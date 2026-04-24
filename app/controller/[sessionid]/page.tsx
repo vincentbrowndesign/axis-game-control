@@ -63,6 +63,12 @@ function isRealSession(id: string) {
   return id !== "test" && id.length > 20;
 }
 
+function formatClock(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
 export default function ControllerPage() {
   const params = useParams();
   const sessionId = String(params.sessionId);
@@ -76,6 +82,21 @@ export default function ControllerPage() {
   const [timeouts, setTimeouts] = useState(3);
   const [opponentScore, setOpponentScore] = useState(0);
 
+  const [clockSeconds, setClockSeconds] = useState(8 * 60);
+  const [clockRunning, setClockRunning] = useState(false);
+
+  const clockDisplay = formatClock(clockSeconds);
+
+  useEffect(() => {
+    if (!clockRunning) return;
+
+    const timer = setInterval(() => {
+      setClockSeconds((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [clockRunning]);
+
   useEffect(() => {
     const savedLog = localStorage.getItem(backupKey);
     if (savedLog) setLog(JSON.parse(savedLog));
@@ -86,6 +107,13 @@ export default function ControllerPage() {
     if (rawSession) {
       const session = JSON.parse(rawSession);
       setOpponentScore(session.opponent_score ?? 0);
+
+      if (session.game_clock) {
+        const [m, s] = String(session.game_clock).split(":").map(Number);
+        if (!Number.isNaN(m) && !Number.isNaN(s)) {
+          setClockSeconds(m * 60 + s);
+        }
+      }
     }
 
     if (rawPlayers) {
@@ -153,7 +181,7 @@ export default function ControllerPage() {
         event_type: mapped.event_type,
         event_value: mapped.value,
         video_time_ms: 0,
-        game_clock: "06:24",
+        game_clock: clockDisplay,
         period: "1ST QTR",
         lineup_player_ids: court.map((p) => p.dbId).filter(Boolean),
         metadata: {},
@@ -173,7 +201,7 @@ export default function ControllerPage() {
         event_type: `OPP_${points}`,
         event_value: points,
         video_time_ms: 0,
-        game_clock: "06:24",
+        game_clock: clockDisplay,
         period: "1ST QTR",
         lineup_player_ids: court.map((p) => p.dbId).filter(Boolean),
         metadata: { opponent: true },
@@ -192,7 +220,7 @@ export default function ControllerPage() {
         player_out: outPlayer.dbId,
         player_in: inPlayer.dbId,
         video_time_ms: 0,
-        game_clock: "06:24",
+        game_clock: clockDisplay,
         period: "1ST QTR",
       }),
     });
@@ -256,6 +284,8 @@ export default function ControllerPage() {
     setTimeouts(3);
     setPendingEvent(null);
     setSelectedPlayerId(null);
+    setClockRunning(false);
+    setClockSeconds(8 * 60);
     localStorage.removeItem(backupKey);
   }
 
@@ -319,7 +349,7 @@ export default function ControllerPage() {
           </div>
 
           <div className="rounded-b-3xl bg-black/80 px-16 py-3 text-center shadow-2xl">
-            <div className="grid grid-cols-3 items-center gap-12">
+            <div className="grid grid-cols-3 items-start gap-12">
               <div>
                 <p className="text-xs font-bold text-white/60">TEAM AXIS</p>
                 <p className="text-5xl font-black text-green-500">
@@ -329,7 +359,30 @@ export default function ControllerPage() {
 
               <div>
                 <p className="text-xs font-bold text-white/60">1ST QTR</p>
-                <p className="text-5xl font-black">06:24</p>
+                <p className="text-5xl font-black">{clockDisplay}</p>
+
+                <div className="mt-2 flex justify-center gap-2">
+                  <button
+                    onClick={() => setClockRunning((v) => !v)}
+                    className={`rounded-lg px-4 py-1 text-xs font-black transition active:scale-90 ${
+                      clockRunning
+                        ? "bg-red-600 text-white"
+                        : "bg-green-500 text-black"
+                    }`}
+                  >
+                    {clockRunning ? "STOP" : "START"}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setClockRunning(false);
+                      setClockSeconds(8 * 60);
+                    }}
+                    className="rounded-lg bg-neutral-700 px-4 py-1 text-xs font-black text-white transition active:scale-90"
+                  >
+                    RESET
+                  </button>
+                </div>
               </div>
 
               <div className="text-right">
