@@ -65,17 +65,16 @@ export default function SpurtsPage() {
     return getAtmosphere({
       homeScore,
       awayScore,
-      possessions,
       spurt,
     });
-  }, [homeScore, awayScore, possessions, spurt]);
+  }, [homeScore, awayScore, spurt]);
 
   useEffect(() => {
     if (!scorePulse) return;
 
     const timeout = window.setTimeout(() => {
       setScorePulse(null);
-    }, 180);
+    }, 220);
 
     return () => window.clearTimeout(timeout);
   }, [scorePulse]);
@@ -93,6 +92,7 @@ export default function SpurtsPage() {
 
     if (activeTeam === "HOME") {
       nextHome += points;
+
       setHomeScore(nextHome);
 
       if (points > 0) {
@@ -100,6 +100,7 @@ export default function SpurtsPage() {
       }
     } else {
       nextAway += points;
+
       setAwayScore(nextAway);
 
       if (points > 0) {
@@ -165,18 +166,20 @@ export default function SpurtsPage() {
 
   const backgroundClass =
     atmosphere.pressureGame
-      ? "bg-[#030712]"
-      : atmosphere.blowout
-      ? "bg-[#071019]"
+      ? "bg-[#02050a]"
+      : atmosphere.gameBreaking
+      ? "bg-[#050910]"
       : "bg-[#08111d]";
 
-  const globalGlow =
-    atmosphere.pressureGame
-      ? "shadow-[0_0_180px_rgba(255,255,255,0.08)]"
+  const pageGlow =
+    atmosphere.gameBreaking
+      ? spurt?.team === "HOME"
+        ? "shadow-[0_0_220px_rgba(34,211,238,0.18)]"
+        : "shadow-[0_0_220px_rgba(249,115,22,0.18)]"
       : atmosphere.dominant
       ? spurt?.team === "HOME"
-        ? "shadow-[0_0_180px_rgba(34,211,238,0.12)]"
-        : "shadow-[0_0_180px_rgba(249,115,22,0.12)]"
+        ? "shadow-[0_0_160px_rgba(34,211,238,0.12)]"
+        : "shadow-[0_0_160px_rgba(249,115,22,0.12)]"
       : "";
 
   return (
@@ -184,7 +187,7 @@ export default function SpurtsPage() {
       className={`min-h-screen overflow-x-hidden text-white transition-all duration-700 ${backgroundClass}`}
     >
       <div
-        className={`mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pt-5 pb-14 transition-all duration-700 ${globalGlow}`}
+        className={`mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pt-5 pb-14 transition-all duration-700 ${pageGlow}`}
       >
         {/* HEADER */}
 
@@ -204,7 +207,7 @@ export default function SpurtsPage() {
             onClick={() =>
               setQuarter((previous) => previous + 1)
             }
-            className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black active:scale-[0.96]"
+            className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black backdrop-blur-xl active:scale-[0.96]"
           >
             Q{quarter}
           </button>
@@ -214,14 +217,14 @@ export default function SpurtsPage() {
 
         <div className="mt-10 flex items-end justify-center gap-5">
           <div className="text-center">
-            <div className="mb-2 text-[10px] uppercase tracking-[0.35em] text-white/30">
+            <div className="mb-2 text-[10px] uppercase tracking-[0.35em] text-white/25">
               Home
             </div>
 
             <div
-              className={`text-[118px] font-black leading-[0.82] tracking-[-0.08em] transition-all duration-150 ${
+              className={`text-[118px] font-black leading-[0.82] tracking-[-0.09em] transition-all duration-200 ${
                 scorePulse === "HOME"
-                  ? "scale-[1.06] text-cyan-300"
+                  ? "scale-[1.08] text-cyan-300 blur-[0.2px]"
                   : ""
               }`}
             >
@@ -234,14 +237,14 @@ export default function SpurtsPage() {
           </div>
 
           <div className="text-center">
-            <div className="mb-2 text-[10px] uppercase tracking-[0.35em] text-white/30">
+            <div className="mb-2 text-[10px] uppercase tracking-[0.35em] text-white/25">
               Away
             </div>
 
             <div
-              className={`text-[118px] font-black leading-[0.82] tracking-[-0.08em] transition-all duration-150 ${
+              className={`text-[118px] font-black leading-[0.82] tracking-[-0.09em] transition-all duration-200 ${
                 scorePulse === "AWAY"
-                  ? "scale-[1.06] text-orange-300"
+                  ? "scale-[1.08] text-orange-300 blur-[0.2px]"
                   : ""
               }`}
             >
@@ -253,10 +256,10 @@ export default function SpurtsPage() {
         {/* POSSESSION */}
 
         <div
-          className={`mt-8 rounded-[34px] border px-6 py-6 text-center transition-all duration-500 ${
+          className={`mt-8 rounded-[34px] px-6 py-6 text-center transition-all duration-700 ${
             activeTeam === "HOME"
-              ? "border-cyan-400/20 bg-cyan-400/[0.14]"
-              : "border-orange-400/20 bg-orange-400/[0.14]"
+              ? "bg-cyan-400/[0.18] shadow-[0_0_40px_rgba(34,211,238,0.18)]"
+              : "bg-orange-400/[0.18] shadow-[0_0_40px_rgba(249,115,22,0.18)]"
           }`}
         >
           <div className="text-[10px] uppercase tracking-[0.45em] text-white/35">
@@ -268,20 +271,22 @@ export default function SpurtsPage() {
           </div>
         </div>
 
-        {/* CURRENT STATE */}
+        {/* STATE */}
 
         <div
-          className={`mt-5 rounded-[32px] border px-6 py-6 text-center transition-all duration-700 ${
-            atmosphere.dominant
-              ? "scale-[1.015] border-white/20 bg-white/[0.08]"
-              : "border-white/10 bg-white/[0.04]"
+          className={`mt-5 rounded-[34px] px-6 py-7 text-center transition-all duration-700 ${
+            atmosphere.gameBreaking
+              ? "scale-[1.025] bg-white/[0.12] shadow-[0_0_60px_rgba(255,255,255,0.08)]"
+              : atmosphere.dominant
+              ? "bg-white/[0.08]"
+              : "bg-white/[0.04]"
           }`}
         >
-          <div className="text-[10px] uppercase tracking-[0.4em] text-white/30">
+          <div className="text-[10px] uppercase tracking-[0.45em] text-white/30">
             Current State
           </div>
 
-          <div className="mt-3 text-[34px] font-black leading-[1] tracking-[-0.04em]">
+          <div className="mt-4 text-[38px] font-black leading-[0.95] tracking-[-0.05em]">
             {gameState}
           </div>
 
@@ -303,7 +308,7 @@ export default function SpurtsPage() {
               onClick={() =>
                 completePossession(item.value)
               }
-              className="h-32 rounded-[30px] border border-white/10 bg-white/[0.05] text-5xl font-black tracking-[-0.05em] transition-all duration-100 active:scale-[0.94] active:bg-white/[0.10]"
+              className="h-32 rounded-[30px] bg-white/[0.05] text-5xl font-black tracking-[-0.05em] backdrop-blur-xl transition-all duration-100 active:scale-[0.94] active:bg-white/[0.10]"
             >
               {item.label}
             </button>
@@ -320,7 +325,7 @@ export default function SpurtsPage() {
               onClick={() =>
                 completePossession(item.value)
               }
-              className="h-20 rounded-[22px] border border-white/10 bg-white/[0.03] text-lg font-black transition-all duration-100 active:scale-[0.96]"
+              className="h-20 rounded-[22px] bg-white/[0.04] text-lg font-black backdrop-blur-xl transition-all duration-100 active:scale-[0.96]"
             >
               {item.label}
             </button>
@@ -333,7 +338,7 @@ export default function SpurtsPage() {
           <button
             type="button"
             onClick={undoLast}
-            className="h-16 rounded-[20px] border border-white/10 bg-white/[0.03] text-base font-black transition-all duration-100 active:scale-[0.98]"
+            className="h-16 rounded-[20px] bg-white/[0.04] text-base font-black backdrop-blur-xl transition-all duration-100 active:scale-[0.98]"
           >
             UNDO
           </button>
@@ -343,7 +348,7 @@ export default function SpurtsPage() {
             onClick={() =>
               setQuarter((previous) => previous + 1)
             }
-            className="h-16 rounded-[20px] border border-white/10 bg-white/[0.03] text-base font-black transition-all duration-100 active:scale-[0.98]"
+            className="h-16 rounded-[20px] bg-white/[0.04] text-base font-black backdrop-blur-xl transition-all duration-100 active:scale-[0.98]"
           >
             NEXT Q
           </button>
@@ -354,7 +359,7 @@ export default function SpurtsPage() {
         <button
           type="button"
           onClick={resetGame}
-          className="mt-4 h-16 rounded-[20px] border border-red-500/20 bg-red-500/10 text-base font-black text-red-300 transition-all duration-100 active:scale-[0.98]"
+          className="mt-4 h-16 rounded-[20px] bg-red-500/12 text-base font-black text-red-300 backdrop-blur-xl transition-all duration-100 active:scale-[0.98]"
         >
           RESET
         </button>
@@ -362,13 +367,13 @@ export default function SpurtsPage() {
         {/* FEED */}
 
         <div className="mt-10">
-          <div className="mb-3 text-[10px] uppercase tracking-[0.45em] text-white/25">
+          <div className="mb-3 text-[10px] uppercase tracking-[0.45em] text-white/20">
             Last 3
           </div>
 
           <div className="flex flex-col gap-3">
             {latestFeed.length === 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/40">
+              <div className="rounded-2xl bg-white/[0.03] px-4 py-4 text-sm text-white/40">
                 No possessions yet.
               </div>
             )}
@@ -376,14 +381,14 @@ export default function SpurtsPage() {
             {latestFeed.map((possession) => (
               <div
                 key={possession.id}
-                className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                className="flex items-center justify-between rounded-2xl bg-white/[0.04] px-4 py-4 backdrop-blur-xl"
               >
                 <div className="flex items-center gap-3">
                   <div className="font-black">
                     {possession.team}
                   </div>
 
-                  <div className="text-white/45">
+                  <div className="text-white/40">
                     {possession.outcome}
                   </div>
                 </div>
