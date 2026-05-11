@@ -1,20 +1,30 @@
-import { PossessionEvent } from "../session/types";
+import { SpurtsEvent } from "../events/eventTypes";
 
-export function calculateRun(events: PossessionEvent[]) {
-  const recent = events.slice(-8);
+type Team = "HOME" | "AWAY";
 
-  let home = 0;
-  let away = 0;
+export function getRun(
+  events: SpurtsEvent[],
+  team: Team
+) {
+  let run = 0;
 
-  recent.forEach((event) => {
-    if (event.team === "HOME") {
-      home += event.value;
+  for (
+    let i = events.length - 1;
+    i >= 0;
+    i--
+  ) {
+    const event = events[i];
+
+    if (event.type !== "MAKE") {
+      continue;
     }
 
-    if (event.team === "AWAY") {
-      away += event.value;
+    if (event.team !== team) {
+      break;
     }
-  });
 
-  return { home, away };
+    run += event.value;
+  }
+
+  return run;
 }

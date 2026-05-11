@@ -6,12 +6,12 @@ export function createSession(
 ): SpurtsSession {
   return {
     id: crypto.randomUUID(),
+
     homeTeam,
     awayTeam,
+
     createdAt: Date.now(),
 
     events: [],
-    snapshots: [],
-    markers: [],
   };
 }

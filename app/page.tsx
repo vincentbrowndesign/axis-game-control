@@ -1,31 +1,82 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+import { createSession } from "@/lib/session/createSession";
+import { saveSession } from "@/lib/session/sessionStore";
 
 export default function HomePage() {
+  const router = useRouter();
+
+  function openController() {
+    const session = createSession(
+      "HOME",
+      "AWAY"
+    );
+
+    saveSession(session);
+
+    router.push(
+      `/session/${session.id}`
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-[#08111d] text-white">
-      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6">
-        <div className="text-center">
-          <div className="text-[10px] uppercase tracking-[0.45em] text-cyan-400">
-            Axis
-          </div>
-
-          <h1 className="mt-2 text-6xl font-black tracking-[-0.06em]">
-            Spurts
-          </h1>
-
-          <p className="mt-5 text-base text-white/45">
-            Feel momentum. Pressure. Collapse. Control.
-          </p>
+    <main className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
+      <div className="w-full max-w-[640px] text-center">
+        <div className="mb-4 text-[10px] font-bold tracking-[0.45em] text-cyan-400">
+          AXIS
         </div>
 
-        <Link
-          href="/controller/spurts"
-          className="mt-12 flex h-20 w-full items-center justify-center rounded-[28px] bg-cyan-400/20 text-2xl font-black tracking-[-0.04em] text-cyan-200 shadow-[0_0_50px_rgba(34,211,238,0.15)] transition-all duration-200 active:scale-[0.98]"
+        <h1 className="text-[72px] font-black leading-none tracking-[-0.08em]">
+          Spurts
+        </h1>
+
+        <p className="mt-5 text-[18px] text-white/50">
+          Feel momentum. Pressure.
+          Collapse. Control.
+        </p>
+
+        <button
+          onClick={openController}
+          className="mt-12 w-full rounded-full bg-cyan-500 px-8 py-6 text-[22px] font-black tracking-[-0.03em] text-black transition-all hover:scale-[1.02]"
         >
           OPEN CONTROLLER
-        </Link>
+        </button>
+
+        <div className="mt-10 grid grid-cols-2 gap-4 text-left">
+          <div className="border border-white/10 bg-white/[0.03] p-4">
+            <div className="text-[10px] font-bold tracking-[0.3em] text-white/35">
+              LIVE
+            </div>
+
+            <div className="mt-2 text-[20px] font-black tracking-[-0.04em]">
+              SCORE TRACKING
+            </div>
+
+            <p className="mt-2 text-sm text-white/45">
+              Track makes, misses,
+              turnovers, runs, and
+              pressure in real time.
+            </p>
+          </div>
+
+          <div className="border border-white/10 bg-white/[0.03] p-4">
+            <div className="text-[10px] font-bold tracking-[0.3em] text-white/35">
+              MEMORY
+            </div>
+
+            <div className="mt-2 text-[20px] font-black tracking-[-0.04em]">
+              GAME NARRATIVE
+            </div>
+
+            <p className="mt-2 text-sm text-white/45">
+              Build timelines, sync
+              clips, and identify
+              momentum swings.
+            </p>
+          </div>
+        </div>
       </div>
     </main>
   );

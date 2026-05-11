@@ -1,46 +1,53 @@
-export type AxisEvent = {
-  id: number;
-  time: string;
-  team: "HOME" | "AWAY";
+type TimelineItem = {
+  id: string;
   label: string;
-  value: number;
+  tone: string;
 };
 
-type EventStreamProps = {
-  events: AxisEvent[];
+type Props = {
+  items: TimelineItem[];
 };
 
-export default function EventStream({ events }: EventStreamProps) {
+export default function EventStream({
+  items,
+}: Props) {
   return (
-    <section className="border border-white/10 bg-[#0b0b0b] p-4">
-      <div className="mb-4">
-        <div className="text-[9px] font-bold tracking-[0.28em] text-white/30">
-          EVENT STREAM
-        </div>
-        <div className="mt-1 text-[18px] font-black tracking-[-0.04em]">
-          GAME SIGNALS
-        </div>
-      </div>
+    <div className="space-y-3">
+      {[...items]
+        .reverse()
+        .map((item) => {
+          let styles =
+            "border-white/10 bg-white/[0.03] text-white";
 
-      <div className="max-h-[150px] space-y-2 overflow-hidden">
-        {events.length === 0 ? (
-          <div className="text-[13px] font-medium text-white/35">
-            Waiting for first signal.
-          </div>
-        ) : (
-          [...events].reverse().slice(0, 5).map((event) => (
+          if (item.tone === "cyan") {
+            styles =
+              "border-cyan-500/20 bg-cyan-500/10 text-cyan-300";
+          }
+
+          if (item.tone === "yellow") {
+            styles =
+              "border-yellow-500/20 bg-yellow-500/10 text-yellow-300";
+          }
+
+          if (item.tone === "danger") {
+            styles =
+              "border-red-500/20 bg-red-500/10 text-red-300";
+          }
+
+          if (item.tone === "marker") {
+            styles =
+              "border-purple-500/20 bg-purple-500/10 text-purple-300";
+          }
+
+          return (
             <div
-              key={event.id}
-              className="grid grid-cols-[42px_50px_1fr_auto] items-center border-t border-white/10 pt-2 text-[12px]"
+              key={item.id}
+              className={`flex items-center justify-between border px-4 py-4 font-black tracking-[-0.03em] ${styles}`}
             >
-              <span className="font-bold text-white/35">{event.time}</span>
-              <span className="font-black">{event.team}</span>
-              <span className="font-medium text-white/70">{event.label}</span>
-              <span className="font-black text-[#ffb800]">+{event.value}</span>
+              <div>{item.label}</div>
             </div>
-          ))
-        )}
-      </div>
-    </section>
+          );
+        })}
+    </div>
   );
 }
