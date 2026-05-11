@@ -67,6 +67,8 @@ export default function SessionPage() {
     value: 0 | 1 | 2 | 3,
     team: "HOME" | "AWAY"
   ) {
+    if (!session) return;
+
     const event: PossessionEvent = {
       id: crypto.randomUUID(),
 
@@ -82,10 +84,13 @@ export default function SessionPage() {
 
     const next: SpurtsSession = {
       id: session.id,
+
       homeTeam:
         session.homeTeam,
+
       awayTeam:
         session.awayTeam,
+
       createdAt:
         session.createdAt,
 
@@ -109,6 +114,8 @@ export default function SessionPage() {
   async function handleSnapshot(
     e: React.ChangeEvent<HTMLInputElement>
   ) {
+    if (!session) return;
+
     const file =
       e.target.files?.[0];
 
@@ -129,6 +136,7 @@ export default function SessionPage() {
         imageUrl,
 
         period: parsed.period,
+
         clock: parsed.clock,
 
         homeScore:
@@ -145,10 +153,13 @@ export default function SessionPage() {
 
     const next: SpurtsSession = {
       id: session.id,
+
       homeTeam:
         session.homeTeam,
+
       awayTeam:
         session.awayTeam,
+
       createdAt:
         session.createdAt,
 
