@@ -65,10 +65,9 @@ function formatClock(seconds: number) {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
 
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(
-    2,
-    "0"
-  )}`;
+  return `${String(mins).padStart(2, "0")}:${String(
+    secs
+  ).padStart(2, "0")}`;
 }
 
 function getInferenceState(
@@ -90,15 +89,20 @@ export default function SessionPage() {
 
   const sessionId = params.id as string;
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(
+    null
+  );
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaRecorderRef =
+    useRef<MediaRecorder | null>(null);
 
   const chunksRef = useRef<Blob[]>([]);
 
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [stream, setStream] =
+    useState<MediaStream | null>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
+  const [isRecording, setIsRecording] =
+    useState(false);
 
   const [elapsed, setElapsed] = useState(0);
 
@@ -106,13 +110,18 @@ export default function SessionPage() {
 
   const [awayScore, setAwayScore] = useState(0);
 
-  const [events, setEvents] = useState<SessionEvent[]>([]);
+  const [events, setEvents] = useState<
+    SessionEvent[]
+  >([]);
 
   const [selectedEvent, setSelectedEvent] =
     useState<SessionEvent | null>(null);
 
   const inference = useMemo(() => {
-    return getInferenceState(homeScore, awayScore);
+    return getInferenceState(
+      homeScore,
+      awayScore
+    );
   }, [homeScore, awayScore]);
 
   useEffect(() => {
@@ -130,12 +139,15 @@ export default function SessionPage() {
   useEffect(() => {
     async function setupCamera() {
       try {
-        const media = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-          },
-          audio: true,
-        });
+        const media =
+          await navigator.mediaDevices.getUserMedia(
+            {
+              video: {
+                facingMode: "environment",
+              },
+              audio: true,
+            }
+          );
 
         setStream(media);
 
@@ -144,76 +156,199 @@ export default function SessionPage() {
         }
       } catch (err) {
         console.error(err);
+
+        alert(
+          "Camera permission denied"
+        );
       }
     }
 
     setupCamera();
 
     return () => {
-      stream?.getTracks().forEach((track) => track.stop());
+      stream
+        ?.getTracks()
+        .forEach((track) => track.stop());
     };
   }, []);
 
   async function startRecording() {
-    if (!stream) return;
+    if (!stream) {
+      alert("NO STREAM");
 
-    chunksRef.current = [];
+      return;
+    }
 
-    const recorder = new MediaRecorder(stream, {
-      mimeType: "video/webm",
-    });
+    try {
+      chunksRef.current = [];
 
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunksRef.current.push(event.data);
-      }
-    };
+      const mimeTypes = [
+        "video/mp4",
+        "video/webm;codecs=h264",
+        "video/webm",
+      ];
 
-    recorder.onstop = async () => {
-      const blob = new Blob(chunksRef.current, {
-        type: "video/webm",
-      });
+      const supportedMime =
+        mimeTypes.find((type) =>
+          MediaRecorder.isTypeSupported(type)
+        ) || "video/webm";
 
-      const formData = new FormData();
-
-      formData.append(
-        "file",
-        blob,
-        `axis-session-${Date.now()}.webm`
+      console.log(
+        "USING MIME:",
+        supportedMime
       );
 
-      formData.append("sessionId", sessionId);
-
-      formData.append(
-        "events",
-        JSON.stringify(events)
+      const recorder = new MediaRecorder(
+        stream,
+        {
+          mimeType: supportedMime,
+        }
       );
 
-      try {
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
+      recorder.ondataavailable = (
+        event
+      ) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(
+            event.data
+          );
 
-        const data = await response.json();
+          console.log(
+            "CHUNK:",
+            event.data.size
+          );
+        }
+      };
 
-        console.log("UPLOAD RESULT", data);
+      recorder.onerror = (event) => {
+        console.error(
+          "RECORDER ERROR",
+          event
+        );
+      };
 
-        router.push(`/replay/${sessionId}`);
-      } catch (error) {
-        console.error(error);
-      }
-    };
+      recorder.onstop = async () => {
+        try {
+          console.log(
+            "STOPPED. CHUNKS:",
+            chunksRef.current.length
+          );
 
-    mediaRecorderRef.current = recorder;
+          if (
+            chunksRef.current.length === 0
+          ) {
+            alert(
+              "NO VIDEO CAPTURED"
+            );
 
-    recorder.start(1000);
+            return;
+          }
 
-    setIsRecording(true);
+          const blob = new Blob(
+            chunksRef.current,
+            {
+              type: supportedMime,
+            }
+          );
+
+          console.log(
+            "BLOB SIZE:",
+            blob.size
+          );
+
+          const extension =
+            supportedMime.includes(
+              "mp4"
+            )
+              ? "mp4"
+              : "webm";
+
+          const formData =
+            new FormData();
+
+          formData.append(
+            "file",
+            blob,
+            `axis-session-${Date.now()}.${extension}`
+          );
+
+          formData.append(
+            "sessionId",
+            sessionId
+          );
+
+          formData.append(
+            "events",
+            JSON.stringify(events)
+          );
+
+          const response = await fetch(
+            "/api/upload",
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+          const data =
+            await response.json();
+
+          console.log(
+            "UPLOAD RESULT",
+            data
+          );
+
+          if (!response.ok) {
+            alert("UPLOAD FAILED");
+
+            return;
+          }
+
+          router.push(
+            `/replay/${sessionId}`
+          );
+        } catch (error) {
+          console.error(error);
+
+          alert("UPLOAD ERROR");
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+
+      recorder.start(1000);
+
+      setIsRecording(true);
+
+      console.log(
+        "RECORDING STARTED"
+      );
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        "FAILED TO START RECORDING"
+      );
+    }
   }
 
   function stopRecording() {
-    mediaRecorderRef.current?.stop();
+    if (!mediaRecorderRef.current) {
+      alert("NO RECORDER");
+
+      return;
+    }
+
+    if (
+      mediaRecorderRef.current.state ===
+      "inactive"
+    ) {
+      alert("RECORDER INACTIVE");
+
+      return;
+    }
+
+    mediaRecorderRef.current.stop();
 
     setIsRecording(false);
   }
@@ -223,16 +358,18 @@ export default function SessionPage() {
     points: number
   ) {
     const currentTime =
-      videoRef.current?.currentTime || elapsed;
+      elapsed;
 
     let newHome = homeScore;
     let newAway = awayScore;
 
     if (side === "HOME") {
       newHome += points;
+
       setHomeScore(newHome);
     } else {
       newAway += points;
+
       setAwayScore(newAway);
     }
 
@@ -244,51 +381,65 @@ export default function SessionPage() {
       gameTime: currentTime,
       homeScore: newHome,
       awayScore: newAway,
-      inferredState: getInferenceState(
-        newHome,
-        newAway
-      ),
+      inferredState:
+        getInferenceState(
+          newHome,
+          newAway
+        ),
     });
 
-    setEvents((prev) => [...prev, event]);
+    setEvents((prev) => [
+      ...prev,
+      event,
+    ]);
 
     setSelectedEvent(event);
   }
 
-  function registerTimeout(side: TeamSide) {
-    const currentTime =
-      videoRef.current?.currentTime || elapsed;
+  function registerTimeout(
+    side: TeamSide
+  ) {
+    const currentTime = elapsed;
 
-    const timeoutEvent = createEvent({
-      type: "TIMEOUT",
-      team: side,
-      timestamp: currentTime,
-      gameTime: currentTime,
-      homeScore,
-      awayScore,
-      inferredState: inference,
-    });
+    const timeoutEvent =
+      createEvent({
+        type: "TIMEOUT",
+        team: side,
+        timestamp: currentTime,
+        gameTime: currentTime,
+        homeScore,
+        awayScore,
+        inferredState: inference,
+      });
 
-    setEvents((prev) => [...prev, timeoutEvent]);
+    setEvents((prev) => [
+      ...prev,
+      timeoutEvent,
+    ]);
 
     setSelectedEvent(timeoutEvent);
   }
 
-  function registerTurnover(side: TeamSide) {
-    const currentTime =
-      videoRef.current?.currentTime || elapsed;
+  function registerTurnover(
+    side: TeamSide
+  ) {
+    const currentTime = elapsed;
 
-    const turnoverEvent = createEvent({
-      type: "TURNOVER",
-      team: side,
-      timestamp: currentTime,
-      gameTime: currentTime,
-      homeScore,
-      awayScore,
-      inferredState: inference,
-    });
+    const turnoverEvent =
+      createEvent({
+        type: "TURNOVER",
+        team: side,
+        timestamp: currentTime,
+        gameTime: currentTime,
+        homeScore,
+        awayScore,
+        inferredState: inference,
+      });
 
-    setEvents((prev) => [...prev, turnoverEvent]);
+    setEvents((prev) => [
+      ...prev,
+      turnoverEvent,
+    ]);
 
     setSelectedEvent(turnoverEvent);
   }
@@ -304,10 +455,18 @@ export default function SessionPage() {
       removed.type === "SCORE" &&
       removed.points
     ) {
-      if (removed.team === "HOME") {
-        setHomeScore((prev) => prev - removed.points!);
+      if (
+        removed.team === "HOME"
+      ) {
+        setHomeScore(
+          (prev) =>
+            prev - removed.points!
+        );
       } else {
-        setAwayScore((prev) => prev - removed.points!);
+        setAwayScore(
+          (prev) =>
+            prev - removed.points!
+        );
       }
     }
 
@@ -316,12 +475,9 @@ export default function SessionPage() {
     setSelectedEvent(null);
   }
 
-  function jumpToEvent(event: SessionEvent) {
-    if (!videoRef.current) return;
-
-    videoRef.current.currentTime =
-      event.timestamp;
-
+  function jumpToEvent(
+    event: SessionEvent
+  ) {
     setSelectedEvent(event);
   }
 
@@ -332,10 +488,15 @@ export default function SessionPage() {
           side="HOME"
           score={homeScore}
           onScore={(pts) =>
-            addScore("HOME", pts)
+            addScore(
+              "HOME",
+              pts
+            )
           }
           onTimeout={() =>
-            registerTimeout("HOME")
+            registerTimeout(
+              "HOME"
+            )
           }
           color="text-violet-400"
         />
@@ -353,7 +514,9 @@ export default function SessionPage() {
                 LIVE
 
                 <span>
-                  {formatClock(elapsed)}
+                  {formatClock(
+                    elapsed
+                  )}
                 </span>
               </div>
             </div>
@@ -387,7 +550,9 @@ export default function SessionPage() {
             <Timeline
               events={events}
               onJump={jumpToEvent}
-              selectedEvent={selectedEvent}
+              selectedEvent={
+                selectedEvent
+              }
             />
           </div>
         </div>
@@ -396,17 +561,24 @@ export default function SessionPage() {
           side="AWAY"
           score={awayScore}
           onScore={(pts) =>
-            addScore("AWAY", pts)
+            addScore(
+              "AWAY",
+              pts
+            )
           }
           onTimeout={() =>
-            registerTimeout("AWAY")
+            registerTimeout(
+              "AWAY"
+            )
           }
           color="text-orange-400"
         >
           <div className="mt-4 space-y-3">
             <button
               onClick={() =>
-                registerTurnover("HOME")
+                registerTurnover(
+                  "HOME"
+                )
               }
               className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
             >
@@ -415,7 +587,9 @@ export default function SessionPage() {
 
             <button
               onClick={() =>
-                registerTurnover("AWAY")
+                registerTurnover(
+                  "AWAY"
+                )
               }
               className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
             >
@@ -423,7 +597,9 @@ export default function SessionPage() {
             </button>
 
             <button
-              onClick={undoLastEvent}
+              onClick={
+                undoLastEvent
+              }
               className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
             >
               UNDO
@@ -431,14 +607,22 @@ export default function SessionPage() {
 
             {!isRecording ? (
               <button
-                onClick={startRecording}
+                onClick={
+                  startRecording
+                }
                 className="w-full rounded-2xl bg-red-600 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
               >
                 START
               </button>
             ) : (
               <button
-                onClick={stopRecording}
+                onClick={() => {
+                  console.log(
+                    "STOP CLICKED"
+                  );
+
+                  stopRecording();
+                }}
                 className="w-full rounded-2xl bg-white py-4 text-sm font-semibold uppercase tracking-[0.2em] text-black"
               >
                 STOP + SAVE
@@ -461,7 +645,9 @@ function ScoreStack({
 }: {
   side: TeamSide;
   score: number;
-  onScore: (pts: number) => void;
+  onScore: (
+    pts: number
+  ) => void;
   onTimeout: () => void;
   color: string;
   children?: React.ReactNode;
@@ -482,17 +668,23 @@ function ScoreStack({
         <div className="space-y-3">
           <TapButton
             label="+1"
-            onClick={() => onScore(1)}
+            onClick={() =>
+              onScore(1)
+            }
           />
 
           <TapButton
             label="+2"
-            onClick={() => onScore(2)}
+            onClick={() =>
+              onScore(2)
+            }
           />
 
           <TapButton
             label="+3"
-            onClick={() => onScore(3)}
+            onClick={() =>
+              onScore(3)
+            }
           />
 
           <TapButton
@@ -530,8 +722,12 @@ function Timeline({
   selectedEvent,
 }: {
   events: SessionEvent[];
-  onJump: (event: SessionEvent) => void;
-  selectedEvent: SessionEvent | null;
+  onJump: (
+    event: SessionEvent
+  ) => void;
+  selectedEvent:
+    | SessionEvent
+    | null;
 }) {
   return (
     <div className="space-y-2">
@@ -543,9 +739,12 @@ function Timeline({
         events.map((event) => (
           <button
             key={event.id}
-            onClick={() => onJump(event)}
+            onClick={() =>
+              onJump(event)
+            }
             className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition ${
-              selectedEvent?.id === event.id
+              selectedEvent?.id ===
+              event.id
                 ? "border-white bg-zinc-900"
                 : "border-zinc-800 bg-black hover:border-zinc-700"
             }`}
@@ -557,18 +756,31 @@ function Timeline({
 
               <div className="text-xs text-zinc-500">
                 {event.team} ·{" "}
-                {formatClock(event.gameTime)}
+                {formatClock(
+                  event.gameTime
+                )}
               </div>
             </div>
 
             <div className="text-right">
               <div className="text-sm font-bold">
-                {event.scoreSnapshot.home}-
-                {event.scoreSnapshot.away}
+                {
+                  event
+                    .scoreSnapshot
+                    .home
+                }
+                -
+                {
+                  event
+                    .scoreSnapshot
+                    .away
+                }
               </div>
 
               <div className="text-xs text-zinc-500">
-                {event.inferredState}
+                {
+                  event.inferredState
+                }
               </div>
             </div>
           </button>
