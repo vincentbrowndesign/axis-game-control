@@ -1,408 +1,579 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 
-import Scorebug from "@/components/Scorebug";
-import EventStream from "@/components/EventStream";
+type TeamSide = "HOME" | "AWAY";
 
-import { addEvent } from "@/lib/events/addEvent";
+type EventType =
+  | "SCORE"
+  | "TIMEOUT"
+  | "TURNOVER";
 
-import { getGameMemory } from "@/lib/gameMemoryEngine";
+interface SessionEvent {
+  id: string;
+  type: EventType;
+  team: TeamSide;
+  points?: number;
 
-import { buildTimeline } from "@/lib/session/timeline";
+  timestamp: number;
+  gameTime: number;
 
-import {
-  saveSession,
-  loadSession,
-} from "@/lib/session/sessionStore";
+  scoreSnapshot: {
+    home: number;
+    away: number;
+  };
 
-import { createMarker } from "@/lib/session/markers";
+  inferredState?: string;
+}
 
-import type {
-  MakeEvent,
-  MissEvent,
-  TurnoverEvent,
-  SpurtsEvent,
-} from "@/lib/events/eventTypes";
+function createEvent({
+  type,
+  team,
+  points,
+  timestamp,
+  gameTime,
+  homeScore,
+  awayScore,
+  inferredState,
+}: {
+  type: EventType;
+  team: TeamSide;
+  points?: number;
+  timestamp: number;
+  gameTime: number;
+  homeScore: number;
+  awayScore: number;
+  inferredState?: string;
+}): SessionEvent {
+  return {
+    id: crypto.randomUUID(),
+    type,
+    team,
+    points,
+    timestamp,
+    gameTime,
+    scoreSnapshot: {
+      home: homeScore,
+      away: awayScore,
+    },
+    inferredState,
+  };
+}
 
-import type { SpurtsSession } from "@/lib/session/types";
+function formatClock(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
 
-type Team = "HOME" | "AWAY";
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(
+    2,
+    "0"
+  )}`;
+}
 
-const initialSession: SpurtsSession = {
-  id: crypto.randomUUID(),
+function getInferenceState(
+  homeScore: number,
+  awayScore: number
+) {
+  const diff = Math.abs(homeScore - awayScore);
 
-  homeTeam: "HOME",
+  if (diff >= 15) return "CONTROL";
+  if (diff >= 8) return "PRESSURE";
+  if (diff >= 4) return "SHIFT";
 
-  awayTeam: "AWAY",
-
-  createdAt: Date.now(),
-
-  events: [],
-};
+  return "STABLE";
+}
 
 export default function SessionPage() {
-  const [session, setSession] =
-    useState<SpurtsSession>(() => {
-      return (
-        loadSession() ||
-        initialSession
-      );
-    });
+  const params = useParams();
+  const router = useRouter();
 
-  const memory = useMemo(() => {
-    return getGameMemory(
-      session.events
-    );
-  }, [session.events]);
+  const sessionId = params.id as string;
 
-  const timeline = useMemo(() => {
-    return buildTimeline(
-      session.events
-    );
-  }, [session.events]);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+  const chunksRef = useRef<Blob[]>([]);
+
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const [isRecording, setIsRecording] = useState(false);
+
+  const [elapsed, setElapsed] = useState(0);
+
+  const [homeScore, setHomeScore] = useState(0);
+
+  const [awayScore, setAwayScore] = useState(0);
+
+  const [events, setEvents] = useState<SessionEvent[]>([]);
+
+  const [selectedEvent, setSelectedEvent] =
+    useState<SessionEvent | null>(null);
+
+  const inference = useMemo(() => {
+    return getInferenceState(homeScore, awayScore);
+  }, [homeScore, awayScore]);
 
   useEffect(() => {
-    saveSession(session);
-  }, [session]);
+    let interval: NodeJS.Timeout;
 
-  function handleMake(
-    team: Team,
-    value: 1 | 2 | 3
-  ) {
-    const event: MakeEvent = {
-      id: crypto.randomUUID(),
+    if (isRecording) {
+      interval = setInterval(() => {
+        setElapsed((prev) => prev + 1);
+      }, 1000);
+    }
 
-      type: "MAKE",
+    return () => clearInterval(interval);
+  }, [isRecording]);
 
-      team,
+  useEffect(() => {
+    async function setupCamera() {
+      try {
+        const media = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+          },
+          audio: true,
+        });
 
-      value,
+        setStream(media);
 
-      createdAt: Date.now(),
+        if (videoRef.current) {
+          videoRef.current.srcObject = media;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
-      sessionTime: Date.now(),
+    setupCamera();
+
+    return () => {
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  async function startRecording() {
+    if (!stream) return;
+
+    chunksRef.current = [];
+
+    const recorder = new MediaRecorder(stream, {
+      mimeType: "video/webm",
+    });
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunksRef.current.push(event.data);
+      }
     };
 
-    setSession(
-      addEvent(session, event)
-    );
-  }
+    recorder.onstop = async () => {
+      const blob = new Blob(chunksRef.current, {
+        type: "video/webm",
+      });
 
-  function handleMiss(
-    team: Team
-  ) {
-    const event: MissEvent = {
-      id: crypto.randomUUID(),
+      const formData = new FormData();
 
-      type: "MISS",
+      formData.append(
+        "file",
+        blob,
+        `axis-session-${Date.now()}.webm`
+      );
 
-      team,
+      formData.append("sessionId", sessionId);
 
-      createdAt: Date.now(),
+      formData.append(
+        "events",
+        JSON.stringify(events)
+      );
 
-      sessionTime: Date.now(),
+      try {
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        console.log("UPLOAD RESULT", data);
+
+        router.push(`/replay/${sessionId}`);
+      } catch (error) {
+        console.error(error);
+      }
     };
 
-    setSession(
-      addEvent(session, event)
-    );
+    mediaRecorderRef.current = recorder;
+
+    recorder.start(1000);
+
+    setIsRecording(true);
   }
 
-  function handleTurnover(
-    team: Team
-  ) {
-    const event: TurnoverEvent = {
-      id: crypto.randomUUID(),
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
 
+    setIsRecording(false);
+  }
+
+  function addScore(
+    side: TeamSide,
+    points: number
+  ) {
+    const currentTime =
+      videoRef.current?.currentTime || elapsed;
+
+    let newHome = homeScore;
+    let newAway = awayScore;
+
+    if (side === "HOME") {
+      newHome += points;
+      setHomeScore(newHome);
+    } else {
+      newAway += points;
+      setAwayScore(newAway);
+    }
+
+    const event = createEvent({
+      type: "SCORE",
+      team: side,
+      points,
+      timestamp: currentTime,
+      gameTime: currentTime,
+      homeScore: newHome,
+      awayScore: newAway,
+      inferredState: getInferenceState(
+        newHome,
+        newAway
+      ),
+    });
+
+    setEvents((prev) => [...prev, event]);
+
+    setSelectedEvent(event);
+  }
+
+  function registerTimeout(side: TeamSide) {
+    const currentTime =
+      videoRef.current?.currentTime || elapsed;
+
+    const timeoutEvent = createEvent({
+      type: "TIMEOUT",
+      team: side,
+      timestamp: currentTime,
+      gameTime: currentTime,
+      homeScore,
+      awayScore,
+      inferredState: inference,
+    });
+
+    setEvents((prev) => [...prev, timeoutEvent]);
+
+    setSelectedEvent(timeoutEvent);
+  }
+
+  function registerTurnover(side: TeamSide) {
+    const currentTime =
+      videoRef.current?.currentTime || elapsed;
+
+    const turnoverEvent = createEvent({
       type: "TURNOVER",
+      team: side,
+      timestamp: currentTime,
+      gameTime: currentTime,
+      homeScore,
+      awayScore,
+      inferredState: inference,
+    });
 
-      team,
+    setEvents((prev) => [...prev, turnoverEvent]);
 
-      createdAt: Date.now(),
-
-      sessionTime: Date.now(),
-    };
-
-    setSession(
-      addEvent(session, event)
-    );
+    setSelectedEvent(turnoverEvent);
   }
 
-  function handleMarker(
-    label: string
-  ) {
-    const marker =
-      createMarker(label);
+  function undoLastEvent() {
+    const copy = [...events];
 
-    setSession(
-      addEvent(session, marker)
-    );
+    const removed = copy.pop();
+
+    if (!removed) return;
+
+    if (
+      removed.type === "SCORE" &&
+      removed.points
+    ) {
+      if (removed.team === "HOME") {
+        setHomeScore((prev) => prev - removed.points!);
+      } else {
+        setAwayScore((prev) => prev - removed.points!);
+      }
+    }
+
+    setEvents(copy);
+
+    setSelectedEvent(null);
   }
 
-  const pressureTone =
-    memory.pressure ===
-    "BREAKING"
-      ? "danger"
-      : memory.pressure ===
-        "BUILDING"
-      ? "warning"
-      : "neutral";
+  function jumpToEvent(event: SessionEvent) {
+    if (!videoRef.current) return;
 
-  const runLabel =
-    memory.runTeam &&
-    memory.activeRun > 0
-      ? `${memory.runTeam} ${memory.activeRun}-0`
-      : "EVEN";
+    videoRef.current.currentTime =
+      event.timestamp;
+
+    setSelectedEvent(event);
+  }
 
   return (
-    <main className="min-h-screen bg-black px-6 py-8 text-white">
-      <div className="mx-auto max-w-6xl">
-        {/* HEADER */}
+    <main className="min-h-screen bg-black text-white">
+      <div className="mx-auto flex max-w-7xl gap-4 p-4">
+        <ScoreStack
+          side="HOME"
+          score={homeScore}
+          onScore={(pts) =>
+            addScore("HOME", pts)
+          }
+          onTimeout={() =>
+            registerTimeout("HOME")
+          }
+          color="text-violet-400"
+        />
 
-        <div className="mb-8">
-          <div className="text-[11px] tracking-[0.5em] text-cyan-400">
-            AXIS
+        <div className="flex-1">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-4xl tracking-[0.5em]">
+                AXIS
+              </div>
+
+              <div className="flex items-center gap-2 text-sm text-zinc-400">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+
+                LIVE
+
+                <span>
+                  {formatClock(elapsed)}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-xs uppercase tracking-[0.3em] text-zinc-500">
+              {inference}
+            </div>
           </div>
 
-          <div className="mt-2 text-6xl font-black tracking-[-0.08em]">
-            Spurts
+          <div className="overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-950">
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="aspect-video w-full object-cover"
+            />
           </div>
 
-          <div className="mt-3 text-white/50">
-            Live game narrative
-            infrastructure.
+          <div className="mt-4 rounded-[28px] border border-zinc-800 bg-zinc-950 p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-xs uppercase tracking-[0.3em] text-zinc-500">
+                Timeline
+              </div>
+
+              <div className="text-sm text-zinc-400">
+                {events.length} events
+              </div>
+            </div>
+
+            <Timeline
+              events={events}
+              onJump={jumpToEvent}
+              selectedEvent={selectedEvent}
+            />
           </div>
         </div>
 
-        {/* SCOREBUG */}
-
-        <Scorebug
-          homeScore={
-            memory.homeScore
+        <ScoreStack
+          side="AWAY"
+          score={awayScore}
+          onScore={(pts) =>
+            addScore("AWAY", pts)
           }
-          awayScore={
-            memory.awayScore
+          onTimeout={() =>
+            registerTimeout("AWAY")
           }
-          possession={
-            memory.lastScoringTeam ||
-            "HOME"
-          }
-          quarter="LIVE"
-          runLabel={runLabel}
-          pressureLabel={
-            memory.state
-          }
-          pressureTone={
-            pressureTone
-          }
-        />
+          color="text-orange-400"
+        >
+          <div className="mt-4 space-y-3">
+            <button
+              onClick={() =>
+                registerTurnover("HOME")
+              }
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
+            >
+              HOME TOV
+            </button>
 
-        {/* CONTROLS */}
+            <button
+              onClick={() =>
+                registerTurnover("AWAY")
+              }
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
+            >
+              AWAY TOV
+            </button>
 
-        <section className="mt-8 border border-white/10 bg-white/[0.03] p-5">
-          <div className="text-xs tracking-[0.3em] text-white/40">
-            LIVE CONTROL
-          </div>
+            <button
+              onClick={undoLastEvent}
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
+            >
+              UNDO
+            </button>
 
-          <div className="mt-5 grid grid-cols-2 gap-6">
-            {/* HOME */}
-
-            <div>
-              <div className="mb-3 text-xl font-black">
-                HOME
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() =>
-                    handleMake(
-                      "HOME",
-                      1
-                    )
-                  }
-                  className="h-14 w-16 rounded-xl bg-cyan-500 font-black text-black"
-                >
-                  +1
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleMake(
-                      "HOME",
-                      2
-                    )
-                  }
-                  className="h-14 w-16 rounded-xl bg-cyan-500 font-black text-black"
-                >
-                  +2
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleMake(
-                      "HOME",
-                      3
-                    )
-                  }
-                  className="h-14 w-16 rounded-xl bg-cyan-500 font-black text-black"
-                >
-                  +3
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleMiss(
-                      "HOME"
-                    )
-                  }
-                  className="h-14 rounded-xl border border-white/10 px-5 font-black"
-                >
-                  MISS
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleTurnover(
-                      "HOME"
-                    )
-                  }
-                  className="h-14 rounded-xl border border-red-500/20 bg-red-500/10 px-5 font-black text-red-300"
-                >
-                  TO
-                </button>
-              </div>
-            </div>
-
-            {/* AWAY */}
-
-            <div>
-              <div className="mb-3 text-xl font-black">
-                AWAY
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() =>
-                    handleMake(
-                      "AWAY",
-                      1
-                    )
-                  }
-                  className="h-14 w-16 rounded-xl bg-yellow-400 font-black text-black"
-                >
-                  +1
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleMake(
-                      "AWAY",
-                      2
-                    )
-                  }
-                  className="h-14 w-16 rounded-xl bg-yellow-400 font-black text-black"
-                >
-                  +2
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleMake(
-                      "AWAY",
-                      3
-                    )
-                  }
-                  className="h-14 w-16 rounded-xl bg-yellow-400 font-black text-black"
-                >
-                  +3
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleMiss(
-                      "AWAY"
-                    )
-                  }
-                  className="h-14 rounded-xl border border-white/10 px-5 font-black"
-                >
-                  MISS
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleTurnover(
-                      "AWAY"
-                    )
-                  }
-                  className="h-14 rounded-xl border border-red-500/20 bg-red-500/10 px-5 font-black text-red-300"
-                >
-                  TO
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* MARKERS */}
-
-        <section className="mt-8 border border-white/10 bg-white/[0.03] p-5">
-          <div className="text-xs tracking-[0.3em] text-white/40">
-            MARKERS
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            {[
-              "MOMENTUM SWING",
-              "BIG SHOT",
-              "CONTROL LOST",
-              "TURNING POINT",
-            ].map((label) => (
+            {!isRecording ? (
               <button
-                key={label}
-                onClick={() =>
-                  handleMarker(
-                    label
-                  )
-                }
-                className="rounded-xl border border-white/10 px-4 py-3 font-black"
+                onClick={startRecording}
+                className="w-full rounded-2xl bg-red-600 py-4 text-sm font-semibold uppercase tracking-[0.2em]"
               >
-                {label}
+                START
               </button>
-            ))}
+            ) : (
+              <button
+                onClick={stopRecording}
+                className="w-full rounded-2xl bg-white py-4 text-sm font-semibold uppercase tracking-[0.2em] text-black"
+              >
+                STOP + SAVE
+              </button>
+            )}
           </div>
-        </section>
-
-        {/* GAME MEMORY */}
-
-        <section className="mt-8 border border-white/10 bg-white/[0.03] p-5">
-          <div className="text-xs tracking-[0.3em] text-white/40">
-            GAME MEMORY
-          </div>
-
-          <div className="mt-4 text-3xl font-black">
-            {memory.state}
-          </div>
-
-          <div className="mt-2 text-white/40">
-            {runLabel}
-          </div>
-        </section>
-
-        {/* EVENT STREAM */}
-
-        <section className="mt-8 border border-white/10 bg-white/[0.03] p-5">
-          <div className="text-xs tracking-[0.3em] text-white/40">
-            EVENT STREAM
-          </div>
-
-          <div className="mt-5">
-            <EventStream
-              items={timeline}
-            />
-          </div>
-        </section>
+        </ScoreStack>
       </div>
     </main>
+  );
+}
+
+function ScoreStack({
+  side,
+  score,
+  onScore,
+  onTimeout,
+  color,
+  children,
+}: {
+  side: TeamSide;
+  score: number;
+  onScore: (pts: number) => void;
+  onTimeout: () => void;
+  color: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="w-[140px] shrink-0">
+      <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-4">
+        <div className="mb-3 text-center text-xs uppercase tracking-[0.3em] text-zinc-500">
+          {side}
+        </div>
+
+        <div
+          className={`mb-6 text-center text-6xl font-black ${color}`}
+        >
+          {score}
+        </div>
+
+        <div className="space-y-3">
+          <TapButton
+            label="+1"
+            onClick={() => onScore(1)}
+          />
+
+          <TapButton
+            label="+2"
+            onClick={() => onScore(2)}
+          />
+
+          <TapButton
+            label="+3"
+            onClick={() => onScore(3)}
+          />
+
+          <TapButton
+            label="TO"
+            onClick={onTimeout}
+          />
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function TapButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full rounded-2xl border border-zinc-800 bg-black py-5 text-lg font-bold tracking-[0.15em] transition hover:border-zinc-600"
+    >
+      {label}
+    </button>
+  );
+}
+
+function Timeline({
+  events,
+  onJump,
+  selectedEvent,
+}: {
+  events: SessionEvent[];
+  onJump: (event: SessionEvent) => void;
+  selectedEvent: SessionEvent | null;
+}) {
+  return (
+    <div className="space-y-2">
+      {events.length === 0 ? (
+        <div className="py-12 text-center text-sm text-zinc-600">
+          No events yet
+        </div>
+      ) : (
+        events.map((event) => (
+          <button
+            key={event.id}
+            onClick={() => onJump(event)}
+            className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition ${
+              selectedEvent?.id === event.id
+                ? "border-white bg-zinc-900"
+                : "border-zinc-800 bg-black hover:border-zinc-700"
+            }`}
+          >
+            <div>
+              <div className="mb-1 text-sm font-semibold uppercase tracking-[0.2em]">
+                {event.type}
+              </div>
+
+              <div className="text-xs text-zinc-500">
+                {event.team} ·{" "}
+                {formatClock(event.gameTime)}
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-sm font-bold">
+                {event.scoreSnapshot.home}-
+                {event.scoreSnapshot.away}
+              </div>
+
+              <div className="text-xs text-zinc-500">
+                {event.inferredState}
+              </div>
+            </div>
+          </button>
+        ))
+      )}
+    </div>
   );
 }
