@@ -12,7 +12,9 @@ export default function MobileVideoUpload() {
 
     while (!ready) {
       try {
-        const res = await fetch(`/api/mux/asset/${assetId}`)
+        const res = await fetch(
+          `/api/mux/asset/${assetId}`
+        )
 
         const data = await res.json()
 
@@ -85,25 +87,19 @@ export default function MobileVideoUpload() {
 
           try {
             const uploadCheck = await fetch(
-              `https://api.mux.com/video/v1/uploads/${data.uploadId}`,
-              {
-                headers: {
-                  Authorization:
-                    "Basic " +
-                    btoa(
-                      `${process.env.NEXT_PUBLIC_MUX_TOKEN_ID}:${process.env.NEXT_PUBLIC_MUX_TOKEN_SECRET}`
-                    ),
-                },
-              }
+              `/api/mux/upload/${data.uploadId}`
             )
 
             const uploadData =
               await uploadCheck.json()
 
-            console.log("mux upload check", uploadData)
+            console.log(
+              "upload lookup",
+              uploadData
+            )
 
             const assetId =
-              uploadData.data?.asset_id
+              uploadData.assetId
 
             if (!assetId) {
               setStatus("asset not ready yet")
