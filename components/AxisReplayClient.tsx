@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 
 import {
   AxisEvent,
@@ -15,33 +15,102 @@ type Props = {
   initialEvents: AxisEvent[]
 }
 
+function getSymbol(label: string) {
+  switch (label) {
+    case "PASS":
+      return "→"
+
+    case "DRIVE":
+      return "⇢"
+
+    case "SHOT":
+      return "●"
+
+    case "STOP":
+      return "×"
+
+    default:
+      return "•"
+  }
+}
+
+function getStateLabel(
+  analysis: AxisSessionAnalysis | null
+) {
+  if (!analysis) return "NO READ"
+
+  if (analysis.tempo_label === "fast") {
+    return "GOOD FLOW"
+  }
+
+  if (analysis.tempo_label === "balanced") {
+    return "LIVE POSSESSION"
+  }
+
+  return "STALLED"
+}
+
+function getInsight(
+  analysis: AxisSessionAnalysis | null
+) {
+  if (!analysis) {
+    return "Run analysis to reveal possession rhythm."
+  }
+
+  if (analysis.tempo_label === "fast") {
+    return "Defense reacted late before finish."
+  }
+
+  if (analysis.tempo_label === "balanced") {
+    return "Possession maintained movement through sequence."
+  }
+
+  return "Possession slowed before advantage formed."
+}
+
 export default function AxisReplayClient({
   session,
   initialEvents,
 }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoRef =
+    useRef<HTMLVideoElement>(null)
 
-  const [events, setEvents] = useState(initialEvents)
-  const [saving, setSaving] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
+  const [events, setEvents] =
+    useState(initialEvents)
+
+  const [saving, setSaving] =
+    useState(false)
+
+  const [analyzing, setAnalyzing] =
+    useState(false)
+
   const [analysis, setAnalysis] =
-    useState<AxisSessionAnalysis | null>(null)
+    useState<AxisSessionAnalysis | null>(
+      null
+    )
 
-  async function addEvent(label: string) {
+  async function addEvent(
+    label: string
+  ) {
     if (!videoRef.current) return
 
     try {
       setSaving(true)
 
-      const timeSeconds = videoRef.current.currentTime
+      const timeSeconds =
+        videoRef.current.currentTime
 
-      const newEvent = await createAxisEvent({
-        sessionId: session.id,
-        label,
-        timeSeconds,
-      })
+      const newEvent =
+        await createAxisEvent({
+          sessionId: session.id,
+          label,
+          timeSeconds,
+        })
 
-      setEvents((prev) => [...prev, newEvent])
+      setEvents((prev) => [
+        ...prev,
+        newEvent,
+      ])
     } catch (err) {
       console.error(err)
     } finally {
@@ -72,22 +141,29 @@ export default function AxisReplayClient({
     }
   }
 
-  function jumpToEvent(time: number) {
+  function jumpToEvent(
+    time: number
+  ) {
     if (!videoRef.current) return
 
     videoRef.current.currentTime = time
+
     videoRef.current.play()
   }
+
+  const orderedEvents = useMemo(() => {
+    return [...events].sort(
+      (a, b) =>
+        a.time_seconds -
+        b.time_seconds
+    )
+  }, [events])
 
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-        <p className="break-all text-sm uppercase tracking-[0.2em] text-neutral-400">
+        <p className="break-all text-xs uppercase tracking-[0.2em] text-neutral-500">
           {session.file_name}
-        </p>
-
-        <p className="mt-2 text-xs text-neutral-600">
-          {new Date(session.created_at).toLocaleString()}
         </p>
       </div>
 
@@ -99,75 +175,84 @@ export default function AxisReplayClient({
         src={session.video_url}
       />
 
+      <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-6">
+        <p className="text-xs uppercase tracking-[0.25em] text-neutral-500">
+          Axis Read
+        </p>
+
+        <h2 className="mt-3 text-3xl font-bold uppercase tracking-[0.2em]">
+          {getStateLabel(analysis)}
+        </h2>
+
+        <div className="mt-8 flex items-center overflow-x-auto text-5xl font-light tracking-[0.5em] text-white">
+          {orderedEvents.map(
+            (event, index) => (
+              <button
+                key={event.id}
+                onClick={() =>
+                  jumpToEvent(
+                    event.time_seconds
+                  )
+                }
+                className="transition hover:scale-110"
+                style={{
+                  marginRight:
+                    index ===
+                    orderedEvents.length - 1
+                      ? "0rem"
+                      : Math.max(
+                          0.5,
+                          Math.min(
+                            4,
+                            event.time_seconds /
+                              8
+                          )
+                        ) + "rem",
+                }}
+              >
+                {getSymbol(event.label)}
+              </button>
+            )
+          )}
+        </div>
+
+        <p className="mt-8 text-sm leading-7 text-neutral-400">
+          {getInsight(analysis)}
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
-        {["SHOT", "DRIVE", "PASS", "STOP"].map(
-          (label) => (
-            <button
-              key={label}
-              onClick={() => addEvent(label)}
-              disabled={saving}
-              className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 text-sm font-semibold tracking-[0.2em] transition hover:border-white disabled:opacity-50"
-            >
-              {label}
-            </button>
-          )
-        )}
+        {[
+          "PASS",
+          "DRIVE",
+          "SHOT",
+          "STOP",
+        ].map((label) => (
+          <button
+            key={label}
+            onClick={() =>
+              addEvent(label)
+            }
+            disabled={saving}
+            className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 text-sm font-semibold tracking-[0.2em] transition hover:border-white disabled:opacity-50"
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <button
         onClick={analyzeSession}
-        disabled={analyzing || events.length === 0}
-        className="rounded-xl border border-neutral-700 bg-white p-4 text-sm font-bold uppercase tracking-[0.2em] text-black disabled:opacity-40"
+        disabled={
+          analyzing ||
+          events.length === 0
+        }
+        className="rounded-xl bg-white p-4 text-sm font-bold uppercase tracking-[0.2em] text-black transition hover:opacity-90 disabled:opacity-40"
       >
-        {analyzing ? "Analyzing" : "Analyze Session"}
+        {analyzing
+          ? "Analyzing"
+          : "Analyze"}
       </button>
-
-      {analysis && (
-        <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-            Axis Read
-          </p>
-
-          <p className="mt-3 text-lg font-semibold uppercase tracking-[0.15em]">
-            {analysis.tempo_label}
-          </p>
-
-          <p className="mt-3 text-sm leading-6 text-neutral-400">
-            {analysis.summary}
-          </p>
-
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-neutral-400">
-            <div>Events: {analysis.event_count}</div>
-            <div>Avg Gap: {analysis.average_gap_seconds}s</div>
-            <div>Passes: {analysis.pass_count}</div>
-            <div>Drives: {analysis.drive_count}</div>
-            <div>Shots: {analysis.shot_count}</div>
-            <div>Stops: {analysis.stop_count}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        {[...events]
-          .sort((a, b) => a.time_seconds - b.time_seconds)
-          .map((event) => (
-            <button
-              key={event.id}
-              onClick={() =>
-                jumpToEvent(event.time_seconds)
-              }
-              className="flex items-center justify-between rounded-xl border border-neutral-900 bg-neutral-950 p-4 text-left transition hover:border-neutral-700"
-            >
-              <span className="font-semibold tracking-[0.15em]">
-                {event.label}
-              </span>
-
-              <span className="text-sm text-neutral-500">
-                {event.time_seconds.toFixed(1)}s
-              </span>
-            </button>
-          ))}
-      </div>
     </div>
   )
 }
