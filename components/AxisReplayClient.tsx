@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import MuxPlayer from "@mux/mux-player-react"
 import { motion } from "framer-motion"
 
@@ -40,6 +41,14 @@ const aiSuggestions = [
 export default function AxisReplayClient({
   playbackId,
 }: Props) {
+  const [answers, setAnswers] = useState<
+    Record<string, boolean | null>
+  >({
+    OPEN: null,
+    HELP: null,
+    ADVANTAGE: null,
+  })
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="mx-auto flex w-full max-w-md flex-col px-4 pb-32 pt-6">
@@ -185,33 +194,61 @@ export default function AxisReplayClient({
 
           <div className="flex flex-col gap-3">
 
-            {aiSuggestions.map((item, index) => (
-              <motion.div
-                whileTap={{ scale: 0.985 }}
-                key={index}
-                className="flex items-center justify-between rounded-[26px] border border-white/10 bg-zinc-950 px-5 py-5"
-              >
-                <div className="flex items-center gap-3">
+            {aiSuggestions.map((item, index) => {
+              const key = item.replace("?", "")
 
-                  <div className="h-2 w-2 rounded-full bg-white" />
+              return (
+                <motion.div
+                  whileTap={{ scale: 0.985 }}
+                  key={index}
+                  className="flex items-center justify-between rounded-[26px] border border-white/10 bg-zinc-950 px-5 py-5"
+                >
+                  <div className="flex items-center gap-3">
 
-                  <p className="text-[18px] font-bold tracking-[0.08em]">
-                    {item}
-                  </p>
-                </div>
+                    <div className="h-2 w-2 rounded-full bg-white" />
 
-                <div className="flex items-center gap-2">
+                    <p className="text-[18px] font-bold tracking-[0.08em]">
+                      {item}
+                    </p>
+                  </div>
 
-                  <button className="rounded-full border border-white/10 px-4 py-2 text-[10px] uppercase tracking-[0.25em] text-zinc-500">
-                    No
-                  </button>
+                  <div className="flex items-center gap-2">
 
-                  <button className="rounded-full bg-white px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] text-black">
-                    Yes
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    <button
+                      onClick={() =>
+                        setAnswers((prev) => ({
+                          ...prev,
+                          [key]: false,
+                        }))
+                      }
+                      className={`rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] transition-all ${
+                        answers[key] === false
+                          ? "bg-white text-black"
+                          : "border border-white/10 text-zinc-500"
+                      }`}
+                    >
+                      No
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        setAnswers((prev) => ({
+                          ...prev,
+                          [key]: true,
+                        }))
+                      }
+                      className={`rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] transition-all ${
+                        answers[key] === true
+                          ? "bg-white text-black"
+                          : "border border-white/10 text-zinc-500"
+                      }`}
+                    >
+                      Yes
+                    </button>
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
         </div>
       </div>
