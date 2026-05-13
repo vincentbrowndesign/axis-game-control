@@ -8,27 +8,26 @@ const mux = new Mux({
   tokenSecret: process.env.MUX_TOKEN_SECRET!,
 })
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const body = await request.json()
-
-    const upload = await mux.video.uploads.create({
-      cors_origin: "*",
-      new_asset_settings: {
-        playback_policy: ["public"],
-      },
-    })
+    const upload =
+      await mux.video.uploads.create({
+        cors_origin: "*",
+        new_asset_settings: {
+          playback_policy: ["public"],
+        },
+      })
 
     return NextResponse.json({
       uploadUrl: upload.url,
       uploadId: upload.id,
     })
   } catch (error) {
-    console.error(error)
+    console.error("MUX UPLOAD ERROR:", error)
 
     return NextResponse.json(
       {
-        error: "Upload creation failed",
+        error: "Failed creating upload",
       },
       {
         status: 500,
