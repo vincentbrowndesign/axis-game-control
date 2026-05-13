@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server"
 import Mux from "@mux/mux-node"
-
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 
 const mux = new Mux({
   tokenId: process.env.MUX_TOKEN_ID!,
   tokenSecret: process.env.MUX_TOKEN_SECRET!,
 })
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 type Context = {
   params: Promise<{
@@ -33,18 +37,13 @@ export async function GET(
       upload.asset_id
     )
 
-    if (asset.status !== "ready") {
-      return NextResponse.json({
-        status: "processing",
-      })
-    }
-
     const playbackId =
-      asset.playback_ids?.[0]?.id
+      asset.playback_ids?.[0]?.id || null
 
     if (!playbackId) {
       return NextResponse.json({
-        status: "waiting_for_playback",
+        status: "processing",
+        muxStatus: asset.status,
       })
     }
 
@@ -58,6 +57,7 @@ export async function GET(
       return NextResponse.json({
         status: "ready",
         sessionId: existing.id,
+        playbackId,
       })
     }
 
@@ -78,28 +78,26 @@ export async function GET(
 
       return NextResponse.json(
         {
+          status: "database_error",
           error: error.message,
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       )
     }
 
     return NextResponse.json({
       status: "ready",
       sessionId: session.id,
+      playbackId,
     })
   } catch (error) {
     console.error(error)
 
     return NextResponse.json(
       {
-        error: "UPLOAD_STATUS_FAILED",
+        status: "server_error",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     )
   }
 }
