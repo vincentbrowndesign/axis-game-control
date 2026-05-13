@@ -1,55 +1,42 @@
-import { NextResponse } from "next/server"
-import Mux from "@mux/mux-node"
-import { createClient } from "@supabase/supabase-js"
-
-const mux = new Mux({
-  tokenId: process.env.MUX_TOKEN_ID!,
-  tokenSecret: process.env.MUX_TOKEN_SECRET!,
-})
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
+    const body = await req.json();
 
-    const upload = await mux.video.uploads.create({
-      cors_origin: "*",
-      new_asset_settings: {
-        playback_policy: ["public"],
-      },
-    })
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
-    const sessionId = crypto.randomUUID()
-
-    await supabase
+    const { data, error } = await supabase
       .from("axis_sessions")
       .insert({
-        id: sessionId,
         title: body.title || "Axis Session",
-        upload_id: upload.id,
-        asset_id: null,
-        playback_id: null,
+        created_at: new Date().toISOString(),
+        upload_id: body.upload_id || null,
+        asset_id: body.asset_id || null,
+        playback_id: body.playback_id || null,
+        video_url: body.video_url || null,
       })
+      .select()
+      .single();
 
-    return NextResponse.json({
-      uploadUrl: upload.url,
-      uploadId: upload.id,
-      sessionId,
-    })
-  } catch (error) {
-    console.error(error)
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
 
+    return NextResponse.json(data);
+  } catch (error: any) {
     return NextResponse.json(
       {
-        error: "FAILED_CREATING_UPLOAD",
+        error: error.message || "Upload failed",
       },
-      {
-        status: 500,
-      }
-    )
+      { status: 500 }
+    );
   }
 }
