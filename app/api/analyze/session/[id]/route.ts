@@ -1,43 +1,60 @@
+// app/api/session/[id]/route.ts
+
 import { NextResponse } from "next/server"
+import { supabase } from "@/lib/supabaseClient"
 
-import { getAxisEvents } from "@/lib/axisSessions"
-import {
-  buildSessionAnalysis,
-  saveSessionAnalysis,
-} from "@/lib/axisAnalysis"
-
-type Props = {
-  params: Promise<{
-    id: string
-  }>
-}
-
-export async function POST(
-  _request: Request,
-  { params }: Props
+export async function GET(
+  request: Request,
+  context: {
+    params: Promise<{
+      id: string
+    }>
+  }
 ) {
   try {
-    const { id } = await params
+    const { id } = await context.params
 
-    const events = await getAxisEvents(id)
+    const { data: session, error } =
+      await supabase
+        .from("axis_sessions")
+        .select("*")
+        .eq("id", id)
+        .single()
 
-    const analysis = buildSessionAnalysis(id, events)
+    if (error) {
+      return NextResponse.json(
+        {
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
+      )
+    }
 
-    const saved = await saveSessionAnalysis(analysis)
+    const { data: events } =
+      await supabase
+        .from("axis_events")
+        .select("*")
+        .eq("session_id", id)
+        .order("timestamp", {
+          ascending: true,
+        })
 
     return NextResponse.json({
-      ok: true,
-      analysis: saved,
+      session,
+      events: events || [],
     })
   } catch (error) {
     console.error(error)
 
     return NextResponse.json(
       {
-        ok: false,
-        error: "Failed to analyze session",
+        error: "Failed to load session",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     )
   }
 }
