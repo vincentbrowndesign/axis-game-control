@@ -27,16 +27,26 @@ export async function GET(_req: Request, context: Context) {
     if (!upload.asset_id) {
       return NextResponse.json({
         status: "processing",
+        message: "Waiting for Mux asset",
       })
     }
 
     const asset = await mux.video.assets.retrieve(upload.asset_id)
 
-    const playbackId = asset.playback_ids?.[0]?.id ?? null
+    if (asset.status !== "ready") {
+      return NextResponse.json({
+        status: "processing",
+        muxStatus: asset.status,
+        message: "Mux asset not ready yet",
+      })
+    }
+
+    const playbackId = asset.playback_ids?.[0]?.id
 
     if (!playbackId) {
       return NextResponse.json({
         status: "processing",
+        message: "Waiting for playback id",
       })
     }
 
@@ -70,7 +80,10 @@ export async function GET(_req: Request, context: Context) {
       console.error("SESSION_INSERT_FAILED", error)
 
       return NextResponse.json(
-        { error: "SESSION_INSERT_FAILED" },
+        {
+          status: "error",
+          error: error.message,
+        },
         { status: 500 }
       )
     }
@@ -84,7 +97,10 @@ export async function GET(_req: Request, context: Context) {
     console.error("UPLOAD_STATUS_FAILED", error)
 
     return NextResponse.json(
-      { error: "UPLOAD_STATUS_FAILED" },
+      {
+        status: "error",
+        error: "UPLOAD_STATUS_FAILED",
+      },
       { status: 500 }
     )
   }
