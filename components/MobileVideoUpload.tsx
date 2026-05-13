@@ -16,6 +16,7 @@ export default function MobileVideoUpload() {
   async function handleFile(file: File) {
     try {
       setSelectedFile(file)
+
       setStatus("UPLOADING")
       setProgress(10)
 
@@ -24,6 +25,8 @@ export default function MobileVideoUpload() {
       })
 
       const uploadData = await createUpload.json()
+
+      console.log("UPLOAD DATA", uploadData)
 
       if (!uploadData.url || !uploadData.id) {
         setStatus("UPLOAD FAILED")
@@ -35,13 +38,24 @@ export default function MobileVideoUpload() {
 
       setProgress(20)
 
-      await fetch(uploadUrl, {
+      const uploadResponse = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
-          "Content-Type": file.type || "video/quicktime",
+          "Content-Type":
+            file.type || "video/quicktime",
         },
         body: file,
       })
+
+      console.log(
+        "MUX UPLOAD RESPONSE",
+        uploadResponse.status
+      )
+
+      if (!uploadResponse.ok) {
+        setStatus("UPLOAD FAILED")
+        return
+      }
 
       setStatus("PROCESSING")
       setProgress(70)
@@ -59,10 +73,11 @@ export default function MobileVideoUpload() {
 
         const result = await check.json()
 
-        console.log(result)
+        console.log("POLL RESULT", result)
 
         if (result.status === "ready") {
           ready = true
+
           setProgress(100)
 
           router.push(
@@ -76,18 +91,26 @@ export default function MobileVideoUpload() {
           result.status === "server_error" ||
           result.status === "database_error"
         ) {
-          setStatus("UPLOAD FAILED")
+          console.log(result)
+
+          setStatus(
+            result.error ||
+              result.status ||
+              "UPLOAD FAILED"
+          )
+
           return
         }
       }
     } catch (err) {
       console.error(err)
+
       setStatus("UPLOAD FAILED")
     }
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-6 flex flex-col gap-6">
+    <main className="min-h-screen bg-black text-white p-6 flex flex-col gap-6 overflow-hidden">
       <div>
         <h1 className="text-7xl font-bold tracking-[0.35em] leading-none">
           AXIS
@@ -157,7 +180,7 @@ export default function MobileVideoUpload() {
 
       <div className="w-full h-5 bg-zinc-900 rounded-full overflow-hidden">
         <div
-          className="h-full bg-white transition-all"
+          className="h-full bg-white transition-all duration-500"
           style={{
             width: `${progress}%`,
           }}
@@ -165,7 +188,7 @@ export default function MobileVideoUpload() {
       </div>
 
       <div className="text-center">
-        <div className="text-7xl tracking-[0.35em] text-zinc-400">
+        <div className="text-6xl tracking-[0.35em] text-zinc-400 break-words">
           {status}
         </div>
 
