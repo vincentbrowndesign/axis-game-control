@@ -1,6 +1,14 @@
-import Mux from "@mux/mux-node";
+// lib/supabase.ts
 
-export const mux = new Mux({
-  tokenId: process.env.MUX_TOKEN_ID!,
-  tokenSecret: process.env.MUX_TOKEN_SECRET!,
-});
+import { createClient } from "@supabase/supabase-js"
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+export const supabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey
+)

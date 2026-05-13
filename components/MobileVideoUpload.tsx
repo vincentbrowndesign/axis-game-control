@@ -4,74 +4,90 @@
 
 import { useState } from "react"
 
+type UploadReadyPayload = {
+  playbackId: string
+  assetId: string
+  uploadId: string
+}
+
 type Props = {
-  onReady?: (playbackId: string) => void
+  onReady?: (
+    payload: UploadReadyPayload
+  ) => void
 }
 
 export default function MobileVideoUpload({
   onReady,
 }: Props) {
-  const [uploading, setUploading] =
-    useState(false)
-
   const [status, setStatus] =
     useState("")
 
   const [progress, setProgress] =
     useState(0)
 
-  async function wait(ms: number) {
+  const [uploading, setUploading] =
+    useState(false)
+
+  function wait(ms: number) {
     return new Promise((resolve) =>
       setTimeout(resolve, ms)
     )
   }
 
+  // WAIT FOR ASSET ID
+
   async function waitForAsset(
     uploadId: string
   ) {
-    let assetId: string | null = null
-
-    while (!assetId) {
+    while (true) {
       const res = await fetch(
         `/api/mux/upload/${uploadId}`
       )
 
       const data = await res.json()
 
-      console.log("UPLOAD STATUS:", data)
+      console.log(
+        "UPLOAD STATUS:",
+        data
+      )
 
-      assetId = data.assetId
-
-      if (!assetId) {
-        await wait(2000)
+      if (data.assetId) {
+        return data.assetId as string
       }
-    }
 
-    return assetId
+      await wait(2000)
+    }
   }
+
+  // WAIT FOR PLAYBACK + READY STATUS
 
   async function waitForPlayback(
     assetId: string
   ) {
-    let playbackId: string | null = null
-
-    while (!playbackId) {
+    while (true) {
       const res = await fetch(
         `/api/mux/asset/${assetId}`
       )
 
       const data = await res.json()
 
-      console.log("ASSET STATUS:", data)
+      console.log(
+        "ASSET STATUS:",
+        data
+      )
 
-      playbackId = data.playbackId
+      // IMPORTANT:
+      // wait until fully ready
 
-      if (!playbackId) {
-        await wait(2000)
+      if (
+        data.status === "ready" &&
+        data.playbackId
+      ) {
+        return data.playbackId as string
       }
-    }
 
-    return playbackId
+      await wait(2000)
+    }
   }
 
   async function handleUpload(
@@ -84,9 +100,9 @@ export default function MobileVideoUpload({
     try {
       setUploading(true)
 
-      setStatus("Creating upload...")
-
       setProgress(10)
+
+      setStatus("Creating upload...")
 
       // CREATE MUX UPLOAD
 
@@ -106,11 +122,11 @@ export default function MobileVideoUpload({
         )
       }
 
-      setStatus("Uploading video...")
-
-      setProgress(30)
-
       // DIRECT UPLOAD TO MUX
+
+      setProgress(35)
+
+      setStatus("Uploading video...")
 
       const uploadRes = await fetch(
         createData.uploadUrl,
@@ -120,51 +136,65 @@ export default function MobileVideoUpload({
           body: file,
 
           headers: {
-            "Content-Type": file.type,
+            "Content-Type":
+              file.type ||
+              "video/quicktime",
           },
         }
       )
 
       if (!uploadRes.ok) {
-        throw new Error("Upload failed")
+        throw new Error(
+          "Mux upload failed"
+        )
       }
 
-      setStatus("Processing asset...")
+      // WAIT FOR ASSET
 
       setProgress(60)
 
-      // WAIT FOR ASSET ID
-
-      const assetId = await waitForAsset(
-        createData.uploadId
+      setStatus(
+        "Processing asset..."
       )
+
+      const assetId =
+        await waitForAsset(
+          createData.uploadId
+        )
 
       console.log(
         "ASSET READY:",
         assetId
       )
 
-      setStatus("Generating playback...")
+      // WAIT FOR PLAYBACK
 
       setProgress(80)
 
-      // WAIT FOR PLAYBACK ID
+      setStatus(
+        "Preparing replay..."
+      )
 
       const playbackId =
-        await waitForPlayback(assetId)
+        await waitForPlayback(
+          assetId
+        )
 
       console.log(
         "PLAYBACK READY:",
         playbackId
       )
 
-      setStatus("Replay ready")
-
       setProgress(100)
 
-      if (onReady) {
-        onReady(playbackId)
-      }
+      setStatus("Replay ready")
+
+      onReady?.({
+        playbackId,
+        assetId,
+        uploadId:
+          createData.uploadId,
+      })
     } catch (error) {
       console.error(error)
 
@@ -175,28 +205,29 @@ export default function MobileVideoUpload({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       <input
         type="file"
         accept="video/*"
         capture="environment"
         onChange={handleUpload}
+        className="text-white"
       />
 
-      <div className="space-y-2">
-        <div className="h-2 overflow-hidden rounded bg-zinc-800">
-          <div
-            className="h-full bg-green-500 transition-all"
-            style={{
-              width: `${progress}%`,
-            }}
-          />
-        </div>
+      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className="h-full bg-green-500 transition-all"
+          style={{
+            width: `${progress}%`,
+          }}
+        />
+      </div>
 
+      {status && (
         <p className="text-sm text-zinc-400">
           {status}
         </p>
-      </div>
+      )}
     </div>
   )
 }
