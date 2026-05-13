@@ -26,6 +26,19 @@ export default function MobileVideoUpload() {
           `/api/mux/asset/${assetId}`
         )
 
+        if (!res.ok) {
+          console.error(
+            "poll failed",
+            res.status
+          )
+
+          await new Promise((resolve) =>
+            setTimeout(resolve, 2000)
+          )
+
+          continue
+        }
+
         const data = await res.json()
 
         console.log("asset poll", data)
@@ -65,8 +78,10 @@ export default function MobileVideoUpload() {
         )
       } catch (err) {
         console.error(err)
-        setStatus("polling failed")
-        return
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2000)
+        )
       }
     }
   }
@@ -111,24 +126,46 @@ export default function MobileVideoUpload() {
           setStatus("processing replay")
 
           try {
-            const uploadCheck = await fetch(
-              `/api/mux/upload/${data.uploadId}`
-            )
+            let assetId = ""
 
-            const uploadData =
-              await uploadCheck.json()
+            while (!assetId) {
+              const uploadCheck =
+                await fetch(
+                  `/api/mux/upload/${data.uploadId}`
+                )
 
-            console.log(
-              "upload lookup",
-              uploadData
-            )
+              if (!uploadCheck.ok) {
+                await new Promise(
+                  (resolve) =>
+                    setTimeout(
+                      resolve,
+                      2000
+                    )
+                )
 
-            const assetId =
-              uploadData.assetId
+                continue
+              }
 
-            if (!assetId) {
-              setStatus("asset not ready yet")
-              return
+              const uploadData =
+                await uploadCheck.json()
+
+              console.log(
+                "upload lookup",
+                uploadData
+              )
+
+              assetId =
+                uploadData.assetId || ""
+
+              if (!assetId) {
+                await new Promise(
+                  (resolve) =>
+                    setTimeout(
+                      resolve,
+                      2000
+                    )
+                )
+              }
             }
 
             await pollAsset(
