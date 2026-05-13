@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 
+console.log("UPLOAD ROUTE LIVE")
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -8,32 +10,60 @@ export async function POST(req: Request) {
     const {
       sessionId,
       playbackId,
-      assetId,
+     assetId,
     } = body
+
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: "missing sessionId" },
+        { status: 400 }
+      )
+    }
+
+    const updatePayload: {
+      playback_id?: string
+      asset_id?: string
+    } = {}
+
+    if (playbackId) {
+      updatePayload.playback_id = playbackId
+    }
+
+    if (assetId) {
+      updatePayload.asset_id = assetId
+    }
 
     const { data, error } = await supabase
       .from("axis_sessions")
-      .update({
-        playback_id: playbackId,
-        asset_id: assetId,
-      })
+      .update(updatePayload)
       .eq("id", sessionId)
       .select()
       .single()
 
     if (error) {
-      console.error(error)
-      return NextResponse.json(error, { status: 500 })
+      console.error("SUPABASE SAVE ERROR:", error)
+
+      return NextResponse.json(
+        error,
+        { status: 500 }
+      )
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({
+      success: true,
+      data,
+    })
 
   } catch (err) {
-    console.error(err)
+    console.error("UPLOAD SAVE ROUTE ERROR:", err)
 
     return NextResponse.json(
-      { error: "failed to save replay" },
-      { status: 500 }
+      {
+        error: "failed to save replay",
+      },
+      {
+        status: 500,
+      }
     )
   }
 }
