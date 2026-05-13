@@ -22,6 +22,8 @@ export async function GET(
         .single()
 
     if (error) {
+      console.error(error)
+
       return NextResponse.json(
         {
           error: error.message,
@@ -50,7 +52,7 @@ export async function GET(
 
     return NextResponse.json(
       {
-        error: "Failed to load session",
+        error: "Session route failed",
       },
       {
         status: 500,
