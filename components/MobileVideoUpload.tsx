@@ -1,171 +1,178 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 
 export default function MobileVideoUpload() {
   const router = useRouter()
 
-  const [status, setStatus] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [progress, setProgress] = useState(0)
+  const [status, setStatus] = useState("")
+  const [selectedFile, setSelectedFile] =
+    useState<File | null>(null)
 
   async function handleFile(file: File) {
     try {
-      setStatus("CREATING")
-      setProgress(5)
+      setSelectedFile(file)
+      setStatus("UPLOADING")
+      setProgress(10)
 
-      const createRes = await fetch("/api/upload", {
+      const createUpload = await fetch("/api/upload", {
         method: "POST",
       })
 
-      const createData = await createRes.json()
+      const uploadData = await createUpload.json()
 
-      const uploadUrl = createData.url
-      const uploadId = createData.id
-
-      if (!uploadUrl || !uploadId) {
-        throw new Error("UPLOAD_URL_MISSING")
+      if (!uploadData.url || !uploadData.id) {
+        setStatus("UPLOAD FAILED")
+        return
       }
 
-      setStatus("UPLOADING")
+      const uploadUrl = uploadData.url
+      const uploadId = uploadData.id
 
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
+      setProgress(20)
 
-        xhr.open("PUT", uploadUrl)
-
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            const percent = Math.round(
-              (event.loaded / event.total) * 100
-            )
-
-            setProgress(percent)
-          }
-        }
-
-        xhr.onload = () => {
-          if (
-            xhr.status >= 200 &&
-            xhr.status < 300
-          ) {
-            resolve()
-          } else {
-            reject()
-          }
-        }
-
-        xhr.onerror = () => reject()
-
-        xhr.send(file)
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type || "video/quicktime",
+        },
+        body: file,
       })
 
       setStatus("PROCESSING")
-      setProgress(100)
+      setProgress(70)
 
       let ready = false
 
       while (!ready) {
-        await new Promise((r) =>
-          setTimeout(r, 2500)
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2500)
         )
 
-        const pollRes = await fetch(
+        const check = await fetch(
           `/api/mux/upload/${uploadId}`
         )
 
-        const pollData = await pollRes.json()
+        const result = await check.json()
 
-        if (pollData.status === "ready") {
+        console.log(result)
+
+        if (result.status === "ready") {
           ready = true
+          setProgress(100)
 
           router.push(
-            `/session/${pollData.sessionId}`
+            `/session/${result.sessionId}`
           )
+
+          return
+        }
+
+        if (
+          result.status === "server_error" ||
+          result.status === "database_error"
+        ) {
+          setStatus("UPLOAD FAILED")
+          return
         }
       }
-    } catch (error) {
-      console.error(error)
-
+    } catch (err) {
+      console.error(err)
       setStatus("UPLOAD FAILED")
     }
   }
 
   return (
-    <div className="min-h-screen bg-black p-6 text-white">
-      <div className="mx-auto max-w-xl">
-        <h1 className="text-[72px] font-black leading-[0.9] tracking-[0.35em]">
+    <main className="min-h-screen bg-black text-white p-6 flex flex-col gap-6">
+      <div>
+        <h1 className="text-7xl font-bold tracking-[0.35em] leading-none">
           AXIS
-          <br />
-          SESSION
         </h1>
 
-        <div className="mt-10 space-y-6">
-          <label className="block rounded-[32px] border border-white/10 p-10">
-            <div className="text-[42px] font-bold tracking-[0.35em]">
-              CHOOSE
-              <br />
-              FILE
-            </div>
+        <h1 className="text-7xl font-bold tracking-[0.35em] leading-none">
+          SESSION
+        </h1>
+      </div>
 
-            <input
-              type="file"
-              accept="video/*,.mov,.mp4"
-              className="hidden"
-              onChange={(e) => {
-                const file =
-                  e.target.files?.[0]
-
-                if (file) {
-                  handleFile(file)
-                }
-              }}
-            />
-          </label>
-
-          <label className="block rounded-[32px] border border-white/10 p-10">
-            <div className="text-[42px] font-bold tracking-[0.35em]">
-              RECORD
-            </div>
-
-            <input
-              type="file"
-              accept="video/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const file =
-                  e.target.files?.[0]
-
-                if (file) {
-                  handleFile(file)
-                }
-              }}
-            />
-          </label>
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        className="border border-zinc-900 rounded-[2rem] p-8 text-left"
+      >
+        <div className="text-5xl tracking-[0.35em] font-semibold">
+          CHOOSE
         </div>
 
-        {!!status && (
-          <div className="mt-10">
-            <div className="h-6 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full bg-white"
-                style={{
-                  width: `${progress}%`,
-                }}
-              />
-            </div>
+        <div className="text-5xl tracking-[0.35em] font-semibold mt-2">
+          FILE
+        </div>
 
-            <div className="mt-8 text-center text-[56px] tracking-[0.35em] text-white/70">
-              {status}
-            </div>
+        <div className="mt-10 text-2xl text-zinc-300 break-all">
+          {selectedFile
+            ? selectedFile.name
+            : "Choose existing clip"}
+        </div>
+      </button>
 
-            <div className="mt-4 text-center text-4xl text-white/40">
-              {progress}%
-            </div>
-          </div>
-        )}
+      <label className="border border-zinc-900 rounded-[2rem] p-8 block">
+        <div className="text-5xl tracking-[0.35em] font-semibold">
+          RECORD
+        </div>
+
+        <div className="mt-10 text-2xl text-zinc-500">
+          Record from camera.
+        </div>
+
+        <input
+          type="file"
+          accept="video/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+
+            if (file) {
+              handleFile(file)
+            }
+          }}
+        />
+      </label>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+
+          if (file) {
+            handleFile(file)
+          }
+        }}
+      />
+
+      <div className="w-full h-5 bg-zinc-900 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-white transition-all"
+          style={{
+            width: `${progress}%`,
+          }}
+        />
       </div>
-    </div>
+
+      <div className="text-center">
+        <div className="text-7xl tracking-[0.35em] text-zinc-400">
+          {status}
+        </div>
+
+        <div className="mt-6 text-4xl text-zinc-500">
+          {progress}%
+        </div>
+      </div>
+    </main>
   )
 }
