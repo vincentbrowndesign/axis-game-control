@@ -1,7 +1,5 @@
-import { notFound } from "next/navigation"
-
+import { createClient } from "@supabase/supabase-js"
 import AxisReplayClient from "@/components/AxisReplayClient"
-import { supabase } from "@/lib/supabase"
 
 type Props = {
   params: Promise<{
@@ -9,10 +7,15 @@ type Props = {
   }>
 }
 
-export default async function Page({
+export default async function SessionPage({
   params,
 }: Props) {
   const { id } = await params
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
   const { data: session } = await supabase
     .from("axis_sessions")
@@ -20,8 +23,14 @@ export default async function Page({
     .eq("id", id)
     .single()
 
-  if (!session?.playback_id) {
-    notFound()
+  if (!session) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-white/40">
+          Session not found.
+        </p>
+      </main>
+    )
   }
 
   return (
