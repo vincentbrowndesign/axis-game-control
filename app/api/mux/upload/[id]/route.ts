@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import Mux from "@mux/mux-node"
-import { createClient } from "@supabase/supabase-js"
+import { supabase } from "@/lib/supabase"
 
 type Context = {
   params: Promise<{
@@ -47,11 +47,6 @@ export async function GET(
       })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
     const existing = await supabase
       .from("axis_sessions")
       .select("*")
@@ -68,10 +63,10 @@ export async function GET(
     const inserted = await supabase
       .from("axis_sessions")
       .insert({
+        title: "Axis Session",
         upload_id: id,
         asset_id: asset.id,
         playback_id: playbackId,
-        title: "Axis Session",
         video_url: `https://stream.mux.com/${playbackId}.m3u8`,
       })
       .select()
