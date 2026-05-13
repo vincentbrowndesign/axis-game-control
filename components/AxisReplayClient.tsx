@@ -58,6 +58,8 @@ export default function AxisReplayClient({
 
         const data = await response.json()
 
+        console.log("SESSION DATA", data)
+
         setSession(data.session)
         setEvents(data.events || [])
       } catch (error) {
@@ -178,18 +180,22 @@ export default function AxisReplayClient({
                 ).toLocaleString()
               : ""}
           </p>
+
+          <p className="mt-3 break-all text-xs text-neutral-600">
+            playback_id: {playbackId || "NONE"}
+          </p>
         </div>
 
         {playbackId ? (
-          <div className="mt-6 overflow-hidden rounded-[28px]">
+          <div className="mt-6 overflow-hidden rounded-[28px] border border-white/10">
             <MuxPlayer
-              playbackId={playbackId}
-              streamType="on-demand"
-              accentColor="#ffffff"
+              playback-id={playbackId}
+              stream-type="on-demand"
+              accent-color="#ffffff"
             />
           </div>
         ) : (
-          <div className="mt-6 flex aspect-video items-center justify-center rounded-[28px] border border-white/10 bg-neutral-950">
+          <div className="mt-6 flex aspect-video items-center justify-center rounded-[28px] border border-white/10 bg-neutral-950 text-2xl">
             NO VIDEO
           </div>
         )}
