@@ -1,10 +1,13 @@
-// app/api/session/[id]/route.ts
-
 import { NextResponse } from "next/server"
-import { supabase } from "@/lib/supabaseClient"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET(
-  request: Request,
+  req: Request,
   context: {
     params: Promise<{
       id: string
@@ -12,36 +15,23 @@ export async function GET(
   }
 ) {
   try {
-    const { id } = await context.params
+    const params = await context.params
 
-    const { data: session, error } =
-      await supabase
-        .from("axis_sessions")
-        .select("*")
-        .eq("id", id)
-        .single()
+    const sessionId = params.id
 
-    if (error) {
-      console.error(error)
+    const { data: session } = await supabase
+      .from("axis_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .single()
 
-      return NextResponse.json(
-        {
-          error: error.message,
-        },
-        {
-          status: 500,
-        }
-      )
-    }
-
-    const { data: events } =
-      await supabase
-        .from("axis_events")
-        .select("*")
-        .eq("session_id", id)
-        .order("timestamp", {
-          ascending: true,
-        })
+    const { data: events } = await supabase
+      .from("axis_events")
+      .select("*")
+      .eq("session_id", sessionId)
+      .order("created_at", {
+        ascending: true,
+      })
 
     return NextResponse.json({
       session,
@@ -52,7 +42,7 @@ export async function GET(
 
     return NextResponse.json(
       {
-        error: "Session route failed",
+        error: "SESSION_FETCH_FAILED",
       },
       {
         status: 500,

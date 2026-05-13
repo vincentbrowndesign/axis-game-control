@@ -3,241 +3,140 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
-import {
-  createAxisSession,
-} from "@/lib/axisSessions"
-
 export default function MobileVideoUpload() {
   const router = useRouter()
 
+  const [uploading, setUploading] =
+    useState(false)
+
+  const [progress, setProgress] =
+    useState(0)
+
   const [status, setStatus] = useState("")
-  const [progress, setProgress] = useState(0)
-  const [playbackId, setPlaybackId] = useState("")
 
-  async function pollAsset(
-    assetId: string,
-    fileName: string
+  async function handleFile(
+    file: File
   ) {
-    let ready = false
-
-    while (!ready) {
-      try {
-        const res = await fetch(
-          `/api/mux/asset/${assetId}`
-        )
-
-        if (!res.ok) {
-          console.error(
-            "poll failed",
-            res.status
-          )
-
-          await new Promise((resolve) =>
-            setTimeout(resolve, 2000)
-          )
-
-          continue
-        }
-
-        const data = await res.json()
-
-        console.log("asset poll", data)
-
-        if (data.status === "ready") {
-          ready = true
-
-          setPlaybackId(data.playbackId)
-
-          setStatus("saving session")
-
-          const playbackUrl = `https://stream.mux.com/${data.playbackId}.m3u8`
-
-          const session =
-            await createAxisSession({
-              videoUrl: playbackUrl,
-              fileName,
-              title: "Axis Session",
-            })
-
-          setStatus("replay ready")
-
-          router.push(
-            `/session/${session.id}`
-          )
-
-          return
-        }
-
-        if (data.status === "errored") {
-          setStatus("mux processing failed")
-          return
-        }
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, 2000)
-        )
-      } catch (err) {
-        console.error(err)
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, 2000)
-        )
-      }
-    }
-  }
-
-  async function handleFile(file: File) {
     try {
-      setPlaybackId("")
-      setProgress(0)
+      setUploading(true)
+      setStatus("CREATING SESSION")
 
-      setStatus("creating upload")
+      const createResponse = await fetch(
+        "/api/upload",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            title: file.name,
+          }),
+        }
+      )
 
-      const res = await fetch("/api/upload", {
-        method: "POST",
-      })
+      const createData =
+        await createResponse.json()
 
-      const data = await res.json()
-
-      console.log("upload response", data)
-
-      if (!data.uploadUrl || !data.uploadId) {
-        setStatus("failed creating upload")
+      if (!createData.uploadUrl) {
+        setStatus("FAILED CREATING UPLOAD")
         return
       }
 
-      setStatus("uploading")
+      setStatus("UPLOADING VIDEO")
 
-      const xhr = new XMLHttpRequest()
+      await fetch(createData.uploadUrl, {
+        method: "PUT",
+        body: file,
+      })
 
-      xhr.open("PUT", data.uploadUrl, true)
+      setProgress(70)
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent =
-            (event.loaded / event.total) * 100
+      let playbackId: string | null =
+        null
 
-          setProgress(percent)
+      setStatus("PROCESSING VIDEO")
+
+      while (!playbackId) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2500)
+        )
+
+        const statusResponse =
+          await fetch(
+            `/api/upload/${createData.uploadId}`
+          )
+
+        const statusData =
+          await statusResponse.json()
+
+        if (
+          statusData.status === "ready"
+        ) {
+          playbackId =
+            statusData.playbackId
         }
       }
 
-      xhr.onload = async () => {
-        if (xhr.status === 200) {
-          setStatus("processing replay")
+      setProgress(100)
 
-          try {
-            let assetId = ""
+      setStatus("SESSION READY")
 
-            while (!assetId) {
-              const uploadCheck =
-                await fetch(
-                  `/api/mux/upload/${data.uploadId}`
-                )
-
-              if (!uploadCheck.ok) {
-                await new Promise(
-                  (resolve) =>
-                    setTimeout(
-                      resolve,
-                      2000
-                    )
-                )
-
-                continue
-              }
-
-              const uploadData =
-                await uploadCheck.json()
-
-              console.log(
-                "upload lookup",
-                uploadData
-              )
-
-              assetId =
-                uploadData.assetId || ""
-
-              if (!assetId) {
-                await new Promise(
-                  (resolve) =>
-                    setTimeout(
-                      resolve,
-                      2000
-                    )
-                )
-              }
-            }
-
-            await pollAsset(
-              assetId,
-              file.name
-            )
-          } catch (err) {
-            console.error(err)
-            setStatus("asset lookup failed")
-          }
-        } else {
-          console.error(xhr.responseText)
-
-          setStatus("upload failed")
-        }
-      }
-
-      xhr.onerror = () => {
-        setStatus("upload failed")
-      }
-
-      xhr.setRequestHeader(
-        "Content-Type",
-        file.type
+      router.push(
+        `/session/${createData.sessionId}`
       )
+    } catch (error) {
+      console.error(error)
 
-      xhr.send(file)
-    } catch (err) {
-      console.error(err)
-      setStatus("error")
+      setStatus("UPLOAD FAILED")
+    } finally {
+      setUploading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black p-6 text-white">
-      <h1 className="text-center text-5xl font-bold tracking-[0.25em]">
-        AXIS SESSION
-      </h1>
+    <main className="flex min-h-screen items-center justify-center bg-black px-6 text-white">
+      <div className="w-full max-w-xl">
+        <h1 className="text-center text-6xl font-black tracking-[0.35em]">
+          AXIS SESSION
+        </h1>
 
-      <input
-        type="file"
-        accept="video/*"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
+        <div className="mt-14">
+          <input
+            type="file"
+            accept="video/*"
+            capture="environment"
+            onChange={(e) => {
+              const file =
+                e.target.files?.[0]
 
-          if (file) {
-            handleFile(file)
-          }
-        }}
-      />
+              if (file) {
+                handleFile(file)
+              }
+            }}
+            className="w-full text-xl"
+          />
+        </div>
 
-      <div className="h-4 w-full max-w-md overflow-hidden rounded-full bg-neutral-800">
-        <div
-          className="h-full bg-green-500 transition-all"
-          style={{
-            width: `${progress}%`,
-          }}
-        />
+        <div className="mt-10 h-5 overflow-hidden rounded-full bg-neutral-900">
+          <div
+            className="h-full bg-white transition-all duration-500"
+            style={{
+              width: `${progress}%`,
+            }}
+          />
+        </div>
+
+        <p className="mt-10 text-center text-2xl tracking-[0.3em] text-neutral-500">
+          {status}
+        </p>
+
+        {uploading && (
+          <p className="mt-5 text-center text-neutral-700">
+            {progress}%
+          </p>
+        )}
       </div>
-
-      <p className="uppercase tracking-[0.2em] text-neutral-400">
-        {status}
-      </p>
-
-      {playbackId && (
-        <video
-          className="mt-6 w-full max-w-md rounded-xl"
-          controls
-          playsInline
-          src={`https://stream.mux.com/${playbackId}.m3u8`}
-        />
-      )}
-    </div>
+    </main>
   )
 }
