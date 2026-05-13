@@ -49,7 +49,7 @@ export default function SessionPage({
 
   const playerRef = useRef<any>(null)
 
-  // RESOLVE NEXT 15 PARAMS
+  // NEXT 15 PARAMS
 
   useEffect(() => {
     async function resolveParams() {
@@ -61,7 +61,7 @@ export default function SessionPage({
     resolveParams()
   }, [params])
 
-  // LOAD SESSION
+  // LOAD DATA
 
   useEffect(() => {
     if (!sessionId) return
@@ -130,6 +130,11 @@ export default function SessionPage({
     try {
       setSaving(true)
 
+      console.log(
+        "SAVE PAYLOAD:",
+        payload
+      )
+
       const { error } =
         await supabase
           .from("axis_sessions")
@@ -154,6 +159,12 @@ export default function SessionPage({
           "SAVE REPLAY ERROR:",
           error
         )
+
+        alert(
+          JSON.stringify(error)
+        )
+
+        setSaving(false)
 
         return
       }
