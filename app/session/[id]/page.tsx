@@ -1,5 +1,3 @@
-// app/session/[id]/page.tsx
-
 import AxisReplayClient from "@/components/AxisReplayClient"
 
 type PageProps = {
@@ -8,14 +6,8 @@ type PageProps = {
   }>
 }
 
-export default async function SessionPage({
-  params,
-}: PageProps) {
+export default async function SessionPage({ params }: PageProps) {
   const { id } = await params
 
-  return (
-    <main className="min-h-screen bg-black">
-      <AxisReplayClient sessionId={id} />
-    </main>
-  )
+  return <AxisReplayClient sessionId={id} />
 }
