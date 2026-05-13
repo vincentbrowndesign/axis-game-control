@@ -1,12 +1,14 @@
 "use client"
 
 import MuxPlayer from "@mux/mux-player-react"
-import AxisInsights from "./AxisInsights"
+import AxisInsights from "@/engine/AxisInsights"
 
 const mockInsights = [
-  "Advantage created.",
-  "Defense shifted.",
-  "Help defender committed.",
+  "ADVANTAGE CREATED",
+  "DEFENSE SHIFTED",
+  "HELP DEFENDER COMMITTED",
+  "GAP OPENED",
+  "STACK ACTION FORMED",
 ]
 
 type Props = {
@@ -18,9 +20,11 @@ export default function AxisReplayClient({
 }: Props) {
   return (
     <main className="min-h-screen bg-black text-white px-6 py-12">
-      <div className="max-w-md mx-auto flex flex-col gap-8">
-        <h1 className="text-[64px] leading-[0.9] font-black tracking-[0.35em] uppercase">
-          Axis Replay
+      <div className="mx-auto flex max-w-md flex-col gap-8">
+        <h1 className="text-[64px] leading-[0.9] font-black tracking-[0.35em]">
+          AXIS
+          <br />
+          REPLAY
         </h1>
 
         <div className="overflow-hidden rounded-[32px] border border-white/10">
