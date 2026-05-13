@@ -1,43 +1,67 @@
 // app/api/mux/upload/route.ts
 
 import { NextResponse } from "next/server"
-import Mux from "@mux/mux-node"
-
-export const runtime = "nodejs"
-
-const mux = new Mux({
-  tokenId: process.env.MUX_TOKEN_ID!,
-  tokenSecret: process.env.MUX_TOKEN_SECRET!,
-})
 
 export async function POST() {
   try {
-    const upload = await mux.video.uploads.create({
-      cors_origin: "*",
+    const tokenId =
+      process.env.MUX_TOKEN_ID
 
-      new_asset_settings: {
-        playback_policy: ["public"],
-      },
-    })
+    const tokenSecret =
+      process.env.MUX_TOKEN_SECRET
 
-    return NextResponse.json({
-      success: true,
+    if (!tokenId || !tokenSecret) {
+      return NextResponse.json(
+        {
+          error:
+            "Missing Mux credentials",
+        },
+        { status: 500 }
+      )
+    }
 
-      uploadId: upload.id,
+    const response = await fetch(
+      "https://api.mux.com/video/v1/uploads",
+      {
+        method: "POST",
 
-      uploadUrl: upload.url,
-    })
-  } catch (error) {
-    console.error("MUX CREATE UPLOAD ERROR:", error)
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              `${tokenId}:${tokenSecret}`
+            ).toString("base64"),
+
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          new_asset_settings: {
+            playback_policy: [
+              "public",
+            ],
+          },
+
+          cors_origin: "*",
+        }),
+      }
+    )
+
+    const data =
+      await response.json()
+
+    return NextResponse.json(data)
+  } catch (error: any) {
+    console.error(error)
 
     return NextResponse.json(
       {
-        success: false,
-        error: "Failed to create upload",
+        error:
+          error?.message ||
+          "Mux upload failed",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     )
   }
 }
