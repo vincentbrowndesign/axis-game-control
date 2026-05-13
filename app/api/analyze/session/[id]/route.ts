@@ -1,52 +1,51 @@
-import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export async function GET(
   req: Request,
-  context: {
-    params: Promise<{
-      id: string
-    }>
-  }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const params = await context.params
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 
-    const sessionId = params.id
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-    const { data: session } = await supabase
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        {
+          error: "Missing Supabase env vars",
+        },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(
+      supabaseUrl,
+      supabaseKey
+    );
+
+    const { data: session, error } = await supabase
       .from("axis_sessions")
       .select("*")
-      .eq("id", sessionId)
-      .single()
+      .eq("id", params.id)
+      .single();
 
-    const { data: events } = await supabase
-      .from("axis_events")
-      .select("*")
-      .eq("session_id", sessionId)
-      .order("created_at", {
-        ascending: true,
-      })
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({
-      session,
-      events: events || [],
-    })
-  } catch (error) {
-    console.error(error)
-
+    return NextResponse.json(session);
+  } catch (e: any) {
     return NextResponse.json(
       {
-        error: "SESSION_FETCH_FAILED",
+        error: e.message || "Server error",
       },
-      {
-        status: 500,
-      }
-    )
+      { status: 500 }
+    );
   }
 }
