@@ -1,69 +1,30 @@
 import { NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import Mux from "@mux/mux-node"
 
-console.log("UPLOAD ROUTE LIVE")
+const mux = new Mux({
+  tokenId: process.env.MUX_TOKEN_ID!,
+  tokenSecret: process.env.MUX_TOKEN_SECRET!,
+})
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    const body = await req.json()
-
-    const {
-      sessionId,
-      playbackId,
-     assetId,
-    } = body
-
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: "missing sessionId" },
-        { status: 400 }
-      )
-    }
-
-    const updatePayload: {
-      playback_id?: string
-      asset_id?: string
-    } = {}
-
-    if (playbackId) {
-      updatePayload.playback_id = playbackId
-    }
-
-    if (assetId) {
-      updatePayload.asset_id = assetId
-    }
-
-    const { data, error } = await supabase
-      .from("axis_sessions")
-      .update(updatePayload)
-      .eq("id", sessionId)
-      .select()
-      .single()
-
-    if (error) {
-      console.error("SUPABASE SAVE ERROR:", error)
-
-      return NextResponse.json(
-        error,
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      data,
+    const upload = await mux.video.uploads.create({
+      cors_origin: "*",
+      new_asset_settings: {
+        playback_policy: ["public"],
+      },
     })
 
-  } catch (err) {
-    console.error("UPLOAD SAVE ROUTE ERROR:", err)
+    return NextResponse.json({
+      uploadUrl: upload.url,
+      uploadId: upload.id,
+    })
+  } catch (error) {
+    console.error(error)
 
     return NextResponse.json(
-      {
-        error: "failed to save replay",
-      },
-      {
-        status: 500,
-      }
+      { error: "failed creating upload" },
+      { status: 500 }
     )
   }
 }

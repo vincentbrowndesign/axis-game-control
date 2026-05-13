@@ -2,162 +2,85 @@
 
 import { useState } from "react"
 
-type Props = {
-  onReady: (payload: {
-    playbackId: string
-    assetId: string
-    uploadId: string
-  }) => void
-}
+export default function MobileVideoUpload() {
+  const [status, setStatus] = useState("")
+  const [progress, setProgress] = useState(0)
 
-export default function MobileVideoUpload({
-  onReady,
-}: Props) {
-  const [progress, setProgress] =
-    useState(0)
-
-  const [status, setStatus] =
-    useState("")
-
-  async function handleFile(
-    e: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const file =
-      e.target.files?.[0]
-
-    if (!file) return
-
+  async function handleFile(file: File) {
     try {
-      setStatus("Creating upload...")
-      setProgress(10)
+      setStatus("creating upload")
 
-      // CREATE DIRECT UPLOAD
-
-      const uploadRes =
-        await fetch(
-          "/api/mux/upload",
-          {
-            method: "POST",
-          }
-        )
-
-      const uploadData =
-        await uploadRes.json()
-
-      console.log(
-        "UPLOAD DATA:",
-        uploadData
-      )
-
-      if (!uploadData?.data?.url) {
-        console.error(uploadData)
-
-        setStatus(
-          "Failed creating upload"
-        )
-
-        return
-      }
-
-      setStatus("Uploading...")
-      setProgress(30)
-
-      // SEND FILE TO MUX
-
-      const upload = await fetch(
-        uploadData.data.url,
-        {
-          method: "PUT",
-          body: file,
-        }
-      )
-
-      if (!upload.ok) {
-        setStatus("Upload failed")
-
-        return
-      }
-
-      setProgress(70)
-
-      // WAIT FOR ASSET
-
-      let playbackId = ""
-      let attempts = 0
-
-      while (
-        !playbackId &&
-        attempts < 20
-      ) {
-        attempts++
-
-        await new Promise((r) =>
-          setTimeout(r, 3000)
-        )
-
-        const statusRes =
-          await fetch(
-            `/api/mux/upload-status?id=${uploadData.data.id}`
-          )
-
-        const statusData =
-          await statusRes.json()
-
-        console.log(
-          "STATUS:",
-          statusData
-        )
-
-        playbackId =
-          statusData?.playbackId || ""
-      }
-
-      if (!playbackId) {
-        setStatus(
-          "Playback timeout"
-        )
-
-        return
-      }
-
-      setProgress(100)
-
-      setStatus("Replay ready")
-
-      onReady({
-        playbackId,
-        assetId:
-          uploadData.data.asset_id ||
-          "",
-        uploadId:
-          uploadData.data.id,
+      const res = await fetch("/api/upload", {
+        method: "POST",
       })
-    } catch (error) {
-      console.error(error)
 
-      setStatus("Upload failed")
+      const data = await res.json()
+
+      if (!data.uploadUrl) {
+        setStatus("failed creating upload")
+        return
+      }
+
+      setStatus("uploading")
+
+      const xhr = new XMLHttpRequest()
+
+      xhr.open("PUT", data.uploadUrl, true)
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = (event.loaded / event.total) * 100
+          setProgress(percent)
+        }
+      }
+
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          setStatus("upload complete")
+        } else {
+          setStatus("upload failed")
+        }
+      }
+
+      xhr.onerror = () => {
+        setStatus("upload failed")
+      }
+
+      xhr.setRequestHeader("Content-Type", file.type)
+
+      xhr.send(file)
+    } catch (err) {
+      console.error(err)
+      setStatus("error")
     }
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black p-6 text-white">
+      <h1 className="text-5xl font-bold tracking-[0.25em]">
+        AXIS SESSION
+      </h1>
+
       <input
         type="file"
         accept="video/*"
-        onChange={handleFile}
-        className="block w-full text-white"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+
+          if (file) {
+            handleFile(file)
+          }
+        }}
       />
 
-      <div className="h-4 overflow-hidden rounded-full bg-zinc-800">
+      <div className="h-4 w-full max-w-md overflow-hidden rounded-full bg-neutral-800">
         <div
           className="h-full bg-green-500 transition-all"
-          style={{
-            width: `${progress}%`,
-          }}
+          style={{ width: `${progress}%` }}
         />
       </div>
 
-      <p className="text-zinc-400">
+      <p className="uppercase tracking-[0.2em] text-neutral-400">
         {status}
       </p>
     </div>
