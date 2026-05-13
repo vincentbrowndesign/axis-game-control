@@ -14,8 +14,11 @@ export default function MobileVideoUpload() {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
     const file = e.target.files?.[0]
+
     if (!file) return
 
     try {
@@ -29,8 +32,13 @@ export default function MobileVideoUpload() {
 
       const createData = await createRes.json()
 
-      if (!createRes.ok || !createData.uploadUrl || !createData.uploadId) {
-        console.error(createData)
+      console.log("CREATE DATA", createData)
+
+      if (
+        !createRes.ok ||
+        !createData.uploadUrl ||
+        !createData.uploadId
+      ) {
         setStatus("FAILED CREATING UPLOAD")
         setUploading(false)
         return
@@ -47,40 +55,78 @@ export default function MobileVideoUpload() {
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return
 
-          const pct = Math.round((event.loaded / event.total) * 80)
-          setProgress(Math.max(5, pct))
+          const percent = Math.round(
+            (event.loaded / event.total) * 80
+          )
+
+          setProgress(Math.max(5, percent))
         }
 
         xhr.onload = () => {
+          console.log("UPLOAD STATUS", xhr.status)
+
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve()
           } else {
-            reject(new Error("Mux upload failed"))
+            reject(new Error("UPLOAD_FAILED"))
           }
         }
 
-        xhr.onerror = () => reject(new Error("Mux upload error"))
+        xhr.onerror = () => {
+          reject(new Error("UPLOAD_NETWORK_ERROR"))
+        }
 
-        xhr.setRequestHeader("Content-Type", file.type || "video/mp4")
+        xhr.setRequestHeader(
+          "Content-Type",
+          file.type || "video/mp4"
+        )
+
         xhr.send(file)
       })
 
-      setStatus("PROCESSING")
       setProgress(85)
+      setStatus("PROCESSING")
 
       let sessionId: string | null = null
+      let attempts = 0
 
-      while (!sessionId) {
+      while (!sessionId && attempts < 40) {
+        attempts++
+
         await sleep(2500)
 
-        const pollRes = await fetch(`/api/mux/upload/${createData.uploadId}`)
+        const pollRes = await fetch(
+          `/api/mux/upload/${createData.uploadId}`
+        )
+
         const pollData = await pollRes.json()
 
-        console.log("pollData", pollData)
+        console.log("POLL RESPONSE", pollData)
 
-        if (pollData.status === "ready" && pollData.sessionId) {
+        setStatus(
+          pollData.message ||
+            pollData.muxStatus ||
+            pollData.status ||
+            "PROCESSING"
+        )
+
+        if (
+          pollData.status === "ready" &&
+          pollData.sessionId
+        ) {
           sessionId = pollData.sessionId
+          break
         }
+
+        if (pollData.status === "error") {
+          throw new Error(
+            pollData.error || "PROCESSING_FAILED"
+          )
+        }
+      }
+
+      if (!sessionId) {
+        throw new Error("MUX_TIMEOUT")
       }
 
       setProgress(100)
@@ -89,6 +135,7 @@ export default function MobileVideoUpload() {
       router.push(`/session/${sessionId}`)
     } catch (error) {
       console.error(error)
+
       setStatus("UPLOAD FAILED")
       setUploading(false)
     }
@@ -107,6 +154,7 @@ export default function MobileVideoUpload() {
           <input
             type="file"
             accept="video/*"
+            capture="environment"
             onChange={handleFile}
             className="w-full text-xl"
           />
@@ -119,7 +167,9 @@ export default function MobileVideoUpload() {
         <div className="mt-8 h-3 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full bg-white transition-all duration-300"
-            style={{ width: `${progress}%` }}
+            style={{
+              width: `${progress}%`,
+            }}
           />
         </div>
 
@@ -128,7 +178,9 @@ export default function MobileVideoUpload() {
         </p>
 
         {uploading && (
-          <p className="mt-3 text-center text-white/30">{progress}%</p>
+          <p className="mt-3 text-center text-white/30">
+            {progress}%
+          </p>
         )}
       </div>
     </main>
