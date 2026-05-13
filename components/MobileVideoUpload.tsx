@@ -11,26 +11,44 @@ export default function MobileVideoUpload() {
     let ready = false
 
     while (!ready) {
-      const res = await fetch(`/api/mux/asset/${assetId}`)
+      try {
+        const res = await fetch(`/api/mux/asset/${assetId}`)
 
-      const data = await res.json()
+        const data = await res.json()
 
-      if (data.status === "ready") {
-        ready = true
+        console.log("asset poll", data)
 
-        setPlaybackId(data.playbackId)
+        if (data.status === "ready") {
+          ready = true
 
-        setStatus("replay ready")
+          setPlaybackId(data.playbackId)
 
+          setStatus("replay ready")
+
+          return
+        }
+
+        if (data.status === "errored") {
+          setStatus("mux processing failed")
+          return
+        }
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2000)
+        )
+      } catch (err) {
+        console.error(err)
+        setStatus("polling failed")
         return
       }
-
-      await new Promise((resolve) => setTimeout(resolve, 2000))
     }
   }
 
   async function handleFile(file: File) {
     try {
+      setPlaybackId("")
+      setProgress(0)
+
       setStatus("creating upload")
 
       const res = await fetch("/api/upload", {
@@ -39,7 +57,9 @@ export default function MobileVideoUpload() {
 
       const data = await res.json()
 
-      if (!data.uploadUrl) {
+      console.log("upload response", data)
+
+      if (!data.uploadUrl || !data.uploadId) {
         setStatus("failed creating upload")
         return
       }
@@ -52,7 +72,9 @@ export default function MobileVideoUpload() {
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
-          const percent = (event.loaded / event.total) * 100
+          const percent =
+            (event.loaded / event.total) * 100
+
           setProgress(percent)
         }
       }
@@ -61,11 +83,8 @@ export default function MobileVideoUpload() {
         if (xhr.status === 200) {
           setStatus("processing replay")
 
-          let assetReady = false
-          let assetId = null
-
-          while (!assetReady) {
-            const uploadRes = await fetch(
+          try {
+            const uploadCheck = await fetch(
               `https://api.mux.com/video/v1/uploads/${data.uploadId}`,
               {
                 headers: {
@@ -78,21 +97,27 @@ export default function MobileVideoUpload() {
               }
             )
 
-            const uploadData = await uploadRes.json()
+            const uploadData =
+              await uploadCheck.json()
 
-            assetId = uploadData.data?.asset_id
+            console.log("mux upload check", uploadData)
 
-            if (assetId) {
-              assetReady = true
-            } else {
-              await new Promise((resolve) =>
-                setTimeout(resolve, 2000)
-              )
+            const assetId =
+              uploadData.data?.asset_id
+
+            if (!assetId) {
+              setStatus("asset not ready yet")
+              return
             }
-          }
 
-          await pollAsset(assetId)
+            await pollAsset(assetId)
+          } catch (err) {
+            console.error(err)
+            setStatus("asset lookup failed")
+          }
         } else {
+          console.error(xhr.responseText)
+
           setStatus("upload failed")
         }
       }
@@ -101,7 +126,10 @@ export default function MobileVideoUpload() {
         setStatus("upload failed")
       }
 
-      xhr.setRequestHeader("Content-Type", file.type)
+      xhr.setRequestHeader(
+        "Content-Type",
+        file.type
+      )
 
       xhr.send(file)
     } catch (err) {
@@ -112,7 +140,7 @@ export default function MobileVideoUpload() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black p-6 text-white">
-      <h1 className="text-5xl font-bold tracking-[0.25em]">
+      <h1 className="text-center text-5xl font-bold tracking-[0.25em]">
         AXIS SESSION
       </h1>
 
@@ -131,7 +159,9 @@ export default function MobileVideoUpload() {
       <div className="h-4 w-full max-w-md overflow-hidden rounded-full bg-neutral-800">
         <div
           className="h-full bg-green-500 transition-all"
-          style={{ width: `${progress}%` }}
+          style={{
+            width: `${progress}%`,
+          }}
         />
       </div>
 
@@ -143,6 +173,7 @@ export default function MobileVideoUpload() {
         <video
           className="mt-6 w-full max-w-md rounded-xl"
           controls
+          playsInline
           src={`https://stream.mux.com/${playbackId}.m3u8`}
         />
       )}
