@@ -20,33 +20,58 @@ export default function MobileVideoUpload({
   const [progress, setProgress] =
     useState(0)
 
-  async function pollForPlayback(
+  async function wait(ms: number) {
+    return new Promise((resolve) =>
+      setTimeout(resolve, ms)
+    )
+  }
+
+  async function waitForAsset(
+    uploadId: string
+  ) {
+    let assetId: string | null = null
+
+    while (!assetId) {
+      const res = await fetch(
+        `/api/mux/upload/${uploadId}`
+      )
+
+      const data = await res.json()
+
+      console.log("UPLOAD STATUS:", data)
+
+      assetId = data.assetId
+
+      if (!assetId) {
+        await wait(2000)
+      }
+    }
+
+    return assetId
+  }
+
+  async function waitForPlayback(
     assetId: string
   ) {
-    let ready = false
+    let playbackId: string | null = null
 
-    while (!ready) {
+    while (!playbackId) {
       const res = await fetch(
         `/api/mux/asset/${assetId}`
       )
 
       const data = await res.json()
 
-      console.log(data)
+      console.log("ASSET STATUS:", data)
 
-      if (
-        data.status === "ready" &&
-        data.playbackId
-      ) {
-        ready = true
+      playbackId = data.playbackId
 
-        return data.playbackId
+      if (!playbackId) {
+        await wait(2000)
       }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, 2000)
-      )
     }
+
+    return playbackId
   }
 
   async function handleUpload(
@@ -81,11 +106,11 @@ export default function MobileVideoUpload({
         )
       }
 
-      // DIRECT UPLOAD TO MUX
-
       setStatus("Uploading video...")
 
       setProgress(30)
+
+      // DIRECT UPLOAD TO MUX
 
       const uploadRes = await fetch(
         createData.uploadUrl,
@@ -104,57 +129,42 @@ export default function MobileVideoUpload({
         throw new Error("Upload failed")
       }
 
-      setStatus("Processing video...")
+      setStatus("Processing asset...")
 
-      setProgress(70)
+      setProgress(60)
 
-      // WAIT FOR ASSET
+      // WAIT FOR ASSET ID
 
-      let assetId = createData.assetId
+      const assetId = await waitForAsset(
+        createData.uploadId
+      )
 
-      // sometimes asset not immediately attached
+      console.log(
+        "ASSET READY:",
+        assetId
+      )
 
-      while (!assetId) {
-        const uploadCheck =
-          await fetch(
-            `https://api.mux.com/video/v1/uploads/${createData.uploadId}`,
-            {
-              headers: {
-                Authorization:
-                  "Basic " +
-                  btoa(
-                    `${process.env.NEXT_PUBLIC_MUX_TOKEN_ID}:${process.env.NEXT_PUBLIC_MUX_TOKEN_SECRET}`
-                  ),
-              },
-            }
-          )
+      setStatus("Generating playback...")
 
-        const uploadData =
-          await uploadCheck.json()
+      setProgress(80)
 
-        assetId =
-          uploadData.data.asset_id
-
-        await new Promise((r) =>
-          setTimeout(r, 2000)
-        )
-      }
+      // WAIT FOR PLAYBACK ID
 
       const playbackId =
-        await pollForPlayback(assetId)
-
-      setProgress(100)
-
-      setStatus("Video ready")
-
-      if (onReady) {
-        onReady(playbackId)
-      }
+        await waitForPlayback(assetId)
 
       console.log(
         "PLAYBACK READY:",
         playbackId
       )
+
+      setStatus("Replay ready")
+
+      setProgress(100)
+
+      if (onReady) {
+        onReady(playbackId)
+      }
     } catch (error) {
       console.error(error)
 

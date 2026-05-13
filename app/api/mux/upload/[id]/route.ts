@@ -1,59 +1,49 @@
-import { NextRequest, NextResponse } from "next/server";
-import Mux from "@mux/mux-node";
+// app/api/mux/upload/[id]/route.ts
 
-export const runtime = "nodejs";
+import { NextResponse } from "next/server"
+import Mux from "@mux/mux-node"
+
+export const runtime = "nodejs"
 
 const mux = new Mux({
   tokenId: process.env.MUX_TOKEN_ID!,
   tokenSecret: process.env.MUX_TOKEN_SECRET!,
-});
+})
 
 export async function GET(
-  req: NextRequest,
+  req: Request,
   context: {
     params: Promise<{
-      id: string;
-    }>;
+      id: string
+    }>
   }
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = await context.params
 
     const upload =
-      await mux.video.uploads.retrieve(id);
-
-    if (!upload.asset_id) {
-      return NextResponse.json({
-        ready: false,
-      });
-    }
-
-    const asset =
-      await mux.video.assets.retrieve(
-        upload.asset_id
-      );
-
-    const playbackId =
-      asset.playback_ids?.[0]?.id || null;
+      await mux.video.uploads.retrieve(id)
 
     return NextResponse.json({
-      ready: asset.status === "ready",
-      assetId: asset.id,
-      playbackId,
-      status: asset.status,
-    });
-  } catch (error: any) {
-    console.error("MUX POLL ERROR");
-    console.error(error);
+      success: true,
+
+      uploadId: upload.id,
+
+      assetId: upload.asset_id ?? null,
+
+      status: upload.status,
+    })
+  } catch (error) {
+    console.error("MUX UPLOAD STATUS ERROR:", error)
 
     return NextResponse.json(
       {
-        ready: false,
-        error:
-          error?.message ||
-          "Polling failed",
+        success: false,
+        error: "Failed to retrieve upload",
       },
-      { status: 500 }
-    );
+      {
+        status: 500,
+      }
+    )
   }
 }

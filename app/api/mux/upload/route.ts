@@ -22,9 +22,10 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
+
       uploadId: upload.id,
+
       uploadUrl: upload.url,
-      assetId: upload.asset_id ?? null,
     })
   } catch (error) {
     console.error("MUX CREATE UPLOAD ERROR:", error)
