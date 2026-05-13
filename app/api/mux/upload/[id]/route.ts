@@ -1,125 +1,105 @@
-import { NextResponse } from "next/server";
-import Mux from "@mux/mux-node";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server"
+import Mux from "@mux/mux-node"
+
+import { supabase } from "@/lib/supabase"
+
+const mux = new Mux({
+  tokenId: process.env.MUX_TOKEN_ID!,
+  tokenSecret: process.env.MUX_TOKEN_SECRET!,
+})
 
 type Context = {
   params: Promise<{
-    id: string;
-  }>;
-};
+    id: string
+  }>
+}
 
 export async function GET(
   _req: Request,
   context: Context
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = await context.params
 
-    const mux = new Mux({
-      tokenId: process.env.MUX_TOKEN_ID!,
-      tokenSecret: process.env.MUX_TOKEN_SECRET!,
-    });
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    // GET DIRECT UPLOAD
-    const upload = await mux.video.uploads.retrieve(id);
+    const upload = await mux.video.uploads.retrieve(id)
 
     if (!upload.asset_id) {
       return NextResponse.json({
-        status: "processing",
-        stage: "waiting_for_asset",
-      });
+        status: "waiting_for_asset",
+      })
     }
 
-    // GET ASSET
     const asset = await mux.video.assets.retrieve(
       upload.asset_id
-    );
+    )
 
-    console.log("MUX ASSET STATUS", asset.status);
-    console.log(
-      "MUX PLAYBACK IDS",
-      asset.playback_ids
-    );
-
-    // WAIT UNTIL ASSET READY
-    if (
-      asset.status !== "ready" ||
-      !asset.playback_ids ||
-      asset.playback_ids.length === 0
-    ) {
+    if (asset.status !== "ready") {
       return NextResponse.json({
         status: "processing",
-        stage: "mux_processing",
-        assetStatus: asset.status,
-      });
+      })
     }
 
     const playbackId =
-      asset.playback_ids[0].id;
+      asset.playback_ids?.[0]?.id
 
-    // CHECK EXISTING SESSION
+    if (!playbackId) {
+      return NextResponse.json({
+        status: "waiting_for_playback",
+      })
+    }
+
     const { data: existing } = await supabase
       .from("axis_sessions")
       .select("*")
       .eq("upload_id", id)
-      .maybeSingle();
+      .maybeSingle()
 
-    // RETURN EXISTING
     if (existing) {
       return NextResponse.json({
         status: "ready",
         sessionId: existing.id,
-        playbackId,
-      });
+      })
     }
 
-    // CREATE SESSION
-    const { data: session, error } =
-      await supabase
-        .from("axis_sessions")
-        .insert({
-          title: "Axis Session",
-          upload_id: id,
-          asset_id: asset.id,
-          playback_id: playbackId,
-          video_url: `https://stream.mux.com/${playbackId}.m3u8`,
-        })
-        .select()
-        .single();
+    const { data: session, error } = await supabase
+      .from("axis_sessions")
+      .insert({
+        title: "Axis Session",
+        upload_id: id,
+        asset_id: asset.id,
+        playback_id: playbackId,
+        video_url: `https://stream.mux.com/${playbackId}.m3u8`,
+      })
+      .select()
+      .single()
 
     if (error) {
-      console.error(
-        "SESSION_CREATE_FAILED",
-        error
-      );
+      console.error(error)
 
       return NextResponse.json(
         {
-          status: "error",
           error: error.message,
         },
-        { status: 500 }
-      );
+        {
+          status: 500,
+        }
+      )
     }
 
     return NextResponse.json({
       status: "ready",
       sessionId: session.id,
-      playbackId,
-    });
+    })
   } catch (error) {
-    console.error("MUX_POLL_FAILED", error);
+    console.error(error)
 
     return NextResponse.json(
       {
-        status: "error",
+        error: "UPLOAD_STATUS_FAILED",
       },
-      { status: 500 }
-    );
+      {
+        status: 500,
+      }
+    )
   }
 }
