@@ -1,166 +1,195 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 
 export default function MobileVideoUpload() {
-  const router = useRouter();
+  const router = useRouter()
 
-  const [status, setStatus] = useState("");
-  const [progress, setProgress] = useState(0);
-  const [fileName, setFileName] = useState("");
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [status, setStatus] = useState("")
+  const [fileName, setFileName] = useState("")
 
-  async function handleFile(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
+  async function handleFile(file: File) {
     try {
-      const file = event.target.files?.[0];
+      setUploading(true)
+      setProgress(0)
+      setStatus("CREATING UPLOAD")
+      setFileName(file.name)
 
-      if (!file) return;
-
-      setFileName(file.name);
-
-      // STEP 1
-      setStatus("CREATING UPLOAD");
-      setProgress(10);
+      /*
+        STEP 1
+        CREATE DIRECT UPLOAD
+      */
 
       const createRes = await fetch("/api/upload", {
         method: "POST",
-      });
+      })
 
       if (!createRes.ok) {
-        throw new Error("CREATE_UPLOAD_FAILED");
+        throw new Error("FAILED_CREATING_UPLOAD")
       }
 
-      const createData = await createRes.json();
+      const createData = await createRes.json()
 
-      console.log(createData);
+      const uploadUrl = createData.url
+      const uploadId = createData.id
 
-      // STEP 2
-      setStatus("UPLOADING");
-      setProgress(30);
+      if (!uploadUrl || !uploadId) {
+        throw new Error("INVALID_UPLOAD_RESPONSE")
+      }
 
-      const uploadRes = await fetch(
-        createData.uploadUrl,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type":
-              file.type || "video/mp4",
-          },
-          body: file,
+      /*
+        STEP 2
+        UPLOAD FILE TO MUX
+      */
+
+      setStatus("UPLOADING")
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+
+        xhr.open("PUT", uploadUrl)
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round(
+              (event.loaded / event.total) * 100
+            )
+
+            setProgress(percent)
+          }
         }
-      );
 
-      if (!uploadRes.ok) {
-        throw new Error("UPLOAD_FAILED");
-      }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve()
+          } else {
+            reject(new Error(`UPLOAD_FAILED_${xhr.status}`))
+          }
+        }
 
-      // STEP 3
-      setStatus("PROCESSING");
-      setProgress(70);
+        xhr.onerror = () => {
+          reject(new Error("UPLOAD_NETWORK_ERROR"))
+        }
 
-      let sessionId = "";
+        xhr.send(file)
+      })
 
-      for (let i = 0; i < 90; i++) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, 2000)
-        );
+      /*
+        STEP 3
+        WAIT FOR MUX PROCESSING
+      */
+
+      setStatus("PROCESSING")
+      setProgress(100)
+
+      let ready = false
+      let sessionId = ""
+
+      while (!ready) {
+        await new Promise((r) => setTimeout(r, 2500))
 
         const pollRes = await fetch(
-          `/api/mux/upload/${createData.uploadId}`
-        );
+          `/api/mux/upload/${uploadId}`
+        )
 
-        if (!pollRes.ok) continue;
+        const pollData = await pollRes.json()
 
-        const pollData = await pollRes.json();
-
-        console.log("POLL", pollData);
+        console.log("MUX STATUS", pollData)
 
         if (pollData.status === "ready") {
-          sessionId = pollData.sessionId;
-          break;
+          ready = true
+          sessionId = pollData.sessionId
+        }
+
+        if (pollData.status === "error") {
+          throw new Error(
+            pollData.error || "MUX_PROCESSING_FAILED"
+          )
         }
       }
 
-      if (!sessionId) {
-        throw new Error("PROCESSING_TIMEOUT");
-      }
+      /*
+        STEP 4
+        GO TO REPLAY
+      */
 
-      // STEP 4
-      setStatus("READY");
-      setProgress(100);
-
-      router.push(`/session/${sessionId}`);
+      router.push(`/session/${sessionId}`)
     } catch (error) {
-      console.error(error);
+      console.error(error)
 
-      setStatus("UPLOAD FAILED");
-      setProgress(100);
+      setStatus("UPLOAD FAILED")
+    } finally {
+      setUploading(false)
     }
   }
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
-      <div className="mx-auto max-w-2xl">
+    <div className="min-h-screen bg-black text-white p-6">
+      <div className="mx-auto max-w-xl">
         <h1 className="text-[72px] font-black leading-[0.9] tracking-[0.35em]">
           AXIS
           <br />
           SESSION
         </h1>
 
-        <div className="mt-12 space-y-6">
-          {/* CHOOSE */}
-          <label className="block cursor-pointer rounded-[32px] border border-white/10 bg-neutral-950 p-10">
-            <div className="space-y-6">
-              <p className="text-[34px] font-semibold tracking-[0.35em]">
-                CHOOSE FILE
-              </p>
+        <div className="mt-10 space-y-6">
+          <label className="block rounded-[32px] border border-white/10 bg-neutral-950 p-10">
+            <div className="text-[42px] font-bold tracking-[0.35em]">
+              CHOOSE
+              <br />
+              FILE
+            </div>
 
-              {fileName ? (
-                <p className="break-all text-3xl">
-                  {fileName}
-                </p>
-              ) : (
-                <p className="text-xl text-white/40">
-                  Choose existing clip.
-                </p>
-              )}
+            <div className="mt-8 break-all text-4xl text-white">
+              {fileName || "Select existing clip"}
             </div>
 
             <input
               type="file"
-              accept="video/*"
-              onChange={handleFile}
+              accept="video/*,.mov,.mp4"
+              capture={false}
               className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+
+                if (file) {
+                  handleFile(file)
+                }
+              }}
             />
           </label>
 
-          {/* RECORD */}
-          <label className="block cursor-pointer rounded-[32px] border border-white/10 bg-neutral-950 p-10">
-            <div className="space-y-6">
-              <p className="text-[34px] font-semibold tracking-[0.35em]">
-                RECORD
-              </p>
-
-              <p className="text-xl text-white/40">
-                Record from camera.
-              </p>
+          <label className="block rounded-[32px] border border-white/10 bg-neutral-950 p-10">
+            <div className="text-[42px] font-bold tracking-[0.35em]">
+              RECORD
             </div>
+
+            <p className="mt-8 text-3xl text-white/40">
+              Record from camera.
+            </p>
 
             <input
               type="file"
               accept="video/*"
               capture="environment"
-              onChange={handleFile}
               className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+
+                if (file) {
+                  handleFile(file)
+                }
+              }}
             />
           </label>
         </div>
 
-        {status && (
+        {(uploading || status) && (
           <div className="mt-10">
-            <div className="h-5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-8 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-white transition-all duration-300"
                 style={{
@@ -169,18 +198,18 @@ export default function MobileVideoUpload() {
               />
             </div>
 
-            <div className="mt-8 text-center">
-              <p className="text-[48px] tracking-[0.35em] text-white/70">
+            <div className="mt-10 text-center">
+              <div className="text-[64px] tracking-[0.35em] text-white/70">
                 {status}
-              </p>
+              </div>
 
-              <p className="mt-4 text-2xl text-white/40">
+              <div className="mt-6 text-4xl text-white/50">
                 {progress}%
-              </p>
+              </div>
             </div>
           </div>
         )}
       </div>
-    </main>
-  );
+    </div>
+  )
 }
