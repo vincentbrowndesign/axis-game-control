@@ -1,13 +1,23 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+
+import {
+  createAxisSession,
+} from "@/lib/axisSessions"
 
 export default function MobileVideoUpload() {
+  const router = useRouter()
+
   const [status, setStatus] = useState("")
   const [progress, setProgress] = useState(0)
   const [playbackId, setPlaybackId] = useState("")
 
-  async function pollAsset(assetId: string) {
+  async function pollAsset(
+    assetId: string,
+    fileName: string
+  ) {
     let ready = false
 
     while (!ready) {
@@ -25,7 +35,22 @@ export default function MobileVideoUpload() {
 
           setPlaybackId(data.playbackId)
 
+          setStatus("saving session")
+
+          const playbackUrl = `https://stream.mux.com/${data.playbackId}.m3u8`
+
+          const session =
+            await createAxisSession({
+              videoUrl: playbackUrl,
+              fileName,
+              title: "Axis Session",
+            })
+
           setStatus("replay ready")
+
+          router.push(
+            `/session/${session.id}`
+          )
 
           return
         }
@@ -106,7 +131,10 @@ export default function MobileVideoUpload() {
               return
             }
 
-            await pollAsset(assetId)
+            await pollAsset(
+              assetId,
+              file.name
+            )
           } catch (err) {
             console.error(err)
             setStatus("asset lookup failed")
