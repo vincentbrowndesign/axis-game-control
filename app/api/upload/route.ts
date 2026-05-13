@@ -1,25 +1,39 @@
-import { NextResponse } from "next/server";
-import { mux } from "@/lib/mux";
+import { NextResponse } from "next/server"
+import { supabase } from "@/lib/supabase"
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const upload = await mux.video.uploads.create({
-      cors_origin: "*",
-      new_asset_settings: {
-        playback_policy: ["public"],
-      },
-    });
+    const body = await req.json()
 
-    return NextResponse.json({
-      uploadUrl: upload.url,
-      uploadId: upload.id,
-    });
-  } catch (error) {
-    console.error(error);
+    const {
+      sessionId,
+      playbackId,
+      assetId,
+    } = body
+
+    const { data, error } = await supabase
+      .from("axis_sessions")
+      .update({
+        playback_id: playbackId,
+        asset_id: assetId,
+      })
+      .eq("id", sessionId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error(error)
+      return NextResponse.json(error, { status: 500 })
+    }
+
+    return NextResponse.json(data)
+
+  } catch (err) {
+    console.error(err)
 
     return NextResponse.json(
-      { error: "Failed to create upload" },
+      { error: "failed to save replay" },
       { status: 500 }
-    );
+    )
   }
 }
