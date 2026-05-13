@@ -1,154 +1,192 @@
-"use client";
+// components/MobileVideoUpload.tsx
 
-import { useState } from "react";
+"use client"
+
+import { useState } from "react"
 
 type Props = {
-  sessionId: string;
-};
+  onReady?: (playbackId: string) => void
+}
 
 export default function MobileVideoUpload({
-  sessionId,
+  onReady,
 }: Props) {
   const [uploading, setUploading] =
-    useState(false);
+    useState(false)
 
   const [status, setStatus] =
-    useState("");
+    useState("")
 
-  const [error, setError] =
-    useState("");
+  const [progress, setProgress] =
+    useState(0)
+
+  async function pollForPlayback(
+    assetId: string
+  ) {
+    let ready = false
+
+    while (!ready) {
+      const res = await fetch(
+        `/api/mux/asset/${assetId}`
+      )
+
+      const data = await res.json()
+
+      console.log(data)
+
+      if (
+        data.status === "ready" &&
+        data.playbackId
+      ) {
+        ready = true
+
+        return data.playbackId
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000)
+      )
+    }
+  }
 
   async function handleUpload(
     e: React.ChangeEvent<HTMLInputElement>
   ) {
-    const file = e.target.files?.[0];
+    const file = e.target.files?.[0]
 
-    if (!file) return;
+    if (!file) return
 
     try {
-      setUploading(true);
-      setError("");
+      setUploading(true)
 
-      // CREATE UPLOAD
-      setStatus("Creating upload...");
+      setStatus("Creating upload...")
+
+      setProgress(10)
+
+      // CREATE MUX UPLOAD
 
       const createRes = await fetch(
         "/api/mux/upload",
         {
           method: "POST",
         }
-      );
+      )
 
       const createData =
-        await createRes.json();
+        await createRes.json()
 
       if (!createData.success) {
-        console.error(createData);
-
         throw new Error(
-          createData.error ||
-            "Upload creation failed"
-        );
+          "Failed to create upload"
+        )
       }
 
       // DIRECT UPLOAD TO MUX
-      setStatus("Uploading video...");
+
+      setStatus("Uploading video...")
+
+      setProgress(30)
 
       const uploadRes = await fetch(
         createData.uploadUrl,
         {
           method: "PUT",
-          headers: {
-            "Content-Type":
-              file.type || "video/mp4",
-          },
+
           body: file,
+
+          headers: {
+            "Content-Type": file.type,
+          },
         }
-      );
+      )
 
       if (!uploadRes.ok) {
-        throw new Error(
-          "Direct upload failed"
-        );
+        throw new Error("Upload failed")
       }
 
-      // WAIT BEFORE POLLING
-      setStatus(
-        "Processing video… this can take a few minutes on mobile."
-      );
+      setStatus("Processing video...")
 
-      let playbackId: string | null =
-        null;
+      setProgress(70)
 
-      // LONG MOBILE POLLING
-      for (let i = 0; i < 180; i++) {
+      // WAIT FOR ASSET
+
+      let assetId = createData.assetId
+
+      // sometimes asset not immediately attached
+
+      while (!assetId) {
+        const uploadCheck =
+          await fetch(
+            `https://api.mux.com/video/v1/uploads/${createData.uploadId}`,
+            {
+              headers: {
+                Authorization:
+                  "Basic " +
+                  btoa(
+                    `${process.env.NEXT_PUBLIC_MUX_TOKEN_ID}:${process.env.NEXT_PUBLIC_MUX_TOKEN_SECRET}`
+                  ),
+              },
+            }
+          )
+
+        const uploadData =
+          await uploadCheck.json()
+
+        assetId =
+          uploadData.data.asset_id
+
         await new Promise((r) =>
-          setTimeout(r, 3000)
-        );
-
-        const pollRes = await fetch(
-          `/api/mux/upload/${createData.uploadId}`
-        );
-
-        const pollData =
-          await pollRes.json();
-
-        console.log("POLL", pollData);
-
-        if (pollData.playbackId) {
-          playbackId =
-            pollData.playbackId;
-          break;
-        }
+          setTimeout(r, 2000)
+        )
       }
 
-      if (!playbackId) {
-        throw new Error(
-          "Playback never became ready"
-        );
+      const playbackId =
+        await pollForPlayback(assetId)
+
+      setProgress(100)
+
+      setStatus("Video ready")
+
+      if (onReady) {
+        onReady(playbackId)
       }
 
-      setStatus("Ready");
+      console.log(
+        "PLAYBACK READY:",
+        playbackId
+      )
+    } catch (error) {
+      console.error(error)
 
-      window.location.href =
-        `/session/${sessionId}` +
-        `?playbackId=${playbackId}`;
-    } catch (err: any) {
-      console.error(err);
-
-      setError(
-        err?.message ||
-          "Upload failed on mobile"
-      );
+      setStatus("Upload failed")
     } finally {
-      setUploading(false);
+      setUploading(false)
     }
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <label className="border border-white/10 bg-black/30 rounded-2xl p-5 text-center cursor-pointer text-white">
-        <input
-          type="file"
-          accept="video/*"
-          capture="environment"
-          className="hidden"
-          disabled={uploading}
-          onChange={handleUpload}
-        />
+    <div className="flex flex-col gap-4">
+      <input
+        type="file"
+        accept="video/*"
+        capture="environment"
+        onChange={handleUpload}
+      />
 
-        <div className="font-medium">
-          {uploading
-            ? status
-            : "Upload Game Video"}
+      <div className="space-y-2">
+        <div className="h-2 overflow-hidden rounded bg-zinc-800">
+          <div
+            className="h-full bg-green-500 transition-all"
+            style={{
+              width: `${progress}%`,
+            }}
+          />
         </div>
-      </label>
 
-      {error && (
-        <div className="text-red-500 text-sm">
-          {error}
-        </div>
-      )}
+        <p className="text-sm text-zinc-400">
+          {status}
+        </p>
+      </div>
     </div>
-  );
+  )
 }
