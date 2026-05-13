@@ -1,4 +1,7 @@
+import AxisReplayClient from "@/components/AxisReplayClient"
+
 import {
+  getAxisEvents,
   getAxisSession,
 } from "@/lib/axisSessions"
 
@@ -16,6 +19,9 @@ export default async function SessionPage({
   const session =
     await getAxisSession(id)
 
+  const events =
+    await getAxisEvents(id)
+
   return (
     <div className="min-h-screen bg-black p-6 text-white">
       <div className="mx-auto flex max-w-4xl flex-col gap-6">
@@ -23,23 +29,9 @@ export default async function SessionPage({
           AXIS REPLAY
         </h1>
 
-        <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-          <p className="text-sm uppercase tracking-[0.2em] text-neutral-500">
-            {session.file_name}
-          </p>
-
-          <p className="mt-2 text-xs text-neutral-600">
-            {new Date(
-              session.created_at
-            ).toLocaleString()}
-          </p>
-        </div>
-
-        <video
-          className="w-full rounded-2xl"
-          controls
-          playsInline
-          src={session.video_url}
+        <AxisReplayClient
+          session={session}
+          initialEvents={events}
         />
       </div>
     </div>
