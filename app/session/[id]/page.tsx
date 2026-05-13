@@ -1,13 +1,15 @@
-import AxisReplayClient from "@/components/AxisReplayClient"
+import AxisReplayClient from "@/components/AxisReplayClient";
 
-type PageProps = {
+type Props = {
   params: Promise<{
-    id: string
-  }>
-}
+    id: string;
+  }>;
+};
 
-export default async function SessionPage({ params }: PageProps) {
-  const { id } = await params
+export default async function Page({
+  params,
+}: Props) {
+  const { id } = await params;
 
-  return <AxisReplayClient sessionId={id} />
+  return <AxisReplayClient sessionId={id} />;
 }

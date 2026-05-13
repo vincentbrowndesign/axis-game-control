@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 export default function MobileVideoUpload() {
   const router = useRouter();
 
-  const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState(0);
   const [fileName, setFileName] = useState("");
@@ -20,100 +19,76 @@ export default function MobileVideoUpload() {
       if (!file) return;
 
       setFileName(file.name);
-      setUploading(true);
-      setStatus("CREATING SESSION");
-      setProgress(10);
-
-      // CREATE SESSION
-      const sessionRes = await fetch("/api/session", {
-        method: "POST",
-      });
-
-      if (!sessionRes.ok) {
-        throw new Error("Failed creating session");
-      }
-
-      const session = await sessionRes.json();
 
       setStatus("CREATING UPLOAD");
-      setProgress(20);
+      setProgress(10);
 
-      // CREATE MUX DIRECT UPLOAD
-      const uploadRes = await fetch("/api/upload", {
+      const createRes = await fetch("/api/upload", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sessionId: session.id,
-        }),
       });
 
-      if (!uploadRes.ok) {
-        throw new Error("Failed creating upload");
+      if (!createRes.ok) {
+        throw new Error("CREATE_UPLOAD_FAILED");
       }
 
-      const upload = await uploadRes.json();
-
-      if (!upload.url) {
-        throw new Error("Missing upload URL");
-      }
+      const createData = await createRes.json();
 
       setStatus("UPLOADING");
-      setProgress(40);
+      setProgress(30);
 
-      // UPLOAD FILE TO MUX
-      const muxUpload = await fetch(upload.url, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-      });
+      const uploadRes = await fetch(
+        createData.uploadUrl,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type":
+              file.type || "video/mp4",
+          },
+          body: file,
+        }
+      );
 
-      if (!muxUpload.ok) {
-        throw new Error("Upload failed");
+      if (!uploadRes.ok) {
+        throw new Error("UPLOAD_FAILED");
       }
 
       setStatus("PROCESSING");
-      setProgress(85);
+      setProgress(70);
 
-      // WAIT FOR PLAYBACK ID
-      let playbackId: string | null = null;
+      let sessionId = "";
 
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < 60; i++) {
         await new Promise((resolve) =>
           setTimeout(resolve, 2000)
         );
 
         const pollRes = await fetch(
-          `/api/upload/${session.id}`
+          `/api/mux/upload/${createData.uploadId}`
         );
-
-        if (!pollRes.ok) continue;
 
         const pollData = await pollRes.json();
 
-        if (pollData.playback_id) {
-          playbackId = pollData.playback_id;
+        console.log(pollData);
+
+        if (pollData.status === "ready") {
+          sessionId = pollData.sessionId;
           break;
         }
       }
 
-      if (!playbackId) {
-        throw new Error("Playback never became ready");
+      if (!sessionId) {
+        throw new Error("PROCESSING_TIMEOUT");
       }
 
       setStatus("READY");
       setProgress(100);
 
-      router.push(`/session/${session.id}`);
+      router.push(`/session/${sessionId}`);
     } catch (error) {
       console.error(error);
 
       setStatus("UPLOAD FAILED");
       setProgress(100);
-      setUploading(false);
     }
   }
 
@@ -126,21 +101,20 @@ export default function MobileVideoUpload() {
           SESSION
         </h1>
 
-        <div className="mt-12 space-y-4">
-          {/* CHOOSE CLIP */}
-          <label className="flex cursor-pointer items-center justify-center rounded-[32px] border border-white/10 bg-neutral-950 px-8 py-12 active:scale-[0.99]">
-            <div className="w-full">
-              <p className="text-[28px] font-semibold tracking-[0.35em]">
+        <div className="mt-12 space-y-6">
+          <label className="block cursor-pointer rounded-[32px] border border-white/10 bg-neutral-950 p-10">
+            <div className="space-y-6">
+              <p className="text-[34px] font-semibold tracking-[0.35em]">
                 CHOOSE FILE
               </p>
 
               {fileName ? (
-                <p className="mt-6 text-2xl text-white">
+                <p className="break-all text-3xl">
                   {fileName}
                 </p>
               ) : (
-                <p className="mt-6 text-xl text-white/40">
-                  Choose an existing clip from your phone.
+                <p className="text-xl text-white/40">
+                  Choose existing clip.
                 </p>
               )}
             </div>
@@ -153,15 +127,14 @@ export default function MobileVideoUpload() {
             />
           </label>
 
-          {/* RECORD */}
-          <label className="flex cursor-pointer items-center justify-center rounded-[32px] border border-white/10 bg-neutral-950 px-8 py-12 active:scale-[0.99]">
-            <div className="w-full">
-              <p className="text-[28px] font-semibold tracking-[0.35em]">
+          <label className="block cursor-pointer rounded-[32px] border border-white/10 bg-neutral-950 p-10">
+            <div className="space-y-6">
+              <p className="text-[34px] font-semibold tracking-[0.35em]">
                 RECORD
               </p>
 
-              <p className="mt-6 text-xl text-white/40">
-                Record live from camera.
+              <p className="text-xl text-white/40">
+                Record from camera.
               </p>
             </div>
 
@@ -175,11 +148,11 @@ export default function MobileVideoUpload() {
           </label>
         </div>
 
-        {(uploading || status) && (
+        {status && (
           <div className="mt-10">
             <div className="h-5 overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full bg-white transition-all duration-500"
+                className="h-full bg-white transition-all duration-300"
                 style={{
                   width: `${progress}%`,
                 }}
@@ -187,7 +160,7 @@ export default function MobileVideoUpload() {
             </div>
 
             <div className="mt-8 text-center">
-              <p className="text-[42px] tracking-[0.4em] text-white/70">
+              <p className="text-[42px] tracking-[0.35em] text-white/70">
                 {status}
               </p>
 
