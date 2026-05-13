@@ -1,48 +1,63 @@
-import { NextRequest, NextResponse } from "next/server";
-import Mux from "@mux/mux-node";
+// app/api/mux/upload-status/route.ts
 
-const mux = new Mux({
-  tokenId: process.env.MUX_TOKEN_ID!,
-  tokenSecret: process.env.MUX_TOKEN_SECRET!,
-});
+import { NextRequest, NextResponse } from "next/server"
 
-export async function GET(req: NextRequest) {
-  try {
-    const uploadId = req.nextUrl.searchParams.get("uploadId");
+export async function GET(
+  req: NextRequest
+) {
+  const id =
+    req.nextUrl.searchParams.get(
+      "id"
+    )
 
-    if (!uploadId) {
-      return NextResponse.json({ error: "Missing uploadId" }, { status: 400 });
+  const tokenId =
+    process.env.MUX_TOKEN_ID!
+
+  const tokenSecret =
+    process.env.MUX_TOKEN_SECRET!
+
+  const response = await fetch(
+    `https://api.mux.com/video/v1/uploads/${id}`,
+    {
+      headers: {
+        Authorization:
+          "Basic " +
+          Buffer.from(
+            `${tokenId}:${tokenSecret}`
+          ).toString("base64"),
+      },
     }
+  )
 
-    const upload = await mux.video.uploads.retrieve(uploadId);
+  const data =
+    await response.json()
 
-    const assetId = upload.asset_id;
+  const assetId =
+    data?.data?.asset_id
 
-    if (!assetId) {
-      return NextResponse.json({
-        status: upload.status,
-        uploadId,
-        assetId: null,
-        playbackId: null,
-      });
-    }
-
-    const asset = await mux.video.assets.retrieve(assetId);
-
-    const playbackId = asset.playback_ids?.[0]?.id ?? null;
-
-    return NextResponse.json({
-      status: asset.status,
-      uploadId,
-      assetId,
-      playbackId,
-    });
-  } catch (error) {
-    console.error("MUX STATUS ERROR:", error);
-
-    return NextResponse.json(
-      { error: "Failed to fetch upload status" },
-      { status: 500 }
-    );
+  if (!assetId) {
+    return NextResponse.json({})
   }
+
+  const assetRes = await fetch(
+    `https://api.mux.com/video/v1/assets/${assetId}`,
+    {
+      headers: {
+        Authorization:
+          "Basic " +
+          Buffer.from(
+            `${tokenId}:${tokenSecret}`
+          ).toString("base64"),
+      },
+    }
+  )
+
+  const assetData =
+    await assetRes.json()
+
+  return NextResponse.json({
+    playbackId:
+      assetData?.data?.playback_ids?.[0]
+        ?.id || null,
+  })
 }
