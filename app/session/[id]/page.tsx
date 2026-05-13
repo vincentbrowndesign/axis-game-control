@@ -11,5 +11,7 @@ export default async function Page({
 }: Props) {
   const { id } = await params;
 
-  return <AxisReplayClient sessionId={id} />;
+  return (
+    <AxisReplayClient sessionId={id} />
+  );
 }

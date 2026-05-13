@@ -15,7 +15,7 @@ export default function AxisReplayClient({
   );
 
   useEffect(() => {
-    async function load() {
+    async function loadSession() {
       const res = await fetch(
         `/api/analyze/session/${sessionId}`
       );
@@ -25,7 +25,7 @@ export default function AxisReplayClient({
       setSession(data);
     }
 
-    load();
+    loadSession();
   }, [sessionId]);
 
   return (

@@ -25,39 +25,51 @@ export async function GET(
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    // GET DIRECT UPLOAD
     const upload = await mux.video.uploads.retrieve(id);
 
     if (!upload.asset_id) {
       return NextResponse.json({
         status: "processing",
+        stage: "waiting_for_asset",
       });
     }
 
+    // GET ASSET
     const asset = await mux.video.assets.retrieve(
       upload.asset_id
     );
 
-    if (asset.status !== "ready") {
+    console.log("MUX ASSET STATUS", asset.status);
+    console.log(
+      "MUX PLAYBACK IDS",
+      asset.playback_ids
+    );
+
+    // WAIT UNTIL ASSET READY
+    if (
+      asset.status !== "ready" ||
+      !asset.playback_ids ||
+      asset.playback_ids.length === 0
+    ) {
       return NextResponse.json({
         status: "processing",
+        stage: "mux_processing",
+        assetStatus: asset.status,
       });
     }
 
     const playbackId =
-      asset.playback_ids?.[0]?.id;
+      asset.playback_ids[0].id;
 
-    if (!playbackId) {
-      return NextResponse.json({
-        status: "processing",
-      });
-    }
-
+    // CHECK EXISTING SESSION
     const { data: existing } = await supabase
       .from("axis_sessions")
       .select("*")
       .eq("upload_id", id)
       .maybeSingle();
 
+    // RETURN EXISTING
     if (existing) {
       return NextResponse.json({
         status: "ready",
@@ -66,6 +78,7 @@ export async function GET(
       });
     }
 
+    // CREATE SESSION
     const { data: session, error } =
       await supabase
         .from("axis_sessions")
@@ -80,7 +93,10 @@ export async function GET(
         .single();
 
     if (error) {
-      console.error(error);
+      console.error(
+        "SESSION_CREATE_FAILED",
+        error
+      );
 
       return NextResponse.json(
         {

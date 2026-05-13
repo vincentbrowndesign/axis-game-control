@@ -20,6 +20,7 @@ export default function MobileVideoUpload() {
 
       setFileName(file.name);
 
+      // STEP 1
       setStatus("CREATING UPLOAD");
       setProgress(10);
 
@@ -33,6 +34,9 @@ export default function MobileVideoUpload() {
 
       const createData = await createRes.json();
 
+      console.log(createData);
+
+      // STEP 2
       setStatus("UPLOADING");
       setProgress(30);
 
@@ -52,12 +56,13 @@ export default function MobileVideoUpload() {
         throw new Error("UPLOAD_FAILED");
       }
 
+      // STEP 3
       setStatus("PROCESSING");
       setProgress(70);
 
       let sessionId = "";
 
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 90; i++) {
         await new Promise((resolve) =>
           setTimeout(resolve, 2000)
         );
@@ -66,9 +71,11 @@ export default function MobileVideoUpload() {
           `/api/mux/upload/${createData.uploadId}`
         );
 
+        if (!pollRes.ok) continue;
+
         const pollData = await pollRes.json();
 
-        console.log(pollData);
+        console.log("POLL", pollData);
 
         if (pollData.status === "ready") {
           sessionId = pollData.sessionId;
@@ -80,6 +87,7 @@ export default function MobileVideoUpload() {
         throw new Error("PROCESSING_TIMEOUT");
       }
 
+      // STEP 4
       setStatus("READY");
       setProgress(100);
 
@@ -102,6 +110,7 @@ export default function MobileVideoUpload() {
         </h1>
 
         <div className="mt-12 space-y-6">
+          {/* CHOOSE */}
           <label className="block cursor-pointer rounded-[32px] border border-white/10 bg-neutral-950 p-10">
             <div className="space-y-6">
               <p className="text-[34px] font-semibold tracking-[0.35em]">
@@ -127,6 +136,7 @@ export default function MobileVideoUpload() {
             />
           </label>
 
+          {/* RECORD */}
           <label className="block cursor-pointer rounded-[32px] border border-white/10 bg-neutral-950 p-10">
             <div className="space-y-6">
               <p className="text-[34px] font-semibold tracking-[0.35em]">
@@ -160,7 +170,7 @@ export default function MobileVideoUpload() {
             </div>
 
             <div className="mt-8 text-center">
-              <p className="text-[42px] tracking-[0.35em] text-white/70">
+              <p className="text-[48px] tracking-[0.35em] text-white/70">
                 {status}
               </p>
 
