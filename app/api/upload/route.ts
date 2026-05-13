@@ -1,3 +1,5 @@
+// app/api/upload/route.ts
+
 import { NextResponse } from "next/server"
 import Mux from "@mux/mux-node"
 
@@ -6,8 +8,10 @@ const mux = new Mux({
   tokenSecret: process.env.MUX_TOKEN_SECRET!,
 })
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const body = await request.json()
+
     const upload = await mux.video.uploads.create({
       cors_origin: "*",
       new_asset_settings: {
@@ -23,8 +27,12 @@ export async function POST() {
     console.error(error)
 
     return NextResponse.json(
-      { error: "failed creating upload" },
-      { status: 500 }
+      {
+        error: "Upload creation failed",
+      },
+      {
+        status: 500,
+      }
     )
   }
 }
