@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-export async function GET() {
+export async function POST() {
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +13,8 @@ export async function GET() {
       .insert({
         title: "Axis Session",
         playback_id: "demo",
+        video_url: null,
+        file_name: null,
       })
       .select()
       .single()
@@ -21,12 +23,8 @@ export async function GET() {
       console.error(error)
 
       return NextResponse.json(
-        {
-          error: error.message,
-        },
-        {
-          status: 500,
-        }
+        { success: false, error: error.message },
+        { status: 500 }
       )
     }
 
@@ -35,16 +33,15 @@ export async function GET() {
       session: data,
       redirect: `/session/${data.id}`,
     })
-  } catch (err) {
-    console.error(err)
+  } catch (error) {
+    console.error(error)
 
     return NextResponse.json(
       {
-        error: "server crash",
+        success: false,
+        error: "Unexpected server error",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     )
   }
 }
