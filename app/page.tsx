@@ -1,29 +1,49 @@
-import Link from "next/link"
+"use client"
+
+import { useRouter } from "next/navigation"
 
 export default function HomePage() {
-  return (
-    <main className="min-h-screen bg-black px-6 py-12 text-white">
-      <div className="mx-auto max-w-md">
-        <div className="text-[11px] uppercase tracking-[0.4em] text-zinc-500">
-          Axis Session
-        </div>
+  const router = useRouter()
 
-        <h1 className="mt-4 text-6xl font-black leading-none">
+  async function startSession() {
+    try {
+      const response = await fetch("/api/session/create", {
+        method: "POST",
+      })
+
+      const data = await response.json()
+
+      if (!data.id) return
+
+      router.push(`/session/${data.id}`)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-black px-5 py-10 text-white">
+      <div className="mx-auto flex max-w-md flex-col">
+        <p className="text-[11px] uppercase tracking-[0.45em] text-zinc-600">
+          Axis Session
+        </p>
+
+        <h1 className="mt-6 text-[64px] font-black leading-[0.85] tracking-[-0.08em]">
           AXIS
           <br />
           REPLAY
         </h1>
 
-        <p className="mt-6 text-lg leading-relaxed text-zinc-400">
+        <p className="mt-8 text-2xl leading-relaxed text-zinc-400">
           Axis remembers how you play.
         </p>
 
-        <Link
-          href="/session/demo"
-          className="mt-10 flex h-16 items-center justify-center rounded-full bg-white text-sm font-bold text-black"
+        <button
+          onClick={startSession}
+          className="mt-14 rounded-full bg-white px-6 py-5 text-lg font-black text-black"
         >
           Start Session
-        </Link>
+        </button>
       </div>
     </main>
   )
