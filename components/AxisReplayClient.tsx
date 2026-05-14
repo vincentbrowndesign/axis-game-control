@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+
 import MuxPlayer from "@mux/mux-player-react"
 import { motion } from "framer-motion"
 
@@ -8,7 +9,18 @@ type Props = {
   playbackId: string
 }
 
-const timeline = [
+type TimelineEvent = {
+  time: string
+  label: string
+  active?: boolean
+}
+
+type Suggestion = {
+  key: string
+  label: string
+}
+
+const initialTimeline: TimelineEvent[] = [
   {
     time: "0:04",
     label: "BALL MOVE",
@@ -32,15 +44,27 @@ const timeline = [
   },
 ]
 
-const aiSuggestions = [
-  "OPEN?",
-  "HELP?",
-  "ADVANTAGE?",
+const initialSuggestions: Suggestion[] = [
+  {
+    key: "OPEN",
+    label: "OPEN?",
+  },
+  {
+    key: "HELP",
+    label: "HELP?",
+  },
+  {
+    key: "ADVANTAGE",
+    label: "ADVANTAGE?",
+  },
 ]
 
 export default function AxisReplayClient({
   playbackId,
 }: Props) {
+  const [timeline, setTimeline] =
+    useState<TimelineEvent[]>(initialTimeline)
+
   const [answers, setAnswers] = useState<
     Record<string, boolean | null>
   >({
@@ -48,6 +72,66 @@ export default function AxisReplayClient({
     HELP: null,
     ADVANTAGE: null,
   })
+
+  const [environment, setEnvironment] =
+    useState<string>("SCANNING")
+
+  const [confidence, setConfidence] =
+    useState<number>(0)
+
+  useEffect(() => {
+    async function runInference() {
+      try {
+        const response = await fetch("/api/infer", {
+          method: "POST",
+        })
+
+        const json = await response.json()
+
+        if (json?.environment) {
+          setEnvironment(
+            json.environment.basketballLikely
+              ? "BASKETBALL DETECTED"
+              : "UNKNOWN ENVIRONMENT"
+          )
+
+          setConfidence(json.environment.confidence)
+        }
+
+        if (json?.sequence?.timeline) {
+          const mapped =
+            json.sequence.timeline.map(
+              (
+                event: {
+                  time: string
+                  label: string
+                },
+                index: number
+              ) => ({
+                ...event,
+                active: index === 2,
+              })
+            )
+
+          setTimeline(mapped)
+        }
+      } catch (error) {
+        console.error(error)
+      }
+    }
+
+    runInference()
+  }, [])
+
+  const confirmedCount = useMemo(() => {
+    return Object.values(answers).filter(
+      (value) => value !== null
+    ).length
+  }, [answers])
+
+  const activeEvent =
+    timeline.find((event) => event.active) ??
+    timeline[0]
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -80,13 +164,33 @@ export default function AxisReplayClient({
           />
         </motion.div>
 
+        {/* ENVIRONMENT */}
+        <div className="mt-5 rounded-[28px] border border-white/10 bg-zinc-950 px-5 py-4">
+          <div className="flex items-center justify-between">
+
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-600">
+                Environment
+              </p>
+
+              <h3 className="mt-2 text-[20px] font-black tracking-[-0.05em]">
+                {environment}
+              </h3>
+            </div>
+
+            <div className="rounded-full border border-white/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em]">
+              {Math.round(confidence * 100)}%
+            </div>
+          </div>
+        </div>
+
         {/* ACTIVE EVENT */}
         <div className="mt-5 rounded-[30px] border border-white/10 bg-zinc-950 p-6">
 
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
 
-              <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
+              <div className="h-2 w-2 animate-pulse rounded-full bg-white" />
 
               <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500">
                 Live Sequence
@@ -94,14 +198,12 @@ export default function AxisReplayClient({
             </div>
 
             <p className="text-[10px] uppercase tracking-[0.35em] text-white">
-              0:07
+              {activeEvent?.time}
             </p>
           </div>
 
           <h2 className="text-[42px] leading-[0.9] font-black tracking-[-0.07em]">
-            PAINT
-            <br />
-            TOUCH
+            {activeEvent?.label}
           </h2>
         </div>
 
@@ -124,6 +226,14 @@ export default function AxisReplayClient({
               <motion.button
                 whileTap={{ scale: 0.985 }}
                 key={index}
+                onClick={() => {
+                  setTimeline((prev) =>
+                    prev.map((item, i) => ({
+                      ...item,
+                      active: i === index,
+                    }))
+                  )
+                }}
                 className={`flex items-center justify-between rounded-[26px] border px-5 py-5 transition-all ${
                   event.active
                     ? "border-white bg-white text-black"
@@ -188,14 +298,14 @@ export default function AxisReplayClient({
             </p>
 
             <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-700">
-              Confirm
+              {confirmedCount}/3 CONFIRMED
             </p>
           </div>
 
           <div className="flex flex-col gap-3">
 
-            {aiSuggestions.map((item, index) => {
-              const key = item.replace("?", "")
+            {initialSuggestions.map((item, index) => {
+              const value = answers[item.key]
 
               return (
                 <motion.div
@@ -205,11 +315,29 @@ export default function AxisReplayClient({
                 >
                   <div className="flex items-center gap-3">
 
-                    <div className="h-2 w-2 rounded-full bg-white" />
+                    <div
+                      className={`h-2 w-2 rounded-full ${
+                        value === true
+                          ? "bg-white"
+                          : value === false
+                          ? "bg-zinc-500"
+                          : "bg-zinc-700"
+                      }`}
+                    />
 
-                    <p className="text-[18px] font-bold tracking-[0.08em]">
-                      {item}
-                    </p>
+                    <div>
+                      <p className="text-[18px] font-bold tracking-[0.08em]">
+                        {item.label}
+                      </p>
+
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-zinc-600">
+                        {value === null
+                          ? "Awaiting Input"
+                          : value
+                          ? "Confirmed"
+                          : "Rejected"}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -218,11 +346,11 @@ export default function AxisReplayClient({
                       onClick={() =>
                         setAnswers((prev) => ({
                           ...prev,
-                          [key]: false,
+                          [item.key]: false,
                         }))
                       }
                       className={`rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] transition-all ${
-                        answers[key] === false
+                        value === false
                           ? "bg-white text-black"
                           : "border border-white/10 text-zinc-500"
                       }`}
@@ -234,11 +362,11 @@ export default function AxisReplayClient({
                       onClick={() =>
                         setAnswers((prev) => ({
                           ...prev,
-                          [key]: true,
+                          [item.key]: true,
                         }))
                       }
                       className={`rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] transition-all ${
-                        answers[key] === true
+                        value === true
                           ? "bg-white text-black"
                           : "border border-white/10 text-zinc-500"
                       }`}
