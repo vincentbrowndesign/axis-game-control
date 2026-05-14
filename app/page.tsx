@@ -20,12 +20,12 @@ export default function HomePage() {
 
       console.log(data)
 
-      if (!data?.id) {
+      if (!data?.session?.id) {
         alert("Session creation failed.")
         return
       }
 
-      router.push(`/session/${data.id}`)
+      router.push(`/session/${data.session.id}`)
     } catch (err) {
       console.error(err)
       alert("Something went wrong.")
