@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import Mux from "@mux/mux-node"
-import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase"
 
 type Context = {
   params: Promise<{
@@ -47,11 +47,20 @@ export async function GET(
       })
     }
 
-    const existing = await supabase
+    const existing = await supabaseAdmin
       .from("axis_sessions")
       .select("*")
       .eq("upload_id", id)
       .maybeSingle()
+
+    if (existing.error) {
+      console.error(existing.error)
+
+      return NextResponse.json({
+        status: "database_error",
+        error: existing.error.message,
+      })
+    }
 
     if (existing.data) {
       return NextResponse.json({
@@ -60,7 +69,7 @@ export async function GET(
       })
     }
 
-    const inserted = await supabase
+    const inserted = await supabaseAdmin
       .from("axis_sessions")
       .insert({
         title: "Axis Session",
@@ -90,6 +99,7 @@ export async function GET(
 
     return NextResponse.json({
       status: "server_error",
+      error: "Mux upload polling failed",
     })
   }
 }
