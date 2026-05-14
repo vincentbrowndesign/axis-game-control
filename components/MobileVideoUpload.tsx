@@ -80,6 +80,8 @@ export default function MobileVideoUpload() {
 
           setProgress(100)
 
+          setStatus("READY")
+
           router.push(
             `/session/${result.sessionId}`
           )
@@ -112,24 +114,30 @@ export default function MobileVideoUpload() {
   return (
     <main className="min-h-screen bg-black text-white p-6 flex flex-col gap-6 overflow-hidden">
       <div>
-        <h1 className="text-7xl font-bold tracking-[0.35em] leading-none">
+        <p className="text-[11px] uppercase tracking-[0.45em] text-zinc-600">
+          Axis Session
+        </p>
+
+        <h1 className="mt-6 text-[64px] font-black leading-[0.85] tracking-[-0.08em]">
           AXIS
+          <br />
+          REPLAY
         </h1>
 
-        <h1 className="text-7xl font-bold tracking-[0.35em] leading-none">
-          SESSION
-        </h1>
+        <p className="mt-8 text-2xl leading-relaxed text-zinc-400">
+          Axis remembers how you play.
+        </p>
       </div>
 
       <button
         onClick={() => fileInputRef.current?.click()}
         className="border border-zinc-900 rounded-[2rem] p-8 text-left"
       >
-        <div className="text-5xl tracking-[0.35em] font-semibold">
+        <div className="text-5xl tracking-[0.15em] font-semibold">
           CHOOSE
         </div>
 
-        <div className="text-5xl tracking-[0.35em] font-semibold mt-2">
+        <div className="text-5xl tracking-[0.15em] font-semibold mt-2">
           FILE
         </div>
 
@@ -141,12 +149,12 @@ export default function MobileVideoUpload() {
       </button>
 
       <label className="border border-zinc-900 rounded-[2rem] p-8 block">
-        <div className="text-5xl tracking-[0.35em] font-semibold">
+        <div className="text-5xl tracking-[0.15em] font-semibold">
           RECORD
         </div>
 
         <div className="mt-10 text-2xl text-zinc-500">
-          Record from camera.
+          Record from camera
         </div>
 
         <input
@@ -187,12 +195,12 @@ export default function MobileVideoUpload() {
         />
       </div>
 
-      <div className="text-center">
-        <div className="text-6xl tracking-[0.35em] text-zinc-400 break-words">
+      <div className="text-center pb-10">
+        <div className="text-3xl tracking-[0.25em] text-zinc-400 break-words">
           {status}
         </div>
 
-        <div className="mt-6 text-4xl text-zinc-500">
+        <div className="mt-4 text-xl text-zinc-500">
           {progress}%
         </div>
       </div>
