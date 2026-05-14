@@ -18,24 +18,31 @@ type ReplaySession = {
 export default function HomePage() {
   const router = useRouter()
 
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const uploadInputRef =
+    useRef<HTMLInputElement | null>(null)
+
+  const cameraInputRef =
+    useRef<HTMLInputElement | null>(null)
 
   const [progress, setProgress] = useState(0)
+
   const [status, setStatus] = useState("")
 
-  function saveSession(
+  async function saveSession(
     file: File,
     source: "camera" | "upload"
   ) {
     try {
       setProgress(10)
+
       setStatus("Preparing behavioral memory...")
 
       const localUrl = URL.createObjectURL(file)
 
       const id = crypto.randomUUID()
 
-      const video = document.createElement("video")
+      const video =
+        document.createElement("video")
 
       video.preload = "metadata"
 
@@ -58,15 +65,13 @@ export default function HomePage() {
         )
 
         const existing = JSON.parse(
-          localStorage.getItem("axis-sessions") || "[]"
+          localStorage.getItem("axis-sessions") ||
+            "[]"
         ) as string[]
 
         localStorage.setItem(
           "axis-sessions",
-          JSON.stringify([
-            id,
-            ...existing.filter((x) => x !== id),
-          ])
+          JSON.stringify([id, ...existing])
         )
 
         setProgress(100)
@@ -74,129 +79,125 @@ export default function HomePage() {
         setStatus("Behavioral memory stored.")
 
         setTimeout(() => {
-          router.push(`/session/${id}`)
-        }, 700)
-      }
-
-      video.onerror = () => {
-        setProgress(0)
-        setStatus("Video metadata failed.")
+          router.push(`/replay/${id}`)
+        }, 500)
       }
 
       video.src = localUrl
     } catch (error) {
       console.error(error)
 
-      setProgress(0)
-
       setStatus("Upload failed.")
+
+      setProgress(0)
     }
   }
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-10">
-          <p className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
+    <main className="min-h-screen bg-black px-5 pb-24 pt-10 text-white">
+      <div className="mx-auto max-w-5xl">
+        <div className="space-y-5">
+          <p className="text-xs uppercase tracking-[0.45em] text-zinc-700">
             Axis Session
           </p>
 
-          <h1 className="text-7xl font-black leading-none">
+          <h1 className="text-[clamp(4rem,18vw,9rem)] font-black leading-[0.88] tracking-[-0.08em]">
             AXIS
             <br />
             REPLAY
           </h1>
 
-          <p className="mt-6 text-2xl text-zinc-500">
+          <p className="max-w-xl text-xl text-zinc-500 sm:text-2xl">
             Axis remembers how you play.
           </p>
         </div>
 
-        <div className="space-y-6">
+        <div className="mt-10 grid gap-5 md:grid-cols-2">
           <button
-            onClick={() => inputRef.current?.click()}
-            className="w-full rounded-[2rem] border border-zinc-900 bg-black p-8 text-left transition hover:border-zinc-700"
+            onClick={() =>
+              uploadInputRef.current?.click()
+            }
+            className="rounded-[2rem] border border-zinc-900 bg-zinc-950 p-8 text-left transition hover:border-zinc-700"
           >
-            <div className="text-6xl font-black leading-none">
+            <p className="text-6xl font-black leading-none">
               CHOOSE
               <br />
               FILE
-            </div>
+            </p>
 
-            <div className="mt-8 text-2xl text-lime-300">
+            <p className="mt-8 text-2xl text-lime-400">
               Choose existing clip
-            </div>
+            </p>
           </button>
-
-          <label className="block w-full rounded-[2rem] border border-zinc-900 bg-black p-8 transition hover:border-zinc-700">
-            <div className="text-6xl font-black leading-none">
-              RECORD
-            </div>
-
-            <div className="mt-8 text-2xl text-cyan-400">
-              Record from camera
-            </div>
-
-            <input
-              type="file"
-              accept="video/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-
-                if (file) {
-                  saveSession(file, "camera")
-                }
-              }}
-            />
-          </label>
-
-          <input
-            ref={inputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-
-              if (file) {
-                saveSession(file, "upload")
-              }
-            }}
-          />
 
           <button
-            onClick={() => router.push("/sessions")}
-            className="w-full rounded-full border border-zinc-900 py-5 text-lg font-bold text-zinc-400 transition hover:border-zinc-700 hover:text-white"
+            onClick={() =>
+              cameraInputRef.current?.click()
+            }
+            className="rounded-[2rem] border border-zinc-900 bg-zinc-950 p-8 text-left transition hover:border-zinc-700"
           >
-            View Memories
-          </button>
+            <p className="text-6xl font-black leading-none">
+              RECORD
+            </p>
 
-          <div className="mt-10">
-            <div className="h-6 overflow-hidden rounded-full bg-zinc-950">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-lime-300 to-cyan-300 transition-all duration-500"
-                style={{
-                  width: `${progress}%`,
-                }}
-              />
+            <p className="mt-8 text-2xl text-cyan-400">
+              Record from camera
+            </p>
+          </button>
+        </div>
+
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+
+            if (!file) return
+
+            saveSession(file, "upload")
+          }}
+        />
+
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="video/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+
+            if (!file) return
+
+            saveSession(file, "camera")
+          }}
+        />
+
+        <div className="mt-14">
+          <div className="h-6 overflow-hidden rounded-full bg-zinc-950">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-lime-300 to-cyan-300 transition-all duration-500"
+              style={{
+                width: `${progress}%`,
+              }}
+            />
+          </div>
+
+          <div className="mt-5 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.45em] text-zinc-700">
+                Behavioral Memory Upload
+              </p>
+
+              <h2 className="mt-3 text-[clamp(2.5rem,9vw,5rem)] font-black leading-[0.9]">
+                {status || "Waiting for upload."}
+              </h2>
             </div>
 
-            <div className="mt-4 flex items-end justify-between gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-[0.4em] text-zinc-700">
-                  Behavioral Memory Upload
-                </div>
-
-                <div className="mt-4 text-3xl leading-tight text-zinc-300">
-                  {status}
-                </div>
-              </div>
-
-              <div className="text-7xl font-black text-zinc-300">
-                {progress}%
-              </div>
+            <div className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-zinc-300">
+              {progress}%
             </div>
           </div>
         </div>
