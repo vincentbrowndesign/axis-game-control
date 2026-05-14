@@ -1,37 +1,81 @@
 import { AxisObservation } from "@/types/axis"
-import { confidenceLabel } from "@/engine/confidenceEngine"
 
 type Props = {
   observations: AxisObservation[]
 }
 
+function confidenceLabel(score: number) {
+  if (score >= 88) return "HIGH"
+  if (score >= 74) return "MEDIUM"
+  return "LOW"
+}
+
 export default function ObservationFeed({
   observations,
 }: Props) {
+  if (!observations.length) {
+    return (
+      <div className="rounded-[32px] border border-white/10 bg-white/[0.03] p-6">
+        <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
+          Observations
+        </p>
+
+        <h2 className="mt-4 text-3xl font-black text-white">
+          Not enough signal yet.
+        </h2>
+
+        <p className="mt-4 text-zinc-500">
+          Add events like DRIVE, PAINT TOUCH, OPEN, SHOT, MAKE, MISS, or TURNOVER.
+          Axis only speaks when there is proof.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {observations.map((item) => (
         <div
           key={item.id}
-          className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"
+          className="rounded-[32px] border border-white/10 bg-white/[0.03] p-6"
         >
           <div className="flex items-center justify-between">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-zinc-500">
+            <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
               Observation
-            </div>
+            </p>
 
-            <div className="text-[11px] uppercase tracking-[0.3em] text-zinc-500">
+            <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
               {confidenceLabel(item.confidence)}
-            </div>
+            </p>
           </div>
 
-          <div className="mt-4 text-2xl font-bold leading-tight text-white">
-            {item.text}
+          <h2 className="mt-5 text-3xl font-black leading-tight text-white">
+            {item.title}
+          </h2>
+
+          <div className="mt-6 rounded-[24px] border border-white/10 bg-black p-4">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-600">
+              Proof
+            </p>
+
+            <p className="mt-2 text-zinc-300">
+              {item.proof}
+            </p>
           </div>
 
-          <div className="mt-4 text-sm text-zinc-500">
+          <div className="mt-4 rounded-[24px] border border-white/10 bg-black p-4">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-600">
+              Why it matters
+            </p>
+
+            <p className="mt-2 text-zinc-300">
+              {item.why}
+            </p>
+          </div>
+
+          <p className="mt-5 text-sm text-zinc-500">
             {item.confidence}% confidence
-          </div>
+          </p>
         </div>
       ))}
     </div>

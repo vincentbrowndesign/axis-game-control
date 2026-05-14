@@ -1,20 +1,35 @@
-export type AxisObservation = {
+export type AxisEventType =
+  | "PASS"
+  | "DRIVE"
+  | "PAINT_TOUCH"
+  | "SHOT"
+  | "MAKE"
+  | "MISS"
+  | "TURNOVER"
+  | "OPEN"
+  | "HELP"
+  | "RESET"
+
+export type AxisEvent = {
   id: string
-  text: string
-  confidence: number
+  type: AxisEventType
+  label: string
+  time: number
 }
 
-export type AxisPlayer = {
+export type AxisObservation = {
   id: string
-  name: string
-  jersey?: string
-  confidence?: number
+  title: string
+  proof: string
+  why: string
+  confidence: number
 }
 
 export type AxisSession = {
   id: string
+  playbackId: string | null
+  playerName: string | null
+  jersey: string | null
   createdAt: string
-  videoUrl?: string
-  environment?: string
-  observations: AxisObservation[]
+  events: AxisEvent[]
 }
