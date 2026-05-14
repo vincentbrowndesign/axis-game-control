@@ -1,209 +1,161 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 
 export default function MobileVideoUpload() {
-  const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
+  const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [status, setStatus] = useState("")
-  const [selectedFile, setSelectedFile] =
-    useState<File | null>(null)
 
-  async function handleFile(file: File) {
+  const handlePick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0]
+
+    if (!file) return
+
     try {
-      setSelectedFile(file)
-
-      setStatus("UPLOADING")
+      setUploading(true)
       setProgress(10)
 
-      const createUpload = await fetch("/api/upload", {
+      // mock upload feel
+      const fake = setInterval(() => {
+        setProgress((p) => {
+          if (p >= 90) return p
+          return p + 10
+        })
+      }, 300)
+
+      const formData = new FormData()
+      formData.append("file", file)
+
+      await fetch("/api/upload", {
         method: "POST",
+        body: formData,
       })
 
-      const uploadData = await createUpload.json()
+      clearInterval(fake)
 
-      console.log("UPLOAD DATA", uploadData)
+      setProgress(100)
 
-      if (!uploadData.url || !uploadData.id) {
-        setStatus("UPLOAD FAILED")
-        return
-      }
-
-      const uploadUrl = uploadData.url
-      const uploadId = uploadData.id
-
-      setProgress(20)
-
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type":
-            file.type || "video/quicktime",
-        },
-        body: file,
-      })
-
-      console.log(
-        "MUX UPLOAD RESPONSE",
-        uploadResponse.status
-      )
-
-      if (!uploadResponse.ok) {
-        setStatus("UPLOAD FAILED")
-        return
-      }
-
-      setStatus("PROCESSING")
-      setProgress(70)
-
-      let ready = false
-
-      while (!ready) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, 2500)
-        )
-
-        const check = await fetch(
-          `/api/mux/upload/${uploadId}`
-        )
-
-        const result = await check.json()
-
-        console.log("POLL RESULT", result)
-
-        if (result.status === "ready") {
-          ready = true
-
-          setProgress(100)
-
-          setStatus("READY")
-
-          router.push(
-            `/session/${result.sessionId}`
-          )
-
-          return
-        }
-
-        if (
-          result.status === "server_error" ||
-          result.status === "database_error"
-        ) {
-          console.log(result)
-
-          setStatus(
-            result.error ||
-              result.status ||
-              "UPLOAD FAILED"
-          )
-
-          return
-        }
-      }
+      setTimeout(() => {
+        window.location.href = "/replay/demo"
+      }, 500)
     } catch (err) {
       console.error(err)
-
-      setStatus("UPLOAD FAILED")
+    } finally {
+      setUploading(false)
     }
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-6 flex flex-col gap-6 overflow-hidden">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.45em] text-zinc-600">
-          Axis Session
-        </p>
-
-        <h1 className="mt-6 text-[64px] font-black leading-[0.85] tracking-[-0.08em]">
-          AXIS
-          <br />
-          REPLAY
-        </h1>
-
-        <p className="mt-8 text-2xl leading-relaxed text-zinc-400">
-          Axis remembers how you play.
-        </p>
-      </div>
-
-      <button
-        onClick={() => fileInputRef.current?.click()}
-        className="border border-zinc-900 rounded-[2rem] p-8 text-left"
-      >
-        <div className="text-5xl tracking-[0.15em] font-semibold">
-          CHOOSE
-        </div>
-
-        <div className="text-5xl tracking-[0.15em] font-semibold mt-2">
-          FILE
-        </div>
-
-        <div className="mt-10 text-2xl text-zinc-300 break-all">
-          {selectedFile
-            ? selectedFile.name
-            : "Choose existing clip"}
-        </div>
-      </button>
-
-      <label className="border border-zinc-900 rounded-[2rem] p-8 block">
-        <div className="text-5xl tracking-[0.15em] font-semibold">
-          RECORD
-        </div>
-
-        <div className="mt-10 text-2xl text-zinc-500">
-          Record from camera
-        </div>
-
-        <input
-          type="file"
-          accept="video/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-
-            if (file) {
-              handleFile(file)
-            }
-          }}
-        />
-      </label>
-
+    <div className="space-y-6">
       <input
         ref={fileInputRef}
         type="file"
         accept="video/*"
+        capture="environment"
         className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-
-          if (file) {
-            handleFile(file)
-          }
-        }}
+        onChange={handleUpload}
       />
 
-      <div className="w-full h-5 bg-zinc-900 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-white transition-all duration-500"
-          style={{
-            width: `${progress}%`,
-          }}
-        />
+      <div className="grid grid-cols-1 gap-5">
+        <button
+          onClick={handlePick}
+          className="
+            relative
+            overflow-hidden
+            rounded-[38px]
+            border
+            border-white/10
+            bg-[#0b0b0f]
+            p-10
+            text-left
+            transition-all
+            duration-300
+            active:scale-[0.98]
+          "
+        >
+          {/* glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#d7ff64]/12 via-transparent to-transparent" />
+
+          <div className="relative z-10">
+            <p className="mb-6 text-[60px] font-black leading-[0.88] tracking-[-0.08em] text-[#f5f5f5]">
+              CHOOSE
+              <br />
+              FILE
+            </p>
+
+            <p className="text-[20px] text-[#d7ff64]/80">
+              Choose existing clip
+            </p>
+          </div>
+        </button>
+
+        <button
+          onClick={handlePick}
+          className="
+            relative
+            overflow-hidden
+            rounded-[38px]
+            border
+            border-white/10
+            bg-[#0b0b0f]
+            p-10
+            text-left
+            transition-all
+            duration-300
+            active:scale-[0.98]
+          "
+        >
+          {/* glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#6ae2ff]/12 via-transparent to-transparent" />
+
+          <div className="relative z-10">
+            <p className="mb-6 text-[60px] font-black leading-[0.88] tracking-[-0.08em] text-[#f5f5f5]">
+              RECORD
+            </p>
+
+            <p className="text-[20px] text-[#6ae2ff]/80">
+              Record from camera
+            </p>
+          </div>
+        </button>
       </div>
 
-      <div className="text-center pb-10">
-        <div className="text-3xl tracking-[0.25em] text-zinc-400 break-words">
-          {status}
+      <div className="space-y-3 px-1">
+        <div className="h-5 overflow-hidden rounded-full bg-white/5">
+          <div
+            className="
+              h-full
+              rounded-full
+              bg-gradient-to-r
+              from-[#d7ff64]
+              to-[#6ae2ff]
+              transition-all
+              duration-300
+            "
+            style={{
+              width: `${progress}%`,
+            }}
+          />
         </div>
 
-        <div className="mt-4 text-xl text-zinc-500">
-          {progress}%
+        <div className="flex items-center justify-between">
+          <p className="text-sm uppercase tracking-[0.3em] text-white/30">
+            behavioral memory upload
+          </p>
+
+          <p className="text-2xl text-white/50">
+            {uploading ? `${progress}%` : "0%"}
+          </p>
         </div>
       </div>
-    </main>
+    </div>
   )
 }
