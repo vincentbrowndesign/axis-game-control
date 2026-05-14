@@ -1,5 +1,8 @@
 "use client"
 
+import AxisCard from "@/components/layout/AxisCard"
+import AxisButton from "@/components/layout/AxisButton"
+
 export type Player = {
   id: string
   name: string
@@ -44,18 +47,18 @@ export default function PlayerSelectCard({
   onContinue,
 }: Props) {
   return (
-    <section className="rounded-[34px] border border-white/10 bg-white/[0.03] p-6">
-      <p className="text-[11px] uppercase tracking-[0.4em] text-zinc-600">
+    <AxisCard>
+      <p className="text-[11px] uppercase tracking-[0.42em] text-zinc-600">
         Identity Link
       </p>
 
-      <h2 className="mt-5 text-5xl font-black tracking-[-0.06em] leading-none">
+      <h2 className="mt-5 text-[68px] font-black leading-[0.88] tracking-[-0.08em]">
         WHO IS
         <br />
         THIS?
       </h2>
 
-      <p className="mt-5 text-xl leading-relaxed text-zinc-400">
+      <p className="mt-6 text-[22px] leading-[1.6] text-zinc-400">
         Axis can connect this session to an
         existing player memory profile.
       </p>
@@ -68,75 +71,72 @@ export default function PlayerSelectCard({
             onClick={() =>
               onContinue?.(player.id)
             }
-            className="rounded-[30px] border border-white/10 bg-black/40 p-5 text-left active:scale-[0.98]"
+            className="rounded-[30px] border border-white/10 bg-black/40 p-5 text-left transition-all active:scale-[0.985]"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-4xl font-black tracking-[-0.05em]">
+                <h3 className="text-[54px] font-black tracking-[-0.06em]">
                   {player.name}
                 </h3>
 
-                <p className="mt-2 text-xl text-zinc-400">
+                <p className="mt-2 text-[20px] text-zinc-400">
                   Class of {player.gradYear}
                 </p>
               </div>
 
-              <div className="rounded-full border border-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.35em] text-zinc-500">
+              <div className="rounded-full border border-white/10 px-5 py-3 text-[11px] uppercase tracking-[0.38em] text-zinc-500">
                 {player.lastSeen}
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <div className="rounded-[24px] border border-white/10 bg-zinc-950 p-4">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                  Height
-                </p>
+            <div className="mt-7 grid grid-cols-2 gap-3">
+              <Info
+                label="Height"
+                value={player.height}
+              />
 
-                <p className="mt-3 text-3xl font-semibold">
-                  {player.height}
-                </p>
-              </div>
+              <Info
+                label="Weight"
+                value={player.weight}
+              />
 
-              <div className="rounded-[24px] border border-white/10 bg-zinc-950 p-4">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                  Weight
-                </p>
+              <Info
+                label="Position"
+                value={player.position}
+              />
 
-                <p className="mt-3 text-3xl font-semibold">
-                  {player.weight}
-                </p>
-              </div>
-
-              <div className="rounded-[24px] border border-white/10 bg-zinc-950 p-4">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                  Position
-                </p>
-
-                <p className="mt-3 text-3xl font-semibold">
-                  {player.position}
-                </p>
-              </div>
-
-              <div className="rounded-[24px] border border-white/10 bg-zinc-950 p-4">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                  Dominant
-                </p>
-
-                <p className="mt-3 text-3xl font-semibold">
-                  {player.handedness}
-                </p>
-              </div>
+              <Info
+                label="Dominant"
+                value={player.handedness}
+              />
             </div>
           </button>
         ))}
       </div>
 
-      <a
-        href="/player/new"
-        className="mt-6 block w-full rounded-full border border-white/10 bg-black py-5 text-center text-lg font-black text-white"
-      >
+      <AxisButton className="mt-6 bg-black text-white border border-white/10">
         Create New Player
-      </a>
-    </section>
+      </AxisButton>
+    </AxisCard>
+  )
+}
+
+function Info({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-zinc-950 p-4">
+      <p className="text-[11px] uppercase tracking-[0.38em] text-zinc-600">
+        {label}
+      </p>
+
+      <p className="mt-4 text-[28px] font-bold tracking-[-0.04em]">
+        {value}
+      </p>
+    </div>
   )
 }
