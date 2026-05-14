@@ -25,7 +25,7 @@ export default async function SessionPage({
 
   if (!session) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+      <main className="min-h-screen bg-black flex items-center justify-center text-white">
         <p className="text-white/40">
           Session not found.
         </p>
@@ -35,7 +35,10 @@ export default async function SessionPage({
 
   return (
     <AxisReplayClient
-      playbackId={session.playback_id}
+      playbackId={
+        session.playback_id ||
+        "vWQzB00Wy019K7t5YqzB6Q02qhF00nR5Y00nK7x2Vh2qg"
+      }
     />
   )
 }
