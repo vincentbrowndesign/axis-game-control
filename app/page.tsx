@@ -96,23 +96,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-black px-5 pb-24 pt-10 text-white">
       <div className="mx-auto max-w-5xl">
-        <div className="space-y-5">
-          <p className="text-xs uppercase tracking-[0.45em] text-zinc-700">
-            Axis Session
-          </p>
-
-          <h1 className="text-[clamp(4rem,18vw,9rem)] font-black leading-[0.88] tracking-[-0.08em]">
-            AXIS
-            <br />
-            REPLAY
-          </h1>
-
-          <p className="max-w-xl text-xl text-zinc-500 sm:text-2xl">
-            Axis remembers how you play.
-          </p>
-        </div>
-
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
+        <div className="grid gap-5 md:grid-cols-2">
           <button
             onClick={() =>
               uploadInputRef.current?.click()
