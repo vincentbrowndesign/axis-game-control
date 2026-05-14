@@ -1,127 +1,55 @@
-"use client"
-
-import AxisCard from "@/components/layout/AxisCard"
-import AxisButton from "@/components/layout/AxisButton"
-
-export type Player = {
+type Player = {
   id: string
   name: string
   gradYear: string
   height: string
   weight: string
   position: string
-  handedness: string
+  dominant: string
   lastSeen: string
 }
 
 type Props = {
-  players?: Player[]
-  onContinue?: (playerId: string) => void
+  player: Player
+  onSelect: () => void
 }
 
-const defaultPlayers: Player[] = [
-  {
-    id: "hudson",
-    name: "Hudson",
-    gradYear: "2032",
-    height: "5'3",
-    weight: "95",
-    position: "Guard",
-    handedness: "Right",
-    lastSeen: "Yesterday",
-  },
-  {
-    id: "ant",
-    name: "Ant",
-    gradYear: "2031",
-    height: "5'6",
-    weight: "110",
-    position: "Wing",
-    handedness: "Left",
-    lastSeen: "2 Sessions Ago",
-  },
-]
-
 export default function PlayerSelectCard({
-  players = defaultPlayers,
-  onContinue,
+  player,
+  onSelect,
 }: Props) {
   return (
-    <AxisCard>
-      <p className="text-[11px] uppercase tracking-[0.42em] text-zinc-600">
-        Identity Link
-      </p>
+    <button
+      onClick={onSelect}
+      className="w-full rounded-[34px] border border-zinc-900 bg-black p-6 text-left transition active:scale-[0.99]"
+    >
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <div className="text-6xl leading-none font-black tracking-[-0.06em]">
+            {player.name}
+          </div>
 
-      <h2 className="mt-5 text-[68px] font-black leading-[0.88] tracking-[-0.08em]">
-        WHO IS
-        <br />
-        THIS?
-      </h2>
+          <div className="text-zinc-500 text-[20px] mt-3">
+            Class of {player.gradYear}
+          </div>
+        </div>
 
-      <p className="mt-6 text-[22px] leading-[1.6] text-zinc-400">
-        Axis can connect this session to an
-        existing player memory profile.
-      </p>
-
-      <div className="mt-8 flex flex-col gap-5">
-        {players.map((player) => (
-          <button
-            key={player.id}
-            type="button"
-            onClick={() =>
-              onContinue?.(player.id)
-            }
-            className="rounded-[30px] border border-white/10 bg-black/40 p-5 text-left transition-all active:scale-[0.985]"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-[54px] font-black tracking-[-0.06em]">
-                  {player.name}
-                </h3>
-
-                <p className="mt-2 text-[20px] text-zinc-400">
-                  Class of {player.gradYear}
-                </p>
-              </div>
-
-              <div className="rounded-full border border-white/10 px-5 py-3 text-[11px] uppercase tracking-[0.38em] text-zinc-500">
-                {player.lastSeen}
-              </div>
-            </div>
-
-            <div className="mt-7 grid grid-cols-2 gap-3">
-              <Info
-                label="Height"
-                value={player.height}
-              />
-
-              <Info
-                label="Weight"
-                value={player.weight}
-              />
-
-              <Info
-                label="Position"
-                value={player.position}
-              />
-
-              <Info
-                label="Dominant"
-                value={player.handedness}
-              />
-            </div>
-          </button>
-        ))}
+        <div className="rounded-full border border-zinc-800 px-5 py-3 text-[11px] tracking-[0.35em] text-zinc-500 uppercase">
+          {player.lastSeen}
+        </div>
       </div>
 
-      <AxisButton className="mt-6 bg-black text-white border border-white/10">
-        Create New Player
-      </AxisButton>
-    </AxisCard>
+      <div className="grid grid-cols-2 gap-4">
+        <InfoCard label="HEIGHT" value={player.height} />
+        <InfoCard label="WEIGHT" value={player.weight} />
+        <InfoCard label="POSITION" value={player.position} />
+        <InfoCard label="DOMINANT" value={player.dominant} />
+      </div>
+    </button>
   )
 }
 
-function Info({
+function InfoCard({
   label,
   value,
 }: {
@@ -129,14 +57,14 @@ function Info({
   value: string
 }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-zinc-950 p-4">
-      <p className="text-[11px] uppercase tracking-[0.38em] text-zinc-600">
+    <div className="rounded-[28px] border border-zinc-900 bg-[#050505] p-5 min-h-[138px] flex flex-col justify-between">
+      <div className="text-[11px] tracking-[0.42em] text-zinc-600">
         {label}
-      </p>
+      </div>
 
-      <p className="mt-4 text-[28px] font-bold tracking-[-0.04em]">
+      <div className="text-[54px] leading-none font-black tracking-[-0.06em]">
         {value}
-      </p>
+      </div>
     </div>
   )
 }

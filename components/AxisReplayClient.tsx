@@ -1,279 +1,297 @@
 "use client"
 
-import { motion } from "framer-motion"
-import MuxPlayer from "@mux/mux-player-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import PlayerSelectCard from "./PlayerSelectCard"
 
 type Props = {
-  playbackId?: string
-  sessionId?: string
+  sessionId: string
 }
 
-type AxisObservation = {
+type Player = {
   id: string
-  title: string
-  proof: string
-  why: string
-  confidence: number
+  name: string
+  gradYear: string
+  height: string
+  weight: string
+  position: string
+  dominant: string
+  lastSeen: string
 }
 
-const sessionEvents = [
-  "DRIVE",
-  "PAINT TOUCH",
-  "SHOT",
-  "MAKE",
+const mockPlayers: Player[] = [
+  {
+    id: "1",
+    name: "Hudson",
+    gradYear: "2032",
+    height: "5'3",
+    weight: "95",
+    position: "Guard",
+    dominant: "Right",
+    lastSeen: "Yesterday",
+  },
+  {
+    id: "2",
+    name: "Ant",
+    gradYear: "2031",
+    height: "5'6",
+    weight: "110",
+    position: "Wing",
+    dominant: "Left",
+    lastSeen: "2 Sessions Ago",
+  },
 ]
 
-function confidenceLabel(score: number) {
-  if (score >= 88) return "HIGH"
-  if (score >= 74) return "MEDIUM"
-  return "LOW"
-}
+export default function AxisReplayClient({ sessionId }: Props) {
+  const [session, setSession] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
 
-function buildObservations(): AxisObservation[] {
-  return [
-    {
-      id: "decision-speed",
-      title:
-        "Your best scoring windows appeared before help established.",
-      proof:
-        "This possession created pressure immediately after the first paint touch.",
-      why:
-        "Early attacks create cleaner reads before the defense stabilizes.",
-      confidence: 92,
-    },
-    {
-      id: "paint-memory",
-      title:
-        "Paint pressure increased overall shot quality.",
-      proof:
-        "Axis connected DRIVE → PAINT TOUCH → SHOT → MAKE.",
-      why:
-        "The system remembers what consistently creates advantages over time.",
-      confidence: 89,
-    },
-    {
-      id: "behavior-profile",
-      title:
-        "This session expanded your behavioral memory profile.",
-      proof:
-        "Movement timing, pressure creation, and finish behavior were attached to your identity layer.",
-      why:
-        "Axis is building long-term intelligence around how you actually play.",
-      confidence: 84,
-    },
-  ]
-}
+  useEffect(() => {
+    async function loadSession() {
+      try {
+        const res = await fetch(`/api/session/${sessionId}`)
 
-export default function AxisReplayClient({
-  playbackId,
-  sessionId,
-}: Props) {
-  const [playerConfirmed, setPlayerConfirmed] =
-    useState(false)
+        if (!res.ok) {
+          setLoading(false)
+          return
+        }
 
-  const observations = useMemo(() => {
-    if (!playerConfirmed) return []
+        const data = await res.json()
+        setSession(data)
+      } catch (error) {
+        console.error(error)
+      } finally {
+        setLoading(false)
+      }
+    }
 
-    return buildObservations()
-  }, [playerConfirmed])
+    loadSession()
+  }, [sessionId])
 
-  const hasVideo =
-    playbackId &&
-    playbackId !== "demo" &&
-    playbackId.length > 5
+  const playbackId = useMemo(() => {
+    return session?.playbackId || session?.muxPlaybackId
+  }, [session])
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-black text-white p-6">
+        <div className="text-sm tracking-[0.35em] text-zinc-500 mb-6">
+          AXIS SESSION
+        </div>
+
+        <h1 className="text-6xl font-black leading-[0.9]">
+          AXIS
+          <br />
+          REPLAY
+        </h1>
+
+        <p className="text-zinc-400 mt-6 text-xl">
+          Loading session...
+        </p>
+      </main>
+    )
+  }
 
   return (
-    <main className="min-h-screen bg-black px-5 py-10 text-white">
-      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
-        <header>
-          <p className="text-[11px] uppercase tracking-[0.45em] text-zinc-600">
-            Axis Session
-          </p>
+    <main className="min-h-screen bg-black text-white px-5 py-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="text-[11px] tracking-[0.45em] text-zinc-600 mb-5">
+          AXIS SESSION
+        </div>
 
-          <h1 className="mt-4 text-[58px] font-black leading-[0.86] tracking-[-0.08em]">
-            AXIS
-            <br />
-            REPLAY
-          </h1>
+        <h1 className="text-[72px] leading-[0.82] font-black tracking-[-0.06em]">
+          AXIS
+          <br />
+          REPLAY
+        </h1>
 
-          <p className="mt-6 text-lg leading-relaxed text-zinc-400">
-            Axis remembers how you play.
-          </p>
-        </header>
+        <p className="text-zinc-500 text-[18px] mt-6 mb-8">
+          Axis remembers how you play.
+        </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="overflow-hidden rounded-[34px] border border-white/10 bg-zinc-950"
-        >
-          {hasVideo ? (
-            <MuxPlayer
-              playbackId={playbackId}
-              streamType="on-demand"
-              autoPlay={false}
-              accentColor="#ffffff"
+        <section className="rounded-[38px] overflow-hidden border border-zinc-900 bg-[#050505] mb-8">
+          {playbackId ? (
+            <video
+              className="w-full aspect-[9/16] object-cover"
+              controls
+              playsInline
+              src={`https://stream.mux.com/${playbackId}.m3u8`}
             />
           ) : (
-            <div className="flex aspect-[9/16] items-center justify-center bg-black">
-              <div className="text-center">
-                <p className="text-[11px] uppercase tracking-[0.4em] text-zinc-600">
-                  Replay Pending
-                </p>
-
-                <h2 className="mt-4 text-3xl font-black">
-                  SESSION SAVED
-                </h2>
-
-                <p className="mt-4 px-8 text-sm leading-relaxed text-zinc-500">
-                  Video processing and behavioral analysis
-                  will appear here after upload completes.
-                </p>
-
-                {sessionId && (
-                  <div className="mt-6 inline-block rounded-full border border-white/10 px-4 py-2 text-xs text-zinc-600">
-                    {sessionId}
-                  </div>
-                )}
-              </div>
+            <div className="aspect-[9/16] flex items-center justify-center text-zinc-600">
+              No video found
             </div>
           )}
-        </motion.div>
+        </section>
 
-        {!playerConfirmed ? (
-          <PlayerSelectCard
-            onContinue={() =>
-              setPlayerConfirmed(true)
-            }
-          />
+        {!selectedPlayer ? (
+          <section className="rounded-[38px] border border-zinc-900 bg-[#050505] p-7 mb-8">
+            <div className="text-[11px] tracking-[0.45em] text-zinc-600 mb-5">
+              IDENTITY LINK
+            </div>
+
+            <h2 className="text-[72px] leading-[0.82] font-black tracking-[-0.06em]">
+              WHO IS
+              <br />
+              THIS?
+            </h2>
+
+            <p className="text-zinc-500 text-[18px] mt-6 mb-10 max-w-xl">
+              Axis can connect this session to an existing player memory profile.
+            </p>
+
+            <div className="space-y-6">
+              {mockPlayers.map((player) => (
+                <PlayerSelectCard
+                  key={player.id}
+                  player={player}
+                  onSelect={() => setSelectedPlayer(player)}
+                />
+              ))}
+            </div>
+
+            <button className="w-full mt-7 rounded-[28px] bg-white text-black py-5 text-2xl font-semibold">
+              Create New Player
+            </button>
+          </section>
         ) : (
           <>
-            <motion.section
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-[34px] border border-white/10 bg-white/[0.03] p-6"
-            >
-              <p className="text-[11px] uppercase tracking-[0.4em] text-zinc-600">
-                Axis Memory
-              </p>
-
-              <div className="mt-6 grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-4xl font-black">
-                    1
-                  </p>
-
-                  <p className="mt-2 text-xs text-zinc-500">
-                    session
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-4xl font-black">
-                    {sessionEvents.length}
-                  </p>
-
-                  <p className="mt-2 text-xs text-zinc-500">
-                    events
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-4xl font-black">
-                    {observations.length}
-                  </p>
-
-                  <p className="mt-2 text-xs text-zinc-500">
-                    reads
-                  </p>
-                </div>
-              </div>
-            </motion.section>
-
-            <section className="rounded-[34px] border border-white/10 bg-white/[0.03] p-6">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] uppercase tracking-[0.4em] text-zinc-600">
-                  Connected Events
-                </p>
-
-                <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                  Memory
-                </p>
+            <section className="rounded-[38px] border border-zinc-900 bg-[#050505] p-7 mb-8">
+              <div className="text-[11px] tracking-[0.45em] text-zinc-600 mb-6">
+                AXIS MEMORY
               </div>
 
-              <div className="mt-5 flex flex-col gap-3">
-                {sessionEvents.map(
-                  (event, index) => (
-                    <div
-                      key={event}
-                      className="flex items-center justify-between rounded-[24px] border border-white/10 bg-black px-5 py-4"
-                    >
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-600">
-                          0:0{index + 4}
-                        </p>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-6xl font-black">1</div>
+                  <div className="text-zinc-500 mt-2">session</div>
+                </div>
 
-                        <p className="mt-1 text-xl font-black">
-                          {event}
-                        </p>
-                      </div>
+                <div>
+                  <div className="text-6xl font-black">4</div>
+                  <div className="text-zinc-500 mt-2">events</div>
+                </div>
 
-                      <div className="h-2 w-2 rounded-full bg-white" />
-                    </div>
-                  )
-                )}
+                <div>
+                  <div className="text-6xl font-black">3</div>
+                  <div className="text-zinc-500 mt-2">reads</div>
+                </div>
               </div>
             </section>
 
-            <section className="space-y-4">
-              {observations.map((item) => (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-[34px] border border-white/10 bg-white/[0.03] p-6"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                      Observation
-                    </p>
+            <section className="rounded-[38px] border border-zinc-900 bg-[#050505] p-7 mb-8">
+              <div className="flex items-center justify-between mb-6">
+                <div className="text-[11px] tracking-[0.45em] text-zinc-600">
+                  CONNECTED EVENTS
+                </div>
 
-                    <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                      {confidenceLabel(
-                        item.confidence
-                      )}
-                    </p>
+                <div className="text-[11px] tracking-[0.45em] text-zinc-600">
+                  MEMORY
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {[
+                  ["0:04", "DRIVE"],
+                  ["0:05", "PAINT TOUCH"],
+                  ["0:06", "SHOT"],
+                  ["0:07", "MAKE"],
+                ].map(([time, label]) => (
+                  <div
+                    key={label}
+                    className="rounded-[28px] border border-zinc-900 bg-black px-6 py-5 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="text-zinc-600 text-sm mb-2">
+                        {time}
+                      </div>
+
+                      <div className="text-4xl font-bold tracking-[-0.04em]">
+                        {label}
+                      </div>
+                    </div>
+
+                    <div className="w-3 h-3 rounded-full bg-white" />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-6 pb-20">
+              {[
+                {
+                  level: "HIGH",
+                  title:
+                    "Your best scoring windows appeared before help established.",
+                  proof:
+                    "This possession created pressure immediately after the first paint touch.",
+                  why:
+                    "Early attacks create cleaner reads before the defense stabilizes.",
+                  confidence: "92%",
+                },
+                {
+                  level: "HIGH",
+                  title:
+                    "Paint pressure increased overall shot quality.",
+                  proof:
+                    "Axis connected DRIVE → PAINT TOUCH → SHOT → MAKE.",
+                  why:
+                    "The system remembers what consistently creates advantages over time.",
+                  confidence: "89%",
+                },
+                {
+                  level: "MEDIUM",
+                  title:
+                    "This session expanded your behavioral memory profile.",
+                  proof:
+                    "Movement timing, pressure creation, and finish behavior were attached to your identity layer.",
+                  why:
+                    "Axis is building long-term intelligence around how you actually play.",
+                  confidence: "84%",
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-[38px] border border-zinc-900 bg-[#050505] p-7"
+                >
+                  <div className="flex items-center justify-between mb-7">
+                    <div className="text-[11px] tracking-[0.45em] text-zinc-600">
+                      OBSERVATION
+                    </div>
+
+                    <div className="text-[11px] tracking-[0.45em] text-zinc-600">
+                      {item.level}
+                    </div>
                   </div>
 
-                  <h2 className="mt-5 text-3xl font-black leading-tight">
+                  <h3 className="text-[54px] leading-[0.92] font-black tracking-[-0.06em] mb-8">
                     {item.title}
-                  </h2>
+                  </h3>
 
-                  <div className="mt-6 rounded-[24px] border border-white/10 bg-black p-4">
-                    <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-600">
-                      Proof
-                    </p>
+                  <div className="rounded-[28px] border border-zinc-900 bg-black p-6 mb-5">
+                    <div className="text-[11px] tracking-[0.45em] text-zinc-600 mb-4">
+                      PROOF
+                    </div>
 
-                    <p className="mt-2 text-zinc-300">
+                    <p className="text-2xl leading-[1.45] text-zinc-200">
                       {item.proof}
                     </p>
                   </div>
 
-                  <div className="mt-4 rounded-[24px] border border-white/10 bg-black p-4">
-                    <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-600">
-                      Why it matters
-                    </p>
+                  <div className="rounded-[28px] border border-zinc-900 bg-black p-6">
+                    <div className="text-[11px] tracking-[0.45em] text-zinc-600 mb-4">
+                      WHY IT MATTERS
+                    </div>
 
-                    <p className="mt-2 text-zinc-300">
+                    <p className="text-2xl leading-[1.45] text-zinc-200">
                       {item.why}
                     </p>
                   </div>
 
-                  <p className="mt-5 text-sm text-zinc-500">
-                    {item.confidence}% confidence
-                  </p>
-                </motion.div>
+                  <div className="mt-6 text-zinc-500 text-xl">
+                    {item.confidence} confidence
+                  </div>
+                </div>
               ))}
             </section>
           </>
