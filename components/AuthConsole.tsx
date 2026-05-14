@@ -21,6 +21,8 @@ export default function AuthConsole() {
     setLoading(true)
     setStatus("")
 
+    const redirectTo = `${window.location.origin}/auth/callback?next=/`
+
     const auth =
       mode === "login"
         ? await supabase.auth.signInWithPassword({
@@ -31,6 +33,7 @@ export default function AuthConsole() {
             email,
             password,
             options: {
+              emailRedirectTo: redirectTo,
               data: {
                 display_name: displayName,
               },
@@ -43,12 +46,47 @@ export default function AuthConsole() {
       return
     }
 
-    if (mode === "signup" && auth.data.user) {
-      await supabase.from("axis_profiles").upsert({
-        user_id: auth.data.user.id,
-        display_name: displayName || null,
-      })
+    if (!auth.data.session) {
+      setStatus(
+        "Confirmation required. Open the verification email, then return to Axis."
+      )
+      setLoading(false)
+      return
     }
+
+    const profile = await fetch("/api/profile/ensure", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        displayName,
+      }),
+    })
+
+    if (!profile.ok) {
+      const data = (await profile.json()) as {
+        error?: string
+      }
+
+      setStatus(data.error || "Profile initialization failed.")
+      setLoading(false)
+      return
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setStatus(
+        "Session cookie did not persist. Refresh and try again."
+      )
+      setLoading(false)
+      return
+    }
+
+    await supabase.auth.refreshSession()
 
     setStatus(
       mode === "login"
@@ -56,8 +94,28 @@ export default function AuthConsole() {
         : "Profile initialized."
     )
     setLoading(false)
-    router.refresh()
     router.push("/")
+    router.refresh()
+  }
+
+  async function resetPassword() {
+    if (!email) {
+      setStatus("Enter your email first.")
+      return
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email,
+      {
+        redirectTo: `${window.location.origin}/auth/callback?next=/profile`,
+      }
+    )
+
+    setStatus(
+      error
+        ? error.message
+        : "Password recovery email sent."
+    )
   }
 
   return (
@@ -143,6 +201,16 @@ export default function AuthConsole() {
           >
             {loading ? "LINKING..." : "ENTER AXIS"}
           </button>
+
+          {mode === "login" && (
+            <button
+              type="button"
+              onClick={resetPassword}
+              className="mt-4 w-full border border-white/10 px-6 py-4 text-xs font-black uppercase tracking-[0.22em] text-white/40 transition hover:text-white"
+            >
+              Reset Access
+            </button>
+          )}
 
           {status && (
             <p className="mt-5 text-sm leading-relaxed text-white/45">
