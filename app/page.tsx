@@ -1,266 +1,152 @@
-// app/page.tsx
-
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRef, useState } from "react"
 
-type UploadState = {
-  uploading: boolean
-  progress: number
-  status: string
-}
+export default function Page() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-export default function HomePage() {
-  const router = useRouter()
+  const [videoUrl, setVideoUrl] = useState("")
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [status, setStatus] = useState("")
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const captureInputRef = useRef<HTMLInputElement>(null)
-
-  const [uploadState, setUploadState] = useState<UploadState>({
-    uploading: false,
-    progress: 0,
-    status: "",
-  })
-
-  useEffect(() => {
-    const saved = sessionStorage.getItem("axis-upload-state")
-
-    if (saved) {
-      setUploadState(JSON.parse(saved))
-    }
-  }, [])
-
-  useEffect(() => {
-    sessionStorage.setItem(
-      "axis-upload-state",
-      JSON.stringify(uploadState)
-    )
-  }, [uploadState])
-
-  async function handleFile(file: File | null) {
-    if (!file) return
-
+  async function uploadFile(file: File) {
     try {
-      setUploadState({
-        uploading: true,
-        progress: 10,
-        status: "Creating session...",
-      })
+      setUploading(true)
+      setProgress(10)
+      setStatus("Preparing behavioral memory...")
 
-      // create session
-      const sessionRes = await fetch("/api/session/create", {
-        method: "POST",
-      })
-
-      if (!sessionRes.ok) {
-        throw new Error("Session creation failed")
-      }
-
-      const session = await sessionRes.json()
-
-      setUploadState({
-        uploading: true,
-        progress: 20,
-        status: "Preparing behavioral memory...",
-      })
-
-      // prepare upload
       const formData = new FormData()
       formData.append("file", file)
 
-      setUploadState({
-        uploading: true,
-        progress: 40,
-        status: "Uploading session...",
-      })
-
-      // upload
-      const uploadRes = await fetch("/api/upload", {
+      const response = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       })
 
-      if (!uploadRes.ok) {
-        throw new Error("Upload request failed")
+      setProgress(70)
+
+      if (!response.ok) {
+        throw new Error("Upload failed")
       }
 
-      const uploadData = await uploadRes.json()
+      const data = await response.json()
 
-      console.log("UPLOAD DATA:", uploadData)
+      if (!data?.url) {
+        throw new Error("No playback URL")
+      }
 
-      setUploadState({
-        uploading: true,
-        progress: 65,
-        status: "Linking memory...",
-      })
+      setProgress(100)
 
-      // link playback id to session
-      await fetch("/api/session/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sessionId: session.id,
-          playbackId: uploadData.playbackId,
-        }),
-      })
+      setVideoUrl(data.url)
 
-      setUploadState({
-        uploading: true,
-        progress: 85,
-        status: "Generating replay...",
-      })
-
-      sessionStorage.setItem(
-        "axis-last-session",
-        JSON.stringify({
-          sessionId: session.id,
-          playbackId: uploadData.playbackId,
-        })
-      )
-
-      setUploadState({
-        uploading: false,
-        progress: 100,
-        status: "Behavioral memory stored.",
-      })
-
-      setTimeout(() => {
-        router.push(`/replay/${session.id}`)
-      }, 1200)
-    } catch (error) {
-      console.error("UPLOAD FLOW ERROR:", error)
-
-      setUploadState({
-        uploading: false,
-        progress: 0,
-        status: "Upload failed.",
-      })
+      setStatus("Behavioral memory stored.")
+    } catch (err) {
+      console.error(err)
+      setStatus("Upload failed.")
+      setProgress(0)
+    } finally {
+      setUploading(false)
     }
   }
 
+  function handleChooseFile(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0]
+
+    if (!file) return
+
+    uploadFile(file)
+  }
+
   return (
-    <main className="min-h-screen bg-black text-white px-5 py-8">
-      <div className="max-w-xl mx-auto">
-        {/* HEADER */}
-        <div className="mb-10">
-          <div className="text-[12px] tracking-[0.45em] text-zinc-600 mb-4">
-            AXIS SESSION
-          </div>
-
-          <h1 className="text-[74px] leading-[0.88] font-black tracking-[-0.08em]">
-            AXIS
-            <br />
-            REPLAY
-          </h1>
-
-          <p className="text-zinc-400 text-2xl mt-8">
-            Axis remembers how you play.
-          </p>
+    <main className="min-h-screen bg-black text-white px-6 py-10">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-xs tracking-[0.4em] text-zinc-600 mb-6">
+          AXIS SESSION
         </div>
 
-        {/* CHOOSE FILE */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full rounded-[42px] border border-zinc-900 overflow-hidden mb-6 text-left"
-        >
-          <div
-            className="
-              rounded-[42px]
-              p-8
-              bg-[radial-gradient(circle_at_top_left,rgba(190,242,100,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(20,20,60,0.9),transparent_50%),#030303]
-            "
+        <h1 className="text-7xl font-black leading-none mb-6">
+          AXIS
+          <br />
+          REPLAY
+        </h1>
+
+        <p className="text-2xl text-zinc-500 mb-10">
+          Axis remembers how you play.
+        </p>
+
+        <div className="space-y-6">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full rounded-[2rem] border border-zinc-900 bg-black p-8 text-left"
           >
-            <div className="text-[72px] leading-[0.88] font-black tracking-[-0.08em]">
+            <div className="text-6xl font-black leading-none">
               CHOOSE
               <br />
               FILE
             </div>
 
-            <div className="mt-8 text-lime-300 text-2xl">
+            <div className="mt-8 text-2xl text-lime-400">
               Choose existing clip
             </div>
-          </div>
-        </button>
+          </button>
 
-        {/* RECORD */}
-        <button
-          onClick={() => captureInputRef.current?.click()}
-          className="w-full rounded-[42px] border border-zinc-900 overflow-hidden mb-8 text-left"
-        >
-          <div
-            className="
-              rounded-[42px]
-              p-8
-              bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(10,20,60,0.9),transparent_50%),#030303]
-            "
-          >
-            <div className="text-[72px] leading-[0.88] font-black tracking-[-0.08em]">
+          <label className="w-full rounded-[2rem] border border-zinc-900 bg-black p-8 block">
+            <div className="text-6xl font-black leading-none">
               RECORD
             </div>
 
-            <div className="mt-8 text-sky-400 text-2xl">
+            <div className="mt-8 text-2xl text-sky-400">
               Record from camera
             </div>
-          </div>
-        </button>
 
-        {/* hidden inputs */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*"
-          className="hidden"
-          onChange={(e) =>
-            handleFile(e.target.files?.[0] || null)
-          }
-        />
-
-        <input
-          ref={captureInputRef}
-          type="file"
-          accept="video/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) =>
-            handleFile(e.target.files?.[0] || null)
-          }
-        />
-
-        {/* PROGRESS */}
-        <div className="mt-8">
-          <div className="w-full h-6 rounded-full bg-zinc-950 overflow-hidden">
-            <div
-              className="
-                h-full
-                rounded-full
-                bg-gradient-to-r
-                from-lime-300
-                to-sky-300
-                transition-all
-                duration-500
-              "
-              style={{
-                width: `${uploadState.progress}%`,
-              }}
+            <input
+              type="file"
+              accept="video/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleChooseFile}
             />
-          </div>
+          </label>
 
-          <div className="flex items-center justify-between mt-4">
-            <div className="text-[12px] tracking-[0.45em] text-zinc-600 uppercase">
-              Behavioral Memory Upload
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={handleChooseFile}
+          />
+
+          <div className="mt-10">
+            <div className="h-6 rounded-full bg-zinc-900 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-lime-300 to-sky-300 transition-all duration-500"
+                style={{
+                  width: `${progress}%`,
+                }}
+              />
             </div>
 
-            <div className="text-5xl text-zinc-400">
-              {uploadState.progress}%
+            <div className="flex justify-between mt-4 text-zinc-500 tracking-[0.35em] text-sm">
+              <span>BEHAVIORAL MEMORY UPLOAD</span>
+              <span>{progress}%</span>
+            </div>
+
+            <div className="mt-6 text-2xl text-zinc-400">
+              {status}
             </div>
           </div>
 
-          {uploadState.status && (
-            <div className="mt-6 text-zinc-400 text-2xl">
-              {uploadState.status}
+          {videoUrl && (
+            <div className="mt-10 rounded-[2rem] overflow-hidden border border-zinc-900">
+              <video
+                src={videoUrl}
+                controls
+                playsInline
+                className="w-full"
+              />
             </div>
           )}
         </div>
