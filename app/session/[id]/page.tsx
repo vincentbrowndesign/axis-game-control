@@ -17,11 +17,14 @@ export default async function SessionPage({
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { data: session } = await supabase
+  const { data: session, error } = await supabase
     .from("axis_sessions")
     .select("*")
     .eq("id", id)
     .single()
+
+  console.log("SESSION", session)
+  console.log("ERROR", error)
 
   if (!session) {
     return (
@@ -36,9 +39,9 @@ export default async function SessionPage({
   return (
     <AxisReplayClient
       playbackId={
-        session.playback_id ||
-        "vWQzB00Wy019K7t5YqzB6Q02qhF00nR5Y00nK7x2Vh2qg"
+        session.playback_id || "demo"
       }
+      sessionId={session.id}
     />
   )
 }

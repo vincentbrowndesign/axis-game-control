@@ -5,7 +5,8 @@ import MuxPlayer from "@mux/mux-player-react"
 import { useMemo, useState } from "react"
 
 type Props = {
-  playbackId: string
+  playbackId?: string
+  sessionId?: string
 }
 
 type AxisObservation = {
@@ -32,43 +33,59 @@ function confidenceLabel(score: number) {
 function buildObservations(): AxisObservation[] {
   return [
     {
-      id: "paint-pressure",
-      title: "Paint pressure created the cleanest scoring window.",
-      proof: "This session connected DRIVE → PAINT TOUCH → SHOT.",
+      id: "decision-speed",
+      title:
+        "Your best scoring windows appeared before help established.",
+      proof:
+        "This possession created pressure immediately after the first paint touch.",
       why:
-        "Paint touches force the defense to react. When that reaction is late, the next shot usually gets cleaner.",
-      confidence: 91,
+        "Early attacks create cleaner reads before the defense stabilizes.",
+      confidence: 92,
     },
     {
-      id: "sequence-memory",
-      title: "Axis connected this possession to your memory profile.",
-      proof: "4 events were attached to this replay: DRIVE, PAINT TOUCH, SHOT, MAKE.",
+      id: "paint-memory",
+      title:
+        "Paint pressure increased overall shot quality.",
+      proof:
+        "Axis connected DRIVE → PAINT TOUCH → SHOT → MAKE.",
       why:
-        "The value is not one clip. The value is remembering what keeps showing up over time.",
-      confidence: 86,
+        "The system remembers what consistently creates advantages over time.",
+      confidence: 89,
     },
     {
-      id: "development-signal",
-      title: "This is now a behavior signal, not just a highlight.",
-      proof: "The possession produced pressure, a finish window, and an outcome.",
+      id: "behavior-profile",
+      title:
+        "This session expanded your behavioral memory profile.",
+      proof:
+        "Movement timing, pressure creation, and finish behavior were attached to your identity layer.",
       why:
-        "Axis learns how you create advantages so future sessions can compare what is changing.",
-      confidence: 79,
+        "Axis is building long-term intelligence around how you actually play.",
+      confidence: 84,
     },
   ]
 }
 
-export default function AxisReplayClient({ playbackId }: Props) {
-  const [playerConfirmed, setPlayerConfirmed] = useState(false)
+export default function AxisReplayClient({
+  playbackId,
+  sessionId,
+}: Props) {
+  const [playerConfirmed, setPlayerConfirmed] =
+    useState(false)
 
   const observations = useMemo(() => {
     if (!playerConfirmed) return []
     return buildObservations()
   }, [playerConfirmed])
 
+  const hasVideo =
+    playbackId &&
+    playbackId !== "demo" &&
+    playbackId.length > 5
+
   return (
     <main className="min-h-screen bg-black px-5 py-10 text-white">
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
+
         <header>
           <p className="text-[11px] uppercase tracking-[0.45em] text-zinc-600">
             Axis Session
@@ -90,12 +107,37 @@ export default function AxisReplayClient({ playbackId }: Props) {
           animate={{ opacity: 1, y: 0 }}
           className="overflow-hidden rounded-[34px] border border-white/10 bg-zinc-950"
         >
-          <MuxPlayer
-            playbackId={playbackId}
-            streamType="on-demand"
-            autoPlay={false}
-            accentColor="#ffffff"
-          />
+          {hasVideo ? (
+            <MuxPlayer
+              playbackId={playbackId}
+              streamType="on-demand"
+              autoPlay={false}
+              accentColor="#ffffff"
+            />
+          ) : (
+            <div className="flex aspect-[9/16] items-center justify-center bg-black">
+              <div className="text-center">
+                <p className="text-[11px] uppercase tracking-[0.4em] text-zinc-600">
+                  Replay Pending
+                </p>
+
+                <h2 className="mt-4 text-3xl font-black">
+                  SESSION SAVED
+                </h2>
+
+                <p className="mt-4 px-8 text-sm leading-relaxed text-zinc-500">
+                  Video processing and behavioral analysis
+                  will appear here after upload completes.
+                </p>
+
+                {sessionId && (
+                  <div className="mt-6 rounded-full border border-white/10 px-4 py-2 text-xs text-zinc-600 inline-block">
+                    {sessionId}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {!playerConfirmed ? (
@@ -113,7 +155,8 @@ export default function AxisReplayClient({ playbackId }: Props) {
             </h2>
 
             <p className="mt-3 text-zinc-400">
-              Possible match attached to this session.
+              Axis matched this session to an existing
+              behavioral profile.
             </p>
 
             <div className="mt-6 rounded-[26px] border border-white/10 bg-black p-5">
@@ -127,9 +170,47 @@ export default function AxisReplayClient({ playbackId }: Props) {
                 </p>
               </div>
 
-              <p className="mt-4 text-zinc-400">
-                This clip can now be connected to the player memory profile.
-              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-white/10 bg-zinc-950 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-600">
+                    Movement
+                  </p>
+
+                  <p className="mt-2 text-sm text-zinc-300">
+                    Matched
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-zinc-950 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-600">
+                    Timing
+                  </p>
+
+                  <p className="mt-2 text-sm text-zinc-300">
+                    Connected
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-zinc-950 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-600">
+                    Pressure
+                  </p>
+
+                  <p className="mt-2 text-sm text-zinc-300">
+                    Recognized
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-zinc-950 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-600">
+                    Behavior
+                  </p>
+
+                  <p className="mt-2 text-sm text-zinc-300">
+                    Learning
+                  </p>
+                </div>
+              </div>
             </div>
 
             <button
@@ -137,13 +218,6 @@ export default function AxisReplayClient({ playbackId }: Props) {
               className="mt-7 w-full rounded-full bg-white py-4 text-base font-black text-black"
             >
               Continue
-            </button>
-
-            <button
-              onClick={() => setPlayerConfirmed(true)}
-              className="mt-4 w-full rounded-full border border-white/10 py-4 text-sm font-bold text-zinc-500"
-            >
-              This isn&apos;t me
             </button>
           </motion.section>
         ) : (
@@ -160,6 +234,7 @@ export default function AxisReplayClient({ playbackId }: Props) {
               <div className="mt-6 grid grid-cols-3 gap-3">
                 <div>
                   <p className="text-4xl font-black">1</p>
+
                   <p className="mt-2 text-xs text-zinc-500">
                     session
                   </p>
@@ -169,6 +244,7 @@ export default function AxisReplayClient({ playbackId }: Props) {
                   <p className="text-4xl font-black">
                     {sessionEvents.length}
                   </p>
+
                   <p className="mt-2 text-xs text-zinc-500">
                     events
                   </p>
@@ -178,6 +254,7 @@ export default function AxisReplayClient({ playbackId }: Props) {
                   <p className="text-4xl font-black">
                     {observations.length}
                   </p>
+
                   <p className="mt-2 text-xs text-zinc-500">
                     reads
                   </p>
@@ -188,11 +265,11 @@ export default function AxisReplayClient({ playbackId }: Props) {
             <section className="rounded-[34px] border border-white/10 bg-white/[0.03] p-6">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] uppercase tracking-[0.4em] text-zinc-600">
-                  Session Events
+                  Connected Events
                 </p>
 
                 <p className="text-[11px] uppercase tracking-[0.35em] text-zinc-600">
-                  Connected
+                  Memory
                 </p>
               </div>
 
