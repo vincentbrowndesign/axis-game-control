@@ -1,59 +1,113 @@
 "use client"
 
+import { useEffect, useState } from "react"
+
 type Props = {
-  sessionId?: string
-  playbackId?: string | null
-  videoUrl?: string | null
+  playbackId: string
   className?: string
 }
 
+type SessionData = {
+  id: string
+  videoUrl: string
+  createdAt: number
+  source: string
+}
+
 export default function AxisReplayClient({
-  sessionId,
   playbackId,
-  videoUrl,
-  className = "",
+  className,
 }: Props) {
-  const finalUrl =
-    videoUrl ||
-    (playbackId
-      ? `https://stream.mux.com/${playbackId}.m3u8`
-      : null)
+  const [session, setSession] = useState<SessionData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadSession() {
+      try {
+        const raw = localStorage.getItem(`axis-session-${playbackId}`)
+
+        if (!raw) {
+          setLoading(false)
+          return
+        }
+
+        const parsed = JSON.parse(raw)
+
+        setSession(parsed)
+      } catch (error) {
+        console.error(error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadSession()
+  }, [playbackId])
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black text-zinc-500">
+        Loading replay...
+      </div>
+    )
+  }
+
+  if (!session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black text-zinc-500">
+        Session not found.
+      </div>
+    )
+  }
 
   return (
-    <section className={className}>
-      {finalUrl ? (
-        <div className="overflow-hidden rounded-[42px] border border-white/10 bg-black">
-          <video
-            src={finalUrl}
-            controls
-            playsInline
-            preload="metadata"
-            className="w-full bg-black"
-          />
+    <div className={`min-h-screen bg-black p-6 ${className || ""}`}>
+      <div className="mb-10">
+        <div className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
+          Axis Session
         </div>
-      ) : (
-        <div className="flex min-h-[360px] items-center justify-center rounded-[42px] border border-white/10 bg-black p-8 text-center">
+
+        <h1 className="text-6xl font-black leading-none text-white">
+          AXIS
+          <br />
+          REPLAY
+        </h1>
+
+        <p className="mt-6 text-2xl text-zinc-500">
+          Axis remembers how you play.
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-[2rem] border border-zinc-900 bg-black">
+        <video
+          src={session.videoUrl}
+          controls
+          playsInline
+          className="w-full"
+        />
+      </div>
+
+      <div className="mt-8">
+        <div className="h-6 overflow-hidden rounded-full bg-zinc-950">
+          <div className="h-full w-full rounded-full bg-gradient-to-r from-lime-300 to-cyan-300" />
+        </div>
+
+        <div className="mt-4 flex items-end justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.45em] text-zinc-600">
-              Replay Pending
-            </p>
+            <div className="text-xs uppercase tracking-[0.4em] text-zinc-700">
+              Behavioral Memory Upload
+            </div>
 
-            <h2 className="mt-5 text-4xl font-black tracking-[-0.05em]">
-              SESSION SAVED
-            </h2>
+            <div className="mt-4 text-3xl text-zinc-300">
+              Behavioral memory stored.
+            </div>
+          </div>
 
-            <p className="mt-4 text-zinc-500">
-              Video will appear after upload completes.
-            </p>
-
-            {sessionId && (
-              <p className="mt-6 break-all rounded-full border border-white/10 px-4 py-2 text-xs text-zinc-600">
-                {sessionId}
-              </p>
-            )}
+          <div className="text-7xl font-black text-zinc-300">
+            100%
           </div>
         </div>
-      )}
-    </section>
+      </div>
+    </div>
   )
 }
