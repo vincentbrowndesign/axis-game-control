@@ -11,7 +11,10 @@ type SessionData = {
   id: string
   videoUrl: string
   createdAt: number
-  source: string
+  source: "camera" | "upload"
+  title: string
+  mission: string
+  player: string
 }
 
 export default function AxisReplayClient({
@@ -22,26 +25,13 @@ export default function AxisReplayClient({
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function loadSession() {
-      try {
-        const raw = localStorage.getItem(`axis-session-${playbackId}`)
+    const raw = localStorage.getItem(`axis-session-${playbackId}`)
 
-        if (!raw) {
-          setLoading(false)
-          return
-        }
-
-        const parsed = JSON.parse(raw)
-
-        setSession(parsed)
-      } catch (error) {
-        console.error(error)
-      } finally {
-        setLoading(false)
-      }
+    if (raw) {
+      setSession(JSON.parse(raw))
     }
 
-    loadSession()
+    setLoading(false)
   }, [playbackId])
 
   if (loading) {
@@ -60,6 +50,8 @@ export default function AxisReplayClient({
     )
   }
 
+  const created = new Date(session.createdAt).toLocaleString()
+
   return (
     <div className={`min-h-screen bg-black p-6 ${className || ""}`}>
       <div className="mb-10">
@@ -67,7 +59,7 @@ export default function AxisReplayClient({
           Axis Session
         </div>
 
-        <h1 className="text-6xl font-black leading-none text-white">
+        <h1 className="text-7xl font-black leading-none">
           AXIS
           <br />
           REPLAY
@@ -87,6 +79,19 @@ export default function AxisReplayClient({
         />
       </div>
 
+      <section className="mt-8 rounded-[2rem] border border-zinc-900 p-6">
+        <p className="text-xs uppercase tracking-[0.4em] text-zinc-700">
+          Session Metadata
+        </p>
+
+        <div className="mt-6 grid grid-cols-2 gap-4">
+          <Meta label="Source" value={session.source} />
+          <Meta label="Created" value={created} />
+          <Meta label="Mission" value={session.mission} />
+          <Meta label="Player" value={session.player} />
+        </div>
+      </section>
+
       <div className="mt-8">
         <div className="h-6 overflow-hidden rounded-full bg-zinc-950">
           <div className="h-full w-full rounded-full bg-gradient-to-r from-lime-300 to-cyan-300" />
@@ -103,11 +108,23 @@ export default function AxisReplayClient({
             </div>
           </div>
 
-          <div className="text-7xl font-black text-zinc-300">
-            100%
-          </div>
+          <div className="text-7xl font-black text-zinc-300">100%</div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.5rem] border border-zinc-900 p-4">
+      <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-700">
+        {label}
+      </p>
+
+      <p className="mt-3 text-xl font-bold capitalize text-white">
+        {value}
+      </p>
     </div>
   )
 }

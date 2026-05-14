@@ -3,35 +3,50 @@
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 
+type ReplaySession = {
+  id: string
+  createdAt: number
+  source: "camera" | "upload"
+  videoUrl: string
+  title: string
+  mission: string
+  player: string
+}
+
 export default function HomePage() {
   const router = useRouter()
-
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState("")
 
-  async function handleFile(file: File) {
+  function saveSession(file: File, source: "camera" | "upload") {
     try {
-      setUploading(true)
       setProgress(10)
       setStatus("Preparing behavioral memory...")
 
       const localUrl = URL.createObjectURL(file)
-
       const id = crypto.randomUUID()
 
-      const session = {
+      const session: ReplaySession = {
         id,
         createdAt: Date.now(),
-        source: "mobile",
+        source,
         videoUrl: localUrl,
+        title: file.name || "Axis Session",
+        mission: "None",
+        player: "Unassigned",
       }
 
+      localStorage.setItem(`axis-session-${id}`, JSON.stringify(session))
+
+      const existing = JSON.parse(
+        localStorage.getItem("axis-sessions") || "[]"
+      ) as string[]
+
       localStorage.setItem(
-        `axis-session-${id}`,
-        JSON.stringify(session)
+        "axis-sessions",
+        JSON.stringify([id, ...existing.filter((x) => x !== id)])
       )
 
       setProgress(100)
@@ -42,11 +57,8 @@ export default function HomePage() {
       }, 700)
     } catch (error) {
       console.error(error)
-
-      setStatus("Upload failed.")
       setProgress(0)
-    } finally {
-      setUploading(false)
+      setStatus("Upload failed.")
     }
   }
 
@@ -54,9 +66,9 @@ export default function HomePage() {
     <main className="min-h-screen bg-black px-6 py-10 text-white">
       <div className="mx-auto max-w-4xl">
         <div className="mb-10">
-          <div className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
+          <p className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
             Axis Session
-          </div>
+          </p>
 
           <h1 className="text-7xl font-black leading-none">
             AXIS
@@ -101,10 +113,7 @@ export default function HomePage() {
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
-
-                if (file) {
-                  handleFile(file)
-                }
+                if (file) saveSession(file, "camera")
               }}
             />
           </label>
@@ -116,20 +125,22 @@ export default function HomePage() {
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]
-
-              if (file) {
-                handleFile(file)
-              }
+              if (file) saveSession(file, "upload")
             }}
           />
+
+          <button
+            onClick={() => router.push("/sessions")}
+            className="w-full rounded-full border border-zinc-900 py-5 text-lg font-bold text-zinc-400"
+          >
+            View Memories
+          </button>
 
           <div className="mt-10">
             <div className="h-6 overflow-hidden rounded-full bg-zinc-950">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-lime-300 to-cyan-300 transition-all duration-500"
-                style={{
-                  width: `${progress}%`,
-                }}
+                style={{ width: `${progress}%` }}
               />
             </div>
 
