@@ -2,27 +2,38 @@ import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
 export async function POST() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
-  const { data, error } = await supabase
-    .from("axis_sessions")
-    .insert({
-      playback_id: "",
+    const { data, error } = await supabase
+      .from("axis_sessions")
+      .insert({
+        playback_id: "",
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error(error)
+
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      id: data.id,
     })
-    .select()
-    .single()
+  } catch (err) {
+    console.error(err)
 
-  if (error) {
     return NextResponse.json(
-      { error: error.message },
+      { error: "server error" },
       { status: 500 }
     )
   }
-
-  return NextResponse.json({
-    id: data.id,
-  })
 }

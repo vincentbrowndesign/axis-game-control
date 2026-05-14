@@ -1,23 +1,36 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useState } from "react"
 
 export default function HomePage() {
   const router = useRouter()
 
+  const [loading, setLoading] = useState(false)
+
   async function startSession() {
     try {
+      setLoading(true)
+
       const response = await fetch("/api/session/create", {
         method: "POST",
       })
 
       const data = await response.json()
 
-      if (!data.id) return
+      console.log(data)
+
+      if (!data?.id) {
+        alert("Session creation failed.")
+        return
+      }
 
       router.push(`/session/${data.id}`)
     } catch (err) {
       console.error(err)
+      alert("Something went wrong.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -40,9 +53,10 @@ export default function HomePage() {
 
         <button
           onClick={startSession}
-          className="mt-14 rounded-full bg-white px-6 py-5 text-lg font-black text-black"
+          disabled={loading}
+          className="mt-14 rounded-full bg-white px-6 py-5 text-lg font-black text-black disabled:opacity-50"
         >
-          Start Session
+          {loading ? "Starting..." : "Start Session"}
         </button>
       </div>
     </main>
