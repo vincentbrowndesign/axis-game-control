@@ -1,17 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
-type Props = {
-  playbackId: string
-  className?: string
-}
-
-type SessionData = {
+type ReplaySession = {
   id: string
-  videoUrl: string
   createdAt: number
   source: "camera" | "upload"
+  videoUrl: string
   title: string
   mission: string
   player: string
@@ -19,182 +14,174 @@ type SessionData = {
   duration?: number
 }
 
+type Props = {
+  playbackId: string
+  className?: string
+}
+
+function formatDuration(seconds?: number) {
+  if (!seconds) return "0:00"
+
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+
+  return `${mins}:${secs.toString().padStart(2, "0")}`
+}
+
 export default function AxisReplayClient({
   playbackId,
-  className,
+  className = "",
 }: Props) {
-  const [session, setSession] = useState<SessionData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [session, setSession] =
+    useState<ReplaySession | null>(null)
+
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(
-        `axis-session-${playbackId}`
-      )
-
-      if (raw) {
-        const parsed = JSON.parse(raw) as SessionData
-        setSession(parsed)
-      }
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
-  }, [playbackId])
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-zinc-500">
-        Loading replay...
-      </div>
+    const raw = localStorage.getItem(
+      `axis-session-${playbackId}`
     )
-  }
+
+    if (!raw) return
+
+    const parsed = JSON.parse(raw)
+
+    setSession(parsed)
+  }, [playbackId])
 
   if (!session) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-zinc-500">
-        Session not found.
+      <div className="rounded-[2rem] border border-zinc-900 bg-zinc-950 p-10 text-zinc-500">
+        No replay found.
       </div>
     )
   }
 
-  const created = new Date(
-    session.createdAt
-  ).toLocaleString()
-
   return (
-    <div
-      className={`min-h-screen bg-black p-6 text-white ${
-        className || ""
-      }`}
-    >
-      <div className="mb-10">
-        <div className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
+    <div className={`space-y-8 ${className}`}>
+      <div className="space-y-5">
+        <p className="text-xs uppercase tracking-[0.45em] text-zinc-700">
           Axis Session
-        </div>
+        </p>
 
-        <h1 className="text-7xl font-black leading-none">
+        <h1 className="text-7xl font-black leading-[0.9] text-white">
           AXIS
           <br />
           REPLAY
         </h1>
 
-        <p className="mt-6 text-2xl text-zinc-500">
+        <p className="text-2xl text-zinc-500">
           Axis remembers how you play.
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-[2rem] border border-zinc-900 bg-black">
+      <div className="overflow-hidden rounded-[2rem] border border-zinc-900 bg-zinc-950">
         <video
+          ref={videoRef}
           src={session.videoUrl}
           controls
           playsInline
           preload="metadata"
-          className="aspect-video w-full bg-black object-cover"
+          poster="/axis-poster.jpg"
+          className="w-full rounded-[2rem] bg-black object-cover"
         />
       </div>
 
-      <section className="mt-8 rounded-[2rem] border border-zinc-900 p-6">
-        <p className="text-xs uppercase tracking-[0.4em] text-zinc-700">
+      <div className="rounded-[2rem] border border-zinc-900 bg-zinc-950 p-6">
+        <p className="mb-8 text-xs uppercase tracking-[0.45em] text-zinc-700">
           Session Metadata
         </p>
 
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          <Meta
-            label="Source"
-            value={capitalize(session.source)}
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-[1.5rem] border border-zinc-900 bg-black p-5">
+            <p className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-700">
+              Source
+            </p>
 
-          <Meta
-            label="Created"
-            value={created}
-          />
+            <h3 className="text-3xl font-black text-white">
+              {session.source === "camera"
+                ? "Camera"
+                : "Upload"}
+            </h3>
+          </div>
 
-          <Meta
-            label="Mission"
-            value={session.mission || "None"}
-          />
+          <div className="rounded-[1.5rem] border border-zinc-900 bg-black p-5">
+            <p className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-700">
+              Created
+            </p>
 
-          <Meta
-            label="Player"
-            value={session.player || "Unassigned"}
-          />
+            <h3 className="text-3xl font-black leading-tight text-white">
+              {new Date(
+                session.createdAt
+              ).toLocaleString()}
+            </h3>
+          </div>
 
-          <Meta
-            label="Environment"
-            value={
-              capitalize(
-                session.environment || "practice"
-              )
-            }
-          />
+          <div className="rounded-[1.5rem] border border-zinc-900 bg-black p-5">
+            <p className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-700">
+              Mission
+            </p>
 
-          <Meta
-            label="Duration"
-            value={formatDuration(session.duration || 0)}
-          />
+            <h3 className="text-3xl font-black text-white">
+              {session.mission || "None"}
+            </h3>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-zinc-900 bg-black p-5">
+            <p className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-700">
+              Player
+            </p>
+
+            <h3 className="text-3xl font-black text-white">
+              {session.player || "Unassigned"}
+            </h3>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-zinc-900 bg-black p-5">
+            <p className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-700">
+              Environment
+            </p>
+
+            <h3 className="text-3xl font-black text-white">
+              {session.environment || "Practice"}
+            </h3>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-zinc-900 bg-black p-5">
+            <p className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-700">
+              Duration
+            </p>
+
+            <h3 className="text-3xl font-black text-white">
+              {formatDuration(session.duration)}
+            </h3>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <div className="mt-8">
+      <div>
         <div className="h-6 overflow-hidden rounded-full bg-zinc-950">
           <div className="h-full w-full rounded-full bg-gradient-to-r from-lime-300 to-cyan-300" />
         </div>
 
-        <div className="mt-4 flex items-end justify-between gap-4">
+        <div className="mt-5 flex items-end justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.4em] text-zinc-700">
+            <p className="text-xs uppercase tracking-[0.45em] text-zinc-700">
               Behavioral Memory Upload
-            </div>
+            </p>
 
-            <div className="mt-4 text-3xl leading-tight text-zinc-300">
+            <h2 className="mt-3 text-5xl font-black leading-none text-white">
               Behavioral
               <br />
               memory stored.
-            </div>
+            </h2>
           </div>
 
-          <div className="text-7xl font-black text-zinc-300">
+          <div className="text-8xl font-black leading-none text-zinc-300">
             100%
           </div>
         </div>
       </div>
     </div>
   )
-}
-
-function Meta({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-[1.5rem] border border-zinc-900 p-4">
-      <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-700">
-        {label}
-      </p>
-
-      <p className="mt-3 break-words text-2xl font-black leading-tight text-white">
-        {value}
-      </p>
-    </div>
-  )
-}
-
-function formatDuration(seconds: number) {
-  if (!seconds) return "0:00"
-
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-
-  return `${mins}:${secs
-    .toString()
-    .padStart(2, "0")}`
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1)
 }
