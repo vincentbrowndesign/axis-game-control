@@ -1,4 +1,10 @@
 import AxisReplayClient from "@/components/AxisReplayClient"
+import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
+import {
+  mapReplaySession,
+  type AxisReplaySession,
+} from "@/types/memory"
 
 type Props = {
   params: Promise<{
@@ -10,28 +16,41 @@ export default async function ReplayPage({
   params,
 }: Props) {
   const { id } = await params
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  let initialSession = null
+
+  if (user) {
+    const { data } = await supabase
+      .from("axis_sessions")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle<AxisReplaySession>()
+
+    if (data) {
+      if (data.file_path) {
+        const signed = await supabaseAdmin.storage
+          .from("axis-replays")
+          .createSignedUrl(data.file_path, 60 * 60 * 24)
+
+        data.video_url =
+          signed.data?.signedUrl || data.video_url
+      }
+
+      initialSession = mapReplaySession(data)
+    }
+  }
 
   return (
-    <main className="min-h-screen bg-black px-5 py-8 text-white">
-      <div className="mx-auto max-w-xl">
-        <div className="mb-10">
-          <p className="mb-4 text-[12px] uppercase tracking-[0.45em] text-zinc-600">
-            Axis Replay
-          </p>
-
-          <h1 className="text-[74px] font-black leading-[0.88] tracking-[-0.08em]">
-            AXIS
-            <br />
-            REPLAY
-          </h1>
-
-          <p className="mt-8 text-2xl text-zinc-400">
-            Axis remembers how you play.
-          </p>
-        </div>
-
-        <AxisReplayClient playbackId={id} />
-      </div>
+    <main className="min-h-screen bg-black text-white">
+      <AxisReplayClient
+        playbackId={id}
+        initialSession={initialSession}
+      />
     </main>
   )
 }

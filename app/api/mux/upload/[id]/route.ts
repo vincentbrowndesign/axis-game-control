@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import Mux from "@mux/mux-node"
-import { supabaseAdmin } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
 type Context = {
   params: Promise<{

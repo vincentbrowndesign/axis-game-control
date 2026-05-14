@@ -1,21 +1,12 @@
-"use client"
+import Link from "next/link"
+import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
+import {
+  mapReplaySession,
+  type AxisReplaySession,
+} from "@/types/memory"
 
-import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
-
-type SessionData = {
-  id: string
-  videoUrl: string
-  createdAt: number
-  source: "camera" | "upload"
-  title: string
-  mission: string
-  player: string
-  environment?: "game" | "practice" | "mission" | "workout"
-  duration?: number
-}
-
-function formatDuration(seconds: number) {
+function formatDuration(seconds?: number) {
   if (!seconds) return "0s"
 
   const mins = Math.floor(seconds / 60)
@@ -28,135 +19,162 @@ function formatDuration(seconds: number) {
 
 function relativeTime(timestamp: number) {
   const diff = Date.now() - timestamp
-
   const mins = Math.floor(diff / 60000)
 
   if (mins < 1) return "Just now"
-
   if (mins < 60) return `${mins}m ago`
 
   const hours = Math.floor(mins / 60)
 
   if (hours < 24) return `${hours}h ago`
 
-  const days = Math.floor(hours / 24)
-
-  return `${days}d ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
-export default function SessionsPage() {
-  const router = useRouter()
+export default async function SessionsPage() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  const [sessions, setSessions] = useState<SessionData[]>([])
-
-  useEffect(() => {
-    const ids = JSON.parse(
-      localStorage.getItem("axis-sessions") || "[]"
-    ) as string[]
-
-    const loaded = ids
-      .map((id) => {
-        const raw = localStorage.getItem(
-          `axis-session-${id}`
-        )
-
-        return raw
-          ? (JSON.parse(raw) as SessionData)
-          : null
-      })
-      .filter(Boolean) as SessionData[]
-
-    setSessions(loaded)
-  }, [])
-
-  const ordered = useMemo(() => {
-    return [...sessions].sort(
-      (a, b) => b.createdAt - a.createdAt
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-black px-5 py-10 text-white">
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-end">
+          <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
+            Axis Replay Archive
+          </p>
+          <h1 className="mt-5 text-[clamp(4rem,15vw,10rem)] font-black leading-[0.82] tracking-[-0.07em]">
+            LOCKED
+            <br />
+            MEMORY
+          </h1>
+          <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
+            Authenticate to open your persistent replay archive.
+          </p>
+          <Link
+            href="/auth"
+            className="mt-10 w-fit bg-white px-8 py-5 text-sm font-black uppercase tracking-[0.24em] text-black"
+          >
+            Enter Axis
+          </Link>
+        </div>
+      </main>
     )
-  }, [sessions])
+  }
+
+  const { data } = await supabase
+    .from("axis_sessions")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .returns<AxisReplaySession[]>()
+
+  const sessions = await Promise.all(
+    (data || []).map(async (session) => {
+      if (session.file_path) {
+        const signed = await supabaseAdmin.storage
+          .from("axis-replays")
+          .createSignedUrl(session.file_path, 60 * 60 * 24)
+
+        session.video_url =
+          signed.data?.signedUrl || session.video_url
+      }
+
+      return mapReplaySession(session)
+    })
+  )
 
   return (
-    <main className="min-h-screen bg-black px-6 py-8 text-white">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-10">
-          <p className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
-            Axis Replay
-          </p>
+    <main className="min-h-screen bg-black px-5 py-8 text-white">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-10 flex flex-col gap-6 border-b border-white/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
+              Axis Replay Archive
+            </p>
+            <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.84] tracking-[-0.07em]">
+              MEMORY
+              <br />
+              LIBRARY
+            </h1>
+          </div>
 
-          <h1 className="text-6xl font-black">
-            Behavioral
-            <br />
-            Memory
-          </h1>
+          <Link
+            href="/"
+            className="w-fit border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
+          >
+            New Upload
+          </Link>
         </div>
 
-        <div className="space-y-6">
-          {ordered.map((session) => (
-            <button
+        <div className="grid gap-5">
+          {sessions.map((session) => (
+            <Link
               key={session.id}
-              onClick={() =>
-                router.push(`/session/${session.id}`)
-              }
-              className="w-full overflow-hidden rounded-[2rem] border border-zinc-900 bg-zinc-950 text-left transition hover:border-zinc-700"
+              href={`/replay/${session.id}`}
+              className="group overflow-hidden border border-white/10 bg-white/[0.03] transition hover:border-white/25"
             >
-              <div className="relative aspect-video overflow-hidden">
-                <video
-                  src={session.videoUrl}
-                  muted
-                  className="h-full w-full object-cover opacity-70"
-                />
+              <div className="grid gap-0 lg:grid-cols-[minmax(280px,0.9fr)_1.1fr]">
+                <div className="relative aspect-video overflow-hidden bg-black">
+                  {session.videoUrl ? (
+                    <video
+                      src={session.videoUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="h-full w-full object-cover opacity-60 transition duration-500 group-hover:opacity-80"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-white/[0.04]" />
+                  )}
 
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-
-                <div className="absolute left-5 top-5 flex gap-2">
-                  <div className="rounded-full border border-zinc-700 bg-black/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-300">
-                    {session.environment || "practice"}
-                  </div>
-
-                  <div className="rounded-full border border-zinc-700 bg-black/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-300">
-                    {session.source}
-                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                 </div>
 
-                <div className="absolute bottom-5 left-5">
-                  <p className="text-xs uppercase tracking-[0.35em] text-zinc-500">
-                    Behavioral Memory
-                  </p>
-
-                  <h2 className="mt-2 text-4xl font-black">
-                    {session.player || "Unassigned"}
-                  </h2>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
-                    <span>
-                      {relativeTime(session.createdAt)}
+                <div className="flex min-h-full flex-col justify-between p-6">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-lime-300">
+                      {session.environment}
                     </span>
-
-                    <span>•</span>
-
-                    <span>
-                      {formatDuration(
-                        session.duration || 0
-                      )}
+                    <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-cyan-300">
+                      {session.source}
                     </span>
-
-                    <span>•</span>
-
-                    <span>
-                      Mission:{" "}
-                      {session.mission || "None"}
+                    <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-white/40">
+                      {session.status || "stored"}
                     </span>
+                  </div>
+
+                  <div className="mt-10">
+                    <p className="text-[10px] uppercase tracking-[0.4em] text-white/30">
+                      Behavioral Memory
+                    </p>
+                    <h2 className="mt-3 text-[clamp(2.5rem,8vw,5rem)] font-black leading-[0.9] tracking-[-0.05em]">
+                      {session.player || "Unassigned"}
+                    </h2>
+                    <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-white/40">
+                      <span>{relativeTime(session.createdAt)}</span>
+                      <span>/</span>
+                      <span>
+                        {formatDuration(session.duration || 0)}
+                      </span>
+                      <span>/</span>
+                      <span>Mission: {session.mission}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </button>
+            </Link>
           ))}
 
-          {ordered.length === 0 && (
-            <div className="rounded-[2rem] border border-zinc-900 p-12 text-center">
-              <p className="text-2xl text-zinc-500">
-                No behavioral memories stored yet.
+          {sessions.length === 0 && (
+            <div className="border border-white/10 bg-white/[0.03] p-12">
+              <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
+                Archive Empty
               </p>
+              <h2 className="mt-5 text-5xl font-black leading-none tracking-[-0.05em] text-white/75">
+                No memory stored yet.
+              </h2>
             </div>
           )}
         </div>

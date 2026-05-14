@@ -1,9 +1,5 @@
 import { AxisEvent, AxisObservation } from "@/types/axis"
 
-function pct(value: number) {
-  return `${Math.round(value)}%`
-}
-
 function count(events: AxisEvent[], type: string) {
   return events.filter((event) => event.type === type).length
 }
