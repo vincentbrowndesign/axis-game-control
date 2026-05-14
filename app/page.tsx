@@ -23,7 +23,6 @@ export default function HomePage() {
     status: "",
   })
 
-  // restore unfinished upload state
   useEffect(() => {
     const saved = sessionStorage.getItem("axis-upload-state")
 
@@ -32,7 +31,6 @@ export default function HomePage() {
     }
   }, [])
 
-  // persist upload state
   useEffect(() => {
     sessionStorage.setItem(
       "axis-upload-state",
@@ -43,17 +41,21 @@ export default function HomePage() {
   async function handleFile(file: File | null) {
     if (!file) return
 
-    setUploadState({
-      uploading: true,
-      progress: 10,
-      status: "Creating session...",
-    })
-
     try {
+      setUploadState({
+        uploading: true,
+        progress: 10,
+        status: "Creating session...",
+      })
+
       // create session
       const sessionRes = await fetch("/api/session/create", {
         method: "POST",
       })
+
+      if (!sessionRes.ok) {
+        throw new Error("Session creation failed")
+      }
 
       const session = await sessionRes.json()
 
@@ -63,25 +65,38 @@ export default function HomePage() {
         status: "Preparing behavioral memory...",
       })
 
-      // upload to mux endpoint
+      // prepare upload
       const formData = new FormData()
       formData.append("file", file)
 
+      setUploadState({
+        uploading: true,
+        progress: 40,
+        status: "Uploading session...",
+      })
+
+      // upload
       const uploadRes = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       })
 
+      if (!uploadRes.ok) {
+        throw new Error("Upload request failed")
+      }
+
       const uploadData = await uploadRes.json()
+
+      console.log("UPLOAD DATA:", uploadData)
 
       setUploadState({
         uploading: true,
-        progress: 60,
-        status: "Linking session memory...",
+        progress: 65,
+        status: "Linking memory...",
       })
 
-      // connect playback id to session
-      await fetch(`/api/session/create`, {
+      // link playback id to session
+      await fetch("/api/session/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -94,7 +109,7 @@ export default function HomePage() {
 
       setUploadState({
         uploading: true,
-        progress: 90,
+        progress: 85,
         status: "Generating replay...",
       })
 
@@ -116,7 +131,7 @@ export default function HomePage() {
         router.push(`/replay/${session.id}`)
       }, 1200)
     } catch (error) {
-      console.error(error)
+      console.error("UPLOAD FLOW ERROR:", error)
 
       setUploadState({
         uploading: false,
@@ -129,6 +144,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-black text-white px-5 py-8">
       <div className="max-w-xl mx-auto">
+        {/* HEADER */}
         <div className="mb-10">
           <div className="text-[12px] tracking-[0.45em] text-zinc-600 mb-4">
             AXIS SESSION
@@ -213,7 +229,7 @@ export default function HomePage() {
           }
         />
 
-        {/* upload state */}
+        {/* PROGRESS */}
         <div className="mt-8">
           <div className="w-full h-6 rounded-full bg-zinc-950 overflow-hidden">
             <div
@@ -243,7 +259,7 @@ export default function HomePage() {
           </div>
 
           {uploadState.status && (
-            <div className="mt-4 text-zinc-500 text-lg">
+            <div className="mt-6 text-zinc-400 text-2xl">
               {uploadState.status}
             </div>
           )}

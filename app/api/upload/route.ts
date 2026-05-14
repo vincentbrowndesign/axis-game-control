@@ -1,31 +1,39 @@
 import { NextResponse } from "next/server"
-import Mux from "@mux/mux-node"
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const mux = new Mux({
-      tokenId: process.env.MUX_TOKEN_ID!,
-      tokenSecret: process.env.MUX_TOKEN_SECRET!,
-    })
+    const formData = await req.formData()
 
-    const upload = await mux.video.uploads.create({
-      cors_origin: "*",
+    const file = formData.get("file") as File | null
 
-      new_asset_settings: {
-        playback_policy: ["public"],
-      },
-    })
+    if (!file) {
+      return NextResponse.json(
+        { error: "No file uploaded" },
+        { status: 400 }
+      )
+    }
+
+    // convert file to buffer
+    const arrayBuffer = await file.arrayBuffer()
+
+    // fake upload simulation for now
+    // replace later with mux direct upload
+
+    const playbackId =
+      "demo_" + Math.random().toString(36).slice(2)
 
     return NextResponse.json({
-      id: upload.id,
-      url: upload.url,
+      success: true,
+      playbackId,
+      size: arrayBuffer.byteLength,
+      fileName: file.name,
     })
   } catch (error) {
-    console.error(error)
+    console.error("UPLOAD ERROR:", error)
 
     return NextResponse.json(
       {
-        error: "Failed to create upload",
+        error: "Upload failed",
       },
       {
         status: 500,
