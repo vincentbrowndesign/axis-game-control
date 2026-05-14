@@ -9,39 +9,42 @@ export async function GET() {
 
 export async function POST() {
   try {
+    if (
+      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      return NextResponse.json(
+        {
+          error: "Missing Supabase environment variables",
+        },
+        {
+          status: 500,
+        }
+      )
+    }
+
     const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     )
-
-    const mockPlaybackIds = [
-      "DS00Spx1CV902MC00YwTYhQxK01CZhFmcWWR8SeA00g4w",
-      "VzDVn5qqP01rVcpW7dKzYBynh3s02T00h01",
-      "q6NOGo02XfByt00FQWz00Qx00Yk5W1jYpA"
-    ]
-
-    const randomPlaybackId =
-      mockPlaybackIds[
-        Math.floor(
-          Math.random() * mockPlaybackIds.length
-        )
-      ]
 
     const { data, error } = await supabase
       .from("axis_sessions")
       .insert({
         title: "Axis Session",
-        playback_id: randomPlaybackId,
+        playback_id: "demo",
       })
       .select()
       .single()
 
-    if (error) {
-      console.error(error)
+    console.log("SUPABASE DATA:", data)
+    console.log("SUPABASE ERROR:", error)
 
+    if (error) {
       return NextResponse.json(
         {
           error: error.message,
+          details: error,
         },
         {
           status: 500,
@@ -54,12 +57,12 @@ export async function POST() {
       id: data.id,
     })
 
-  } catch (error) {
-    console.error(error)
+  } catch (e) {
+    console.error("SERVER ERROR:", e)
 
     return NextResponse.json(
       {
-        error: "Failed to create session",
+        error: "server crash",
       },
       {
         status: 500,
