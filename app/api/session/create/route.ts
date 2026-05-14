@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
 
 export async function GET() {
   return NextResponse.json({
@@ -9,7 +9,7 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from("axis_sessions")
       .insert({
         title: "Axis Session",
@@ -22,8 +22,12 @@ export async function POST() {
 
     if (error) {
       return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
+        {
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
       )
     }
 
@@ -40,7 +44,9 @@ export async function POST() {
             ? error.message
             : "Unknown error",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     )
   }
 }
