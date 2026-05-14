@@ -11,53 +11,84 @@ type ReplaySession = {
   title: string
   mission: string
   player: string
+  environment?: "game" | "practice" | "mission" | "workout"
+  duration?: number
 }
 
 export default function HomePage() {
   const router = useRouter()
+
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState("")
 
-  function saveSession(file: File, source: "camera" | "upload") {
+  function saveSession(
+    file: File,
+    source: "camera" | "upload"
+  ) {
     try {
       setProgress(10)
       setStatus("Preparing behavioral memory...")
 
       const localUrl = URL.createObjectURL(file)
+
       const id = crypto.randomUUID()
 
-      const session: ReplaySession = {
-        id,
-        createdAt: Date.now(),
-        source,
-        videoUrl: localUrl,
-        title: file.name || "Axis Session",
-        mission: "None",
-        player: "Unassigned",
+      const video = document.createElement("video")
+
+      video.preload = "metadata"
+
+      video.onloadedmetadata = () => {
+        const session: ReplaySession = {
+          id,
+          createdAt: Date.now(),
+          source,
+          videoUrl: localUrl,
+          title: file.name || "Axis Session",
+          mission: "None",
+          player: "Unassigned",
+          environment: "practice",
+          duration: video.duration || 0,
+        }
+
+        localStorage.setItem(
+          `axis-session-${id}`,
+          JSON.stringify(session)
+        )
+
+        const existing = JSON.parse(
+          localStorage.getItem("axis-sessions") || "[]"
+        ) as string[]
+
+        localStorage.setItem(
+          "axis-sessions",
+          JSON.stringify([
+            id,
+            ...existing.filter((x) => x !== id),
+          ])
+        )
+
+        setProgress(100)
+
+        setStatus("Behavioral memory stored.")
+
+        setTimeout(() => {
+          router.push(`/session/${id}`)
+        }, 700)
       }
 
-      localStorage.setItem(`axis-session-${id}`, JSON.stringify(session))
+      video.onerror = () => {
+        setProgress(0)
+        setStatus("Video metadata failed.")
+      }
 
-      const existing = JSON.parse(
-        localStorage.getItem("axis-sessions") || "[]"
-      ) as string[]
-
-      localStorage.setItem(
-        "axis-sessions",
-        JSON.stringify([id, ...existing.filter((x) => x !== id)])
-      )
-
-      setProgress(100)
-      setStatus("Behavioral memory stored.")
-
-      setTimeout(() => {
-        router.push(`/session/${id}`)
-      }, 700)
+      video.src = localUrl
     } catch (error) {
       console.error(error)
+
       setProgress(0)
+
       setStatus("Upload failed.")
     }
   }
@@ -84,7 +115,7 @@ export default function HomePage() {
         <div className="space-y-6">
           <button
             onClick={() => inputRef.current?.click()}
-            className="w-full rounded-[2rem] border border-zinc-900 bg-black p-8 text-left"
+            className="w-full rounded-[2rem] border border-zinc-900 bg-black p-8 text-left transition hover:border-zinc-700"
           >
             <div className="text-6xl font-black leading-none">
               CHOOSE
@@ -97,7 +128,7 @@ export default function HomePage() {
             </div>
           </button>
 
-          <label className="block w-full rounded-[2rem] border border-zinc-900 bg-black p-8">
+          <label className="block w-full rounded-[2rem] border border-zinc-900 bg-black p-8 transition hover:border-zinc-700">
             <div className="text-6xl font-black leading-none">
               RECORD
             </div>
@@ -113,7 +144,10 @@ export default function HomePage() {
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
-                if (file) saveSession(file, "camera")
+
+                if (file) {
+                  saveSession(file, "camera")
+                }
               }}
             />
           </label>
@@ -125,13 +159,16 @@ export default function HomePage() {
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]
-              if (file) saveSession(file, "upload")
+
+              if (file) {
+                saveSession(file, "upload")
+              }
             }}
           />
 
           <button
             onClick={() => router.push("/sessions")}
-            className="w-full rounded-full border border-zinc-900 py-5 text-lg font-bold text-zinc-400"
+            className="w-full rounded-full border border-zinc-900 py-5 text-lg font-bold text-zinc-400 transition hover:border-zinc-700 hover:text-white"
           >
             View Memories
           </button>
@@ -140,17 +177,19 @@ export default function HomePage() {
             <div className="h-6 overflow-hidden rounded-full bg-zinc-950">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-lime-300 to-cyan-300 transition-all duration-500"
-                style={{ width: `${progress}%` }}
+                style={{
+                  width: `${progress}%`,
+                }}
               />
             </div>
 
-            <div className="mt-4 flex items-end justify-between">
+            <div className="mt-4 flex items-end justify-between gap-4">
               <div>
                 <div className="text-xs uppercase tracking-[0.4em] text-zinc-700">
                   Behavioral Memory Upload
                 </div>
 
-                <div className="mt-4 text-3xl text-zinc-300">
+                <div className="mt-4 text-3xl leading-tight text-zinc-300">
                   {status}
                 </div>
               </div>

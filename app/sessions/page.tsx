@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 
 type SessionData = {
@@ -11,10 +11,42 @@ type SessionData = {
   title: string
   mission: string
   player: string
+  environment?: "game" | "practice" | "mission" | "workout"
+  duration?: number
+}
+
+function formatDuration(seconds: number) {
+  if (!seconds) return "0s"
+
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+
+  if (mins <= 0) return `${secs}s`
+
+  return `${mins}m ${secs}s`
+}
+
+function relativeTime(timestamp: number) {
+  const diff = Date.now() - timestamp
+
+  const mins = Math.floor(diff / 60000)
+
+  if (mins < 1) return "Just now"
+
+  if (mins < 60) return `${mins}m ago`
+
+  const hours = Math.floor(mins / 60)
+
+  if (hours < 24) return `${hours}h ago`
+
+  const days = Math.floor(hours / 24)
+
+  return `${days}d ago`
 }
 
 export default function SessionsPage() {
   const router = useRouter()
+
   const [sessions, setSessions] = useState<SessionData[]>([])
 
   useEffect(() => {
@@ -24,70 +56,109 @@ export default function SessionsPage() {
 
     const loaded = ids
       .map((id) => {
-        const raw = localStorage.getItem(`axis-session-${id}`)
-        return raw ? (JSON.parse(raw) as SessionData) : null
+        const raw = localStorage.getItem(
+          `axis-session-${id}`
+        )
+
+        return raw
+          ? (JSON.parse(raw) as SessionData)
+          : null
       })
       .filter(Boolean) as SessionData[]
 
     setSessions(loaded)
   }, [])
 
+  const ordered = useMemo(() => {
+    return [...sessions].sort(
+      (a, b) => b.createdAt - a.createdAt
+    )
+  }, [sessions])
+
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
-      <div className="mx-auto max-w-4xl">
-        <p className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
-          Axis Memory
-        </p>
+    <main className="min-h-screen bg-black px-6 py-8 text-white">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-10">
+          <p className="mb-3 text-xs uppercase tracking-[0.4em] text-zinc-700">
+            Axis Replay
+          </p>
 
-        <h1 className="text-7xl font-black leading-none">
-          SESSION
-          <br />
-          MEMORY
-        </h1>
+          <h1 className="text-6xl font-black">
+            Behavioral
+            <br />
+            Memory
+          </h1>
+        </div>
 
-        <p className="mt-6 text-2xl text-zinc-500">
-          Every clip becomes part of the memory layer.
-        </p>
-
-        <div className="mt-10 space-y-5">
-          {sessions.length === 0 && (
-            <p className="text-zinc-600">No sessions stored yet.</p>
-          )}
-
-          {sessions.map((session) => (
+        <div className="space-y-6">
+          {ordered.map((session) => (
             <button
               key={session.id}
-              onClick={() => router.push(`/session/${session.id}`)}
-              className="w-full rounded-[2rem] border border-zinc-900 p-5 text-left"
+              onClick={() =>
+                router.push(`/session/${session.id}`)
+              }
+              className="w-full overflow-hidden rounded-[2rem] border border-zinc-900 bg-zinc-950 text-left transition hover:border-zinc-700"
             >
-              <video
-                src={session.videoUrl}
-                muted
-                playsInline
-                className="mb-5 aspect-video w-full rounded-[1.5rem] object-cover"
-              />
+              <div className="relative aspect-video overflow-hidden">
+                <video
+                  src={session.videoUrl}
+                  muted
+                  className="h-full w-full object-cover opacity-70"
+                />
 
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.35em] text-zinc-700">
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+
+                <div className="absolute left-5 top-5 flex gap-2">
+                  <div className="rounded-full border border-zinc-700 bg-black/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-300">
+                    {session.environment || "practice"}
+                  </div>
+
+                  <div className="rounded-full border border-zinc-700 bg-black/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-300">
                     {session.source}
-                  </p>
-
-                  <h2 className="mt-2 text-3xl font-black">
-                    {session.player}
-                  </h2>
-
-                  <p className="mt-2 text-zinc-500">
-                    {new Date(session.createdAt).toLocaleString()}
-                  </p>
+                  </div>
                 </div>
 
-                <p className="rounded-full border border-zinc-900 px-4 py-2 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                  Open
-                </p>
+                <div className="absolute bottom-5 left-5">
+                  <p className="text-xs uppercase tracking-[0.35em] text-zinc-500">
+                    Behavioral Memory
+                  </p>
+
+                  <h2 className="mt-2 text-4xl font-black">
+                    {session.player || "Unassigned"}
+                  </h2>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+                    <span>
+                      {relativeTime(session.createdAt)}
+                    </span>
+
+                    <span>•</span>
+
+                    <span>
+                      {formatDuration(
+                        session.duration || 0
+                      )}
+                    </span>
+
+                    <span>•</span>
+
+                    <span>
+                      Mission:{" "}
+                      {session.mission || "None"}
+                    </span>
+                  </div>
+                </div>
               </div>
             </button>
           ))}
+
+          {ordered.length === 0 && (
+            <div className="rounded-[2rem] border border-zinc-900 p-12 text-center">
+              <p className="text-2xl text-zinc-500">
+                No behavioral memories stored yet.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </main>
