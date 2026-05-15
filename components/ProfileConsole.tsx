@@ -2,24 +2,20 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import type { AxisProfile } from "@/types/memory"
 
 type Props = {
   email: string
-  userId: string
   profile: AxisProfile | null
   sessionCount: number
 }
 
 export default function ProfileConsole({
   email,
-  userId,
   profile,
   sessionCount,
 }: Props) {
   const router = useRouter()
-  const supabase = createClient()
 
   const [displayName, setDisplayName] = useState(
     profile?.display_name || ""
@@ -33,21 +29,24 @@ export default function ProfileConsole({
 
   async function save() {
     setLoading(true)
+    setStatus("")
 
-    const { error } = await supabase
-      .from("axis_profiles")
-      .upsert({
-        user_id: userId,
-        display_name: displayName || null,
-        player_name: playerName || null,
-        role: role || null,
-        updated_at: new Date().toISOString(),
+    const response = await fetch("/api/profile/ensure", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        displayName,
+        playerName,
+        role,
       })
+    })
 
     setLoading(false)
 
-    if (error) {
-      setStatus(error.message)
+    if (!response.ok) {
+      setStatus("MEMORY LOAD FAILED")
       return
     }
 

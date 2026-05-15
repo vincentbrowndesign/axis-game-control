@@ -1,8 +1,27 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import {
+  cleanText,
+  createStoragePath,
+  isSupportedReplayFile,
+  normalizeEnvironment,
+  normalizeSource,
+  sanitizeFileName,
+} from "@/lib/replayStorage"
 
 export const runtime = "nodejs"
+
+function axisError(message: string, status = 400) {
+  return NextResponse.json(
+    {
+      error: message,
+    },
+    {
+      status,
+    }
+  )
+}
 
 export async function POST(req: Request) {
   try {
@@ -13,46 +32,37 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      return NextResponse.json(
-        {
-          error: "Authentication required",
-        },
-        {
-          status: 401,
-        }
-      )
+      return axisError("SIGNAL INTERRUPTED", 401)
     }
 
     const formData = await req.formData()
 
     const file = formData.get("file") as File | null
-    const source = formData.get("source")
     const duration = Number(formData.get("duration") || 0)
-    const environment = formData.get("environment")
-    const mission = formData.get("mission")
-    const player = formData.get("player")
 
     if (!file) {
-      return NextResponse.json(
-        {
-          error: "No file uploaded",
-        },
-        {
-          status: 400,
-        }
-      )
+      return axisError("MEMORY LOAD FAILED")
     }
 
-    const extension =
-      file.name.split(".").pop()?.toLowerCase() || "mp4"
+    if (!isSupportedReplayFile(file)) {
+      return axisError("STORAGE PATH INVALID")
+    }
+
     const sessionId = crypto.randomUUID()
-    const filePath = `${user.id}/${sessionId}.${extension}`
+    const safeFileName = sanitizeFileName(file.name)
+    const filePath = createStoragePath({
+      userId: user.id,
+      sessionId,
+      fileName: safeFileName,
+      type: file.type,
+    })
     const buffer = Buffer.from(await file.arrayBuffer())
+    const contentType = file.type || "video/mp4"
 
     const upload = await supabaseAdmin.storage
       .from("axis-replays")
       .upload(filePath, buffer, {
-        contentType: file.type || "video/mp4",
+        contentType,
         upsert: false,
       })
 
@@ -61,7 +71,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json(
         {
-          error: upload.error.message,
+          error: "RETRYING INGEST",
         },
         {
           status: 500,
@@ -69,41 +79,48 @@ export async function POST(req: Request) {
       )
     }
 
+    const signedUrlTtl = 60 * 60 * 24 * 7
     const signedUrl = await supabaseAdmin.storage
       .from("axis-replays")
-      .createSignedUrl(filePath, 60 * 60 * 24)
+      .createSignedUrl(filePath, signedUrlTtl)
+
+    if (signedUrl.error) {
+      console.error("SIGNED URL ERROR:", signedUrl.error)
+      await supabaseAdmin.storage
+        .from("axis-replays")
+        .remove([filePath])
+
+      return axisError("MEMORY LOAD FAILED", 500)
+    }
 
     const inserted = await supabaseAdmin
       .from("axis_sessions")
       .insert({
         id: sessionId,
         user_id: user.id,
-        title: file.name || "Axis Session",
+        title: safeFileName || "Axis Session",
         video_url: signedUrl.data?.signedUrl || null,
-        file_name: file.name,
+        file_name: safeFileName,
         file_path: filePath,
-        source: source === "camera" ? "camera" : "upload",
-        mission:
-          typeof mission === "string" && mission
-            ? mission
-            : "None",
-        player_name:
-          typeof player === "string" && player
-            ? player
-            : "Unassigned",
-        environment:
-          environment === "game" ||
-          environment === "mission" ||
-          environment === "workout"
-            ? environment
-            : "practice",
+        source: normalizeSource(formData.get("source")),
+        mission: cleanText(formData.get("mission"), "None"),
+        player_name: cleanText(
+          formData.get("player"),
+          "Unassigned"
+        ),
+        environment: normalizeEnvironment(
+          formData.get("environment")
+        ),
         duration_seconds: Number.isFinite(duration)
           ? duration
           : 0,
         status: "stored",
+        tags: [],
         metadata: {
-          originalType: file.type,
+          originalName: file.name,
+          originalType: file.type || null,
           originalSize: file.size,
+          signedUrlExpiresIn: signedUrlTtl,
         },
       })
       .select("id, video_url")
@@ -111,10 +128,13 @@ export async function POST(req: Request) {
 
     if (inserted.error) {
       console.error("SESSION INSERT ERROR:", inserted.error)
+      await supabaseAdmin.storage
+        .from("axis-replays")
+        .remove([filePath])
 
       return NextResponse.json(
         {
-          error: inserted.error.message,
+          error: "MEMORY LOAD FAILED",
         },
         {
           status: 500,
@@ -122,21 +142,25 @@ export async function POST(req: Request) {
       )
     }
 
-    await supabaseAdmin.from("axis_uploads").insert({
+    const uploadRecord = await supabaseAdmin.from("axis_uploads").insert({
       user_id: user.id,
       session_id: inserted.data.id,
       bucket_id: "axis-replays",
       file_path: filePath,
-      file_name: file.name,
-      content_type: file.type || null,
+      file_name: safeFileName,
+      content_type: contentType,
       size_bytes: file.size,
     })
+
+    if (uploadRecord.error) {
+      console.error("UPLOAD RECORD ERROR:", uploadRecord.error)
+    }
 
     return NextResponse.json({
       success: true,
       id: inserted.data.id,
-      fileName: file.name,
-      type: file.type,
+      fileName: safeFileName,
+      type: contentType,
       size: file.size,
       videoUrl: inserted.data.video_url,
     })
@@ -145,7 +169,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        error: "Upload route crashed",
+        error: "SIGNAL INTERRUPTED",
       },
       {
         status: 500,

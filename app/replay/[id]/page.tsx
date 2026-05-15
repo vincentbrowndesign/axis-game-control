@@ -35,7 +35,7 @@ export default async function ReplayPage({
       if (data.file_path) {
         const signed = await supabaseAdmin.storage
           .from("axis-replays")
-          .createSignedUrl(data.file_path, 60 * 60 * 24)
+          .createSignedUrl(data.file_path, 60 * 60 * 24 * 7)
 
         data.video_url =
           signed.data?.signedUrl || data.video_url

@@ -34,6 +34,7 @@ export type AxisReplaySession = {
   environment: SessionEnvironment | null
   duration_seconds: number | null
   status: string | null
+  tags: string[] | null
   metadata: Record<string, unknown> | null
 }
 
@@ -49,6 +50,7 @@ export type ReplaySessionView = {
   duration?: number
   status?: string
   fileName?: string
+  tags: string[]
 }
 
 export function mapReplaySession(
@@ -66,5 +68,6 @@ export function mapReplaySession(
     duration: session.duration_seconds || 0,
     status: session.status || "stored",
     fileName: session.file_name || undefined,
+    tags: session.tags || [],
   }
 }

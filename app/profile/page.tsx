@@ -50,7 +50,6 @@ export default async function ProfilePage() {
   return (
     <ProfileConsole
       email={user.email}
-      userId={user.id}
       profile={profile || null}
       sessionCount={count || 0}
     />

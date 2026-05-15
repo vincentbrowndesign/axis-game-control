@@ -6,6 +6,17 @@ import { createClient } from "@/lib/supabase/client"
 
 type Mode = "login" | "signup"
 
+function authStatus(error: string) {
+  const lower = error.toLowerCase()
+
+  if (lower.includes("rate limit")) return "SIGNAL INTERRUPTED"
+  if (lower.includes("invalid")) return "MEMORY ACCESS DENIED"
+  if (lower.includes("confirm")) return "CONFIRMATION REQUIRED"
+  if (lower.includes("password")) return "MEMORY ACCESS DENIED"
+
+  return "SIGNAL INTERRUPTED"
+}
+
 export default function AuthConsole() {
   const router = useRouter()
   const supabase = createClient()
@@ -41,7 +52,7 @@ export default function AuthConsole() {
           })
 
     if (auth.error) {
-      setStatus(auth.error.message)
+      setStatus(authStatus(auth.error.message))
       setLoading(false)
       return
     }
@@ -59,17 +70,17 @@ export default function AuthConsole() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        displayName,
-      }),
+      body: JSON.stringify(
+        mode === "signup"
+          ? {
+              displayName,
+            }
+          : {}
+      ),
     })
 
     if (!profile.ok) {
-      const data = (await profile.json()) as {
-        error?: string
-      }
-
-      setStatus(data.error || "Profile initialization failed.")
+      setStatus("MEMORY LOAD FAILED")
       setLoading(false)
       return
     }
@@ -113,8 +124,8 @@ export default function AuthConsole() {
 
     setStatus(
       error
-        ? error.message
-        : "Password recovery email sent."
+        ? authStatus(error.message)
+        : "RECOVERY SIGNAL SENT"
     )
   }
 

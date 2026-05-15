@@ -158,6 +158,9 @@ export default function AxisReplayClient({
     useState<InferSignal | null>(null)
   const [currentTime, setLocalCurrentTime] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [replayStatus, setReplayStatus] = useState<
+    "ready" | "recovering" | "recovered" | "failed"
+  >("ready")
 
   useEffect(() => {
     setPlaybackId(playbackId)
@@ -171,6 +174,39 @@ export default function AxisReplayClient({
       setIsLoading(false)
     })
   }, [initialSession, playbackId, setPlaybackId])
+
+  async function recoverReplay() {
+    if (replayStatus === "recovering") return
+
+    try {
+      setReplayStatus("recovering")
+
+      const response = await fetch(`/api/replay/${playbackId}`)
+
+      if (!response.ok) {
+        setReplayStatus("failed")
+        return
+      }
+
+      const data = (await response.json()) as {
+        session?: ReplaySessionView
+      }
+
+      if (!data.session?.videoUrl) {
+        setReplayStatus("failed")
+        return
+      }
+
+      setSession(data.session)
+      localStorage.setItem(
+        `axis-session-${playbackId}`,
+        JSON.stringify(data.session)
+      )
+      setReplayStatus("recovered")
+    } catch {
+      setReplayStatus("failed")
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -276,7 +312,13 @@ export default function AxisReplayClient({
           <div className="flex items-center gap-3">
             <div className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(190,242,100,0.8)]" />
             <p className="text-xs uppercase tracking-[0.3em] text-white/45">
-              {signal
+              {replayStatus === "recovering"
+                ? "Retrying Ingest"
+                : replayStatus === "recovered"
+                  ? "Replay Recovered"
+                : replayStatus === "failed"
+                  ? "Memory Load Failed"
+                  : signal
                 ? signal.basketballLikely
                   ? "Signal Locked"
                   : "Signal Gate"
@@ -334,6 +376,7 @@ export default function AxisReplayClient({
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onEnded={() => setPlaying(false)}
+              onError={recoverReplay}
             />
 
             <div className="pointer-events-none absolute left-5 top-5 flex items-center gap-3">
@@ -425,8 +468,14 @@ export default function AxisReplayClient({
                 : "Waiting for court signal."}
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-white/50">
-              {signal?.message ||
-                "Replay is available while the signal gate evaluates movement context."}
+              {replayStatus === "recovering"
+                ? "RETRYING INGEST"
+                : replayStatus === "recovered"
+                  ? "REPLAY RECOVERED"
+                : replayStatus === "failed"
+                  ? "MEMORY LOAD FAILED"
+                  : signal?.message ||
+                    "Replay is available while the signal gate evaluates movement context."}
             </p>
           </div>
         </aside>

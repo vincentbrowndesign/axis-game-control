@@ -75,7 +75,7 @@ export default async function SessionsPage() {
       if (session.file_path) {
         const signed = await supabaseAdmin.storage
           .from("axis-replays")
-          .createSignedUrl(session.file_path, 60 * 60 * 24)
+          .createSignedUrl(session.file_path, 60 * 60 * 24 * 7)
 
         session.video_url =
           signed.data?.signedUrl || session.video_url

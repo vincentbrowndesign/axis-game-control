@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { isSupportedReplayFile } from "@/lib/replayStorage"
 
 type Source = "camera" | "upload"
 
@@ -15,15 +16,21 @@ function readDuration(file: File) {
   return new Promise<number>((resolve) => {
     const url = URL.createObjectURL(file)
     const video = document.createElement("video")
+    const timeout = window.setTimeout(() => {
+      URL.revokeObjectURL(url)
+      resolve(0)
+    }, 6000)
 
     video.preload = "metadata"
     video.onloadedmetadata = () => {
       const duration = video.duration || 0
 
+      window.clearTimeout(timeout)
       URL.revokeObjectURL(url)
       resolve(duration)
     }
     video.onerror = () => {
+      window.clearTimeout(timeout)
       URL.revokeObjectURL(url)
       resolve(0)
     }
@@ -49,16 +56,30 @@ export default function UploadConsole({ email }: Props) {
   }
 
   async function saveSession(file: File, source: Source) {
+    if (isUploading) return
+
+    if (!isSupportedReplayFile(file)) {
+      setProgress(0)
+      setStatus("STORAGE PATH INVALID")
+      return
+    }
+
+    if (!navigator.onLine) {
+      setProgress(0)
+      setStatus("SIGNAL INTERRUPTED")
+      return
+    }
+
     try {
       setIsUploading(true)
       setProgress(12)
-      setStatus("Preparing behavioral memory...")
+      setStatus("PREPARING BEHAVIORAL MEMORY")
 
       const localUrl = URL.createObjectURL(file)
       const duration = await readDuration(file)
 
       setProgress(36)
-      setStatus("Binding upload to authenticated memory...")
+      setStatus("BINDING MEMORY TO SESSION")
 
       const formData = new FormData()
       formData.set("file", file)
@@ -75,20 +96,27 @@ export default function UploadConsole({ email }: Props) {
 
       const result = (await response.json()) as {
         id?: string
+        fileName?: string
         videoUrl?: string
         error?: string
       }
 
       if (!response.ok || !result.id) {
-        throw new Error(result.error || "Upload failed")
+        throw new Error(result.error || "SIGNAL INTERRUPTED")
+      }
+
+      const replayUrl = result.videoUrl || localUrl
+
+      if (result.videoUrl) {
+        URL.revokeObjectURL(localUrl)
       }
 
       const session = {
         id: result.id,
         createdAt: Date.now(),
         source,
-        videoUrl: result.videoUrl || localUrl,
-        title: file.name || "Axis Session",
+        videoUrl: replayUrl,
+        title: result.fileName || file.name || "Axis Session",
         mission: "None",
         player: "Unassigned",
         environment: "practice",
@@ -113,17 +141,23 @@ export default function UploadConsole({ email }: Props) {
       )
 
       setProgress(100)
-      setStatus("Behavioral memory stored.")
+      setStatus("MEMORY STORED")
 
       setTimeout(() => {
         router.push(`/replay/${result.id}`)
       }, 350)
     } catch (error) {
       console.error(error)
-      setStatus(
+      const message =
         error instanceof Error
           ? error.message
-          : "Upload failed."
+          : "SIGNAL INTERRUPTED"
+
+      setStatus(
+        message.includes("Failed") ||
+          message.includes("Load failed")
+          ? "SIGNAL INTERRUPTED"
+          : message
       )
       setProgress(0)
     } finally {
@@ -219,6 +253,7 @@ export default function UploadConsole({ email }: Props) {
             const file = event.target.files?.[0]
 
             if (file) saveSession(file, "upload")
+            else setStatus("MEMORY LOAD FAILED")
             event.target.value = ""
           }}
         />
@@ -233,6 +268,7 @@ export default function UploadConsole({ email }: Props) {
             const file = event.target.files?.[0]
 
             if (file) saveSession(file, "camera")
+            else setStatus("SIGNAL INTERRUPTED")
             event.target.value = ""
           }}
         />

@@ -43,6 +43,7 @@ export async function POST(req: Request) {
         player_name: "Unassigned",
         environment: "practice",
         status: "created",
+        tags: [],
         metadata: {},
       })
       .select("id, playback_id")
