@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { buildMemoryState } from "@/lib/memoryInference"
+import { normalizeReplay } from "@/lib/normalizeReplay"
 import {
-  mapReplaySession,
   type AxisReplaySession,
 } from "@/types/memory"
 
@@ -67,8 +67,8 @@ export async function GET(_req: Request, context: Context) {
     .order("created_at", { ascending: false })
     .returns<AxisReplaySession[]>()
 
-  const session = mapReplaySession(data)
-  const previousSessions = (previousData || []).map(mapReplaySession)
+  const session = normalizeReplay(data)
+  const previousSessions = (previousData || []).map(normalizeReplay)
   const memoryState = buildMemoryState({
     session,
     previousSessions,

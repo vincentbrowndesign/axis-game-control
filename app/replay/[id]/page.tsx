@@ -2,8 +2,8 @@ import AxisReplayClient from "@/components/AxisReplayClient"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { buildMemoryState } from "@/lib/memoryInference"
+import { normalizeReplay } from "@/lib/normalizeReplay"
 import {
-  mapReplaySession,
   type AxisReplaySession,
 } from "@/types/memory"
 
@@ -51,9 +51,9 @@ export default async function ReplayPage({
         .order("created_at", { ascending: false })
         .returns<AxisReplaySession[]>()
 
-      const session = mapReplaySession(data)
+      const session = normalizeReplay(data)
       const previousSessions = (previousData || []).map(
-        mapReplaySession
+        normalizeReplay
       )
       const memoryState = buildMemoryState({
         session,

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
+import { normalizeReplay } from "@/lib/normalizeReplay"
 import type { ReplaySessionView } from "@/types/memory"
 
 declare global {
@@ -110,35 +111,7 @@ function normalizeSession(
 ) {
   if (!value) return null
 
-  return {
-    ...value,
-    source: value.source || "upload",
-    videoUrl: value.videoUrl || "",
-    title: value.title || "Axis Session",
-    mission: value.mission || "None",
-    player: value.player || "Unassigned",
-    environment: value.environment || "practice",
-    duration:
-      typeof value.duration === "number" &&
-      Number.isFinite(value.duration)
-        ? value.duration
-        : 0,
-    status: value.status || "stored",
-    tags: Array.isArray(value.tags) ? value.tags : [],
-    memoryCount:
-      typeof value.memoryCount === "number" &&
-      Number.isFinite(value.memoryCount)
-        ? Math.max(value.memoryCount, 1)
-        : 1,
-    lastSignal: value.lastSignal || "MEMORY STORED",
-    archiveStatus: value.archiveStatus || "ACTIVE",
-    context:
-      value.context ||
-      "Replay linked. Session added. Memory available.",
-    timeline: Array.isArray(value.timeline) ? value.timeline : [],
-    ambientLine: value.ambientLine || "Context building.",
-    memoryState: value.memoryState,
-  }
+  return normalizeReplay(value)
 }
 
 function pushLiveSignal(

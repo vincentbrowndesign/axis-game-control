@@ -2,8 +2,9 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { buildMemoryState } from "@/lib/memoryInference"
+import { normalizeReplay } from "@/lib/normalizeReplay"
 import {
-  mapReplaySession,
+  type ReplaySessionView,
   type AxisReplaySession,
 } from "@/types/memory"
 
@@ -45,8 +46,8 @@ function memoryKey(session: {
 }
 
 function previousForSession(
-  session: ReturnType<typeof mapReplaySession>,
-  sessions: ReturnType<typeof mapReplaySession>[]
+  session: ReplaySessionView,
+  sessions: ReplaySessionView[]
 ) {
   return sessions.filter(
     (item) =>
@@ -105,7 +106,7 @@ export default async function SessionsPage() {
           signed.data?.signedUrl || session.video_url
       }
 
-      return mapReplaySession(session)
+      return normalizeReplay(session)
     })
   )
 
