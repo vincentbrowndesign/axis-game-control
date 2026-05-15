@@ -128,14 +128,14 @@ function buildTimeline(
       segments.push({
         start: sample.timestamp,
         end: sample.timestamp,
-        label: "ACTIVE MOTION",
+        label: "ACTIVITY DETECTED",
         evidence: `Motion ${segmentEvidence(sample.motionIntensity)}`,
       })
     } else if (sample.motionIntensity > 0 && sample.motionIntensity <= 0.08) {
       segments.push({
         start: sample.timestamp,
         end: sample.timestamp,
-        label: "LOW ACTIVITY",
+        label: "ACTIVITY WAITING",
         evidence: `Motion ${segmentEvidence(sample.motionIntensity)}`,
       })
     }

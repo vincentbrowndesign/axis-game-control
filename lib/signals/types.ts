@@ -18,7 +18,11 @@ export type AudioSignalSample = {
 export type SignalTimelineSegment = {
   start: number
   end: number
-  label: "LOW ACTIVITY" | "ACTIVE MOTION" | "BRIGHTNESS SHIFT" | "AUDIO ENERGY"
+  label:
+    | "ACTIVITY WAITING"
+    | "ACTIVITY DETECTED"
+    | "BRIGHTNESS SHIFT"
+    | "AUDIO ENERGY"
   evidence: string
 }
 

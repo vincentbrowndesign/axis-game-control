@@ -37,8 +37,8 @@ type Marker = {
 
 type LiveSignalLabel =
   | "SIGNAL RECORDED"
-  | "ACTIVE MOTION"
-  | "LOW ACTIVITY"
+  | "ACTIVITY DETECTED"
+  | "ACTIVITY WAITING"
   | "BRIGHTNESS SHIFT"
   | "AUDIO ENERGY"
   | "SIGNAL LOST"
@@ -178,10 +178,10 @@ function percent(value?: number | null) {
 }
 
 function activityLabel(value?: ExtractedReplaySignals["activityState"]) {
-  if (value === "active") return "ACTIVE MOTION"
-  if (value === "low") return "LOW ACTIVITY"
+  if (value === "active") return "ACTIVITY DETECTED"
+  if (value === "low") return "ACTIVITY WAITING"
 
-  return "SIGNAL RECORDED"
+  return "ACTIVITY WAITING"
 }
 
 function mergeBaseline(
@@ -512,7 +512,7 @@ export default function AxisReplayClient({
             if (signal.motionIntensity > 0.34) {
               lastActivityRef.current = video.currentTime
               emitSignal(
-                "ACTIVE MOTION",
+                "ACTIVITY DETECTED",
                 "Motion increased in replay.",
                 "lime"
               )
@@ -521,13 +521,13 @@ export default function AxisReplayClient({
               signal.motionIntensity < 0.08
             ) {
               emitSignal(
-                "LOW ACTIVITY",
+                "ACTIVITY WAITING",
                 "Footage is holding low movement.",
                 "zinc"
               )
             } else if (signal.motionIntensity < 0.12) {
               emitSignal(
-                "LOW ACTIVITY",
+                "ACTIVITY WAITING",
                 "Low movement detected.",
                 "zinc"
               )
@@ -641,7 +641,7 @@ export default function AxisReplayClient({
           },
           {
             time: formatClock(duration),
-            label: "MEMORY STORED",
+            label: "ARCHIVE ACTIVE",
             detail: "Replay added to archive.",
             tone: "lime",
           },

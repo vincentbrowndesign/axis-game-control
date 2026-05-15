@@ -197,15 +197,15 @@ function asSignalSegmentLabel(
   value: unknown
 ): SignalTimelineSegment["label"] {
   if (
-    value === "LOW ACTIVITY" ||
-    value === "ACTIVE MOTION" ||
+    value === "ACTIVITY WAITING" ||
+    value === "ACTIVITY DETECTED" ||
     value === "BRIGHTNESS SHIFT" ||
     value === "AUDIO ENERGY"
   ) {
     return value
   }
 
-  return "LOW ACTIVITY"
+  return "ACTIVITY WAITING"
 }
 
 function normalizeSignalTimeline(value: unknown): SignalTimelineSegment[] {
