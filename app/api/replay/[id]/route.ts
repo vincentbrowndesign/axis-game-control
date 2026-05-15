@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { buildMemoryState } from "@/lib/memoryInference"
 import { normalizeReplay } from "@/lib/normalizeReplay"
-import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import {
   type AxisReplaySession,
 } from "@/types/memory"
@@ -75,10 +74,6 @@ export async function GET(_req: Request, context: Context) {
     previousSessions,
     player: session.player,
   })
-  const baseline = buildBaseline({
-    session,
-    previousSessions,
-  })
 
   return NextResponse.json({
     session: {
@@ -95,7 +90,6 @@ export async function GET(_req: Request, context: Context) {
       })),
       ambientLine: memoryState.ambientLine,
       memoryState,
-      baseline,
     },
   })
 }

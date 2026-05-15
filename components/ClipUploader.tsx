@@ -35,10 +35,6 @@ function statusFromCaughtError(error: unknown) {
     return "ROUTE UNREACHABLE"
   }
 
-  if (error.message === "RESPONSE CORRUPTED") {
-    return "RESPONSE CORRUPTED"
-  }
-
   return error.message
 }
 
@@ -159,7 +155,7 @@ export default function ClipUploader({
         console.log("UPLOAD_RESPONSE_RAW", text)
 
         throw new Error(
-          "RESPONSE CORRUPTED"
+          "SIGNAL WAITING"
         )
       }
 
@@ -183,7 +179,7 @@ export default function ClipUploader({
         )
 
         throw new Error(
-          "RESPONSE CORRUPTED"
+          "SIGNAL WAITING"
         )
       }
 

@@ -5,6 +5,7 @@ import { useSessionStore } from "@/store/useSessionStore"
 import { normalizeReplay } from "@/lib/normalizeReplay"
 import { readBasketballSignal } from "@/lib/basketball/readBasketballSignal"
 import type { BasketballSignalState } from "@/lib/basketball/types"
+import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
 import {
   addAudioSignalSample,
@@ -44,6 +45,8 @@ type LiveSignalLabel =
   | "AUDIO ENERGY"
   | "SIGNAL LOST"
   | "SIGNAL RETURNED"
+  | "SIGNAL INITIALIZING"
+  | "SIGNAL WAITING"
 
 type LiveSignalEvent = {
   label: LiveSignalLabel
@@ -199,6 +202,21 @@ function mergeBaseline(
   }
 }
 
+function createWaitingBaseline(
+  session: ReplaySessionView | null
+): CalibrationBaseline {
+  return {
+    status: "NOT ENOUGH MEMORY",
+    averageSessionDuration: session?.duration || 0,
+    averageMotionIntensity: null,
+    averageAudioEnergy: null,
+    usualSource: session?.source || "upload",
+    memoryCount: Math.max(session?.memoryCount || 1, 1),
+    firstMemoryDate: session?.createdAt || null,
+    latestMemoryDate: session?.createdAt || null,
+  }
+}
+
 function displaySignalLabel(value: string) {
   return value
     .toLowerCase()
@@ -297,17 +315,32 @@ function BasketballRead({
   session,
   signals,
   baseline,
+  signalStatus,
 }: {
   session: ReplaySessionView
   signals: ExtractedReplaySignals | null
   baseline: CalibrationBaseline
+  signalStatus: "initializing" | "waiting" | "ready"
 }) {
   const displaySignals = signals || session.signalRead
-  const basketballState = readBasketballSignal({
-    session,
-    signals: displaySignals,
-    baseline,
-  })
+  const basketballState =
+    signalStatus === "ready"
+      ? readBasketballSignal({
+          session,
+          signals: displaySignals,
+          baseline,
+        })
+      : {
+          headline:
+            signalStatus === "initializing"
+              ? "SIGNAL INITIALIZING"
+              : "SIGNAL WAITING",
+          courtState: "CAMERA STABLE",
+          activityState: "LOW ACTIVITY",
+          clipType: "CLIP STORED",
+          evidence: [],
+          confidence: 0,
+        }
 
   return (
     <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
@@ -327,15 +360,27 @@ function BasketballRead({
         />
         <DetailRow
           label="Motion"
-          value={motionValue(basketballState, displaySignals)}
+          value={
+            signalStatus === "ready"
+              ? motionValue(basketballState, displaySignals)
+              : "Waiting"
+          }
         />
         <DetailRow
           label="Camera"
-          value={cameraValue(basketballState, displaySignals)}
+          value={
+            signalStatus === "ready"
+              ? cameraValue(basketballState, displaySignals)
+              : "Waiting"
+          }
         />
         <DetailRow
           label="Audio"
-          value={audioValue(basketballState, displaySignals)}
+          value={
+            signalStatus === "ready"
+              ? audioValue(basketballState, displaySignals)
+              : "Waiting"
+          }
         />
         <DetailRow
           label="Baseline"
@@ -351,7 +396,7 @@ function BasketballRead({
         {basketballSentence({
           state: basketballState,
           baseline,
-          signals: displaySignals,
+          signals: signalStatus === "ready" ? displaySignals : null,
           session,
         })}
       </p>
@@ -393,9 +438,9 @@ export default function AxisReplayClient({
   const analyserRef = useRef<AnalyserNode | null>(null)
   const audioSourceReadyRef = useRef(false)
   const audioPeakRef = useRef(0)
-  const signalAccumulatorRef = useRef(
-    createSignalAccumulator(initialSession?.duration || 0)
-  )
+  const signalAccumulatorRef = useRef(createSignalAccumulator(0))
+  const signalReadyRef = useRef(false)
+  const sessionRef = useRef<ReplaySessionView | null>(null)
   const setPlaybackId = useSessionStore(
     (state) => state.setPlaybackId
   )
@@ -429,6 +474,12 @@ export default function AxisReplayClient({
     audioEnergy: 0,
   })
   const [audioReady, setAudioReady] = useState(false)
+  const [signalReady, setSignalReady] = useState(false)
+  const [baseline, setBaseline] = useState<CalibrationBaseline | null>(null)
+
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
 
   useEffect(() => {
     setPlaybackId(playbackId)
@@ -439,6 +490,9 @@ export default function AxisReplayClient({
 
     queueMicrotask(() => {
       setLiveSignalEvents([])
+      signalReadyRef.current = false
+      setSignalReady(false)
+      setBaseline(null)
       const localSession = safeParseSession(
         localStorage.getItem(`axis-session-${playbackId}`)
       )
@@ -451,6 +505,40 @@ export default function AxisReplayClient({
       setIsLoading(false)
     })
   }, [initialSession, playbackId, setPlaybackId])
+
+  useEffect(() => {
+    if (!session?.videoUrl || !videoRef.current || isLoading) return
+
+    let cancelled = false
+
+    queueMicrotask(() => {
+      if (cancelled) return
+
+      try {
+        signalAccumulatorRef.current = createSignalAccumulator(
+          session.duration || 0
+        )
+        previousFrameRef.current = null
+        setBaseline(
+          buildBaseline({
+            session,
+            previousSessions: [],
+            signals: null,
+          })
+        )
+        signalReadyRef.current = true
+        setSignalReady(true)
+      } catch (error) {
+        console.warn("AXIS SIGNAL INITIALIZATION WAITING", error)
+        signalReadyRef.current = false
+        setSignalReady(false)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLoading, session])
 
   async function recoverReplay() {
     if (replayStatus === "recovering") return
@@ -554,6 +642,7 @@ export default function AxisReplayClient({
       const canvas = canvasRef.current
 
       if (
+        signalReadyRef.current &&
         video &&
         canvas &&
         !video.paused &&
@@ -591,6 +680,19 @@ export default function AxisReplayClient({
               signalAccumulatorRef.current
             )
             setExtractedSignals(extracted)
+            setBaseline((currentBaseline) => {
+              const activeSession = sessionRef.current
+
+              if (!activeSession) return currentBaseline
+
+              return currentBaseline
+                ? mergeBaseline(currentBaseline, extracted)
+                : buildBaseline({
+                    session: activeSession,
+                    previousSessions: [],
+                    signals: extracted,
+                  })
+            })
             setLiveMetrics((metrics) => ({
               ...metrics,
               motionAmount: signal.motionIntensity,
@@ -673,7 +775,21 @@ export default function AxisReplayClient({
             timestamp: video.currentTime,
             energy,
           })
-          setExtractedSignals(extractSignals(signalAccumulatorRef.current))
+          const extracted = extractSignals(signalAccumulatorRef.current)
+          setExtractedSignals(extracted)
+          setBaseline((currentBaseline) => {
+            const activeSession = sessionRef.current
+
+            if (!activeSession) return currentBaseline
+
+            return currentBaseline
+              ? mergeBaseline(currentBaseline, extracted)
+              : buildBaseline({
+                  session: activeSession,
+                  previousSessions: [],
+                  signals: extracted,
+                })
+          })
           setLiveMetrics((metrics) => ({
             ...metrics,
             audioEnergy: energy,
@@ -770,7 +886,14 @@ export default function AxisReplayClient({
     ? [...liveMarkers, ...markers].slice(0, 10)
     : markers
   const latestLiveSignal = liveSignalEvents[0]?.label || replayStatusLabel
-  const baseline = mergeBaseline(session?.baseline, extractedSignals)
+  const signalStatus = !session?.videoUrl
+    ? "waiting"
+    : signalReady
+      ? "ready"
+      : "initializing"
+  const displayBaseline = baseline
+    ? mergeBaseline(baseline, extractedSignals)
+    : createWaitingBaseline(session)
 
   if (isLoading) {
     return (
@@ -850,13 +973,21 @@ export default function AxisReplayClient({
               preload="metadata"
               className="aspect-video w-full bg-black object-cover"
               onLoadedMetadata={(event) => {
-                setSignalDuration(
-                  signalAccumulatorRef.current,
-                  event.currentTarget.duration || duration
-                )
-                setExtractedSignals(
-                  extractSignals(signalAccumulatorRef.current)
-                )
+                if (!signalReadyRef.current) return
+
+                try {
+                  setSignalDuration(
+                    signalAccumulatorRef.current,
+                    event.currentTarget.duration || duration
+                  )
+                  setExtractedSignals(
+                    extractSignals(signalAccumulatorRef.current)
+                  )
+                } catch (error) {
+                  console.warn("AXIS SIGNAL METADATA WAITING", error)
+                  signalReadyRef.current = false
+                  setSignalReady(false)
+                }
               }}
               onTimeUpdate={(event) => {
                 const time = event.currentTarget.currentTime
@@ -922,7 +1053,8 @@ export default function AxisReplayClient({
           <BasketballRead
             session={session}
             signals={extractedSignals}
-            baseline={baseline}
+            baseline={displayBaseline}
+            signalStatus={signalStatus}
           />
 
           <div className="mt-8 space-y-3 lg:hidden">

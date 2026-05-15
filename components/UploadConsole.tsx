@@ -21,11 +21,7 @@ function toAxisErrorState(error: unknown) {
     error instanceof Error ? error.message : "SIGNAL INTERRUPTED"
 
   if (message.includes("NON_JSON_RESPONSE")) {
-    return "RESPONSE CORRUPTED"
-  }
-
-  if (message.includes("RESPONSE_CORRUPTED")) {
-    return "RESPONSE CORRUPTED"
+    return "SIGNAL WAITING"
   }
 
   if (
@@ -63,7 +59,7 @@ function toAxisErrorState(error: unknown) {
     message === "MEMORY INGEST FAILED" ||
     message === "INVALID MEMORY FORMAT" ||
     message === "STORAGE KEY INVALID" ||
-    message === "RESPONSE CORRUPTED"
+    message === "SIGNAL WAITING"
   ) {
     return message
   }
@@ -77,7 +73,11 @@ function parseUploadResponse(text: string) {
   } catch (error) {
     console.error("AXIS JSON PARSE FAILURE", error)
 
-    throw new Error("RESPONSE_CORRUPTED")
+    return {
+      ok: false,
+      error: "SIGNAL WAITING",
+      detail: "UPLOAD RESPONSE UNAVAILABLE",
+    }
   }
 }
 
