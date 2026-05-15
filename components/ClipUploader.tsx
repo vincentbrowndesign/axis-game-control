@@ -16,7 +16,7 @@ function statusFromUploadFailure(data: AxisUploadResponse) {
 
 function statusFromCaughtError(error: unknown) {
   if (!(error instanceof Error)) {
-    return "UPLOAD WAITING"
+    return "MEMORY WAITING"
   }
 
   if (
@@ -155,7 +155,7 @@ export default function ClipUploader({
         console.log("UPLOAD_RESPONSE_RAW", text)
 
         throw new Error(
-          "SIGNAL WAITING"
+          "MEMORY PROCESSING"
         )
       }
 
@@ -179,7 +179,7 @@ export default function ClipUploader({
         )
 
         throw new Error(
-          "SIGNAL WAITING"
+          "MEMORY PROCESSING"
         )
       }
 
@@ -238,20 +238,21 @@ export default function ClipUploader({
           className="w-full border border-white/10 bg-black p-8 text-left transition-opacity hover:opacity-80"
         >
           <div className="text-5xl font-black leading-none text-white">
-            CHOOSE
+            RECORD
             <br />
-            FILE
+            MEMORY
           </div>
 
           <div className="mt-3 text-2xl text-lime-300">
-            Attach existing clip
+            Live basketball capture
           </div>
         </button>
 
         <input
           ref={inputRef}
           type="file"
-          accept="video/*,.mov,.mp4,.m4v"
+          accept="video/*"
+          capture="environment"
           className="hidden"
           onChange={handleFileChange}
         />
@@ -268,7 +269,7 @@ export default function ClipUploader({
 
       <div className="mt-6">
         <div className="text-xs uppercase tracking-[0.4em] text-white/30">
-          Behavioral Memory Upload
+          Basketball Memory Capture
         </div>
 
         <div className="mt-4 text-5xl font-black leading-none text-white">

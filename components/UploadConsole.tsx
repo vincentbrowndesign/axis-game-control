@@ -12,7 +12,8 @@ import { parseUploadResponseText } from "@/lib/uploadResponse"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import type { CalibrationMission } from "@/lib/missions/types"
 
-type Source = "camera" | "upload"
+type Source = "camera"
+type FlowStep = "entry" | "mission" | "brief" | "capture" | "processing"
 
 type Props = {
   email: string
@@ -22,10 +23,10 @@ const calibrationMissions = getCalibrationMissions()
 
 function toAxisErrorState(error: unknown) {
   const message =
-    error instanceof Error ? error.message : "UPLOAD WAITING"
+    error instanceof Error ? error.message : "MEMORY WAITING"
 
   if (message.includes("NON_JSON_RESPONSE")) {
-    return "SIGNAL WAITING"
+    return "MEMORY PROCESSING"
   }
 
   if (
@@ -55,16 +56,16 @@ function toAxisErrorState(error: unknown) {
     message.includes("Load failed") ||
     message.includes("Failed")
   ) {
-    return "UPLOAD WAITING"
+    return "MEMORY WAITING"
   }
 
   if (
-    message === "UPLOAD WAITING" ||
+    message === "MEMORY WAITING" ||
     message === "AUTH REQUIRED" ||
     message === "MEMORY INGEST FAILED" ||
     message === "INVALID MEMORY FORMAT" ||
     message === "STORAGE KEY INVALID" ||
-    message === "SIGNAL WAITING"
+    message === "MEMORY PROCESSING"
   ) {
     return message
   }
@@ -80,7 +81,7 @@ function parseUploadResponse(text: string) {
 
     return {
       ok: false,
-      error: "SIGNAL WAITING",
+      error: "MEMORY PROCESSING",
       detail: "UPLOAD RESPONSE UNAVAILABLE",
     }
   }
@@ -112,60 +113,39 @@ function readDuration(file: File) {
   })
 }
 
+function missionName(mission: CalibrationMission) {
+  return mission.title.replace(/^CALIBRATION \d+ - /, "")
+}
+
 function MissionCard({
   mission,
-  selected,
   onSelect,
 }: {
   mission: CalibrationMission
-  selected: boolean
   onSelect: () => void
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`border p-5 text-left transition ${
-        selected
-          ? "border-lime-300 bg-lime-300 text-black"
-          : "border-white/10 bg-white/[0.03] text-white hover:border-white/25"
-      }`}
+      className="min-h-56 border border-white/10 bg-white/[0.03] p-5 text-left text-white transition hover:border-lime-300 hover:bg-lime-300 hover:text-black"
     >
       <div className="flex items-start justify-between gap-4">
-        <p className="max-w-[72%] text-lg font-black uppercase leading-none tracking-[-0.02em]">
-          {mission.title}
+        <p className="text-2xl font-black uppercase leading-none tracking-[-0.03em]">
+          {missionName(mission)}
         </p>
-        <p
-          className={`font-mono text-xs ${
-            selected ? "text-black/60" : "text-white/35"
-          }`}
-        >
+        <p className="font-mono text-xs opacity-60">
           {mission.durationTarget}s
         </p>
       </div>
 
-      <p
-        className={`mt-5 text-sm leading-relaxed ${
-          selected ? "text-black/70" : "text-white/50"
-        }`}
-      >
+      <p className="mt-6 text-sm leading-relaxed opacity-65">
         {mission.description}
       </p>
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        {mission.signalFocus.slice(0, 3).map((signal) => (
-          <span
-            key={signal}
-            className={`border px-2 py-1 text-[10px] uppercase tracking-[0.22em] ${
-              selected
-                ? "border-black/15 text-black/65"
-                : "border-white/10 text-white/35"
-            }`}
-          >
-            {signal}
-          </span>
-        ))}
-      </div>
+      <p className="mt-8 text-[10px] uppercase tracking-[0.32em] opacity-45">
+        Build Baseline
+      </p>
     </button>
   )
 }
@@ -173,14 +153,13 @@ function MissionCard({
 export default function UploadConsole({ email }: Props) {
   const router = useRouter()
   const supabase = createClient()
-  const uploadInputRef =
-    useRef<HTMLInputElement | null>(null)
   const cameraInputRef =
     useRef<HTMLInputElement | null>(null)
 
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState("")
   const [isUploading, setIsUploading] = useState(false)
+  const [flowStep, setFlowStep] = useState<FlowStep>("entry")
   const [selectedMissionId, setSelectedMissionId] = useState(
     calibrationMissions[0]?.id || "none"
   )
@@ -239,17 +218,17 @@ export default function UploadConsole({ email }: Props) {
 
     if (!navigator.onLine) {
       setProgress(0)
-      setStatus("UPLOAD WAITING")
+      setStatus("MEMORY WAITING")
       return
     }
 
     try {
+      setFlowStep("processing")
       setIsUploading(true)
       setProgress(12)
-      setStatus("PREPARING BEHAVIORAL MEMORY")
+      setStatus("BINDING MEMORY TO SESSION")
 
-      const duration =
-        source === "camera" ? await readDuration(file) : 0
+      const duration = await readDuration(file)
 
       setProgress(36)
       setStatus("BINDING MEMORY TO SESSION")
@@ -297,11 +276,11 @@ export default function UploadConsole({ email }: Props) {
       }
 
       setProgress(100)
-      setStatus("MEMORY STORED")
+      setStatus("MEMORY RECORDED")
 
       setTimeout(() => {
         router.push(`/replay/${result.replayId}`)
-      }, 350)
+      }, 900)
     } catch (error) {
       console.error(error)
       setStatus(toAxisErrorState(error))
@@ -314,16 +293,14 @@ export default function UploadConsole({ email }: Props) {
   return (
     <main className="min-h-screen bg-black px-5 pb-24 pt-8 text-white">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-10 flex flex-col gap-6 border-b border-white/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <header className="mb-10 flex items-center justify-between gap-6 border-b border-white/10 pb-6">
           <div>
             <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              Axis Upload Console
+              Axis Memory Core
             </p>
-            <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.84] tracking-[-0.07em]">
-              FEED
-              <br />
-              MEMORY
-            </h1>
+            <p className="mt-2 text-sm text-white/35">
+              {email}
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -347,94 +324,144 @@ export default function UploadConsole({ email }: Props) {
               Exit
             </button>
           </div>
-        </div>
+        </header>
 
-        <div className="mb-8 flex items-center gap-3">
-          <div className="h-2 w-2 rounded-full bg-lime-300" />
-          <p className="text-xs uppercase tracking-[0.35em] text-white/40">
-            Session owner: {email}
-          </p>
-        </div>
+        {flowStep === "entry" ? (
+          <section className="flex min-h-[calc(100vh-13rem)] flex-col justify-end pb-10">
+            <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
+              First Session
+            </p>
+            <h1 className="mt-6 text-[clamp(4.8rem,18vw,12rem)] font-black leading-[0.78] tracking-[-0.07em]">
+              START
+              <br />
+              MEMORY
+            </h1>
+            <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
+              Build your basketball baseline.
+            </p>
+            <button
+              type="button"
+              onClick={() => setFlowStep("mission")}
+              className="mt-10 w-fit bg-white px-9 py-5 text-sm font-black uppercase tracking-[0.28em] text-black transition hover:bg-lime-300"
+            >
+              Begin
+            </button>
+          </section>
+        ) : null}
 
-        <section className="mb-10 border-b border-white/10 pb-10">
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
+        {flowStep === "mission" ? (
+          <section className="pb-10">
+            <div className="mb-8">
               <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
                 Begin Calibration
               </p>
-              <h2 className="mt-3 text-[clamp(3rem,10vw,6rem)] font-black leading-[0.85] tracking-[-0.06em]">
-                START
+              <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
+                SELECT
                 <br />
-                MEMORY
-              </h2>
+                MISSION
+              </h1>
             </div>
 
-            <p className="max-w-sm text-sm leading-relaxed text-white/45">
-              Pick a basketball memory mission, then record or attach the clip.
-              AXIS will build baseline movement after replay loads.
-            </p>
-          </div>
+            <div className="grid gap-3 lg:grid-cols-5">
+              {calibrationMissions.map((mission) => (
+                <MissionCard
+                  key={mission.id}
+                  mission={mission}
+                  onSelect={() => {
+                    setSelectedMissionId(mission.id)
+                    setFlowStep("brief")
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-          <div className="grid gap-3 lg:grid-cols-5">
-            {calibrationMissions.map((mission) => (
-              <MissionCard
-                key={mission.id}
-                mission={mission}
-                selected={mission.id === selectedMissionId}
-                onSelect={() => setSelectedMissionId(mission.id)}
+        {flowStep === "brief" && selectedMission ? (
+          <section className="grid min-h-[calc(100vh-13rem)] gap-10 pb-10 lg:grid-cols-[1fr_360px] lg:items-end">
+            <div>
+              <button
+                type="button"
+                onClick={() => setFlowStep("mission")}
+                className="mb-8 text-xs uppercase tracking-[0.35em] text-white/35 transition hover:text-white"
+              >
+                Missions
+              </button>
+              <p className="text-[10px] uppercase tracking-[0.5em] text-lime-300">
+                Mission Brief
+              </p>
+              <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
+                {missionName(selectedMission)}
+              </h1>
+              <p className="mt-8 font-mono text-3xl text-white/65">
+                {selectedMission.durationTarget} seconds
+              </p>
+              <p className="mt-6 max-w-xl text-xl leading-relaxed text-white/55">
+                {selectedMission.description}
+              </p>
+            </div>
+
+            <div className="border border-white/10 bg-white/[0.03] p-6">
+              <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
+                Axis calibrates
+              </p>
+              <div className="mt-5 space-y-3">
+                {selectedMission.signalFocus.slice(0, 4).map((signal) => (
+                  <div
+                    key={signal}
+                    className="border-b border-white/10 pb-3 text-sm uppercase tracking-[0.25em] text-white/55 last:border-b-0 last:pb-0"
+                  >
+                    {signal}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={() => {
+                  setFlowStep("capture")
+                  setStatus("BINDING MEMORY TO SESSION")
+                  cameraInputRef.current?.click()
+                }}
+                className="mt-8 w-full bg-lime-300 px-6 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-white disabled:opacity-50"
+              >
+                Start Recording
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {flowStep === "capture" || flowStep === "processing" ? (
+          <section className="flex min-h-[calc(100vh-13rem)] flex-col justify-end pb-10">
+            <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
+              {flowStep === "capture" ? "Live Capture" : "Memory Processing"}
+            </p>
+            <h1 className="mt-5 text-[clamp(3.8rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
+              {status || "BINDING MEMORY TO SESSION"}
+            </h1>
+            <p className="mt-6 text-sm uppercase tracking-[0.32em] text-white/35">
+              {selectedMission?.title || "Calibration Mission"}
+            </p>
+
+            <div className="mt-10 h-5 overflow-hidden bg-white/10">
+              <div
+                className="h-full bg-gradient-to-r from-lime-300 via-cyan-300 to-white transition-all duration-500"
+                style={{
+                  width: `${progress}%`,
+                }}
               />
-            ))}
-          </div>
-        </section>
-
-        <div className="grid gap-5 md:grid-cols-2">
-          <button
-            type="button"
-            disabled={isUploading}
-            onClick={() => uploadInputRef.current?.click()}
-            className="border border-white/10 bg-white/[0.03] p-8 text-left transition hover:border-white/25 disabled:opacity-50"
-          >
-            <p className="text-[clamp(4rem,10vw,7rem)] font-black leading-[0.82] tracking-[-0.06em]">
-              CHOOSE
-              <br />
-              FILE
-            </p>
-
-            <p className="mt-8 text-2xl text-lime-300">
-              Attach existing clip
-            </p>
-          </button>
-
-          <button
-            type="button"
-            disabled={isUploading}
-            onClick={() => cameraInputRef.current?.click()}
-            className="border border-white/10 bg-white/[0.03] p-8 text-left transition hover:border-white/25 disabled:opacity-50"
-          >
-            <p className="text-[clamp(4rem,10vw,7rem)] font-black leading-[0.82] tracking-[-0.06em]">
-              RECORD
-            </p>
-
-            <p className="mt-8 text-2xl text-cyan-300">
-              Capture from camera
-            </p>
-          </button>
-        </div>
-
-        <input
-          ref={uploadInputRef}
-          type="file"
-          accept="video/*,.mov,.mp4,.m4v"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0]
-
-            if (file) {
-              void saveSession(file, "upload")
-            }
-            else setStatus("MEMORY LOAD FAILED")
-          }}
-        />
+            </div>
+            <div className="mt-5 flex items-end justify-between gap-5">
+              <p className="max-w-md text-sm leading-relaxed text-white/45">
+                Replay will open after the memory is created. Signal reading
+                starts on the replay screen.
+              </p>
+              <p className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-white/70">
+                {progress}%
+              </p>
+            </div>
+          </section>
+        ) : null}
 
         <input
           ref={cameraInputRef}
@@ -445,41 +472,14 @@ export default function UploadConsole({ email }: Props) {
           onChange={(event) => {
             const file = event.target.files?.[0]
 
-            if (file) saveSession(file, "camera")
-            else setStatus("UPLOAD WAITING")
+            if (file) void saveSession(file, "camera")
+            else {
+              setStatus("")
+              setFlowStep("brief")
+            }
             event.target.value = ""
           }}
         />
-
-        <div className="mt-14">
-          <div className="h-5 overflow-hidden bg-white/10">
-            <div
-              className="h-full bg-gradient-to-r from-lime-300 via-cyan-300 to-white transition-all duration-500"
-              style={{
-                width: `${progress}%`,
-              }}
-            />
-          </div>
-
-          <div className="mt-5 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.45em] text-white/30">
-              Behavioral Memory Upload
-            </p>
-
-            <h2 className="mt-3 text-[clamp(2.5rem,9vw,5rem)] font-black leading-[0.9]">
-              {status || "Waiting for upload."}
-            </h2>
-            <p className="mt-3 text-xs uppercase tracking-[0.32em] text-white/35">
-              {selectedMission?.title || "Calibration Mission"}
-            </p>
-          </div>
-
-            <div className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-white/70">
-              {progress}%
-            </div>
-          </div>
-        </div>
       </div>
     </main>
   )

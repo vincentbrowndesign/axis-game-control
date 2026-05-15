@@ -19,13 +19,13 @@ export default async function HomePage() {
           Axis Memory Core
         </p>
         <h1 className="mt-6 text-[clamp(4.5rem,16vw,11rem)] font-black leading-[0.8] tracking-[-0.07em]">
-          CLAIM
+          START
           <br />
-          SESSION
+          MEMORY
         </h1>
         <p className="mt-8 max-w-2xl text-xl leading-relaxed text-white/45">
-          Sign in to persist uploads, replay metadata, and the behavioral
-          memory graph that will connect sessions over time.
+          Build your basketball baseline. Enter Axis to begin calibration,
+          record live movement, and grow your memory archive.
         </p>
         <Link
           href="/auth"
