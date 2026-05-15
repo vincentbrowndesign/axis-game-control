@@ -103,7 +103,7 @@ export default function ClipUploader({
           await response.text()
 
         console.error(
-          "AXIS NON JSON RESPONSE",
+          "AXIS NON JSON RESPONSE TEXT",
           text
         )
 
