@@ -8,7 +8,14 @@ import { readBasketballSignal } from "@/lib/basketball/readBasketballSignal"
 import type { BasketballSignalState } from "@/lib/basketball/types"
 import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
+import { MemoryCinemaLayer } from "@/components/MemoryCinemaLayer"
 import { generateReplayMarkers } from "@/lib/replay/generateReplayMarkers"
+import {
+  buildReplayReveals,
+  describeReveal,
+} from "@/lib/replay/revealEngine"
+import type { ReplayReveal } from "@/lib/replay/revealEngine"
+import { memoryCinemaState } from "@/lib/replay/memoryCinema"
 import type { ReplayMarker } from "@/lib/replay/types"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import { segmentCalibrationMemory } from "@/lib/segments/segmentCalibrationMemory"
@@ -197,10 +204,14 @@ function AxisNoticed({
   markers,
   onSelect,
 }: {
-  markers: ReplayMarker[]
+  markers: ReplayReveal[]
   onSelect: (marker: ReplayMarker) => void
 }) {
-  if (!markers.length) {
+  const visibleMarkers = markers.filter(
+    (marker) => marker.phase !== "withholding"
+  )
+
+  if (!visibleMarkers.length) {
     return (
       <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
         <div className="flex items-center justify-between gap-4">
@@ -212,7 +223,7 @@ function AxisNoticed({
           </p>
         </div>
         <p className="mt-4 text-sm leading-relaxed text-white/45">
-          Memory stored. Replay markers build as movement returns.
+          Memory stored. Structure returns through the replay.
         </p>
       </div>
     )
@@ -230,7 +241,7 @@ function AxisNoticed({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        {markers.slice(0, 3).map((marker) => (
+        {visibleMarkers.slice(0, 3).map((marker) => (
           <button
             key={marker.id}
             type="button"
@@ -1240,19 +1251,51 @@ export default function AxisReplayClient({
     }
   }
 
+  const playReplayTone = useCallback(async (marker: ReplayMarker) => {
+    try {
+      const Tone = await import("tone")
+
+      await Tone.start()
+
+      const synth = new Tone.MembraneSynth({
+        envelope: {
+          attack: 0.001,
+          decay: 0.18,
+          sustain: 0.01,
+          release: 0.18,
+        },
+        volume: -24,
+      }).toDestination()
+      const note =
+        marker.type === "cadence" || marker.type === "rhythm"
+          ? "C2"
+          : marker.type === "reset"
+            ? "G1"
+            : "A1"
+
+      synth.triggerAttackRelease(note, "16n")
+      window.setTimeout(() => {
+        synth.dispose()
+      }, 420)
+    } catch {
+      // Replay tone is optional atmosphere; silence must never block replay.
+    }
+  }, [])
+
   const jumpToReplayMarker = useCallback((marker: ReplayMarker) => {
     const video = videoRef.current
 
     if (!video) return
 
     video.currentTime = marker.startTime
+    void playReplayTone(marker)
 
     const playAttempt = video.play()
 
     if (playAttempt) {
       void playAttempt.catch(() => undefined)
     }
-  }, [])
+  }, [playReplayTone])
 
   useEffect(() => {
     let frameId = 0
@@ -1602,10 +1645,16 @@ export default function AxisReplayClient({
     signals: displaySignals,
     segmentedMemory,
   })
+  const replayReveals = buildReplayReveals({
+    markers: replayMarkers,
+    currentTime,
+  })
+  const cinemaState = memoryCinemaState(replayReveals)
+  const revealLine = describeReveal(replayReveals)
   const replayMarkerCards: Marker[] = replayMarkers.map((marker) => ({
     time: `${formatClock(marker.startTime)}-${formatClock(marker.endTime)}`,
     label: marker.label,
-    detail: "Replay marker added.",
+    detail: revealLine,
     tone: marker.type === "stabilization" ? "cyan" : "lime",
   }))
   const displayMarkers = liveMarkers.length
@@ -1723,10 +1772,17 @@ export default function AxisReplayClient({
               onError={recoverReplay}
             />
 
+            <MemoryCinemaLayer
+              reveals={replayReveals}
+              state={cinemaState}
+            />
+
             <div className="pointer-events-none absolute left-5 top-5 flex items-center gap-3">
               <div className="h-2 w-2 rounded-full bg-lime-300" />
               <p className="text-xs uppercase tracking-[0.35em] text-white/55">
-                {latestLiveSignal}
+                {replayReveals.length
+                  ? cinemaState.headline
+                  : latestLiveSignal}
               </p>
             </div>
 
@@ -1780,7 +1836,7 @@ export default function AxisReplayClient({
           />
 
           <AxisNoticed
-            markers={replayMarkers}
+            markers={replayReveals}
             onSelect={jumpToReplayMarker}
           />
 
