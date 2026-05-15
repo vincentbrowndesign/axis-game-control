@@ -9,12 +9,16 @@ import {
   normalizeReplayFile,
 } from "@/lib/replayStorage"
 import { parseUploadResponseText } from "@/lib/uploadResponse"
+import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
+import type { CalibrationMission } from "@/lib/missions/types"
 
 type Source = "camera" | "upload"
 
 type Props = {
   email: string
 }
+
+const calibrationMissions = getCalibrationMissions()
 
 function toAxisErrorState(error: unknown) {
   const message =
@@ -108,6 +112,64 @@ function readDuration(file: File) {
   })
 }
 
+function MissionCard({
+  mission,
+  selected,
+  onSelect,
+}: {
+  mission: CalibrationMission
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`border p-5 text-left transition ${
+        selected
+          ? "border-lime-300 bg-lime-300 text-black"
+          : "border-white/10 bg-white/[0.03] text-white hover:border-white/25"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <p className="max-w-[72%] text-lg font-black uppercase leading-none tracking-[-0.02em]">
+          {mission.title}
+        </p>
+        <p
+          className={`font-mono text-xs ${
+            selected ? "text-black/60" : "text-white/35"
+          }`}
+        >
+          {mission.durationTarget}s
+        </p>
+      </div>
+
+      <p
+        className={`mt-5 text-sm leading-relaxed ${
+          selected ? "text-black/70" : "text-white/50"
+        }`}
+      >
+        {mission.description}
+      </p>
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        {mission.signalFocus.slice(0, 3).map((signal) => (
+          <span
+            key={signal}
+            className={`border px-2 py-1 text-[10px] uppercase tracking-[0.22em] ${
+              selected
+                ? "border-black/15 text-black/65"
+                : "border-white/10 text-white/35"
+            }`}
+          >
+            {signal}
+          </span>
+        ))}
+      </div>
+    </button>
+  )
+}
+
 export default function UploadConsole({ email }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -119,6 +181,12 @@ export default function UploadConsole({ email }: Props) {
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState("")
   const [isUploading, setIsUploading] = useState(false)
+  const [selectedMissionId, setSelectedMissionId] = useState(
+    calibrationMissions[0]?.id || "none"
+  )
+  const selectedMission =
+    calibrationMissions.find((mission) => mission.id === selectedMissionId) ||
+    calibrationMissions[0]
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -190,8 +258,8 @@ export default function UploadConsole({ email }: Props) {
       formData.append("file", file)
       formData.append("source", source)
       formData.append("duration", String(duration))
-      formData.append("environment", "practice")
-      formData.append("mission", "None")
+      formData.append("environment", selectedMission ? "mission" : "practice")
+      formData.append("mission", selectedMission?.title || "None")
       formData.append("player", "Unassigned")
       formData.append("originalName", normalized.originalName)
       formData.append("mime", normalized.mime)
@@ -288,6 +356,37 @@ export default function UploadConsole({ email }: Props) {
           </p>
         </div>
 
+        <section className="mb-10 border-b border-white/10 pb-10">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
+                Begin Calibration
+              </p>
+              <h2 className="mt-3 text-[clamp(3rem,10vw,6rem)] font-black leading-[0.85] tracking-[-0.06em]">
+                START
+                <br />
+                MEMORY
+              </h2>
+            </div>
+
+            <p className="max-w-sm text-sm leading-relaxed text-white/45">
+              Pick a basketball memory mission, then record or attach the clip.
+              AXIS will build baseline movement after replay loads.
+            </p>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-5">
+            {calibrationMissions.map((mission) => (
+              <MissionCard
+                key={mission.id}
+                mission={mission}
+                selected={mission.id === selectedMissionId}
+                onSelect={() => setSelectedMissionId(mission.id)}
+              />
+            ))}
+          </div>
+        </section>
+
         <div className="grid gap-5 md:grid-cols-2">
           <button
             type="button"
@@ -363,15 +462,18 @@ export default function UploadConsole({ email }: Props) {
           </div>
 
           <div className="mt-5 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.45em] text-white/30">
-                Behavioral Memory Upload
-              </p>
+          <div>
+            <p className="text-xs uppercase tracking-[0.45em] text-white/30">
+              Behavioral Memory Upload
+            </p>
 
-              <h2 className="mt-3 text-[clamp(2.5rem,9vw,5rem)] font-black leading-[0.9]">
-                {status || "Waiting for upload."}
-              </h2>
-            </div>
+            <h2 className="mt-3 text-[clamp(2.5rem,9vw,5rem)] font-black leading-[0.9]">
+              {status || "Waiting for upload."}
+            </h2>
+            <p className="mt-3 text-xs uppercase tracking-[0.32em] text-white/35">
+              {selectedMission?.title || "Calibration Mission"}
+            </p>
+          </div>
 
             <div className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-white/70">
               {progress}%

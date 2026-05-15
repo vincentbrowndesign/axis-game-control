@@ -296,6 +296,35 @@ function normalizeBaseline(
 
   if (!Object.keys(record).length) return undefined
 
+  const missionSessions = Array.isArray(record.missionSessions)
+    ? record.missionSessions
+        .map((item) => {
+          const session = asRecord(item)
+          const missionType = asString(session.missionType, "")
+
+          if (!missionType) return null
+
+          return {
+            missionType,
+            duration: asNumber(session.duration, 0),
+            motionLevel:
+              session.motionLevel == null
+                ? null
+                : asNumber(session.motionLevel, 0),
+            audioLevel:
+              session.audioLevel == null
+                ? null
+                : asNumber(session.audioLevel, 0),
+            completionCount: Math.max(
+              1,
+              asNumber(session.completionCount, 1)
+            ),
+            timestamp: asTimestamp(session.timestamp, 0),
+          }
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    : []
+
   return {
     status: asBaselineStatus(record.status),
     averageSessionDuration: asNumber(record.averageSessionDuration, 0),
@@ -317,6 +346,13 @@ function normalizeBaseline(
       record.latestMemoryDate == null
         ? null
         : asTimestamp(record.latestMemoryDate, 0),
+    missionType:
+      record.missionType == null ? null : asString(record.missionType, ""),
+    missionCompletionCount: Math.max(
+      0,
+      asNumber(record.missionCompletionCount, missionSessions.length)
+    ),
+    missionSessions,
   }
 }
 

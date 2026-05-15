@@ -15,12 +15,15 @@ Memory converts normalized replay/session data into AXIS context:
 - ambient replay language
 - confidence-like display state
 - calibration baseline status
+- mission completion context
 
 Primary file:
 
 - `lib/memoryInference.ts`
 - `lib/calibration/buildBaseline.ts`
 - `lib/calibration/types.ts`
+- `lib/missions/getCalibrationMissions.ts`
+- `lib/missions/types.ts`
 
 ## Inputs
 
@@ -40,6 +43,8 @@ Memory should not receive:
 - AI model responses from upload.
 
 Calibration should stay grounded. It may compare duration, source, measured motion intensity, measured audio energy, memory count, first memory date, and latest memory date. It must not infer fatigue, control, pressure, or decision quality.
+
+Calibration missions are basketball memory prompts, not training-data prompts. They may label a session as handle, footwork, shooting form, live movement, or transition so the baseline can store mission type, duration, motion level, audio level, completion count, and timestamp.
 
 ## Outputs
 
@@ -70,6 +75,8 @@ Preferred labels and lines:
 - Motion level recorded.
 - Session added to baseline.
 - Not enough memories for comparison.
+- Movement archived.
+- Build baseline.
 
 Avoid:
 
@@ -85,3 +92,5 @@ Avoid generic sports analytics language. AXIS is not a dashboard of box score in
 Do not call memory inference from `/api/upload`.
 
 The upload route may persist minimal fallback metadata, but actual memory state belongs to replay load, replay recovery, archive rendering, and client display.
+
+Mission selection can travel through the existing `mission` form field, but uploads must still return the frozen minimal response. Mission progress and baseline growth are replay/memory concerns after the clip exists.

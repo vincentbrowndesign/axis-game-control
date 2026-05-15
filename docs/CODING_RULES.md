@@ -33,6 +33,9 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Memory receives normalized session data.
 - Memory should not know about storage upload internals.
 - Keep memory language AXIS-native.
+- Calibration missions are basketball memory prompts.
+- Do not describe mission collection as training data.
+- Mission progress and baseline growth must not alter upload responses.
 
 ## Inference Rules
 
@@ -45,6 +48,7 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Basketball-aware language must translate measured signals, not invent analytics.
 - Every visible basketball statement must answer what real signal produced it.
 - AI descriptions must be generated from real signals until external frame reading is implemented.
+- Missions may isolate movement contexts, but they must not claim shot, pass, dribble, fatigue, IQ, or scoring quality detection.
 
 ## UI Rules
 
@@ -70,6 +74,24 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
   - Basketball Read
   - Activity Waiting
   - Activity Detected
+  - Begin Calibration
+  - Start Memory
+  - Build Baseline
+  - Movement Archived
+  - Calibration
+  - Baseline
+  - Memory
+  - Movement
+  - Session
+  - Signal
+  - Archive
+
+Avoid mission language:
+  - assessment
+  - evaluation
+  - performance grading
+  - pressure score
+  - IQ metrics
 
 ## Compatibility Rules
 

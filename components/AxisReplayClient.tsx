@@ -205,6 +205,9 @@ function mergeBaseline(
     memoryCount,
     firstMemoryDate: baseline?.firstMemoryDate ?? null,
     latestMemoryDate: baseline?.latestMemoryDate ?? null,
+    missionType: baseline?.missionType ?? null,
+    missionCompletionCount: baseline?.missionCompletionCount || 0,
+    missionSessions: baseline?.missionSessions || [],
   }
 }
 
@@ -220,6 +223,25 @@ function createWaitingBaseline(
     memoryCount: Math.max(session?.memoryCount || 1, 1),
     firstMemoryDate: session?.createdAt || null,
     latestMemoryDate: session?.createdAt || null,
+    missionType:
+      session?.mission && session.mission !== "None"
+        ? session.mission
+        : null,
+    missionCompletionCount:
+      session?.mission && session.mission !== "None" ? 1 : 0,
+    missionSessions:
+      session?.mission && session.mission !== "None"
+        ? [
+            {
+              missionType: session.mission,
+              duration: session.duration || 0,
+              motionLevel: null,
+              audioLevel: null,
+              completionCount: 1,
+              timestamp: session.createdAt,
+            },
+          ]
+        : [],
   }
 }
 
@@ -251,6 +273,12 @@ function baselineValue(baseline: CalibrationBaseline) {
   return baseline.memoryCount <= 1 ? "Not Enough Memory" : "Started"
 }
 
+function missionValue(session: ReplaySessionView) {
+  return session.mission && session.mission !== "None"
+    ? session.mission
+    : "Open Session"
+}
+
 function basketballSentence({
   state,
   baseline,
@@ -276,6 +304,8 @@ function basketballSentence({
 
   if (state.clipType === "SHORT CLIP") {
     lines.push("Short clip stored.")
+  } else if (session.mission && session.mission !== "None") {
+    lines.push("Movement archived.")
   } else if ((signals?.duration || session.duration) && session.player !== "Unassigned") {
     lines.push("Replay added to player memory.")
   } else if (signals?.duration || session.duration) {
@@ -378,6 +408,10 @@ function BasketballRead({
         <DetailRow
           label="Baseline"
           value={baselineValue(baseline)}
+        />
+        <DetailRow
+          label="Mission"
+          value={missionValue(session)}
         />
         <DetailRow
           label="Memory"
@@ -937,8 +971,14 @@ export default function AxisReplayClient({
           },
           {
             time: formatClock(duration),
-            label: "ARCHIVE ACTIVE",
-            detail: "Replay added to archive.",
+            label:
+              session?.mission && session.mission !== "None"
+                ? "MOVEMENT ARCHIVED"
+                : "ARCHIVE ACTIVE",
+            detail:
+              session?.mission && session.mission !== "None"
+                ? "Mission memory added to baseline."
+                : "Replay added to archive.",
             tone: "lime",
           },
         ]
@@ -1176,6 +1216,10 @@ export default function AxisReplayClient({
             <DetailRow
               label="Environment"
               value={capitalize(session.environment || "practice")}
+            />
+            <DetailRow
+              label="Mission"
+              value={missionValue(session)}
             />
             <DetailRow
               label="Memory Count"

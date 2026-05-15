@@ -24,6 +24,8 @@ Inference must not determine whether uploads succeed.
 - `lib/basketball/readBasketballSignal.ts`: basketball-aware state translation from measured signals.
 - `lib/basketball/types.ts`: basketball signal state types.
 - `lib/ai/describeReplay.ts`: grounded descriptions from measured signals only.
+- `lib/missions/getCalibrationMissions.ts`: basketball calibration mission definitions.
+- `lib/missions/types.ts`: mission metadata and signal-focus types.
 - `lib/vision/*`: early vision helper stubs.
 - `engine/inferenceEngine.ts`: event-to-state inference helper.
 
@@ -79,6 +81,8 @@ Basketball Signal V1 may say only grounded states:
 
 These states must be derived from duration, frame sampling, pixel differences, camera movement estimate, audio energy, normalized replay data, or baseline memory count.
 
+Calibration Mission V1 gives the signal layer cleaner basketball contexts without making fake detections. Missions can focus the future archive around handle, footwork, shooting form, live movement, and transition, but the current system may only display mission completion, baseline growth, and measured signal status.
+
 ## Language
 
 Use AXIS-native signal language. Prefer:
@@ -95,6 +99,8 @@ Use AXIS-native signal language. Prefer:
 - Basketball Read
 - Activity Detected
 - Activity Waiting
+- Movement Archived
+- Build Baseline
 
 Do not introduce:
 
@@ -102,5 +108,10 @@ Do not introduce:
 - PRESSURE SPIKE
 - RUN DETECTED
 - RECOVERY WINDOW
+- assessment
+- evaluation
+- performance grading
+- pressure score
+- IQ metrics
 
 Avoid generic sports analytics language unless explicitly requested for a specific feature.
