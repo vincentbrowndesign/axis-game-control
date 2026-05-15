@@ -4,23 +4,21 @@ export type CalibrationMissionDifficulty =
   | "live"
 
 export type CalibrationSignalFocus =
-  | "bounce cadence"
-  | "hand movement rhythm"
+  | "bounce rhythm"
+  | "hand rhythm"
   | "camera stability"
-  | "audio repetition"
-  | "lateral motion"
-  | "lower-body movement"
-  | "directional changes"
-  | "repeated release motion"
-  | "body silhouette repetition"
-  | "camera framing consistency"
-  | "motion chaos"
-  | "pace variation"
-  | "camera instability"
-  | "audio activity"
+  | "direction changes"
+  | "lower-body rhythm"
+  | "balance shifts"
+  | "release repeat"
+  | "body shape"
+  | "camera framing"
+  | "pace changes"
+  | "movement density"
+  | "live rhythm"
   | "acceleration"
   | "movement intensity"
-  | "rapid camera movement"
+  | "camera movement"
 
 export type CalibrationMissionUiState =
   | "ready"
@@ -29,10 +27,14 @@ export type CalibrationMissionUiState =
 
 export type CalibrationMission = {
   id: string
+  order: number
   title: string
+  task: string
   description: string
   durationTarget: number
   difficulty: CalibrationMissionDifficulty
-  signalFocus: CalibrationSignalFocus[]
+  axisWatches: CalibrationSignalFocus[]
+  baselineName: string
+  unlockAfter: number
   uiState: CalibrationMissionUiState
 }

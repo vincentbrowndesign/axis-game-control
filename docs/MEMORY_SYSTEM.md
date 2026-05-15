@@ -46,6 +46,8 @@ Calibration should stay grounded. It may compare duration, source, measured moti
 
 Calibration missions are basketball memory prompts, not training-data prompts. They may label a session as handle, footwork, shooting form, live movement, or transition so the baseline can store mission type, duration, motion level, audio level, completion count, and timestamp.
 
+Each mission builds a named baseline. Comparison language stays locked until the mission has enough memories, currently three. Before unlock, use milestone language: `BASELINE BUILDING`, `1 / 3 memories`, `COMPARISON LOCKED`, and `Record 2 more to unlock read`. After unlock, use `BASELINE READY` and `COMPARISON UNLOCKED`.
+
 ## Outputs
 
 Memory produces `MemoryState`:
@@ -77,6 +79,10 @@ Preferred labels and lines:
 - Not enough memories for comparison.
 - Movement archived.
 - Build baseline.
+- Baseline building.
+- Baseline ready.
+- Comparison locked.
+- Comparison unlocked.
 
 Avoid:
 

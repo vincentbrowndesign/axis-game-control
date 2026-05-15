@@ -36,6 +36,8 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Calibration missions are basketball memory prompts.
 - Do not describe mission collection as training data.
 - Mission progress and baseline growth must not alter upload responses.
+- Comparison language remains locked until a mission baseline has enough memories.
+- Mission cards must show what Axis watches, what baseline is being built, and progress toward unlock.
 
 ## Inference Rules
 
@@ -74,6 +76,13 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
   - Basketball Read
   - Activity Waiting
   - Activity Detected
+  - Record With Axis
+  - Axis Watches
+  - Builds Baseline
+  - Baseline Building
+  - Baseline Ready
+  - Comparison Locked
+  - Comparison Unlocked
   - Begin Calibration
   - Start Memory
   - Build Baseline
@@ -92,6 +101,17 @@ Avoid mission language:
   - performance grading
   - pressure score
   - IQ metrics
+  - vector extraction
+  - pixel delta
+  - frame sampling
+  - model inference
+  - telemetry pipeline
+  - Choose File
+  - Attach Existing Clip
+  - Upload Console
+  - Waiting for upload
+  - Signal interrupted
+  - Response corrupted
 
 ## Compatibility Rules
 

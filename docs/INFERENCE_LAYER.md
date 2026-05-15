@@ -81,7 +81,25 @@ Basketball Signal V1 may say only grounded states:
 
 These states must be derived from duration, frame sampling, pixel differences, camera movement estimate, audio energy, normalized replay data, or baseline memory count.
 
-Calibration Mission V1 gives the signal layer cleaner basketball contexts without making fake detections. Missions can focus the future archive around handle, footwork, shooting form, live movement, and transition, but the current system may only display mission completion, baseline growth, and measured signal status.
+Calibration Mission V1 gives the signal layer cleaner basketball contexts without making fake detections. Missions can focus the future archive around handle, footwork, shooting form, live movement, and transition, but the current system may only display mission completion, baseline growth, comparison lock status, and measured signal status.
+
+Mission UI should translate what Axis watches into basketball language:
+
+- bounce rhythm
+- hand rhythm
+- camera stability
+- direction changes
+- lower-body rhythm
+- balance shifts
+- release repeat
+- body shape
+- camera framing
+- pace changes
+- movement density
+- live rhythm
+- acceleration
+- movement intensity
+- camera movement
 
 ## Language
 
@@ -101,6 +119,10 @@ Use AXIS-native signal language. Prefer:
 - Activity Waiting
 - Movement Archived
 - Build Baseline
+- Baseline Building
+- Baseline Ready
+- Comparison Locked
+- Comparison Unlocked
 
 Do not introduce:
 
@@ -113,5 +135,10 @@ Do not introduce:
 - performance grading
 - pressure score
 - IQ metrics
+- vector extraction
+- pixel delta
+- frame sampling
+- model inference
+- telemetry pipeline
 
 Avoid generic sports analytics language unless explicitly requested for a specific feature.

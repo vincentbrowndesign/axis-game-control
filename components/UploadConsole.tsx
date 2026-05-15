@@ -114,7 +114,11 @@ function readDuration(file: File) {
 }
 
 function missionName(mission: CalibrationMission) {
-  return mission.title.replace(/^CALIBRATION \d+ - /, "")
+  return mission.title
+}
+
+function missionProgressText(mission: CalibrationMission) {
+  return `0 / ${mission.unlockAfter} memories needed`
 }
 
 function MissionCard({
@@ -128,23 +132,41 @@ function MissionCard({
     <button
       type="button"
       onClick={onSelect}
-      className="min-h-56 border border-white/10 bg-white/[0.03] p-5 text-left text-white transition hover:border-lime-300 hover:bg-lime-300 hover:text-black"
+      className="min-h-80 border border-white/10 bg-white/[0.03] p-5 text-left text-white transition hover:border-lime-300 hover:bg-lime-300 hover:text-black"
     >
       <div className="flex items-start justify-between gap-4">
         <p className="text-2xl font-black uppercase leading-none tracking-[-0.03em]">
-          {missionName(mission)}
+          {`CALIBRATION ${mission.order.toString().padStart(2, "0")}`}
         </p>
         <p className="font-mono text-xs opacity-60">
           {mission.durationTarget}s
         </p>
       </div>
 
-      <p className="mt-6 text-sm leading-relaxed opacity-65">
-        {mission.description}
+      <h2 className="mt-4 text-4xl font-black uppercase leading-none tracking-[-0.04em]">
+        {missionName(mission)}
+      </h2>
+      <p className="mt-4 text-base leading-relaxed opacity-75">
+        {mission.task}
       </p>
 
-      <p className="mt-8 text-[10px] uppercase tracking-[0.32em] opacity-45">
-        Build Baseline
+      <p className="mt-7 text-[10px] uppercase tracking-[0.32em] opacity-45">
+        Axis Watches
+      </p>
+      <div className="mt-3 space-y-2 text-sm opacity-70">
+        {mission.axisWatches.map((watch) => (
+          <p key={watch}>{watch}</p>
+        ))}
+      </div>
+
+      <p className="mt-7 text-[10px] uppercase tracking-[0.32em] opacity-45">
+        Builds
+      </p>
+      <p className="mt-2 text-sm font-semibold opacity-80">
+        {mission.baselineName}
+      </p>
+      <p className="mt-4 text-xs uppercase tracking-[0.24em] opacity-55">
+        {missionProgressText(mission)}
       </p>
     </button>
   )
@@ -238,7 +260,14 @@ export default function UploadConsole({ email }: Props) {
       formData.append("source", source)
       formData.append("duration", String(duration))
       formData.append("environment", selectedMission ? "mission" : "practice")
-      formData.append("mission", selectedMission?.title || "None")
+      formData.append(
+        "mission",
+        selectedMission
+          ? `CALIBRATION ${selectedMission.order
+              .toString()
+              .padStart(2, "0")} - ${selectedMission.title}`
+          : "None"
+      )
       formData.append("player", "Unassigned")
       formData.append("originalName", normalized.originalName)
       formData.append("mime", normalized.mime)
@@ -356,10 +385,14 @@ export default function UploadConsole({ email }: Props) {
                 Begin Calibration
               </p>
               <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-                SELECT
+                PICK ONE
                 <br />
                 MISSION
               </h1>
+              <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/45">
+                Each mission builds one part of your baseline. Comparison
+                unlocks after three memories.
+              </p>
             </div>
 
             <div className="grid gap-3 lg:grid-cols-5">
@@ -403,10 +436,10 @@ export default function UploadConsole({ email }: Props) {
 
             <div className="border border-white/10 bg-white/[0.03] p-6">
               <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-                Axis calibrates
+                Axis Watches
               </p>
               <div className="mt-5 space-y-3">
-                {selectedMission.signalFocus.slice(0, 4).map((signal) => (
+                {selectedMission.axisWatches.map((signal) => (
                   <div
                     key={signal}
                     className="border-b border-white/10 pb-3 text-sm uppercase tracking-[0.25em] text-white/55 last:border-b-0 last:pb-0"
@@ -414,6 +447,18 @@ export default function UploadConsole({ email }: Props) {
                     {signal}
                   </div>
                 ))}
+              </div>
+              <div className="mt-8 border-t border-white/10 pt-6">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
+                  Builds Baseline
+                </p>
+                <p className="mt-3 text-lg font-black uppercase text-white">
+                  {selectedMission.baselineName}
+                </p>
+                <p className="mt-2 text-sm text-white/45">
+                  Comparison locked. Record {selectedMission.unlockAfter} to
+                  unlock read.
+                </p>
               </div>
               <button
                 type="button"
@@ -425,7 +470,7 @@ export default function UploadConsole({ email }: Props) {
                 }}
                 className="mt-8 w-full bg-lime-300 px-6 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-white disabled:opacity-50"
               >
-                Start Recording
+                Record With Axis
               </button>
             </div>
           </section>
@@ -442,6 +487,11 @@ export default function UploadConsole({ email }: Props) {
             <p className="mt-6 text-sm uppercase tracking-[0.32em] text-white/35">
               {selectedMission?.title || "Calibration Mission"}
             </p>
+            {flowStep === "processing" && progress === 100 ? (
+              <p className="mt-4 text-sm uppercase tracking-[0.32em] text-lime-300">
+                BASELINE UPDATED
+              </p>
+            ) : null}
 
             <div className="mt-10 h-5 overflow-hidden bg-white/10">
               <div

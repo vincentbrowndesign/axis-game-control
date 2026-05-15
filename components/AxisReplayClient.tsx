@@ -7,6 +7,7 @@ import { readBasketballSignal } from "@/lib/basketball/readBasketballSignal"
 import type { BasketballSignalState } from "@/lib/basketball/types"
 import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
+import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import {
   addAudioSignalSample,
   addFrameSignalSample,
@@ -67,6 +68,7 @@ type FrameSignal = {
 
 const SIGNAL_ATTEMPT_DELAY_MS = 2000
 const SIGNAL_UNAVAILABLE_TIMEOUT_MS = 5000
+const calibrationMissions = getCalibrationMissions()
 
 function formatClock(seconds?: number) {
   if (!seconds || Number.isNaN(seconds)) return "00:00"
@@ -269,14 +271,42 @@ function clipValue(
   return displaySignalLabel(state.clipType)
 }
 
-function baselineValue(baseline: CalibrationBaseline) {
-  return baseline.memoryCount <= 1 ? "Not Enough Memory" : "Started"
-}
-
 function missionValue(session: ReplaySessionView) {
   return session.mission && session.mission !== "None"
     ? session.mission
     : "Open Session"
+}
+
+function missionFromSession(session: ReplaySessionView) {
+  return calibrationMissions.find((mission) =>
+    session.mission?.includes(mission.title)
+  )
+}
+
+function baselineProgress({
+  session,
+  baseline,
+}: {
+  session: ReplaySessionView
+  baseline: CalibrationBaseline
+}) {
+  const mission = missionFromSession(session)
+  const unlockAfter = mission?.unlockAfter || 3
+  const count = Math.min(
+    baseline.missionCompletionCount || 0,
+    unlockAfter
+  )
+  const ready = count >= unlockAfter
+
+  return {
+    label: ready ? "BASELINE READY" : "BASELINE BUILDING",
+    comparison: ready ? "COMPARISON UNLOCKED" : "COMPARISON LOCKED",
+    progress: `${count} / ${unlockAfter} memories`,
+    detail: ready
+      ? "Axis can compare this memory to your normal rhythm."
+      : `Record ${unlockAfter - count} more to unlock read.`,
+    baselineName: mission?.baselineName || "Movement Baseline",
+  }
 }
 
 function basketballSentence({
@@ -293,6 +323,7 @@ function basketballSentence({
   signalStatus: SignalReadiness
 }) {
   const lines: string[] = []
+  const progress = baselineProgress({ session, baseline })
 
   if (signalStatus === "initializing") {
     return "Signal initializing. Replay remains available."
@@ -325,10 +356,10 @@ function basketballSentence({
     lines.push("Camera movement recorded.")
   }
 
-  if (baseline.memoryCount <= 1) {
-    lines.push("More memory needed before comparison.")
+  if (progress.comparison === "COMPARISON LOCKED") {
+    lines.push("Comparison locked. More memory needed.")
   } else {
-    lines.push("Baseline started.")
+    lines.push("Comparison unlocked.")
   }
 
   if (state.headline === "PLAYER UNASSIGNED") {
@@ -358,6 +389,7 @@ function BasketballRead({
   audioStatus: SignalChannelStatus
 }) {
   const displaySignals = signals || session.signalRead
+  const progress = baselineProgress({ session, baseline })
   const basketballState =
     signalStatus === "recorded"
       ? readBasketballSignal({
@@ -407,7 +439,19 @@ function BasketballRead({
         />
         <DetailRow
           label="Baseline"
-          value={baselineValue(baseline)}
+          value={progress.label}
+        />
+        <DetailRow
+          label="Builds"
+          value={progress.baselineName}
+        />
+        <DetailRow
+          label="Comparison"
+          value={progress.comparison}
+        />
+        <DetailRow
+          label="Milestone"
+          value={progress.progress}
         />
         <DetailRow
           label="Mission"
@@ -427,6 +471,9 @@ function BasketballRead({
           session,
           signalStatus,
         })}
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-white/35">
+        {progress.detail}
       </p>
     </div>
   )
