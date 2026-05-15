@@ -58,6 +58,16 @@ export function readFrameSignalSample({
   let cameraShift = 0
   const pixelCount = data.length / 4
 
+  if (pixelCount <= 0) {
+    return {
+      timestamp,
+      brightness: 0,
+      brightnessShift: 0,
+      motionIntensity: 0,
+      cameraMovement: 0,
+    }
+  }
+
   for (let index = 0; index < data.length; index += 4) {
     const luminance =
       data[index] * 0.299 +
@@ -199,6 +209,10 @@ export function extractSignals(
   return {
     duration: accumulator.duration,
     frameSampleCount: frameSamples.length,
+    metadataReady: accumulator.duration > 0,
+    motionStatus: frameSamples.length ? "recorded" : "waiting",
+    cameraStatus: frameSamples.length ? "recorded" : "waiting",
+    audioStatus: audioSamples.length ? "recorded" : "waiting",
     averageBrightness,
     brightnessShifts,
     motionIntensity,

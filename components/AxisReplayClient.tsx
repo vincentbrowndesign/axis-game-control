@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
 import { normalizeReplay } from "@/lib/normalizeReplay"
 import { readBasketballSignal } from "@/lib/basketball/readBasketballSignal"
@@ -15,7 +15,11 @@ import {
   readFrameSignalSample,
   setSignalDuration,
 } from "@/lib/signals/extractSignals"
-import type { ExtractedReplaySignals } from "@/lib/signals/types"
+import type {
+  ExtractedReplaySignals,
+  SignalChannelStatus,
+  SignalReadiness,
+} from "@/lib/signals/types"
 import type { ReplaySessionView } from "@/types/memory"
 
 declare global {
@@ -43,10 +47,10 @@ type LiveSignalLabel =
   | "ACTIVITY WAITING"
   | "BRIGHTNESS SHIFT"
   | "AUDIO ENERGY"
-  | "SIGNAL LOST"
   | "SIGNAL RETURNED"
   | "SIGNAL INITIALIZING"
   | "SIGNAL WAITING"
+  | "SIGNAL UNAVAILABLE"
 
 type LiveSignalEvent = {
   label: LiveSignalLabel
@@ -61,6 +65,9 @@ type FrameSignal = {
   averageBrightness: number
   audioEnergy: number
 }
+
+const METADATA_TIMEOUT_MS = 8000
+const FRAME_SAMPLE_TIMEOUT_MS = 10000
 
 function formatClock(seconds?: number) {
   if (!seconds || Number.isNaN(seconds)) return "00:00"
@@ -225,37 +232,20 @@ function displaySignalLabel(value: string) {
     .join(" ")
 }
 
-function motionValue(
-  state: BasketballSignalState,
-  signals?: ExtractedReplaySignals | null
-) {
-  if (!signals?.frameSampleCount) return "Waiting"
-  if (state.activityState === "ACTIVE MOTION") return "Active Motion"
-
-  return "Low Activity"
-}
-
-function cameraValue(
-  state: BasketballSignalState,
-  signals?: ExtractedReplaySignals | null
-) {
-  if (signals?.cameraMovement == null) return "Waiting"
-  if (state.courtState === "CAMERA MOVING") return "Moving"
-  if (state.courtState === "CAMERA STABLE") return "Stable"
+function channelValue(status: SignalChannelStatus) {
+  if (status === "recorded") return "Recorded"
+  if (status === "unavailable") return "Unavailable"
 
   return "Waiting"
 }
 
-function audioValue(
+function clipValue(
   state: BasketballSignalState,
-  signals?: ExtractedReplaySignals | null
+  status: SignalReadiness
 ) {
-  if (signals?.audioEnergy == null) return "Waiting"
-  if (state.evidence.some((item) => item.startsWith("Audio"))) {
-    return signals.audioState === "noisy" ? "Present" : "Quiet"
-  }
+  if (status === "waiting" || status === "initializing") return "Waiting"
 
-  return "Waiting"
+  return displaySignalLabel(state.clipType)
 }
 
 function baselineValue(baseline: CalibrationBaseline) {
@@ -267,13 +257,23 @@ function basketballSentence({
   baseline,
   signals,
   session,
+  signalStatus,
 }: {
   state: BasketballSignalState
   baseline: CalibrationBaseline
   signals?: ExtractedReplaySignals | null
   session: ReplaySessionView
+  signalStatus: SignalReadiness
 }) {
   const lines: string[] = []
+
+  if (signalStatus === "waiting" || signalStatus === "initializing") {
+    return "Signal waiting. Replay remains available."
+  }
+
+  if (signalStatus === "unavailable") {
+    return "Signal unavailable. Replay remains available."
+  }
 
   if (state.clipType === "SHORT CLIP") {
     lines.push("Short clip stored.")
@@ -316,15 +316,21 @@ function BasketballRead({
   signals,
   baseline,
   signalStatus,
+  motionStatus,
+  cameraStatus,
+  audioStatus,
 }: {
   session: ReplaySessionView
   signals: ExtractedReplaySignals | null
   baseline: CalibrationBaseline
-  signalStatus: "initializing" | "waiting" | "ready"
+  signalStatus: SignalReadiness
+  motionStatus: SignalChannelStatus
+  cameraStatus: SignalChannelStatus
+  audioStatus: SignalChannelStatus
 }) {
   const displaySignals = signals || session.signalRead
   const basketballState =
-    signalStatus === "ready"
+    signalStatus === "recorded"
       ? readBasketballSignal({
           session,
           signals: displaySignals,
@@ -334,7 +340,9 @@ function BasketballRead({
           headline:
             signalStatus === "initializing"
               ? "SIGNAL INITIALIZING"
-              : "SIGNAL WAITING",
+              : signalStatus === "unavailable"
+                ? "SIGNAL UNAVAILABLE"
+                : "SIGNAL WAITING",
           courtState: "CAMERA STABLE",
           activityState: "LOW ACTIVITY",
           clipType: "CLIP STORED",
@@ -356,31 +364,19 @@ function BasketballRead({
       <div className="grid gap-3 sm:grid-cols-2">
         <DetailRow
           label="Clip"
-          value={displaySignalLabel(basketballState.clipType)}
+          value={clipValue(basketballState, signalStatus)}
         />
         <DetailRow
           label="Motion"
-          value={
-            signalStatus === "ready"
-              ? motionValue(basketballState, displaySignals)
-              : "Waiting"
-          }
+          value={channelValue(motionStatus)}
         />
         <DetailRow
           label="Camera"
-          value={
-            signalStatus === "ready"
-              ? cameraValue(basketballState, displaySignals)
-              : "Waiting"
-          }
+          value={channelValue(cameraStatus)}
         />
         <DetailRow
           label="Audio"
-          value={
-            signalStatus === "ready"
-              ? audioValue(basketballState, displaySignals)
-              : "Waiting"
-          }
+          value={channelValue(audioStatus)}
         />
         <DetailRow
           label="Baseline"
@@ -396,8 +392,9 @@ function BasketballRead({
         {basketballSentence({
           state: basketballState,
           baseline,
-          signals: signalStatus === "ready" ? displaySignals : null,
+          signals: signalStatus === "recorded" ? displaySignals : null,
           session,
+          signalStatus,
         })}
       </p>
     </div>
@@ -441,6 +438,9 @@ export default function AxisReplayClient({
   const signalAccumulatorRef = useRef(createSignalAccumulator(0))
   const signalReadyRef = useRef(false)
   const sessionRef = useRef<ReplaySessionView | null>(null)
+  const metadataTimeoutRef = useRef<number | null>(null)
+  const frameSampleTimeoutRef = useRef<number | null>(null)
+  const frameSamplingUnavailableRef = useRef(false)
   const setPlaybackId = useSessionStore(
     (state) => state.setPlaybackId
   )
@@ -474,8 +474,37 @@ export default function AxisReplayClient({
     audioEnergy: 0,
   })
   const [audioReady, setAudioReady] = useState(false)
-  const [signalReady, setSignalReady] = useState(false)
+  const [signalStatus, setSignalStatus] =
+    useState<SignalReadiness>("waiting")
+  const [motionStatus, setMotionStatus] =
+    useState<SignalChannelStatus>("waiting")
+  const [cameraStatus, setCameraStatus] =
+    useState<SignalChannelStatus>("waiting")
+  const [audioStatus, setAudioStatus] =
+    useState<SignalChannelStatus>("waiting")
   const [baseline, setBaseline] = useState<CalibrationBaseline | null>(null)
+
+  const clearSignalTimeouts = useCallback(() => {
+    if (metadataTimeoutRef.current != null) {
+      window.clearTimeout(metadataTimeoutRef.current)
+      metadataTimeoutRef.current = null
+    }
+
+    if (frameSampleTimeoutRef.current != null) {
+      window.clearTimeout(frameSampleTimeoutRef.current)
+      frameSampleTimeoutRef.current = null
+    }
+  }, [])
+
+  const markSignalRecorded = useCallback(() => {
+    setSignalStatus("recorded")
+  }, [])
+
+  const markSignalUnavailableIfEmpty = useCallback(() => {
+    setSignalStatus((current) =>
+      current === "recorded" ? current : "unavailable"
+    )
+  }, [])
 
   useEffect(() => {
     sessionRef.current = session
@@ -486,12 +515,18 @@ export default function AxisReplayClient({
     signalAccumulatorRef.current = createSignalAccumulator(
       initialSession?.duration || 0
     )
+    clearSignalTimeouts()
     previousFrameRef.current = null
+    frameSamplingUnavailableRef.current = false
 
     queueMicrotask(() => {
       setLiveSignalEvents([])
       signalReadyRef.current = false
-      setSignalReady(false)
+      setSignalStatus("waiting")
+      setMotionStatus("waiting")
+      setCameraStatus("waiting")
+      setAudioStatus("waiting")
+      setAudioReady(false)
       setBaseline(null)
       const localSession = safeParseSession(
         localStorage.getItem(`axis-session-${playbackId}`)
@@ -504,12 +539,18 @@ export default function AxisReplayClient({
       setExtractedSignals(initialSession?.signalRead || null)
       setIsLoading(false)
     })
-  }, [initialSession, playbackId, setPlaybackId])
+  }, [clearSignalTimeouts, initialSession, playbackId, setPlaybackId])
 
   useEffect(() => {
     if (!session?.videoUrl || !videoRef.current || isLoading) return
 
     let cancelled = false
+    setSignalStatus("initializing")
+    setMotionStatus("waiting")
+    setCameraStatus("waiting")
+    setAudioStatus("waiting")
+    frameSamplingUnavailableRef.current = false
+    clearSignalTimeouts()
 
     queueMicrotask(() => {
       if (cancelled) return
@@ -527,18 +568,43 @@ export default function AxisReplayClient({
           })
         )
         signalReadyRef.current = true
-        setSignalReady(true)
+        setSignalStatus("initializing")
+
+        metadataTimeoutRef.current = window.setTimeout(() => {
+          if (cancelled) return
+          setSignalStatus((current) =>
+            current === "recorded" ? current : "waiting"
+          )
+        }, METADATA_TIMEOUT_MS)
+
+        frameSampleTimeoutRef.current = window.setTimeout(() => {
+          if (cancelled) return
+          const hasFrameSamples =
+            signalAccumulatorRef.current.frameSamples.length > 0
+
+          if (!hasFrameSamples) {
+            setMotionStatus("unavailable")
+            setCameraStatus("unavailable")
+            markSignalUnavailableIfEmpty()
+          }
+        }, FRAME_SAMPLE_TIMEOUT_MS)
       } catch (error) {
         console.warn("AXIS SIGNAL INITIALIZATION WAITING", error)
         signalReadyRef.current = false
-        setSignalReady(false)
+        setSignalStatus("waiting")
       }
     })
 
     return () => {
       cancelled = true
+      clearSignalTimeouts()
     }
-  }, [isLoading, session])
+  }, [
+    clearSignalTimeouts,
+    isLoading,
+    markSignalUnavailableIfEmpty,
+    session,
+  ])
 
   async function recoverReplay() {
     if (replayStatus === "recovering") return
@@ -603,6 +669,9 @@ export default function AxisReplayClient({
       setAudioReady(true)
     } catch (error) {
       console.warn("AXIS AUDIO SIGNAL UNAVAILABLE", error)
+      setAudioReady(false)
+      setAudioStatus("unavailable")
+      markSignalUnavailableIfEmpty()
     }
   }
 
@@ -655,7 +724,7 @@ export default function AxisReplayClient({
           willReadFrequently: true,
         })
 
-        if (context) {
+        if (context && !frameSamplingUnavailableRef.current) {
           try {
             context.drawImage(video, 0, 0, canvas.width, canvas.height)
             const frame = context.getImageData(
@@ -671,6 +740,13 @@ export default function AxisReplayClient({
             })
             previousFrameRef.current = new Uint8ClampedArray(frame)
             addFrameSignalSample(signalAccumulatorRef.current, signal)
+            setMotionStatus("recorded")
+            setCameraStatus("recorded")
+            markSignalRecorded()
+            if (frameSampleTimeoutRef.current != null) {
+              window.clearTimeout(frameSampleTimeoutRef.current)
+              frameSampleTimeoutRef.current = null
+            }
             setSignalDuration(
               signalAccumulatorRef.current,
               video.duration || 0
@@ -739,25 +815,28 @@ export default function AxisReplayClient({
                 "cyan"
               )
             }
-
-            if (
-              signal.motionIntensity < 0.06 &&
-              signal.brightness < 0.02
-            ) {
-              emitSignal(
-                "SIGNAL LOST",
-                "Replay signal is low.",
-                "zinc"
-              )
-            }
           } catch (error) {
             console.warn("AXIS FRAME SIGNAL UNAVAILABLE", error)
+            frameSamplingUnavailableRef.current = true
+            setMotionStatus("unavailable")
+            setCameraStatus("unavailable")
+            markSignalUnavailableIfEmpty()
             emitSignal(
-              "SIGNAL LOST",
+              "SIGNAL UNAVAILABLE",
               "Frame sampling unavailable.",
               "zinc"
             )
           }
+        } else if (!context && !frameSamplingUnavailableRef.current) {
+          frameSamplingUnavailableRef.current = true
+          setMotionStatus("unavailable")
+          setCameraStatus("unavailable")
+          markSignalUnavailableIfEmpty()
+          emitSignal(
+            "SIGNAL UNAVAILABLE",
+            "Frame sampling unavailable.",
+            "zinc"
+          )
         }
 
         const analyser = analyserRef.current
@@ -771,6 +850,8 @@ export default function AxisReplayClient({
 
           audioPeakRef.current = peak
           const energy = Math.min(1, peak / 80)
+          setAudioStatus("recorded")
+          markSignalRecorded()
           addAudioSignalSample(signalAccumulatorRef.current, {
             timestamp: video.currentTime,
             energy,
@@ -813,7 +894,7 @@ export default function AxisReplayClient({
     return () => {
       cancelAnimationFrame(frameId)
     }
-  }, [])
+  }, [markSignalRecorded, markSignalUnavailableIfEmpty])
 
   const duration = session?.duration || 0
   const progress =
@@ -858,7 +939,7 @@ export default function AxisReplayClient({
       : replayStatus === "recovered"
         ? "Replay Unlocked"
         : replayStatus === "failed"
-          ? "Signal Interrupted"
+          ? "Signal Waiting"
           : session?.memoryState?.status
             ? session.memoryState.status
             : extractedSignals?.frameSampleCount
@@ -871,7 +952,7 @@ export default function AxisReplayClient({
       : replayStatus === "recovered"
         ? "REPLAY UNLOCKED"
         : replayStatus === "failed"
-          ? "SIGNAL INTERRUPTED"
+          ? "SIGNAL WAITING"
           : session?.memoryState?.contextLine ||
             session?.context ||
             "Replay linked. Session added. Memory available."
@@ -886,11 +967,6 @@ export default function AxisReplayClient({
     ? [...liveMarkers, ...markers].slice(0, 10)
     : markers
   const latestLiveSignal = liveSignalEvents[0]?.label || replayStatusLabel
-  const signalStatus = !session?.videoUrl
-    ? "waiting"
-    : signalReady
-      ? "ready"
-      : "initializing"
   const displayBaseline = baseline
     ? mergeBaseline(baseline, extractedSignals)
     : createWaitingBaseline(session)
@@ -976,6 +1052,10 @@ export default function AxisReplayClient({
                 if (!signalReadyRef.current) return
 
                 try {
+                  if (metadataTimeoutRef.current != null) {
+                    window.clearTimeout(metadataTimeoutRef.current)
+                    metadataTimeoutRef.current = null
+                  }
                   setSignalDuration(
                     signalAccumulatorRef.current,
                     event.currentTarget.duration || duration
@@ -985,8 +1065,7 @@ export default function AxisReplayClient({
                   )
                 } catch (error) {
                   console.warn("AXIS SIGNAL METADATA WAITING", error)
-                  signalReadyRef.current = false
-                  setSignalReady(false)
+                  setSignalStatus("waiting")
                 }
               }}
               onTimeUpdate={(event) => {
@@ -1055,6 +1134,9 @@ export default function AxisReplayClient({
             signals={extractedSignals}
             baseline={displayBaseline}
             signalStatus={signalStatus}
+            motionStatus={motionStatus}
+            cameraStatus={cameraStatus}
+            audioStatus={audioStatus}
           />
 
           <div className="mt-8 space-y-3 lg:hidden">

@@ -2,6 +2,17 @@ export type ActivityState = "low" | "active" | "unknown"
 
 export type AudioState = "silent" | "noisy" | "unknown"
 
+export type SignalChannelStatus =
+  | "waiting"
+  | "recorded"
+  | "unavailable"
+
+export type SignalReadiness =
+  | "waiting"
+  | "initializing"
+  | "recorded"
+  | "unavailable"
+
 export type FrameSignalSample = {
   timestamp: number
   brightness: number
@@ -29,6 +40,10 @@ export type SignalTimelineSegment = {
 export type ExtractedReplaySignals = {
   duration: number
   frameSampleCount: number
+  metadataReady: boolean
+  motionStatus: SignalChannelStatus
+  cameraStatus: SignalChannelStatus
+  audioStatus: SignalChannelStatus
   averageBrightness: number | null
   brightnessShifts: number
   motionIntensity: number | null

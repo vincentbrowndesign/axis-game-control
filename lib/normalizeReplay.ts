@@ -3,6 +3,7 @@ import type {
 } from "@/lib/calibration/types"
 import type {
   ExtractedReplaySignals,
+  SignalChannelStatus,
   SignalTimelineSegment,
 } from "@/lib/signals/types"
 import type {
@@ -225,6 +226,21 @@ function normalizeSignalTimeline(value: unknown): SignalTimelineSegment[] {
     .filter((item) => item.end >= item.start)
 }
 
+function asSignalChannelStatus(
+  value: unknown,
+  fallback: SignalChannelStatus
+): SignalChannelStatus {
+  if (
+    value === "waiting" ||
+    value === "recorded" ||
+    value === "unavailable"
+  ) {
+    return value
+  }
+
+  return fallback
+}
+
 function normalizeSignalRead(
   value: unknown
 ): ExtractedReplaySignals | undefined {
@@ -235,6 +251,10 @@ function normalizeSignalRead(
   return {
     duration: asNumber(record.duration, 0),
     frameSampleCount: Math.max(0, asNumber(record.frameSampleCount, 0)),
+    metadataReady: Boolean(record.metadataReady),
+    motionStatus: asSignalChannelStatus(record.motionStatus, "waiting"),
+    cameraStatus: asSignalChannelStatus(record.cameraStatus, "waiting"),
+    audioStatus: asSignalChannelStatus(record.audioStatus, "waiting"),
     averageBrightness:
       record.averageBrightness == null
         ? null

@@ -18,7 +18,7 @@ type Props = {
 
 function toAxisErrorState(error: unknown) {
   const message =
-    error instanceof Error ? error.message : "SIGNAL INTERRUPTED"
+    error instanceof Error ? error.message : "UPLOAD WAITING"
 
   if (message.includes("NON_JSON_RESPONSE")) {
     return "SIGNAL WAITING"
@@ -51,11 +51,12 @@ function toAxisErrorState(error: unknown) {
     message.includes("Load failed") ||
     message.includes("Failed")
   ) {
-    return "SIGNAL INTERRUPTED"
+    return "UPLOAD WAITING"
   }
 
   if (
-    message === "SIGNAL INTERRUPTED" ||
+    message === "UPLOAD WAITING" ||
+    message === "AUTH REQUIRED" ||
     message === "MEMORY INGEST FAILED" ||
     message === "INVALID MEMORY FORMAT" ||
     message === "STORAGE KEY INVALID" ||
@@ -147,7 +148,7 @@ export default function UploadConsole({ email }: Props) {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      throw new Error("SIGNAL INTERRUPTED")
+      throw new Error("AUTH REQUIRED")
     }
 
     const uploadPath = `${user.id}/${normalized.finalName}`
@@ -170,7 +171,7 @@ export default function UploadConsole({ email }: Props) {
 
     if (!navigator.onLine) {
       setProgress(0)
-      setStatus("SIGNAL INTERRUPTED")
+      setStatus("UPLOAD WAITING")
       return
     }
 
@@ -219,7 +220,7 @@ export default function UploadConsole({ email }: Props) {
 
       if (!response.ok || !result.ok || !result.replayId) {
         throw new Error(
-          result.error || result.detail || "SIGNAL INTERRUPTED"
+          result.error || result.detail || "MEMORY INGEST FAILED"
         )
       }
 
@@ -346,7 +347,7 @@ export default function UploadConsole({ email }: Props) {
             const file = event.target.files?.[0]
 
             if (file) saveSession(file, "camera")
-            else setStatus("SIGNAL INTERRUPTED")
+            else setStatus("UPLOAD WAITING")
             event.target.value = ""
           }}
         />

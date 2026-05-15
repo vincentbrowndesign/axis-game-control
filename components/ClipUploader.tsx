@@ -16,7 +16,7 @@ function statusFromUploadFailure(data: AxisUploadResponse) {
 
 function statusFromCaughtError(error: unknown) {
   if (!(error instanceof Error)) {
-    return "SIGNAL INTERRUPTED"
+    return "UPLOAD WAITING"
   }
 
   if (
