@@ -8,6 +8,8 @@ import type { BasketballSignalState } from "@/lib/basketball/types"
 import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
+import { segmentCalibrationMemory } from "@/lib/segments/segmentCalibrationMemory"
+import type { SegmentedMemory } from "@/lib/segments/types"
 import {
   addAudioSignalSample,
   addFrameSignalSample,
@@ -275,6 +277,10 @@ function countValue(value: number | null | undefined, label: string) {
   return `${value} ${label}`
 }
 
+function segmentationValue(value: number, fallback = "Waiting") {
+  return value > 0 ? String(value) : fallback
+}
+
 function clipValue(
   state: BasketballSignalState,
   status: SignalReadiness
@@ -325,9 +331,11 @@ function baselineProgress({
 function missionWatchRows({
   session,
   signals,
+  segmentedMemory,
 }: {
   session: ReplaySessionView
   signals?: ExtractedReplaySignals | null
+  segmentedMemory?: SegmentedMemory | null
 }) {
   const mission = missionFromSession(session)
   const read: BrowserSignalRead | undefined = signals?.browserSignals
@@ -341,10 +349,36 @@ function missionWatchRows({
   }
 
   if (mission.title === "HANDLE") {
+    const dribbleCycles =
+      segmentedMemory?.segments.filter(
+        (segment) => segment.type === "dribble_cycle"
+      ).length || 0
+    const activityWindows =
+      segmentedMemory?.segments.filter(
+        (segment) => segment.type === "activity_window"
+      ).length || 0
+    const cadenceState = segmentedMemory?.cadenceEstimate.state
+    const hasEnoughSignal = (segmentedMemory?.confidence || 0) >= 0.5
+
     return [
-      ["Bounce Rhythm", percentValue(read?.repeatedMotion)],
-      ["Hand Rhythm", percentValue(read?.motionDensity)],
-      ["Camera Stability", percentValue(read?.cameraStability)],
+      [
+        "Bounce Rhythm",
+        hasEnoughSignal
+          ? "Found"
+          : segmentedMemory
+            ? "Not Enough Signal"
+            : "Waiting",
+      ],
+      ["Rep Segments", segmentationValue(dribbleCycles)],
+      [
+        "Cadence",
+        cadenceState === "stable"
+          ? "Stable"
+          : cadenceState === "uneven"
+            ? "Uneven"
+            : "Waiting",
+      ],
+      ["Activity Windows", segmentationValue(activityWindows)],
     ]
   }
 
@@ -385,12 +419,14 @@ function basketballSentence({
   signals,
   session,
   signalStatus,
+  segmentedMemory,
 }: {
   state: BasketballSignalState
   baseline: CalibrationBaseline
   signals?: ExtractedReplaySignals | null
   session: ReplaySessionView
   signalStatus: SignalReadiness
+  segmentedMemory?: SegmentedMemory | null
 }) {
   const lines: string[] = []
   const progress = baselineProgress({ session, baseline })
@@ -401,6 +437,14 @@ function basketballSentence({
 
   if (signalStatus === "unavailable") {
     return "Signal unavailable. Replay remains available."
+  }
+
+  if (
+    session.mission?.includes("HANDLE") &&
+    segmentedMemory &&
+    segmentedMemory.confidence < 0.5
+  ) {
+    return "Not enough signal. Replay remains available."
   }
 
   if (state.clipType === "SHORT CLIP") {
@@ -427,7 +471,15 @@ function basketballSentence({
   }
 
   if (progress.comparison === "COMPARISON LOCKED") {
-    lines.push("Comparison locked. More memory needed.")
+    if (
+      session.mission?.includes("HANDLE") &&
+      segmentedMemory?.confidence &&
+      segmentedMemory.confidence >= 0.5
+    ) {
+      lines.push(`Cadence found. ${progress.detail}`)
+    } else {
+      lines.push("Comparison locked. More memory needed.")
+    }
   } else {
     lines.push("Comparison unlocked.")
   }
@@ -449,6 +501,7 @@ function BasketballRead({
   motionStatus,
   cameraStatus,
   audioStatus,
+  segmentedMemory,
 }: {
   session: ReplaySessionView
   signals: ExtractedReplaySignals | null
@@ -457,12 +510,14 @@ function BasketballRead({
   motionStatus: SignalChannelStatus
   cameraStatus: SignalChannelStatus
   audioStatus: SignalChannelStatus
+  segmentedMemory: SegmentedMemory | null
 }) {
   const displaySignals = signals || session.signalRead
   const progress = baselineProgress({ session, baseline })
   const watchRows = missionWatchRows({
     session,
     signals: displaySignals,
+    segmentedMemory,
   })
   const basketballState =
     signalStatus === "recorded"
@@ -565,6 +620,7 @@ function BasketballRead({
           signals: signalStatus === "recorded" ? displaySignals : null,
           session,
           signalStatus,
+          segmentedMemory,
         })}
       </p>
       <p className="mt-2 text-sm leading-relaxed text-white/35">
@@ -656,6 +712,8 @@ export default function AxisReplayClient({
   const [audioStatus, setAudioStatus] =
     useState<SignalChannelStatus>("waiting")
   const [baseline, setBaseline] = useState<CalibrationBaseline | null>(null)
+  const [segmentedMemory, setSegmentedMemory] =
+    useState<SegmentedMemory | null>(null)
 
   const clearSignalTimeouts = useCallback(() => {
     if (metadataTimeoutRef.current != null) {
@@ -699,6 +757,33 @@ export default function AxisReplayClient({
     }
   }, [])
 
+  const updateSegmentedMemory = useCallback(
+    (activeSession: ReplaySessionView | null) => {
+      if (!activeSession?.mission || activeSession.mission === "None") {
+        setSegmentedMemory(null)
+        return
+      }
+
+      try {
+        const accumulator = signalAccumulatorRef.current
+
+        setSegmentedMemory(
+          segmentCalibrationMemory({
+            missionId: activeSession.mission,
+            clipDuration:
+              accumulator.duration || activeSession.duration || 0,
+            frameSamples: accumulator.frameSamples,
+            audioSamples: accumulator.audioSamples,
+          })
+        )
+      } catch (error) {
+        console.warn("AXIS SEGMENTATION WAITING", error)
+        setSegmentedMemory(null)
+      }
+    },
+    []
+  )
+
   useEffect(() => {
     sessionRef.current = session
   }, [session])
@@ -720,6 +805,7 @@ export default function AxisReplayClient({
       setCameraStatus("waiting")
       setAudioStatus("waiting")
       setAudioReady(false)
+      setSegmentedMemory(null)
       setBaseline(null)
       const localSession = safeParseSession(
         localStorage.getItem(`axis-session-${playbackId}`)
@@ -760,6 +846,7 @@ export default function AxisReplayClient({
             signals: null,
           })
         )
+        updateSegmentedMemory(session)
         signalReadyRef.current = true
         setSignalStatus("initializing")
 
@@ -790,6 +877,7 @@ export default function AxisReplayClient({
     finalizeUnavailableChannels,
     isLoading,
     session,
+    updateSegmentedMemory,
   ])
 
   async function recoverReplay() {
@@ -942,6 +1030,7 @@ export default function AxisReplayClient({
               signalAccumulatorRef.current
             )
             setExtractedSignals(extracted)
+            updateSegmentedMemory(sessionRef.current)
             setBaseline((currentBaseline) => {
               const activeSession = sessionRef.current
 
@@ -1044,6 +1133,7 @@ export default function AxisReplayClient({
           })
           const extracted = extractSignals(signalAccumulatorRef.current)
           setExtractedSignals(extracted)
+          updateSegmentedMemory(sessionRef.current)
           setBaseline((currentBaseline) => {
             const activeSession = sessionRef.current
 
@@ -1080,7 +1170,11 @@ export default function AxisReplayClient({
     return () => {
       cancelAnimationFrame(frameId)
     }
-  }, [markSignalRecorded, markSignalUnavailableIfEmpty])
+  }, [
+    markSignalRecorded,
+    markSignalUnavailableIfEmpty,
+    updateSegmentedMemory,
+  ])
 
   const duration = session?.duration || 0
   const progress =
@@ -1255,6 +1349,7 @@ export default function AxisReplayClient({
                   setExtractedSignals(
                     extractSignals(signalAccumulatorRef.current)
                   )
+                  updateSegmentedMemory(sessionRef.current)
                 } catch (error) {
                   console.warn("AXIS SIGNAL METADATA WAITING", error)
                   setSignalStatus("unavailable")
@@ -1329,6 +1424,7 @@ export default function AxisReplayClient({
             motionStatus={motionStatus}
             cameraStatus={cameraStatus}
             audioStatus={audioStatus}
+            segmentedMemory={segmentedMemory}
           />
 
           <div className="mt-8 space-y-3 lg:hidden">
