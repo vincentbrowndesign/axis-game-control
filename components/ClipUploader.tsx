@@ -1,42 +1,17 @@
 "use client"
 
 import { useRef, useState } from "react"
+import {
+  type AxisUploadResponse,
+  parseUploadResponseText,
+} from "@/lib/uploadResponse"
 
 type ClipUploaderProps = {
   onSelect: (file: File) => void
 }
 
-function statusFromUploadFailure(data: {
-  error?: string
-  stage?: string
-}) {
-  if (data.stage === "auth") {
-    return "AUTH FAILURE"
-  }
-
-  if (
-    data.stage === "file-validation" ||
-    data.stage === "form-data" ||
-    data.stage === "array-buffer"
-  ) {
-    return "INVALID FILE"
-  }
-
-  if (
-    data.stage === "storage-upload" ||
-    data.stage === "signed-url"
-  ) {
-    return "STORAGE FAILURE"
-  }
-
-  if (
-    data.stage === "db-session-create" ||
-    data.stage === "db-upload-record"
-  ) {
-    return "DATABASE FAILURE"
-  }
-
-  return data.error || "MEMORY INGEST FAILED"
+function statusFromUploadFailure(data: AxisUploadResponse) {
+  return data.error || data.detail || "MEMORY INGEST FAILED"
 }
 
 function statusFromCaughtError(error: unknown) {
@@ -181,6 +156,7 @@ export default function ClipUploader({
           "AXIS NON JSON RESPONSE TEXT",
           text
         )
+        console.log("UPLOAD_RESPONSE_RAW", text)
 
         throw new Error(
           "RESPONSE CORRUPTED"
@@ -194,16 +170,12 @@ export default function ClipUploader({
         "AXIS RESPONSE TEXT",
         text
       )
+      console.log("UPLOAD_RESPONSE_RAW", text)
 
-      let data: {
-        ok?: boolean
-        error?: string
-        stage?: string
-        detail?: string
-      }
+      let data: AxisUploadResponse
 
       try {
-        data = JSON.parse(text)
+        data = parseUploadResponseText(text)
       } catch (error) {
         console.error(
           "AXIS JSON PARSE FAILURE",
@@ -220,15 +192,19 @@ export default function ClipUploader({
         data
       )
 
-      if (!response.ok) {
+      if (!response.ok || !data.ok) {
         console.error(
-          "AXIS FAILURE STAGE",
-          data?.stage || "unknown"
+          "AXIS UPLOAD FAILURE",
+          data?.error || data?.detail || "unknown"
         )
 
         throw new Error(
           statusFromUploadFailure(data)
         )
+      }
+
+      if (!data.replayId || !data.videoUrl || !data.createdAt) {
+        throw new Error("MEMORY INGEST FAILED")
       }
 
       console.log(

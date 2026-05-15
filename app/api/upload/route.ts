@@ -7,6 +7,7 @@ import {
   normalizeReplayFile,
   normalizeSource,
 } from "@/lib/replayStorage"
+import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
 
@@ -21,18 +22,29 @@ function axisError({
   status?: number
   detail?: unknown
 }) {
-  return safeJson(
-    {
-      ok: false,
-      stage,
-      error,
-      detail:
-        detail instanceof Error
-          ? detail.message
-          : detail ?? null,
-    },
-    status
-  )
+  console.error("AXIS UPLOAD RESPONSE ERROR", {
+    stage,
+    error,
+    detail:
+      detail instanceof Error
+        ? detail.message
+        : detail ?? null,
+  })
+
+  const body: AxisUploadResponse = {
+    ok: false,
+    error,
+    detail:
+      detail instanceof Error
+        ? detail.message
+        : typeof detail === "string"
+          ? detail
+          : detail == null
+            ? undefined
+            : JSON.stringify(detail),
+  }
+
+  return safeJson(body, status)
 }
 
 function detailFromError(error: unknown) {
@@ -41,13 +53,9 @@ function detailFromError(error: unknown) {
     : "UNKNOWN FAILURE"
 }
 
-function safeJson(body: Record<string, unknown>, status = 200) {
+function safeJson(body: AxisUploadResponse, status = 200) {
   return Response.json(
-    JSON.parse(
-      JSON.stringify(body, (_key, value) =>
-        value === undefined ? null : value
-      )
-    ),
+    JSON.parse(JSON.stringify(body)),
     {
       status,
     }
@@ -77,7 +85,6 @@ async function withTimeout<T>(
 export async function GET() {
   return safeJson({
     ok: true,
-    axis: "UPLOAD ROUTE ACTIVE",
   })
 }
 
@@ -92,7 +99,6 @@ export async function POST(request: Request) {
     if (request.headers.get("x-axis-route-test") === "true") {
       return safeJson({
         ok: true,
-        axis: "UPLOAD ROUTE ACTIVE",
       })
     }
 
@@ -317,12 +323,6 @@ export async function POST(request: Request) {
           originalName: normalized.originalName,
           originalType: normalized.mime || null,
           originalSize: file.size,
-          memoryCount: 1,
-          lastSignal: "MEMORY STORED",
-          archiveStatus: "ACTIVE",
-          context: "Replay linked. Session added. Memory available.",
-          timeline: [],
-          ambientLine: "Replay added to archive.",
           signedUrlExpiresIn: signedUrlTtl,
         },
       })
@@ -362,47 +362,22 @@ export async function POST(request: Request) {
       console.log("AXIS UPLOAD RECORD CREATED")
     }
 
-    const sessionView = {
-      id: inserted.data.id,
-      createdAt: Date.now(),
-      source: normalizeSource(formData.get("source")),
-      videoUrl: inserted.data.video_url || "",
-      title: normalized.finalName || "Axis Session",
-      mission: cleanText(formData.get("mission"), "None"),
-      player: cleanText(formData.get("player"), "Unassigned"),
-      environment: normalizeEnvironment(formData.get("environment")),
-      duration: Number.isFinite(duration) ? duration : 0,
-      status: "stored",
-      fileName: normalized.finalName,
-      tags: [],
-      memoryCount: 1,
-      lastSignal: "MEMORY STORED",
-      archiveStatus: "ACTIVE",
-      context: "Replay linked. Session added. Memory available.",
-      timeline: [],
-      ambientLine: "Replay added to archive.",
-    }
+    const createdAt = Date.now()
 
     console.log("AXIS FINAL RESPONSE", {
-      id: inserted.data.id,
-      fileName: normalized.finalName,
-      type: contentType,
-      size: file.size,
+      replayId: inserted.data.id,
+      videoUrl: inserted.data.video_url || "",
+      createdAt,
     })
 
-    return safeJson({
+    const body: AxisUploadResponse = {
       ok: true,
-      stage: "complete",
-      success: true,
-      id: inserted.data.id,
-      fileName: normalized.finalName,
-      type: contentType,
-      size: file.size,
+      replayId: inserted.data.id,
       videoUrl: inserted.data.video_url || "",
-      session: sessionView,
-      metadataStored: !uploadRecord.error,
-      metadataError: uploadRecord.error?.message || null,
-    })
+      createdAt,
+    }
+
+    return safeJson(body)
   } catch (error) {
     console.error("AXIS UPLOAD ERROR", error)
 

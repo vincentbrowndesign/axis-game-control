@@ -1,0 +1,68 @@
+# Coding Rules
+
+These rules exist to keep AXIS stable across Codex sessions.
+
+## Read First
+
+Before making changes, read:
+
+- `AGENTS.md`
+- `docs/ARCHITECTURE.md`
+- the doc for the subsystem being changed
+
+For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` before writing code.
+
+## Upload Rules
+
+- Do not mutate upload response shape.
+- Do not couple inference with upload infrastructure.
+- Do not call AI, memory, or inference from `/api/upload`.
+- Keep upload response minimal and stable.
+- Keep upload errors in the existing envelope style.
+
+## Replay Rules
+
+- Normalize all replay/session data before render.
+- Use `normalizeReplay` as the replay boundary.
+- Treat old sessions and local storage sessions as incomplete.
+- Keep schema changes backward compatible.
+
+## Memory Rules
+
+- Memory happens after replay loads.
+- Memory receives normalized session data.
+- Memory should not know about storage upload internals.
+- Keep memory language AXIS-native.
+
+## Inference Rules
+
+- Inference happens after replay exists.
+- Inference must not block upload completion.
+- Inference must not change upload response shape.
+- Keep inference isolated from storage and upload metadata.
+
+## UI Rules
+
+- Preserve AXIS visual identity.
+- Do not redesign UI unless explicitly asked.
+- Avoid generic sports analytics language.
+- Avoid forbidden labels:
+  - CONTROL LOST
+  - PRESSURE SPIKE
+  - RUN DETECTED
+  - RECOVERY WINDOW
+- Prefer:
+  - Memory Online
+  - Context Building
+  - Replay Linked
+  - Footage Accepted
+  - Memory Stored
+
+## Compatibility Rules
+
+- Add fields defensively.
+- Normalize absent or legacy values.
+- Do not make rendering depend on newly migrated fields only.
+- Do not break local storage replay recovery.
+- Do not remove legacy aliases from normalization without a migration plan.
+

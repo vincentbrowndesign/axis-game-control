@@ -8,44 +8,12 @@ import {
   isSupportedReplayFile,
   normalizeReplayFile,
 } from "@/lib/replayStorage"
+import { parseUploadResponseText } from "@/lib/uploadResponse"
 
 type Source = "camera" | "upload"
 
 type Props = {
   email: string
-}
-
-type UploadResponse = {
-  ok?: boolean
-  id?: string
-  fileName?: string
-  videoUrl?: string
-  error?: string
-  stage?: string
-  session?: {
-    id?: string
-    createdAt?: number
-    source?: Source
-    videoUrl?: string
-    title?: string
-    mission?: string
-    player?: string
-    environment?: string
-    duration?: number
-    status?: string
-    fileName?: string
-    tags?: string[]
-    memoryCount?: number
-    lastSignal?: string
-    archiveStatus?: string
-    context?: string
-    timeline?: {
-      time: string
-      label: string
-      detail: string
-    }[]
-    ambientLine?: string
-  }
 }
 
 function toAxisErrorState(error: unknown) {
@@ -105,18 +73,12 @@ function toAxisErrorState(error: unknown) {
 
 function parseUploadResponse(text: string) {
   try {
-    return JSON.parse(text) as UploadResponse
+    return parseUploadResponseText(text)
   } catch (error) {
     console.error("AXIS JSON PARSE FAILURE", error)
 
     throw new Error("RESPONSE_CORRUPTED")
   }
-}
-
-function safeMemoryCount(value?: number) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(value, 1)
-    : 1
 }
 
 function readDuration(file: File) {
@@ -246,69 +208,30 @@ export default function UploadConsole({ email }: Props) {
         const text = await response.text()
 
         console.error("AXIS NON JSON RESPONSE TEXT", text)
+        console.log("UPLOAD_RESPONSE_RAW", text)
 
         throw new Error(`NON_JSON_RESPONSE: ${text}`)
       }
 
       const text = await response.text()
+      console.log("UPLOAD_RESPONSE_RAW", text)
       const result = parseUploadResponse(text)
 
-      if (!response.ok || !result.id) {
-        throw new Error(result.error || "SIGNAL INTERRUPTED")
+      if (!response.ok || !result.ok || !result.replayId) {
+        throw new Error(
+          result.error || result.detail || "SIGNAL INTERRUPTED"
+        )
       }
 
       if (!result.videoUrl) {
         throw new Error("MEMORY INGEST FAILED")
       }
 
-      const session = {
-        id: result.id,
-        createdAt: Date.now(),
-        source,
-        videoUrl: result.videoUrl,
-        title: result.fileName || file.name || "Axis Session",
-        mission: "None",
-        player: "Unassigned",
-        environment: "practice",
-        duration,
-        status: "stored",
-        fileName: result.fileName || normalized.finalName,
-        tags: result.session?.tags || [],
-        memoryCount: safeMemoryCount(result.session?.memoryCount),
-        lastSignal: result.session?.lastSignal || "MEMORY STORED",
-        archiveStatus: result.session?.archiveStatus || "ACTIVE",
-        context:
-          result.session?.context ||
-          "Replay linked. Session added. Memory available.",
-        timeline: Array.isArray(result.session?.timeline)
-          ? result.session.timeline
-          : [],
-        ambientLine:
-          result.session?.ambientLine || "Replay added to archive.",
-      }
-
-      localStorage.setItem(
-        `axis-session-${result.id}`,
-        JSON.stringify(session)
-      )
-
-      const existing = JSON.parse(
-        localStorage.getItem("axis-sessions") || "[]"
-      ) as string[]
-
-      localStorage.setItem(
-        "axis-sessions",
-        JSON.stringify([
-          result.id,
-          ...existing.filter((id) => id !== result.id),
-        ])
-      )
-
       setProgress(100)
       setStatus("MEMORY STORED")
 
       setTimeout(() => {
-        router.push(`/replay/${result.id}`)
+        router.push(`/replay/${result.replayId}`)
       }, 350)
     } catch (error) {
       console.error(error)
