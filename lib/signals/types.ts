@@ -1,3 +1,5 @@
+import type { BrowserSignalRead } from "@/lib/vision/providers/types"
+
 export type ActivityState = "low" | "active" | "unknown"
 
 export type AudioState = "silent" | "noisy" | "unknown"
@@ -50,6 +52,7 @@ export type ExtractedReplaySignals = {
   activityState: ActivityState
   audioEnergy: number | null
   audioState: AudioState
+  browserSignals: BrowserSignalRead
   timeline: SignalTimelineSegment[]
 }
 

@@ -21,6 +21,7 @@ import type {
   SignalChannelStatus,
   SignalReadiness,
 } from "@/lib/signals/types"
+import type { BrowserSignalRead } from "@/lib/vision/providers/types"
 import type { ReplaySessionView } from "@/types/memory"
 
 declare global {
@@ -262,6 +263,18 @@ function channelValue(status: SignalChannelStatus) {
   return "Waiting"
 }
 
+function percentValue(value: number | null | undefined) {
+  if (value == null) return "Waiting"
+
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`
+}
+
+function countValue(value: number | null | undefined, label: string) {
+  if (value == null) return "Waiting"
+
+  return `${value} ${label}`
+}
+
 function clipValue(
   state: BasketballSignalState,
   status: SignalReadiness
@@ -307,6 +320,63 @@ function baselineProgress({
       : `Record ${unlockAfter - count} more to unlock read.`,
     baselineName: mission?.baselineName || "Movement Baseline",
   }
+}
+
+function missionWatchRows({
+  session,
+  signals,
+}: {
+  session: ReplaySessionView
+  signals?: ExtractedReplaySignals | null
+}) {
+  const mission = missionFromSession(session)
+  const read: BrowserSignalRead | undefined = signals?.browserSignals
+
+  if (!mission) {
+    return [
+      ["Motion", percentValue(read?.motionDelta)],
+      ["Camera Stability", percentValue(read?.cameraStability)],
+      ["Audio", percentValue(read?.audioEnergy)],
+    ]
+  }
+
+  if (mission.title === "HANDLE") {
+    return [
+      ["Bounce Rhythm", percentValue(read?.repeatedMotion)],
+      ["Hand Rhythm", percentValue(read?.motionDensity)],
+      ["Camera Stability", percentValue(read?.cameraStability)],
+    ]
+  }
+
+  if (mission.title === "FOOTWORK") {
+    return [
+      ["Direction Changes", countValue(read?.directionChanges, "changes")],
+      ["Movement Bursts", countValue(read?.movementBursts, "bursts")],
+      ["Camera Stability", percentValue(read?.cameraStability)],
+    ]
+  }
+
+  if (mission.title === "SHOOTING FORM") {
+    return [
+      ["Repeated Motion", percentValue(read?.repeatedMotion)],
+      ["Framing Consistency", percentValue(read?.framingConsistency)],
+      ["Release Rhythm", percentValue(read?.repeatedMotion)],
+    ]
+  }
+
+  if (mission.title === "LIVE MOVEMENT") {
+    return [
+      ["Motion Density", percentValue(read?.motionDensity)],
+      ["Pace Changes", countValue(read?.paceChanges, "changes")],
+      ["Camera Movement", percentValue(read?.cameraMovement)],
+    ]
+  }
+
+  return [
+    ["Acceleration Burst", percentValue(read?.accelerationBurst)],
+    ["Movement Intensity", percentValue(read?.motionDelta)],
+    ["Camera Movement", percentValue(read?.cameraMovement)],
+  ]
 }
 
 function basketballSentence({
@@ -390,6 +460,10 @@ function BasketballRead({
 }) {
   const displaySignals = signals || session.signalRead
   const progress = baselineProgress({ session, baseline })
+  const watchRows = missionWatchRows({
+    session,
+    signals: displaySignals,
+  })
   const basketballState =
     signalStatus === "recorded"
       ? readBasketballSignal({
@@ -461,6 +535,27 @@ function BasketballRead({
           label="Memory"
           value={formatMemoryCount(baseline.memoryCount)}
         />
+      </div>
+
+      <div className="mt-6 border-t border-white/10 pt-5">
+        <p className="mb-2 text-[10px] uppercase tracking-[0.45em] text-white/25">
+          Axis Watches
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {watchRows.map(([label, value]) => (
+            <div
+              key={label}
+              className="border border-white/10 bg-black/30 p-4"
+            >
+              <p className="text-[10px] uppercase tracking-[0.28em] text-white/30">
+                {label}
+              </p>
+              <p className="mt-3 text-lg font-black text-white">
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <p className="mt-5 text-sm leading-relaxed text-white/50">

@@ -6,6 +6,7 @@ import type {
   SignalChannelStatus,
   SignalTimelineSegment,
 } from "@/lib/signals/types"
+import type { BrowserSignalRead } from "@/lib/vision/providers/types"
 import type {
   AxisReplaySession,
   MemoryState,
@@ -247,31 +248,99 @@ function normalizeSignalRead(
   const record = asRecord(value)
 
   if (!Object.keys(record).length) return undefined
+  const browserRecord = asRecord(record.browserSignals)
+  const frameSampleCount = Math.max(
+    0,
+    asNumber(record.frameSampleCount, 0)
+  )
+  const duration = asNumber(record.duration, 0)
+  const motionIntensity =
+    record.motionIntensity == null
+      ? null
+      : asNumber(record.motionIntensity, 0)
+  const cameraMovement =
+    record.cameraMovement == null
+      ? null
+      : asNumber(record.cameraMovement, 0)
+  const averageBrightness =
+    record.averageBrightness == null
+      ? null
+      : asNumber(record.averageBrightness, 0)
+  const audioEnergy =
+    record.audioEnergy == null ? null : asNumber(record.audioEnergy, 0)
+  const browserSignals: BrowserSignalRead = {
+    provider: "browserSignals",
+    duration: asNumber(browserRecord.duration, duration),
+    frameSampleCount: Math.max(
+      0,
+      asNumber(browserRecord.frameSampleCount, frameSampleCount)
+    ),
+    averageBrightness:
+      browserRecord.averageBrightness == null
+        ? averageBrightness
+        : asNumber(browserRecord.averageBrightness, 0),
+    motionDelta:
+      browserRecord.motionDelta == null
+        ? motionIntensity
+        : asNumber(browserRecord.motionDelta, 0),
+    cameraMovement:
+      browserRecord.cameraMovement == null
+        ? cameraMovement
+        : asNumber(browserRecord.cameraMovement, 0),
+    cameraStability:
+      browserRecord.cameraStability == null
+        ? cameraMovement == null
+          ? null
+          : Math.max(0, Math.min(1, 1 - cameraMovement))
+        : asNumber(browserRecord.cameraStability, 0),
+    framingConsistency:
+      browserRecord.framingConsistency == null
+        ? null
+        : asNumber(browserRecord.framingConsistency, 0),
+    motionDensity:
+      browserRecord.motionDensity == null
+        ? null
+        : asNumber(browserRecord.motionDensity, 0),
+    paceChanges: Math.max(0, asNumber(browserRecord.paceChanges, 0)),
+    directionChanges: Math.max(
+      0,
+      asNumber(browserRecord.directionChanges, 0)
+    ),
+    movementBursts: Math.max(
+      0,
+      asNumber(browserRecord.movementBursts, 0)
+    ),
+    repeatedMotion:
+      browserRecord.repeatedMotion == null
+        ? null
+        : asNumber(browserRecord.repeatedMotion, 0),
+    accelerationBurst:
+      browserRecord.accelerationBurst == null
+        ? null
+        : asNumber(browserRecord.accelerationBurst, 0),
+    audioEnergy:
+      browserRecord.audioEnergy == null
+        ? audioEnergy
+        : asNumber(browserRecord.audioEnergy, 0),
+    audioAvailable: Boolean(browserRecord.audioAvailable ?? audioEnergy),
+    observations: [],
+  }
 
   return {
-    duration: asNumber(record.duration, 0),
-    frameSampleCount: Math.max(0, asNumber(record.frameSampleCount, 0)),
+    duration,
+    frameSampleCount,
     metadataReady: Boolean(record.metadataReady),
     motionStatus: asSignalChannelStatus(record.motionStatus, "waiting"),
     cameraStatus: asSignalChannelStatus(record.cameraStatus, "waiting"),
     audioStatus: asSignalChannelStatus(record.audioStatus, "waiting"),
-    averageBrightness:
-      record.averageBrightness == null
-        ? null
-        : asNumber(record.averageBrightness, 0),
+    averageBrightness,
     brightnessShifts: Math.max(0, asNumber(record.brightnessShifts, 0)),
-    motionIntensity:
-      record.motionIntensity == null
-        ? null
-        : asNumber(record.motionIntensity, 0),
-    cameraMovement:
-      record.cameraMovement == null
-        ? null
-        : asNumber(record.cameraMovement, 0),
+    motionIntensity,
+    cameraMovement,
     activityState: asActivityState(record.activityState),
-    audioEnergy:
-      record.audioEnergy == null ? null : asNumber(record.audioEnergy, 0),
+    audioEnergy,
     audioState: asAudioState(record.audioState),
+    browserSignals,
     timeline: normalizeSignalTimeline(record.timeline),
   }
 }

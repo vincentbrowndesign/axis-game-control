@@ -21,6 +21,8 @@ Inference must not determine whether uploads succeed.
 - `components/AxisReplayClient.tsx`: live frame and audio sampling during playback.
 - `lib/signals/extractSignals.ts`: measured signal extraction from sampled frames and audio.
 - `lib/signals/types.ts`: signal extraction types.
+- `lib/vision/providers/types.ts`: future-ready vision provider interface and disabled provider slots.
+- `lib/vision/providers/browserSignals.ts`: browser-safe CV V1 measurement from sampled frames and audio.
 - `lib/basketball/readBasketballSignal.ts`: basketball-aware state translation from measured signals.
 - `lib/basketball/types.ts`: basketball signal state types.
 - `lib/ai/describeReplay.ts`: grounded descriptions from measured signals only.
@@ -60,6 +62,14 @@ Display only measured signals:
 - brightness shifts
 - motion intensity estimate
 - camera movement estimate
+- camera stability estimate
+- framing consistency estimate
+- motion density
+- pace changes
+- direction changes
+- movement bursts
+- repeated motion
+- acceleration burst
 - activity state
 - audio energy when available
 
@@ -80,6 +90,8 @@ Basketball Signal V1 may say only grounded states:
 - PLAYER UNASSIGNED
 
 These states must be derived from duration, frame sampling, pixel differences, camera movement estimate, audio energy, normalized replay data, or baseline memory count.
+
+Computer Vision V1 is `browserSignals` only. It uses browser frame sampling after replay load and exposes real observation fields such as motion delta, brightness, camera stability, framing consistency, duration, and optional audio energy. Provider slots for `mediapipePoseProvider`, `openAiVisionProvider`, and `onnxProvider` must remain disabled until explicitly implemented.
 
 Calibration Mission V1 gives the signal layer cleaner basketball contexts without making fake detections. Missions can focus the future archive around handle, footwork, shooting form, live movement, and transition, but the current system may only display mission completion, baseline growth, comparison lock status, and measured signal status.
 

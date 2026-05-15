@@ -5,6 +5,7 @@ import type {
   SignalAccumulator,
   SignalTimelineSegment,
 } from "./types"
+import { buildBrowserSignalRead } from "@/lib/vision/providers/browserSignals"
 
 const MAX_FRAME_SAMPLES = 120
 const MAX_AUDIO_SAMPLES = 120
@@ -205,6 +206,11 @@ export function extractSignals(
   const brightnessShifts = frameSamples.filter(
     (sample) => sample.brightnessShift >= 0.28
   ).length
+  const browserSignals = buildBrowserSignalRead({
+    duration: accumulator.duration,
+    frameSamples,
+    audioSamples,
+  })
 
   return {
     duration: accumulator.duration,
@@ -230,6 +236,7 @@ export function extractSignals(
         : audioEnergy >= 0.18
           ? "noisy"
           : "silent",
+    browserSignals,
     timeline: buildTimeline(frameSamples, audioSamples),
   }
 }
