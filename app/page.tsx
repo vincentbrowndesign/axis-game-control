@@ -1,6 +1,8 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import UploadConsole from "@/components/UploadConsole"
 import { createClient } from "@/lib/supabase/server"
+import type { AxisProfile } from "@/types/memory"
 
 export default async function HomePage() {
   const supabase = await createClient()
@@ -9,7 +11,22 @@ export default async function HomePage() {
   } = await supabase.auth.getUser()
 
   if (user?.email) {
-    return <UploadConsole email={user.email} />
+    const { data: profile } = await supabase
+      .from("axis_profiles")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle<AxisProfile>()
+
+    if (!profile?.player_name || !profile.role) {
+      redirect("/profile?next=/")
+    }
+
+    return (
+      <UploadConsole
+        email={user.email}
+        twinName={profile.player_name || profile.display_name}
+      />
+    )
   }
 
   return (

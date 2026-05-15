@@ -10,7 +10,7 @@ A progression lane for one player and one warmup type.
 
 Chain key:
 
-`playerId + warmupId`
+`twinId + warmupId`
 
 Example:
 

@@ -3,6 +3,13 @@
 Read these docs before changing code:
 
 - `docs/ARCHITECTURE.md`
+- `docs/AXIS_WORLD_MODEL.md`
+- `docs/MEMORY_MODEL.md`
+- `docs/WORLD_RULES.md`
+- `docs/LANGUAGE_SYSTEM.md`
+- `docs/PERCEPTION_HIERARCHY.md`
+- `docs/WARMUP_PHILOSOPHY.md`
+- `docs/BEHAVIORAL_CONTINUITY.md`
 - `docs/UPLOAD_PIPELINE.md`
 - `docs/REPLAY_SCHEMA.md`
 - `docs/MEMORY_SYSTEM.md`
@@ -25,6 +32,7 @@ Hard rules:
 - Old sessions must never break after schema changes.
 - Preserve AXIS visual identity and language.
 - Do not redesign UI unless explicitly asked.
+- Before product, UX, memory, perception, Digital Twin, or warmup changes, read the world model docs above.
 
 Forbidden AXIS labels:
 

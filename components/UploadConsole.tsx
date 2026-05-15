@@ -11,13 +11,14 @@ import {
 import { parseUploadResponseText } from "@/lib/uploadResponse"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import type { CalibrationMission } from "@/lib/missions/types"
-import { getOrCreateLocalPlayer } from "@/lib/warmups/progress"
+import { getActiveTwin } from "@/lib/twin/getOrCreateTwin"
 
 type Source = "camera"
 type FlowStep = "entry" | "mission" | "brief" | "capture" | "processing"
 
 type Props = {
   email: string
+  twinName?: string | null
 }
 
 const calibrationMissions = getCalibrationMissions()
@@ -176,7 +177,7 @@ function MissionCard({
   )
 }
 
-export default function UploadConsole({ email }: Props) {
+export default function UploadConsole({ email, twinName = null }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const cameraInputRef =
@@ -272,7 +273,7 @@ export default function UploadConsole({ email }: Props) {
               .padStart(2, "0")} - ${selectedMission.title}`
           : "None"
       )
-      formData.append("player", getOrCreateLocalPlayer().name)
+      formData.append("player", getActiveTwin(twinName).displayName)
       formData.append("originalName", normalized.originalName)
       formData.append("mime", normalized.mime)
       formData.append("finalName", normalized.finalName)

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
 import { normalizeReplay } from "@/lib/normalizeReplay"
@@ -16,12 +17,12 @@ import type {
   PoseFrame,
   PoseLandmarkRead,
 } from "@/lib/vision/mediapipe/types"
-import {
-  getOrCreateLocalPlayer,
-  recordWarmupMemory,
-  type LocalMemoryOwner,
-  type WarmupChainProgress,
-} from "@/lib/warmups/progress"
+import { getActiveTwin } from "@/lib/twin/getOrCreateTwin"
+import { recordWarmupMemory } from "@/lib/twin/warmupChains"
+import type {
+  DigitalTwin,
+  WarmupChainProgress,
+} from "@/lib/twin/types"
 import {
   addAudioSignalSample,
   addFrameSignalSample,
@@ -333,7 +334,7 @@ function missionFromSession(session: ReplaySessionView) {
 
 function memoryOwnerName(
   session: ReplaySessionView,
-  owner?: LocalMemoryOwner | null
+  owner?: DigitalTwin | null
 ) {
   if (
     session.player &&
@@ -343,7 +344,7 @@ function memoryOwnerName(
     return session.player
   }
 
-  return owner?.name || "LOCAL PLAYER"
+  return owner?.displayName || "LOCAL PLAYER"
 }
 
 function baselineProgress({
@@ -817,7 +818,7 @@ export default function AxisReplayClient({
     useState<SegmentedMemory | null>(null)
   const [poseRead, setPoseRead] = useState<PoseLandmarkRead | null>(null)
   const [memoryOwner, setMemoryOwner] =
-    useState<LocalMemoryOwner | null>(null)
+    useState<DigitalTwin | null>(null)
   const [warmupProgress, setWarmupProgress] =
     useState<WarmupChainProgress | null>(null)
 
@@ -936,7 +937,7 @@ export default function AxisReplayClient({
     (activeSession: ReplaySessionView | null) => {
       if (!activeSession) return
 
-      const owner = getOrCreateLocalPlayer(activeSession.player)
+      const owner = getActiveTwin(activeSession.player)
       const mission = missionFromSession(activeSession)
 
       setMemoryOwner(owner)
@@ -953,8 +954,8 @@ export default function AxisReplayClient({
 
       recordedWarmupKeyRef.current = recordKey
       const progress = recordWarmupMemory({
-        playerId: owner.id,
-        playerName: owner.name,
+        twinId: owner.id,
+        twinName: owner.displayName,
         warmupId: mission.id,
         sessionId,
         unlockAfter: mission.unlockAfter,
@@ -1664,6 +1665,27 @@ export default function AxisReplayClient({
             poseRead={poseRead}
             warmupProgress={warmupProgress}
           />
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Link
+              href="/"
+              className="border border-white/10 bg-white px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
+            >
+              Next Warmup
+            </Link>
+            <Link
+              href="/"
+              className="border border-white/10 px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-white/60 transition hover:text-white"
+            >
+              Memory Core
+            </Link>
+            <Link
+              href="/sessions"
+              className="border border-white/10 px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-white/60 transition hover:text-white"
+            >
+              View Warmup Chain
+            </Link>
+          </div>
 
           <div className="mt-8 space-y-3 lg:hidden">
             {displayMarkers.map((marker) => (

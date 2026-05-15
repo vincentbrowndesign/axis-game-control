@@ -51,7 +51,7 @@ Warmup progression is not global memory count.
 
 Warmup progression is keyed by:
 
-`playerId + warmupId`
+`twinId + warmupId`
 
 This means:
 
