@@ -21,6 +21,8 @@ Inference must not determine whether uploads succeed.
 - `components/AxisReplayClient.tsx`: live frame and audio sampling during playback.
 - `lib/signals/extractSignals.ts`: measured signal extraction from sampled frames and audio.
 - `lib/signals/types.ts`: signal extraction types.
+- `lib/basketball/readBasketballSignal.ts`: basketball-aware state translation from measured signals.
+- `lib/basketball/types.ts`: basketball signal state types.
 - `lib/ai/describeReplay.ts`: grounded descriptions from measured signals only.
 - `lib/vision/*`: early vision helper stubs.
 - `engine/inferenceEngine.ts`: event-to-state inference helper.
@@ -61,6 +63,22 @@ Display only measured signals:
 
 Do not say court detected, player detected, fatigue detected, decision quality detected, or ball detected unless that capability is actually implemented with evidence.
 
+Basketball Signal V1 may say only grounded states:
+
+- CLIP STORED
+- SHORT CLIP
+- ACTIVE MOTION
+- LOW ACTIVITY
+- CAMERA MOVING
+- CAMERA STABLE
+- AUDIO PRESENT
+- AUDIO QUIET
+- BASELINE STARTED
+- NOT ENOUGH MEMORY
+- PLAYER UNASSIGNED
+
+These states must be derived from duration, frame sampling, pixel differences, camera movement estimate, audio energy, normalized replay data, or baseline memory count.
+
 ## Language
 
 Use AXIS-native signal language. Prefer:
@@ -74,6 +92,9 @@ Use AXIS-native signal language. Prefer:
 - Baseline Started
 - Not Enough Memory
 - Archive Active
+- Basketball Read
+- Activity Detected
+- Activity Waiting
 
 Do not introduce:
 

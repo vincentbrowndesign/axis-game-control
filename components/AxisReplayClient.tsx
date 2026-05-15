@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
 import { normalizeReplay } from "@/lib/normalizeReplay"
-import { describeReplay } from "@/lib/ai/describeReplay"
+import { readBasketballSignal } from "@/lib/basketball/readBasketballSignal"
+import type { BasketballSignalState } from "@/lib/basketball/types"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
 import {
   addAudioSignalSample,
@@ -171,19 +172,6 @@ function MarkerCard({ marker }: { marker: Marker }) {
   )
 }
 
-function percent(value?: number | null) {
-  if (value == null || !Number.isFinite(value)) return "Waiting"
-
-  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`
-}
-
-function activityLabel(value?: ExtractedReplaySignals["activityState"]) {
-  if (value === "active") return "ACTIVITY DETECTED"
-  if (value === "low") return "ACTIVITY WAITING"
-
-  return "ACTIVITY WAITING"
-}
-
 function mergeBaseline(
   baseline: CalibrationBaseline | undefined,
   signals: ExtractedReplaySignals | null
@@ -211,7 +199,101 @@ function mergeBaseline(
   }
 }
 
-function SignalRead({
+function displaySignalLabel(value: string) {
+  return value
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+function motionValue(
+  state: BasketballSignalState,
+  signals?: ExtractedReplaySignals | null
+) {
+  if (!signals?.frameSampleCount) return "Waiting"
+  if (state.activityState === "ACTIVE MOTION") return "Active Motion"
+
+  return "Low Activity"
+}
+
+function cameraValue(
+  state: BasketballSignalState,
+  signals?: ExtractedReplaySignals | null
+) {
+  if (signals?.cameraMovement == null) return "Waiting"
+  if (state.courtState === "CAMERA MOVING") return "Moving"
+  if (state.courtState === "CAMERA STABLE") return "Stable"
+
+  return "Waiting"
+}
+
+function audioValue(
+  state: BasketballSignalState,
+  signals?: ExtractedReplaySignals | null
+) {
+  if (signals?.audioEnergy == null) return "Waiting"
+  if (state.evidence.some((item) => item.startsWith("Audio"))) {
+    return signals.audioState === "noisy" ? "Present" : "Quiet"
+  }
+
+  return "Waiting"
+}
+
+function baselineValue(baseline: CalibrationBaseline) {
+  return baseline.memoryCount <= 1 ? "Not Enough Memory" : "Started"
+}
+
+function basketballSentence({
+  state,
+  baseline,
+  signals,
+  session,
+}: {
+  state: BasketballSignalState
+  baseline: CalibrationBaseline
+  signals?: ExtractedReplaySignals | null
+  session: ReplaySessionView
+}) {
+  const lines: string[] = []
+
+  if (state.clipType === "SHORT CLIP") {
+    lines.push("Short clip stored.")
+  } else if ((signals?.duration || session.duration) && session.player !== "Unassigned") {
+    lines.push("Replay added to player memory.")
+  } else if (signals?.duration || session.duration) {
+    lines.push("Replay added to memory.")
+  }
+
+  if (signals?.frameSampleCount && state.activityState === "ACTIVE MOTION") {
+    lines.push("Active motion recorded.")
+  } else if (signals?.frameSampleCount) {
+    lines.push("Low activity recorded.")
+  }
+
+  if (
+    signals?.cameraMovement != null &&
+    state.evidence.some((item) => item.startsWith("Camera"))
+  ) {
+    lines.push("Camera movement recorded.")
+  }
+
+  if (baseline.memoryCount <= 1) {
+    lines.push("More memory needed before comparison.")
+  } else {
+    lines.push("Baseline started.")
+  }
+
+  if (state.headline === "PLAYER UNASSIGNED") {
+    lines.push("Player not assigned.")
+  }
+
+  return lines[0]
+    ? lines.slice(0, 2).join(" ")
+    : "Waiting for replay frames."
+}
+
+function BasketballRead({
   session,
   signals,
   baseline,
@@ -221,40 +303,43 @@ function SignalRead({
   baseline: CalibrationBaseline
 }) {
   const displaySignals = signals || session.signalRead
-  const description = displaySignals
-    ? describeReplay({
-        signals: displaySignals,
-        baseline,
-      })
-    : null
+  const basketballState = readBasketballSignal({
+    session,
+    signals: displaySignals,
+    baseline,
+  })
 
   return (
     <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
       <div className="mb-5 flex items-center justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
-          Signal Read
+          Basketball Read
         </p>
         <p className="text-[10px] uppercase tracking-[0.3em] text-lime-300">
-          {baseline.status}
+          {basketballState.headline}
         </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <DetailRow
-          label="Duration"
-          value={formatDuration(displaySignals?.duration || session.duration || 0)}
+          label="Clip"
+          value={displaySignalLabel(basketballState.clipType)}
         />
         <DetailRow
           label="Motion"
-          value={percent(displaySignals?.motionIntensity)}
+          value={motionValue(basketballState, displaySignals)}
         />
         <DetailRow
-          label="Activity"
-          value={activityLabel(displaySignals?.activityState)}
+          label="Camera"
+          value={cameraValue(basketballState, displaySignals)}
+        />
+        <DetailRow
+          label="Audio"
+          value={audioValue(basketballState, displaySignals)}
         />
         <DetailRow
           label="Baseline"
-          value={baseline.status}
+          value={baselineValue(baseline)}
         />
         <DetailRow
           label="Memory"
@@ -263,8 +348,12 @@ function SignalRead({
       </div>
 
       <p className="mt-5 text-sm leading-relaxed text-white/50">
-        {description?.summary ||
-          "Signal read begins when replay frames are available."}
+        {basketballSentence({
+          state: basketballState,
+          baseline,
+          signals: displaySignals,
+          session,
+        })}
       </p>
     </div>
   )
@@ -830,7 +919,7 @@ export default function AxisReplayClient({
             </div>
           </div>
 
-          <SignalRead
+          <BasketballRead
             session={session}
             signals={extractedSignals}
             baseline={baseline}

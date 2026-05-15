@@ -42,6 +42,8 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Keep inference isolated from storage and upload metadata.
 - Signal extraction must show only measured signals.
 - Do not claim court, player, ball, fatigue, or decision quality detection unless actually implemented with evidence.
+- Basketball-aware language must translate measured signals, not invent analytics.
+- Every visible basketball statement must answer what real signal produced it.
 - AI descriptions must be generated from real signals until external frame reading is implemented.
 
 ## UI Rules
@@ -65,6 +67,9 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
   - Signal Recorded
   - Not Enough Memory
   - Archive Active
+  - Basketball Read
+  - Activity Waiting
+  - Activity Detected
 
 ## Compatibility Rules
 
