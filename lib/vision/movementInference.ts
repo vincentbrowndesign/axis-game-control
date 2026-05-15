@@ -6,11 +6,5 @@ export type MovementSignal =
   | "SHOT"
 
 export async function inferMovement(): Promise<MovementSignal[]> {
-  return [
-    "BALL MOVE",
-    "DRIVE",
-    "PAINT TOUCH",
-    "OPEN",
-    "SHOT"
-  ]
+  return []
 }

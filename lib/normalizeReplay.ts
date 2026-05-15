@@ -1,4 +1,11 @@
 import type {
+  CalibrationBaseline,
+} from "@/lib/calibration/types"
+import type {
+  ExtractedReplaySignals,
+  SignalTimelineSegment,
+} from "@/lib/signals/types"
+import type {
   AxisReplaySession,
   MemoryState,
   MemoryTimelineEvent,
@@ -174,6 +181,125 @@ function normalizeMemoryState(
   }
 }
 
+function asActivityState(value: unknown) {
+  return value === "low" || value === "active" || value === "unknown"
+    ? value
+    : "unknown"
+}
+
+function asAudioState(value: unknown) {
+  return value === "silent" || value === "noisy" || value === "unknown"
+    ? value
+    : "unknown"
+}
+
+function asSignalSegmentLabel(
+  value: unknown
+): SignalTimelineSegment["label"] {
+  if (
+    value === "LOW ACTIVITY" ||
+    value === "ACTIVE MOTION" ||
+    value === "BRIGHTNESS SHIFT" ||
+    value === "AUDIO ENERGY"
+  ) {
+    return value
+  }
+
+  return "LOW ACTIVITY"
+}
+
+function normalizeSignalTimeline(value: unknown): SignalTimelineSegment[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item) => {
+      const record = asRecord(item)
+
+      return {
+        start: asNumber(record.start, 0),
+        end: asNumber(record.end, asNumber(record.start, 0)),
+        label: asSignalSegmentLabel(record.label),
+        evidence: asString(record.evidence, "Signal recorded."),
+      }
+    })
+    .filter((item) => item.end >= item.start)
+}
+
+function normalizeSignalRead(
+  value: unknown
+): ExtractedReplaySignals | undefined {
+  const record = asRecord(value)
+
+  if (!Object.keys(record).length) return undefined
+
+  return {
+    duration: asNumber(record.duration, 0),
+    frameSampleCount: Math.max(0, asNumber(record.frameSampleCount, 0)),
+    averageBrightness:
+      record.averageBrightness == null
+        ? null
+        : asNumber(record.averageBrightness, 0),
+    brightnessShifts: Math.max(0, asNumber(record.brightnessShifts, 0)),
+    motionIntensity:
+      record.motionIntensity == null
+        ? null
+        : asNumber(record.motionIntensity, 0),
+    cameraMovement:
+      record.cameraMovement == null
+        ? null
+        : asNumber(record.cameraMovement, 0),
+    activityState: asActivityState(record.activityState),
+    audioEnergy:
+      record.audioEnergy == null ? null : asNumber(record.audioEnergy, 0),
+    audioState: asAudioState(record.audioState),
+    timeline: normalizeSignalTimeline(record.timeline),
+  }
+}
+
+function asBaselineStatus(value: unknown): CalibrationBaseline["status"] {
+  if (
+    value === "BASELINE STARTED" ||
+    value === "MEMORY ADDED" ||
+    value === "NOT ENOUGH MEMORY" ||
+    value === "COMPARISON LOCKED"
+  ) {
+    return value
+  }
+
+  return "BASELINE STARTED"
+}
+
+function normalizeBaseline(
+  value: unknown
+): CalibrationBaseline | undefined {
+  const record = asRecord(value)
+
+  if (!Object.keys(record).length) return undefined
+
+  return {
+    status: asBaselineStatus(record.status),
+    averageSessionDuration: asNumber(record.averageSessionDuration, 0),
+    averageMotionIntensity:
+      record.averageMotionIntensity == null
+        ? null
+        : asNumber(record.averageMotionIntensity, 0),
+    averageAudioEnergy:
+      record.averageAudioEnergy == null
+        ? null
+        : asNumber(record.averageAudioEnergy, 0),
+    usualSource: record.usualSource === "camera" ? "camera" : "upload",
+    memoryCount: Math.max(0, asNumber(record.memoryCount, 0)),
+    firstMemoryDate:
+      record.firstMemoryDate == null
+        ? null
+        : asTimestamp(record.firstMemoryDate, 0),
+    latestMemoryDate:
+      record.latestMemoryDate == null
+        ? null
+        : asTimestamp(record.latestMemoryDate, 0),
+  }
+}
+
 export function normalizeReplay(rawData: unknown): ReplaySessionView {
   try {
     const raw = asRecord(rawData)
@@ -257,6 +383,8 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
           : timelineEvents,
       ambientLine: memoryState?.ambientLine ?? ambientLine,
       memoryState,
+      signalRead: normalizeSignalRead(raw.signalRead),
+      baseline: normalizeBaseline(raw.baseline),
     }
   } catch (error) {
     console.error("AXIS REPLAY NORMALIZE FAILED", error)

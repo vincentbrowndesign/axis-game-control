@@ -19,8 +19,8 @@ export default function InferencePanel({
 
           <h3 className="mt-2 text-2xl font-black text-white">
             {basketballLikely
-              ? "Basketball Detected"
-              : "Unknown Environment"}
+              ? "Signal Recorded"
+              : "Signal Waiting"}
           </h3>
         </div>
 

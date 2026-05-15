@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { buildMemoryState } from "@/lib/memoryInference"
 import { normalizeReplay } from "@/lib/normalizeReplay"
+import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import {
   type AxisReplaySession,
 } from "@/types/memory"
@@ -60,6 +61,10 @@ export default async function ReplayPage({
         previousSessions,
         player: session.player,
       })
+      const baseline = buildBaseline({
+        session,
+        previousSessions,
+      })
 
       initialSession = {
         ...session,
@@ -75,6 +80,7 @@ export default async function ReplayPage({
         })),
         ambientLine: memoryState.ambientLine,
         memoryState,
+        baseline,
       }
     }
   }

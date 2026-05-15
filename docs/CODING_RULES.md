@@ -40,6 +40,9 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Inference must not block upload completion.
 - Inference must not change upload response shape.
 - Keep inference isolated from storage and upload metadata.
+- Signal extraction must show only measured signals.
+- Do not claim court, player, ball, fatigue, or decision quality detection unless actually implemented with evidence.
+- AI descriptions must be generated from real signals until external frame reading is implemented.
 
 ## UI Rules
 
@@ -57,6 +60,11 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
   - Replay Linked
   - Footage Accepted
   - Memory Stored
+  - Signal Read
+  - Baseline Started
+  - Signal Recorded
+  - Not Enough Memory
+  - Archive Active
 
 ## Compatibility Rules
 
@@ -65,4 +73,3 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Do not make rendering depend on newly migrated fields only.
 - Do not break local storage replay recovery.
 - Do not remove legacy aliases from normalization without a migration plan.
-

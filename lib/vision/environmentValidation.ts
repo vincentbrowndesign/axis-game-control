@@ -6,12 +6,8 @@ export type EnvironmentResult = {
 
 export async function validateEnvironment(): Promise<EnvironmentResult> {
   return {
-    basketballLikely: true,
-    confidence: 0.82,
-    reasons: [
-      "court lines detected",
-      "player movement detected",
-      "indoor gym lighting"
-    ]
+    basketballLikely: false,
+    confidence: 0,
+    reasons: []
   }
 }

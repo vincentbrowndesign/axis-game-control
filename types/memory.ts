@@ -1,3 +1,6 @@
+import type { CalibrationBaseline } from "@/lib/calibration/types"
+import type { ExtractedReplaySignals } from "@/lib/signals/types"
+
 export type SessionSource = "camera" | "upload"
 
 export type SessionEnvironment =
@@ -83,4 +86,6 @@ export type ReplaySessionView = {
   timelineEvents?: MemoryTimelineEvent[]
   ambientLine?: string
   memoryState?: MemoryState
+  signalRead?: ExtractedReplaySignals
+  baseline?: CalibrationBaseline
 }
