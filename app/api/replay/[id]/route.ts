@@ -24,7 +24,7 @@ export async function GET(_req: Request, context: Context) {
   if (error || !user) {
     return NextResponse.json(
       {
-        error: "SIGNAL INTERRUPTED",
+        error: "MEMORY ACCESS REQUIRED",
       },
       {
         status: 401,

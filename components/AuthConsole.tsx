@@ -9,12 +9,12 @@ type Mode = "login" | "signup"
 function authStatus(error: string) {
   const lower = error.toLowerCase()
 
-  if (lower.includes("rate limit")) return "SIGNAL INTERRUPTED"
+  if (lower.includes("rate limit")) return "MEMORY ACCESS WAITING"
   if (lower.includes("invalid")) return "MEMORY ACCESS DENIED"
   if (lower.includes("confirm")) return "CONFIRMATION REQUIRED"
   if (lower.includes("password")) return "MEMORY ACCESS DENIED"
 
-  return "SIGNAL INTERRUPTED"
+  return "MEMORY ACCESS WAITING"
 }
 
 export default function AuthConsole() {

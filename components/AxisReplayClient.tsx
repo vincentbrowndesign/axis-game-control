@@ -24,7 +24,11 @@ import type {
   WarmupChainProgress,
 } from "@/lib/twin/types"
 import { atmosphereState } from "@/lib/world/atmosphereState"
-import { getNextWarmupFromMission } from "@/lib/world/getNextWarmup"
+import {
+  getNextWarmupFromMission,
+  getWarmupById,
+} from "@/lib/world/getNextWarmup"
+import { getPendingMemory } from "@/lib/video/recordingPersistence"
 import {
   addAudioSignalSample,
   addFrameSignalSample,
@@ -719,6 +723,7 @@ export default function AxisReplayClient({
   const poseUnavailableRef = useRef(false)
   const lastPoseSampleRef = useRef(0)
   const recordedWarmupKeyRef = useRef<string | null>(null)
+  const pendingObjectUrlRef = useRef<string | null>(null)
   const setPlaybackId = useSessionStore(
     (state) => state.setPlaybackId
   )
@@ -930,6 +935,10 @@ export default function AxisReplayClient({
     return () => {
       poseProviderRef.current?.close()
       poseProviderRef.current = null
+      if (pendingObjectUrlRef.current) {
+        URL.revokeObjectURL(pendingObjectUrlRef.current)
+        pendingObjectUrlRef.current = null
+      }
     }
   }, [])
 
@@ -946,7 +955,76 @@ export default function AxisReplayClient({
     poseUnavailableRef.current = false
     recordedWarmupKeyRef.current = null
 
+    let cancelled = false
+
     queueMicrotask(() => {
+      async function hydrateReplay() {
+        const localSession = safeParseSession(
+          localStorage.getItem(`axis-session-${playbackId}`)
+        )
+        const normalizedSession =
+          normalizeSession(initialSession) ||
+          normalizeSession(localSession)
+
+        if (normalizedSession) {
+          if (!cancelled) {
+            setSession(normalizedSession)
+            setExtractedSignals(initialSession?.signalRead || null)
+            setIsLoading(false)
+          }
+          return
+        }
+
+        const pendingMemory = await getPendingMemory(playbackId)
+
+        if (!pendingMemory) {
+          if (!cancelled) {
+            setSession(null)
+            setExtractedSignals(null)
+            setIsLoading(false)
+          }
+          return
+        }
+
+        if (pendingObjectUrlRef.current) {
+          URL.revokeObjectURL(pendingObjectUrlRef.current)
+        }
+
+        const videoUrl = URL.createObjectURL(pendingMemory.blob)
+        pendingObjectUrlRef.current = videoUrl
+        const warmup = getWarmupById(pendingMemory.warmupId)
+        const owner = getActiveTwin()
+        const pendingSession = normalizeSession({
+          id: pendingMemory.id,
+          createdAt: pendingMemory.createdAt,
+          source: "camera",
+          videoUrl,
+          title: "Replay Ready",
+          mission: warmup
+            ? `WARMUP ${warmup.order
+                .toString()
+                .padStart(2, "0")} - ${warmup.title}`
+            : "Open Session",
+          player: owner.displayName,
+          environment: warmup ? "mission" : "practice",
+          duration: pendingMemory.duration,
+          status: "MEMORY STORED",
+          fileName: pendingMemory.filename,
+          tags: [],
+          memoryCount: 1,
+          archiveStatus: "Active",
+          context: "Memory stored. Replay ready.",
+          ambientLine: "Memory carries forward.",
+        })
+
+        if (!cancelled) {
+          setSession(pendingSession)
+          setExtractedSignals(null)
+          setReplayStatus("recovered")
+          setIsLoading(false)
+        }
+      }
+
       setLiveSignalEvents([])
       signalReadyRef.current = false
       setSignalStatus("initializing")
@@ -958,17 +1036,12 @@ export default function AxisReplayClient({
       setBaseline(null)
       setPoseRead(null)
       setWarmupProgress(null)
-      const localSession = safeParseSession(
-        localStorage.getItem(`axis-session-${playbackId}`)
-      )
-
-      setSession(
-        normalizeSession(initialSession) ||
-          normalizeSession(localSession)
-      )
-      setExtractedSignals(initialSession?.signalRead || null)
-      setIsLoading(false)
+      void hydrateReplay()
     })
+
+    return () => {
+      cancelled = true
+    }
   }, [clearSignalTimeouts, initialSession, playbackId, setPlaybackId])
 
   useEffect(() => {

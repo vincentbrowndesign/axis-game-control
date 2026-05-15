@@ -12,6 +12,11 @@ import { parseUploadResponseText } from "@/lib/uploadResponse"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import type { CalibrationMission } from "@/lib/missions/types"
 import { getActiveTwin } from "@/lib/twin/getOrCreateTwin"
+import { getSupportedRecordingMime } from "@/lib/video/getSupportedRecordingMime"
+import {
+  savePendingMemory,
+  updatePendingMemoryStatus,
+} from "@/lib/video/recordingPersistence"
 
 type Source = "camera"
 type FlowStep = "entry" | "mission" | "brief" | "capture" | "processing"
@@ -223,26 +228,10 @@ export default function UploadConsole({
       throw new Error("INVALID FINAL NAME")
     }
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (userError || !user) {
-      throw new Error("AUTH REQUIRED")
-    }
-
-    const uploadPath = `${user.id}/${normalized.finalName}`
-
-    if (!uploadPath.includes("/")) {
-      throw new Error("INVALID STORAGE PATH")
-    }
-
     console.log("AXIS FILE", file)
     console.log("AXIS NAME", normalized.originalName)
     console.log("AXIS MIME", normalized.mime)
     console.log("AXIS FINAL", normalized.finalName)
-    console.log("AXIS PATH", uploadPath)
 
     if (!isSupportedReplayFile(file)) {
       setProgress(0)
@@ -250,11 +239,7 @@ export default function UploadConsole({
       return
     }
 
-    if (!navigator.onLine) {
-      setProgress(0)
-      setStatus("MEMORY WAITING")
-      return
-    }
+    let pendingMemoryId: string | null = null
 
     try {
       setFlowStep("processing")
@@ -263,9 +248,61 @@ export default function UploadConsole({
       setStatus("BINDING MEMORY TO SESSION")
 
       const duration = await readDuration(file)
+      const activeTwin = getActiveTwin(twinName)
+      const pendingMemory = await savePendingMemory({
+        blob: file,
+        mimeType:
+          normalized.mime ||
+          file.type ||
+          getSupportedRecordingMime() ||
+          "video/mp4",
+        filename: normalized.finalName,
+        duration,
+        twinId: activeTwin.id,
+        warmupId: selectedMission?.id || "open-session",
+        status: "saving",
+      })
+
+      pendingMemoryId = pendingMemory?.id || null
 
       setProgress(36)
       setStatus("BINDING MEMORY TO SESSION")
+
+      if (!navigator.onLine) {
+        if (pendingMemoryId) {
+          await updatePendingMemoryStatus(pendingMemoryId, "pending")
+        }
+
+        setProgress(100)
+        setStatus("MEMORY STORED")
+        if (pendingMemoryId) {
+          setTimeout(() => {
+            router.push(`/replay/${pendingMemoryId}`)
+          }, 900)
+        }
+        return
+      }
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        if (pendingMemoryId) {
+          await updatePendingMemoryStatus(pendingMemoryId, "pending")
+        }
+
+        throw new Error("AUTH REQUIRED")
+      }
+
+      const uploadPath = `${user.id}/${normalized.finalName}`
+
+      if (!uploadPath.includes("/")) {
+        throw new Error("INVALID STORAGE PATH")
+      }
+
+      console.log("AXIS PATH", uploadPath)
 
       const formData = new FormData()
       formData.append("file", file)
@@ -280,7 +317,7 @@ export default function UploadConsole({
               .padStart(2, "0")} - ${selectedMission.title}`
           : "None"
       )
-      formData.append("player", getActiveTwin(twinName).displayName)
+      formData.append("player", activeTwin.displayName)
       formData.append("originalName", normalized.originalName)
       formData.append("mime", normalized.mime)
       formData.append("finalName", normalized.finalName)
@@ -319,13 +356,26 @@ export default function UploadConsole({
       setProgress(100)
       setStatus("MEMORY STORED")
 
+      if (pendingMemoryId) {
+        await updatePendingMemoryStatus(pendingMemoryId, "synced")
+      }
+
       setTimeout(() => {
         router.push(`/replay/${result.replayId}`)
       }, 900)
     } catch (error) {
       console.error(error)
-      setStatus(toAxisErrorState(error))
-      setProgress(0)
+      if (pendingMemoryId) {
+        await updatePendingMemoryStatus(pendingMemoryId, "failed")
+        setStatus("MEMORY STORED")
+        setProgress(100)
+        setTimeout(() => {
+          router.push(`/replay/${pendingMemoryId}`)
+        }, 900)
+      } else {
+        setStatus(toAxisErrorState(error))
+        setProgress(0)
+      }
     } finally {
       setIsUploading(false)
     }
