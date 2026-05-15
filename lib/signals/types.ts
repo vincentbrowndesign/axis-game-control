@@ -8,7 +8,6 @@ export type SignalChannelStatus =
   | "unavailable"
 
 export type SignalReadiness =
-  | "waiting"
   | "initializing"
   | "recorded"
   | "unavailable"
