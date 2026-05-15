@@ -8,20 +8,63 @@ const VIDEO_EXTENSIONS = new Set([
   "quicktime",
 ])
 
-export function sanitizeFileName(name: string) {
-  const fallback = `axis-replay-${Date.now()}.mp4`
-  const raw = name.trim() || fallback
-  const normalized = raw.normalize("NFKD")
-  const safe = normalized
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .replace(/_{2,}/g, "_")
-    .replace(/^_+|_+$/g, "")
+export type ReplayFileLike = {
+  name?: string
+  type?: string
+  size: number
+}
 
-  return safe || fallback
+export function normalizeReplayFile(file: ReplayFileLike) {
+  const originalName =
+    typeof file?.name === "string" && file.name.length > 0
+      ? file.name
+      : "axis_capture"
+
+  const mime =
+    typeof file?.type === "string"
+      ? file.type.toLowerCase()
+      : ""
+
+  const extension = originalName.includes(".")
+    ? originalName.split(".").pop()?.toLowerCase() || "bin"
+    : mime.includes("quicktime")
+      ? "mov"
+      : mime.includes("mp4")
+        ? "mp4"
+        : mime.includes("image/heic")
+          ? "heic"
+          : "bin"
+
+  const safeBase =
+    originalName
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .slice(0, 60) || "axis_capture"
+
+  const finalName = `${Date.now()}_${safeBase}.${extension}`
+
+  return {
+    originalName,
+    mime,
+    extension,
+    safeBase,
+    finalName,
+  }
+}
+
+export function sanitizeFileName(name: string) {
+  return normalizeReplayFile({
+    name,
+    size: 1,
+  }).finalName
 }
 
 export function getFileExtension(name: string, type?: string) {
-  const extension = name.split(".").pop()?.toLowerCase()
+  const { extension } = normalizeReplayFile({
+    name,
+    type,
+    size: 1,
+  })
 
   if (extension) return extension
 
@@ -33,38 +76,35 @@ export function getFileExtension(name: string, type?: string) {
 }
 
 export function isSupportedReplayFile(file: {
-  name: string
+  name?: string
   type?: string
   size: number
 }) {
   if (!file.size) return false
 
-  const extension = getFileExtension(file.name, file.type)
-  const type = file.type || ""
+  const { extension, mime } = normalizeReplayFile(file)
 
-  if (type.startsWith("video/")) return true
+  if (mime.startsWith("video/")) return true
 
   return VIDEO_EXTENSIONS.has(extension)
 }
 
 export function createStoragePath({
   userId,
-  sessionId,
   fileName,
   type,
 }: {
   userId: string
-  sessionId: string
   fileName: string
   type?: string
 }) {
-  const safeName = sanitizeFileName(fileName)
-  const extension = getFileExtension(safeName, type)
-  const baseName = safeName
-    .replace(/\.[^.]+$/, "")
-    .slice(0, 80)
+  const { finalName } = normalizeReplayFile({
+    name: fileName,
+    type,
+    size: 1,
+  })
 
-  return `${userId}/${Date.now()}-${sessionId}-${baseName}.${extension}`
+  return `${userId}/${finalName}`
 }
 
 export function normalizeSource(value: FormDataEntryValue | null): SessionSource {

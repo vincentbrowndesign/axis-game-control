@@ -3,11 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
   cleanText,
-  createStoragePath,
   isSupportedReplayFile,
   normalizeEnvironment,
+  normalizeReplayFile,
   normalizeSource,
-  sanitizeFileName,
 } from "@/lib/replayStorage"
 
 export const runtime = "nodejs"
@@ -37,27 +36,44 @@ export async function POST(req: Request) {
 
     const formData = await req.formData()
 
-    const file = formData.get("file") as File | null
+    const fileEntry = formData.get("file")
     const duration = Number(formData.get("duration") || 0)
 
-    if (!file) {
+    if (!fileEntry) {
       return axisError("MEMORY LOAD FAILED")
     }
 
+    if (!(fileEntry instanceof File)) {
+      return axisError("INVALID MEMORY FORMAT")
+    }
+
+    const file = fileEntry
+    const normalized = normalizeReplayFile(file)
+
+    console.log("AXIS FILE", file)
+    console.log("AXIS NAME", normalized.originalName)
+    console.log("AXIS MIME", normalized.mime)
+    console.log("AXIS FINAL", normalized.finalName)
+
     if (!isSupportedReplayFile(file)) {
-      return axisError("STORAGE PATH INVALID")
+      return axisError("INVALID MEMORY FORMAT")
+    }
+
+    if (!normalized.finalName) {
+      return axisError("STORAGE KEY INVALID")
     }
 
     const sessionId = crypto.randomUUID()
-    const safeFileName = sanitizeFileName(file.name)
-    const filePath = createStoragePath({
-      userId: user.id,
-      sessionId,
-      fileName: safeFileName,
-      type: file.type,
-    })
+    const filePath = `${user.id}/${normalized.finalName}`
+
+    if (!filePath.includes("/")) {
+      return axisError("STORAGE KEY INVALID")
+    }
+
+    console.log("AXIS PATH", filePath)
+
     const buffer = Buffer.from(await file.arrayBuffer())
-    const contentType = file.type || "video/mp4"
+    const contentType = normalized.mime || "video/mp4"
 
     const upload = await supabaseAdmin.storage
       .from("axis-replays")
@@ -71,7 +87,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json(
         {
-          error: "RETRYING INGEST",
+          error: "STORAGE KEY INVALID",
         },
         {
           status: 500,
@@ -98,9 +114,9 @@ export async function POST(req: Request) {
       .insert({
         id: sessionId,
         user_id: user.id,
-        title: safeFileName || "Axis Session",
+        title: normalized.finalName || "Axis Session",
         video_url: signedUrl.data?.signedUrl || null,
-        file_name: safeFileName,
+        file_name: normalized.finalName,
         file_path: filePath,
         source: normalizeSource(formData.get("source")),
         mission: cleanText(formData.get("mission"), "None"),
@@ -117,8 +133,8 @@ export async function POST(req: Request) {
         status: "stored",
         tags: [],
         metadata: {
-          originalName: file.name,
-          originalType: file.type || null,
+          originalName: normalized.originalName,
+          originalType: normalized.mime || null,
           originalSize: file.size,
           signedUrlExpiresIn: signedUrlTtl,
         },
@@ -147,7 +163,7 @@ export async function POST(req: Request) {
       session_id: inserted.data.id,
       bucket_id: "axis-replays",
       file_path: filePath,
-      file_name: safeFileName,
+      file_name: normalized.finalName,
       content_type: contentType,
       size_bytes: file.size,
     })
@@ -159,7 +175,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       id: inserted.data.id,
-      fileName: safeFileName,
+      fileName: normalized.finalName,
       type: contentType,
       size: file.size,
       videoUrl: inserted.data.video_url,

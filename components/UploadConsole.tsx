@@ -4,12 +4,66 @@ import Link from "next/link"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { isSupportedReplayFile } from "@/lib/replayStorage"
+import {
+  isSupportedReplayFile,
+  normalizeReplayFile,
+} from "@/lib/replayStorage"
 
 type Source = "camera" | "upload"
 
 type Props = {
   email: string
+}
+
+function toAxisErrorState(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "SIGNAL INTERRUPTED"
+
+  if (message.includes("NON_JSON_RESPONSE")) {
+    return "RESPONSE CORRUPTED"
+  }
+
+  if (
+    message.includes("INVALID FILE OBJECT") ||
+    message.includes("INVALID FINAL NAME") ||
+    message.includes("INVALID STORAGE PATH")
+  ) {
+    return "STORAGE KEY INVALID"
+  }
+
+  if (
+    message.includes("NO FILE") ||
+    message.includes("MEMORY LOAD FAILED")
+  ) {
+    return "MEMORY INGEST FAILED"
+  }
+
+  if (
+    message.includes("INVALID MEMORY FORMAT") ||
+    message.includes("unsupported")
+  ) {
+    return "INVALID MEMORY FORMAT"
+  }
+
+  if (
+    message.includes("expected pattern") ||
+    message.includes("Load failed") ||
+    message.includes("Failed")
+  ) {
+    return "SIGNAL INTERRUPTED"
+  }
+
+  if (
+    message === "SIGNAL INTERRUPTED" ||
+    message === "MEMORY INGEST FAILED" ||
+    message === "INVALID MEMORY FORMAT" ||
+    message === "STORAGE KEY INVALID" ||
+    message === "RESPONSE CORRUPTED"
+  ) {
+    return message
+  }
+
+  return "MEMORY INGEST FAILED"
 }
 
 function readDuration(file: File) {
@@ -58,9 +112,44 @@ export default function UploadConsole({ email }: Props) {
   async function saveSession(file: File, source: Source) {
     if (isUploading) return
 
+    if (!file) {
+      throw new Error("NO FILE")
+    }
+
+    if (!(file instanceof File)) {
+      throw new Error("INVALID FILE OBJECT")
+    }
+
+    const normalized = normalizeReplayFile(file)
+
+    if (!normalized.finalName) {
+      throw new Error("INVALID FINAL NAME")
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error("SIGNAL INTERRUPTED")
+    }
+
+    const uploadPath = `${user.id}/${normalized.finalName}`
+
+    if (!uploadPath.includes("/")) {
+      throw new Error("INVALID STORAGE PATH")
+    }
+
+    console.log("AXIS FILE", file)
+    console.log("AXIS NAME", normalized.originalName)
+    console.log("AXIS MIME", normalized.mime)
+    console.log("AXIS FINAL", normalized.finalName)
+    console.log("AXIS PATH", uploadPath)
+
     if (!isSupportedReplayFile(file)) {
       setProgress(0)
-      setStatus("STORAGE PATH INVALID")
+      setStatus("INVALID MEMORY FORMAT")
       return
     }
 
@@ -75,24 +164,36 @@ export default function UploadConsole({ email }: Props) {
       setProgress(12)
       setStatus("PREPARING BEHAVIORAL MEMORY")
 
-      const localUrl = URL.createObjectURL(file)
-      const duration = await readDuration(file)
+      const duration =
+        source === "camera" ? await readDuration(file) : 0
 
       setProgress(36)
       setStatus("BINDING MEMORY TO SESSION")
 
       const formData = new FormData()
-      formData.set("file", file)
-      formData.set("source", source)
-      formData.set("duration", String(duration))
-      formData.set("environment", "practice")
-      formData.set("mission", "None")
-      formData.set("player", "Unassigned")
+      formData.append("file", file)
+      formData.append("source", source)
+      formData.append("duration", String(duration))
+      formData.append("environment", "practice")
+      formData.append("mission", "None")
+      formData.append("player", "Unassigned")
+      formData.append("originalName", normalized.originalName)
+      formData.append("mime", normalized.mime)
+      formData.append("finalName", normalized.finalName)
 
       const response = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       })
+
+      const contentType =
+        response.headers.get("content-type") || ""
+
+      if (!contentType.includes("application/json")) {
+        const text = await response.text()
+
+        throw new Error(`NON_JSON_RESPONSE: ${text}`)
+      }
 
       const result = (await response.json()) as {
         id?: string
@@ -105,17 +206,15 @@ export default function UploadConsole({ email }: Props) {
         throw new Error(result.error || "SIGNAL INTERRUPTED")
       }
 
-      const replayUrl = result.videoUrl || localUrl
-
-      if (result.videoUrl) {
-        URL.revokeObjectURL(localUrl)
+      if (!result.videoUrl) {
+        throw new Error("MEMORY INGEST FAILED")
       }
 
       const session = {
         id: result.id,
         createdAt: Date.now(),
         source,
-        videoUrl: replayUrl,
+        videoUrl: result.videoUrl,
         title: result.fileName || file.name || "Axis Session",
         mission: "None",
         player: "Unassigned",
@@ -148,17 +247,7 @@ export default function UploadConsole({ email }: Props) {
       }, 350)
     } catch (error) {
       console.error(error)
-      const message =
-        error instanceof Error
-          ? error.message
-          : "SIGNAL INTERRUPTED"
-
-      setStatus(
-        message.includes("Failed") ||
-          message.includes("Load failed")
-          ? "SIGNAL INTERRUPTED"
-          : message
-      )
+      setStatus(toAxisErrorState(error))
       setProgress(0)
     } finally {
       setIsUploading(false)
@@ -247,14 +336,15 @@ export default function UploadConsole({ email }: Props) {
         <input
           ref={uploadInputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,.mov,.mp4,.m4v"
           className="hidden"
           onChange={(event) => {
             const file = event.target.files?.[0]
 
-            if (file) saveSession(file, "upload")
+            if (file) {
+              void saveSession(file, "upload")
+            }
             else setStatus("MEMORY LOAD FAILED")
-            event.target.value = ""
           }}
         />
 
