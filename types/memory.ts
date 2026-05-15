@@ -52,7 +52,72 @@ export type ReplaySessionView = {
   fileName?: string
   tags: string[]
   memoryCount?: number
+  lastSignal?: string
+  archiveStatus?: string
+  context?: string
+  timeline?: {
+    time: string
+    label: string
+    detail: string
+  }[]
   ambientLine?: string
+}
+
+function metadataNumber(
+  metadata: Record<string, unknown> | null,
+  key: string,
+  fallback: number
+) {
+  const value = metadata?.[key]
+
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : fallback
+}
+
+function metadataString(
+  metadata: Record<string, unknown> | null,
+  key: string,
+  fallback: string
+) {
+  const value = metadata?.[key]
+
+  return typeof value === "string" && value.length > 0
+    ? value
+    : fallback
+}
+
+function metadataTimeline(metadata: Record<string, unknown> | null) {
+  const value = metadata?.timeline
+
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null
+
+      const record = item as Record<string, unknown>
+
+      return {
+        time:
+          typeof record.time === "string"
+            ? record.time
+            : "00:00",
+        label:
+          typeof record.label === "string"
+            ? record.label
+            : "SIGNAL FOUND",
+        detail:
+          typeof record.detail === "string"
+            ? record.detail
+            : "Session memory expanded.",
+      }
+    })
+    .filter((item): item is {
+      time: string
+      label: string
+      detail: string
+    } => Boolean(item))
 }
 
 export function mapReplaySession(
@@ -71,7 +136,27 @@ export function mapReplaySession(
     status: session.status || "stored",
     fileName: session.file_name || undefined,
     tags: session.tags || [],
-    memoryCount: 1,
-    ambientLine: "Memory online.",
+    memoryCount: metadataNumber(session.metadata, "memoryCount", 1),
+    lastSignal: metadataString(
+      session.metadata,
+      "lastSignal",
+      "MEMORY STORED"
+    ),
+    archiveStatus: metadataString(
+      session.metadata,
+      "archiveStatus",
+      "ACTIVE"
+    ),
+    context: metadataString(
+      session.metadata,
+      "context",
+      "Replay linked. Session added. Memory available."
+    ),
+    timeline: metadataTimeline(session.metadata),
+    ambientLine: metadataString(
+      session.metadata,
+      "ambientLine",
+      "Memory online."
+    ),
   }
 }

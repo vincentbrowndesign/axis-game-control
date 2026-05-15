@@ -15,11 +15,48 @@ type Props = {
   email: string
 }
 
+type UploadResponse = {
+  ok?: boolean
+  id?: string
+  fileName?: string
+  videoUrl?: string
+  error?: string
+  stage?: string
+  session?: {
+    id?: string
+    createdAt?: number
+    source?: Source
+    videoUrl?: string
+    title?: string
+    mission?: string
+    player?: string
+    environment?: string
+    duration?: number
+    status?: string
+    fileName?: string
+    tags?: string[]
+    memoryCount?: number
+    lastSignal?: string
+    archiveStatus?: string
+    context?: string
+    timeline?: {
+      time: string
+      label: string
+      detail: string
+    }[]
+    ambientLine?: string
+  }
+}
+
 function toAxisErrorState(error: unknown) {
   const message =
     error instanceof Error ? error.message : "SIGNAL INTERRUPTED"
 
   if (message.includes("NON_JSON_RESPONSE")) {
+    return "RESPONSE CORRUPTED"
+  }
+
+  if (message.includes("RESPONSE_CORRUPTED")) {
     return "RESPONSE CORRUPTED"
   }
 
@@ -64,6 +101,22 @@ function toAxisErrorState(error: unknown) {
   }
 
   return "MEMORY INGEST FAILED"
+}
+
+function parseUploadResponse(text: string) {
+  try {
+    return JSON.parse(text) as UploadResponse
+  } catch (error) {
+    console.error("AXIS JSON PARSE FAILURE", error)
+
+    throw new Error("RESPONSE_CORRUPTED")
+  }
+}
+
+function safeMemoryCount(value?: number) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(value, 1)
+    : 1
 }
 
 function readDuration(file: File) {
@@ -192,15 +245,13 @@ export default function UploadConsole({ email }: Props) {
       if (!contentType.includes("application/json")) {
         const text = await response.text()
 
+        console.error("AXIS NON JSON RESPONSE TEXT", text)
+
         throw new Error(`NON_JSON_RESPONSE: ${text}`)
       }
 
-      const result = (await response.json()) as {
-        id?: string
-        fileName?: string
-        videoUrl?: string
-        error?: string
-      }
+      const text = await response.text()
+      const result = parseUploadResponse(text)
 
       if (!response.ok || !result.id) {
         throw new Error(result.error || "SIGNAL INTERRUPTED")
@@ -220,6 +271,20 @@ export default function UploadConsole({ email }: Props) {
         player: "Unassigned",
         environment: "practice",
         duration,
+        status: "stored",
+        fileName: result.fileName || normalized.finalName,
+        tags: result.session?.tags || [],
+        memoryCount: safeMemoryCount(result.session?.memoryCount),
+        lastSignal: result.session?.lastSignal || "MEMORY STORED",
+        archiveStatus: result.session?.archiveStatus || "ACTIVE",
+        context:
+          result.session?.context ||
+          "Replay linked. Session added. Memory available.",
+        timeline: Array.isArray(result.session?.timeline)
+          ? result.session.timeline
+          : [],
+        ambientLine:
+          result.session?.ambientLine || "Replay added to archive.",
       }
 
       localStorage.setItem(

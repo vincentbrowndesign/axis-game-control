@@ -21,7 +21,7 @@ function axisError({
   status?: number
   detail?: unknown
 }) {
-  return Response.json(
+  return safeJson(
     {
       ok: false,
       stage,
@@ -29,11 +29,9 @@ function axisError({
       detail:
         detail instanceof Error
           ? detail.message
-          : detail,
+          : detail ?? null,
     },
-    {
-      status,
-    }
+    status
   )
 }
 
@@ -41,6 +39,19 @@ function detailFromError(error: unknown) {
   return error instanceof Error
     ? error.message
     : "UNKNOWN FAILURE"
+}
+
+function safeJson(body: Record<string, unknown>, status = 200) {
+  return Response.json(
+    JSON.parse(
+      JSON.stringify(body, (_key, value) =>
+        value === undefined ? null : value
+      )
+    ),
+    {
+      status,
+    }
+  )
 }
 
 async function withTimeout<T>(
@@ -64,7 +75,7 @@ async function withTimeout<T>(
 }
 
 export async function GET() {
-  return Response.json({
+  return safeJson({
     ok: true,
     axis: "UPLOAD ROUTE ACTIVE",
   })
@@ -79,7 +90,7 @@ export async function POST(request: Request) {
     )
 
     if (request.headers.get("x-axis-route-test") === "true") {
-      return Response.json({
+      return safeJson({
         ok: true,
         axis: "UPLOAD ROUTE ACTIVE",
       })
@@ -306,6 +317,12 @@ export async function POST(request: Request) {
           originalName: normalized.originalName,
           originalType: normalized.mime || null,
           originalSize: file.size,
+          memoryCount: 1,
+          lastSignal: "MEMORY STORED",
+          archiveStatus: "ACTIVE",
+          context: "Replay linked. Session added. Memory available.",
+          timeline: [],
+          ambientLine: "Replay added to archive.",
           signedUrlExpiresIn: signedUrlTtl,
         },
       })
@@ -341,15 +358,29 @@ export async function POST(request: Request) {
 
     if (uploadRecord.error) {
       console.error("AXIS UPLOAD RECORD FAILURE", uploadRecord.error)
-
-      return axisError({
-        stage: "db-upload-record",
-        error: "DATABASE FAILURE",
-        status: 500,
-        detail: uploadRecord.error.message,
-      })
     } else {
       console.log("AXIS UPLOAD RECORD CREATED")
+    }
+
+    const sessionView = {
+      id: inserted.data.id,
+      createdAt: Date.now(),
+      source: normalizeSource(formData.get("source")),
+      videoUrl: inserted.data.video_url || "",
+      title: normalized.finalName || "Axis Session",
+      mission: cleanText(formData.get("mission"), "None"),
+      player: cleanText(formData.get("player"), "Unassigned"),
+      environment: normalizeEnvironment(formData.get("environment")),
+      duration: Number.isFinite(duration) ? duration : 0,
+      status: "stored",
+      fileName: normalized.finalName,
+      tags: [],
+      memoryCount: 1,
+      lastSignal: "MEMORY STORED",
+      archiveStatus: "ACTIVE",
+      context: "Replay linked. Session added. Memory available.",
+      timeline: [],
+      ambientLine: "Replay added to archive.",
     }
 
     console.log("AXIS FINAL RESPONSE", {
@@ -359,7 +390,7 @@ export async function POST(request: Request) {
       size: file.size,
     })
 
-    return Response.json({
+    return safeJson({
       ok: true,
       stage: "complete",
       success: true,
@@ -367,7 +398,10 @@ export async function POST(request: Request) {
       fileName: normalized.finalName,
       type: contentType,
       size: file.size,
-      videoUrl: inserted.data.video_url,
+      videoUrl: inserted.data.video_url || "",
+      session: sessionView,
+      metadataStored: !uploadRecord.error,
+      metadataError: uploadRecord.error?.message || null,
     })
   } catch (error) {
     console.error("AXIS UPLOAD ERROR", error)

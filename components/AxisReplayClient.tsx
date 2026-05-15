@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
 import type { ReplaySessionView } from "@/types/memory"
 
@@ -9,7 +9,7 @@ type InferSignal = {
   confidence: number
   environment: string
   message: string
-  timeline: {
+  timeline?: {
     time: string
     label: string
     type: string
@@ -72,6 +72,41 @@ function safeParseSession(raw: string | null) {
     return JSON.parse(raw) as ReplaySessionView
   } catch {
     return null
+  }
+}
+
+function normalizeSession(
+  value: ReplaySessionView | null | undefined
+) {
+  if (!value) return null
+
+  return {
+    ...value,
+    source: value.source || "upload",
+    videoUrl: value.videoUrl || "",
+    title: value.title || "Axis Session",
+    mission: value.mission || "None",
+    player: value.player || "Unassigned",
+    environment: value.environment || "practice",
+    duration:
+      typeof value.duration === "number" &&
+      Number.isFinite(value.duration)
+        ? value.duration
+        : 0,
+    status: value.status || "stored",
+    tags: Array.isArray(value.tags) ? value.tags : [],
+    memoryCount:
+      typeof value.memoryCount === "number" &&
+      Number.isFinite(value.memoryCount)
+        ? Math.max(value.memoryCount, 1)
+        : 1,
+    lastSignal: value.lastSignal || "MEMORY STORED",
+    archiveStatus: value.archiveStatus || "ACTIVE",
+    context:
+      value.context ||
+      "Replay linked. Session added. Memory available.",
+    timeline: Array.isArray(value.timeline) ? value.timeline : [],
+    ambientLine: value.ambientLine || "Context building.",
   }
 }
 
@@ -159,7 +194,9 @@ export default function AxisReplayClient({
   )
 
   const [session, setSession] =
-    useState<ReplaySessionView | null>(initialSession)
+    useState<ReplaySessionView | null>(
+      normalizeSession(initialSession)
+    )
   const [signal, setSignal] =
     useState<InferSignal | null>(null)
   const [currentTime, setLocalCurrentTime] = useState(0)
@@ -176,7 +213,10 @@ export default function AxisReplayClient({
         localStorage.getItem(`axis-session-${playbackId}`)
       )
 
-      setSession(initialSession || localSession)
+      setSession(
+        normalizeSession(initialSession) ||
+          normalizeSession(localSession)
+      )
       setIsLoading(false)
     })
   }, [initialSession, playbackId, setPlaybackId])
@@ -203,10 +243,10 @@ export default function AxisReplayClient({
         return
       }
 
-      setSession(data.session)
+      setSession(normalizeSession(data.session))
       localStorage.setItem(
         `axis-session-${playbackId}`,
-        JSON.stringify(data.session)
+        JSON.stringify(normalizeSession(data.session))
       )
       setReplayStatus("recovered")
     } catch {
@@ -252,41 +292,46 @@ export default function AxisReplayClient({
         ? 100
         : 0
 
-  const markers = useMemo<Marker[]>(() => {
-    if (signal?.timeline.length) {
-      return signal.timeline.map((event) => ({
-        time: event.time,
-        label: "SIGNAL FOUND",
-        detail: "Moment added to session memory.",
-        tone:
-          event.type === "advantage" || event.type === "attack"
-            ? "lime"
-            : "cyan",
-      }))
-    }
-
-    return [
-      {
-        time: "00:00",
-        label: "FOOTAGE ACCEPTED",
-        detail: "Replay linked to player archive.",
-        tone: "cyan",
-      },
-      {
-        time: formatClock(Math.max(duration * 0.33, 1)),
-        label: "CONTEXT BUILDING",
-        detail:
-          signal?.message || "Session context is being added to memory.",
-        tone: signal?.basketballLikely ? "lime" : "zinc",
-      },
-      {
-        time: formatClock(duration),
-        label: "MEMORY STORED",
-        detail: "Movement stored for this player.",
-        tone: "lime",
-      },
-    ]
-  }, [duration, signal])
+  const markers: Marker[] =
+    Array.isArray(session?.timeline) && session.timeline.length
+      ? session.timeline.map((event) => ({
+          time: event.time || "00:00",
+          label: event.label || "SIGNAL FOUND",
+          detail: event.detail || "Session memory expanded.",
+          tone: "cyan",
+        }))
+      : Array.isArray(signal?.timeline) && signal.timeline.length
+        ? signal.timeline.map((event) => ({
+            time: event.time,
+            label: "SIGNAL FOUND",
+            detail: "Moment added to session memory.",
+            tone:
+              event.type === "advantage" || event.type === "attack"
+                ? "lime"
+                : "cyan",
+          }))
+        : [
+            {
+              time: "00:00",
+              label: "FOOTAGE ACCEPTED",
+              detail: "Replay linked to player archive.",
+              tone: "cyan",
+            },
+            {
+              time: formatClock(Math.max(duration * 0.33, 1)),
+              label: "CONTEXT BUILDING",
+              detail:
+                signal?.message ||
+                "Session context is being added to memory.",
+              tone: signal?.basketballLikely ? "lime" : "zinc",
+            },
+            {
+              time: formatClock(duration),
+              label: "MEMORY STORED",
+              detail: "Movement stored for this player.",
+              tone: "lime",
+            },
+          ]
 
   if (isLoading) {
     return (
@@ -408,7 +453,7 @@ export default function AxisReplayClient({
                 Last Signal
               </p>
               <p className="mt-3 text-2xl font-black text-white">
-                {formatClock(currentTime)}
+                {session.lastSignal || formatClock(currentTime)}
               </p>
             </div>
 
@@ -417,7 +462,7 @@ export default function AxisReplayClient({
                 Archive Status
               </p>
               <p className="mt-3 text-2xl font-black text-lime-300">
-                Active
+                {session.archiveStatus || "Active"}
               </p>
             </div>
           </div>
@@ -480,7 +525,8 @@ export default function AxisReplayClient({
                   ? "REPLAY UNLOCKED"
                 : replayStatus === "failed"
                   ? "SIGNAL INTERRUPTED"
-                  : "Replay linked. Session added. Memory available."}
+                  : session.context ||
+                    "Replay linked. Session added. Memory available."}
             </p>
           </div>
         </aside>
