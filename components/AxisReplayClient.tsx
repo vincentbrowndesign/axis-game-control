@@ -23,6 +23,8 @@ import type {
   DigitalTwin,
   WarmupChainProgress,
 } from "@/lib/twin/types"
+import { atmosphereState } from "@/lib/world/atmosphereState"
+import { getNextWarmupFromMission } from "@/lib/world/getNextWarmup"
 import {
   addAudioSignalSample,
   addFrameSignalSample,
@@ -98,25 +100,10 @@ function formatClock(seconds?: number) {
     .padStart(2, "0")}`
 }
 
-function formatDuration(seconds?: number) {
-  if (!seconds || Number.isNaN(seconds)) return "0:00"
-
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-
-  return `${mins}:${secs.toString().padStart(2, "0")}`
-}
-
 function formatMemoryCount(count?: number) {
   return Math.max(count || 1, 1)
     .toString()
     .padStart(2, "0")
-}
-
-function capitalize(value?: string) {
-  if (!value) return "Unknown"
-
-  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function safeParseSession(raw: string | null) {
@@ -272,26 +259,19 @@ function displaySignalLabel(value: string) {
     .join(" ")
 }
 
-function channelValue(status: SignalChannelStatus) {
-  if (status === "recorded") return "Recorded"
-  if (status === "unavailable") return "Unavailable"
-
-  return "Waiting"
-}
-
 function percentValue(value: number | null | undefined) {
-  if (value == null) return "Waiting"
+  if (value == null) return "Emerging"
 
   return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`
 }
 
 function countValue(value: number | null | undefined, label: string) {
-  if (value == null) return "Waiting"
+  if (value == null) return "Building"
 
   return `${value} ${label}`
 }
 
-function segmentationValue(value: number, fallback = "Waiting") {
+function segmentationValue(value: number, fallback = "Emerging") {
   return value > 0 ? String(value) : fallback
 }
 
@@ -439,7 +419,7 @@ function missionWatchRows({
           ? "Found"
           : segmentedMemory
             ? "Read Building"
-            : "Waiting",
+            : "Emerging",
       ],
       ["Rep Segments", segmentationValue(dribbleCycles)],
       [
@@ -448,7 +428,7 @@ function missionWatchRows({
           ? "Stable"
           : cadenceState === "uneven"
             ? "Uneven"
-            : "Waiting",
+            : "Stabilizing",
       ],
       ["Activity Windows", segmentationValue(activityWindows)],
     ]
@@ -582,9 +562,6 @@ function BasketballRead({
   signals,
   baseline,
   signalStatus,
-  motionStatus,
-  cameraStatus,
-  audioStatus,
   segmentedMemory,
   poseRead,
   warmupProgress,
@@ -593,9 +570,6 @@ function BasketballRead({
   signals: ExtractedReplaySignals | null
   baseline: CalibrationBaseline
   signalStatus: SignalReadiness
-  motionStatus: SignalChannelStatus
-  cameraStatus: SignalChannelStatus
-  audioStatus: SignalChannelStatus
   segmentedMemory: SegmentedMemory | null
   poseRead: PoseLandmarkRead | null
   warmupProgress: WarmupChainProgress | null
@@ -638,46 +612,22 @@ function BasketballRead({
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-4">
         <DetailRow
           label="Clip"
           value={clipValue(basketballState, signalStatus)}
         />
         <DetailRow
-          label="Motion"
-          value={channelValue(motionStatus)}
-        />
-        <DetailRow
-          label="Camera"
-          value={channelValue(cameraStatus)}
-        />
-        <DetailRow
-          label="Audio"
-          value={channelValue(audioStatus)}
-        />
-        <DetailRow
-          label="Status"
+          label="World"
           value={progress.label}
-        />
-        <DetailRow
-          label="Builds"
-          value={progress.baselineName}
         />
         <DetailRow
           label="Comparison"
           value={progress.comparison}
         />
         <DetailRow
-          label="Milestone"
+          label="Chain"
           value={progress.progress}
-        />
-        <DetailRow
-          label="Warmup"
-          value={missionValue(session)}
-        />
-        <DetailRow
-          label="Global Memory"
-          value={formatMemoryCount(session.memoryCount)}
         />
       </div>
 
@@ -719,9 +669,6 @@ function BasketballRead({
           Landmark read still building.
         </p>
       ) : null}
-      <p className="mt-2 text-sm leading-relaxed text-white/35">
-        {progress.detail}
-      </p>
     </div>
   )
 }
@@ -798,20 +745,20 @@ export default function AxisReplayClient({
   const [liveSignalEvents, setLiveSignalEvents] = useState<
     LiveSignalEvent[]
   >([])
-  const [liveMetrics, setLiveMetrics] = useState<FrameSignal>({
+  const [, setLiveMetrics] = useState<FrameSignal>({
     motionAmount: 0,
     cameraMovement: 0,
     averageBrightness: 0,
     audioEnergy: 0,
   })
-  const [audioReady, setAudioReady] = useState(false)
+  const [, setAudioReady] = useState(false)
   const [signalStatus, setSignalStatus] =
     useState<SignalReadiness>("initializing")
-  const [motionStatus, setMotionStatus] =
+  const [, setMotionStatus] =
     useState<SignalChannelStatus>("waiting")
-  const [cameraStatus, setCameraStatus] =
+  const [, setCameraStatus] =
     useState<SignalChannelStatus>("waiting")
-  const [audioStatus, setAudioStatus] =
+  const [, setAudioStatus] =
     useState<SignalChannelStatus>("waiting")
   const [baseline, setBaseline] = useState<CalibrationBaseline | null>(null)
   const [segmentedMemory, setSegmentedMemory] =
@@ -1438,8 +1385,8 @@ export default function AxisReplayClient({
           },
           {
             time: formatClock(Math.max(duration * 0.33, 1)),
-            label: "SIGNAL RECORDED",
-            detail: "Signal read starts when frames are available.",
+            label: "READ BUILDING",
+            detail: "Memory returning.",
             tone: "zinc",
           },
           {
@@ -1466,7 +1413,7 @@ export default function AxisReplayClient({
           : session?.memoryState?.status
             ? session.memoryState.status
             : extractedSignals?.frameSampleCount
-              ? "Signal Recorded"
+              ? "Movement Stored"
               : "Memory Stored"
 
   const contextPanelLine =
@@ -1490,10 +1437,6 @@ export default function AxisReplayClient({
     ? [...liveMarkers, ...markers].slice(0, 10)
     : markers
   const latestLiveSignal = liveSignalEvents[0]?.label || replayStatusLabel
-  const displayBaseline = baseline
-    ? mergeBaseline(baseline, extractedSignals)
-    : createWaitingBaseline(session)
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black px-5 py-8 text-white">
@@ -1506,18 +1449,27 @@ export default function AxisReplayClient({
 
   if (!session) return <EmptyReplay />
 
+  const displayBaseline = baseline
+    ? mergeBaseline(baseline, extractedSignals)
+    : createWaitingBaseline(session)
+  const nextWarmup = getNextWarmupFromMission(session.mission)
+  const atmosphere = atmosphereState({
+    memoryCount: session.memoryCount,
+    warmupCount: warmupProgress?.completedCount,
+  })
+
   return (
     <div
-      className={`min-h-screen overflow-hidden bg-black text-white ${className}`}
+      className={`axis-atmosphere min-h-screen overflow-hidden bg-black text-white ${className}`}
     >
       <header className="sticky top-0 z-30 border-b border-white/10 bg-black/80 backdrop-blur-xl">
         <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-              Axis Replay System
+              {atmosphere.depthLabel}
             </p>
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">
-              {session?.memoryState?.headline || "Memory Online"}
+              {atmosphere.pulseLabel}
             </h1>
           </div>
 
@@ -1634,7 +1586,7 @@ export default function AxisReplayClient({
 
             <div className="border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Last Signal
+                Pulse
               </p>
               <p className="mt-3 text-2xl font-black text-white">
                 {latestLiveSignal}
@@ -1658,9 +1610,6 @@ export default function AxisReplayClient({
             signals={extractedSignals}
             baseline={displayBaseline}
             signalStatus={signalStatus}
-            motionStatus={motionStatus}
-            cameraStatus={cameraStatus}
-            audioStatus={audioStatus}
             segmentedMemory={segmentedMemory}
             poseRead={poseRead}
             warmupProgress={warmupProgress}
@@ -1668,10 +1617,10 @@ export default function AxisReplayClient({
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <Link
-              href="/"
+              href={nextWarmup ? `/?warmup=${nextWarmup.id}` : "/"}
               className="border border-white/10 bg-white px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
             >
-              Next Warmup
+              {nextWarmup ? nextWarmup.title : "Next Warmup"}
             </Link>
             <Link
               href="/"
@@ -1699,7 +1648,7 @@ export default function AxisReplayClient({
 
         <aside className="border-t border-white/10 p-5 lg:border-l lg:border-t-0">
           <p className="mb-4 text-[10px] uppercase tracking-[0.45em] text-white/25">
-            Session Metadata
+            Memory
           </p>
 
           <div className="border border-white/10 bg-white/[0.03] p-5">
@@ -1708,47 +1657,19 @@ export default function AxisReplayClient({
               value={memoryOwnerName(session, memoryOwner)}
             />
             <DetailRow
-              label="Session"
-              value={new Date(session.createdAt).toLocaleDateString()}
-            />
-            <DetailRow
-              label="Environment"
-              value={capitalize(session.environment || "practice")}
-            />
-            <DetailRow
               label="Warmup"
               value={missionValue(session)}
             />
             <DetailRow
-              label="Memory Count"
+              label="Archive"
               value={formatMemoryCount(session.memoryCount)}
             />
             <DetailRow
-              label="Duration"
-              value={formatDuration(duration)}
-            />
-            <DetailRow
-              label="Replay Status"
-              value="Replay Linked"
-            />
-            <DetailRow
-              label="Motion"
-              value={`${Math.round(liveMetrics.motionAmount * 100)}%`}
-            />
-            <DetailRow
-              label="Camera"
-              value={`${Math.round(liveMetrics.cameraMovement * 100)}%`}
-            />
-            <DetailRow
-              label="Brightness"
-              value={`${Math.round(liveMetrics.averageBrightness * 100)}%`}
-            />
-            <DetailRow
-              label="Audio"
+              label="Depth"
               value={
-                audioReady
-                  ? `${Math.round(liveMetrics.audioEnergy * 100)}%`
-                  : channelValue(audioStatus)
+                warmupProgress
+                  ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter}`
+                  : atmosphere.depthLabel
               }
             />
           </div>

@@ -19,6 +19,7 @@ type FlowStep = "entry" | "mission" | "brief" | "capture" | "processing"
 type Props = {
   email: string
   twinName?: string | null
+  initialWarmupId?: string | null
 }
 
 const calibrationMissions = getCalibrationMissions()
@@ -177,7 +178,11 @@ function MissionCard({
   )
 }
 
-export default function UploadConsole({ email, twinName = null }: Props) {
+export default function UploadConsole({
+  email,
+  twinName = null,
+  initialWarmupId = null,
+}: Props) {
   const router = useRouter()
   const supabase = createClient()
   const cameraInputRef =
@@ -186,9 +191,11 @@ export default function UploadConsole({ email, twinName = null }: Props) {
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState("")
   const [isUploading, setIsUploading] = useState(false)
-  const [flowStep, setFlowStep] = useState<FlowStep>("entry")
+  const [flowStep, setFlowStep] = useState<FlowStep>(
+    initialWarmupId ? "brief" : "entry"
+  )
   const [selectedMissionId, setSelectedMissionId] = useState(
-    calibrationMissions[0]?.id || "none"
+    initialWarmupId || calibrationMissions[0]?.id || "none"
   )
   const selectedMission =
     calibrationMissions.find((mission) => mission.id === selectedMissionId) ||
@@ -325,12 +332,12 @@ export default function UploadConsole({ email, twinName = null }: Props) {
   }
 
   return (
-    <main className="min-h-screen bg-black px-5 pb-24 pt-8 text-white">
+    <main className="axis-atmosphere min-h-screen bg-black px-5 pb-24 pt-8 text-white">
       <div className="mx-auto max-w-6xl">
         <header className="mb-10 flex items-center justify-between gap-6 border-b border-white/10 pb-6">
           <div>
             <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              Axis Memory Core
+              Axis
             </p>
             <p className="mt-2 text-sm text-white/35">
               {email}
@@ -348,7 +355,7 @@ export default function UploadConsole({ email, twinName = null }: Props) {
               href="/profile"
               className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
             >
-              Profile
+              Twin
             </Link>
             <button
               type="button"
@@ -363,7 +370,7 @@ export default function UploadConsole({ email, twinName = null }: Props) {
         {flowStep === "entry" ? (
           <section className="flex min-h-[calc(100vh-13rem)] flex-col justify-end pb-10">
             <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-              First Session
+              {twinName || "Local Player"}
             </p>
             <h1 className="mt-6 text-[clamp(4.8rem,18vw,12rem)] font-black leading-[0.78] tracking-[-0.07em]">
               START
@@ -371,7 +378,7 @@ export default function UploadConsole({ email, twinName = null }: Props) {
               MEMORY
             </h1>
             <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-              Build your basketball rhythm.
+              Begin the rhythm.
             </p>
             <button
               type="button"
@@ -387,16 +394,15 @@ export default function UploadConsole({ email, twinName = null }: Props) {
           <section className="pb-10">
             <div className="mb-8">
               <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-                Pick Warmup
+                Sequence
               </p>
               <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-                PICK
-                <br />
                 WARMUP
+                <br />
+                LINE
               </h1>
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/45">
-                Each warmup stores movement and builds your rhythm.
-                Comparison unlocks after three warmups.
+                Move once. The world carries forward.
               </p>
             </div>
 
@@ -423,10 +429,10 @@ export default function UploadConsole({ email, twinName = null }: Props) {
                 onClick={() => setFlowStep("mission")}
                 className="mb-8 text-xs uppercase tracking-[0.35em] text-white/35 transition hover:text-white"
               >
-                Warmups
+                Line
               </button>
               <p className="text-[10px] uppercase tracking-[0.5em] text-lime-300">
-                Warmup Brief
+                Up Next
               </p>
               <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
                 {missionName(selectedMission)}
@@ -455,13 +461,13 @@ export default function UploadConsole({ email, twinName = null }: Props) {
               </div>
               <div className="mt-8 border-t border-white/10 pt-6">
                 <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                  Builds Rhythm
+                  Builds
                 </p>
                 <p className="mt-3 text-lg font-black uppercase text-white">
                   {selectedMission.baselineName}
                 </p>
                 <p className="mt-2 text-sm text-white/45">
-                  {selectedMission.unlockAfter} warmups unlock comparison.
+                  {selectedMission.unlockAfter} warmups
                 </p>
               </div>
               <button
@@ -507,8 +513,7 @@ export default function UploadConsole({ email, twinName = null }: Props) {
             </div>
             <div className="mt-5 flex items-end justify-between gap-5">
               <p className="max-w-md text-sm leading-relaxed text-white/45">
-                Replay opens after the memory is stored. Reads improve as
-                warmups build.
+                Memory carries forward.
               </p>
               <p className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-white/70">
                 {progress}%

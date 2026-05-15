@@ -1,10 +1,18 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import UploadConsole from "@/components/UploadConsole"
+import { getWarmupById } from "@/lib/world/getNextWarmup"
 import { createClient } from "@/lib/supabase/server"
 import type { AxisProfile } from "@/types/memory"
 
-export default async function HomePage() {
+type Props = {
+  searchParams?: Promise<{
+    warmup?: string
+  }>
+}
+
+export default async function HomePage({ searchParams }: Props) {
+  const params = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -25,15 +33,16 @@ export default async function HomePage() {
       <UploadConsole
         email={user.email}
         twinName={profile.player_name || profile.display_name}
+        initialWarmupId={getWarmupById(params?.warmup)?.id || null}
       />
     )
   }
 
   return (
-    <main className="min-h-screen bg-black px-5 py-10 text-white">
+    <main className="axis-atmosphere min-h-screen bg-black px-5 py-10 text-white">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col justify-end">
         <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-          Axis Memory Core
+          Axis
         </p>
         <h1 className="mt-6 text-[clamp(4.5rem,16vw,11rem)] font-black leading-[0.8] tracking-[-0.07em]">
           START
@@ -41,8 +50,7 @@ export default async function HomePage() {
           MEMORY
         </h1>
         <p className="mt-8 max-w-2xl text-xl leading-relaxed text-white/45">
-          Build your basketball rhythm. Enter Axis, pick a warmup,
-          record live movement, and grow your memory archive.
+          The court remembers.
         </p>
         <Link
           href="/auth"
