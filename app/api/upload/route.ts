@@ -22,8 +22,10 @@ function axisError(message: string, status = 400) {
   )
 }
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
+    console.log("AXIS UPLOAD START")
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -34,20 +36,25 @@ export async function POST(req: Request) {
       return axisError("SIGNAL INTERRUPTED", 401)
     }
 
-    const formData = await req.formData()
+    const formData = await request.formData()
+    console.log("AXIS FORM DATA RECEIVED")
 
-    const fileEntry = formData.get("file")
+    const file = formData.get("file")
     const duration = Number(formData.get("duration") || 0)
 
-    if (!fileEntry) {
-      return axisError("MEMORY LOAD FAILED")
+    if (!(file instanceof File)) {
+      return Response.json(
+        {
+          error: "INVALID MEMORY FORMAT",
+        },
+        {
+          status: 400,
+        }
+      )
     }
 
-    if (!(fileEntry instanceof File)) {
-      return axisError("INVALID MEMORY FORMAT")
-    }
+    console.log("AXIS FILE FOUND")
 
-    const file = fileEntry
     const normalized = normalizeReplayFile(file)
 
     console.log("AXIS FILE", file)
@@ -85,15 +92,18 @@ export async function POST(req: Request) {
     if (upload.error) {
       console.error("STORAGE ERROR:", upload.error)
 
-      return NextResponse.json(
+      return Response.json(
         {
           error: "STORAGE KEY INVALID",
+          detail: upload.error.message,
         },
         {
           status: 500,
         }
       )
     }
+
+    console.log("AXIS STORAGE SUCCESS")
 
     const signedUrlTtl = 60 * 60 * 24 * 7
     const signedUrl = await supabaseAdmin.storage
@@ -148,15 +158,18 @@ export async function POST(req: Request) {
         .from("axis-replays")
         .remove([filePath])
 
-      return NextResponse.json(
+      return Response.json(
         {
           error: "MEMORY LOAD FAILED",
+          detail: inserted.error.message,
         },
         {
           status: 500,
         }
       )
     }
+
+    console.log("AXIS SESSION CREATED")
 
     const uploadRecord = await supabaseAdmin.from("axis_uploads").insert({
       user_id: user.id,
@@ -172,7 +185,7 @@ export async function POST(req: Request) {
       console.error("UPLOAD RECORD ERROR:", uploadRecord.error)
     }
 
-    return NextResponse.json({
+    return Response.json({
       success: true,
       id: inserted.data.id,
       fileName: normalized.finalName,
@@ -181,11 +194,15 @@ export async function POST(req: Request) {
       videoUrl: inserted.data.video_url,
     })
   } catch (error) {
-    console.error("UPLOAD ERROR:", error)
+    console.error("AXIS UPLOAD ERROR", error)
 
-    return NextResponse.json(
+    return Response.json(
       {
-        error: "SIGNAL INTERRUPTED",
+        error: "MEMORY INGEST FAILED",
+        detail:
+          error instanceof Error
+            ? error.message
+            : "UNKNOWN FAILURE",
       },
       {
         status: 500,
