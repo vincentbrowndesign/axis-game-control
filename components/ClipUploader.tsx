@@ -6,6 +6,67 @@ type ClipUploaderProps = {
   onSelect: (file: File) => void
 }
 
+function statusFromUploadFailure(data: {
+  error?: string
+  stage?: string
+}) {
+  if (data.stage === "auth") {
+    return "AUTH FAILURE"
+  }
+
+  if (
+    data.stage === "file-validation" ||
+    data.stage === "form-data" ||
+    data.stage === "array-buffer"
+  ) {
+    return "INVALID FILE"
+  }
+
+  if (
+    data.stage === "storage-upload" ||
+    data.stage === "signed-url"
+  ) {
+    return "STORAGE FAILURE"
+  }
+
+  if (
+    data.stage === "db-session-create" ||
+    data.stage === "db-upload-record"
+  ) {
+    return "DATABASE FAILURE"
+  }
+
+  return data.error || "MEMORY INGEST FAILED"
+}
+
+function statusFromCaughtError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return "SIGNAL INTERRUPTED"
+  }
+
+  if (
+    error.message === "NO FILE SELECTED" ||
+    error.message === "INVALID FILE OBJECT" ||
+    error.message === "EMPTY FILE"
+  ) {
+    return "INVALID FILE"
+  }
+
+  if (
+    error.message.includes("Failed to fetch") ||
+    error.message.includes("Load failed") ||
+    error.message.includes("NetworkError")
+  ) {
+    return "ROUTE UNREACHABLE"
+  }
+
+  if (error.message === "RESPONSE CORRUPTED") {
+    return "RESPONSE CORRUPTED"
+  }
+
+  return error.message
+}
+
 export default function ClipUploader({
   onSelect,
 }: ClipUploaderProps) {
@@ -59,6 +120,15 @@ export default function ClipUploader({
         selectedFile.size
       )
 
+      console.log(
+        "AXIS UPLOAD START",
+        {
+          name: selectedFile.name,
+          type: selectedFile.type,
+          size: selectedFile.size,
+        }
+      )
+
       setStatus(
         "SIGNAL PATH VERIFIED"
       )
@@ -82,6 +152,11 @@ export default function ClipUploader({
           method: "POST",
           body: formData,
         }
+      )
+
+      console.log(
+        "AXIS RESPONSE STATUS",
+        response.status
       )
 
       const contentType =
@@ -112,13 +187,47 @@ export default function ClipUploader({
         )
       }
 
-      const data =
-        await response.json()
+      const text =
+        await response.text()
+
+      console.log(
+        "AXIS RESPONSE TEXT",
+        text
+      )
+
+      let data: {
+        ok?: boolean
+        error?: string
+        stage?: string
+        detail?: string
+      }
+
+      try {
+        data = JSON.parse(text)
+      } catch (error) {
+        console.error(
+          "AXIS JSON PARSE FAILURE",
+          error
+        )
+
+        throw new Error(
+          "RESPONSE CORRUPTED"
+        )
+      }
+
+      console.log(
+        "AXIS PARSED JSON",
+        data
+      )
 
       if (!response.ok) {
+        console.error(
+          "AXIS FAILURE STAGE",
+          data?.stage || "unknown"
+        )
+
         throw new Error(
-          data?.error ||
-            "MEMORY INGEST FAILED"
+          statusFromUploadFailure(data)
         )
       }
 
@@ -141,9 +250,7 @@ export default function ClipUploader({
       setProgress(0)
 
       setStatus(
-        error instanceof Error
-          ? error.message
-          : "SIGNAL INTERRUPTED"
+        statusFromCaughtError(error)
       )
     }
   }
