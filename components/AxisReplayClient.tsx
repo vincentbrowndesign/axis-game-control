@@ -53,6 +53,12 @@ function formatDuration(seconds?: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`
 }
 
+function formatMemoryCount(count?: number) {
+  return Math.max(count || 1, 1)
+    .toString()
+    .padStart(2, "0")
+}
+
 function capitalize(value?: string) {
   if (!value) return "Unknown"
 
@@ -250,8 +256,8 @@ export default function AxisReplayClient({
     if (signal?.timeline.length) {
       return signal.timeline.map((event) => ({
         time: event.time,
-        label: event.label,
-        detail: `${capitalize(event.type)} signal captured in replay memory.`,
+        label: "SIGNAL FOUND",
+        detail: "Moment added to session memory.",
         tone:
           event.type === "advantage" || event.type === "attack"
             ? "lime"
@@ -262,21 +268,21 @@ export default function AxisReplayClient({
     return [
       {
         time: "00:00",
-        label: "INGEST",
-        detail: "Video attached to local behavioral memory.",
+        label: "FOOTAGE ACCEPTED",
+        detail: "Replay linked to player archive.",
         tone: "cyan",
       },
       {
         time: formatClock(Math.max(duration * 0.33, 1)),
-        label: "SIGNAL GATE",
+        label: "CONTEXT BUILDING",
         detail:
-          signal?.message || "Inference layer waiting for court, ball, and player signal.",
+          signal?.message || "Session context is being added to memory.",
         tone: signal?.basketballLikely ? "lime" : "zinc",
       },
       {
         time: formatClock(duration),
         label: "MEMORY STORED",
-        detail: "Replay preserved for review and future player context.",
+        detail: "Movement stored for this player.",
         tone: "lime",
       },
     ]
@@ -305,7 +311,7 @@ export default function AxisReplayClient({
               Axis Replay System
             </p>
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">
-              Behavioral Memory Active
+              Memory Online
             </h1>
           </div>
 
@@ -313,16 +319,16 @@ export default function AxisReplayClient({
             <div className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(190,242,100,0.8)]" />
             <p className="text-xs uppercase tracking-[0.3em] text-white/45">
               {replayStatus === "recovering"
-                ? "Retrying Ingest"
+                ? "Memory Indexing"
                 : replayStatus === "recovered"
-                  ? "Replay Recovered"
+                  ? "Replay Unlocked"
                 : replayStatus === "failed"
-                  ? "Memory Load Failed"
+                  ? "Signal Interrupted"
                   : signal
                 ? signal.basketballLikely
-                  ? "Signal Locked"
-                  : "Signal Gate"
-                : "Processing"}
+                  ? "Signal Active"
+                  : "Context Building"
+                : "Memory Indexing"}
             </p>
           </div>
         </div>
@@ -331,7 +337,7 @@ export default function AxisReplayClient({
       <div className="grid min-h-[calc(100vh-73px)] grid-cols-1 lg:grid-cols-[292px_minmax(0,1fr)_320px]">
         <aside className="hidden border-r border-white/10 p-5 lg:block">
           <p className="mb-4 text-[10px] uppercase tracking-[0.45em] text-white/25">
-            Session Archive
+            Session Thread
           </p>
 
           <div className="space-y-3">
@@ -347,7 +353,7 @@ export default function AxisReplayClient({
         <section className="min-w-0 px-5 py-8 lg:px-8 lg:py-10">
           <div className="mb-8">
             <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              Axis Behavioral Replay
+              Axis Memory Replay
             </p>
             <h2 className="mt-4 max-w-4xl text-[clamp(3.7rem,9vw,8rem)] font-black leading-[0.86] tracking-[-0.06em] text-white">
               AXIS
@@ -355,7 +361,7 @@ export default function AxisReplayClient({
               REPLAY
             </h2>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/50">
-              Axis remembers how you play.
+              {session.ambientLine || "Context building."}
             </p>
           </div>
 
@@ -390,28 +396,28 @@ export default function AxisReplayClient({
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Clock
+                Memory Count
               </p>
-              <p className="mt-3 font-mono text-2xl text-white">
+              <p className="mt-3 text-2xl font-black text-lime-300">
+                {formatMemoryCount(session.memoryCount)}
+              </p>
+            </div>
+
+            <div className="border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
+                Last Signal
+              </p>
+              <p className="mt-3 text-2xl font-black text-white">
                 {formatClock(currentTime)}
               </p>
             </div>
 
             <div className="border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Inference
-              </p>
-              <p className="mt-3 text-2xl font-black text-white">
-                {signal ? `${signal.confidence}%` : "PENDING"}
-              </p>
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Stored
+                Archive Status
               </p>
               <p className="mt-3 text-2xl font-black text-lime-300">
-                100%
+                Active
               </p>
             </div>
           </div>
@@ -437,45 +443,44 @@ export default function AxisReplayClient({
               value={session.player || "Unassigned"}
             />
             <DetailRow
-              label="Mission"
-              value={session.mission || "None"}
-            />
-            <DetailRow
-              label="Source"
-              value={capitalize(session.source)}
+              label="Session"
+              value={new Date(session.createdAt).toLocaleDateString()}
             />
             <DetailRow
               label="Environment"
               value={capitalize(session.environment || "practice")}
             />
             <DetailRow
+              label="Memory Count"
+              value={formatMemoryCount(session.memoryCount)}
+            />
+            <DetailRow
               label="Duration"
               value={formatDuration(duration)}
             />
             <DetailRow
-              label="Created"
-              value={new Date(session.createdAt).toLocaleString()}
+              label="Replay Status"
+              value="Replay Linked"
             />
           </div>
 
           <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
             <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
-              Inference Layer
+              Player Context
             </p>
             <h3 className="mt-4 text-2xl font-black leading-tight text-white">
-              {signal?.basketballLikely
-                ? "Basketball signal detected."
-                : "Waiting for court signal."}
+              {session.memoryCount && session.memoryCount > 1
+                ? "Previous session located."
+                : "Replay added to archive."}
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-white/50">
               {replayStatus === "recovering"
-                ? "RETRYING INGEST"
+                ? "MEMORY INDEXING"
                 : replayStatus === "recovered"
-                  ? "REPLAY RECOVERED"
+                  ? "REPLAY UNLOCKED"
                 : replayStatus === "failed"
-                  ? "MEMORY LOAD FAILED"
-                  : signal?.message ||
-                    "Replay is available while the signal gate evaluates movement context."}
+                  ? "SIGNAL INTERRUPTED"
+                  : "Replay linked. Session added. Memory available."}
             </p>
           </div>
         </aside>
@@ -484,7 +489,7 @@ export default function AxisReplayClient({
       <footer className="sticky bottom-0 border-t border-white/10 bg-black/85 px-5 py-4 backdrop-blur-xl">
         <div className="mb-3 flex items-center gap-3">
           <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-            Session Timeline
+            Session Continuity
           </p>
           <div className="h-px flex-1 bg-white/10" />
         </div>

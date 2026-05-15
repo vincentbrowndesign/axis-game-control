@@ -51,6 +51,8 @@ export type ReplaySessionView = {
   status?: string
   fileName?: string
   tags: string[]
+  memoryCount?: number
+  ambientLine?: string
 }
 
 export function mapReplaySession(
@@ -69,5 +71,7 @@ export function mapReplaySession(
     status: session.status || "stored",
     fileName: session.file_name || undefined,
     tags: session.tags || [],
+    memoryCount: 1,
+    ambientLine: "Memory online.",
   }
 }

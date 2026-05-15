@@ -31,6 +31,18 @@ function relativeTime(timestamp: number) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
+function formatMemoryCount(count: number) {
+  return count.toString().padStart(2, "0")
+}
+
+function memoryKey(session: {
+  player: string
+}) {
+  return session.player && session.player !== "Unassigned"
+    ? session.player
+    : "Unassigned"
+}
+
 export default async function SessionsPage() {
   const supabase = await createClient()
   const {
@@ -85,6 +97,17 @@ export default async function SessionsPage() {
     })
   )
 
+  const memoryCounts = sessions.reduce<Record<string, number>>(
+    (counts, session) => {
+      const key = memoryKey(session)
+
+      counts[key] = (counts[key] || 0) + 1
+
+      return counts
+    },
+    {}
+  )
+
   return (
     <main className="min-h-screen bg-black px-5 py-8 text-white">
       <div className="mx-auto max-w-6xl">
@@ -104,12 +127,50 @@ export default async function SessionsPage() {
             href="/"
             className="w-fit border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
           >
-            New Upload
+            Add Memory
           </Link>
         </div>
 
+        <div className="mb-8 grid gap-3 sm:grid-cols-3">
+          <div className="border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
+              Memory Count
+            </p>
+            <p className="mt-3 text-5xl font-black text-lime-300">
+              {formatMemoryCount(sessions.length)}
+            </p>
+          </div>
+
+          <div className="border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
+              Last Signal
+            </p>
+            <p className="mt-4 text-xl font-black uppercase tracking-[-0.02em] text-white">
+              {sessions.length ? relativeTime(sessions[0].createdAt) : "None"}
+            </p>
+          </div>
+
+          <div className="border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
+              Archive Status
+            </p>
+            <p className="mt-4 text-xl font-black uppercase tracking-[-0.02em] text-white">
+              {sessions.length ? "Active" : "Waiting"}
+            </p>
+          </div>
+        </div>
+
+        <p className="mb-6 text-sm uppercase tracking-[0.35em] text-white/35">
+          {sessions.length
+            ? "Previous session located."
+            : "Archive ready."}
+        </p>
+
         <div className="grid gap-5">
-          {sessions.map((session) => (
+          {sessions.map((session) => {
+            const count = memoryCounts[memoryKey(session)] || 1
+
+            return (
             <Link
               key={session.id}
               href={`/replay/${session.id}`}
@@ -138,16 +199,18 @@ export default async function SessionsPage() {
                       {session.environment}
                     </span>
                     <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-cyan-300">
-                      {session.source}
+                      Memory {formatMemoryCount(count)}
                     </span>
                     <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-white/40">
-                      {session.status || "stored"}
+                      {session.status === "stored"
+                        ? "Memory Stored"
+                        : session.status || "Session Added"}
                     </span>
                   </div>
 
                   <div className="mt-10">
                     <p className="text-[10px] uppercase tracking-[0.4em] text-white/30">
-                      Behavioral Memory
+                      Player Context
                     </p>
                     <h2 className="mt-3 text-[clamp(2.5rem,8vw,5rem)] font-black leading-[0.9] tracking-[-0.05em]">
                       {session.player || "Unassigned"}
@@ -159,13 +222,40 @@ export default async function SessionsPage() {
                         {formatDuration(session.duration || 0)}
                       </span>
                       <span>/</span>
-                      <span>Mission: {session.mission}</span>
+                      <span>Session continuity found</span>
+                    </div>
+
+                    <div className="mt-8 grid gap-2 sm:grid-cols-3">
+                      <div className="border border-white/10 bg-black/30 p-3">
+                        <p className="text-[9px] uppercase tracking-[0.3em] text-white/25">
+                          Player
+                        </p>
+                        <p className="mt-2 text-sm text-white/70">
+                          {session.player || "Unassigned"}
+                        </p>
+                      </div>
+                      <div className="border border-white/10 bg-black/30 p-3">
+                        <p className="text-[9px] uppercase tracking-[0.3em] text-white/25">
+                          Session
+                        </p>
+                        <p className="mt-2 text-sm text-white/70">
+                          {new Date(session.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="border border-white/10 bg-black/30 p-3">
+                        <p className="text-[9px] uppercase tracking-[0.3em] text-white/25">
+                          Replay Status
+                        </p>
+                        <p className="mt-2 text-sm text-lime-300">
+                          Replay Linked
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </Link>
-          ))}
+          )})}
 
           {sessions.length === 0 && (
             <div className="border border-white/10 bg-white/[0.03] p-12">
@@ -173,7 +263,7 @@ export default async function SessionsPage() {
                 Archive Empty
               </p>
               <h2 className="mt-5 text-5xl font-black leading-none tracking-[-0.05em] text-white/75">
-                No memory stored yet.
+                Memory waiting.
               </h2>
             </div>
           )}

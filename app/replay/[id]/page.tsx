@@ -41,7 +41,23 @@ export default async function ReplayPage({
           signed.data?.signedUrl || data.video_url
       }
 
-      initialSession = mapReplaySession(data)
+      const { count } = await supabase
+        .from("axis_sessions")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("user_id", user.id)
+        .eq("player_name", data.player_name || "Unassigned")
+
+      initialSession = {
+        ...mapReplaySession(data),
+        memoryCount: count || 1,
+        ambientLine:
+          (count || 0) > 1
+            ? "Previous session located."
+            : "Replay added to archive.",
+      }
     }
   }
 

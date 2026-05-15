@@ -50,7 +50,7 @@ export default function ProfileConsole({
       return
     }
 
-    setStatus("Profile memory updated.")
+    setStatus("CONTEXT EXPANDED")
     router.refresh()
   }
 
@@ -77,18 +77,51 @@ export default function ProfileConsole({
             </div>
             <div className="border border-white/10 bg-white/[0.03] p-5">
               <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Sessions
+                Memory Count
               </p>
               <p className="mt-3 text-5xl font-black text-lime-300">
-                {sessionCount}
+                {sessionCount.toString().padStart(2, "0")}
               </p>
             </div>
           </div>
+
+          <div className="mt-6 grid max-w-xl gap-3 sm:grid-cols-3">
+            <div className="border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[9px] uppercase tracking-[0.32em] text-white/25">
+                Last Signal
+              </p>
+              <p className="mt-3 text-sm uppercase tracking-[0.18em] text-white/70">
+                {sessionCount ? "Today" : "Waiting"}
+              </p>
+            </div>
+            <div className="border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[9px] uppercase tracking-[0.32em] text-white/25">
+                Archive Status
+              </p>
+              <p className="mt-3 text-sm uppercase tracking-[0.18em] text-lime-300">
+                {sessionCount ? "Active" : "Ready"}
+              </p>
+            </div>
+            <div className="border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[9px] uppercase tracking-[0.32em] text-white/25">
+                Player Context
+              </p>
+              <p className="mt-3 text-sm uppercase tracking-[0.18em] text-white/70">
+                {profile?.player_name ? "Linked" : "Open"}
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-8 max-w-xl text-sm uppercase tracking-[0.35em] text-white/35">
+            {sessionCount
+              ? "Previous session located."
+              : "Memory online."}
+          </p>
         </section>
 
         <section className="self-end border border-white/10 bg-white/[0.03] p-6">
           <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-            Identity Metadata
+            Player Context
           </p>
 
           <div className="mt-8 space-y-4">
@@ -122,7 +155,7 @@ export default function ProfileConsole({
             disabled={loading}
             className="mt-6 w-full bg-white px-6 py-5 text-lg font-black uppercase tracking-[0.12em] text-black disabled:opacity-40"
           >
-            {loading ? "STORING..." : "STORE PROFILE"}
+            {loading ? "MEMORY INDEXING" : "STORE CONTEXT"}
           </button>
 
           {status && (
