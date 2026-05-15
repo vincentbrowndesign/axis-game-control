@@ -8,6 +8,8 @@ import { readBasketballSignal } from "@/lib/basketball/readBasketballSignal"
 import type { BasketballSignalState } from "@/lib/basketball/types"
 import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
+import { generateReplayMarkers } from "@/lib/replay/generateReplayMarkers"
+import type { ReplayMarker } from "@/lib/replay/types"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import { segmentCalibrationMemory } from "@/lib/segments/segmentCalibrationMemory"
 import type { SegmentedMemory } from "@/lib/segments/types"
@@ -187,6 +189,67 @@ function MarkerCard({ marker }: { marker: Marker }) {
       <p className="text-sm leading-relaxed text-white/55">
         {marker.detail}
       </p>
+    </div>
+  )
+}
+
+function AxisNoticed({
+  markers,
+  onSelect,
+}: {
+  markers: ReplayMarker[]
+  onSelect: (marker: ReplayMarker) => void
+}) {
+  if (!markers.length) {
+    return (
+      <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
+            Axis Noticed
+          </p>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-lime-300">
+            REPLAY READY
+          </p>
+        </div>
+        <p className="mt-4 text-sm leading-relaxed text-white/45">
+          Memory stored. Replay markers build as movement returns.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
+          Axis Noticed
+        </p>
+        <p className="text-[10px] uppercase tracking-[0.3em] text-lime-300">
+          REPLAY MARKERS
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {markers.slice(0, 3).map((marker) => (
+          <button
+            key={marker.id}
+            type="button"
+            onClick={() => onSelect(marker)}
+            className="group border border-white/10 bg-black/30 p-4 text-left transition hover:border-lime-300 hover:bg-lime-300 hover:text-black"
+          >
+            <p className="font-mono text-xs text-white/35 group-hover:text-black/50">
+              {formatClock(marker.startTime)} -{" "}
+              {formatClock(marker.endTime)}
+            </p>
+            <p className="mt-3 text-lg font-black uppercase leading-tight">
+              {marker.label}
+            </p>
+            <p className="mt-3 text-[10px] uppercase tracking-[0.25em] opacity-45">
+              {marker.type}
+            </p>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -1177,6 +1240,20 @@ export default function AxisReplayClient({
     }
   }
 
+  const jumpToReplayMarker = useCallback((marker: ReplayMarker) => {
+    const video = videoRef.current
+
+    if (!video) return
+
+    video.currentTime = marker.startTime
+
+    const playAttempt = video.play()
+
+    if (playAttempt) {
+      void playAttempt.catch(() => undefined)
+    }
+  }, [])
+
   useEffect(() => {
     let frameId = 0
     let lastSample = 0
@@ -1506,9 +1583,6 @@ export default function AxisReplayClient({
     detail: event.detail,
     tone: event.tone,
   }))
-  const displayMarkers = liveMarkers.length
-    ? [...liveMarkers, ...markers].slice(0, 10)
-    : markers
   const latestLiveSignal = liveSignalEvents[0]?.label || replayStatusLabel
   if (isLoading) {
     return (
@@ -1522,8 +1596,25 @@ export default function AxisReplayClient({
 
   if (!session) return <EmptyReplay />
 
+  const displaySignals = extractedSignals || session.signalRead || null
+  const replayMarkers = generateReplayMarkers({
+    session,
+    signals: displaySignals,
+    segmentedMemory,
+  })
+  const replayMarkerCards: Marker[] = replayMarkers.map((marker) => ({
+    time: `${formatClock(marker.startTime)}-${formatClock(marker.endTime)}`,
+    label: marker.label,
+    detail: "Replay marker added.",
+    tone: marker.type === "stabilization" ? "cyan" : "lime",
+  }))
+  const displayMarkers = liveMarkers.length
+    ? [...liveMarkers, ...replayMarkerCards, ...markers].slice(0, 10)
+    : replayMarkerCards.length
+      ? [...replayMarkerCards, ...markers].slice(0, 10)
+      : markers
   const displayBaseline = baseline
-    ? mergeBaseline(baseline, extractedSignals)
+    ? mergeBaseline(baseline, displaySignals)
     : createWaitingBaseline(session)
   const nextWarmup = getNextWarmupFromMission(session.mission)
   const atmosphere = atmosphereState({
@@ -1680,12 +1771,17 @@ export default function AxisReplayClient({
 
           <BasketballRead
             session={session}
-            signals={extractedSignals}
+            signals={displaySignals}
             baseline={displayBaseline}
             signalStatus={signalStatus}
             segmentedMemory={segmentedMemory}
             poseRead={poseRead}
             warmupProgress={warmupProgress}
+          />
+
+          <AxisNoticed
+            markers={replayMarkers}
+            onSelect={jumpToReplayMarker}
           />
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
