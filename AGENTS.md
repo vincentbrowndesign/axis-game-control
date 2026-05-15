@@ -6,6 +6,9 @@ Read these docs before changing code:
 - `docs/UPLOAD_PIPELINE.md`
 - `docs/REPLAY_SCHEMA.md`
 - `docs/MEMORY_SYSTEM.md`
+- `docs/WARMUP_SYSTEM.md`
+- `docs/PERCEPTION_RULES.md`
+- `docs/MEMORY_PRIMITIVES.md`
 - `docs/INFERENCE_LAYER.md`
 - `docs/UI_LANGUAGE.md`
 - `docs/AXIS_IDENTITY.md`

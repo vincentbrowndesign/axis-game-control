@@ -48,6 +48,8 @@ Warmups are basketball memory prompts, not training-data prompts. They may label
 
 Each warmup builds a named rhythm baseline. Comparison language stays locked until the warmup has enough memories, currently three. Before unlock, lead with reward language: `MEMORY STORED`, `REPLAY READY`, `WARMUP ADDED`, `1 / 3 warmups`, and `2 more warmups to unlock comparison`. After unlock, use `BASELINE READY` and `COMPARISON UNLOCKED`.
 
+Warmup progression is separate from global memory count. The chain key is `playerId + warmupId`. If no profile exists, use `LOCAL PLAYER` so warmups connect immediately instead of feeling broken.
+
 ## Outputs
 
 Memory produces `MemoryState`:

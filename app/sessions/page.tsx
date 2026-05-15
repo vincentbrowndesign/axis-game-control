@@ -42,7 +42,15 @@ function memoryKey(session: {
 }) {
   return session.player && session.player !== "Unassigned"
     ? session.player
-    : "Unassigned"
+    : "LOCAL PLAYER"
+}
+
+function memoryOwner(session: {
+  player: string
+}) {
+  return session.player && session.player !== "Unassigned"
+    ? session.player
+    : "LOCAL PLAYER"
 }
 
 function previousForSession(
@@ -239,10 +247,10 @@ export default async function SessionsPage() {
 
                   <div className="mt-10">
                     <p className="text-[10px] uppercase tracking-[0.4em] text-white/30">
-                      Player Context
+                      Player Memory
                     </p>
                     <h2 className="mt-3 text-[clamp(2.5rem,8vw,5rem)] font-black leading-[0.9] tracking-[-0.05em]">
-                      {session.player || "Unassigned"}
+                      {memoryOwner(session)}
                     </h2>
                     <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-white/40">
                       <span>{relativeTime(session.createdAt)}</span>
@@ -260,10 +268,10 @@ export default async function SessionsPage() {
                     <div className="mt-8 grid gap-2 sm:grid-cols-3">
                       <div className="border border-white/10 bg-black/30 p-3">
                         <p className="text-[9px] uppercase tracking-[0.3em] text-white/25">
-                          Player
+                          Memory Owner
                         </p>
                         <p className="mt-2 text-sm text-white/70">
-                          {session.player || "Unassigned"}
+                          {memoryOwner(session)}
                         </p>
                       </div>
                       <div className="border border-white/10 bg-black/30 p-3">

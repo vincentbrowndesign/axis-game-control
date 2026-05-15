@@ -14,6 +14,12 @@ function hasAssignedPlayer(player?: string | null) {
   return Boolean(player && player.trim() && player !== "Unassigned")
 }
 
+function memoryOwner(player?: string | null) {
+  return hasAssignedPlayer(player)
+    ? player?.trim() || "LOCAL PLAYER"
+    : "LOCAL PLAYER"
+}
+
 function samePlayer(
   session: ReplaySessionView,
   player: string | null
@@ -69,7 +75,7 @@ export function buildMemoryState({
   let contextLine = "Session added to archive."
 
   if (!assigned) {
-    contextLine = "Replay stored. Player not assigned."
+    contextLine = "Replay ready. Local player memory active."
   } else if (duration > 0 && duration < 5) {
     contextLine = "Short memory stored."
   } else if (memoryCount === 1) {
@@ -85,7 +91,7 @@ export function buildMemoryState({
   let ambientLine = "Context building."
 
   if (!assigned && relatedPrevious.length > 0) {
-    ambientLine = "Unassigned memory stored."
+    ambientLine = "Local player memory stored."
   } else if (previousWithin24Hours) {
     ambientLine = "Signal returned."
   } else if (hasTags) {
@@ -114,12 +120,12 @@ export function buildMemoryState({
   })
 
   addEvent(events, {
-    label: assigned ? "PLAYER LINKED" : "PLAYER NOT ASSIGNED",
+    label: "PLAYER MEMORY",
     time: "00:00",
     body: assigned
       ? "Replay connected to player context."
-      : "Replay stored without a player link.",
-    tone: assigned ? "lime" : "zinc",
+      : `${memoryOwner(player)} continuity active.`,
+    tone: "lime",
   })
 
   if (sameEnvironmentBefore) {

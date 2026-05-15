@@ -11,6 +11,7 @@ import {
 import { parseUploadResponseText } from "@/lib/uploadResponse"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import type { CalibrationMission } from "@/lib/missions/types"
+import { getOrCreateLocalPlayer } from "@/lib/warmups/progress"
 
 type Source = "camera"
 type FlowStep = "entry" | "mission" | "brief" | "capture" | "processing"
@@ -271,7 +272,7 @@ export default function UploadConsole({ email }: Props) {
               .padStart(2, "0")} - ${selectedMission.title}`
           : "None"
       )
-      formData.append("player", "Unassigned")
+      formData.append("player", getOrCreateLocalPlayer().name)
       formData.append("originalName", normalized.originalName)
       formData.append("mime", normalized.mime)
       formData.append("finalName", normalized.finalName)

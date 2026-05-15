@@ -90,7 +90,7 @@ Basketball Signal V1 may say only grounded states:
 - AUDIO QUIET
 - BASELINE STARTED
 - NOT ENOUGH MEMORY
-- PLAYER UNASSIGNED
+- PLAYER MEMORY
 
 These states must be derived from duration, frame sampling, pixel differences, camera movement estimate, audio energy, normalized replay data, or baseline memory count.
 

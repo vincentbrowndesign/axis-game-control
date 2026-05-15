@@ -12,7 +12,6 @@ export type BasketballSignalLabel =
   | "AUDIO QUIET"
   | "BASELINE STARTED"
   | "NOT ENOUGH MEMORY"
-  | "PLAYER UNASSIGNED"
 
 export type BasketballSignalState = {
   headline: string

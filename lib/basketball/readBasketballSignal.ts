@@ -7,14 +7,6 @@ function percent(value: number) {
   return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`
 }
 
-function hasPlayer(session: ReplaySessionView) {
-  return Boolean(
-    session.player &&
-      session.player.trim() &&
-      session.player !== "Unassigned"
-  )
-}
-
 function clipType(
   session: ReplaySessionView,
   signals?: ExtractedReplaySignals | null
@@ -85,10 +77,6 @@ export function readBasketballSignal({
 
   if (baseline) {
     evidence.push(`${baseline.memoryCount} warmups`)
-  }
-
-  if (!hasPlayer(session)) {
-    evidence.push("Player not assigned")
   }
 
   const headline =

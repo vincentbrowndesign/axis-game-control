@@ -17,6 +17,12 @@ import type {
   PoseLandmarkRead,
 } from "@/lib/vision/mediapipe/types"
 import {
+  getOrCreateLocalPlayer,
+  recordWarmupMemory,
+  type LocalMemoryOwner,
+  type WarmupChainProgress,
+} from "@/lib/warmups/progress"
+import {
   addAudioSignalSample,
   addFrameSignalSample,
   createSignalAccumulator,
@@ -325,17 +331,34 @@ function missionFromSession(session: ReplaySessionView) {
   )
 }
 
+function memoryOwnerName(
+  session: ReplaySessionView,
+  owner?: LocalMemoryOwner | null
+) {
+  if (
+    session.player &&
+    session.player.trim() &&
+    session.player !== "Unassigned"
+  ) {
+    return session.player
+  }
+
+  return owner?.name || "LOCAL PLAYER"
+}
+
 function baselineProgress({
   session,
   baseline,
+  warmupProgress,
 }: {
   session: ReplaySessionView
   baseline: CalibrationBaseline
+  warmupProgress?: WarmupChainProgress | null
 }) {
   const mission = missionFromSession(session)
-  const unlockAfter = mission?.unlockAfter || 3
+  const unlockAfter = warmupProgress?.unlockAfter || mission?.unlockAfter || 3
   const count = Math.min(
-    baseline.missionCompletionCount || 0,
+    warmupProgress?.completedCount || baseline.missionCompletionCount || 0,
     unlockAfter
   )
   const ready = count >= unlockAfter
@@ -345,12 +368,12 @@ function baselineProgress({
   return {
     label: ready ? "BASELINE READY" : "WARMUP ADDED",
     comparison: ready
-      ? "COMPARISON UNLOCKED"
+      ? "COMPARISON AVAILABLE"
       : `UNLOCKS AFTER ${unlockAfter} WARMUPS`,
     comparisonReady: ready,
     progress: `${count} / ${unlockAfter} warmups`,
     detail: ready
-      ? "Axis can compare this memory to your normal rhythm."
+      ? "Read unlocking."
       : `${remaining} more ${warmupLabel} to unlock comparison.`,
     baselineName: mission?.baselineName || "Movement Rhythm",
   }
@@ -477,6 +500,7 @@ function basketballSentence({
   signalStatus,
   segmentedMemory,
   poseRead,
+  warmupProgress,
 }: {
   state: BasketballSignalState
   baseline: CalibrationBaseline
@@ -485,9 +509,10 @@ function basketballSentence({
   signalStatus: SignalReadiness
   segmentedMemory?: SegmentedMemory | null
   poseRead?: PoseLandmarkRead | null
+  warmupProgress?: WarmupChainProgress | null
 }) {
   const lines: string[] = []
-  const progress = baselineProgress({ session, baseline })
+  const progress = baselineProgress({ session, baseline, warmupProgress })
 
   if (signalStatus === "initializing") {
     return "Memory stored. Read still building."
@@ -509,8 +534,6 @@ function basketballSentence({
     lines.push("Memory stored.")
   } else if (session.mission && session.mission !== "None") {
     lines.push("Warmup added.")
-  } else if ((signals?.duration || session.duration) && session.player !== "Unassigned") {
-    lines.push("Session added to archive.")
   } else if (signals?.duration || session.duration) {
     lines.push("Replay ready.")
   }
@@ -548,10 +571,6 @@ function basketballSentence({
     lines.push("Comparison unlocked.")
   }
 
-  if (state.headline === "PLAYER UNASSIGNED") {
-    lines.push("Player not assigned.")
-  }
-
   return lines[0]
     ? lines.slice(0, 2).join(" ")
     : "Memory stored. Read still building."
@@ -567,6 +586,7 @@ function BasketballRead({
   audioStatus,
   segmentedMemory,
   poseRead,
+  warmupProgress,
 }: {
   session: ReplaySessionView
   signals: ExtractedReplaySignals | null
@@ -577,9 +597,10 @@ function BasketballRead({
   audioStatus: SignalChannelStatus
   segmentedMemory: SegmentedMemory | null
   poseRead: PoseLandmarkRead | null
+  warmupProgress: WarmupChainProgress | null
 }) {
   const displaySignals = signals || session.signalRead
-  const progress = baselineProgress({ session, baseline })
+  const progress = baselineProgress({ session, baseline, warmupProgress })
   const watchRows = missionWatchRows({
     session,
     signals: displaySignals,
@@ -654,8 +675,8 @@ function BasketballRead({
           value={missionValue(session)}
         />
         <DetailRow
-          label="Memory"
-          value={formatMemoryCount(baseline.memoryCount)}
+          label="Global Memory"
+          value={formatMemoryCount(session.memoryCount)}
         />
       </div>
 
@@ -689,6 +710,7 @@ function BasketballRead({
           signalStatus,
           segmentedMemory,
           poseRead,
+          warmupProgress,
         })}
       </p>
       {poseRead?.status === "unavailable" ? (
@@ -748,6 +770,7 @@ export default function AxisReplayClient({
   const poseInitializingRef = useRef(false)
   const poseUnavailableRef = useRef(false)
   const lastPoseSampleRef = useRef(0)
+  const recordedWarmupKeyRef = useRef<string | null>(null)
   const setPlaybackId = useSessionStore(
     (state) => state.setPlaybackId
   )
@@ -793,6 +816,10 @@ export default function AxisReplayClient({
   const [segmentedMemory, setSegmentedMemory] =
     useState<SegmentedMemory | null>(null)
   const [poseRead, setPoseRead] = useState<PoseLandmarkRead | null>(null)
+  const [memoryOwner, setMemoryOwner] =
+    useState<LocalMemoryOwner | null>(null)
+  const [warmupProgress, setWarmupProgress] =
+    useState<WarmupChainProgress | null>(null)
 
   const clearSignalTimeouts = useCallback(() => {
     if (metadataTimeoutRef.current != null) {
@@ -905,6 +932,48 @@ export default function AxisReplayClient({
     []
   )
 
+  const updateWarmupProgress = useCallback(
+    (activeSession: ReplaySessionView | null) => {
+      if (!activeSession) return
+
+      const owner = getOrCreateLocalPlayer(activeSession.player)
+      const mission = missionFromSession(activeSession)
+
+      setMemoryOwner(owner)
+
+      if (!mission) {
+        setWarmupProgress(null)
+        return
+      }
+
+      const sessionId = activeSession.id || playbackId
+      const recordKey = `${owner.id}:${mission.id}:${sessionId}`
+
+      if (recordedWarmupKeyRef.current === recordKey) return
+
+      recordedWarmupKeyRef.current = recordKey
+      const progress = recordWarmupMemory({
+        playerId: owner.id,
+        playerName: owner.name,
+        warmupId: mission.id,
+        sessionId,
+        unlockAfter: mission.unlockAfter,
+      })
+
+      setWarmupProgress(progress)
+      setBaseline((currentBaseline) =>
+        currentBaseline
+          ? {
+              ...currentBaseline,
+              missionType: activeSession.mission,
+              missionCompletionCount: progress.completedCount,
+            }
+          : currentBaseline
+      )
+    },
+    [playbackId]
+  )
+
   useEffect(() => {
     sessionRef.current = session
   }, [session])
@@ -927,6 +996,7 @@ export default function AxisReplayClient({
     poseFramesRef.current = []
     lastPoseSampleRef.current = 0
     poseUnavailableRef.current = false
+    recordedWarmupKeyRef.current = null
 
     queueMicrotask(() => {
       setLiveSignalEvents([])
@@ -939,6 +1009,7 @@ export default function AxisReplayClient({
       setSegmentedMemory(null)
       setBaseline(null)
       setPoseRead(null)
+      setWarmupProgress(null)
       const localSession = safeParseSession(
         localStorage.getItem(`axis-session-${playbackId}`)
       )
@@ -978,6 +1049,7 @@ export default function AxisReplayClient({
             signals: null,
           })
         )
+        updateWarmupProgress(session)
         updateSegmentedMemory(session)
         void initializePoseProvider()
         signalReadyRef.current = true
@@ -1012,6 +1084,7 @@ export default function AxisReplayClient({
     isLoading,
     session,
     updateSegmentedMemory,
+    updateWarmupProgress,
   ])
 
   async function recoverReplay() {
@@ -1589,6 +1662,7 @@ export default function AxisReplayClient({
             audioStatus={audioStatus}
             segmentedMemory={segmentedMemory}
             poseRead={poseRead}
+            warmupProgress={warmupProgress}
           />
 
           <div className="mt-8 space-y-3 lg:hidden">
@@ -1608,8 +1682,8 @@ export default function AxisReplayClient({
 
           <div className="border border-white/10 bg-white/[0.03] p-5">
             <DetailRow
-              label="Player"
-              value={session.player || "Unassigned"}
+              label="Memory Owner"
+              value={memoryOwnerName(session, memoryOwner)}
             />
             <DetailRow
               label="Session"
@@ -1620,7 +1694,7 @@ export default function AxisReplayClient({
               value={capitalize(session.environment || "practice")}
             />
             <DetailRow
-              label="Mission"
+              label="Warmup"
               value={missionValue(session)}
             />
             <DetailRow
@@ -1659,15 +1733,15 @@ export default function AxisReplayClient({
 
           <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
             <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
-              Player Context
+              Player Memory
             </p>
             <h3 className="mt-4 text-2xl font-black leading-tight text-white">
-              {session.memoryCount && session.memoryCount > 1
-                ? "Previous session located."
-                : session.context || "Replay added to archive."}
+              {memoryOwnerName(session, memoryOwner)}
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-white/50">
-              {contextPanelLine}
+              {warmupProgress
+                ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter} warmups in this chain.`
+                : contextPanelLine}
             </p>
           </div>
         </aside>
