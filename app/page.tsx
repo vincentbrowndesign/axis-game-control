@@ -24,7 +24,7 @@ export default async function HomePage() {
           MEMORY
         </h1>
         <p className="mt-8 max-w-2xl text-xl leading-relaxed text-white/45">
-          Build your basketball baseline. Enter Axis to begin calibration,
+          Build your basketball rhythm. Enter Axis, pick a warmup,
           record live movement, and grow your memory archive.
         </p>
         <Link

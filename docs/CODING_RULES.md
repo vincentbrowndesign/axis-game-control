@@ -33,11 +33,12 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Memory receives normalized session data.
 - Memory should not know about storage upload internals.
 - Keep memory language AXIS-native.
-- Calibration missions are basketball memory prompts.
-- Do not describe mission collection as training data.
-- Mission progress and baseline growth must not alter upload responses.
-- Comparison language remains locked until a mission baseline has enough memories.
-- Mission cards must show what Axis watches, what baseline is being built, and progress toward unlock.
+- Warmups are the user-facing basketball memory prompts.
+- Calibration is the hidden system layer.
+- Do not describe warmup collection as training data.
+- Warmup progress and baseline growth must not alter upload responses.
+- Comparison remains gated until a warmup baseline has enough memories.
+- Warmup cards must show what Axis watches, what rhythm is being built, and progress toward unlock.
 
 ## Inference Rules
 
@@ -50,11 +51,11 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Basketball-aware language must translate measured signals, not invent analytics.
 - Every visible basketball statement must answer what real signal produced it.
 - AI descriptions must be generated from real signals until external frame reading is implemented.
-- Missions may isolate movement contexts, but they must not claim shot, pass, dribble, fatigue, IQ, or scoring quality detection.
+- Warmups may isolate movement contexts, but they must not claim shot, pass, dribble, fatigue, IQ, or scoring quality detection.
 - CV V1 starts with `browserSignals`.
 - MediaPipe Pose may run browser-side after replay load, but it must stay optional, async, and recoverable.
 - Keep `openAiVisionProvider` and `onnxProvider` disabled until their real implementations exist.
-- Mission-aware reads may show proxies only when backed by browser measurements.
+- Warmup-aware reads may show proxies only when backed by browser measurements.
 - Pose reads may describe geometry, rhythm, repetition, movement persistence, and baseline deviation only when backed by landmark confidence.
 
 ## UI Rules
@@ -73,10 +74,13 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
   - Replay Linked
   - Footage Accepted
   - Memory Stored
+  - Replay Ready
+  - Warmup Added
+  - Movement Stored
+  - Session Added To Archive
   - Signal Read
   - Baseline Started
   - Signal Recorded
-  - Not Enough Memory
   - Archive Active
   - Basketball Read
   - Activity Waiting
@@ -86,13 +90,12 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
   - Builds Baseline
   - Baseline Building
   - Baseline Ready
-  - Comparison Locked
+  - Comparison Unlocks After 3 Warmups
   - Comparison Unlocked
-  - Begin Calibration
   - Start Memory
   - Build Baseline
   - Movement Archived
-  - Calibration
+  - Warmup
   - Baseline
   - Memory
   - Movement
@@ -117,6 +120,11 @@ Avoid mission language:
   - Waiting for upload
   - Signal interrupted
   - Response corrupted
+  - Signal unavailable
+  - Not enough signal
+  - Comparison locked
+  - Begin Calibration
+  - Calibration
 
 ## Compatibility Rules
 

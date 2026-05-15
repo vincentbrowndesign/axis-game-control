@@ -77,7 +77,7 @@ function activitySegments({
     confidence: segments.length ? 0.46 : 0,
     summary: segments.length
       ? "Activity windows found."
-      : "Not enough signal. Replay remains available.",
+      : "Memory stored. Read still building.",
   }
 }
 

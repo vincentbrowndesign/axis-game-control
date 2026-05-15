@@ -1,4 +1,7 @@
 export type BasketballSignalLabel =
+  | "MEMORY STORED"
+  | "REPLAY READY"
+  | "WARMUP ADDED"
   | "CLIP STORED"
   | "SHORT CLIP"
   | "ACTIVE MOTION"

@@ -21,10 +21,12 @@ function clipType(
 ): BasketballSignalLabel {
   const duration = signals?.duration || session.duration || 0
 
-  if (!duration) return "CLIP STORED"
+  if (!duration) return "REPLAY READY"
   if (duration < 10) return "SHORT CLIP"
 
-  return "CLIP STORED"
+  return session.mission && session.mission !== "None"
+    ? "WARMUP ADDED"
+    : "MEMORY STORED"
 }
 
 function activityState(
@@ -45,24 +47,6 @@ function cameraState(
   return "CAMERA STABLE"
 }
 
-function audioState(
-  signals?: ExtractedReplaySignals | null
-): BasketballSignalLabel {
-  if (signals?.audioEnergy == null) return "AUDIO QUIET"
-  if (signals.audioState === "noisy") return "AUDIO PRESENT"
-
-  return "AUDIO QUIET"
-}
-
-function baselineState(
-  baseline?: CalibrationBaseline | null
-): BasketballSignalLabel {
-  if (!baseline || baseline.memoryCount <= 1) return "NOT ENOUGH MEMORY"
-  if (baseline.status === "BASELINE STARTED") return "BASELINE STARTED"
-
-  return "BASELINE STARTED"
-}
-
 export function readBasketballSignal({
   session,
   signals,
@@ -75,8 +59,6 @@ export function readBasketballSignal({
   const clip = clipType(session, signals)
   const activity = activityState(signals)
   const camera = cameraState(signals)
-  const audio = audioState(signals)
-  const baselineLabel = baselineState(baseline)
   const evidence: string[] = []
 
   if (signals?.duration || session.duration) {
@@ -102,7 +84,7 @@ export function readBasketballSignal({
   }
 
   if (baseline) {
-    evidence.push(`${baseline.memoryCount} memories`)
+    evidence.push(`${baseline.memoryCount} warmups`)
   }
 
   if (!hasPlayer(session)) {
@@ -110,15 +92,11 @@ export function readBasketballSignal({
   }
 
   const headline =
-    !hasPlayer(session)
-      ? "PLAYER UNASSIGNED"
-      : baselineLabel === "NOT ENOUGH MEMORY"
-        ? "NOT ENOUGH MEMORY"
-        : activity === "ACTIVE MOTION"
-          ? "ACTIVE MOTION"
-          : audio === "AUDIO PRESENT"
-            ? "AUDIO PRESENT"
-            : clip
+    session.mission && session.mission !== "None"
+      ? "WARMUP ADDED"
+      : clip === "SHORT CLIP"
+        ? "MEMORY STORED"
+        : clip
 
   return {
     headline,

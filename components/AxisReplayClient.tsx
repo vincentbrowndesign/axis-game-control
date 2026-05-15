@@ -59,7 +59,7 @@ type LiveSignalLabel =
   | "AUDIO ENERGY"
   | "SIGNAL RETURNED"
   | "SIGNAL INITIALIZING"
-  | "SIGNAL UNAVAILABLE"
+  | "READ BUILDING"
 
 type LiveSignalEvent = {
   label: LiveSignalLabel
@@ -298,7 +298,7 @@ function createPoseRead(status: PoseLandmarkRead["status"]): PoseLandmarkRead {
     observations: [],
     summary:
       status === "unavailable"
-        ? "Landmark signal unavailable. Replay remains available."
+        ? "Memory stored. Read still building."
         : "Landmark signal initializing.",
   }
 }
@@ -307,7 +307,8 @@ function clipValue(
   state: BasketballSignalState,
   status: SignalReadiness
 ) {
-  if (status === "initializing") return "Waiting"
+  if (status === "initializing") return "Replay Ready"
+  if (status === "unavailable") return "Replay Ready"
 
   return displaySignalLabel(state.clipType)
 }
@@ -338,15 +339,20 @@ function baselineProgress({
     unlockAfter
   )
   const ready = count >= unlockAfter
+  const remaining = Math.max(unlockAfter - count, 0)
+  const warmupLabel = remaining === 1 ? "warmup" : "warmups"
 
   return {
-    label: ready ? "BASELINE READY" : "BASELINE BUILDING",
-    comparison: ready ? "COMPARISON UNLOCKED" : "COMPARISON LOCKED",
-    progress: `${count} / ${unlockAfter} memories`,
+    label: ready ? "BASELINE READY" : "WARMUP ADDED",
+    comparison: ready
+      ? "COMPARISON UNLOCKED"
+      : `UNLOCKS AFTER ${unlockAfter} WARMUPS`,
+    comparisonReady: ready,
+    progress: `${count} / ${unlockAfter} warmups`,
     detail: ready
       ? "Axis can compare this memory to your normal rhythm."
-      : `Record ${unlockAfter - count} more to unlock read.`,
-    baselineName: mission?.baselineName || "Movement Baseline",
+      : `${remaining} more ${warmupLabel} to unlock comparison.`,
+    baselineName: mission?.baselineName || "Movement Rhythm",
   }
 }
 
@@ -408,7 +414,7 @@ function missionWatchRows({
         hasEnoughSignal
           ? "Found"
           : segmentedMemory
-            ? "Not Enough Signal"
+            ? "Read Building"
             : "Waiting",
       ],
       ["Rep Segments", segmentationValue(dribbleCycles)],
@@ -484,11 +490,11 @@ function basketballSentence({
   const progress = baselineProgress({ session, baseline })
 
   if (signalStatus === "initializing") {
-    return "Signal initializing. Replay remains available."
+    return "Memory stored. Read still building."
   }
 
   if (signalStatus === "unavailable") {
-    return "Signal unavailable. Replay remains available."
+    return "Memory stored. Read still building."
   }
 
   if (
@@ -496,17 +502,17 @@ function basketballSentence({
     segmentedMemory &&
     segmentedMemory.confidence < 0.5
   ) {
-    return "Not enough signal. Replay remains available."
+    return "Memory stored. Read still building."
   }
 
   if (state.clipType === "SHORT CLIP") {
-    lines.push("Short clip stored.")
+    lines.push("Memory stored.")
   } else if (session.mission && session.mission !== "None") {
-    lines.push("Movement archived.")
+    lines.push("Warmup added.")
   } else if ((signals?.duration || session.duration) && session.player !== "Unassigned") {
-    lines.push("Replay added to player memory.")
+    lines.push("Session added to archive.")
   } else if (signals?.duration || session.duration) {
-    lines.push("Replay added to memory.")
+    lines.push("Replay ready.")
   }
 
   if (signals?.frameSampleCount && state.activityState === "ACTIVE MOTION") {
@@ -518,7 +524,7 @@ function basketballSentence({
   if (poseRead?.status === "available" && poseRead.confidence >= 0.35) {
     lines.push("Landmark signal recorded.")
   } else if (poseRead?.status === "unavailable" && !lines.length) {
-    lines.push("Landmark signal unavailable. Replay remains available.")
+    lines.push("Memory stored. Read still building.")
   }
 
   if (
@@ -528,15 +534,15 @@ function basketballSentence({
     lines.push("Camera movement recorded.")
   }
 
-  if (progress.comparison === "COMPARISON LOCKED") {
+  if (!progress.comparisonReady) {
     if (
       session.mission?.includes("HANDLE") &&
       segmentedMemory?.confidence &&
       segmentedMemory.confidence >= 0.5
     ) {
-      lines.push(`Cadence found. ${progress.detail}`)
+      lines.push(`Rhythm captured. ${progress.detail}`)
     } else {
-      lines.push("Comparison locked. More memory needed.")
+      lines.push(progress.detail)
     }
   } else {
     lines.push("Comparison unlocked.")
@@ -548,7 +554,7 @@ function basketballSentence({
 
   return lines[0]
     ? lines.slice(0, 2).join(" ")
-    : "Waiting for replay frames."
+    : "Memory stored. Read still building."
 }
 
 function BasketballRead({
@@ -590,8 +596,8 @@ function BasketballRead({
       : {
           headline:
             signalStatus === "initializing"
-              ? "SIGNAL INITIALIZING"
-              : "SIGNAL UNAVAILABLE",
+              ? "MEMORY STORED"
+              : "REPLAY READY",
           courtState: "CAMERA STABLE",
           activityState: "LOW ACTIVITY",
           clipType: "CLIP STORED",
@@ -628,7 +634,7 @@ function BasketballRead({
           value={channelValue(audioStatus)}
         />
         <DetailRow
-          label="Baseline"
+          label="Status"
           value={progress.label}
         />
         <DetailRow
@@ -644,7 +650,7 @@ function BasketballRead({
           value={progress.progress}
         />
         <DetailRow
-          label="Mission"
+          label="Warmup"
           value={missionValue(session)}
         />
         <DetailRow
@@ -687,7 +693,7 @@ function BasketballRead({
       </p>
       {poseRead?.status === "unavailable" ? (
         <p className="mt-2 text-sm leading-relaxed text-white/35">
-          Landmark signal unavailable. Replay remains available.
+          Landmark read still building.
         </p>
       ) : null}
       <p className="mt-2 text-sm leading-relaxed text-white/35">
@@ -1225,8 +1231,8 @@ export default function AxisReplayClient({
             setCameraStatus("unavailable")
             markSignalUnavailableIfEmpty()
             emitSignal(
-              "SIGNAL UNAVAILABLE",
-              "Frame sampling unavailable.",
+              "READ BUILDING",
+              "Memory stored. Read still building.",
               "zinc"
             )
           }
@@ -1236,8 +1242,8 @@ export default function AxisReplayClient({
           setCameraStatus("unavailable")
           markSignalUnavailableIfEmpty()
           emitSignal(
-            "SIGNAL UNAVAILABLE",
-            "Frame sampling unavailable.",
+            "READ BUILDING",
+            "Memory stored. Read still building.",
             "zinc"
           )
         }
@@ -1370,7 +1376,7 @@ export default function AxisReplayClient({
                 : "ARCHIVE ACTIVE",
             detail:
               session?.mission && session.mission !== "None"
-                ? "Mission memory added to baseline."
+                ? "Warmup added to rhythm."
                 : "Replay added to archive.",
             tone: "lime",
           },
@@ -1382,12 +1388,12 @@ export default function AxisReplayClient({
       : replayStatus === "recovered"
         ? "Replay Unlocked"
         : replayStatus === "failed"
-          ? "Signal Unavailable"
+          ? "Replay Ready"
           : session?.memoryState?.status
             ? session.memoryState.status
             : extractedSignals?.frameSampleCount
               ? "Signal Recorded"
-              : "Context Building"
+              : "Memory Stored"
 
   const contextPanelLine =
     replayStatus === "recovering"
@@ -1395,7 +1401,7 @@ export default function AxisReplayClient({
       : replayStatus === "recovered"
         ? "REPLAY UNLOCKED"
         : replayStatus === "failed"
-          ? "SIGNAL UNAVAILABLE"
+          ? "REPLAY READY"
           : session?.memoryState?.contextLine ||
             session?.context ||
             "Replay linked. Session added. Memory available."

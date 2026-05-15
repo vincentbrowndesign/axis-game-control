@@ -43,7 +43,7 @@ export function describeReplay({
   }
 
   if (baseline.memoryCount <= 1) {
-    descriptions.push("Baseline needs more memories before comparison.")
+    descriptions.push("Warmups build toward comparison.")
   } else {
     descriptions.push("This replay is now part of the player archive.")
   }
@@ -51,7 +51,7 @@ export function describeReplay({
   return {
     summary:
       descriptions[0] ||
-      "Signal recorded from the replay.",
+      "Memory stored. Read still building.",
     observations: signals.timeline.map((segment) => ({
       timestamp: segment.start,
       signal: segment.label,

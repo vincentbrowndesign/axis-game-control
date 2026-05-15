@@ -21,12 +21,11 @@ export default function ObservationFeed({
         </p>
 
         <h2 className="mt-4 text-3xl font-black text-white">
-          Not enough signal yet.
+          Memory stored.
         </h2>
 
         <p className="mt-4 text-zinc-500">
-          Add events like DRIVE, PAINT TOUCH, OPEN, SHOT, MAKE, MISS, or TURNOVER.
-          Axis only speaks when there is proof.
+          Replay ready. The read builds as more movement is archived.
         </p>
       </div>
     )

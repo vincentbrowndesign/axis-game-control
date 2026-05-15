@@ -15,7 +15,7 @@ Memory converts normalized replay/session data into AXIS context:
 - ambient replay language
 - confidence-like display state
 - calibration baseline status
-- mission completion context
+- warmup completion context
 
 Primary file:
 
@@ -42,11 +42,11 @@ Memory should not receive:
 - Upload response construction details.
 - AI model responses from upload.
 
-Calibration should stay grounded. It may compare duration, source, measured motion intensity, measured audio energy, memory count, first memory date, and latest memory date. It must not infer fatigue, control, pressure, or decision quality.
+Calibration is the hidden system layer. The user-facing ritual is Warmup. Calibration should stay grounded. It may compare duration, source, measured motion intensity, measured audio energy, memory count, first memory date, and latest memory date. It must not infer fatigue, control, pressure, or decision quality.
 
-Calibration missions are basketball memory prompts, not training-data prompts. They may label a session as handle, footwork, shooting form, live movement, or transition so the baseline can store mission type, duration, motion level, audio level, completion count, and timestamp.
+Warmups are basketball memory prompts, not training-data prompts. They may label a session as handle, footwork, shooting form, live movement, or transition so the baseline can store mission type, duration, motion level, audio level, completion count, and timestamp.
 
-Each mission builds a named baseline. Comparison language stays locked until the mission has enough memories, currently three. Before unlock, use milestone language: `BASELINE BUILDING`, `1 / 3 memories`, `COMPARISON LOCKED`, and `Record 2 more to unlock read`. After unlock, use `BASELINE READY` and `COMPARISON UNLOCKED`.
+Each warmup builds a named rhythm baseline. Comparison language stays locked until the warmup has enough memories, currently three. Before unlock, lead with reward language: `MEMORY STORED`, `REPLAY READY`, `WARMUP ADDED`, `1 / 3 warmups`, and `2 more warmups to unlock comparison`. After unlock, use `BASELINE READY` and `COMPARISON UNLOCKED`.
 
 ## Outputs
 
@@ -72,16 +72,18 @@ Preferred labels and lines:
 - Replay Linked
 - Footage Accepted
 - Memory Stored
+- Replay Ready
+- Warmup Added
 - Baseline started.
 - First memory stored.
 - Motion level recorded.
 - Session added to baseline.
-- Not enough memories for comparison.
+- Reads improve after more warmups.
 - Movement archived.
 - Build baseline.
 - Baseline building.
 - Baseline ready.
-- Comparison locked.
+- Comparison unlocks after 3 warmups.
 - Comparison unlocked.
 
 Avoid:
@@ -99,4 +101,4 @@ Do not call memory inference from `/api/upload`.
 
 The upload route may persist minimal fallback metadata, but actual memory state belongs to replay load, replay recovery, archive rendering, and client display.
 
-Mission selection can travel through the existing `mission` form field, but uploads must still return the frozen minimal response. Mission progress and baseline growth are replay/memory concerns after the clip exists.
+Warmup selection can travel through the existing `mission` form field, but uploads must still return the frozen minimal response. Warmup progress and baseline growth are replay/memory concerns after the clip exists.

@@ -107,13 +107,13 @@ MediaPipe Landmark Foundation may run browser-side after replay load. It observe
 - upper-body rhythm
 - acceleration windows
 
-MediaPipe must remain optional and recoverable. If model loading, canvas access, video readiness, or pose detection fails, replay continues and the UI may say: Landmark signal unavailable. Replay remains available.
+MediaPipe must remain optional and recoverable. If model loading, canvas access, video readiness, or pose detection fails, replay continues and the UI should lead with reward language: Memory stored. Read still building.
 
 Provider slots for `openAiVisionProvider` and `onnxProvider` must remain disabled until explicitly implemented.
 
-Calibration Mission V1 gives the signal layer cleaner basketball contexts without making fake detections. Missions can focus the future archive around handle, footwork, shooting form, live movement, and transition, but the current system may only display mission completion, baseline growth, comparison lock status, and measured signal status.
+Warmup V1 gives the signal layer cleaner basketball contexts without making fake detections. Warmups can focus the future archive around handle, footwork, shooting form, live movement, and transition, but the current system may only display warmup completion, baseline growth, comparison milestone status, and measured signal status.
 
-Mission UI should translate what Axis watches into basketball language:
+Warmup UI should translate what Axis watches into basketball language:
 
 - bounce rhythm
 - hand rhythm
@@ -139,10 +139,15 @@ Use AXIS-native signal language. Prefer:
 - Replay Linked
 - Footage Accepted
 - Memory Stored
+- Replay Ready
+- Warmup Added
+- Movement Stored
+- Handle Sequence Saved
+- Live Capture Stored
+- Session Added To Archive
 - Signal Read
 - Signal Recorded
 - Baseline Started
-- Not Enough Memory
 - Archive Active
 - Basketball Read
 - Activity Detected
@@ -151,7 +156,7 @@ Use AXIS-native signal language. Prefer:
 - Build Baseline
 - Baseline Building
 - Baseline Ready
-- Comparison Locked
+- Comparison Unlocks After 3 Warmups
 - Comparison Unlocked
 
 Do not introduce:

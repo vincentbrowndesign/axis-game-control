@@ -229,6 +229,6 @@ export function segmentHandleMission({
     summary:
       confidence >= 0.5
         ? "Cadence found."
-        : "Not enough signal. Replay remains available.",
+        : "Memory stored. Read still building.",
   }
 }

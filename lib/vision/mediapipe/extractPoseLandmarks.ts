@@ -388,7 +388,7 @@ export function summarizePoseLandmarks({
       confidence: 0,
       persistence: 0,
       observations: [],
-      summary: "Landmark signal unavailable. Replay remains available.",
+      summary: "Memory stored. Read still building.",
     }
   }
 
@@ -415,6 +415,6 @@ export function summarizePoseLandmarks({
     summary:
       confidence >= 0.35
         ? "Landmark signal recorded."
-        : "Landmark signal unavailable. Replay remains available.",
+        : "Memory stored. Read still building.",
   }
 }

@@ -118,7 +118,7 @@ function missionName(mission: CalibrationMission) {
 }
 
 function missionProgressText(mission: CalibrationMission) {
-  return `0 / ${mission.unlockAfter} memories needed`
+  return `0 / ${mission.unlockAfter} warmups`
 }
 
 function MissionCard({
@@ -136,7 +136,7 @@ function MissionCard({
     >
       <div className="flex items-start justify-between gap-4">
         <p className="text-2xl font-black uppercase leading-none tracking-[-0.03em]">
-          {`CALIBRATION ${mission.order.toString().padStart(2, "0")}`}
+          {`WARMUP ${mission.order.toString().padStart(2, "0")}`}
         </p>
         <p className="font-mono text-xs opacity-60">
           {mission.durationTarget}s
@@ -147,7 +147,7 @@ function MissionCard({
         {missionName(mission)}
       </h2>
       <p className="mt-4 text-base leading-relaxed opacity-75">
-        {mission.task}
+        {mission.description}
       </p>
 
       <p className="mt-7 text-[10px] uppercase tracking-[0.32em] opacity-45">
@@ -166,6 +166,9 @@ function MissionCard({
         {mission.baselineName}
       </p>
       <p className="mt-4 text-xs uppercase tracking-[0.24em] opacity-55">
+        Milestone
+      </p>
+      <p className="mt-2 text-xs uppercase tracking-[0.24em] opacity-55">
         {missionProgressText(mission)}
       </p>
     </button>
@@ -263,7 +266,7 @@ export default function UploadConsole({ email }: Props) {
       formData.append(
         "mission",
         selectedMission
-          ? `CALIBRATION ${selectedMission.order
+          ? `WARMUP ${selectedMission.order
               .toString()
               .padStart(2, "0")} - ${selectedMission.title}`
           : "None"
@@ -305,7 +308,7 @@ export default function UploadConsole({ email }: Props) {
       }
 
       setProgress(100)
-      setStatus("MEMORY RECORDED")
+      setStatus("MEMORY STORED")
 
       setTimeout(() => {
         router.push(`/replay/${result.replayId}`)
@@ -366,7 +369,7 @@ export default function UploadConsole({ email }: Props) {
               MEMORY
             </h1>
             <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-              Build your basketball baseline.
+              Build your basketball rhythm.
             </p>
             <button
               type="button"
@@ -382,16 +385,16 @@ export default function UploadConsole({ email }: Props) {
           <section className="pb-10">
             <div className="mb-8">
               <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-                Begin Calibration
+                Pick Warmup
               </p>
               <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-                PICK ONE
+                PICK
                 <br />
-                MISSION
+                WARMUP
               </h1>
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/45">
-                Each mission builds one part of your baseline. Comparison
-                unlocks after three memories.
+                Each warmup stores movement and builds your rhythm.
+                Comparison unlocks after three warmups.
               </p>
             </div>
 
@@ -418,10 +421,10 @@ export default function UploadConsole({ email }: Props) {
                 onClick={() => setFlowStep("mission")}
                 className="mb-8 text-xs uppercase tracking-[0.35em] text-white/35 transition hover:text-white"
               >
-                Missions
+                Warmups
               </button>
               <p className="text-[10px] uppercase tracking-[0.5em] text-lime-300">
-                Mission Brief
+                Warmup Brief
               </p>
               <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
                 {missionName(selectedMission)}
@@ -450,14 +453,13 @@ export default function UploadConsole({ email }: Props) {
               </div>
               <div className="mt-8 border-t border-white/10 pt-6">
                 <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                  Builds Baseline
+                  Builds Rhythm
                 </p>
                 <p className="mt-3 text-lg font-black uppercase text-white">
                   {selectedMission.baselineName}
                 </p>
                 <p className="mt-2 text-sm text-white/45">
-                  Comparison locked. Record {selectedMission.unlockAfter} to
-                  unlock read.
+                  {selectedMission.unlockAfter} warmups unlock comparison.
                 </p>
               </div>
               <button
@@ -485,11 +487,11 @@ export default function UploadConsole({ email }: Props) {
               {status || "BINDING MEMORY TO SESSION"}
             </h1>
             <p className="mt-6 text-sm uppercase tracking-[0.32em] text-white/35">
-              {selectedMission?.title || "Calibration Mission"}
+              {selectedMission?.title || "Warmup"}
             </p>
             {flowStep === "processing" && progress === 100 ? (
               <p className="mt-4 text-sm uppercase tracking-[0.32em] text-lime-300">
-                BASELINE UPDATED
+                WARMUP ADDED
               </p>
             ) : null}
 
@@ -503,8 +505,8 @@ export default function UploadConsole({ email }: Props) {
             </div>
             <div className="mt-5 flex items-end justify-between gap-5">
               <p className="max-w-md text-sm leading-relaxed text-white/45">
-                Replay will open after the memory is created. Signal reading
-                starts on the replay screen.
+                Replay opens after the memory is stored. Reads improve as
+                warmups build.
               </p>
               <p className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-white/70">
                 {progress}%
