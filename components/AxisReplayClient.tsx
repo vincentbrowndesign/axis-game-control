@@ -4,6 +4,12 @@ import { useEffect, useRef, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
 import type { ReplaySessionView } from "@/types/memory"
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext
+  }
+}
+
 type InferSignal = {
   basketballLikely: boolean
   confidence: number
@@ -31,6 +37,30 @@ type Marker = {
   label: string
   detail: string
   tone: "lime" | "cyan" | "zinc"
+}
+
+type LiveSignalLabel =
+  | "ACTIVE RUNNING"
+  | "COURT DETECTED"
+  | "PLAYER LOCKED"
+  | "LOW ACTIVITY"
+  | "DEAD BALL"
+  | "CROWD ENERGY"
+  | "SIGNAL LOST"
+  | "SIGNAL RETURNED"
+
+type LiveSignalEvent = {
+  label: LiveSignalLabel
+  time: number
+  detail: string
+  tone: "lime" | "cyan" | "zinc"
+}
+
+type FrameSignal = {
+  motionAmount: number
+  cameraMovement: number
+  playerVisibility: number
+  courtVisibility: number
 }
 
 function formatClock(seconds?: number) {
@@ -107,6 +137,118 @@ function normalizeSession(
       "Replay linked. Session added. Memory available.",
     timeline: Array.isArray(value.timeline) ? value.timeline : [],
     ambientLine: value.ambientLine || "Context building.",
+    memoryState: value.memoryState,
+  }
+}
+
+function pushLiveSignal(
+  events: LiveSignalEvent[],
+  event: LiveSignalEvent
+) {
+  const previous = events[0]
+
+  if (
+    previous?.label === event.label &&
+    Math.abs(previous.time - event.time) < 4
+  ) {
+    return events
+  }
+
+  return [event, ...events].slice(0, 8)
+}
+
+function rgbToHsl(r: number, g: number, b: number) {
+  const nr = r / 255
+  const ng = g / 255
+  const nb = b / 255
+  const max = Math.max(nr, ng, nb)
+  const min = Math.min(nr, ng, nb)
+  const light = (max + min) / 2
+
+  if (max === min) {
+    return {
+      hue: 0,
+      saturation: 0,
+      light,
+    }
+  }
+
+  const delta = max - min
+  const saturation =
+    light > 0.5
+      ? delta / (2 - max - min)
+      : delta / (max + min)
+
+  let hue = 0
+
+  if (max === nr) {
+    hue = (ng - nb) / delta + (ng < nb ? 6 : 0)
+  } else if (max === ng) {
+    hue = (nb - nr) / delta + 2
+  } else {
+    hue = (nr - ng) / delta + 4
+  }
+
+  return {
+    hue: hue * 60,
+    saturation,
+    light,
+  }
+}
+
+function readFrameSignal(
+  data: Uint8ClampedArray,
+  previousFrame: Uint8ClampedArray | null
+): FrameSignal {
+  let motion = 0
+  let courtPixels = 0
+  let contrastPixels = 0
+  let cameraShift = 0
+  const pixelCount = data.length / 4
+
+  for (let index = 0; index < data.length; index += 4) {
+    const r = data[index]
+    const g = data[index + 1]
+    const b = data[index + 2]
+    const luminance = r * 0.299 + g * 0.587 + b * 0.114
+    const { hue, saturation, light } = rgbToHsl(r, g, b)
+    const courtTone =
+      ((hue >= 18 && hue <= 52) ||
+        (hue >= 75 && hue <= 165)) &&
+      saturation > 0.16 &&
+      light > 0.22 &&
+      light < 0.88
+
+    if (courtTone) courtPixels += 1
+
+    if (
+      saturation > 0.2 &&
+      (light < 0.28 || light > 0.72 || !courtTone)
+    ) {
+      contrastPixels += 1
+    }
+
+    if (previousFrame) {
+      const prev =
+        previousFrame[index] * 0.299 +
+        previousFrame[index + 1] * 0.587 +
+        previousFrame[index + 2] * 0.114
+      const delta = Math.abs(luminance - prev)
+
+      motion += delta
+      if (delta > 32) cameraShift += 1
+    }
+  }
+
+  return {
+    motionAmount: previousFrame
+      ? Math.min(1, motion / pixelCount / 42)
+      : 0,
+    cameraMovement: previousFrame
+      ? Math.min(1, cameraShift / pixelCount / 0.38)
+      : 0,
+    playerVisibility: Math.min(1, contrastPixels / pixelCount / 0.28),
+    courtVisibility: Math.min(1, courtPixels / pixelCount / 0.34),
   }
 }
 
@@ -183,6 +325,14 @@ export default function AxisReplayClient({
   className = "",
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const previousFrameRef = useRef<Uint8ClampedArray | null>(null)
+  const lastActivityRef = useRef(0)
+  const lastSignalLabelRef = useRef<LiveSignalLabel | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const audioSourceReadyRef = useRef(false)
+  const audioPeakRef = useRef(0)
   const setPlaybackId = useSessionStore(
     (state) => state.setPlaybackId
   )
@@ -204,6 +354,16 @@ export default function AxisReplayClient({
   const [replayStatus, setReplayStatus] = useState<
     "ready" | "recovering" | "recovered" | "failed"
   >("ready")
+  const [liveSignalEvents, setLiveSignalEvents] = useState<
+    LiveSignalEvent[]
+  >([])
+  const [liveMetrics, setLiveMetrics] = useState<FrameSignal>({
+    motionAmount: 0,
+    cameraMovement: 0,
+    playerVisibility: 0,
+    courtVisibility: 0,
+  })
+  const [audioReady, setAudioReady] = useState(false)
 
   useEffect(() => {
     setPlaybackId(playbackId)
@@ -254,6 +414,38 @@ export default function AxisReplayClient({
     }
   }
 
+  async function connectAudioSignal() {
+    if (audioSourceReadyRef.current || !videoRef.current) return
+
+    try {
+      const AudioContextClass =
+        window.AudioContext || window.webkitAudioContext
+      const context =
+        audioContextRef.current || new AudioContextClass()
+
+      if (context.state === "suspended") {
+        await context.resume()
+      }
+
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.82
+
+      const source = context.createMediaElementSource(
+        videoRef.current
+      )
+      source.connect(analyser)
+      analyser.connect(context.destination)
+
+      audioContextRef.current = context
+      analyserRef.current = analyser
+      audioSourceReadyRef.current = true
+      setAudioReady(true)
+    } catch (error) {
+      console.warn("AXIS AUDIO SIGNAL UNAVAILABLE", error)
+    }
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -283,6 +475,173 @@ export default function AxisReplayClient({
       isMounted = false
     }
   }, [playbackId])
+
+  useEffect(() => {
+    let frameId = 0
+    let lastSample = 0
+    const audioData = new Uint8Array(128)
+
+    function emitSignal(
+      label: LiveSignalLabel,
+      detail: string,
+      tone: "lime" | "cyan" | "zinc"
+    ) {
+      const video = videoRef.current
+      const time = video?.currentTime || 0
+
+      if (
+        lastSignalLabelRef.current === label &&
+        Math.abs(time - lastActivityRef.current) < 3
+      ) {
+        return
+      }
+
+      lastSignalLabelRef.current = label
+      setLiveSignalEvents((events) =>
+        pushLiveSignal(events, {
+          label,
+          time,
+          detail,
+          tone,
+        })
+      )
+    }
+
+    function sample(now: number) {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+
+      if (
+        video &&
+        canvas &&
+        !video.paused &&
+        !video.ended &&
+        video.readyState >= 2 &&
+        now - lastSample > 420
+      ) {
+        lastSample = now
+        const context = canvas.getContext("2d", {
+          willReadFrequently: true,
+        })
+
+        if (context) {
+          try {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height)
+            const frame = context.getImageData(
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            ).data
+            const signal = readFrameSignal(
+              frame,
+              previousFrameRef.current
+            )
+            previousFrameRef.current = new Uint8ClampedArray(frame)
+            setLiveMetrics(signal)
+
+            if (signal.motionAmount > 0.34) {
+              lastActivityRef.current = video.currentTime
+              emitSignal(
+                "ACTIVE RUNNING",
+                "Motion increased in replay.",
+                "lime"
+              )
+            } else if (
+              video.currentTime - lastActivityRef.current > 4 &&
+              signal.motionAmount < 0.08
+            ) {
+              emitSignal(
+                "DEAD BALL",
+                "Footage is holding low movement.",
+                "zinc"
+              )
+            } else if (signal.motionAmount < 0.12) {
+              emitSignal(
+                "LOW ACTIVITY",
+                "Low movement detected.",
+                "zinc"
+              )
+            }
+
+            if (signal.courtVisibility > 0.42) {
+              emitSignal(
+                "COURT DETECTED",
+                "Court-like surface visible.",
+                "cyan"
+              )
+            }
+
+            if (
+              signal.playerVisibility > 0.2 &&
+              signal.motionAmount > 0.16
+            ) {
+              emitSignal(
+                "PLAYER LOCKED",
+                "Moving player shape visible.",
+                "lime"
+              )
+            }
+
+            if (signal.cameraMovement > 0.5) {
+              emitSignal(
+                "SIGNAL RETURNED",
+                "Camera movement re-entered frame.",
+                "cyan"
+              )
+            }
+
+            if (
+              signal.courtVisibility < 0.08 &&
+              signal.playerVisibility < 0.08 &&
+              signal.motionAmount < 0.06
+            ) {
+              emitSignal(
+                "SIGNAL LOST",
+                "Replay signal is low.",
+                "zinc"
+              )
+            }
+          } catch (error) {
+            console.warn("AXIS FRAME SIGNAL UNAVAILABLE", error)
+            emitSignal(
+              "SIGNAL LOST",
+              "Frame sampling unavailable.",
+              "zinc"
+            )
+          }
+        }
+
+        const analyser = analyserRef.current
+
+        if (analyser) {
+          analyser.getByteTimeDomainData(audioData)
+
+          const peak = audioData.reduce((max, value) => {
+            return Math.max(max, Math.abs(value - 128))
+          }, 0)
+
+          audioPeakRef.current = peak
+
+          if (peak > 42) {
+            emitSignal(
+              "CROWD ENERGY",
+              "Audio spike detected.",
+              "cyan"
+            )
+          }
+        }
+      }
+
+      frameId = requestAnimationFrame(sample)
+    }
+
+    frameId = requestAnimationFrame(sample)
+
+    return () => {
+      cancelAnimationFrame(frameId)
+    }
+  }, [])
 
   const duration = session?.duration || 0
   const progress =
@@ -333,6 +692,43 @@ export default function AxisReplayClient({
             },
           ]
 
+  const replayStatusLabel =
+    replayStatus === "recovering"
+      ? "Memory Indexing"
+      : replayStatus === "recovered"
+        ? "Replay Unlocked"
+        : replayStatus === "failed"
+          ? "Signal Interrupted"
+          : session?.memoryState?.status
+            ? session.memoryState.status
+            : signal?.basketballLikely
+              ? "Signal Active"
+              : signal
+                ? "Context Building"
+                : "Memory Indexing"
+
+  const contextPanelLine =
+    replayStatus === "recovering"
+      ? "MEMORY INDEXING"
+      : replayStatus === "recovered"
+        ? "REPLAY UNLOCKED"
+        : replayStatus === "failed"
+          ? "SIGNAL INTERRUPTED"
+          : session?.memoryState?.contextLine ||
+            session?.context ||
+            "Replay linked. Session added. Memory available."
+
+  const liveMarkers: Marker[] = liveSignalEvents.map((event) => ({
+    time: formatClock(event.time),
+    label: event.label,
+    detail: event.detail,
+    tone: event.tone,
+  }))
+  const displayMarkers = liveMarkers.length
+    ? [...liveMarkers, ...markers].slice(0, 10)
+    : markers
+  const latestLiveSignal = liveSignalEvents[0]?.label || replayStatusLabel
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black px-5 py-8 text-white">
@@ -356,24 +752,14 @@ export default function AxisReplayClient({
               Axis Replay System
             </p>
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">
-              Memory Online
+              {session?.memoryState?.headline || "Memory Online"}
             </h1>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(190,242,100,0.8)]" />
             <p className="text-xs uppercase tracking-[0.3em] text-white/45">
-              {replayStatus === "recovering"
-                ? "Memory Indexing"
-                : replayStatus === "recovered"
-                  ? "Replay Unlocked"
-                : replayStatus === "failed"
-                  ? "Signal Interrupted"
-                  : signal
-                ? signal.basketballLikely
-                  ? "Signal Active"
-                  : "Context Building"
-                : "Memory Indexing"}
+              {replayStatusLabel}
             </p>
           </div>
         </div>
@@ -386,7 +772,7 @@ export default function AxisReplayClient({
           </p>
 
           <div className="space-y-3">
-            {markers.map((marker) => (
+            {displayMarkers.map((marker) => (
               <MarkerCard
                 key={`${marker.time}-${marker.label}`}
                 marker={marker}
@@ -406,7 +792,9 @@ export default function AxisReplayClient({
               REPLAY
             </h2>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/50">
-              {session.ambientLine || "Context building."}
+              {session.memoryState?.ambientLine ||
+                session.ambientLine ||
+                "Context building."}
             </p>
           </div>
 
@@ -424,7 +812,10 @@ export default function AxisReplayClient({
                 setLocalCurrentTime(time)
                 setCurrentTime(time)
               }}
-              onPlay={() => setPlaying(true)}
+              onPlay={() => {
+                setPlaying(true)
+                void connectAudioSignal()
+              }}
               onPause={() => setPlaying(false)}
               onEnded={() => setPlaying(false)}
               onError={recoverReplay}
@@ -433,9 +824,16 @@ export default function AxisReplayClient({
             <div className="pointer-events-none absolute left-5 top-5 flex items-center gap-3">
               <div className="h-2 w-2 rounded-full bg-lime-300" />
               <p className="text-xs uppercase tracking-[0.35em] text-white/55">
-                Replay Active
+                {latestLiveSignal}
               </p>
             </div>
+
+            <canvas
+              ref={canvasRef}
+              width={96}
+              height={54}
+              className="hidden"
+            />
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -453,7 +851,7 @@ export default function AxisReplayClient({
                 Last Signal
               </p>
               <p className="mt-3 text-2xl font-black text-white">
-                {session.lastSignal || formatClock(currentTime)}
+                {latestLiveSignal}
               </p>
             </div>
 
@@ -462,13 +860,15 @@ export default function AxisReplayClient({
                 Archive Status
               </p>
               <p className="mt-3 text-2xl font-black text-lime-300">
-                {session.archiveStatus || "Active"}
+                {session.memoryState?.archiveStatus ||
+                  session.archiveStatus ||
+                  "Active"}
               </p>
             </div>
           </div>
 
           <div className="mt-8 space-y-3 lg:hidden">
-            {markers.map((marker) => (
+            {displayMarkers.map((marker) => (
               <MarkerCard
                 key={`${marker.time}-${marker.label}-mobile`}
                 marker={marker}
@@ -507,6 +907,22 @@ export default function AxisReplayClient({
               label="Replay Status"
               value="Replay Linked"
             />
+            <DetailRow
+              label="Motion"
+              value={`${Math.round(liveMetrics.motionAmount * 100)}%`}
+            />
+            <DetailRow
+              label="Court"
+              value={`${Math.round(liveMetrics.courtVisibility * 100)}%`}
+            />
+            <DetailRow
+              label="Player"
+              value={`${Math.round(liveMetrics.playerVisibility * 100)}%`}
+            />
+            <DetailRow
+              label="Audio"
+              value={audioReady ? "Signal Active" : "Signal Waiting"}
+            />
           </div>
 
           <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
@@ -516,17 +932,10 @@ export default function AxisReplayClient({
             <h3 className="mt-4 text-2xl font-black leading-tight text-white">
               {session.memoryCount && session.memoryCount > 1
                 ? "Previous session located."
-                : "Replay added to archive."}
+                : session.context || "Replay added to archive."}
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-white/50">
-              {replayStatus === "recovering"
-                ? "MEMORY INDEXING"
-                : replayStatus === "recovered"
-                  ? "REPLAY UNLOCKED"
-                : replayStatus === "failed"
-                  ? "SIGNAL INTERRUPTED"
-                  : session.context ||
-                    "Replay linked. Session added. Memory available."}
+              {contextPanelLine}
             </p>
           </div>
         </aside>

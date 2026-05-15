@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { buildMemoryState } from "@/lib/memoryInference"
 import {
   mapReplaySession,
   type AxisReplaySession,
@@ -57,7 +58,38 @@ export async function GET(_req: Request, context: Context) {
     data.video_url = signed.data?.signedUrl || data.video_url
   }
 
+  const { data: previousData } = await supabase
+    .from("axis_sessions")
+    .select("*")
+    .eq("user_id", user.id)
+    .neq("id", id)
+    .lt("created_at", data.created_at)
+    .order("created_at", { ascending: false })
+    .returns<AxisReplaySession[]>()
+
+  const session = mapReplaySession(data)
+  const previousSessions = (previousData || []).map(mapReplaySession)
+  const memoryState = buildMemoryState({
+    session,
+    previousSessions,
+    player: session.player,
+  })
+
   return NextResponse.json({
-    session: mapReplaySession(data),
+    session: {
+      ...session,
+      memoryCount: memoryState.memoryCount,
+      lastSignal: memoryState.status,
+      archiveStatus: memoryState.archiveStatus,
+      context: memoryState.contextLine,
+      timeline: memoryState.timelineEvents.map((event) => ({
+        time: event.time,
+        label: event.label,
+        detail: event.body,
+        tone: event.tone,
+      })),
+      ambientLine: memoryState.ambientLine,
+      memoryState,
+    },
   })
 }

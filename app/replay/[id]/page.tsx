@@ -1,6 +1,7 @@
 import AxisReplayClient from "@/components/AxisReplayClient"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { buildMemoryState } from "@/lib/memoryInference"
 import {
   mapReplaySession,
   type AxisReplaySession,
@@ -41,22 +42,39 @@ export default async function ReplayPage({
           signed.data?.signedUrl || data.video_url
       }
 
-      const { count } = await supabase
+      const { data: previousData } = await supabase
         .from("axis_sessions")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
+        .select("*")
         .eq("user_id", user.id)
-        .eq("player_name", data.player_name || "Unassigned")
+        .neq("id", id)
+        .lt("created_at", data.created_at)
+        .order("created_at", { ascending: false })
+        .returns<AxisReplaySession[]>()
+
+      const session = mapReplaySession(data)
+      const previousSessions = (previousData || []).map(
+        mapReplaySession
+      )
+      const memoryState = buildMemoryState({
+        session,
+        previousSessions,
+        player: session.player,
+      })
 
       initialSession = {
-        ...mapReplaySession(data),
-        memoryCount: count || 1,
-        ambientLine:
-          (count || 0) > 1
-            ? "Previous session located."
-            : "Replay added to archive.",
+        ...session,
+        memoryCount: memoryState.memoryCount,
+        lastSignal: memoryState.status,
+        archiveStatus: memoryState.archiveStatus,
+        context: memoryState.contextLine,
+        timeline: memoryState.timelineEvents.map((event) => ({
+          time: event.time,
+          label: event.label,
+          detail: event.body,
+          tone: event.tone,
+        })),
+        ambientLine: memoryState.ambientLine,
+        memoryState,
       }
     }
   }

@@ -38,6 +38,24 @@ export type AxisReplaySession = {
   metadata: Record<string, unknown> | null
 }
 
+export type MemoryTimelineEvent = {
+  label: string
+  time: string
+  body: string
+  tone: "lime" | "cyan" | "zinc"
+}
+
+export type MemoryState = {
+  headline: string
+  status: string
+  ambientLine: string
+  contextLine: string
+  archiveStatus: string
+  memoryCount: number
+  timelineEvents: MemoryTimelineEvent[]
+  confidence: number
+}
+
 export type ReplaySessionView = {
   id: string
   createdAt: number
@@ -59,8 +77,10 @@ export type ReplaySessionView = {
     time: string
     label: string
     detail: string
+    tone?: "lime" | "cyan" | "zinc"
   }[]
   ambientLine?: string
+  memoryState?: MemoryState
 }
 
 function metadataNumber(

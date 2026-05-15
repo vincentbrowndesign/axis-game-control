@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { buildMemoryState } from "@/lib/memoryInference"
 import {
   mapReplaySession,
   type AxisReplaySession,
@@ -41,6 +42,17 @@ function memoryKey(session: {
   return session.player && session.player !== "Unassigned"
     ? session.player
     : "Unassigned"
+}
+
+function previousForSession(
+  session: ReturnType<typeof mapReplaySession>,
+  sessions: ReturnType<typeof mapReplaySession>[]
+) {
+  return sessions.filter(
+    (item) =>
+      item.id !== session.id &&
+      item.createdAt < session.createdAt
+  )
 }
 
 export default async function SessionsPage() {
@@ -108,6 +120,18 @@ export default async function SessionsPage() {
     {}
   )
 
+  const memoryStates = sessions.reduce<
+    Record<string, ReturnType<typeof buildMemoryState>>
+  >((states, session) => {
+    states[session.id] = buildMemoryState({
+      session,
+      previousSessions: previousForSession(session, sessions),
+      player: session.player,
+    })
+
+    return states
+  }, {})
+
   return (
     <main className="min-h-screen bg-black px-5 py-8 text-white">
       <div className="mx-auto max-w-6xl">
@@ -162,13 +186,17 @@ export default async function SessionsPage() {
 
         <p className="mb-6 text-sm uppercase tracking-[0.35em] text-white/35">
           {sessions.length
-            ? "Previous session located."
+            ? "Memory online."
             : "Archive ready."}
         </p>
 
         <div className="grid gap-5">
           {sessions.map((session) => {
-            const count = memoryCounts[memoryKey(session)] || 1
+            const memoryState = memoryStates[session.id]
+            const count =
+              memoryState?.memoryCount ||
+              memoryCounts[memoryKey(session)] ||
+              1
 
             return (
             <Link
@@ -203,7 +231,7 @@ export default async function SessionsPage() {
                     </span>
                     <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-white/40">
                       {session.status === "stored"
-                        ? "Memory Stored"
+                        ? memoryState?.status || "Memory Stored"
                         : session.status || "Session Added"}
                     </span>
                   </div>
@@ -222,7 +250,10 @@ export default async function SessionsPage() {
                         {formatDuration(session.duration || 0)}
                       </span>
                       <span>/</span>
-                      <span>Session continuity found</span>
+                      <span>
+                        {memoryState?.contextLine ||
+                          "Session added to archive."}
+                      </span>
                     </div>
 
                     <div className="mt-8 grid gap-2 sm:grid-cols-3">
@@ -247,7 +278,8 @@ export default async function SessionsPage() {
                           Replay Status
                         </p>
                         <p className="mt-2 text-sm text-lime-300">
-                          Replay Linked
+                          {memoryState?.archiveStatus ||
+                            "Archive Active"}
                         </p>
                       </div>
                     </div>
