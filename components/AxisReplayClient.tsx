@@ -4,8 +4,6 @@ import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
 import { normalizeReplay } from "@/lib/normalizeReplay"
-import { readBasketballSignal } from "@/lib/basketball/readBasketballSignal"
-import type { BasketballSignalState } from "@/lib/basketball/types"
 import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
 import { MemoryCinemaLayer } from "@/components/MemoryCinemaLayer"
@@ -13,11 +11,8 @@ import { generateReplayMarkers } from "@/lib/replay/generateReplayMarkers"
 import { getReplayReward } from "@/lib/replay/getReplayReward"
 import {
   buildReplayReveals,
-  describeReveal,
 } from "@/lib/replay/revealEngine"
-import type { ReplayReveal } from "@/lib/replay/revealEngine"
 import { memoryCinemaState } from "@/lib/replay/memoryCinema"
-import type { ReplayMarker } from "@/lib/replay/types"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import { segmentCalibrationMemory } from "@/lib/segments/segmentCalibrationMemory"
 import type { SegmentedMemory } from "@/lib/segments/types"
@@ -33,7 +28,6 @@ import type {
   DigitalTwin,
   WarmupChainProgress,
 } from "@/lib/twin/types"
-import { atmosphereState } from "@/lib/world/atmosphereState"
 import {
   getNextWarmupFromMission,
   getWarmupById,
@@ -52,7 +46,6 @@ import type {
   SignalChannelStatus,
   SignalReadiness,
 } from "@/lib/signals/types"
-import type { BrowserSignalRead } from "@/lib/vision/providers/types"
 import type { ReplaySessionView } from "@/types/memory"
 
 declare global {
@@ -65,13 +58,6 @@ type Props = {
   playbackId: string
   initialSession?: ReplaySessionView | null
   className?: string
-}
-
-type Marker = {
-  time: string
-  label: string
-  detail: string
-  tone: "lime" | "cyan" | "zinc"
 }
 
 type LiveSignalLabel =
@@ -102,23 +88,6 @@ const SIGNAL_ATTEMPT_DELAY_MS = 2000
 const SIGNAL_UNAVAILABLE_TIMEOUT_MS = 5000
 const POSE_SAMPLE_INTERVAL_MS = 900
 const calibrationMissions = getCalibrationMissions()
-
-function formatClock(seconds?: number) {
-  if (!seconds || Number.isNaN(seconds)) return "00:00"
-
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-
-  return `${mins.toString().padStart(2, "0")}:${secs
-    .toString()
-    .padStart(2, "0")}`
-}
-
-function formatMemoryCount(count?: number) {
-  return Math.max(count || 1, 1)
-    .toString()
-    .padStart(2, "0")
-}
 
 function safeParseSession(raw: string | null) {
   if (!raw) return null
@@ -154,159 +123,19 @@ function pushLiveSignal(
   return [event, ...events].slice(0, 8)
 }
 
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-white/10 py-3 last:border-b-0">
-      <span className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-        {label}
-      </span>
-      <span className="max-w-[58%] text-right text-sm font-medium text-white/80">
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function MarkerCard({ marker }: { marker: Marker }) {
-  const toneClass =
-    marker.tone === "lime"
-      ? "text-lime-300"
-      : marker.tone === "cyan"
-        ? "text-cyan-300"
-        : "text-white/55"
-
-  return (
-    <div className="border border-white/10 bg-white/[0.03] p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <p
-          className={`text-[11px] uppercase tracking-[0.28em] ${toneClass}`}
-        >
-          {marker.label}
-        </p>
-        <p className="font-mono text-xs text-white/35">
-          {marker.time}
-        </p>
-      </div>
-
-      <p className="text-sm leading-relaxed text-white/55">
-        {marker.detail}
-      </p>
-    </div>
-  )
-}
-
-function AxisNoticed({
-  markers,
-  onSelect,
-}: {
-  markers: ReplayReveal[]
-  onSelect: (marker: ReplayMarker) => void
-}) {
-  const visibleMarkers = markers.filter(
-    (marker) => marker.phase !== "withholding"
-  )
-
-  if (!visibleMarkers.length) {
-    return (
-      <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
-            Axis Noticed
-          </p>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-lime-300">
-            REPLAY READY
-          </p>
-        </div>
-        <p className="mt-4 text-sm leading-relaxed text-white/45">
-          Memory stored. Structure returns through the replay.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
-          Axis Noticed
-        </p>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-lime-300">
-          REPLAY MARKERS
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {visibleMarkers.slice(0, 3).map((marker) => (
-          <button
-            key={marker.id}
-            type="button"
-            onClick={() => onSelect(marker)}
-            className="group border border-white/10 bg-black/30 p-4 text-left transition hover:border-lime-300 hover:bg-lime-300 hover:text-black"
-          >
-            <p className="font-mono text-xs text-white/35 group-hover:text-black/50">
-              {formatClock(marker.startTime)} -{" "}
-              {formatClock(marker.endTime)}
-            </p>
-            <p className="mt-3 text-lg font-black uppercase leading-tight">
-              {marker.label}
-            </p>
-            <p className="mt-3 text-[10px] uppercase tracking-[0.25em] opacity-45">
-              {marker.type}
-            </p>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function ReplayReward({
-  found,
   nextRep,
-  focus,
-  onSelect,
 }: {
-  found: string
   nextRep: string
-  focus: ReplayMarker | null
-  onSelect: (marker: ReplayMarker) => void
 }) {
   return (
-    <section className="mt-5 border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.45em] text-lime-300">
-            Axis Found
-          </p>
-          <h3 className="mt-4 max-w-3xl text-[clamp(2.4rem,7vw,5.4rem)] font-black uppercase leading-[0.88] tracking-[-0.06em] text-white">
-            {found}
-          </h3>
-        </div>
-
-        <div className="border-t border-white/10 pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-            Next Rep
-          </p>
-          <p className="mt-3 text-lg leading-snug text-white/70">
-            {nextRep}
-          </p>
-          {focus ? (
-            <button
-              type="button"
-              onClick={() => onSelect(focus)}
-              className="mt-5 w-full bg-white px-5 py-4 text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
-            >
-              Watch This
-            </button>
-          ) : null}
-        </div>
-      </div>
+    <section className="mt-6 text-center">
+      <p className="text-[10px] uppercase tracking-[0.5em] text-white/25">
+        Next Rep
+      </p>
+      <p className="mt-3 text-[clamp(1.6rem,5vw,3.2rem)] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white">
+        {nextRep}
+      </p>
     </section>
   )
 }
@@ -341,64 +170,6 @@ function mergeBaseline(
   }
 }
 
-function createWaitingBaseline(
-  session: ReplaySessionView | null
-): CalibrationBaseline {
-  return {
-    status: "NOT ENOUGH MEMORY",
-    averageSessionDuration: session?.duration || 0,
-    averageMotionIntensity: null,
-    averageAudioEnergy: null,
-    usualSource: session?.source || "upload",
-    memoryCount: Math.max(session?.memoryCount || 1, 1),
-    firstMemoryDate: session?.createdAt || null,
-    latestMemoryDate: session?.createdAt || null,
-    missionType:
-      session?.mission && session.mission !== "None"
-        ? session.mission
-        : null,
-    missionCompletionCount:
-      session?.mission && session.mission !== "None" ? 1 : 0,
-    missionSessions:
-      session?.mission && session.mission !== "None"
-        ? [
-            {
-              missionType: session.mission,
-              duration: session.duration || 0,
-              motionLevel: null,
-              audioLevel: null,
-              completionCount: 1,
-              timestamp: session.createdAt,
-            },
-          ]
-        : [],
-  }
-}
-
-function displaySignalLabel(value: string) {
-  return value
-    .toLowerCase()
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ")
-}
-
-function percentValue(value: number | null | undefined) {
-  if (value == null) return "Emerging"
-
-  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`
-}
-
-function countValue(value: number | null | undefined, label: string) {
-  if (value == null) return "Building"
-
-  return `${value} ${label}`
-}
-
-function segmentationValue(value: number, fallback = "Emerging") {
-  return value > 0 ? String(value) : fallback
-}
-
 function createPoseRead(status: PoseLandmarkRead["status"]): PoseLandmarkRead {
   return {
     status,
@@ -414,386 +185,9 @@ function createPoseRead(status: PoseLandmarkRead["status"]): PoseLandmarkRead {
   }
 }
 
-function clipValue(
-  state: BasketballSignalState,
-  status: SignalReadiness
-) {
-  if (status === "initializing") return "Replay Ready"
-  if (status === "unavailable") return "Replay Ready"
-
-  return displaySignalLabel(state.clipType)
-}
-
-function missionValue(session: ReplaySessionView) {
-  return session.mission && session.mission !== "None"
-    ? session.mission
-    : "Open Session"
-}
-
 function missionFromSession(session: ReplaySessionView) {
   return calibrationMissions.find((mission) =>
     session.mission?.includes(mission.title)
-  )
-}
-
-function memoryOwnerName(
-  session: ReplaySessionView,
-  owner?: DigitalTwin | null
-) {
-  if (
-    session.player &&
-    session.player.trim() &&
-    session.player !== "Unassigned"
-  ) {
-    return session.player
-  }
-
-  return owner?.displayName || "LOCAL PLAYER"
-}
-
-function baselineProgress({
-  session,
-  baseline,
-  warmupProgress,
-}: {
-  session: ReplaySessionView
-  baseline: CalibrationBaseline
-  warmupProgress?: WarmupChainProgress | null
-}) {
-  const mission = missionFromSession(session)
-  const unlockAfter = warmupProgress?.unlockAfter || mission?.unlockAfter || 3
-  const count = Math.min(
-    warmupProgress?.completedCount || baseline.missionCompletionCount || 0,
-    unlockAfter
-  )
-  const ready = count >= unlockAfter
-  const remaining = Math.max(unlockAfter - count, 0)
-  const warmupLabel = remaining === 1 ? "warmup" : "warmups"
-
-  return {
-    label: ready ? "BASELINE READY" : "WARMUP ADDED",
-    comparison: ready
-      ? "COMPARISON AVAILABLE"
-      : `UNLOCKS AFTER ${unlockAfter} WARMUPS`,
-    comparisonReady: ready,
-    progress: `${count} / ${unlockAfter} warmups`,
-    detail: ready
-      ? "Read unlocking."
-      : `${remaining} more ${warmupLabel} to unlock comparison.`,
-    baselineName: mission?.baselineName || "Movement Rhythm",
-  }
-}
-
-function missionWatchRows({
-  session,
-  signals,
-  segmentedMemory,
-  poseRead,
-}: {
-  session: ReplaySessionView
-  signals?: ExtractedReplaySignals | null
-  segmentedMemory?: SegmentedMemory | null
-  poseRead?: PoseLandmarkRead | null
-}) {
-  const mission = missionFromSession(session)
-  const read: BrowserSignalRead | undefined = signals?.browserSignals
-  const poseRows =
-    poseRead?.status === "available" && poseRead.confidence >= 0.35
-      ? poseRead.observations
-          .filter((observation) => observation.confidence >= 0.35)
-          .map((observation) => [
-            observation.label,
-            observation.state,
-          ])
-      : []
-
-  if (!mission) {
-    return poseRows.length
-      ? poseRows.slice(0, 3)
-      : [
-          ["Motion", percentValue(read?.motionDelta)],
-          ["Camera Stability", percentValue(read?.cameraStability)],
-          ["Audio", percentValue(read?.audioEnergy)],
-        ]
-  }
-
-  if (mission.title === "HANDLE") {
-    const dribbleCycles =
-      segmentedMemory?.segments.filter(
-        (segment) => segment.type === "dribble_cycle"
-      ).length || 0
-    const activityWindows =
-      segmentedMemory?.segments.filter(
-        (segment) => segment.type === "activity_window"
-      ).length || 0
-    const cadenceState = segmentedMemory?.cadenceEstimate.state
-    const hasEnoughSignal = (segmentedMemory?.confidence || 0) >= 0.5
-
-    if (poseRows.length) {
-      return [
-        ...poseRows.slice(0, 3),
-        ["Rep Segments", segmentationValue(dribbleCycles)],
-      ]
-    }
-
-    return [
-      [
-        "Bounce Rhythm",
-        hasEnoughSignal
-          ? "Found"
-          : segmentedMemory
-            ? "Read Building"
-            : "Emerging",
-      ],
-      ["Rep Segments", segmentationValue(dribbleCycles)],
-      [
-        "Cadence",
-        cadenceState === "stable"
-          ? "Stable"
-          : cadenceState === "uneven"
-            ? "Uneven"
-            : "Stabilizing",
-      ],
-      ["Activity Windows", segmentationValue(activityWindows)],
-    ]
-  }
-
-  if (mission.title === "FOOTWORK") {
-    if (poseRows.length) return poseRows.slice(0, 3)
-
-    return [
-      ["Direction Changes", countValue(read?.directionChanges, "changes")],
-      ["Movement Bursts", countValue(read?.movementBursts, "bursts")],
-      ["Camera Stability", percentValue(read?.cameraStability)],
-    ]
-  }
-
-  if (mission.title === "SHOOTING FORM") {
-    if (poseRows.length) return poseRows.slice(0, 3)
-
-    return [
-      ["Repeated Motion", percentValue(read?.repeatedMotion)],
-      ["Framing Consistency", percentValue(read?.framingConsistency)],
-      ["Release Rhythm", percentValue(read?.repeatedMotion)],
-    ]
-  }
-
-  if (mission.title === "LIVE MOVEMENT") {
-    if (poseRows.length) return poseRows.slice(0, 3)
-
-    return [
-      ["Motion Density", percentValue(read?.motionDensity)],
-      ["Pace Changes", countValue(read?.paceChanges, "changes")],
-      ["Camera Movement", percentValue(read?.cameraMovement)],
-    ]
-  }
-
-  if (poseRows.length) return poseRows.slice(0, 3)
-
-  return [
-    ["Acceleration Burst", percentValue(read?.accelerationBurst)],
-    ["Movement Intensity", percentValue(read?.motionDelta)],
-    ["Camera Movement", percentValue(read?.cameraMovement)],
-  ]
-}
-
-function basketballSentence({
-  state,
-  baseline,
-  signals,
-  session,
-  signalStatus,
-  segmentedMemory,
-  poseRead,
-  warmupProgress,
-}: {
-  state: BasketballSignalState
-  baseline: CalibrationBaseline
-  signals?: ExtractedReplaySignals | null
-  session: ReplaySessionView
-  signalStatus: SignalReadiness
-  segmentedMemory?: SegmentedMemory | null
-  poseRead?: PoseLandmarkRead | null
-  warmupProgress?: WarmupChainProgress | null
-}) {
-  const lines: string[] = []
-  const progress = baselineProgress({ session, baseline, warmupProgress })
-
-  if (signalStatus === "initializing") {
-    return "Memory stored. Read still building."
-  }
-
-  if (signalStatus === "unavailable") {
-    return "Memory stored. Read still building."
-  }
-
-  if (
-    session.mission?.includes("HANDLE") &&
-    segmentedMemory &&
-    segmentedMemory.confidence < 0.5
-  ) {
-    return "Memory stored. Read still building."
-  }
-
-  if (state.clipType === "SHORT CLIP") {
-    lines.push("Memory stored.")
-  } else if (session.mission && session.mission !== "None") {
-    lines.push("Warmup added.")
-  } else if (signals?.duration || session.duration) {
-    lines.push("Replay ready.")
-  }
-
-  if (signals?.frameSampleCount && state.activityState === "ACTIVE MOTION") {
-    lines.push("Active motion recorded.")
-  } else if (signals?.frameSampleCount) {
-    lines.push("Low activity recorded.")
-  }
-
-  if (poseRead?.status === "available" && poseRead.confidence >= 0.35) {
-    lines.push("Landmark signal recorded.")
-  } else if (poseRead?.status === "unavailable" && !lines.length) {
-    lines.push("Memory stored. Read still building.")
-  }
-
-  if (
-    signals?.cameraMovement != null &&
-    state.evidence.some((item) => item.startsWith("Camera"))
-  ) {
-    lines.push("Camera movement recorded.")
-  }
-
-  if (!progress.comparisonReady) {
-    if (
-      session.mission?.includes("HANDLE") &&
-      segmentedMemory?.confidence &&
-      segmentedMemory.confidence >= 0.5
-    ) {
-      lines.push(`Rhythm captured. ${progress.detail}`)
-    } else {
-      lines.push(progress.detail)
-    }
-  } else {
-    lines.push("Comparison unlocked.")
-  }
-
-  return lines[0]
-    ? lines.slice(0, 2).join(" ")
-    : "Memory stored. Read still building."
-}
-
-function BasketballRead({
-  session,
-  signals,
-  baseline,
-  signalStatus,
-  segmentedMemory,
-  poseRead,
-  warmupProgress,
-}: {
-  session: ReplaySessionView
-  signals: ExtractedReplaySignals | null
-  baseline: CalibrationBaseline
-  signalStatus: SignalReadiness
-  segmentedMemory: SegmentedMemory | null
-  poseRead: PoseLandmarkRead | null
-  warmupProgress: WarmupChainProgress | null
-}) {
-  const displaySignals = signals || session.signalRead
-  const progress = baselineProgress({ session, baseline, warmupProgress })
-  const watchRows = missionWatchRows({
-    session,
-    signals: displaySignals,
-    segmentedMemory,
-    poseRead,
-  })
-  const basketballState =
-    signalStatus === "recorded"
-      ? readBasketballSignal({
-          session,
-          signals: displaySignals,
-          baseline,
-        })
-      : {
-          headline:
-            signalStatus === "initializing"
-              ? "MEMORY STORED"
-              : "REPLAY READY",
-          courtState: "CAMERA STABLE",
-          activityState: "LOW ACTIVITY",
-          clipType: "CLIP STORED",
-          evidence: [],
-          confidence: 0,
-        }
-
-  return (
-    <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
-          Basketball Read
-        </p>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-lime-300">
-          {basketballState.headline}
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-4">
-        <DetailRow
-          label="Clip"
-          value={clipValue(basketballState, signalStatus)}
-        />
-        <DetailRow
-          label="World"
-          value={progress.label}
-        />
-        <DetailRow
-          label="Comparison"
-          value={progress.comparison}
-        />
-        <DetailRow
-          label="Chain"
-          value={progress.progress}
-        />
-      </div>
-
-      <div className="mt-6 border-t border-white/10 pt-5">
-        <p className="mb-2 text-[10px] uppercase tracking-[0.45em] text-white/25">
-          Axis Watches
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {watchRows.map(([label, value]) => (
-            <div
-              key={label}
-              className="border border-white/10 bg-black/30 p-4"
-            >
-              <p className="text-[10px] uppercase tracking-[0.28em] text-white/30">
-                {label}
-              </p>
-              <p className="mt-3 text-lg font-black text-white">
-                {value}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <p className="mt-5 text-sm leading-relaxed text-white/50">
-        {basketballSentence({
-          state: basketballState,
-          baseline,
-          signals: signalStatus === "recorded" ? displaySignals : null,
-          session,
-          signalStatus,
-          segmentedMemory,
-          poseRead,
-          warmupProgress,
-        })}
-      </p>
-      {poseRead?.status === "unavailable" ? (
-        <p className="mt-2 text-sm leading-relaxed text-white/35">
-          Landmark read still building.
-        </p>
-      ) : null}
-    </div>
   )
 }
 
@@ -867,7 +261,7 @@ export default function AxisReplayClient({
   const [replayStatus, setReplayStatus] = useState<
     "ready" | "recovering" | "recovered" | "failed"
   >("ready")
-  const [liveSignalEvents, setLiveSignalEvents] = useState<
+  const [, setLiveSignalEvents] = useState<
     LiveSignalEvent[]
   >([])
   const [, setLiveMetrics] = useState<FrameSignal>({
@@ -877,7 +271,7 @@ export default function AxisReplayClient({
     audioEnergy: 0,
   })
   const [, setAudioReady] = useState(false)
-  const [signalStatus, setSignalStatus] =
+  const [, setSignalStatus] =
     useState<SignalReadiness>("initializing")
   const [, setMotionStatus] =
     useState<SignalChannelStatus>("waiting")
@@ -885,13 +279,13 @@ export default function AxisReplayClient({
     useState<SignalChannelStatus>("waiting")
   const [, setAudioStatus] =
     useState<SignalChannelStatus>("waiting")
-  const [baseline, setBaseline] = useState<CalibrationBaseline | null>(null)
+  const [, setBaseline] = useState<CalibrationBaseline | null>(null)
   const [segmentedMemory, setSegmentedMemory] =
     useState<SegmentedMemory | null>(null)
-  const [poseRead, setPoseRead] = useState<PoseLandmarkRead | null>(null)
-  const [memoryOwner, setMemoryOwner] =
+  const [, setPoseRead] = useState<PoseLandmarkRead | null>(null)
+  const [, setMemoryOwner] =
     useState<DigitalTwin | null>(null)
-  const [warmupProgress, setWarmupProgress] =
+  const [, setWarmupProgress] =
     useState<WarmupChainProgress | null>(null)
 
   const clearSignalTimeouts = useCallback(() => {
@@ -1297,52 +691,6 @@ export default function AxisReplayClient({
     }
   }
 
-  const playReplayTone = useCallback(async (marker: ReplayMarker) => {
-    try {
-      const Tone = await import("tone")
-
-      await Tone.start()
-
-      const synth = new Tone.MembraneSynth({
-        envelope: {
-          attack: 0.001,
-          decay: 0.18,
-          sustain: 0.01,
-          release: 0.18,
-        },
-        volume: -24,
-      }).toDestination()
-      const note =
-        marker.type === "cadence" || marker.type === "rhythm"
-          ? "C2"
-          : marker.type === "reset"
-            ? "G1"
-            : "A1"
-
-      synth.triggerAttackRelease(note, "16n")
-      window.setTimeout(() => {
-        synth.dispose()
-      }, 420)
-    } catch {
-      // Replay tone is optional atmosphere; silence must never block replay.
-    }
-  }, [])
-
-  const jumpToReplayMarker = useCallback((marker: ReplayMarker) => {
-    const video = videoRef.current
-
-    if (!video) return
-
-    video.currentTime = marker.startTime
-    void playReplayTone(marker)
-
-    const playAttempt = video.play()
-
-    if (playAttempt) {
-      void playAttempt.catch(() => undefined)
-    }
-  }, [playReplayTone])
-
   useEffect(() => {
     let frameId = 0
     let lastSample = 0
@@ -1600,79 +948,6 @@ export default function AxisReplayClient({
   ])
 
   const duration = session?.duration || 0
-  const progress =
-    duration > 0
-      ? Math.min(100, (currentTime / duration) * 100)
-      : session
-        ? 100
-        : 0
-
-  const markers: Marker[] =
-    Array.isArray(session?.timeline) && session.timeline.length
-      ? session.timeline.map((event) => ({
-          time: event.time || "00:00",
-          label: event.label || "SIGNAL FOUND",
-          detail: event.detail || "Session memory expanded.",
-          tone: "cyan",
-        }))
-      : [
-          {
-            time: "00:00",
-            label: "FOOTAGE ACCEPTED",
-            detail: "Replay linked to player archive.",
-            tone: "cyan",
-          },
-          {
-            time: formatClock(Math.max(duration * 0.33, 1)),
-            label: "READ BUILDING",
-            detail: "Memory returning.",
-            tone: "zinc",
-          },
-          {
-            time: formatClock(duration),
-            label:
-              session?.mission && session.mission !== "None"
-                ? "MOVEMENT ARCHIVED"
-                : "ARCHIVE ACTIVE",
-            detail:
-              session?.mission && session.mission !== "None"
-                ? "Warmup added to rhythm."
-                : "Replay added to archive.",
-            tone: "lime",
-          },
-        ]
-
-  const replayStatusLabel =
-    replayStatus === "recovering"
-      ? "Memory Indexing"
-      : replayStatus === "recovered"
-        ? "Replay Unlocked"
-        : replayStatus === "failed"
-          ? "Replay Ready"
-          : session?.memoryState?.status
-            ? session.memoryState.status
-            : extractedSignals?.frameSampleCount
-              ? "Movement Stored"
-              : "Memory Stored"
-
-  const contextPanelLine =
-    replayStatus === "recovering"
-      ? "MEMORY INDEXING"
-      : replayStatus === "recovered"
-        ? "REPLAY UNLOCKED"
-        : replayStatus === "failed"
-          ? "REPLAY READY"
-          : session?.memoryState?.contextLine ||
-            session?.context ||
-            "Replay linked. Session added. Memory available."
-
-  const liveMarkers: Marker[] = liveSignalEvents.map((event) => ({
-    time: formatClock(event.time),
-    label: event.label,
-    detail: event.detail,
-    tone: event.tone,
-  }))
-  const latestLiveSignal = liveSignalEvents[0]?.label || replayStatusLabel
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black px-5 py-8 text-white">
@@ -1696,27 +971,8 @@ export default function AxisReplayClient({
     currentTime,
   })
   const cinemaState = memoryCinemaState(replayReveals)
-  const revealLine = describeReveal(replayReveals)
   const replayReward = getReplayReward(replayReveals)
-  const replayMarkerCards: Marker[] = replayMarkers.map((marker) => ({
-    time: `${formatClock(marker.startTime)}-${formatClock(marker.endTime)}`,
-    label: marker.label,
-    detail: revealLine,
-    tone: marker.type === "stabilization" ? "cyan" : "lime",
-  }))
-  const displayMarkers = liveMarkers.length
-    ? [...liveMarkers, ...replayMarkerCards, ...markers].slice(0, 10)
-    : replayMarkerCards.length
-      ? [...replayMarkerCards, ...markers].slice(0, 10)
-      : markers
-  const displayBaseline = baseline
-    ? mergeBaseline(baseline, displaySignals)
-    : createWaitingBaseline(session)
   const nextWarmup = getNextWarmupFromMission(session.mission)
-  const atmosphere = atmosphereState({
-    memoryCount: session.memoryCount,
-    warmupCount: warmupProgress?.completedCount,
-  })
   const focusStart =
     replayReward.focus && duration > 0
       ? Math.max(
@@ -1742,45 +998,18 @@ export default function AxisReplayClient({
     <div
       className={`axis-atmosphere min-h-screen overflow-hidden bg-black text-white ${className}`}
     >
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/80 backdrop-blur-xl">
-        <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-              {atmosphere.depthLabel}
+      <div className="px-5 py-8 lg:px-8 lg:py-10">
+        <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col justify-between">
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
+              Returning
             </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">
-              {atmosphere.pulseLabel}
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(190,242,100,0.8)]" />
-            <p className="text-xs uppercase tracking-[0.3em] text-white/45">
-              {replayStatusLabel}
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="min-h-[calc(100vh-73px)] px-5 py-8 lg:px-8 lg:py-10">
-        <section className="mx-auto max-w-6xl">
-          <div className="mb-6">
-            <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              Axis Memory Replay
-            </p>
-            <h2 className="mt-3 max-w-4xl text-[clamp(3.2rem,9vw,7rem)] font-black leading-[0.86] tracking-[-0.06em] text-white">
-              AXIS
-              <br />
-              REPLAY
-            </h2>
-            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/50">
-              {session.memoryState?.ambientLine ||
-                session.ambientLine ||
-                "Context building."}
+            <p className="mt-4 text-[clamp(2rem,7vw,5.8rem)] font-black uppercase leading-[0.88] tracking-[-0.06em] text-white">
+              {replayReward.found}
             </p>
           </div>
 
-          <div className="relative overflow-hidden border border-white/10 bg-white/[0.03]">
+          <div className="relative my-8 overflow-hidden border border-white/10 bg-white/[0.03] shadow-[0_0_80px_rgba(255,255,255,0.04)]">
             <video
               ref={videoRef}
               src={session.videoUrl}
@@ -1829,15 +1058,6 @@ export default function AxisReplayClient({
               state={cinemaState}
             />
 
-            <div className="pointer-events-none absolute left-5 top-5 flex items-center gap-3">
-              <div className="h-2 w-2 rounded-full bg-lime-300" />
-              <p className="text-xs uppercase tracking-[0.35em] text-white/55">
-                {replayReveals.length
-                  ? cinemaState.headline
-                  : latestLiveSignal}
-              </p>
-            </div>
-
             <canvas
               ref={canvasRef}
               width={96}
@@ -1858,140 +1078,21 @@ export default function AxisReplayClient({
           </div>
 
           <ReplayReward
-            found={replayReward.found}
             nextRep={replayReward.nextRep}
-            focus={replayReward.focus}
-            onSelect={jumpToReplayMarker}
           />
 
-          <AxisNoticed
-            markers={replayReveals}
-            onSelect={jumpToReplayMarker}
-          />
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-8 flex justify-center">
             <Link
               href={nextWarmup ? `/?warmup=${nextWarmup.id}` : "/"}
-              className="border border-white/10 bg-white px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
+              className="bg-white px-6 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
             >
               Next Warmup
             </Link>
-            <Link
-              href="/"
-              className="border border-white/10 px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-white/60 transition hover:text-white"
-            >
-              Memory Core
-            </Link>
-            <Link
-              href="/sessions"
-              className="border border-white/10 px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-white/60 transition hover:text-white"
-            >
-              View Warmup Chain
-            </Link>
           </div>
 
-          <details className="mt-8 border border-white/10 bg-white/[0.03] p-5">
-            <summary className="cursor-pointer text-[10px] uppercase tracking-[0.45em] text-white/35">
-              Memory Details
-            </summary>
-
-            <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-              <div>
-                <BasketballRead
-                  session={session}
-                  signals={displaySignals}
-                  baseline={displayBaseline}
-                  signalStatus={signalStatus}
-                  segmentedMemory={segmentedMemory}
-                  poseRead={poseRead}
-                  warmupProgress={warmupProgress}
-                />
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <div className="border border-white/10 bg-black/30 p-4">
-                    <DetailRow
-                      label="Memory Count"
-                      value={formatMemoryCount(session.memoryCount)}
-                    />
-                  </div>
-                  <div className="border border-white/10 bg-black/30 p-4">
-                    <DetailRow label="Pulse" value={latestLiveSignal} />
-                  </div>
-                  <div className="border border-white/10 bg-black/30 p-4">
-                    <DetailRow
-                      label="Archive"
-                      value={
-                        session.memoryState?.archiveStatus ||
-                        session.archiveStatus ||
-                        "Active"
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <aside>
-                <div className="border border-white/10 bg-black/30 p-5">
-                  <DetailRow
-                    label="Memory Owner"
-                    value={memoryOwnerName(session, memoryOwner)}
-                  />
-                  <DetailRow
-                    label="Warmup"
-                    value={missionValue(session)}
-                  />
-                  <DetailRow
-                    label="Depth"
-                    value={
-                      warmupProgress
-                        ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter}`
-                        : atmosphere.depthLabel
-                    }
-                  />
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  {displayMarkers.map((marker) => (
-                    <MarkerCard
-                      key={`${marker.time}-${marker.label}`}
-                      marker={marker}
-                    />
-                  ))}
-                </div>
-
-                <p className="mt-5 text-sm leading-relaxed text-white/45">
-                  {warmupProgress
-                    ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter} warmups in this chain.`
-                    : contextPanelLine}
-                </p>
-              </aside>
-            </div>
-          </details>
         </section>
       </div>
 
-      <footer className="sticky bottom-0 border-t border-white/10 bg-black/85 px-5 py-4 backdrop-blur-xl">
-        <div className="mb-3 flex items-center gap-3">
-          <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-            Session Continuity
-          </p>
-          <div className="h-px flex-1 bg-white/10" />
-        </div>
-
-        <div className="h-2 overflow-hidden bg-white/10">
-          <div
-            className="h-full bg-gradient-to-r from-lime-300 via-cyan-300 to-white transition-all duration-300"
-            style={{
-              width: `${progress}%`,
-            }}
-          />
-        </div>
-
-        <div className="mt-3 flex justify-between font-mono text-xs text-white/40">
-          <span>{formatClock(currentTime)}</span>
-          <span>{formatClock(duration)}</span>
-        </div>
-      </footer>
     </div>
   )
 }
