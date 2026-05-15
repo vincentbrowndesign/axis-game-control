@@ -10,6 +10,12 @@ import type { CalibrationBaseline } from "@/lib/calibration/types"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import { segmentCalibrationMemory } from "@/lib/segments/segmentCalibrationMemory"
 import type { SegmentedMemory } from "@/lib/segments/types"
+import { summarizePoseLandmarks } from "@/lib/vision/mediapipe/extractPoseLandmarks"
+import { MediaPipePoseProvider } from "@/lib/vision/mediapipe/poseProvider"
+import type {
+  PoseFrame,
+  PoseLandmarkRead,
+} from "@/lib/vision/mediapipe/types"
 import {
   addAudioSignalSample,
   addFrameSignalSample,
@@ -71,6 +77,7 @@ type FrameSignal = {
 
 const SIGNAL_ATTEMPT_DELAY_MS = 2000
 const SIGNAL_UNAVAILABLE_TIMEOUT_MS = 5000
+const POSE_SAMPLE_INTERVAL_MS = 900
 const calibrationMissions = getCalibrationMissions()
 
 function formatClock(seconds?: number) {
@@ -281,6 +288,21 @@ function segmentationValue(value: number, fallback = "Waiting") {
   return value > 0 ? String(value) : fallback
 }
 
+function createPoseRead(status: PoseLandmarkRead["status"]): PoseLandmarkRead {
+  return {
+    status,
+    provider: "mediapipePoseProvider",
+    frameCount: 0,
+    confidence: 0,
+    persistence: 0,
+    observations: [],
+    summary:
+      status === "unavailable"
+        ? "Landmark signal unavailable. Replay remains available."
+        : "Landmark signal initializing.",
+  }
+}
+
 function clipValue(
   state: BasketballSignalState,
   status: SignalReadiness
@@ -332,20 +354,33 @@ function missionWatchRows({
   session,
   signals,
   segmentedMemory,
+  poseRead,
 }: {
   session: ReplaySessionView
   signals?: ExtractedReplaySignals | null
   segmentedMemory?: SegmentedMemory | null
+  poseRead?: PoseLandmarkRead | null
 }) {
   const mission = missionFromSession(session)
   const read: BrowserSignalRead | undefined = signals?.browserSignals
+  const poseRows =
+    poseRead?.status === "available" && poseRead.confidence >= 0.35
+      ? poseRead.observations
+          .filter((observation) => observation.confidence >= 0.35)
+          .map((observation) => [
+            observation.label,
+            observation.state,
+          ])
+      : []
 
   if (!mission) {
-    return [
-      ["Motion", percentValue(read?.motionDelta)],
-      ["Camera Stability", percentValue(read?.cameraStability)],
-      ["Audio", percentValue(read?.audioEnergy)],
-    ]
+    return poseRows.length
+      ? poseRows.slice(0, 3)
+      : [
+          ["Motion", percentValue(read?.motionDelta)],
+          ["Camera Stability", percentValue(read?.cameraStability)],
+          ["Audio", percentValue(read?.audioEnergy)],
+        ]
   }
 
   if (mission.title === "HANDLE") {
@@ -359,6 +394,13 @@ function missionWatchRows({
       ).length || 0
     const cadenceState = segmentedMemory?.cadenceEstimate.state
     const hasEnoughSignal = (segmentedMemory?.confidence || 0) >= 0.5
+
+    if (poseRows.length) {
+      return [
+        ...poseRows.slice(0, 3),
+        ["Rep Segments", segmentationValue(dribbleCycles)],
+      ]
+    }
 
     return [
       [
@@ -383,6 +425,8 @@ function missionWatchRows({
   }
 
   if (mission.title === "FOOTWORK") {
+    if (poseRows.length) return poseRows.slice(0, 3)
+
     return [
       ["Direction Changes", countValue(read?.directionChanges, "changes")],
       ["Movement Bursts", countValue(read?.movementBursts, "bursts")],
@@ -391,6 +435,8 @@ function missionWatchRows({
   }
 
   if (mission.title === "SHOOTING FORM") {
+    if (poseRows.length) return poseRows.slice(0, 3)
+
     return [
       ["Repeated Motion", percentValue(read?.repeatedMotion)],
       ["Framing Consistency", percentValue(read?.framingConsistency)],
@@ -399,12 +445,16 @@ function missionWatchRows({
   }
 
   if (mission.title === "LIVE MOVEMENT") {
+    if (poseRows.length) return poseRows.slice(0, 3)
+
     return [
       ["Motion Density", percentValue(read?.motionDensity)],
       ["Pace Changes", countValue(read?.paceChanges, "changes")],
       ["Camera Movement", percentValue(read?.cameraMovement)],
     ]
   }
+
+  if (poseRows.length) return poseRows.slice(0, 3)
 
   return [
     ["Acceleration Burst", percentValue(read?.accelerationBurst)],
@@ -420,6 +470,7 @@ function basketballSentence({
   session,
   signalStatus,
   segmentedMemory,
+  poseRead,
 }: {
   state: BasketballSignalState
   baseline: CalibrationBaseline
@@ -427,6 +478,7 @@ function basketballSentence({
   session: ReplaySessionView
   signalStatus: SignalReadiness
   segmentedMemory?: SegmentedMemory | null
+  poseRead?: PoseLandmarkRead | null
 }) {
   const lines: string[] = []
   const progress = baselineProgress({ session, baseline })
@@ -461,6 +513,12 @@ function basketballSentence({
     lines.push("Active motion recorded.")
   } else if (signals?.frameSampleCount) {
     lines.push("Low activity recorded.")
+  }
+
+  if (poseRead?.status === "available" && poseRead.confidence >= 0.35) {
+    lines.push("Landmark signal recorded.")
+  } else if (poseRead?.status === "unavailable" && !lines.length) {
+    lines.push("Landmark signal unavailable. Replay remains available.")
   }
 
   if (
@@ -502,6 +560,7 @@ function BasketballRead({
   cameraStatus,
   audioStatus,
   segmentedMemory,
+  poseRead,
 }: {
   session: ReplaySessionView
   signals: ExtractedReplaySignals | null
@@ -511,6 +570,7 @@ function BasketballRead({
   cameraStatus: SignalChannelStatus
   audioStatus: SignalChannelStatus
   segmentedMemory: SegmentedMemory | null
+  poseRead: PoseLandmarkRead | null
 }) {
   const displaySignals = signals || session.signalRead
   const progress = baselineProgress({ session, baseline })
@@ -518,6 +578,7 @@ function BasketballRead({
     session,
     signals: displaySignals,
     segmentedMemory,
+    poseRead,
   })
   const basketballState =
     signalStatus === "recorded"
@@ -621,8 +682,14 @@ function BasketballRead({
           session,
           signalStatus,
           segmentedMemory,
+          poseRead,
         })}
       </p>
+      {poseRead?.status === "unavailable" ? (
+        <p className="mt-2 text-sm leading-relaxed text-white/35">
+          Landmark signal unavailable. Replay remains available.
+        </p>
+      ) : null}
       <p className="mt-2 text-sm leading-relaxed text-white/35">
         {progress.detail}
       </p>
@@ -670,6 +737,11 @@ export default function AxisReplayClient({
   const metadataTimeoutRef = useRef<number | null>(null)
   const frameSampleTimeoutRef = useRef<number | null>(null)
   const frameSamplingUnavailableRef = useRef(false)
+  const poseProviderRef = useRef<MediaPipePoseProvider | null>(null)
+  const poseFramesRef = useRef<PoseFrame[]>([])
+  const poseInitializingRef = useRef(false)
+  const poseUnavailableRef = useRef(false)
+  const lastPoseSampleRef = useRef(0)
   const setPlaybackId = useSessionStore(
     (state) => state.setPlaybackId
   )
@@ -714,6 +786,7 @@ export default function AxisReplayClient({
   const [baseline, setBaseline] = useState<CalibrationBaseline | null>(null)
   const [segmentedMemory, setSegmentedMemory] =
     useState<SegmentedMemory | null>(null)
+  const [poseRead, setPoseRead] = useState<PoseLandmarkRead | null>(null)
 
   const clearSignalTimeouts = useCallback(() => {
     if (metadataTimeoutRef.current != null) {
@@ -757,6 +830,48 @@ export default function AxisReplayClient({
     }
   }, [])
 
+  const updatePoseRead = useCallback(
+    (activeSession: ReplaySessionView | null) => {
+      if (!activeSession) return
+
+      try {
+        setPoseRead(
+          summarizePoseLandmarks({
+            missionId: activeSession.mission || "None",
+            frames: poseFramesRef.current,
+          })
+        )
+      } catch (error) {
+        console.warn("AXIS LANDMARK SUMMARY WAITING", error)
+        setPoseRead(createPoseRead("unavailable"))
+      }
+    },
+    []
+  )
+
+  const initializePoseProvider = useCallback(async () => {
+    if (
+      poseProviderRef.current ||
+      poseInitializingRef.current ||
+      poseUnavailableRef.current
+    ) {
+      return
+    }
+
+    poseInitializingRef.current = true
+    setPoseRead(createPoseRead("initializing"))
+
+    try {
+      poseProviderRef.current = await MediaPipePoseProvider.create()
+    } catch (error) {
+      console.warn("AXIS LANDMARK SIGNAL UNAVAILABLE", error)
+      poseUnavailableRef.current = true
+      setPoseRead(createPoseRead("unavailable"))
+    } finally {
+      poseInitializingRef.current = false
+    }
+  }, [])
+
   const updateSegmentedMemory = useCallback(
     (activeSession: ReplaySessionView | null) => {
       if (!activeSession?.mission || activeSession.mission === "None") {
@@ -789,6 +904,13 @@ export default function AxisReplayClient({
   }, [session])
 
   useEffect(() => {
+    return () => {
+      poseProviderRef.current?.close()
+      poseProviderRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
     setPlaybackId(playbackId)
     signalAccumulatorRef.current = createSignalAccumulator(
       initialSession?.duration || 0
@@ -796,6 +918,9 @@ export default function AxisReplayClient({
     clearSignalTimeouts()
     previousFrameRef.current = null
     frameSamplingUnavailableRef.current = false
+    poseFramesRef.current = []
+    lastPoseSampleRef.current = 0
+    poseUnavailableRef.current = false
 
     queueMicrotask(() => {
       setLiveSignalEvents([])
@@ -807,6 +932,7 @@ export default function AxisReplayClient({
       setAudioReady(false)
       setSegmentedMemory(null)
       setBaseline(null)
+      setPoseRead(null)
       const localSession = safeParseSession(
         localStorage.getItem(`axis-session-${playbackId}`)
       )
@@ -847,6 +973,7 @@ export default function AxisReplayClient({
           })
         )
         updateSegmentedMemory(session)
+        void initializePoseProvider()
         signalReadyRef.current = true
         setSignalStatus("initializing")
 
@@ -875,6 +1002,7 @@ export default function AxisReplayClient({
   }, [
     clearSignalTimeouts,
     finalizeUnavailableChannels,
+    initializePoseProvider,
     isLoading,
     session,
     updateSegmentedMemory,
@@ -1160,6 +1288,34 @@ export default function AxisReplayClient({
             )
           }
         }
+
+        const poseProvider = poseProviderRef.current
+
+        if (
+          poseProvider &&
+          now - lastPoseSampleRef.current > POSE_SAMPLE_INTERVAL_MS
+        ) {
+          lastPoseSampleRef.current = now
+
+          try {
+            const poseFrame = poseProvider.detect(
+              video,
+              Math.round(video.currentTime * 1000)
+            )
+
+            if (poseFrame) {
+              poseFramesRef.current = [
+                ...poseFramesRef.current,
+                poseFrame,
+              ].slice(-90)
+              updatePoseRead(sessionRef.current)
+            }
+          } catch (error) {
+            console.warn("AXIS LANDMARK FRAME UNAVAILABLE", error)
+            poseUnavailableRef.current = true
+            setPoseRead(createPoseRead("unavailable"))
+          }
+        }
       }
 
       frameId = requestAnimationFrame(sample)
@@ -1173,6 +1329,7 @@ export default function AxisReplayClient({
   }, [
     markSignalRecorded,
     markSignalUnavailableIfEmpty,
+    updatePoseRead,
     updateSegmentedMemory,
   ])
 
@@ -1425,6 +1582,7 @@ export default function AxisReplayClient({
             cameraStatus={cameraStatus}
             audioStatus={audioStatus}
             segmentedMemory={segmentedMemory}
+            poseRead={poseRead}
           />
 
           <div className="mt-8 space-y-3 lg:hidden">

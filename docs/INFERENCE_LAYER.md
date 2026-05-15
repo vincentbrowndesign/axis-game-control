@@ -23,6 +23,9 @@ Inference must not determine whether uploads succeed.
 - `lib/signals/types.ts`: signal extraction types.
 - `lib/vision/providers/types.ts`: future-ready vision provider interface and disabled provider slots.
 - `lib/vision/providers/browserSignals.ts`: browser-safe CV V1 measurement from sampled frames and audio.
+- `lib/vision/mediapipe/poseProvider.ts`: optional browser-side MediaPipe Pose provider.
+- `lib/vision/mediapipe/extractPoseLandmarks.ts`: mission-aware landmark summaries from pose frames.
+- `lib/vision/mediapipe/types.ts`: simplified pose frame, landmark, and observation types.
 - `lib/basketball/readBasketballSignal.ts`: basketball-aware state translation from measured signals.
 - `lib/basketball/types.ts`: basketball signal state types.
 - `lib/ai/describeReplay.ts`: grounded descriptions from measured signals only.
@@ -91,7 +94,22 @@ Basketball Signal V1 may say only grounded states:
 
 These states must be derived from duration, frame sampling, pixel differences, camera movement estimate, audio energy, normalized replay data, or baseline memory count.
 
-Computer Vision V1 is `browserSignals` only. It uses browser frame sampling after replay load and exposes real observation fields such as motion delta, brightness, camera stability, framing consistency, duration, and optional audio energy. Provider slots for `mediapipePoseProvider`, `openAiVisionProvider`, and `onnxProvider` must remain disabled until explicitly implemented.
+Computer Vision V1 begins with `browserSignals`. It uses browser frame sampling after replay load and exposes real observation fields such as motion delta, brightness, camera stability, framing consistency, duration, and optional audio energy.
+
+MediaPipe Landmark Foundation may run browser-side after replay load. It observes simplified pose geometry only:
+
+- landmark persistence
+- wrist path rhythm
+- stance width consistency
+- shoulder stability
+- hip and knee movement
+- lateral movement
+- upper-body rhythm
+- acceleration windows
+
+MediaPipe must remain optional and recoverable. If model loading, canvas access, video readiness, or pose detection fails, replay continues and the UI may say: Landmark signal unavailable. Replay remains available.
+
+Provider slots for `openAiVisionProvider` and `onnxProvider` must remain disabled until explicitly implemented.
 
 Calibration Mission V1 gives the signal layer cleaner basketball contexts without making fake detections. Missions can focus the future archive around handle, footwork, shooting form, live movement, and transition, but the current system may only display mission completion, baseline growth, comparison lock status, and measured signal status.
 

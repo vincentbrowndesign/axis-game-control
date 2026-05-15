@@ -63,7 +63,7 @@ export const visionProviders: Record<
   },
   mediapipePoseProvider: {
     id: "mediapipePoseProvider",
-    status: "disabled",
+    status: "enabled",
     label: "MediaPipe Pose Provider",
   },
   openAiVisionProvider: {

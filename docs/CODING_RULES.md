@@ -51,9 +51,11 @@ For Next.js code, read the relevant guide in `node_modules/next/dist/docs/` befo
 - Every visible basketball statement must answer what real signal produced it.
 - AI descriptions must be generated from real signals until external frame reading is implemented.
 - Missions may isolate movement contexts, but they must not claim shot, pass, dribble, fatigue, IQ, or scoring quality detection.
-- CV V1 must use `browserSignals` only.
-- Keep `mediapipePoseProvider`, `openAiVisionProvider`, and `onnxProvider` disabled until their real implementations exist.
+- CV V1 starts with `browserSignals`.
+- MediaPipe Pose may run browser-side after replay load, but it must stay optional, async, and recoverable.
+- Keep `openAiVisionProvider` and `onnxProvider` disabled until their real implementations exist.
 - Mission-aware reads may show proxies only when backed by browser measurements.
+- Pose reads may describe geometry, rhythm, repetition, movement persistence, and baseline deviation only when backed by landmark confidence.
 
 ## UI Rules
 
