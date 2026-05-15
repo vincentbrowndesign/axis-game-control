@@ -50,7 +50,7 @@ export default async function HomePage({ searchParams }: Props) {
           MEMORY
         </h1>
         <p className="mt-8 max-w-2xl text-xl leading-relaxed text-white/45">
-          The court remembers.
+          Build your basketball rhythm.
         </p>
         <Link
           href="/auth"

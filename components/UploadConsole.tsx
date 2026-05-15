@@ -423,19 +423,19 @@ export default function UploadConsole({
               {twinName || "Local Player"}
             </p>
             <h1 className="mt-6 text-[clamp(4.8rem,18vw,12rem)] font-black leading-[0.78] tracking-[-0.07em]">
-              START
+              RETURNING
               <br />
               MEMORY
             </h1>
             <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-              Begin the rhythm.
+              Rhythm held.
             </p>
             <button
               type="button"
               onClick={() => setFlowStep("mission")}
               className="mt-10 w-fit bg-white px-9 py-5 text-sm font-black uppercase tracking-[0.28em] text-black transition hover:bg-lime-300"
             >
-              Begin
+              Enter Axis
             </button>
           </section>
         ) : null}

@@ -10,6 +10,7 @@ import { buildBaseline } from "@/lib/calibration/buildBaseline"
 import type { CalibrationBaseline } from "@/lib/calibration/types"
 import { MemoryCinemaLayer } from "@/components/MemoryCinemaLayer"
 import { generateReplayMarkers } from "@/lib/replay/generateReplayMarkers"
+import { getReplayReward } from "@/lib/replay/getReplayReward"
 import {
   buildReplayReveals,
   describeReveal,
@@ -262,6 +263,51 @@ function AxisNoticed({
         ))}
       </div>
     </div>
+  )
+}
+
+function ReplayReward({
+  found,
+  nextRep,
+  focus,
+  onSelect,
+}: {
+  found: string
+  nextRep: string
+  focus: ReplayMarker | null
+  onSelect: (marker: ReplayMarker) => void
+}) {
+  return (
+    <section className="mt-5 border border-white/10 bg-white/[0.04] p-5 sm:p-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.45em] text-lime-300">
+            Axis Found
+          </p>
+          <h3 className="mt-4 max-w-3xl text-[clamp(2.4rem,7vw,5.4rem)] font-black uppercase leading-[0.88] tracking-[-0.06em] text-white">
+            {found}
+          </h3>
+        </div>
+
+        <div className="border-t border-white/10 pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
+            Next Rep
+          </p>
+          <p className="mt-3 text-lg leading-snug text-white/70">
+            {nextRep}
+          </p>
+          {focus ? (
+            <button
+              type="button"
+              onClick={() => onSelect(focus)}
+              className="mt-5 w-full bg-white px-5 py-4 text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
+            >
+              Watch This
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -1651,6 +1697,7 @@ export default function AxisReplayClient({
   })
   const cinemaState = memoryCinemaState(replayReveals)
   const revealLine = describeReveal(replayReveals)
+  const replayReward = getReplayReward(replayReveals)
   const replayMarkerCards: Marker[] = replayMarkers.map((marker) => ({
     time: `${formatClock(marker.startTime)}-${formatClock(marker.endTime)}`,
     label: marker.label,
@@ -1670,6 +1717,26 @@ export default function AxisReplayClient({
     memoryCount: session.memoryCount,
     warmupCount: warmupProgress?.completedCount,
   })
+  const focusStart =
+    replayReward.focus && duration > 0
+      ? Math.max(
+          0,
+          Math.min(100, (replayReward.focus.startTime / duration) * 100)
+        )
+      : 0
+  const focusWidth =
+    replayReward.focus && duration > 0
+      ? Math.max(
+          4,
+          Math.min(
+            100 - focusStart,
+            ((replayReward.focus.endTime -
+              replayReward.focus.startTime) /
+              duration) *
+              100
+          )
+        )
+      : 0
 
   return (
     <div
@@ -1695,28 +1762,13 @@ export default function AxisReplayClient({
         </div>
       </header>
 
-      <div className="grid min-h-[calc(100vh-73px)] grid-cols-1 lg:grid-cols-[292px_minmax(0,1fr)_320px]">
-        <aside className="hidden border-r border-white/10 p-5 lg:block">
-          <p className="mb-4 text-[10px] uppercase tracking-[0.45em] text-white/25">
-            Session Thread
-          </p>
-
-          <div className="space-y-3">
-            {displayMarkers.map((marker) => (
-              <MarkerCard
-                key={`${marker.time}-${marker.label}`}
-                marker={marker}
-              />
-            ))}
-          </div>
-        </aside>
-
-        <section className="min-w-0 px-5 py-8 lg:px-8 lg:py-10">
-          <div className="mb-8">
+      <div className="min-h-[calc(100vh-73px)] px-5 py-8 lg:px-8 lg:py-10">
+        <section className="mx-auto max-w-6xl">
+          <div className="mb-6">
             <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
               Axis Memory Replay
             </p>
-            <h2 className="mt-4 max-w-4xl text-[clamp(3.7rem,9vw,8rem)] font-black leading-[0.86] tracking-[-0.06em] text-white">
+            <h2 className="mt-3 max-w-4xl text-[clamp(3.2rem,9vw,7rem)] font-black leading-[0.86] tracking-[-0.06em] text-white">
               AXIS
               <br />
               REPLAY
@@ -1792,47 +1844,24 @@ export default function AxisReplayClient({
               height={54}
               className="hidden"
             />
-          </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Memory Count
-              </p>
-              <p className="mt-3 text-2xl font-black text-lime-300">
-                {formatMemoryCount(session.memoryCount)}
-              </p>
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Pulse
-              </p>
-              <p className="mt-3 text-2xl font-black text-white">
-                {latestLiveSignal}
-              </p>
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                Archive Status
-              </p>
-              <p className="mt-3 text-2xl font-black text-lime-300">
-                {session.memoryState?.archiveStatus ||
-                  session.archiveStatus ||
-                  "Active"}
-              </p>
+            <div className="pointer-events-none absolute inset-x-5 bottom-5 h-1 bg-white/15">
+              <div
+                className="absolute h-full bg-lime-300 shadow-[0_0_22px_rgba(190,242,100,0.55)] transition-all duration-500"
+                style={{
+                  left: `${focusStart}%`,
+                  width: `${focusWidth}%`,
+                  opacity: replayReward.focus ? 1 : 0,
+                }}
+              />
             </div>
           </div>
 
-          <BasketballRead
-            session={session}
-            signals={displaySignals}
-            baseline={displayBaseline}
-            signalStatus={signalStatus}
-            segmentedMemory={segmentedMemory}
-            poseRead={poseRead}
-            warmupProgress={warmupProgress}
+          <ReplayReward
+            found={replayReward.found}
+            nextRep={replayReward.nextRep}
+            focus={replayReward.focus}
+            onSelect={jumpToReplayMarker}
           />
 
           <AxisNoticed
@@ -1845,7 +1874,7 @@ export default function AxisReplayClient({
               href={nextWarmup ? `/?warmup=${nextWarmup.id}` : "/"}
               className="border border-white/10 bg-white px-5 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
             >
-              {nextWarmup ? nextWarmup.title : "Next Warmup"}
+              Next Warmup
             </Link>
             <Link
               href="/"
@@ -1861,58 +1890,84 @@ export default function AxisReplayClient({
             </Link>
           </div>
 
-          <div className="mt-8 space-y-3 lg:hidden">
-            {displayMarkers.map((marker) => (
-              <MarkerCard
-                key={`${marker.time}-${marker.label}-mobile`}
-                marker={marker}
-              />
-            ))}
-          </div>
+          <details className="mt-8 border border-white/10 bg-white/[0.03] p-5">
+            <summary className="cursor-pointer text-[10px] uppercase tracking-[0.45em] text-white/35">
+              Memory Details
+            </summary>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div>
+                <BasketballRead
+                  session={session}
+                  signals={displaySignals}
+                  baseline={displayBaseline}
+                  signalStatus={signalStatus}
+                  segmentedMemory={segmentedMemory}
+                  poseRead={poseRead}
+                  warmupProgress={warmupProgress}
+                />
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="border border-white/10 bg-black/30 p-4">
+                    <DetailRow
+                      label="Memory Count"
+                      value={formatMemoryCount(session.memoryCount)}
+                    />
+                  </div>
+                  <div className="border border-white/10 bg-black/30 p-4">
+                    <DetailRow label="Pulse" value={latestLiveSignal} />
+                  </div>
+                  <div className="border border-white/10 bg-black/30 p-4">
+                    <DetailRow
+                      label="Archive"
+                      value={
+                        session.memoryState?.archiveStatus ||
+                        session.archiveStatus ||
+                        "Active"
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <aside>
+                <div className="border border-white/10 bg-black/30 p-5">
+                  <DetailRow
+                    label="Memory Owner"
+                    value={memoryOwnerName(session, memoryOwner)}
+                  />
+                  <DetailRow
+                    label="Warmup"
+                    value={missionValue(session)}
+                  />
+                  <DetailRow
+                    label="Depth"
+                    value={
+                      warmupProgress
+                        ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter}`
+                        : atmosphere.depthLabel
+                    }
+                  />
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {displayMarkers.map((marker) => (
+                    <MarkerCard
+                      key={`${marker.time}-${marker.label}`}
+                      marker={marker}
+                    />
+                  ))}
+                </div>
+
+                <p className="mt-5 text-sm leading-relaxed text-white/45">
+                  {warmupProgress
+                    ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter} warmups in this chain.`
+                    : contextPanelLine}
+                </p>
+              </aside>
+            </div>
+          </details>
         </section>
-
-        <aside className="border-t border-white/10 p-5 lg:border-l lg:border-t-0">
-          <p className="mb-4 text-[10px] uppercase tracking-[0.45em] text-white/25">
-            Memory
-          </p>
-
-          <div className="border border-white/10 bg-white/[0.03] p-5">
-            <DetailRow
-              label="Memory Owner"
-              value={memoryOwnerName(session, memoryOwner)}
-            />
-            <DetailRow
-              label="Warmup"
-              value={missionValue(session)}
-            />
-            <DetailRow
-              label="Archive"
-              value={formatMemoryCount(session.memoryCount)}
-            />
-            <DetailRow
-              label="Depth"
-              value={
-                warmupProgress
-                  ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter}`
-                  : atmosphere.depthLabel
-              }
-            />
-          </div>
-
-          <div className="mt-5 border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[10px] uppercase tracking-[0.45em] text-white/25">
-              Player Memory
-            </p>
-            <h3 className="mt-4 text-2xl font-black leading-tight text-white">
-              {memoryOwnerName(session, memoryOwner)}
-            </h3>
-            <p className="mt-4 text-sm leading-relaxed text-white/50">
-              {warmupProgress
-                ? `${warmupProgress.completedCount} / ${warmupProgress.unlockAfter} warmups in this chain.`
-                : contextPanelLine}
-            </p>
-          </div>
-        </aside>
       </div>
 
       <footer className="sticky bottom-0 border-t border-white/10 bg-black/85 px-5 py-4 backdrop-blur-xl">
