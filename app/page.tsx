@@ -3,8 +3,10 @@ import { redirect } from "next/navigation"
 import UploadConsole from "@/components/UploadConsole"
 import {
   coachingNoteLine,
+  constructionZoneLabel,
   drillName,
   phaseLabel,
+  isConstructionActive,
   isRepeated,
   normalizeSessions,
   playerName,
@@ -29,7 +31,7 @@ function PrimaryNav() {
   return (
     <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
       <Link className="border border-white/10 px-3 py-2 text-white" href="/">
-        Today
+        Capture
       </Link>
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/sessions">
         Archive
@@ -111,7 +113,7 @@ export default async function HomePage({ searchParams }: Props) {
     .slice(0, 4)
   const notes = sessions.filter((session) => session.coachNote).slice(0, 4)
   const constructionSessions = sessions
-    .filter((session) => session.constructionZone)
+    .filter(isConstructionActive)
     .slice(0, 4)
   const recentSituations = [
     ...new Set(
@@ -131,10 +133,10 @@ export default async function HomePage({ searchParams }: Props) {
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
-              Today
+              Capture
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Practice stream
+              Practice capture
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
               Record clips, review notes, and keep repeat work close to practice.
@@ -240,7 +242,7 @@ export default async function HomePage({ searchParams }: Props) {
 
             <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Construction Zone
+                Under construction
               </h2>
               <div className="mt-3 grid gap-2">
                 {constructionSessions.map((session) => (
@@ -251,7 +253,7 @@ export default async function HomePage({ searchParams }: Props) {
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
-                      {playerName(session)} / Focus: mechanical compliance
+                      {playerName(session)} / {constructionZoneLabel(session)}
                     </p>
                     {triggerLabel(session) ? (
                       <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">

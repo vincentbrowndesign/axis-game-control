@@ -1,6 +1,7 @@
 import { normalizeReplay } from "@/lib/normalizeReplay"
 import type {
   AxisReplaySession,
+  ConstructionZoneStatus,
   ReplaySessionView,
   StressPhase,
 } from "@/types/memory"
@@ -12,17 +13,23 @@ export const STRESS_PHASES: StressPhase[] = [
   "Game Ready",
 ]
 
+export const CONSTRUCTION_ZONE_STATUSES: ConstructionZoneStatus[] = [
+  "Active",
+  "Stabilizing",
+  "Cleared",
+]
+
 export const BASKETBALL_SITUATIONS = [
   "High Pick-and-Roll",
-  "Closeout Attack",
-  "Corner Kick",
   "Weak-Side Tag",
+  "Corner Kick",
   "Slot Drive",
   "Baseline Drift",
-  "Transition Finish",
-  "Ball Screen Reject",
+  "Nail Help",
+  "Transition Advantage",
+  "Closeout Attack",
   "Paint Touch",
-  "Help Rotation",
+  "Ball Screen Reject",
 ]
 
 export function normalizeSessions(rows: AxisReplaySession[] | null | undefined) {
@@ -96,7 +103,9 @@ export function tagCounts(sessions: ReplaySessionView[]) {
 }
 
 export function repeatKey(session: ReplaySessionView) {
-  return `${playerName(session).toLowerCase()}::${drillName(session).toLowerCase()}`
+  const focus = session.situation?.trim() || drillName(session)
+
+  return `${playerName(session).toLowerCase()}::${focus.toLowerCase()}`
 }
 
 export function repeatCounts(sessions: ReplaySessionView[]) {
@@ -144,6 +153,14 @@ export function triggerLabel(session: ReplaySessionView) {
 
 export function phaseLabel(session: ReplaySessionView) {
   return session.stressPhase || "Block"
+}
+
+export function constructionZoneLabel(session: ReplaySessionView) {
+  return session.constructionZoneStatus || (session.constructionZone ? "Active" : "Cleared")
+}
+
+export function isConstructionActive(session: ReplaySessionView) {
+  return constructionZoneLabel(session) !== "Cleared"
 }
 
 function practiceDateKey(timestamp: number) {

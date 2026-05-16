@@ -9,6 +9,7 @@ import type {
 import type { BrowserSignalRead } from "@/lib/vision/providers/types"
 import type {
   AxisReplaySession,
+  ConstructionZoneStatus,
   MemoryState,
   MemoryTimelineEvent,
   ReplaySessionView,
@@ -114,6 +115,21 @@ function asStressPhase(value: unknown): StressPhase | undefined {
   }
 
   return undefined
+}
+
+function asConstructionZoneStatus(
+  value: unknown,
+  isActive: boolean
+): ConstructionZoneStatus {
+  if (
+    value === "Active" ||
+    value === "Stabilizing" ||
+    value === "Cleared"
+  ) {
+    return value
+  }
+
+  return isActive ? "Active" : "Cleared"
 }
 
 function asTone(value: unknown): "lime" | "cyan" | "zinc" {
@@ -521,8 +537,14 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
       ),
       triggerWord: asOptionalString(raw.triggerWord ?? metadata.triggerWord),
       repeatTomorrow: Boolean(raw.repeatTomorrow ?? metadata.repeatTomorrow),
-      constructionZone: Boolean(
-        raw.constructionZone ?? metadata.constructionZone
+      constructionZone:
+        asConstructionZoneStatus(
+          raw.constructionZoneStatus ?? metadata.constructionZoneStatus,
+          Boolean(raw.constructionZone ?? metadata.constructionZone)
+        ) !== "Cleared",
+      constructionZoneStatus: asConstructionZoneStatus(
+        raw.constructionZoneStatus ?? metadata.constructionZoneStatus,
+        Boolean(raw.constructionZone ?? metadata.constructionZone)
       ),
       stressPhase: asStressPhase(raw.stressPhase ?? metadata.stressPhase),
       memoryCount: memoryState?.memoryCount ?? memoryCount,

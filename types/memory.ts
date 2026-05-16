@@ -11,6 +11,8 @@ export type SessionEnvironment =
 
 export type StressPhase = "Block" | "Guided" | "Scrimmage" | "Game Ready"
 
+export type ConstructionZoneStatus = "Active" | "Stabilizing" | "Cleared"
+
 export type AxisProfile = {
   id: string
   user_id: string
@@ -81,6 +83,7 @@ export type ReplaySessionView = {
   triggerWord?: string
   repeatTomorrow?: boolean
   constructionZone?: boolean
+  constructionZoneStatus?: ConstructionZoneStatus
   stressPhase?: StressPhase
   memoryCount?: number
   lastSignal?: string

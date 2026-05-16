@@ -382,7 +382,7 @@ export default function UploadConsole({
               href="/"
               className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
             >
-              Today
+              Capture
             </Link>
             <Link
               href="/sessions"

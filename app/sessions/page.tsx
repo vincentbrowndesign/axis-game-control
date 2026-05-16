@@ -4,11 +4,14 @@ import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
   BASKETBALL_SITUATIONS,
+  CONSTRUCTION_ZONE_STATUSES,
   STRESS_PHASES,
   coachingNoteLine,
+  constructionZoneLabel,
   dateLabel,
   drillName,
   phaseLabel,
+  isConstructionActive,
   isRecent,
   isRepeated,
   normalizeSessions,
@@ -22,6 +25,7 @@ import {
 } from "@/lib/archive/sessionRollup"
 import {
   type AxisReplaySession,
+  type ConstructionZoneStatus,
   type ReplaySessionView,
   type SessionEnvironment,
   type StressPhase,
@@ -49,7 +53,7 @@ function PrimaryNav() {
   return (
     <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
-        Today
+        Capture
       </Link>
       <Link className="border border-white/10 px-3 py-2 text-white" href="/sessions">
         Archive
@@ -206,7 +210,15 @@ async function saveCoachNote(formData: FormData) {
     .trim()
     .toUpperCase()
     .slice(0, 18)
-  const constructionZone = formData.get("constructionZone") === "on"
+  const constructionZoneStatusValue = String(
+    formData.get("constructionZoneStatus") || "Cleared"
+  )
+  const constructionZoneStatus: ConstructionZoneStatus =
+    CONSTRUCTION_ZONE_STATUSES.includes(
+      constructionZoneStatusValue as ConstructionZoneStatus
+    )
+      ? (constructionZoneStatusValue as ConstructionZoneStatus)
+      : "Cleared"
   const stressPhaseValue = String(formData.get("stressPhase") || "Block")
   const stressPhase: StressPhase = STRESS_PHASES.includes(
     stressPhaseValue as StressPhase
@@ -254,7 +266,8 @@ async function saveCoachNote(formData: FormData) {
         coachCorrection,
         triggerWord,
         repeatTomorrow: shouldRepeat,
-        constructionZone,
+        constructionZone: constructionZoneStatus !== "Cleared",
+        constructionZoneStatus,
         stressPhase,
       },
       updated_at: new Date().toISOString(),
@@ -369,8 +382,10 @@ export default async function SessionsPage({
         (!filters.phase || phaseLabel(session) === filters.phase) &&
         (!filters.construction ||
           (filters.construction === "active"
-            ? session.constructionZone
-            : !session.constructionZone)) &&
+            ? constructionZoneLabel(session) === "Active"
+            : filters.construction === "stabilizing"
+              ? constructionZoneLabel(session) === "Stabilizing"
+              : constructionZoneLabel(session) === "Cleared")) &&
         (view !== "recent" || isRecent(session)) &&
         (view !== "repeated" || isRepeated(session, sessionRepeats, tags))
       )
@@ -584,8 +599,9 @@ export default async function SessionsPage({
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               >
                 <option value="">Any</option>
-                <option value="active">Construction Zone</option>
-                <option value="normal">Normal</option>
+                <option value="active">Active</option>
+                <option value="stabilizing">Stabilizing</option>
+                <option value="cleared">Cleared</option>
               </select>
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
@@ -712,7 +728,7 @@ export default async function SessionsPage({
                         </span>
                       ) : null}
                       <span className="border border-white/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/70">
-                        {session.constructionZone ? "Construction Zone" : "Normal"}
+                        Construction: {constructionZoneLabel(session)}
                       </span>
                       <span className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
                         Phase: {phaseLabel(session)}
@@ -721,7 +737,7 @@ export default async function SessionsPage({
                         {nextAction(session, sessionRepeats, tags)}
                       </span>
                     </div>
-                    {session.constructionZone ? (
+                    {isConstructionActive(session) ? (
                       <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
                         Focus: mechanical compliance
                       </p>
@@ -797,15 +813,17 @@ export default async function SessionsPage({
                         />
                         Repeat
                       </label>
-                      <label className="flex items-center gap-2 border border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/55">
-                        <input
-                          type="checkbox"
-                          name="constructionZone"
-                          defaultChecked={Boolean(session.constructionZone)}
-                          className="accent-lime-300"
-                        />
-                        Construction Zone
-                      </label>
+                      <select
+                        name="constructionZoneStatus"
+                        defaultValue={constructionZoneLabel(session)}
+                        className="border border-white/10 bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/70 outline-none"
+                      >
+                        {CONSTRUCTION_ZONE_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
                       <select
                         name="stressPhase"
                         defaultValue={phaseLabel(session)}

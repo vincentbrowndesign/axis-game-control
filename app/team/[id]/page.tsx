@@ -2,8 +2,10 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import {
   coachingNoteLine,
+  constructionZoneLabel,
   drillName,
   phaseLabel,
+  isConstructionActive,
   isRepeated,
   normalizeSessions,
   playerName,
@@ -26,7 +28,7 @@ function PrimaryNav() {
   return (
     <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
-        Today
+        Capture
       </Link>
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/sessions">
         Archive
@@ -90,6 +92,7 @@ export default async function TeamPage({ params }: Props) {
   const taggedRepeats = sessions.filter((session) =>
     isRepeated(session, repeats, tags)
   )
+  const activeConstruction = sessions.filter(isConstructionActive)
   const coachNotes = sessions.filter((session) => session.coachNote).slice(0, 6)
   const situationFocus = [
     ...new Set(
@@ -172,6 +175,11 @@ export default async function TeamPage({ params }: Props) {
             {lastScrimmage
               ? `Last scrimmage clips: ${playerName(lastScrimmage)}`
               : "No scrimmage clips yet"}
+          </Link>
+          <Link href="/sessions?construction=active" className="hover:text-white">
+            {activeConstruction.length
+              ? `${activeConstruction.length} active construction clips`
+              : "No active construction clips"}
           </Link>
         </section>
 
@@ -325,9 +333,9 @@ export default async function TeamPage({ params }: Props) {
                     <p className="mt-1 text-sm text-white/45">
                       {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
                     </p>
-                    {session.constructionZone ? (
+                    {isConstructionActive(session) ? (
                       <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/45">
-                        Construction Zone / Focus: mechanical compliance
+                        Construction: {constructionZoneLabel(session)} / Focus: mechanical compliance
                       </p>
                     ) : null}
                   </Link>
