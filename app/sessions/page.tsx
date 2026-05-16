@@ -1,12 +1,47 @@
 import Link from "next/link"
+import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
-import { buildMemoryState } from "@/lib/memoryInference"
 import { normalizeReplay } from "@/lib/normalizeReplay"
 import {
-  type ReplaySessionView,
   type AxisReplaySession,
+  type ReplaySessionView,
+  type SessionEnvironment,
 } from "@/types/memory"
+
+type ArchiveSort = "date" | "player" | "drill" | "practice" | "scrimmage" | "game"
+type ArchiveView = "all" | "recent" | "repeated"
+
+const SORT_OPTIONS: { value: ArchiveSort; label: string }[] = [
+  { value: "date", label: "Date" },
+  { value: "player", label: "Player" },
+  { value: "drill", label: "Drill" },
+  { value: "practice", label: "Practice" },
+  { value: "scrimmage", label: "Scrimmage" },
+  { value: "game", label: "Game" },
+]
+
+const VIEW_OPTIONS: { value: ArchiveView; label: string }[] = [
+  { value: "all", label: "All sessions" },
+  { value: "recent", label: "Recent" },
+  { value: "repeated", label: "Repeated" },
+]
+
+function textParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] || "" : value || ""
+}
+
+function sortParam(value: string): ArchiveSort {
+  return SORT_OPTIONS.some((option) => option.value === value)
+    ? (value as ArchiveSort)
+    : "date"
+}
+
+function viewParam(value: string): ArchiveView {
+  return VIEW_OPTIONS.some((option) => option.value === value)
+    ? (value as ArchiveView)
+    : "all"
+}
 
 function formatDuration(seconds?: number) {
   if (!seconds) return "0s"
@@ -14,9 +49,7 @@ function formatDuration(seconds?: number) {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
 
-  if (mins <= 0) return `${secs}s`
-
-  return `${mins}m ${secs}s`
+  return mins <= 0 ? `${secs}s` : `${mins}m ${secs}s`
 }
 
 function relativeTime(timestamp: number) {
@@ -33,38 +66,246 @@ function relativeTime(timestamp: number) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-function formatMemoryCount(count: number) {
-  return count.toString().padStart(2, "0")
+function dateLabel(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 }
 
-function memoryKey(session: {
-  player: string
-}) {
+function playerName(session: ReplaySessionView) {
   return session.player && session.player !== "Unassigned"
     ? session.player
-    : "LOCAL PLAYER"
+    : "Local player"
 }
 
-function memoryOwner(session: {
-  player: string
-}) {
-  return session.player && session.player !== "Unassigned"
-    ? session.player
-    : "LOCAL PLAYER"
+function drillName(session: ReplaySessionView) {
+  return session.mission && session.mission !== "None"
+    ? session.mission
+    : "Open session"
 }
 
-function previousForSession(
+function sessionText(session: ReplaySessionView) {
+  return [
+    session.title,
+    session.mission,
+    session.environment,
+    session.coachNote,
+    playerName(session),
+    ...session.tags,
+  ]
+    .join(" ")
+    .toLowerCase()
+}
+
+function matchesType(session: ReplaySessionView, type: string) {
+  if (!type) return true
+
+  const normalized = type.toLowerCase()
+
+  if (normalized === "scrimmage") {
+    return sessionText(session).includes("scrimmage")
+  }
+
+  return session.environment === normalized
+}
+
+function isRecent(session: ReplaySessionView) {
+  return Date.now() - session.createdAt <= 1000 * 60 * 60 * 24 * 14
+}
+
+function tagCounts(sessions: ReplaySessionView[]) {
+  return sessions.reduce<Record<string, number>>((counts, session) => {
+    for (const tag of session.tags) {
+      const key = tag.toLowerCase()
+      counts[key] = (counts[key] || 0) + 1
+    }
+
+    return counts
+  }, {})
+}
+
+function repeatKey(session: ReplaySessionView) {
+  return `${playerName(session).toLowerCase()}::${drillName(session).toLowerCase()}`
+}
+
+function repeatCounts(sessions: ReplaySessionView[]) {
+  return sessions.reduce<Record<string, number>>((counts, session) => {
+    const key = repeatKey(session)
+    counts[key] = (counts[key] || 0) + 1
+
+    return counts
+  }, {})
+}
+
+function isRepeated(
   session: ReplaySessionView,
-  sessions: ReplaySessionView[]
+  sessionRepeats: Record<string, number>,
+  tags: Record<string, number>
 ) {
-  return sessions.filter(
-    (item) =>
-      item.id !== session.id &&
-      item.createdAt < session.createdAt
+  return (
+    sessionRepeats[repeatKey(session)] > 1 ||
+    session.tags.some((tag) => tags[tag.toLowerCase()] > 1) ||
+    session.coachNote?.toLowerCase().includes("repeat")
   )
 }
 
-export default async function SessionsPage() {
+function sortSessions(sessions: ReplaySessionView[], sort: ArchiveSort) {
+  const ordered = [...sessions]
+
+  if (sort === "player") {
+    return ordered.sort((a, b) => playerName(a).localeCompare(playerName(b)))
+  }
+
+  if (sort === "drill") {
+    return ordered.sort((a, b) => drillName(a).localeCompare(drillName(b)))
+  }
+
+  if (sort === "practice" || sort === "game") {
+    return ordered.sort((a, b) => {
+      const aMatch = a.environment === sort ? 0 : 1
+      const bMatch = b.environment === sort ? 0 : 1
+      return aMatch - bMatch || b.createdAt - a.createdAt
+    })
+  }
+
+  if (sort === "scrimmage") {
+    return ordered.sort((a, b) => {
+      const aMatch = sessionText(a).includes("scrimmage") ? 0 : 1
+      const bMatch = sessionText(b).includes("scrimmage") ? 0 : 1
+      return aMatch - bMatch || b.createdAt - a.createdAt
+    })
+  }
+
+  return ordered.sort((a, b) => b.createdAt - a.createdAt)
+}
+
+function hrefWithSort(sort: ArchiveSort, filters: Record<string, string>) {
+  const params = new URLSearchParams()
+
+  for (const [key, value] of Object.entries({ ...filters, sort })) {
+    if (value) params.set(key, value)
+  }
+
+  return `/sessions?${params.toString()}`
+}
+
+function practiceDateKey(timestamp: number) {
+  return new Date(timestamp).toISOString().slice(0, 10)
+}
+
+function practiceStreak(sessions: ReplaySessionView[]) {
+  const practiceDays = new Set(
+    sessions
+      .filter((session) => session.environment === "practice")
+      .map((session) => practiceDateKey(session.createdAt))
+  )
+  let streak = 0
+  const day = new Date()
+
+  for (;;) {
+    const key = day.toISOString().slice(0, 10)
+
+    if (!practiceDays.has(key)) break
+
+    streak += 1
+    day.setDate(day.getDate() - 1)
+  }
+
+  return streak
+}
+
+function playerSummaries(sessions: ReplaySessionView[]) {
+  const players = new Map<string, ReplaySessionView[]>()
+
+  for (const session of sessions) {
+    const name = playerName(session)
+    players.set(name, [...(players.get(name) || []), session])
+  }
+
+  return [...players.entries()]
+    .map(([name, playerSessions]) => {
+      const ordered = [...playerSessions].sort((a, b) => b.createdAt - a.createdAt)
+      const recentTags = [
+        ...new Set(ordered.flatMap((session) => session.tags).filter(Boolean)),
+      ].slice(0, 4)
+      const lastPractice = ordered.find(
+        (session) => session.environment === "practice"
+      )
+
+      return {
+        name,
+        sessions: ordered.length,
+        recentSessions: ordered.filter(isRecent).length,
+        recentTags,
+        lastPractice: lastPractice ? relativeTime(lastPractice.createdAt) : "None",
+        streak: practiceStreak(ordered),
+      }
+    })
+    .sort((a, b) => b.sessions - a.sessions)
+}
+
+async function saveCoachNote(formData: FormData) {
+  "use server"
+
+  const sessionId = String(formData.get("sessionId") || "")
+  const coachNote = String(formData.get("coachNote") || "")
+    .trim()
+    .slice(0, 180)
+
+  if (!sessionId) return
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return
+
+  const existing = await supabase
+    .from("axis_sessions")
+    .select("metadata")
+    .eq("id", sessionId)
+    .eq("user_id", user.id)
+    .single<{ metadata: Record<string, unknown> | null }>()
+
+  const metadata =
+    existing.data?.metadata && typeof existing.data.metadata === "object"
+      ? existing.data.metadata
+      : {}
+
+  await supabase
+    .from("axis_sessions")
+    .update({
+      metadata: { ...metadata, coachNote },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .eq("user_id", user.id)
+
+  revalidatePath("/sessions")
+  revalidatePath("/archive")
+}
+
+export default async function SessionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const params = await searchParams
+  const sort = sortParam(textParam(params.sort))
+  const view = viewParam(textParam(params.view))
+  const filters = {
+    q: textParam(params.q).trim(),
+    player: textParam(params.player).trim(),
+    drill: textParam(params.drill).trim(),
+    tag: textParam(params.tag).trim(),
+    note: textParam(params.note).trim(),
+    type: textParam(params.type).trim(),
+    view,
+  }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -72,24 +313,22 @@ export default async function SessionsPage() {
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-black px-5 py-10 text-white">
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-end">
-          <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-            Axis Replay Archive
+      <main className="min-h-screen bg-zinc-950 px-5 py-10 text-white">
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
+            Archive
           </p>
-          <h1 className="mt-5 text-[clamp(4rem,15vw,10rem)] font-black leading-[0.82] tracking-[-0.07em]">
-            LOCKED
-            <br />
-            MEMORY
+          <h1 className="mt-4 text-5xl font-black tracking-[-0.04em] sm:text-7xl">
+            Sign in to review sessions.
           </h1>
-          <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-            Authenticate to open your persistent replay archive.
+          <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
+            Open the archive to find clips, notes, players, and practice work.
           </p>
           <Link
             href="/auth"
-            className="mt-10 w-fit bg-white px-8 py-5 text-sm font-black uppercase tracking-[0.24em] text-black"
+            className="mt-8 w-fit border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-white/70 transition hover:border-white/35 hover:text-white"
           >
-            Enter Axis
+            Sign in
           </Link>
         </div>
       </main>
@@ -110,205 +349,377 @@ export default async function SessionsPage() {
           .from("axis-replays")
           .createSignedUrl(session.file_path, 60 * 60 * 24 * 7)
 
-        session.video_url =
-          signed.data?.signedUrl || session.video_url
+        session.video_url = signed.data?.signedUrl || session.video_url
       }
 
       return normalizeReplay(session)
     })
   )
 
-  const memoryCounts = sessions.reduce<Record<string, number>>(
-    (counts, session) => {
-      const key = memoryKey(session)
+  const sessionRepeats = repeatCounts(sessions)
+  const tags = tagCounts(sessions)
+  const visibleSessions = sortSessions(
+    sessions.filter((session) => {
+      const lowerText = sessionText(session)
+      const player = filters.player.toLowerCase()
+      const drill = filters.drill.toLowerCase()
+      const tag = filters.tag.toLowerCase()
+      const note = filters.note.toLowerCase()
+      const query = filters.q.toLowerCase()
 
-      counts[key] = (counts[key] || 0) + 1
-
-      return counts
-    },
-    {}
+      return (
+        (!query || lowerText.includes(query)) &&
+        (!player || playerName(session).toLowerCase().includes(player)) &&
+        (!drill || drillName(session).toLowerCase().includes(drill)) &&
+        (!tag ||
+          session.tags.some((item) => item.toLowerCase().includes(tag))) &&
+        (!note || session.coachNote?.toLowerCase().includes(note)) &&
+        matchesType(session, filters.type) &&
+        (view !== "recent" || isRecent(session)) &&
+        (view !== "repeated" || isRepeated(session, sessionRepeats, tags))
+      )
+    }),
+    sort
   )
-
-  const memoryStates = sessions.reduce<
-    Record<string, ReturnType<typeof buildMemoryState>>
-  >((states, session) => {
-    states[session.id] = buildMemoryState({
-      session,
-      previousSessions: previousForSession(session, sessions),
-      player: session.player,
-    })
-
-    return states
-  }, {})
+  const players = playerSummaries(sessions)
+  const taggedRepeats = sessions.filter((session) =>
+    session.tags.some((tag) => tags[tag.toLowerCase()] > 1)
+  ).length
+  const recentSessions = sessions.filter(isRecent).length
 
   return (
-    <main className="min-h-screen bg-black px-5 py-8 text-white">
+    <main className="min-h-screen bg-zinc-950 px-5 py-8 text-white">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-10 flex flex-col gap-6 border-b border-white/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <header className="mb-8 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              Axis Replay Archive
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
+              Archive
             </p>
-            <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.84] tracking-[-0.07em]">
-              MEMORY
-              <br />
-              LIBRARY
+            <h1 className="mt-3 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
+              Session review
             </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
+              Find clips by player, drill, tag, note, and practice type.
+            </p>
           </div>
 
           <Link
             href="/"
-            className="w-fit border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
+            className="w-fit border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-white/70 transition hover:border-white/35 hover:text-white"
           >
-            Add Memory
+            Add session
           </Link>
-        </div>
+        </header>
 
-        <div className="mb-8 grid gap-3 sm:grid-cols-3">
-          <div className="border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-              Memory Count
+        <section className="mb-6 grid gap-3 md:grid-cols-4">
+          <div className="border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+              Sessions
             </p>
-            <p className="mt-3 text-5xl font-black text-lime-300">
-              {formatMemoryCount(sessions.length)}
-            </p>
+            <p className="mt-2 text-3xl font-black">{sessions.length}</p>
           </div>
-
-          <div className="border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-              Last Signal
+          <div className="border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+              Players
             </p>
-            <p className="mt-4 text-xl font-black uppercase tracking-[-0.02em] text-white">
-              {sessions.length ? relativeTime(sessions[0].createdAt) : "None"}
-            </p>
+            <p className="mt-2 text-3xl font-black">{players.length}</p>
           </div>
-
-          <div className="border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-              Archive Status
+          <div className="border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+              Recent
             </p>
-            <p className="mt-4 text-xl font-black uppercase tracking-[-0.02em] text-white">
-              {sessions.length ? "Active" : "Waiting"}
-            </p>
+            <p className="mt-2 text-3xl font-black">{recentSessions}</p>
           </div>
-        </div>
+          <div className="border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+              Tagged repeats
+            </p>
+            <p className="mt-2 text-3xl font-black">{taggedRepeats}</p>
+          </div>
+        </section>
 
-        <p className="mb-6 text-sm uppercase tracking-[0.35em] text-white/35">
-          {sessions.length
-            ? "Memory online."
-            : "Archive ready."}
-        </p>
+        <section className="mb-8 border border-white/10 bg-white/[0.03] p-4">
+          <form action="/sessions" className="grid gap-3 lg:grid-cols-6">
+            <input type="hidden" name="sort" value={sort} />
+            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35 lg:col-span-2">
+              Search
+              <input
+                name="q"
+                defaultValue={filters.q}
+                placeholder="footwork, repeat, left"
+                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+              />
+            </label>
+            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Player
+              <input
+                name="player"
+                defaultValue={filters.player}
+                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+              />
+            </label>
+            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Drill
+              <input
+                name="drill"
+                defaultValue={filters.drill}
+                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+              />
+            </label>
+            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Tag
+              <input
+                name="tag"
+                defaultValue={filters.tag}
+                placeholder="repeat"
+                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+              />
+            </label>
+            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Note
+              <input
+                name="note"
+                defaultValue={filters.note}
+                placeholder="feet"
+                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+              />
+            </label>
+            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Type
+              <select
+                name="type"
+                defaultValue={filters.type}
+                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                <option value="">Any</option>
+                {(["practice", "scrimmage", "game", "workout"] satisfies (
+                  | SessionEnvironment
+                  | "scrimmage"
+                )[]).map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Review
+              <select
+                name="view"
+                defaultValue={view}
+                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                {VIEW_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end gap-2 lg:col-span-4">
+              <button className="border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white/75 transition hover:border-white/35 hover:text-white">
+                Find clips
+              </button>
+              <Link
+                href="/sessions"
+                className="border border-white/10 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white/40 transition hover:text-white"
+              >
+                Clear
+              </Link>
+            </div>
+          </form>
+        </section>
 
-        <div className="grid gap-5">
-          {sessions.map((session) => {
-            const memoryState = memoryStates[session.id]
-            const count =
-              memoryState?.memoryCount ||
-              memoryCounts[memoryKey(session)] ||
-              1
-
-            return (
+        <nav className="mb-8 flex flex-wrap gap-2" aria-label="Sort sessions">
+          {SORT_OPTIONS.map((option) => (
             <Link
-              key={session.id}
-              href={`/replay/${session.id}`}
-              className="group overflow-hidden border border-white/10 bg-white/[0.03] transition hover:border-white/25"
+              key={option.value}
+              href={hrefWithSort(option.value, filters)}
+              className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] transition ${
+                sort === option.value
+                  ? "border-white/35 text-white"
+                  : "border-white/10 text-white/45 hover:text-white"
+              }`}
             >
-              <div className="grid gap-0 lg:grid-cols-[minmax(280px,0.9fr)_1.1fr]">
-                <div className="relative aspect-video overflow-hidden bg-black">
+              {option.label}
+            </Link>
+          ))}
+        </nav>
+
+        <section className="mb-10 grid gap-4 lg:grid-cols-[1fr_320px]">
+          <div className="grid gap-4">
+            {visibleSessions.map((session) => (
+              <article
+                key={session.id}
+                className="grid overflow-hidden border border-white/10 bg-white/[0.03] md:grid-cols-[220px_1fr]"
+              >
+                <Link
+                  href={`/replay/${session.id}`}
+                  className="relative aspect-video bg-black md:aspect-auto"
+                >
                   {session.videoUrl ? (
                     <video
                       src={session.videoUrl}
                       muted
                       playsInline
                       preload="metadata"
-                      className="h-full w-full object-cover opacity-60 transition duration-500 group-hover:opacity-80"
+                      className="h-full w-full object-cover opacity-70"
                     />
                   ) : (
                     <div className="h-full w-full bg-white/[0.04]" />
                   )}
+                </Link>
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                </div>
-
-                <div className="flex min-h-full flex-col justify-between p-6">
+                <div className="grid gap-5 p-5">
                   <div className="flex flex-wrap gap-2">
-                    <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-lime-300">
+                    <span className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/55">
                       {session.environment}
                     </span>
-                    <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-cyan-300">
-                      Memory {formatMemoryCount(count)}
+                    <span className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/55">
+                      {dateLabel(session.createdAt)}
                     </span>
-                    <span className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.25em] text-white/40">
-                      {session.status === "stored"
-                        ? memoryState?.status || "Memory Stored"
-                        : session.status || "Session Added"}
+                    <span className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/55">
+                      {formatDuration(session.duration)}
                     </span>
+                    {isRepeated(session, sessionRepeats, tags) && (
+                      <span className="border border-lime-300/25 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-lime-200">
+                        repeat
+                      </span>
+                    )}
                   </div>
 
-                  <div className="mt-10">
-                    <p className="text-[10px] uppercase tracking-[0.4em] text-white/30">
-                      Player Memory
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+                      {playerName(session)}
                     </p>
-                    <h2 className="mt-3 text-[clamp(2.5rem,8vw,5rem)] font-black leading-[0.9] tracking-[-0.05em]">
-                      {memoryOwner(session)}
-                    </h2>
-                    <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-white/40">
-                      <span>{relativeTime(session.createdAt)}</span>
-                      <span>/</span>
-                      <span>
-                        {formatDuration(session.duration || 0)}
-                      </span>
-                      <span>/</span>
-                      <span>
-                        {memoryState?.contextLine ||
-                          "Session added to archive."}
-                      </span>
-                    </div>
-
-                    <div className="mt-8 grid gap-2 sm:grid-cols-3">
-                      <div className="border border-white/10 bg-black/30 p-3">
-                        <p className="text-[9px] uppercase tracking-[0.3em] text-white/25">
-                          Memory Owner
-                        </p>
-                        <p className="mt-2 text-sm text-white/70">
-                          {memoryOwner(session)}
-                        </p>
-                      </div>
-                      <div className="border border-white/10 bg-black/30 p-3">
-                        <p className="text-[9px] uppercase tracking-[0.3em] text-white/25">
-                          Session
-                        </p>
-                        <p className="mt-2 text-sm text-white/70">
-                          {new Date(session.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="border border-white/10 bg-black/30 p-3">
-                        <p className="text-[9px] uppercase tracking-[0.3em] text-white/25">
-                          Replay Status
-                        </p>
-                        <p className="mt-2 text-sm text-lime-300">
-                          {memoryState?.archiveStatus ||
-                            "Archive Active"}
-                        </p>
-                      </div>
-                    </div>
+                    <Link
+                      href={`/replay/${session.id}`}
+                      className="mt-2 block text-2xl font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
+                    >
+                      {drillName(session)}
+                    </Link>
+                    <p className="mt-2 text-sm text-white/45">
+                      {relativeTime(session.createdAt)}
+                    </p>
                   </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {session.tags.length ? (
+                      session.tags.map((tag) => (
+                        <Link
+                          key={tag}
+                          href={`/sessions?tag=${encodeURIComponent(tag)}`}
+                          className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/45 transition hover:text-white"
+                        >
+                          {tag}
+                        </Link>
+                      ))
+                    ) : (
+                      <span className="text-sm text-white/30">No tags yet</span>
+                    )}
+                  </div>
+
+                  <form action={saveCoachNote} className="grid gap-2">
+                    <input type="hidden" name="sessionId" value={session.id} />
+                    <label className="text-[10px] uppercase tracking-[0.22em] text-white/35">
+                      Coach note
+                    </label>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <input
+                        name="coachNote"
+                        defaultValue={session.coachNote || ""}
+                        placeholder="Lost rhythm left."
+                        className="border border-white/10 bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
+                      />
+                      <button className="border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white/70 transition hover:border-white/35 hover:text-white">
+                        Save note
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </article>
+            ))}
+
+            {visibleSessions.length === 0 && (
+              <div className="border border-white/10 bg-white/[0.03] p-8">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+                  No clips found
+                </p>
+                <h2 className="mt-3 text-3xl font-black tracking-[-0.04em]">
+                  Try a different player, drill, tag, or note.
+                </h2>
+              </div>
+            )}
+          </div>
+
+          <aside className="grid h-fit gap-4">
+            <section className="border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+                Team
+              </p>
+              <div className="mt-4 grid gap-3 text-sm text-white/60">
+                <div className="flex justify-between gap-3">
+                  <span>Players</span>
+                  <span className="font-bold text-white">{players.length}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Recent sessions</span>
+                  <span className="font-bold text-white">{recentSessions}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Tagged repeats</span>
+                  <span className="font-bold text-white">{taggedRepeats}</span>
                 </div>
               </div>
-            </Link>
-          )})}
+            </section>
 
-          {sessions.length === 0 && (
-            <div className="border border-white/10 bg-white/[0.03] p-12">
-              <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-                Archive Empty
+            <section className="border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+                Players
               </p>
-              <h2 className="mt-5 text-5xl font-black leading-none tracking-[-0.05em] text-white/75">
-                Memory waiting.
-              </h2>
-            </div>
-          )}
-        </div>
+              <div className="mt-4 grid gap-3">
+                {players.map((player) => (
+                  <Link
+                    key={player.name}
+                    href={`/sessions?player=${encodeURIComponent(player.name)}`}
+                    className="border border-white/10 bg-black/35 p-3 transition hover:border-white/25"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-white">{player.name}</p>
+                        <p className="mt-1 text-xs text-white/40">
+                          Last practice: {player.lastPractice}
+                        </p>
+                      </div>
+                      <span className="text-sm font-black text-white">
+                        {player.sessions}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
+                      <span>{player.recentSessions} recent</span>
+                      <span>{player.streak} day streak</span>
+                    </div>
+                    {player.recentTags.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {player.recentTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="border border-white/10 px-2 py-1 text-[9px] uppercase tracking-[0.18em] text-white/40"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </Link>
+                ))}
+                {players.length === 0 && (
+                  <p className="text-sm text-white/40">No players yet.</p>
+                )}
+              </div>
+            </section>
+          </aside>
+        </section>
       </div>
     </main>
   )

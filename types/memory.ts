@@ -72,6 +72,7 @@ export type ReplaySessionView = {
   status?: string
   fileName?: string
   tags: string[]
+  coachNote?: string
   memoryCount?: number
   lastSignal?: string
   archiveStatus?: string

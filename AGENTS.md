@@ -1,74 +1,25 @@
-# AXIS Agent Rules
+# AXIS AGENT RULES
 
-Read these docs before changing code:
+Before making product changes, read `/AXIS_CONSTITUTION.md`.
 
-- `docs/AXIS_OVERVIEW.md`
-- `docs/CONTINUITY_SYSTEM.md`
-- `docs/ARCHIVE_SYSTEM.md`
-- `docs/RETRIEVAL_ENGINE.md`
-- `docs/TEAM_MEMORY.md`
-- `docs/SPURTS_OVERVIEW.md`
-- `docs/PRACTICE_LOOP.md`
-- `docs/ACCOUNTABILITY_SYSTEM.md`
-- `docs/CONNECTION_GRAPH.md`
-- `docs/PROGRESSIVE_DISCLOSURE.md`
-- `docs/ARCHITECTURE.md`
-- `docs/AXIS_WORLD_MODEL.md`
-- `docs/MEMORY_MODEL.md`
-- `docs/WORLD_RULES.md`
-- `docs/LANGUAGE_SYSTEM.md`
-- `docs/PERCEPTION_HIERARCHY.md`
-- `docs/WARMUP_PHILOSOPHY.md`
-- `docs/BEHAVIORAL_CONTINUITY.md`
-- `docs/UPLOAD_PIPELINE.md`
-- `docs/REPLAY_SCHEMA.md`
-- `docs/MEMORY_SYSTEM.md`
-- `docs/WARMUP_SYSTEM.md`
-- `docs/PERCEPTION_RULES.md`
-- `docs/MEMORY_PRIMITIVES.md`
-- `docs/INFERENCE_LAYER.md`
-- `docs/UI_LANGUAGE.md`
-- `docs/AXIS_IDENTITY.md`
-- `docs/CODING_RULES.md`
-- `docs/KNOWN_ISSUES.md`
-- `docs/ROADMAP.md`
+Codex must:
+- make small scoped changes
+- preserve working video/upload/replay systems
+- avoid broad rewrites
+- avoid abstract brand language
+- use basketball-first wording
+- keep UI practical and coach/player useful
+- isolate one broken layer at a time
 
-Hard rules:
+Every task must identify:
+1. Goal
+2. Files changed
+3. What was intentionally not touched
+4. Verification run
 
-- Use locked layers and controlled iteration. Do not use giant rewrite prompts as a development process.
-- Before changing code, identify the single layer being modified and keep the change scoped to that layer.
-- Future refinements must follow: goal, locked rules, only modify, do not touch, success condition.
-- Do not reinvent the ecosystem unless the user explicitly changes a locked product truth.
-- Uploads are stable infrastructure. Do not mutate upload response shape.
-- Uploads should never know about AI, inference, memory, or analysis.
-- Memory and inference happen after replay loads.
-- Normalize all replay/session data before render.
-- Old sessions must never break after schema changes.
-- Preserve AXIS visual identity and language.
-- Do not redesign UI unless explicitly asked.
-- Before product, UX, memory, perception, Digital Twin, or warmup changes, read the world model docs above.
-- Axis is behavioral basketball memory infrastructure. Optimize for continuity and retrieval, not more analytics.
-- The archive is remembered effort, not stored clips.
-- Replay is an entry point into memory, not the center of the ecosystem.
-- Warmups are one memory source, not the center of the product.
-- Core loop: memory -> retrieval -> continuity -> reinforcement -> team emergence.
-- Product hierarchy: continuity, archive, and retrieval are primary; practice, drills, and recording are secondary.
-- Emotional goal: users feel they are returning to an evolving basketball identity system, not using a drill app.
-
-Forbidden AXIS labels:
-
-- CONTROL LOST
-- PRESSURE SPIKE
-- RUN DETECTED
-- RECOVERY WINDOW
-
-Preferred AXIS labels:
-
-- Memory Online
-- Context Building
-- Replay Linked
-- Footage Accepted
-- Memory Stored
+Do not invent new product philosophy.
+Do not create new major routes unless asked.
+Do not turn Axis into a dashboard, social feed, AI coach, or drill app.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know

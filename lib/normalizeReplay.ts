@@ -96,6 +96,12 @@ function asStringArray(value: unknown) {
   )
 }
 
+function asOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined
+}
+
 function asTone(value: unknown): "lime" | "cyan" | "zinc" {
   if (value === "lime" || value === "cyan" || value === "zinc") {
     return value
@@ -493,6 +499,7 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
       status: asString(raw.status, DEFAULT_REPLAY.status),
       fileName: asString(raw.fileName ?? raw.file_name, ""),
       tags: asStringArray(raw.tags),
+      coachNote: asOptionalString(raw.coachNote ?? metadata.coachNote),
       memoryCount: memoryState?.memoryCount ?? memoryCount,
       lastSignal: asString(
         raw.lastSignal ?? metadata.lastSignal,
