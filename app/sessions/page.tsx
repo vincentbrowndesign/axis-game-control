@@ -128,6 +128,20 @@ function hrefWithSort(sort: ArchiveSort, filters: Record<string, string>) {
   return `/sessions?${params.toString()}`
 }
 
+function coachingContext(
+  session: ReplaySessionView,
+  sessionRepeats: Record<string, number>,
+  tags: Record<string, number>
+) {
+  if (session.coachNote) return session.coachNote
+
+  if (isRepeated(session, sessionRepeats, tags)) {
+    return `Repeat ${drillName(session)} with ${playerName(session)}.`
+  }
+
+  return `Add the coaching note for ${playerName(session)}.`
+}
+
 async function saveCoachNote(formData: FormData) {
   "use server"
 
@@ -273,6 +287,15 @@ export default async function SessionsPage({
   )
   const pendingNotes = sessions.filter((session) => !session.coachNote)
   const lastPractice = sessions.find((session) => session.environment === "practice")
+  const filtersActive = Boolean(
+    filters.q ||
+      filters.player ||
+      filters.drill ||
+      filters.tag ||
+      filters.note ||
+      filters.type ||
+      view !== "all"
+  )
 
   return (
     <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
@@ -316,97 +339,106 @@ export default async function SessionsPage({
           </Link>
         </section>
 
-        <section className="mb-4 border-b border-white/10 pb-4">
-          <form action="/sessions" className="grid gap-2 lg:grid-cols-[1.4fr_repeat(5,minmax(0,1fr))_auto]">
-            <input type="hidden" name="sort" value={sort} />
-            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Find
-              <input
-                name="q"
-                defaultValue={filters.q}
-                placeholder="footwork, repeat, left"
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
-              />
-            </label>
-            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Player
-              <input
-                name="player"
-                defaultValue={filters.player}
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-              />
-            </label>
-            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Drill
-              <input
-                name="drill"
-                defaultValue={filters.drill}
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-              />
-            </label>
-            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Tag
-              <input
-                name="tag"
-                defaultValue={filters.tag}
-                placeholder="repeat"
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
-              />
-            </label>
-            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Note
-              <input
-                name="note"
-                defaultValue={filters.note}
-                placeholder="feet or missing"
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
-              />
-            </label>
-            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Type
-              <select
-                name="type"
-                defaultValue={filters.type}
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-              >
-                <option value="">Any</option>
-                {(["practice", "scrimmage", "game", "workout"] satisfies (
-                  | SessionEnvironment
-                  | "scrimmage"
-                )[]).map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Review
-              <select
-                name="view"
-                defaultValue={view}
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-              >
-                {VIEW_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex items-end gap-2">
-              <button className="border border-white/15 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:border-white/35 hover:text-white">
+        <details
+          className="mb-4 border-b border-white/10 pb-4"
+          open={filtersActive}
+        >
+          <summary className="cursor-pointer text-sm font-bold text-white/55 transition hover:text-white">
+            Search and filters
+          </summary>
+          <form
+            action="/sessions"
+            className="mt-3 grid gap-2 lg:grid-cols-[1.4fr_repeat(5,minmax(0,1fr))_auto]"
+          >
+              <input type="hidden" name="sort" value={sort} />
+              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
                 Find
-              </button>
-              <Link
-                href="/sessions"
-                className="border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/40 transition hover:text-white"
-              >
-                Clear
-              </Link>
-            </div>
-          </form>
-        </section>
+                <input
+                  name="q"
+                  defaultValue={filters.q}
+                  placeholder="footwork, repeat, left"
+                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+                />
+              </label>
+              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+                Player
+                <input
+                  name="player"
+                  defaultValue={filters.player}
+                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+                />
+              </label>
+              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+                Drill
+                <input
+                  name="drill"
+                  defaultValue={filters.drill}
+                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+                />
+              </label>
+              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+                Tag
+                <input
+                  name="tag"
+                  defaultValue={filters.tag}
+                  placeholder="repeat"
+                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+                />
+              </label>
+              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+                Note
+                <input
+                  name="note"
+                  defaultValue={filters.note}
+                  placeholder="feet or missing"
+                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+                />
+              </label>
+              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+                Type
+                <select
+                  name="type"
+                  defaultValue={filters.type}
+                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+                >
+                  <option value="">Any</option>
+                  {(["practice", "scrimmage", "game", "workout"] satisfies (
+                    | SessionEnvironment
+                    | "scrimmage"
+                  )[]).map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+                Review
+                <select
+                  name="view"
+                  defaultValue={view}
+                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+                >
+                  {VIEW_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-end gap-2">
+                <button className="border border-white/15 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:border-white/35 hover:text-white">
+                  Find
+                </button>
+                <Link
+                  href="/sessions"
+                  className="border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/40 transition hover:text-white"
+                >
+                  Clear
+                </Link>
+              </div>
+            </form>
+        </details>
 
         <nav className="mb-4 flex flex-wrap gap-2" aria-label="Sort sessions">
           {SORT_OPTIONS.map((option) => (
@@ -429,11 +461,11 @@ export default async function SessionsPage({
             {visibleSessions.map((session) => (
               <article
                 key={session.id}
-                className="grid overflow-hidden border border-white/10 bg-white/[0.03] md:grid-cols-[180px_1fr]"
+                className="grid border-b border-white/10 py-3 md:grid-cols-[150px_1fr]"
               >
                 <Link
                   href={`/replay/${session.id}`}
-                  className="relative aspect-video bg-black md:aspect-auto"
+                  className="relative aspect-video bg-black md:my-1"
                 >
                   {session.videoUrl ? (
                     <video
@@ -448,36 +480,21 @@ export default async function SessionsPage({
                   )}
                 </Link>
 
-                <div className="grid gap-3 p-4">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/55">
-                      {session.environment}
-                    </span>
-                    <span className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/55">
-                      {dateLabel(session.createdAt)}
-                    </span>
-                    <span className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/55">
-                      {formatDuration(session.duration)}
-                    </span>
-                    {isRepeated(session, sessionRepeats, tags) && (
-                      <span className="border border-lime-300/25 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-lime-200">
-                        repeat
-                      </span>
-                    )}
-                  </div>
-
+                <div className="grid gap-2 md:pl-4">
                   <div>
-                    <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                      {playerName(session)}
+                    <p className="text-sm font-bold text-lime-100/85">
+                      {coachingContext(session, sessionRepeats, tags)}
                     </p>
                     <Link
                       href={`/replay/${session.id}`}
-                      className="mt-1 block text-xl font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
+                      className="mt-1 block text-lg font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
                     >
                       {drillName(session)}
                     </Link>
                     <p className="mt-1 text-sm text-white/45">
-                      {relativeTime(session.createdAt)}
+                      {playerName(session)} / {relativeTime(session.createdAt)} /{" "}
+                      {session.environment} / {dateLabel(session.createdAt)} /{" "}
+                      {formatDuration(session.duration)}
                     </p>
                   </div>
 
@@ -487,9 +504,9 @@ export default async function SessionsPage({
                         <Link
                           key={tag}
                           href={`/sessions?tag=${encodeURIComponent(tag)}`}
-                          className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/45 transition hover:text-white"
+                          className="text-[10px] uppercase tracking-[0.18em] text-white/40 transition hover:text-white"
                         >
-                          {tag}
+                          #{tag}
                         </Link>
                       ))
                     ) : (
@@ -499,18 +516,15 @@ export default async function SessionsPage({
 
                   <form action={saveCoachNote} className="grid gap-2">
                     <input type="hidden" name="sessionId" value={session.id} />
-                    <label className="text-[10px] uppercase tracking-[0.22em] text-white/35">
-                      Coach note
-                    </label>
                     <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                       <input
                         name="coachNote"
                         defaultValue={session.coachNote || ""}
                         placeholder="Lost rhythm left."
-                        className="border border-white/10 bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
+                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
                       />
-                      <button className="border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white/70 transition hover:border-white/35 hover:text-white">
-                        Save note
+                      <button className="border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white/70 transition hover:border-white/35 hover:text-white">
+                        Note
                       </button>
                     </div>
                   </form>

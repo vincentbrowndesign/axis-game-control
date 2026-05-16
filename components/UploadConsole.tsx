@@ -150,10 +150,10 @@ function MissionCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`border p-3 text-left transition ${
+      className={`border-t py-3 text-left transition ${
         selected
-          ? "border-lime-300/60 bg-lime-300/10 text-white"
-          : "border-white/10 bg-black/30 text-white hover:border-white/25"
+          ? "border-lime-300/60 text-white"
+          : "border-white/10 text-white hover:border-white/25"
       }`}
     >
       <h2 className="text-sm font-black uppercase tracking-[0.12em]">
@@ -401,15 +401,18 @@ export default function UploadConsole({
         </header>
 
         <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
-          <div className="border border-white/10 bg-white/[0.03] p-4">
+          <div className="border-b border-white/10 pb-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.24em] text-white/35">
                   {displayName(twinName)}
                 </p>
                 <h1 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">
-                  Resume session
+                  Quick capture
                 </h1>
+                <p className="mt-2 text-sm text-white/45">
+                  Record the moment, add the note in review, then keep practice moving.
+                </p>
               </div>
               <button
                 type="button"
@@ -442,7 +445,7 @@ export default function UploadConsole({
             </div>
           </div>
 
-          <aside className="border border-white/10 bg-white/[0.03] p-4">
+          <aside className="border-b border-white/10 pb-4">
             <p className="text-[10px] uppercase tracking-[0.24em] text-white/35">
               Selected
             </p>
@@ -454,7 +457,7 @@ export default function UploadConsole({
             </p>
 
             {status ? (
-              <div className="mt-4 border border-white/10 bg-black/30 p-3">
+              <div className="mt-4 border-t border-white/10 pt-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-bold text-white">{status}</p>
                   <p className="text-xs text-white/40">{progress}%</p>
@@ -483,11 +486,11 @@ export default function UploadConsole({
                 {status || "Saving clip"}
               </p>
               <div className="h-2 flex-1 overflow-hidden bg-white/10">
-              <div
-                className="h-full bg-lime-300 transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+                <div
+                  className="h-full bg-lime-300 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
               <p className="text-xs text-white/40">{progress}%</p>
             </div>
           </div>

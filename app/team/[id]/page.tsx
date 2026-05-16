@@ -91,6 +91,9 @@ export default async function TeamPage({ params }: Props) {
   const playerReview = players
     .map((player) => ({
       ...player,
+      reviewSession: needsReview.find(
+        (session) => playerName(session) === player.name
+      ),
       needsNotes: needsReview.filter(
         (session) => playerName(session) === player.name
       ).length,
@@ -101,9 +104,11 @@ export default async function TeamPage({ params }: Props) {
     ? playerReview
     : players.slice(0, 4).map((player) => ({
         ...player,
+        reviewSession: sessions.find(
+          (session) => playerName(session) === player.name
+        ),
         needsNotes: player.sessions,
       }))
-  const latestPractice = sessions.find((session) => session.environment === "practice")
   const lastScrimmage = sessions.find(
     (session) =>
       session.environment === "game" || sessionText(session).includes("scrimmage")
@@ -127,7 +132,7 @@ export default async function TeamPage({ params }: Props) {
           <PrimaryNav />
         </header>
 
-        <section className="mb-5 grid gap-3 border-b border-white/10 pb-5 text-sm text-white/65 md:grid-cols-4">
+        <section className="mb-5 grid gap-2 border-b border-white/10 pb-5 text-sm text-white/65 md:grid-cols-2">
           <Link href="/sessions?view=repeated" className="hover:text-white">
             {taggedRepeats.length
               ? `${taggedRepeats.length} clips tagged repeat for tomorrow`
@@ -137,14 +142,6 @@ export default async function TeamPage({ params }: Props) {
             {needsReview.length
               ? `${needsReview.length} clips need coach notes`
               : "Coach notes are current"}
-          </Link>
-          <Link
-            href={latestPractice ? `/replay/${latestPractice.id}` : "/sessions"}
-            className="hover:text-white"
-          >
-            {latestPractice
-              ? `Latest practice: ${drillName(latestPractice)}`
-              : "No practice session yet"}
           </Link>
           <Link
             href={lastScrimmage ? `/replay/${lastScrimmage.id}` : "/sessions?type=scrimmage"}
@@ -169,20 +166,21 @@ export default async function TeamPage({ params }: Props) {
                     href={`/sessions?player=${encodeURIComponent(player.name)}`}
                     className="border-t border-white/10 py-3 transition hover:text-white"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-white">{player.name}</p>
-                        <p className="mt-1 text-sm text-white/45">
-                          Last practice: {player.lastPractice}
-                        </p>
-                      </div>
-                      <span className="text-sm font-black text-white">
-                        {player.needsNotes}
-                      </span>
-                    </div>
+                    <p className="font-bold text-white">{player.name}</p>
+                    <p className="mt-1 text-sm text-lime-100/80">
+                      {player.reviewSession
+                        ? `${drillName(player.reviewSession)} needs review`
+                        : "Check recent practice work"}
+                    </p>
+                    {player.reviewSession?.coachNote ? (
+                      <p className="mt-1 text-sm text-white/55">
+                        {player.reviewSession.coachNote}
+                      </p>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
+                      <span>{player.needsNotes} notes pending</span>
                       <span>{player.recentSessions} recent</span>
-                      <span>{player.streak} day streak</span>
+                      <span>last practice {player.lastPractice}</span>
                     </div>
                   </Link>
                 ))}
@@ -209,6 +207,12 @@ export default async function TeamPage({ params }: Props) {
                     className="grid gap-2 border-t border-white/10 py-3 transition hover:text-white sm:grid-cols-[1fr_auto]"
                   >
                     <div>
+                      <p className="text-sm text-lime-100/80">
+                        {session.coachNote ||
+                          (isRepeated(session, repeats, tags)
+                            ? "Repeat tomorrow"
+                            : "Open for review")}
+                      </p>
                       <p className="font-bold text-white">{drillName(session)}</p>
                       <p className="mt-1 text-sm text-white/45">
                         {playerName(session)} / {session.environment}
@@ -259,7 +263,8 @@ export default async function TeamPage({ params }: Props) {
                     href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
                     className="border-t border-white/10 py-3 transition hover:text-white"
                   >
-                    <p className="font-bold text-white">{drillName(session)}</p>
+                    <p className="text-sm text-lime-100/80">Repeat tomorrow</p>
+                    <p className="mt-1 font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
                       {playerName(session)}
                     </p>
