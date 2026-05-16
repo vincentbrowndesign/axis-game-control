@@ -12,6 +12,19 @@ export const STRESS_PHASES: StressPhase[] = [
   "Game Ready",
 ]
 
+export const BASKETBALL_SITUATIONS = [
+  "High Pick-and-Roll",
+  "Closeout Attack",
+  "Corner Kick",
+  "Weak-Side Tag",
+  "Slot Drive",
+  "Baseline Drift",
+  "Transition Finish",
+  "Ball Screen Reject",
+  "Paint Touch",
+  "Help Rotation",
+]
+
 export function normalizeSessions(rows: AxisReplaySession[] | null | undefined) {
   return (rows || []).map((session) => normalizeReplay(session))
 }
@@ -101,6 +114,7 @@ export function isRepeated(
   tags: Record<string, number>
 ) {
   return (
+    Boolean(session.repeatTomorrow) ||
     sessionRepeats[repeatKey(session)] > 1 ||
     session.tags.some((tag) => tag.toLowerCase() === "repeat") ||
     session.tags.some((tag) => tags[tag.toLowerCase()] > 1) ||
@@ -118,6 +132,10 @@ export function coachingNoteLine(session: ReplaySessionView) {
   if (session.coachNote) return `Note: ${session.coachNote}`
 
   return "Add the coaching note."
+}
+
+export function situationLabel(session: ReplaySessionView) {
+  return session.situation?.trim() || "Add situation"
 }
 
 export function triggerLabel(session: ReplaySessionView) {

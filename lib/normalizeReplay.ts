@@ -513,12 +513,14 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
       status: asString(raw.status, DEFAULT_REPLAY.status),
       fileName: asString(raw.fileName ?? raw.file_name, ""),
       tags: asStringArray(raw.tags),
+      situation: asOptionalString(raw.situation ?? metadata.situation),
       coachNote: asOptionalString(raw.coachNote ?? metadata.coachNote),
       coachFlaw: asOptionalString(raw.coachFlaw ?? metadata.coachFlaw),
       coachCorrection: asOptionalString(
         raw.coachCorrection ?? metadata.coachCorrection
       ),
       triggerWord: asOptionalString(raw.triggerWord ?? metadata.triggerWord),
+      repeatTomorrow: Boolean(raw.repeatTomorrow ?? metadata.repeatTomorrow),
       constructionZone: Boolean(
         raw.constructionZone ?? metadata.constructionZone
       ),

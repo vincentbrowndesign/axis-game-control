@@ -10,6 +10,7 @@ import {
   playerSummaries,
   relativeTime,
   repeatCounts,
+  situationLabel,
   tagCounts,
   triggerLabel,
 } from "@/lib/archive/sessionRollup"
@@ -90,6 +91,13 @@ export default async function TeamPage({ params }: Props) {
     isRepeated(session, repeats, tags)
   )
   const coachNotes = sessions.filter((session) => session.coachNote).slice(0, 6)
+  const situationFocus = [
+    ...new Set(
+      sessions
+        .map((session) => session.situation)
+        .filter((situation): situation is string => Boolean(situation))
+    ),
+  ].slice(0, 5)
   const needsReview = sessions.filter((session) => !session.coachNote)
   const playerReview = players
     .map((player) => ({
@@ -171,6 +179,26 @@ export default async function TeamPage({ params }: Props) {
           <div className="grid gap-4">
             <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
+                Situation focus
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {situationFocus.map((situation) => (
+                  <Link
+                    key={situation}
+                    href={`/sessions?situation=${encodeURIComponent(situation)}`}
+                    className="border border-white/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/50 transition hover:text-white"
+                  >
+                    {situation}
+                  </Link>
+                ))}
+                {situationFocus.length === 0 && (
+                  <p className="text-sm text-white/45">No situations tagged yet.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="border-b border-white/10 pb-4">
+              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Players needing review
               </h2>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -239,7 +267,7 @@ export default async function TeamPage({ params }: Props) {
                       </p>
                       <p className="font-bold text-white">{drillName(session)}</p>
                       <p className="mt-1 text-sm text-white/45">
-                        {playerName(session)} / {session.environment} / Phase: {phaseLabel(session)}
+                        {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
                       </p>
                     </div>
                     <p className="text-sm text-white/40">{relativeTime(session.createdAt)}</p>
@@ -266,7 +294,7 @@ export default async function TeamPage({ params }: Props) {
                   >
                     <p className="text-sm text-white/75">{session.coachNote}</p>
                     <p className="mt-2 text-xs text-white/35">
-                      {playerName(session)} / {drillName(session)} / Phase: {phaseLabel(session)}
+                      {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
                     </p>
                     {triggerLabel(session) ? (
                       <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
@@ -295,7 +323,7 @@ export default async function TeamPage({ params }: Props) {
                     <p className="text-sm text-lime-100/80">Repeat tomorrow</p>
                     <p className="mt-1 font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
-                      {playerName(session)} / Phase: {phaseLabel(session)}
+                      {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
                     </p>
                     {session.constructionZone ? (
                       <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/45">

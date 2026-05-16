@@ -74,10 +74,12 @@ export type ReplaySessionView = {
   status?: string
   fileName?: string
   tags: string[]
+  situation?: string
   coachNote?: string
   coachFlaw?: string
   coachCorrection?: string
   triggerWord?: string
+  repeatTomorrow?: boolean
   constructionZone?: boolean
   stressPhase?: StressPhase
   memoryCount?: number

@@ -10,6 +10,7 @@ import {
   playerName,
   relativeTime,
   repeatCounts,
+  situationLabel,
   tagCounts,
   triggerLabel,
 } from "@/lib/archive/sessionRollup"
@@ -109,6 +110,16 @@ export default async function HomePage({ searchParams }: Props) {
     .filter((session) => isRepeated(session, repeats, tags))
     .slice(0, 4)
   const notes = sessions.filter((session) => session.coachNote).slice(0, 4)
+  const constructionSessions = sessions
+    .filter((session) => session.constructionZone)
+    .slice(0, 4)
+  const recentSituations = [
+    ...new Set(
+      sessions
+        .map((session) => session.situation)
+        .filter((situation): situation is string => Boolean(situation))
+    ),
+  ].slice(0, 5)
   const firstPractice = getCalibrationMissions()[0]
   const continueHref = firstPractice ? `/?warmup=${firstPractice.id}` : "/"
   const lastSession = sessions[0]
@@ -186,6 +197,9 @@ export default async function HomePage({ searchParams }: Props) {
                       <p className="mt-1 text-sm text-white/45">
                         {playerName(session)} / {session.environment}
                       </p>
+                      <p className="mt-1 text-sm text-white/55">
+                        {situationLabel(session)}
+                      </p>
                       {triggerLabel(session) ? (
                         <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
                           Trigger: {triggerLabel(session)}
@@ -223,9 +237,59 @@ export default async function HomePage({ searchParams }: Props) {
                 )}
               </div>
             </section>
+
+            <section className="border-b border-white/10 pb-4">
+              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
+                Construction Zone
+              </h2>
+              <div className="mt-3 grid gap-2">
+                {constructionSessions.map((session) => (
+                  <Link
+                    key={session.id}
+                    href={`/sessions?player=${encodeURIComponent(playerName(session))}&situation=${encodeURIComponent(situationLabel(session))}`}
+                    className="border-t border-white/10 py-3 transition hover:text-white"
+                  >
+                    <p className="font-bold text-white">{drillName(session)}</p>
+                    <p className="mt-1 text-sm text-white/45">
+                      {playerName(session)} / Focus: mechanical compliance
+                    </p>
+                    {triggerLabel(session) ? (
+                      <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
+                        Trigger: {triggerLabel(session)}
+                      </p>
+                    ) : null}
+                  </Link>
+                ))}
+                {constructionSessions.length === 0 && (
+                  <p className="text-sm text-white/45">
+                    No active construction zone clips.
+                  </p>
+                )}
+              </div>
+            </section>
           </div>
 
           <aside className="grid h-fit gap-3">
+            <section className="border-b border-white/10 pb-4">
+              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
+                Recent situations
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {recentSituations.map((situation) => (
+                  <Link
+                    key={situation}
+                    href={`/sessions?situation=${encodeURIComponent(situation)}`}
+                    className="border border-white/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/50 transition hover:text-white"
+                  >
+                    {situation}
+                  </Link>
+                ))}
+                {recentSituations.length === 0 && (
+                  <p className="text-sm text-white/45">No situations tagged yet.</p>
+                )}
+              </div>
+            </section>
+
             <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Coach notes

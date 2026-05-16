@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
+  BASKETBALL_SITUATIONS,
   STRESS_PHASES,
   coachingNoteLine,
   dateLabel,
@@ -15,6 +16,7 @@ import {
   playerSummaries,
   relativeTime,
   repeatCounts,
+  situationLabel,
   tagCounts,
   triggerLabel,
 } from "@/lib/archive/sessionRollup"
@@ -80,10 +82,12 @@ function sessionText(session: ReplaySessionView) {
     session.title,
     session.mission,
     session.environment,
+    session.situation,
     session.coachNote,
     session.coachFlaw,
     session.coachCorrection,
     session.triggerWord,
+    session.repeatTomorrow ? "repeat tomorrow" : "",
     session.stressPhase,
     playerName(session),
     ...session.tags,
@@ -189,6 +193,9 @@ async function saveCoachNote(formData: FormData) {
   const coachNote = String(formData.get("coachNote") || "")
     .trim()
     .slice(0, 180)
+  const situation = String(formData.get("situation") || "")
+    .trim()
+    .slice(0, 80)
   const coachFlaw = String(formData.get("coachFlaw") || "")
     .trim()
     .slice(0, 140)
@@ -242,9 +249,11 @@ async function saveCoachNote(formData: FormData) {
       metadata: {
         ...metadata,
         coachNote,
+        situation,
         coachFlaw,
         coachCorrection,
         triggerWord,
+        repeatTomorrow: shouldRepeat,
         constructionZone,
         stressPhase,
       },
@@ -269,9 +278,13 @@ export default async function SessionsPage({
     q: textParam(params.q).trim(),
     player: textParam(params.player).trim(),
     drill: textParam(params.drill).trim(),
+    situation: textParam(params.situation).trim(),
+    trigger: textParam(params.trigger).trim(),
     tag: textParam(params.tag).trim(),
     note: textParam(params.note).trim(),
     type: textParam(params.type).trim(),
+    phase: textParam(params.phase).trim(),
+    construction: textParam(params.construction).trim(),
     view,
   }
 
@@ -333,6 +346,8 @@ export default async function SessionsPage({
       const lowerText = sessionText(session)
       const player = filters.player.toLowerCase()
       const drill = filters.drill.toLowerCase()
+      const situation = filters.situation.toLowerCase()
+      const trigger = filters.trigger.toLowerCase()
       const tag = filters.tag.toLowerCase()
       const note = filters.note.toLowerCase()
       const query = filters.q.toLowerCase()
@@ -341,6 +356,9 @@ export default async function SessionsPage({
         (!query || lowerText.includes(query)) &&
         (!player || playerName(session).toLowerCase().includes(player)) &&
         (!drill || drillName(session).toLowerCase().includes(drill)) &&
+        (!situation ||
+          situationLabel(session).toLowerCase().includes(situation)) &&
+        (!trigger || triggerLabel(session).toLowerCase().includes(trigger)) &&
         (!tag ||
           session.tags.some((item) => item.toLowerCase().includes(tag))) &&
         (!note ||
@@ -348,6 +366,11 @@ export default async function SessionsPage({
             ? !session.coachNote
             : session.coachNote?.toLowerCase().includes(note))) &&
         matchesType(session, filters.type) &&
+        (!filters.phase || phaseLabel(session) === filters.phase) &&
+        (!filters.construction ||
+          (filters.construction === "active"
+            ? session.constructionZone
+            : !session.constructionZone)) &&
         (view !== "recent" || isRecent(session)) &&
         (view !== "repeated" || isRepeated(session, sessionRepeats, tags))
       )
@@ -364,9 +387,13 @@ export default async function SessionsPage({
     filters.q ||
       filters.player ||
       filters.drill ||
+      filters.situation ||
+      filters.trigger ||
       filters.tag ||
       filters.note ||
       filters.type ||
+      filters.phase ||
+      filters.construction ||
       view !== "all"
   )
 
@@ -436,6 +463,12 @@ export default async function SessionsPage({
             >
               Last practice
             </Link>
+            <Link
+              href="/sessions?construction=active"
+              className="border border-white/10 px-3 py-2 transition hover:text-white"
+            >
+              Construction Zone
+            </Link>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/50">
@@ -466,7 +499,7 @@ export default async function SessionsPage({
           </summary>
           <form
             action="/sessions"
-            className="mt-3 grid gap-2 lg:grid-cols-[repeat(6,minmax(0,1fr))_auto]"
+            className="mt-3 grid gap-2 lg:grid-cols-[repeat(7,minmax(0,1fr))_auto]"
           >
             <input type="hidden" name="sort" value={sort} />
             <input type="hidden" name="q" value={filters.q} />
@@ -487,11 +520,35 @@ export default async function SessionsPage({
               />
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Situation
+              <select
+                name="situation"
+                defaultValue={filters.situation}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                <option value="">Any</option>
+                {BASKETBALL_SITUATIONS.map((situation) => (
+                  <option key={situation} value={situation}>
+                    {situation}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Tag
               <input
                 name="tag"
                 defaultValue={filters.tag}
                 placeholder="repeat"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+              />
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Trigger
+              <input
+                name="trigger"
+                defaultValue={filters.trigger}
+                placeholder="SINK"
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
             </label>
@@ -503,6 +560,33 @@ export default async function SessionsPage({
                 placeholder="feet or missing"
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Phase
+              <select
+                name="phase"
+                defaultValue={filters.phase}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                <option value="">Any</option>
+                {STRESS_PHASES.map((phase) => (
+                  <option key={phase} value={phase}>
+                    {phase}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Zone
+              <select
+                name="construction"
+                defaultValue={filters.construction}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                <option value="">Any</option>
+                <option value="active">Construction Zone</option>
+                <option value="normal">Normal</option>
+              </select>
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Type
@@ -603,6 +687,9 @@ export default async function SessionsPage({
                       <p className="mt-1 text-sm text-white/45">
                         {sourceContext(session)}
                       </p>
+                      <p className="mt-1 text-sm text-white/60">
+                        Situation: {situationLabel(session)}
+                      </p>
                     </div>
                     {isRepeated(session, sessionRepeats, tags) ? (
                       <Link
@@ -660,6 +747,18 @@ export default async function SessionsPage({
                   <form action={saveCoachNote} className="grid gap-2">
                     <input type="hidden" name="sessionId" value={session.id} />
                     <div className="grid gap-2 md:grid-cols-2">
+                      <select
+                        name="situation"
+                        defaultValue={session.situation || ""}
+                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
+                      >
+                        <option value="">Situation</option>
+                        {BASKETBALL_SITUATIONS.map((situation) => (
+                          <option key={situation} value={situation}>
+                            {situation}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         name="coachFlaw"
                         defaultValue={session.coachFlaw || ""}
@@ -690,7 +789,10 @@ export default async function SessionsPage({
                         <input
                           type="checkbox"
                           name="repeatTomorrow"
-                          defaultChecked={isRepeated(session, sessionRepeats, tags)}
+                          defaultChecked={
+                            Boolean(session.repeatTomorrow) ||
+                            isRepeated(session, sessionRepeats, tags)
+                          }
                           className="accent-lime-300"
                         />
                         Repeat
