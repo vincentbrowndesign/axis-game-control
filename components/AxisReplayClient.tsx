@@ -1136,7 +1136,7 @@ export default function AxisReplayClient({
               href={nextWarmup ? `/?warmup=${nextWarmup.id}` : "/"}
               className="bg-white px-6 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
             >
-              Next Warmup
+              Add Memory
             </Link>
           </div>
 

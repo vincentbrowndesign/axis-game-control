@@ -125,10 +125,6 @@ function missionName(mission: CalibrationMission) {
   return mission.title
 }
 
-function missionProgressText(mission: CalibrationMission) {
-  return `0 / ${mission.unlockAfter} warmups`
-}
-
 function MissionCard({
   mission,
   onSelect,
@@ -142,42 +138,11 @@ function MissionCard({
       onClick={onSelect}
       className="min-h-80 border border-white/10 bg-white/[0.03] p-5 text-left text-white transition hover:border-lime-300 hover:bg-lime-300 hover:text-black"
     >
-      <div className="flex items-start justify-between gap-4">
-        <p className="text-2xl font-black uppercase leading-none tracking-[-0.03em]">
-          {`WARMUP ${mission.order.toString().padStart(2, "0")}`}
-        </p>
-        <p className="font-mono text-xs opacity-60">
-          {mission.durationTarget}s
-        </p>
-      </div>
-
-      <h2 className="mt-4 text-4xl font-black uppercase leading-none tracking-[-0.04em]">
+      <h2 className="text-4xl font-black uppercase leading-none tracking-[-0.04em]">
         {missionName(mission)}
       </h2>
-      <p className="mt-4 text-base leading-relaxed opacity-75">
-        {mission.description}
-      </p>
-
-      <p className="mt-7 text-[10px] uppercase tracking-[0.32em] opacity-45">
-        Axis Watches
-      </p>
-      <div className="mt-3 space-y-2 text-sm opacity-70">
-        {mission.axisWatches.map((watch) => (
-          <p key={watch}>{watch}</p>
-        ))}
-      </div>
-
-      <p className="mt-7 text-[10px] uppercase tracking-[0.32em] opacity-45">
-        Builds
-      </p>
-      <p className="mt-2 text-sm font-semibold opacity-80">
-        {mission.baselineName}
-      </p>
-      <p className="mt-4 text-xs uppercase tracking-[0.24em] opacity-55">
-        Milestone
-      </p>
-      <p className="mt-2 text-xs uppercase tracking-[0.24em] opacity-55">
-        {missionProgressText(mission)}
+      <p className="mt-8 text-sm uppercase tracking-[0.28em] opacity-55">
+        Add to archive
       </p>
     </button>
   )
@@ -245,7 +210,7 @@ export default function UploadConsole({
       setFlowStep("processing")
       setIsUploading(true)
       setProgress(12)
-      setStatus("BINDING MEMORY TO SESSION")
+      setStatus("ADDING MEMORY")
 
       const duration = await readDuration(file)
       const activeTwin = getActiveTwin(twinName)
@@ -266,7 +231,7 @@ export default function UploadConsole({
       pendingMemoryId = pendingMemory?.id || null
 
       setProgress(36)
-      setStatus("BINDING MEMORY TO SESSION")
+      setStatus("ADDING MEMORY")
 
       if (!navigator.onLine) {
         if (pendingMemoryId) {
@@ -444,15 +409,15 @@ export default function UploadConsole({
           <section className="pb-10">
             <div className="mb-8">
               <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-                Sequence
+                Practice
               </p>
               <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-                WARMUP
+                MEMORY
                 <br />
-                LINE
+                SOURCE
               </h1>
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/45">
-                Move once. The world carries forward.
+                Choose one way to add memory.
               </p>
             </div>
 
@@ -479,58 +444,31 @@ export default function UploadConsole({
                 onClick={() => setFlowStep("mission")}
                 className="mb-8 text-xs uppercase tracking-[0.35em] text-white/35 transition hover:text-white"
               >
-                Line
+                Sources
               </button>
               <p className="text-[10px] uppercase tracking-[0.5em] text-lime-300">
-                Up Next
+                Memory
               </p>
               <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
                 {missionName(selectedMission)}
               </h1>
-              <p className="mt-8 font-mono text-3xl text-white/65">
-                {selectedMission.durationTarget} seconds
-              </p>
               <p className="mt-6 max-w-xl text-xl leading-relaxed text-white/55">
-                {selectedMission.description}
+                Record session.
               </p>
             </div>
 
-            <div className="border border-white/10 bg-white/[0.03] p-6">
-              <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-                Axis Watches
-              </p>
-              <div className="mt-5 space-y-3">
-                {selectedMission.axisWatches.map((signal) => (
-                  <div
-                    key={signal}
-                    className="border-b border-white/10 pb-3 text-sm uppercase tracking-[0.25em] text-white/55 last:border-b-0 last:pb-0"
-                  >
-                    {signal}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-8 border-t border-white/10 pt-6">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-                  Builds
-                </p>
-                <p className="mt-3 text-lg font-black uppercase text-white">
-                  {selectedMission.baselineName}
-                </p>
-                <p className="mt-2 text-sm text-white/45">
-                  {selectedMission.unlockAfter} warmups
-                </p>
-              </div>
+            <div className="flex items-end">
               <button
                 type="button"
                 disabled={isUploading}
                 onClick={() => {
                   setFlowStep("capture")
-                  setStatus("BINDING MEMORY TO SESSION")
+                  setStatus("ADDING MEMORY")
                   cameraInputRef.current?.click()
                 }}
                 className="mt-8 w-full bg-lime-300 px-6 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-white disabled:opacity-50"
               >
-                Record With Axis
+                Add Memory
               </button>
             </div>
           </section>
@@ -542,14 +480,14 @@ export default function UploadConsole({
               {flowStep === "capture" ? "Live Capture" : "Memory Processing"}
             </p>
             <h1 className="mt-5 text-[clamp(3.8rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-              {status || "BINDING MEMORY TO SESSION"}
+              {status || "ADDING MEMORY"}
             </h1>
             <p className="mt-6 text-sm uppercase tracking-[0.32em] text-white/35">
-              {selectedMission?.title || "Warmup"}
+              {selectedMission?.title || "Memory"}
             </p>
             {flowStep === "processing" && progress === 100 ? (
               <p className="mt-4 text-sm uppercase tracking-[0.32em] text-lime-300">
-                WARMUP ADDED
+                MEMORY ADDED
               </p>
             ) : null}
 

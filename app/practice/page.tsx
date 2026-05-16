@@ -2,15 +2,15 @@ import ContinuityWorld from "@/components/ContinuityWorld"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 
 export default function PracticePage() {
-  const firstWarmup = getCalibrationMissions()[0]
+  const firstMemorySource = getCalibrationMissions()[0]
 
   return (
     <ContinuityWorld
       eyebrow="Practice"
-      title="Record effort"
-      line="Start with one warmup. Keep the memory that should return tomorrow."
-      primaryHref={firstWarmup ? `/?warmup=${firstWarmup.id}` : "/"}
-      primaryLabel="Record With Axis"
+      title="Add memory"
+      line="Record once. Let the archive carry what matters."
+      primaryHref={firstMemorySource ? `/?warmup=${firstMemorySource.id}` : "/"}
+      primaryLabel="Add Memory"
       links={[
         {
           href: "/archive",
