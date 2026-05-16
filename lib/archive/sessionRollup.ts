@@ -12,9 +12,26 @@ export function playerName(session: ReplaySessionView) {
 }
 
 export function drillName(session: ReplaySessionView) {
-  return session.mission && session.mission !== "None"
-    ? session.mission
-    : "Open session"
+  const mission = session.mission?.replace(/^WARMUP\s+\d+\s+-\s+/i, "").trim()
+
+  if (!mission || mission === "None") {
+    if (session.environment === "game") return "Game Clips"
+    if (session.environment === "practice") {
+      return `Practice - ${dateLabel(session.createdAt)}`
+    }
+
+    return "Open Session"
+  }
+
+  const key = mission.toLowerCase()
+
+  if (key === "handle") return "Ball Handling"
+  if (key === "footwork") return "Footwork"
+  if (key === "shooting form") return "Shooting Form"
+  if (key === "live movement") return "Live Play"
+  if (key === "transition") return "Transition Finish"
+
+  return mission
 }
 
 export function relativeTime(timestamp: number) {

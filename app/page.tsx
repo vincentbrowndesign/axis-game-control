@@ -114,65 +114,65 @@ export default async function HomePage({ searchParams }: Props) {
   const continueHref = firstPractice ? `/?warmup=${firstPractice.id}` : "/"
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-5 py-8 text-white">
+    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-8 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
               Home
             </p>
-            <h1 className="mt-3 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
-              Continue now.
+            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+              Today&apos;s work
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
               Pick up practice, review recent clips, and check notes that still need attention.
             </p>
           </div>
           <PrimaryNav />
         </header>
 
-        <section className="mb-6 grid gap-3 md:grid-cols-4">
+        <section className="mb-4 grid gap-2 md:grid-cols-4">
           <Link
             href={continueHref}
-            className="border border-lime-300/20 bg-lime-300/10 p-4 transition hover:border-lime-200/40"
+            className="border border-lime-300/20 bg-lime-300/10 p-3 transition hover:border-lime-200/40"
           >
             <p className="text-[10px] uppercase tracking-[0.25em] text-lime-200/75">
               Practice
             </p>
-            <p className="mt-2 text-2xl font-black">Continue practice</p>
+            <p className="mt-1 text-xl font-black">Continue practice</p>
           </Link>
           <Link
             href="/sessions?view=recent"
-            className="border border-white/10 bg-white/[0.03] p-4 transition hover:border-white/25"
+            className="border border-white/10 bg-white/[0.03] p-3 transition hover:border-white/25"
           >
             <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
               Recent
             </p>
-            <p className="mt-2 text-3xl font-black">{recentSessions.length}</p>
+            <p className="mt-1 text-2xl font-black">{recentSessions.length}</p>
           </Link>
           <Link
             href="/sessions?view=repeated"
-            className="border border-white/10 bg-white/[0.03] p-4 transition hover:border-white/25"
+            className="border border-white/10 bg-white/[0.03] p-3 transition hover:border-white/25"
           >
             <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
               Repeat
             </p>
-            <p className="mt-2 text-3xl font-black">{repeatSessions.length}</p>
+            <p className="mt-1 text-2xl font-black">{repeatSessions.length}</p>
           </Link>
           <Link
             href="/team/local"
-            className="border border-white/10 bg-white/[0.03] p-4 transition hover:border-white/25"
+            className="border border-white/10 bg-white/[0.03] p-3 transition hover:border-white/25"
           >
             <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
               Team
             </p>
-            <p className="mt-2 text-3xl font-black">{players.length}</p>
+            <p className="mt-1 text-2xl font-black">{players.length}</p>
           </Link>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1fr_340px]">
-          <div className="grid gap-4">
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+        <section className="grid gap-3 lg:grid-cols-[1fr_320px]">
+          <div className="grid gap-3">
+            <section className="border border-white/10 bg-white/[0.03] p-4">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                   Recent clips
@@ -181,12 +181,12 @@ export default async function HomePage({ searchParams }: Props) {
                   Open archive
                 </Link>
               </div>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-2">
                 {sessions.slice(0, 5).map((session) => (
                   <Link
                     key={session.id}
                     href={`/replay/${session.id}`}
-                    className="grid gap-2 border border-white/10 bg-black/35 p-3 transition hover:border-white/25 sm:grid-cols-[1fr_auto]"
+                    className="grid gap-2 border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25 sm:grid-cols-[1fr_auto]"
                   >
                     <div>
                       <p className="font-bold text-white">{drillName(session)}</p>
@@ -203,16 +203,16 @@ export default async function HomePage({ searchParams }: Props) {
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+            <section className="border border-white/10 bg-white/[0.03] p-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Pending review
               </h2>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-2">
                 {pendingReview.map((session) => (
                   <Link
                     key={session.id}
                     href={`/sessions?note=&q=${encodeURIComponent(drillName(session))}`}
-                    className="border border-white/10 bg-black/35 p-3 transition hover:border-white/25"
+                    className="border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25"
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
@@ -227,17 +227,17 @@ export default async function HomePage({ searchParams }: Props) {
             </section>
           </div>
 
-          <aside className="grid h-fit gap-4">
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+          <aside className="grid h-fit gap-3">
+            <section className="border border-white/10 bg-white/[0.03] p-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Coach notes
               </h2>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-2">
                 {notes.map((session) => (
                   <Link
                     key={session.id}
                     href={`/replay/${session.id}`}
-                    className="border border-white/10 bg-black/35 p-3 transition hover:border-white/25"
+                    className="border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25"
                   >
                     <p className="text-sm text-white/75">{session.coachNote}</p>
                     <p className="mt-2 text-xs text-white/35">
@@ -251,16 +251,16 @@ export default async function HomePage({ searchParams }: Props) {
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+            <section className="border border-white/10 bg-white/[0.03] p-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Tagged repeats
               </h2>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-2">
                 {repeatSessions.map((session) => (
                   <Link
                     key={session.id}
                     href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
-                    className="border border-white/10 bg-black/35 p-3 transition hover:border-white/25"
+                    className="border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25"
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">

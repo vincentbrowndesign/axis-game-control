@@ -16,48 +16,48 @@ function rewardFromMarker(marker: ReplayMarker): ReplayReward {
     return {
       found:
         marker.type === "cadence"
-          ? "Similar rhythm returned."
-          : "Related rhythm surfaced.",
-      nextAction: "Add this to memory.",
+          ? "Rhythm clip ready."
+          : "Related rhythm ready.",
+      nextAction: "Leave a note.",
       focus: marker,
     }
   }
 
   if (marker.type === "reset") {
     return {
-      found: "Related reset found.",
-      nextAction: "Keep the pattern.",
+      found: "Reset clip ready.",
+      nextAction: "Review the footwork.",
       focus: marker,
     }
   }
 
   if (marker.type === "burst") {
     return {
-      found: "Practice movement linked.",
-      nextAction: "Return to archive.",
+      found: "Practice movement ready.",
+      nextAction: "Open archive.",
       focus: marker,
     }
   }
 
   if (marker.type === "stabilization") {
     return {
-      found: "Memory added to practice continuity.",
-      nextAction: "Find related memory.",
+      found: "Clip ready for review.",
+      nextAction: "Leave a note.",
       focus: marker,
     }
   }
 
   if (marker.type === "repetition") {
     return {
-      found: `${sentence(marker.label)} returned.`,
-      nextAction: "Link this memory.",
+      found: `${sentence(marker.label)} ready.`,
+      nextAction: "Tag for repeat.",
       focus: marker,
     }
   }
 
   return {
-    found: "Memory added to archive.",
-    nextAction: "Find what connects.",
+    found: "Clip added.",
+    nextAction: "Review this clip.",
     focus: marker,
   }
 }
@@ -72,8 +72,8 @@ export function getReplayReward(
 
   if (!focus) {
     return {
-      found: "Memory added to archive.",
-      nextAction: "Find what connects.",
+      found: "Session saved.",
+      nextAction: "Review this clip.",
       focus: null,
     }
   }

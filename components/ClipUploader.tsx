@@ -11,12 +11,12 @@ type ClipUploaderProps = {
 }
 
 function statusFromUploadFailure(data: AxisUploadResponse) {
-  return data.error || data.detail || "MEMORY INGEST FAILED"
+  return data.error || data.detail || "UPLOAD FAILED"
 }
 
 function statusFromCaughtError(error: unknown) {
   if (!(error instanceof Error)) {
-    return "MEMORY WAITING"
+    return "UPLOAD WAITING"
   }
 
   if (
@@ -112,7 +112,7 @@ export default function ClipUploader({
       )
 
       setStatus(
-        "MEMORY INGEST STARTED"
+        "UPLOAD STARTED"
       )
 
       setProgress(25)
@@ -155,7 +155,7 @@ export default function ClipUploader({
         console.log("UPLOAD_RESPONSE_RAW", text)
 
         throw new Error(
-          "MEMORY PROCESSING"
+          "UPLOAD PROCESSING"
         )
       }
 
@@ -179,7 +179,7 @@ export default function ClipUploader({
         )
 
         throw new Error(
-          "MEMORY PROCESSING"
+          "UPLOAD PROCESSING"
         )
       }
 
@@ -200,7 +200,7 @@ export default function ClipUploader({
       }
 
       if (!data.replayId || !data.videoUrl || !data.createdAt) {
-        throw new Error("MEMORY INGEST FAILED")
+        throw new Error("UPLOAD FAILED")
       }
 
       console.log(
@@ -210,12 +210,12 @@ export default function ClipUploader({
 
       setProgress(100)
 
-      setStatus("MEMORY STORED")
+      setStatus("SESSION SAVED")
 
       onSelect(selectedFile)
     } catch (error) {
       console.error(
-        "MEMORY INGEST FAILED",
+        "UPLOAD FAILED",
         error
       )
 
@@ -237,10 +237,10 @@ export default function ClipUploader({
           }
           className="w-full border border-white/10 bg-black p-8 text-left transition-opacity hover:opacity-80"
         >
-          <div className="text-5xl font-black leading-none text-white">
+          <div className="text-3xl font-black leading-none text-white">
             RECORD
             <br />
-            MEMORY
+            CLIP
           </div>
 
           <div className="mt-3 text-2xl text-lime-300">
@@ -269,7 +269,7 @@ export default function ClipUploader({
 
       <div className="mt-6">
         <div className="text-xs uppercase tracking-[0.4em] text-white/30">
-          Basketball Memory Capture
+          Basketball Clip Capture
         </div>
 
         <div className="mt-4 text-5xl font-black leading-none text-white">

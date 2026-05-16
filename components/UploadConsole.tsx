@@ -122,6 +122,14 @@ function readDuration(file: File) {
 }
 
 function missionName(mission: CalibrationMission) {
+  const title = mission.title.toLowerCase()
+
+  if (title === "handle") return "Ball Handling"
+  if (title === "footwork") return "Footwork"
+  if (title === "shooting form") return "Shooting Form"
+  if (title === "live movement") return "Live Play"
+  if (title === "transition") return "Transition Finish"
+
   return mission.title
 }
 
@@ -131,22 +139,28 @@ function displayName(value?: string | null) {
 
 function MissionCard({
   mission,
+  selected,
   onSelect,
 }: {
   mission: CalibrationMission
+  selected: boolean
   onSelect: () => void
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="min-h-80 border border-white/10 bg-white/[0.03] p-5 text-left text-white transition hover:border-lime-300 hover:bg-lime-300 hover:text-black"
+      className={`border p-3 text-left transition ${
+        selected
+          ? "border-lime-300/60 bg-lime-300/10 text-white"
+          : "border-white/10 bg-black/30 text-white hover:border-white/25"
+      }`}
     >
-      <h2 className="text-4xl font-black uppercase leading-none tracking-[-0.04em]">
+      <h2 className="text-sm font-black uppercase tracking-[0.12em]">
         {missionName(mission)}
       </h2>
-      <p className="mt-8 text-sm uppercase tracking-[0.28em] opacity-55">
-        Carry forward
+      <p className="mt-2 text-xs leading-5 opacity-55">
+        {mission.task}
       </p>
     </button>
   )
@@ -204,7 +218,7 @@ export default function UploadConsole({
 
     if (!isSupportedReplayFile(file)) {
       setProgress(0)
-      setStatus("INVALID MEMORY FORMAT")
+      setStatus("INVALID VIDEO FORMAT")
       return
     }
 
@@ -214,7 +228,7 @@ export default function UploadConsole({
       setFlowStep("processing")
       setIsUploading(true)
       setProgress(12)
-      setStatus("ADDING MEMORY")
+      setStatus("Saving clip")
 
       const duration = await readDuration(file)
       const activeTwin = getActiveTwin(twinName)
@@ -235,7 +249,7 @@ export default function UploadConsole({
       pendingMemoryId = pendingMemory?.id || null
 
       setProgress(36)
-      setStatus("ADDING MEMORY")
+      setStatus("Saving clip")
 
       if (!navigator.onLine) {
         if (pendingMemoryId) {
@@ -243,7 +257,7 @@ export default function UploadConsole({
         }
 
         setProgress(100)
-        setStatus("MEMORY STORED")
+        setStatus("Session saved")
         if (pendingMemoryId) {
           setTimeout(() => {
             router.push(`/replay/${pendingMemoryId}`)
@@ -314,16 +328,16 @@ export default function UploadConsole({
 
       if (!response.ok || !result.ok || !result.replayId) {
         throw new Error(
-          result.error || result.detail || "MEMORY INGEST FAILED"
+          result.error || result.detail || "UPLOAD FAILED"
         )
       }
 
       if (!result.videoUrl) {
-        throw new Error("MEMORY INGEST FAILED")
+        throw new Error("UPLOAD FAILED")
       }
 
       setProgress(100)
-      setStatus("MEMORY STORED")
+      setStatus("Session saved")
 
       if (pendingMemoryId) {
         await updatePendingMemoryStatus(pendingMemoryId, "synced")
@@ -336,7 +350,7 @@ export default function UploadConsole({
       console.error(error)
       if (pendingMemoryId) {
         await updatePendingMemoryStatus(pendingMemoryId, "failed")
-        setStatus("MEMORY STORED")
+        setStatus("Session saved")
         setProgress(100)
         setTimeout(() => {
           router.push(`/replay/${pendingMemoryId}`)
@@ -351,169 +365,132 @@ export default function UploadConsole({
   }
 
   return (
-    <main className="axis-atmosphere min-h-screen bg-black px-5 pb-24 pt-8 text-white">
+    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-10 flex items-center justify-between gap-6 border-b border-white/10 pb-6">
+        <header className="mb-5 flex items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              Axis
+            <p className="text-[10px] uppercase tracking-[0.28em] text-white/35">
+              Practice
             </p>
             <p className="mt-2 text-sm text-white/35">
               {email}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <Link
-        href="/sessions"
-              className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
+              href="/sessions"
+              className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
             >
               Archive
             </Link>
             <Link
               href="/team/local"
-              className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
+              className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
             >
               Team
             </Link>
             <button
               type="button"
               onClick={signOut}
-              className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/35 transition hover:text-white"
+              className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/35 transition hover:text-white"
             >
               Exit
             </button>
           </div>
         </header>
 
-        {flowStep === "entry" ? (
-          <section className="flex min-h-[calc(100vh-13rem)] flex-col justify-end pb-10">
-            <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-              {displayName(twinName)}
-            </p>
-            <h1 className="mt-6 text-[clamp(4.8rem,18vw,12rem)] font-black leading-[0.78] tracking-[-0.07em]">
-              {displayName(twinName)}
-              <br />
-              PRACTICE
-            </h1>
-            <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-              Ready for the next clip.
-            </p>
-            <button
-              type="button"
-              onClick={() => setFlowStep("mission")}
-              className="mt-10 w-fit bg-white px-9 py-5 text-sm font-black uppercase tracking-[0.28em] text-black transition hover:bg-lime-300"
-            >
-              Continue
-            </button>
-          </section>
-        ) : null}
-
-        {flowStep === "mission" ? (
-          <section className="pb-10">
-            <div className="mb-8">
-              <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-                Practice
-              </p>
-              <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-                CLIPS
-                <br />
-                READY
-              </h1>
-              <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/45">
-                Choose today&apos;s practice work.
-              </p>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-5">
-              {calibrationMissions.map((mission) => (
-                <MissionCard
-                  key={mission.id}
-                  mission={mission}
-                  onSelect={() => {
-                    setSelectedMissionId(mission.id)
-                    setFlowStep("brief")
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {flowStep === "brief" && selectedMission ? (
-          <section className="grid min-h-[calc(100vh-13rem)] gap-10 pb-10 lg:grid-cols-[1fr_360px] lg:items-end">
-            <div>
+        <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
+          <div className="border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.24em] text-white/35">
+                  {displayName(twinName)}
+                </p>
+                <h1 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">
+                  Resume session
+                </h1>
+              </div>
               <button
                 type="button"
-                onClick={() => setFlowStep("mission")}
-                className="mb-8 text-xs uppercase tracking-[0.35em] text-white/35 transition hover:text-white"
-              >
-                Sources
-              </button>
-              <p className="text-[10px] uppercase tracking-[0.5em] text-lime-300">
-                Practice
-              </p>
-              <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
-                {displayName(twinName)}
-                <br />
-                PRACTICE
-              </h1>
-              <p className="mt-6 max-w-xl text-xl leading-relaxed text-white/55">
-                {missionName(selectedMission)} ready.
-              </p>
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                disabled={isUploading}
+                disabled={isUploading || !selectedMission}
                 onClick={() => {
                   setFlowStep("capture")
-                  setStatus("ADDING MEMORY")
+                  setStatus("Saving clip")
                   cameraInputRef.current?.click()
                 }}
-                className="mt-8 w-full bg-lime-300 px-6 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-white disabled:opacity-50"
+                className="border border-lime-300/25 bg-lime-300 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white disabled:opacity-50"
               >
                 Record clip
               </button>
             </div>
-          </section>
-        ) : null}
 
-        {flowStep === "capture" || flowStep === "processing" ? (
-          <section className="flex min-h-[calc(100vh-13rem)] flex-col justify-end pb-10">
-            <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              {flowStep === "capture" ? "Live Capture" : "Saving Clip"}
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {calibrationMissions.map((mission) => (
+                <MissionCard
+                  key={mission.id}
+                  mission={mission}
+                  selected={mission.id === selectedMissionId}
+                  onSelect={() => {
+                    setSelectedMissionId(mission.id)
+                    setFlowStep("brief")
+                    setStatus("")
+                    setProgress(0)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <aside className="border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-white/35">
+              Selected
             </p>
-            <h1 className="mt-5 text-[clamp(3.8rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-              {status || "ADDING SESSION"}
-            </h1>
-            <p className="mt-6 text-sm uppercase tracking-[0.32em] text-white/35">
-              {selectedMission?.title || "Open session"}
+            <h2 className="mt-2 text-xl font-black tracking-[-0.03em]">
+              {selectedMission ? missionName(selectedMission) : "Open session"}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-white/45">
+              {selectedMission?.task || "Record the next practice clip."}
             </p>
-            {flowStep === "processing" && progress === 100 ? (
-              <p className="mt-4 text-sm uppercase tracking-[0.32em] text-lime-300">
-                SESSION SAVED
-              </p>
+
+            {status ? (
+              <div className="mt-4 border border-white/10 bg-black/30 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-white">{status}</p>
+                  <p className="text-xs text-white/40">{progress}%</p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden bg-white/10">
+                  <div
+                    className="h-full bg-lime-300 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
             ) : null}
 
-            <div className="mt-10 h-5 overflow-hidden bg-white/10">
+            {flowStep === "processing" && progress > 0 ? (
+              <p className="mt-3 text-sm text-white/45">
+                Clip will open for review when saved.
+              </p>
+            ) : null}
+          </aside>
+        </section>
+
+        {flowStep === "processing" && progress > 0 ? (
+          <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-zinc-950/95 px-5 py-3 backdrop-blur">
+            <div className="mx-auto flex max-w-6xl items-center gap-4">
+              <p className="w-32 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
+                {status || "Saving clip"}
+              </p>
+              <div className="h-2 flex-1 overflow-hidden bg-white/10">
               <div
-                className="h-full bg-gradient-to-r from-lime-300 via-cyan-300 to-white transition-all duration-500"
-                style={{
-                  width: `${progress}%`,
-                }}
+                className="h-full bg-lime-300 transition-all duration-300"
+                style={{ width: `${progress}%` }}
               />
             </div>
-            <div className="mt-5 flex items-end justify-between gap-5">
-              <p className="max-w-md text-sm leading-relaxed text-white/45">
-                Session saved for review.
-              </p>
-              <p className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-white/70">
-                {progress}%
-              </p>
+              <p className="text-xs text-white/40">{progress}%</p>
             </div>
-          </section>
+          </div>
         ) : null}
 
         <input

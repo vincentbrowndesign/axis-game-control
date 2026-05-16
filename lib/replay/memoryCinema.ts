@@ -15,7 +15,7 @@ export function memoryCinemaState(
 
   if (!reveal) {
     return {
-      headline: "MEMORY RETURNING",
+      headline: "CLIP READY",
       tone: "quiet",
       depth: 0.18,
     }
@@ -23,7 +23,7 @@ export function memoryCinemaState(
 
   if (reveal.type === "cadence" || reveal.type === "rhythm") {
     return {
-      headline: "RHYTHM RETURNING",
+      headline: "REVIEW READY",
       tone: "rhythm",
       depth: reveal.emphasis,
     }

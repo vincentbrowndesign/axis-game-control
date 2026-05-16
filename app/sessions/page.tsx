@@ -271,17 +271,17 @@ export default async function SessionsPage({
   const recentSessions = sessions.filter(isRecent).length
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-5 py-8 text-white">
+    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-8 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
               Archive
             </p>
-            <h1 className="mt-3 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
+            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
               Session review
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
               Find clips by player, drill, tag, note, and practice type.
             </p>
           </div>
@@ -294,35 +294,35 @@ export default async function SessionsPage({
           </Link>
         </header>
 
-        <section className="mb-6 grid gap-3 md:grid-cols-4">
-          <div className="border border-white/10 bg-white/[0.03] p-4">
+        <section className="mb-4 grid gap-2 md:grid-cols-4">
+          <div className="border border-white/10 bg-white/[0.03] p-3">
             <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
               Sessions
             </p>
-            <p className="mt-2 text-3xl font-black">{sessions.length}</p>
+            <p className="mt-1 text-2xl font-black">{sessions.length}</p>
           </div>
-          <div className="border border-white/10 bg-white/[0.03] p-4">
+          <div className="border border-white/10 bg-white/[0.03] p-3">
             <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
               Players
             </p>
-            <p className="mt-2 text-3xl font-black">{players.length}</p>
+            <p className="mt-1 text-2xl font-black">{players.length}</p>
           </div>
-          <div className="border border-white/10 bg-white/[0.03] p-4">
+          <div className="border border-white/10 bg-white/[0.03] p-3">
             <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
               Recent
             </p>
-            <p className="mt-2 text-3xl font-black">{recentSessions}</p>
+            <p className="mt-1 text-2xl font-black">{recentSessions}</p>
           </div>
-          <div className="border border-white/10 bg-white/[0.03] p-4">
+          <div className="border border-white/10 bg-white/[0.03] p-3">
             <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
               Tagged repeats
             </p>
-            <p className="mt-2 text-3xl font-black">{taggedRepeats}</p>
+            <p className="mt-1 text-2xl font-black">{taggedRepeats}</p>
           </div>
         </section>
 
-        <section className="mb-8 border border-white/10 bg-white/[0.03] p-4">
-          <form action="/sessions" className="grid gap-3 lg:grid-cols-6">
+        <section className="mb-4 border border-white/10 bg-white/[0.03] p-3">
+          <form action="/sessions" className="grid gap-2 lg:grid-cols-6">
             <input type="hidden" name="sort" value={sort} />
             <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35 lg:col-span-2">
               Search
@@ -330,7 +330,7 @@ export default async function SessionsPage({
                 name="q"
                 defaultValue={filters.q}
                 placeholder="footwork, repeat, left"
-                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
             </label>
             <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
@@ -338,7 +338,7 @@ export default async function SessionsPage({
               <input
                 name="player"
                 defaultValue={filters.player}
-                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               />
             </label>
             <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
@@ -346,7 +346,7 @@ export default async function SessionsPage({
               <input
                 name="drill"
                 defaultValue={filters.drill}
-                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               />
             </label>
             <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
@@ -355,7 +355,7 @@ export default async function SessionsPage({
                 name="tag"
                 defaultValue={filters.tag}
                 placeholder="repeat"
-                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
             </label>
             <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
@@ -364,7 +364,7 @@ export default async function SessionsPage({
                 name="note"
                 defaultValue={filters.note}
                 placeholder="feet"
-                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
             </label>
             <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
@@ -372,7 +372,7 @@ export default async function SessionsPage({
               <select
                 name="type"
                 defaultValue={filters.type}
-                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               >
                 <option value="">Any</option>
                 {(["practice", "scrimmage", "game", "workout"] satisfies (
@@ -390,7 +390,7 @@ export default async function SessionsPage({
               <select
                 name="view"
                 defaultValue={view}
-                className="border border-white/10 bg-black px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               >
                 {VIEW_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -400,12 +400,12 @@ export default async function SessionsPage({
               </select>
             </label>
             <div className="flex items-end gap-2 lg:col-span-4">
-              <button className="border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white/75 transition hover:border-white/35 hover:text-white">
+              <button className="border border-white/15 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:border-white/35 hover:text-white">
                 Find clips
               </button>
               <Link
                 href="/sessions"
-                className="border border-white/10 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white/40 transition hover:text-white"
+                className="border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/40 transition hover:text-white"
               >
                 Clear
               </Link>
@@ -413,7 +413,7 @@ export default async function SessionsPage({
           </form>
         </section>
 
-        <nav className="mb-8 flex flex-wrap gap-2" aria-label="Sort sessions">
+        <nav className="mb-4 flex flex-wrap gap-2" aria-label="Sort sessions">
           {SORT_OPTIONS.map((option) => (
             <Link
               key={option.value}
@@ -429,12 +429,12 @@ export default async function SessionsPage({
           ))}
         </nav>
 
-        <section className="mb-10 grid gap-4 lg:grid-cols-[1fr_320px]">
-          <div className="grid gap-4">
+        <section className="mb-8 grid gap-3 lg:grid-cols-[1fr_300px]">
+          <div className="grid gap-3">
             {visibleSessions.map((session) => (
               <article
                 key={session.id}
-                className="grid overflow-hidden border border-white/10 bg-white/[0.03] md:grid-cols-[220px_1fr]"
+                className="grid overflow-hidden border border-white/10 bg-white/[0.03] md:grid-cols-[180px_1fr]"
               >
                 <Link
                   href={`/replay/${session.id}`}
@@ -453,7 +453,7 @@ export default async function SessionsPage({
                   )}
                 </Link>
 
-                <div className="grid gap-5 p-5">
+                <div className="grid gap-3 p-4">
                   <div className="flex flex-wrap gap-2">
                     <span className="border border-white/10 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.2em] text-white/55">
                       {session.environment}
@@ -477,11 +477,11 @@ export default async function SessionsPage({
                     </p>
                     <Link
                       href={`/replay/${session.id}`}
-                      className="mt-2 block text-2xl font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
+                      className="mt-1 block text-xl font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
                     >
                       {drillName(session)}
                     </Link>
-                    <p className="mt-2 text-sm text-white/45">
+                    <p className="mt-1 text-sm text-white/45">
                       {relativeTime(session.createdAt)}
                     </p>
                   </div>
@@ -535,8 +535,8 @@ export default async function SessionsPage({
             )}
           </div>
 
-          <aside className="grid h-fit gap-4">
-            <section className="border border-white/10 bg-white/[0.03] p-4">
+          <aside className="grid h-fit gap-3">
+            <section className="border border-white/10 bg-white/[0.03] p-3">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
                 Team
               </p>
@@ -556,7 +556,7 @@ export default async function SessionsPage({
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-4">
+            <section className="border border-white/10 bg-white/[0.03] p-3">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
                 Players
               </p>

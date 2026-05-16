@@ -64,8 +64,8 @@ export function describeReveal(reveals: ReplayReveal[]) {
   const revealed = reveals.find((reveal) => reveal.phase === "revealed")
   const emerging = reveals.find((reveal) => reveal.phase === "emerging")
 
-  if (revealed) return `${revealed.label.toLowerCase()} returning.`
-  if (emerging) return `${emerging.label.toLowerCase()} emerging.`
+  if (revealed) return `${revealed.label.toLowerCase()} ready.`
+  if (emerging) return `${emerging.label.toLowerCase()} next.`
 
-  return "Memory structure returning."
+  return "Clip ready."
 }

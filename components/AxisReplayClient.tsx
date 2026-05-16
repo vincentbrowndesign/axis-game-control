@@ -87,10 +87,10 @@ type FrameSignal = {
 const SIGNAL_ATTEMPT_DELAY_MS = 2000
 const SIGNAL_UNAVAILABLE_TIMEOUT_MS = 5000
 const POSE_SAMPLE_INTERVAL_MS = 900
-const REPLAY_FOCUS_REVEAL_MS = 1000
-const REPLAY_STATE_REVEAL_MS = 2200
-const REPLAY_NEXT_REVEAL_MS = 4200
-const REPLAY_FORWARD_REVEAL_MS = 6200
+const REPLAY_FOCUS_REVEAL_MS = 0
+const REPLAY_STATE_REVEAL_MS = 0
+const REPLAY_NEXT_REVEAL_MS = 0
+const REPLAY_FORWARD_REVEAL_MS = 0
 const calibrationMissions = getCalibrationMissions()
 
 function safeParseSession(raw: string | null) {
@@ -133,11 +133,11 @@ function ReplayReward({
   nextAction: string
 }) {
   return (
-    <section className="mt-6 text-center">
-      <p className="text-[10px] uppercase tracking-[0.5em] text-white/25">
-        Memory
+    <section className="text-right">
+      <p className="text-[10px] uppercase tracking-[0.24em] text-white/35">
+        Next
       </p>
-      <p className="mt-3 text-[clamp(1.6rem,5vw,3.2rem)] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white">
+      <p className="mt-1 text-sm font-black uppercase tracking-[0.14em] text-white">
         {nextAction}
       </p>
     </section>
@@ -184,7 +184,7 @@ function createPoseRead(status: PoseLandmarkRead["status"]): PoseLandmarkRead {
     observations: [],
     summary:
       status === "unavailable"
-        ? "Memory stored. Read still building."
+        ? "Session saved. Read still building."
         : "Landmark signal initializing.",
   }
 }
@@ -870,7 +870,7 @@ export default function AxisReplayClient({
             markSignalUnavailableIfEmpty()
             emitSignal(
               "READ BUILDING",
-              "Memory stored. Read still building.",
+              "Session saved. Read still building.",
               "zinc"
             )
           }
@@ -881,7 +881,7 @@ export default function AxisReplayClient({
           markSignalUnavailableIfEmpty()
           emitSignal(
             "READ BUILDING",
-            "Memory stored. Read still building.",
+            "Session saved. Read still building.",
             "zinc"
           )
         }
@@ -1033,21 +1033,24 @@ export default function AxisReplayClient({
       className={`axis-atmosphere min-h-screen overflow-hidden bg-black text-white ${className}`}
     >
       <div className="px-5 py-8 lg:px-8 lg:py-10">
-        <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col justify-between">
+        <section className="mx-auto max-w-6xl">
           <div
-            className={`text-center transition-opacity duration-1000 ${
+            className={`mb-4 flex flex-col gap-3 border-b border-white/10 pb-4 transition-opacity duration-300 sm:flex-row sm:items-end sm:justify-between ${
               showState ? "opacity-100" : "opacity-0"
             }`}
           >
-            <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-              Review
-            </p>
-            <p className="mt-4 text-[clamp(2rem,7vw,5.8rem)] font-black uppercase leading-[0.88] tracking-[-0.06em] text-white">
-              {replayReward.found}
-            </p>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.24em] text-white/35">
+                Review
+              </p>
+              <h1 className="mt-1 text-2xl font-black tracking-[-0.03em]">
+                {replayReward.found}
+              </h1>
+            </div>
+            {showNext ? <ReplayReward nextAction={replayReward.nextAction} /> : null}
           </div>
 
-          <div className="relative my-8 overflow-hidden border border-white/10 bg-white/[0.03] shadow-[0_0_80px_rgba(255,255,255,0.04)]">
+          <div className="relative overflow-hidden border border-white/10 bg-white/[0.03]">
             <video
               ref={videoRef}
               src={session.videoUrl}
@@ -1118,23 +1121,13 @@ export default function AxisReplayClient({
           </div>
 
           <div
-            className={`transition-opacity duration-1000 ${
-              showNext ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            <ReplayReward
-              nextAction={replayReward.nextAction}
-            />
-          </div>
-
-          <div
-            className={`mt-8 flex justify-center transition-opacity duration-1000 ${
+            className={`mt-4 flex justify-end transition-opacity duration-300 ${
               showForward ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
           >
             <Link
               href={nextWarmup ? `/?warmup=${nextWarmup.id}` : "/"}
-              className="bg-white px-6 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
+              className="border border-white/15 px-4 py-3 text-center text-xs font-black uppercase tracking-[0.18em] text-white/70 transition hover:border-white/35 hover:text-white"
             >
               Continue practice
             </Link>
