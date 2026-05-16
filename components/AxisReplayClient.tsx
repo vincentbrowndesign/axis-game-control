@@ -128,17 +128,17 @@ function pushLiveSignal(
 }
 
 function ReplayReward({
-  nextRep,
+  nextAction,
 }: {
-  nextRep: string
+  nextAction: string
 }) {
   return (
     <section className="mt-6 text-center">
       <p className="text-[10px] uppercase tracking-[0.5em] text-white/25">
-        Next Rep
+        Memory
       </p>
       <p className="mt-3 text-[clamp(1.6rem,5vw,3.2rem)] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white">
-        {nextRep}
+        {nextAction}
       </p>
     </section>
   )
@@ -543,7 +543,7 @@ export default function AxisReplayClient({
           createdAt: pendingMemory.createdAt,
           source: "camera",
           videoUrl,
-          title: "Replay Ready",
+          title: "Memory",
           mission: warmup
             ? `WARMUP ${warmup.order
                 .toString()
@@ -1123,7 +1123,7 @@ export default function AxisReplayClient({
             }`}
           >
             <ReplayReward
-              nextRep={replayReward.nextRep}
+              nextAction={replayReward.nextAction}
             />
           </div>
 

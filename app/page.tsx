@@ -45,9 +45,9 @@ export default async function HomePage({ searchParams }: Props) {
     return (
       <ContinuityWorld
         eyebrow="Returning"
-        title="Continuity held"
-        line="Practice, archive, retrieval, and team memory live here."
-        primaryHref="/practice"
+        title="Memory held"
+        line="Basketball life enters memory. Memory becomes retrieval, connections, and shared continuity."
+        primaryHref="/archive"
         primaryLabel="Enter Axis"
       />
     )

@@ -10,10 +10,10 @@ It does not answer:
 
 ## Retrieval Intents
 
-- strongest reps
+- strongest memories
 - rhythm stabilization
 - repeated resets
-- clips to repeat tomorrow
+- memories to revisit tomorrow
 - continuity streaks
 - transfer clips
 - current issue

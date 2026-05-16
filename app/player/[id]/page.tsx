@@ -14,8 +14,8 @@ export default async function PlayerPage({ params }: Props) {
       eyebrow="Player"
       title={id === "local" ? "Local player" : "Player memory"}
       line="Individual continuity lives here: warmups, archive, retrieval, and accountability."
-      primaryHref="/practice"
-      primaryLabel="Start Practice"
+      primaryHref="/archive"
+      primaryLabel="Open Memory"
       links={[
         {
           href: "/archive",

@@ -3,7 +3,7 @@ import type { ReplayMarker } from "./types"
 
 export type ReplayReward = {
   found: string
-  nextRep: string
+  nextAction: string
   focus: ReplayMarker | null
 }
 
@@ -16,48 +16,48 @@ function rewardFromMarker(marker: ReplayMarker): ReplayReward {
     return {
       found:
         marker.type === "cadence"
-          ? "Rhythm returned after the reset."
-          : "Strongest rhythm window surfaced.",
-      nextRep: "Repeat the return and hold it longer.",
+          ? "Similar rhythm returned."
+          : "Related rhythm surfaced.",
+      nextAction: "Add this to memory.",
       focus: marker,
     }
   }
 
   if (marker.type === "reset") {
     return {
-      found: "A reset broke the rhythm.",
-      nextRep: "Shorten the reset and return faster.",
+      found: "Related reset found.",
+      nextAction: "Keep the pattern.",
       focus: marker,
     }
   }
 
   if (marker.type === "burst") {
     return {
-      found: "Movement burst surfaced.",
-      nextRep: "Start slower and match that burst cleanly.",
+      found: "Practice movement linked.",
+      nextAction: "Return to archive.",
       focus: marker,
     }
   }
 
   if (marker.type === "stabilization") {
     return {
-      found: "The frame held steady.",
-      nextRep: "Keep that hold while the movement repeats.",
+      found: "Memory added to practice continuity.",
+      nextAction: "Find related memory.",
       focus: marker,
     }
   }
 
   if (marker.type === "repetition") {
     return {
-      found: `${sentence(marker.label)} detected.`,
-      nextRep: "Repeat the same rep once more.",
+      found: `${sentence(marker.label)} returned.`,
+      nextAction: "Link this memory.",
       focus: marker,
     }
   }
 
   return {
-    found: "Movement continuity surfaced.",
-    nextRep: "Hold the window and repeat the return.",
+    found: "Memory added to archive.",
+    nextAction: "Find what connects.",
     focus: marker,
   }
 }
@@ -72,8 +72,8 @@ export function getReplayReward(
 
   if (!focus) {
     return {
-      found: "Movement stored.",
-      nextRep: "Repeat the same rep once more for a cleaner read.",
+      found: "Memory added to archive.",
+      nextAction: "Find what connects.",
       focus: null,
     }
   }

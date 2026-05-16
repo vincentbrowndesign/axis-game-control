@@ -5,7 +5,7 @@ export default function RetrievePage() {
     <ContinuityWorld
       eyebrow="Retrieve"
       title="What returns"
-      line="Find the reps, resets, rhythm, and transfer clips that matter now."
+      line="Find memories, resets, rhythm, and transfer patterns that matter now."
       primaryHref="/archive"
       primaryLabel="Open Archive"
       links={[

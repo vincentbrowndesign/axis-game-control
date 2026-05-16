@@ -20,12 +20,12 @@ export default function PracticePage() {
         {
           href: "/retrieve",
           label: "Retrieve",
-          line: "Find the next repeat.",
+          line: "Find what matters now.",
         },
         {
           href: "/connections",
           label: "Connections",
-          line: "Link repeated effort.",
+          line: "Link remembered effort.",
         },
       ]}
     />

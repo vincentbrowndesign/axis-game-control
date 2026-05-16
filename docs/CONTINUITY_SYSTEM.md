@@ -7,7 +7,7 @@ Most basketball tools track isolated events. Axis tracks what keeps returning.
 ## Continuity Objects
 
 - Player continuity
-- Warmup chains
+- Structured memory lanes
 - Practice lineage
 - Memory connections
 - Team continuity

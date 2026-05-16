@@ -17,14 +17,9 @@ type Props = {
 
 const defaultLinks: WorldLink[] = [
   {
-    href: "/practice",
-    label: "Practice",
-    line: "Record effort.",
-  },
-  {
     href: "/archive",
-    label: "Archive",
-    line: "Keep what returns.",
+    label: "Memory",
+    line: "Remembered effort.",
   },
   {
     href: "/retrieve",
@@ -34,12 +29,17 @@ const defaultLinks: WorldLink[] = [
   {
     href: "/connections",
     label: "Connections",
-    line: "See effort link across time.",
+    line: "See what keeps returning.",
   },
   {
     href: "/team/local",
     label: "Team",
-    line: "Shared practice memory.",
+    line: "Shared continuity.",
+  },
+  {
+    href: "/practice",
+    label: "Practice",
+    line: "Add memory.",
   },
 ]
 
@@ -47,8 +47,8 @@ export default function ContinuityWorld({
   eyebrow,
   title,
   line,
-  primaryHref = "/practice",
-  primaryLabel = "Start Practice",
+  primaryHref = "/archive",
+  primaryLabel = "Open Memory",
   links = defaultLinks,
 }: Props) {
   return (

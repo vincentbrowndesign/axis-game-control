@@ -14,8 +14,8 @@ export default async function TeamPage({ params }: Props) {
       eyebrow="Team"
       title={id === "local" ? "Team memory" : "Team continuity"}
       line="Shared practice memory connects players, drills, retrieval, and transfer into scrimmage."
-      primaryHref="/practice"
-      primaryLabel="Plan Practice"
+      primaryHref="/archive"
+      primaryLabel="Open Team Memory"
       links={[
         {
           href: "/player/local",
@@ -30,7 +30,7 @@ export default async function TeamPage({ params }: Props) {
         {
           href: "/retrieve",
           label: "Coach Retrieval",
-          line: "Find clips to repeat.",
+          line: "Find what matters now.",
         },
       ]}
     />
