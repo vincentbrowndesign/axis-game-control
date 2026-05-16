@@ -170,6 +170,9 @@ export default function UploadConsole({
   const selectedMission =
     calibrationMissions.find((mission) => mission.id === selectedMissionId) ||
     calibrationMissions[0]
+  const liveTriggers = [
+    ...new Set([...recentTriggers, ...coreTriggers]),
+  ].slice(0, 9)
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -182,7 +185,7 @@ export default function UploadConsole({
     setIsQuickTagging(true)
     setSavedTrigger(triggerWord)
     setRepeatTomorrow(repeat)
-    setStatus("Trigger saved")
+    setStatus(triggerWord ? "Trigger saved" : "Repeat saved")
 
     try {
       const response = await fetch("/api/session/quick-tag", {
@@ -406,7 +409,7 @@ export default function UploadConsole({
               href="/"
               className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
             >
-              Capture
+              Live
             </Link>
             <Link
               href="/sessions"
@@ -463,7 +466,7 @@ export default function UploadConsole({
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              {(recentTriggers.length ? recentTriggers : coreTriggers).map((trigger) => (
+              {liveTriggers.map((trigger) => (
                 <button
                   key={trigger}
                   type="button"

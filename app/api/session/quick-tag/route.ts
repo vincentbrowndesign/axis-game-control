@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 
 function cleanTrigger(value: unknown) {
@@ -109,6 +110,10 @@ export async function POST(req: Request) {
         }
       )
     }
+
+    revalidatePath("/")
+    revalidatePath("/sessions")
+    revalidatePath("/team/local")
 
     return NextResponse.json({
       ok: true,

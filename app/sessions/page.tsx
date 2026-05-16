@@ -55,7 +55,7 @@ function PrimaryNav() {
   return (
     <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
-        Capture
+        Live
       </Link>
       <Link className="border border-white/10 px-3 py-2 text-white" href="/sessions">
         Archive
@@ -430,13 +430,14 @@ export default async function SessionsPage({
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
-              Archive
+              Review mode
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Clip review
+              Tactical archive
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Find clips by player, drill, tag, note, and practice type.
+              Retrieve clips by situation, trigger, constraint, repeat work,
+              phase, player, and note.
             </p>
           </div>
 
@@ -806,98 +807,103 @@ export default async function SessionsPage({
                     )}
                   </div>
 
-                  <form action={saveCoachNote} className="grid gap-2">
-                    <input type="hidden" name="sessionId" value={session.id} />
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <select
-                        name="situation"
-                        defaultValue={session.situation || ""}
-                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
-                      >
-                        <option value="">Situation</option>
-                        {BASKETBALL_SITUATIONS.map((situation) => (
-                          <option key={situation} value={situation}>
-                            {situation}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        name="constraint"
-                        defaultValue={session.constraint || ""}
-                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
-                      >
-                        <option value="">Constraint</option>
-                        {ENVIRONMENTAL_CONSTRAINTS.map((constraint) => (
-                          <option key={constraint} value={constraint}>
-                            {constraint}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        name="coachFlaw"
-                        defaultValue={session.coachFlaw || ""}
-                        placeholder="Flaw: Stood tall on catch."
-                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
-                      />
-                      <input
-                        name="coachCorrection"
-                        defaultValue={session.coachCorrection || ""}
-                        placeholder="Correction: Drop hips before catch."
-                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
-                      />
-                      <input
-                        name="coachNote"
-                        defaultValue={session.coachNote || ""}
-                        placeholder="Note: Repeat tomorrow."
-                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
-                      />
-                      <input
-                        name="triggerWord"
-                        defaultValue={triggerLabel(session)}
-                        placeholder="Trigger: SINK"
-                        className="border border-white/10 bg-black px-3 py-2 text-sm font-black uppercase tracking-[0.12em] text-white outline-none placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-white/25"
-                      />
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto_auto]">
-                      <label className="flex items-center gap-2 border border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/55">
+                  <details className="border-t border-white/10 pt-2">
+                    <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-white/45 transition hover:text-white">
+                      Review details
+                    </summary>
+                    <form action={saveCoachNote} className="mt-3 grid gap-2">
+                      <input type="hidden" name="sessionId" value={session.id} />
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <select
+                          name="situation"
+                          defaultValue={session.situation || ""}
+                          className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
+                        >
+                          <option value="">Situation</option>
+                          {BASKETBALL_SITUATIONS.map((situation) => (
+                            <option key={situation} value={situation}>
+                              {situation}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          name="constraint"
+                          defaultValue={session.constraint || ""}
+                          className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
+                        >
+                          <option value="">Constraint</option>
+                          {ENVIRONMENTAL_CONSTRAINTS.map((constraint) => (
+                            <option key={constraint} value={constraint}>
+                              {constraint}
+                            </option>
+                          ))}
+                        </select>
                         <input
-                          type="checkbox"
-                          name="repeatTomorrow"
-                          defaultChecked={
-                            Boolean(session.repeatTomorrow) ||
-                            isRepeated(session, sessionRepeats, tags)
-                          }
-                          className="accent-lime-300"
+                          name="coachFlaw"
+                          defaultValue={session.coachFlaw || ""}
+                          placeholder="Flaw: Stood tall on catch."
+                          className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
                         />
-                        Repeat
-                      </label>
-                      <select
-                        name="constructionZoneStatus"
-                        defaultValue={constructionZoneLabel(session)}
-                        className="border border-white/10 bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/70 outline-none"
-                      >
-                        {CONSTRUCTION_ZONE_STATUSES.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        name="stressPhase"
-                        defaultValue={phaseLabel(session)}
-                        className="border border-white/10 bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/70 outline-none"
-                      >
-                        {STRESS_PHASES.map((phase) => (
-                          <option key={phase} value={phase}>
-                            {phase}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white/70 transition hover:border-white/35 hover:text-white">
-                        Save
-                      </button>
-                    </div>
-                  </form>
+                        <input
+                          name="coachCorrection"
+                          defaultValue={session.coachCorrection || ""}
+                          placeholder="Correction: Drop hips before catch."
+                          className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
+                        />
+                        <input
+                          name="coachNote"
+                          defaultValue={session.coachNote || ""}
+                          placeholder="Note: Repeat tomorrow."
+                          className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
+                        />
+                        <input
+                          name="triggerWord"
+                          defaultValue={triggerLabel(session)}
+                          placeholder="Trigger: SINK"
+                          className="border border-white/10 bg-black px-3 py-2 text-sm font-black uppercase tracking-[0.12em] text-white outline-none placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-white/25"
+                        />
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto_auto]">
+                        <label className="flex items-center gap-2 border border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/55">
+                          <input
+                            type="checkbox"
+                            name="repeatTomorrow"
+                            defaultChecked={
+                              Boolean(session.repeatTomorrow) ||
+                              isRepeated(session, sessionRepeats, tags)
+                            }
+                            className="accent-lime-300"
+                          />
+                          Repeat
+                        </label>
+                        <select
+                          name="constructionZoneStatus"
+                          defaultValue={constructionZoneLabel(session)}
+                          className="border border-white/10 bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/70 outline-none"
+                        >
+                          {CONSTRUCTION_ZONE_STATUSES.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          name="stressPhase"
+                          defaultValue={phaseLabel(session)}
+                          className="border border-white/10 bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/70 outline-none"
+                        >
+                          {STRESS_PHASES.map((phase) => (
+                            <option key={phase} value={phase}>
+                              {phase}
+                            </option>
+                          ))}
+                        </select>
+                        <button className="border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white/70 transition hover:border-white/35 hover:text-white">
+                          Save
+                        </button>
+                      </div>
+                    </form>
+                  </details>
                 </div>
               </article>
             ))}

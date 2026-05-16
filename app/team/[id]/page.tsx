@@ -29,7 +29,7 @@ function PrimaryNav() {
   return (
     <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
-        Capture
+        Live
       </Link>
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/sessions">
         Archive
@@ -148,10 +148,11 @@ export default async function TeamPage({ params }: Props) {
               Team
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Team practice
+              Reinforcement board
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Review players, notes, and repeat clips before the next practice.
+              See players, repeat clips, active corrections, constraints, and
+              situation focus before the next practice.
             </p>
           </div>
           <PrimaryNav />
