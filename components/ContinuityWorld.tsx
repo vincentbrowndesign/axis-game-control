@@ -60,7 +60,7 @@ export default function ContinuityWorld({
   showContinuity = true,
 }: Props) {
   const fallbackContinuity: ActiveContinuityState = {
-    eyebrow: "Player Continuity",
+    eyebrow: "Continue Now",
     title,
     line,
     href: primaryHref,
@@ -111,14 +111,14 @@ export default function ContinuityWorld({
           )}
         </section>
 
-        <nav className="grid gap-px border border-white/10 bg-white/10 md:grid-cols-5">
+        <nav className="grid gap-px border border-white/5 bg-white/5 opacity-55 transition hover:opacity-100 md:grid-cols-5">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="bg-black p-5 transition hover:bg-white hover:text-black"
+              className="bg-black p-4 transition hover:bg-white hover:text-black"
             >
-              <p className="text-sm font-black uppercase tracking-[0.22em]">
+              <p className="text-xs font-black uppercase tracking-[0.22em]">
                 {link.label}
               </p>
               <p className="mt-3 text-sm leading-relaxed opacity-50">

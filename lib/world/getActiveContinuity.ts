@@ -149,29 +149,29 @@ export function getActiveContinuity({
           : "Previous memory found.")
 
     return {
-      eyebrow: "Player Continuity",
+      eyebrow: "Continue Now",
       title: `${name} returning`,
       line,
       href,
-      actionLabel: "Carry Forward",
+      actionLabel: "Continue",
     }
   }
 
   if (preferredMission) {
     return {
-      eyebrow: "Player Continuity",
+      eyebrow: "Continue Now",
       title: `${name} returning`,
       line: `${preferredMission.title} continuity ready.`,
       href,
-      actionLabel: "Carry Forward",
+      actionLabel: "Continue",
     }
   }
 
   return {
-    eyebrow: "Player Continuity",
+    eyebrow: "Continue Now",
     title: `${name} returning`,
     line: "Continuity ready.",
     href,
-    actionLabel: "Carry Forward",
+    actionLabel: "Continue",
   }
 }

@@ -10,7 +10,7 @@ export default function PracticePage() {
       title="Player continuity"
       line="Return to the player thread already moving."
       primaryHref={firstMemorySource ? `/?warmup=${firstMemorySource.id}` : "/"}
-      primaryLabel="Carry Forward"
+      primaryLabel="Continue"
       preferredWarmupId={firstMemorySource?.id}
       identityName="Local Player"
       links={[

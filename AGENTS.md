@@ -35,6 +35,10 @@ Read these docs before changing code:
 
 Hard rules:
 
+- Use locked layers and controlled iteration. Do not use giant rewrite prompts as a development process.
+- Before changing code, identify the single layer being modified and keep the change scoped to that layer.
+- Future refinements must follow: goal, locked rules, only modify, do not touch, success condition.
+- Do not reinvent the ecosystem unless the user explicitly changes a locked product truth.
 - Uploads are stable infrastructure. Do not mutate upload response shape.
 - Uploads should never know about AI, inference, memory, or analysis.
 - Memory and inference happen after replay loads.
@@ -46,6 +50,10 @@ Hard rules:
 - Axis is behavioral basketball memory infrastructure. Optimize for continuity and retrieval, not more analytics.
 - The archive is remembered effort, not stored clips.
 - Replay is an entry point into memory, not the center of the ecosystem.
+- Warmups are one memory source, not the center of the product.
+- Core loop: memory -> retrieval -> continuity -> reinforcement -> team emergence.
+- Product hierarchy: continuity, archive, and retrieval are primary; practice, drills, and recording are secondary.
+- Emotional goal: users feel they are returning to an evolving basketball identity system, not using a drill app.
 
 Forbidden AXIS labels:
 

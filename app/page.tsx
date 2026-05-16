@@ -50,7 +50,7 @@ export default async function HomePage({ searchParams }: Props) {
         title={`${playerName} returning`}
         line="Continuity active."
         primaryHref="/archive"
-        primaryLabel="Carry Forward"
+        primaryLabel="Continue"
         identityName={playerName}
       />
     )
