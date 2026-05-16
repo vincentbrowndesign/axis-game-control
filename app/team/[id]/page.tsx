@@ -109,6 +109,9 @@ export default async function TeamPage({ params }: Props) {
         ),
         needsNotes: player.sessions,
       }))
+  const recentPractice = sessions.find(
+    (session) => session.environment === "practice"
+  )
   const lastScrimmage = sessions.find(
     (session) =>
       session.environment === "game" || sessionText(session).includes("scrimmage")
@@ -135,13 +138,21 @@ export default async function TeamPage({ params }: Props) {
         <section className="mb-5 grid gap-2 border-b border-white/10 pb-5 text-sm text-white/65 md:grid-cols-2">
           <Link href="/sessions?view=repeated" className="hover:text-white">
             {taggedRepeats.length
-              ? `${taggedRepeats.length} clips tagged repeat for tomorrow`
-              : "No repeat clips tagged yet"}
+              ? `${taggedRepeats.length} repeat clips`
+              : "No repeat clips tagged"}
           </Link>
           <Link href="/sessions?note=missing" className="hover:text-white">
             {needsReview.length
-              ? `${needsReview.length} clips need coach notes`
-              : "Coach notes are current"}
+              ? `${needsReview.length} notes missing`
+              : "Notes are current"}
+          </Link>
+          <Link
+            href={recentPractice ? `/replay/${recentPractice.id}` : "/sessions?type=practice"}
+            className="hover:text-white"
+          >
+            {recentPractice
+              ? `Recent practice: ${drillName(recentPractice)}`
+              : "No recent practice"}
           </Link>
           <Link
             href={lastScrimmage ? `/replay/${lastScrimmage.id}` : "/sessions?type=scrimmage"}

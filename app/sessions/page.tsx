@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
-  dateLabel,
   drillName,
   isRecent,
   isRepeated,
@@ -52,15 +51,6 @@ function viewParam(value: string): ArchiveView {
   return VIEW_OPTIONS.some((option) => option.value === value)
     ? (value as ArchiveView)
     : "all"
-}
-
-function formatDuration(seconds?: number) {
-  if (!seconds) return "0s"
-
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-
-  return mins <= 0 ? `${secs}s` : `${mins}m ${secs}s`
 }
 
 function sessionText(session: ReplaySessionView) {
@@ -321,22 +311,64 @@ export default async function SessionsPage({
           </Link>
         </header>
 
-        <section className="mb-4 flex flex-wrap gap-x-5 gap-y-2 border-b border-white/10 pb-4 text-sm text-white/60">
-          <Link href="/sessions?view=repeated" className="hover:text-white">
+        <section className="mb-4 border-b border-white/10 pb-4">
+          <form action="/sessions" className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <input type="hidden" name="sort" value={sort} />
+            <input
+              name="q"
+              defaultValue={filters.q}
+              placeholder="Search clips, notes, players"
+              className="border border-white/10 bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
+            />
+            <button className="border border-lime-300/30 bg-lime-300 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white">
+              Find clips
+            </button>
+          </form>
+
+          <div className="mt-3 flex flex-wrap gap-2 text-sm text-white/60">
+            <Link
+              href="/sessions?view=recent"
+              className="border border-white/10 px-3 py-2 transition hover:text-white"
+            >
+              Recent
+            </Link>
+            <Link
+              href="/sessions?view=repeated"
+              className="border border-white/10 px-3 py-2 transition hover:text-white"
+            >
+              Repeat clips
+            </Link>
+            <Link
+              href="/sessions?note=missing"
+              className="border border-white/10 px-3 py-2 transition hover:text-white"
+            >
+              Notes missing
+            </Link>
+            <Link
+              href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions?type=practice"}
+              className="border border-white/10 px-3 py-2 transition hover:text-white"
+            >
+              Last practice
+            </Link>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/50">
+            <Link href="/sessions?view=repeated" className="hover:text-white">
             {taggedRepeats.length
               ? `${taggedRepeats.length} clips tagged repeat`
               : "No repeat clips tagged"}
-          </Link>
-          <Link href="/sessions?note=missing" className="hover:text-white">
+            </Link>
+            <Link href="/sessions?note=missing" className="hover:text-white">
             {pendingNotes.length
               ? `${pendingNotes.length} clips need notes`
               : "Notes are current"}
-          </Link>
-          <Link href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions"} className="hover:text-white">
+            </Link>
+            <Link href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions"} className="hover:text-white">
             {lastPractice
               ? `Last practice: ${drillName(lastPractice)}`
               : "No practice sessions yet"}
-          </Link>
+            </Link>
+          </div>
         </section>
 
         <details
@@ -351,15 +383,7 @@ export default async function SessionsPage({
             className="mt-3 grid gap-2 lg:grid-cols-[1.4fr_repeat(5,minmax(0,1fr))_auto]"
           >
               <input type="hidden" name="sort" value={sort} />
-              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-                Find
-                <input
-                  name="q"
-                  defaultValue={filters.q}
-                  placeholder="footwork, repeat, left"
-                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
-                />
-              </label>
+              <input type="hidden" name="q" value={filters.q} />
               <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
                 Player
                 <input
@@ -461,7 +485,7 @@ export default async function SessionsPage({
             {visibleSessions.map((session) => (
               <article
                 key={session.id}
-                className="grid border-b border-white/10 py-3 md:grid-cols-[150px_1fr]"
+                className="grid border-b border-white/10 py-3 sm:grid-cols-[112px_1fr]"
               >
                 <Link
                   href={`/replay/${session.id}`}
@@ -481,20 +505,31 @@ export default async function SessionsPage({
                 </Link>
 
                 <div className="grid gap-2 md:pl-4">
-                  <div>
-                    <p className="text-sm font-bold text-lime-100/85">
-                      {coachingContext(session, sessionRepeats, tags)}
-                    </p>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
                     <Link
                       href={`/replay/${session.id}`}
                       className="mt-1 block text-lg font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
                     >
                       {drillName(session)}
                     </Link>
-                    <p className="mt-1 text-sm text-white/45">
-                      {playerName(session)} / {relativeTime(session.createdAt)} /{" "}
-                      {session.environment} / {dateLabel(session.createdAt)} /{" "}
-                      {formatDuration(session.duration)}
+                      <p className="mt-1 text-sm text-white/45">
+                        {playerName(session)} / {relativeTime(session.createdAt)}
+                      </p>
+                    </div>
+                    {isRepeated(session, sessionRepeats, tags) ? (
+                      <Link
+                        href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
+                        className="border border-lime-300/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-lime-100"
+                      >
+                        Repeat
+                      </Link>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-white/70">
+                      {coachingContext(session, sessionRepeats, tags)}
                     </p>
                   </div>
 
