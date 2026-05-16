@@ -1,4 +1,5 @@
 import Link from "next/link"
+import ModeNav from "@/components/ModeNav"
 import { createClient } from "@/lib/supabase/server"
 import {
   coachingNoteLine,
@@ -27,17 +28,7 @@ type Props = {
 
 function PrimaryNav() {
   return (
-    <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
-      <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
-        Live
-      </Link>
-      <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/sessions">
-        Archive
-      </Link>
-      <Link className="border border-white/10 px-3 py-2 text-white" href="/team/local">
-        Team
-      </Link>
-    </nav>
+    <ModeNav active="team" />
   )
 }
 

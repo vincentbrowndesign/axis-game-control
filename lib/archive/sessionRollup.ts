@@ -21,16 +21,21 @@ export const CONSTRUCTION_ZONE_STATUSES: ConstructionZoneStatus[] = [
 ]
 
 export const BASKETBALL_SITUATIONS = [
+  "High PNR",
   "High Pick-and-Roll",
   "Weak-Side Tag",
+  "Screen Help",
   "Corner Kick",
   "Slot Drive",
   "Baseline Drift",
   "Nail Help",
+  "Transition Defense",
   "Transition Advantage",
   "Closeout Attack",
   "Paint Touch",
   "Ball Screen Reject",
+  "Corner Collapse",
+  "DHO Coverage",
 ]
 
 export const ENVIRONMENTAL_CONSTRAINTS: EnvironmentalConstraint[] = [
@@ -41,6 +46,8 @@ export const ENVIRONMENTAL_CONSTRAINTS: EnvironmentalConstraint[] = [
   "No retreat dribble",
   "Reject screen",
   "Automatic kick on slot drive",
+  "Tag before closeout",
+  "Stop ball first",
 ]
 
 export function normalizeSessions(rows: AxisReplaySession[] | null | undefined) {

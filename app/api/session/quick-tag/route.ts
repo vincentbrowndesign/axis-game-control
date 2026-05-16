@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
+import {
+  appendTimelineEvents,
+  makeTimelineEvent,
+} from "@/lib/axis/reinforcement"
 import { createClient } from "@/lib/supabase/server"
 
 function cleanTrigger(value: unknown) {
@@ -85,6 +89,14 @@ export async function POST(req: Request) {
       : []
 
     if (repeatTomorrow) tags.push("repeat")
+    const timelineEvents = [
+      triggerWord
+        ? makeTimelineEvent("TRIGGER_ASSIGNED", `Trigger: ${triggerWord}`)
+        : null,
+      repeatTomorrow
+        ? makeTimelineEvent("REPEAT_MARKED", "Repeat tomorrow")
+        : null,
+    ].filter((event): event is NonNullable<typeof event> => Boolean(event))
 
     const updated = await supabase
       .from("axis_sessions")
@@ -94,6 +106,10 @@ export async function POST(req: Request) {
           ...metadata,
           triggerWord,
           repeatTomorrow,
+          correctionTimelineEvents: appendTimelineEvents(
+            metadata,
+            timelineEvents
+          ),
         },
         updated_at: new Date().toISOString(),
       })
@@ -112,6 +128,7 @@ export async function POST(req: Request) {
     }
 
     revalidatePath("/")
+    revalidatePath("/systems")
     revalidatePath("/sessions")
     revalidatePath("/team/local")
 

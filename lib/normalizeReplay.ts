@@ -10,6 +10,7 @@ import type { BrowserSignalRead } from "@/lib/vision/providers/types"
 import type {
   AxisReplaySession,
   ConstructionZoneStatus,
+  CorrectionTimelineEvent,
   MemoryState,
   MemoryTimelineEvent,
   ReplaySessionView,
@@ -161,6 +162,31 @@ function normalizeTimelineEvents(value: unknown): MemoryTimelineEvent[] {
       }
     })
     .filter((item): item is MemoryTimelineEvent => Boolean(item))
+}
+
+function normalizeCorrectionTimelineEvents(
+  value: unknown
+): CorrectionTimelineEvent[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item) => {
+      const record = asRecord(item)
+      const id = asString(record.id, "")
+      const type = asString(record.type, "")
+      const at = asString(record.at, "")
+      const detail = asString(record.detail, "")
+
+      if (!id || !type || !at || !detail) return null
+
+      return {
+        id,
+        type: type as CorrectionTimelineEvent["type"],
+        at,
+        detail,
+      }
+    })
+    .filter((item): item is CorrectionTimelineEvent => Boolean(item))
 }
 
 function normalizeTimeline(
@@ -548,6 +574,9 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
         Boolean(raw.constructionZone ?? metadata.constructionZone)
       ),
       stressPhase: asStressPhase(raw.stressPhase ?? metadata.stressPhase),
+      correctionTimelineEvents: normalizeCorrectionTimelineEvents(
+        raw.correctionTimelineEvents ?? metadata.correctionTimelineEvents
+      ),
       memoryCount: memoryState?.memoryCount ?? memoryCount,
       lastSignal: asString(
         raw.lastSignal ?? metadata.lastSignal,

@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import ModeNav from "@/components/ModeNav"
 import { createClient } from "@/lib/supabase/client"
 import {
   isSupportedReplayFile,
@@ -405,24 +406,7 @@ export default function UploadConsole({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Link
-              href="/"
-              className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
-            >
-              Live
-            </Link>
-            <Link
-              href="/sessions"
-              className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
-            >
-              Archive
-            </Link>
-            <Link
-              href="/team/local"
-              className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
-            >
-              Team
-            </Link>
+            <ModeNav active="live" />
             <button
               type="button"
               onClick={signOut}

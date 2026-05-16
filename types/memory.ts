@@ -21,6 +21,8 @@ export type EnvironmentalConstraint =
   | "No retreat dribble"
   | "Reject screen"
   | "Automatic kick on slot drive"
+  | "Tag before closeout"
+  | "Stop ball first"
 
 export type AxisProfile = {
   id: string
@@ -72,6 +74,24 @@ export type MemoryState = {
   confidence: number
 }
 
+export type CorrectionTimelineEvent = {
+  id: string
+  type:
+    | "CLIP_CAPTURED"
+    | "FLAW_TAGGED"
+    | "CORRECTION_ADDED"
+    | "TRIGGER_ASSIGNED"
+    | "CONSTRAINT_ADDED"
+    | "REPEAT_MARKED"
+    | "RETRIEVED"
+    | "STRESS_PHASE_CHANGED"
+    | "CONSTRUCTION_CHANGED"
+    | "TRANSFER_OBSERVED"
+    | "RELAPSE_OBSERVED"
+  at: string
+  detail: string
+}
+
 export type ReplaySessionView = {
   id: string
   createdAt: number
@@ -95,6 +115,7 @@ export type ReplaySessionView = {
   constructionZone?: boolean
   constructionZoneStatus?: ConstructionZoneStatus
   stressPhase?: StressPhase
+  correctionTimelineEvents?: CorrectionTimelineEvent[]
   memoryCount?: number
   lastSignal?: string
   archiveStatus?: string

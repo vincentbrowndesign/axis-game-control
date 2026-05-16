@@ -1,5 +1,10 @@
 import Link from "next/link"
 import { revalidatePath } from "next/cache"
+import ModeNav from "@/components/ModeNav"
+import {
+  appendTimelineEvents,
+  makeTimelineEvent,
+} from "@/lib/axis/reinforcement"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
@@ -53,17 +58,7 @@ const VIEW_OPTIONS: { value: ArchiveView; label: string }[] = [
 
 function PrimaryNav() {
   return (
-    <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
-      <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
-        Live
-      </Link>
-      <Link className="border border-white/10 px-3 py-2 text-white" href="/sessions">
-        Archive
-      </Link>
-      <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/team/local">
-        Team
-      </Link>
-    </nav>
+    <ModeNav active="review" />
   )
 }
 
@@ -259,6 +254,28 @@ async function saveCoachNote(formData: FormData) {
     : []
 
   if (shouldRepeat) tags.push("repeat")
+  const timelineEvents = [
+    coachFlaw
+      ? makeTimelineEvent("FLAW_TAGGED", `Flaw: ${coachFlaw}`)
+      : null,
+    coachCorrection
+      ? makeTimelineEvent("CORRECTION_ADDED", `Correction: ${coachCorrection}`)
+      : null,
+    triggerWord
+      ? makeTimelineEvent("TRIGGER_ASSIGNED", `Trigger: ${triggerWord}`)
+      : null,
+    constraint
+      ? makeTimelineEvent("CONSTRAINT_ADDED", `Constraint: ${constraint}`)
+      : null,
+    shouldRepeat
+      ? makeTimelineEvent("REPEAT_MARKED", "Repeat tomorrow")
+      : null,
+    makeTimelineEvent("STRESS_PHASE_CHANGED", `Phase: ${stressPhase}`),
+    makeTimelineEvent(
+      "CONSTRUCTION_CHANGED",
+      `Construction: ${constructionZoneStatus}`
+    ),
+  ].filter((event): event is NonNullable<typeof event> => Boolean(event))
 
   await supabase
     .from("axis_sessions")
@@ -276,6 +293,10 @@ async function saveCoachNote(formData: FormData) {
         constructionZone: constructionZoneStatus !== "Cleared",
         constructionZoneStatus,
         stressPhase,
+        correctionTimelineEvents: appendTimelineEvents(
+          metadata,
+          timelineEvents
+        ),
       },
       updated_at: new Date().toISOString(),
     })
@@ -283,6 +304,8 @@ async function saveCoachNote(formData: FormData) {
     .eq("user_id", user.id)
 
   revalidatePath("/sessions")
+  revalidatePath("/systems")
+  revalidatePath("/team/local")
   revalidatePath("/archive")
 }
 
@@ -903,6 +926,24 @@ export default async function SessionsPage({
                         </button>
                       </div>
                     </form>
+                    <div className="mt-3 border-t border-white/10 pt-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
+                        Correction timeline
+                      </p>
+                      <div className="mt-2 grid gap-1.5 text-xs text-white/45">
+                        {(session.correctionTimelineEvents?.length
+                          ? session.correctionTimelineEvents.slice(-4)
+                          : [
+                              {
+                                id: `${session.id}-captured`,
+                                detail: "Clip captured",
+                              },
+                            ]
+                        ).map((event) => (
+                          <p key={event.id}>{event.detail}</p>
+                        ))}
+                      </div>
+                    </div>
                   </details>
                 </div>
               </article>

@@ -7,6 +7,7 @@ import {
   normalizeReplayFile,
   normalizeSource,
 } from "@/lib/replayStorage"
+import { makeTimelineEvent } from "@/lib/axis/reinforcement"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
@@ -324,6 +325,9 @@ export async function POST(request: Request) {
           originalType: normalized.mime || null,
           originalSize: file.size,
           signedUrlExpiresIn: signedUrlTtl,
+          correctionTimelineEvents: [
+            makeTimelineEvent("CLIP_CAPTURED", "Clip captured"),
+          ],
         },
       })
       .select("id, video_url")

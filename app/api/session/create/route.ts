@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { makeTimelineEvent } from "@/lib/axis/reinforcement"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
@@ -44,7 +45,11 @@ export async function POST(req: Request) {
         environment: "practice",
         status: "created",
         tags: [],
-        metadata: {},
+        metadata: {
+          correctionTimelineEvents: [
+            makeTimelineEvent("CLIP_CAPTURED", "Clip captured"),
+          ],
+        },
       })
       .select("id, playback_id")
       .single()
