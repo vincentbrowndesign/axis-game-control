@@ -396,16 +396,16 @@ export default function UploadConsole({
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/sessions"
+              href="/archive"
               className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
             >
               Archive
             </Link>
             <Link
-              href="/profile"
+              href="/player/local"
               className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
             >
-              Twin
+              Player
             </Link>
             <button
               type="button"

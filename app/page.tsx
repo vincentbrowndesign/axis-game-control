@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import ContinuityWorld from "@/components/ContinuityWorld"
 import UploadConsole from "@/components/UploadConsole"
 import { getWarmupById } from "@/lib/world/getNextWarmup"
 import { createClient } from "@/lib/supabase/server"
@@ -29,11 +30,25 @@ export default async function HomePage({ searchParams }: Props) {
       redirect("/profile?next=/")
     }
 
+    const warmup = getWarmupById(params?.warmup)
+
+    if (warmup) {
+      return (
+        <UploadConsole
+          email={user.email}
+          twinName={profile.player_name || profile.display_name}
+          initialWarmupId={warmup.id}
+        />
+      )
+    }
+
     return (
-      <UploadConsole
-        email={user.email}
-        twinName={profile.player_name || profile.display_name}
-        initialWarmupId={getWarmupById(params?.warmup)?.id || null}
+      <ContinuityWorld
+        eyebrow="Returning"
+        title="Continuity held"
+        line="Practice, archive, retrieval, and team memory live here."
+        primaryHref="/practice"
+        primaryLabel="Enter Axis"
       />
     )
   }

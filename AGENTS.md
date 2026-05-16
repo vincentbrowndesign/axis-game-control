@@ -2,6 +2,16 @@
 
 Read these docs before changing code:
 
+- `docs/AXIS_OVERVIEW.md`
+- `docs/CONTINUITY_SYSTEM.md`
+- `docs/ARCHIVE_SYSTEM.md`
+- `docs/RETRIEVAL_ENGINE.md`
+- `docs/TEAM_MEMORY.md`
+- `docs/SPURTS_OVERVIEW.md`
+- `docs/PRACTICE_LOOP.md`
+- `docs/ACCOUNTABILITY_SYSTEM.md`
+- `docs/CONNECTION_GRAPH.md`
+- `docs/PROGRESSIVE_DISCLOSURE.md`
 - `docs/ARCHITECTURE.md`
 - `docs/AXIS_WORLD_MODEL.md`
 - `docs/MEMORY_MODEL.md`
@@ -33,6 +43,9 @@ Hard rules:
 - Preserve AXIS visual identity and language.
 - Do not redesign UI unless explicitly asked.
 - Before product, UX, memory, perception, Digital Twin, or warmup changes, read the world model docs above.
+- Axis is behavioral basketball memory infrastructure. Optimize for continuity and retrieval, not more analytics.
+- The archive is remembered effort, not stored clips.
+- Replay is an entry point into memory, not the center of the ecosystem.
 
 Forbidden AXIS labels:
 
