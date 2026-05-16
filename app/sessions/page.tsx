@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
+  dateLabel,
   drillName,
   isRecent,
   isRepeated,
@@ -118,18 +119,40 @@ function hrefWithSort(sort: ArchiveSort, filters: Record<string, string>) {
   return `/sessions?${params.toString()}`
 }
 
-function coachingContext(
+function collectionLabel(session: ReplaySessionView) {
+  if (session.environment === "game") return "Game"
+  if (sessionText(session).includes("scrimmage")) return "Scrimmage"
+
+  return "Practice"
+}
+
+function clipReason(
   session: ReplaySessionView,
   sessionRepeats: Record<string, number>,
   tags: Record<string, number>
 ) {
-  if (session.coachNote) return session.coachNote
+  if (session.coachNote) return `Note: ${session.coachNote}`
 
-  if (isRepeated(session, sessionRepeats, tags)) {
-    return `Repeat ${drillName(session)} with ${playerName(session)}.`
-  }
+  if (isRepeated(session, sessionRepeats, tags)) return "Repeat tomorrow"
 
-  return `Add the coaching note for ${playerName(session)}.`
+  return "Needs review"
+}
+
+function nextAction(
+  session: ReplaySessionView,
+  sessionRepeats: Record<string, number>,
+  tags: Record<string, number>
+) {
+  if (!session.coachNote) return "Add note"
+  if (isRepeated(session, sessionRepeats, tags)) return "Review before practice"
+
+  return "Review clip"
+}
+
+function sourceContext(session: ReplaySessionView) {
+  return `${playerName(session)} / ${collectionLabel(session)} / ${dateLabel(
+    session.createdAt
+  )} / ${relativeTime(session.createdAt)}`
 }
 
 async function saveCoachNote(formData: FormData) {
@@ -342,7 +365,7 @@ export default async function SessionsPage({
               href="/sessions?note=missing"
               className="border border-white/10 px-3 py-2 transition hover:text-white"
             >
-              Notes missing
+              Clips needing notes
             </Link>
             <Link
               href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions?type=practice"}
@@ -354,19 +377,19 @@ export default async function SessionsPage({
 
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/50">
             <Link href="/sessions?view=repeated" className="hover:text-white">
-            {taggedRepeats.length
-              ? `${taggedRepeats.length} clips tagged repeat`
-              : "No repeat clips tagged"}
+              {taggedRepeats.length
+                ? `${taggedRepeats.length} clips tagged repeat`
+                : "No repeat clips tagged"}
             </Link>
             <Link href="/sessions?note=missing" className="hover:text-white">
-            {pendingNotes.length
-              ? `${pendingNotes.length} clips need notes`
-              : "Notes are current"}
+              {pendingNotes.length
+                ? `${pendingNotes.length} clips need notes`
+                : "Notes are current"}
             </Link>
             <Link href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions"} className="hover:text-white">
-            {lastPractice
-              ? `Last practice: ${drillName(lastPractice)}`
-              : "No practice sessions yet"}
+              {lastPractice
+                ? `Last practice: ${drillName(lastPractice)}`
+                : "No practice sessions yet"}
             </Link>
           </div>
         </section>
@@ -380,105 +403,104 @@ export default async function SessionsPage({
           </summary>
           <form
             action="/sessions"
-            className="mt-3 grid gap-2 lg:grid-cols-[1.4fr_repeat(5,minmax(0,1fr))_auto]"
+            className="mt-3 grid gap-2 lg:grid-cols-[repeat(6,minmax(0,1fr))_auto]"
           >
-              <input type="hidden" name="sort" value={sort} />
-              <input type="hidden" name="q" value={filters.q} />
-              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-                Player
-                <input
-                  name="player"
-                  defaultValue={filters.player}
-                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-                />
-              </label>
-              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-                Drill
-                <input
-                  name="drill"
-                  defaultValue={filters.drill}
-                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-                />
-              </label>
-              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-                Tag
-                <input
-                  name="tag"
-                  defaultValue={filters.tag}
-                  placeholder="repeat"
-                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
-                />
-              </label>
-              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-                Note
-                <input
-                  name="note"
-                  defaultValue={filters.note}
-                  placeholder="feet or missing"
-                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
-                />
-              </label>
-              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-                Type
-                <select
-                  name="type"
-                  defaultValue={filters.type}
-                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-                >
-                  <option value="">Any</option>
-                  {(["practice", "scrimmage", "game", "workout"] satisfies (
-                    | SessionEnvironment
-                    | "scrimmage"
-                  )[]).map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-                Review
-                <select
-                  name="view"
-                  defaultValue={view}
-                  className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
-                >
-                  {VIEW_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex items-end gap-2">
-                <button className="border border-white/15 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:border-white/35 hover:text-white">
-                  Find
-                </button>
-                <Link
-                  href="/sessions"
-                  className="border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/40 transition hover:text-white"
-                >
-                  Clear
-                </Link>
-              </div>
-            </form>
+            <input type="hidden" name="sort" value={sort} />
+            <input type="hidden" name="q" value={filters.q} />
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Player
+              <input
+                name="player"
+                defaultValue={filters.player}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              />
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Drill
+              <input
+                name="drill"
+                defaultValue={filters.drill}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              />
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Tag
+              <input
+                name="tag"
+                defaultValue={filters.tag}
+                placeholder="repeat"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+              />
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Note
+              <input
+                name="note"
+                defaultValue={filters.note}
+                placeholder="feet or missing"
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
+              />
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Type
+              <select
+                name="type"
+                defaultValue={filters.type}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                <option value="">Any</option>
+                {(["practice", "scrimmage", "game", "workout"] satisfies (
+                  | SessionEnvironment
+                  | "scrimmage"
+                )[]).map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Review
+              <select
+                name="view"
+                defaultValue={view}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                {VIEW_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end gap-2">
+              <button className="border border-white/15 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:border-white/35 hover:text-white">
+                Find
+              </button>
+              <Link
+                href="/sessions"
+                className="border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/40 transition hover:text-white"
+              >
+                Clear
+              </Link>
+            </div>
+          </form>
+          <div className="mt-3 flex flex-wrap gap-2" aria-label="Sort clips">
+            {SORT_OPTIONS.map((option) => (
+              <Link
+                key={option.value}
+                href={hrefWithSort(option.value, filters)}
+                className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] transition ${
+                  sort === option.value
+                    ? "border-white/35 text-white"
+                    : "border-white/10 text-white/45 hover:text-white"
+                }`}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </div>
         </details>
-
-        <nav className="mb-4 flex flex-wrap gap-2" aria-label="Sort sessions">
-          {SORT_OPTIONS.map((option) => (
-            <Link
-              key={option.value}
-              href={hrefWithSort(option.value, filters)}
-              className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] transition ${
-                sort === option.value
-                  ? "border-white/35 text-white"
-                  : "border-white/10 text-white/45 hover:text-white"
-              }`}
-            >
-              {option.label}
-            </Link>
-          ))}
-        </nav>
 
         <section className="mb-8 grid gap-3 lg:grid-cols-[1fr_300px]">
           <div className="grid gap-3">
@@ -489,7 +511,7 @@ export default async function SessionsPage({
               >
                 <Link
                   href={`/replay/${session.id}`}
-                  className="relative aspect-video bg-black md:my-1"
+                  className="relative aspect-video bg-black/70 md:my-1"
                 >
                   {session.videoUrl ? (
                     <video
@@ -500,21 +522,23 @@ export default async function SessionsPage({
                       className="h-full w-full object-cover opacity-70"
                     />
                   ) : (
-                    <div className="h-full w-full bg-white/[0.04]" />
+                    <div className="grid h-full w-full place-items-center border border-white/10 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
+                      Clip saved
+                    </div>
                   )}
                 </Link>
 
                 <div className="grid gap-2 md:pl-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                    <Link
-                      href={`/replay/${session.id}`}
-                      className="mt-1 block text-lg font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
-                    >
-                      {drillName(session)}
-                    </Link>
+                      <Link
+                        href={`/replay/${session.id}`}
+                        className="block text-lg font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
+                      >
+                        {drillName(session)}
+                      </Link>
                       <p className="mt-1 text-sm text-white/45">
-                        {playerName(session)} / {relativeTime(session.createdAt)}
+                        {sourceContext(session)}
                       </p>
                     </div>
                     {isRepeated(session, sessionRepeats, tags) ? (
@@ -529,7 +553,10 @@ export default async function SessionsPage({
 
                   <div>
                     <p className="text-sm text-white/70">
-                      {coachingContext(session, sessionRepeats, tags)}
+                      {clipReason(session, sessionRepeats, tags)}
+                    </p>
+                    <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
+                      {nextAction(session, sessionRepeats, tags)}
                     </p>
                   </div>
 
