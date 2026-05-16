@@ -87,6 +87,10 @@ type FrameSignal = {
 const SIGNAL_ATTEMPT_DELAY_MS = 2000
 const SIGNAL_UNAVAILABLE_TIMEOUT_MS = 5000
 const POSE_SAMPLE_INTERVAL_MS = 900
+const REPLAY_FOCUS_REVEAL_MS = 1000
+const REPLAY_STATE_REVEAL_MS = 2200
+const REPLAY_NEXT_REVEAL_MS = 4200
+const REPLAY_FORWARD_REVEAL_MS = 6200
 const calibrationMissions = getCalibrationMissions()
 
 function safeParseSession(raw: string | null) {
@@ -257,6 +261,7 @@ export default function AxisReplayClient({
       initialSession?.signalRead || null
     )
   const [currentTime, setLocalCurrentTime] = useState(0)
+  const [replayOpenElapsed, setReplayOpenElapsed] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [replayStatus, setReplayStatus] = useState<
     "ready" | "recovering" | "recovered" | "failed"
@@ -455,6 +460,31 @@ export default function AxisReplayClient({
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (isLoading || !session?.videoUrl) {
+      return
+    }
+
+    let frameId = 0
+    const startedAt = performance.now()
+
+    function tick(now: number) {
+      const elapsed = now - startedAt
+
+      setReplayOpenElapsed(elapsed)
+
+      if (elapsed < REPLAY_FORWARD_REVEAL_MS + 1200) {
+        frameId = requestAnimationFrame(tick)
+      }
+    }
+
+    frameId = requestAnimationFrame(tick)
+
+    return () => {
+      cancelAnimationFrame(frameId)
+    }
+  }, [isLoading, playbackId, session?.videoUrl])
 
   useEffect(() => {
     setPlaybackId(playbackId)
@@ -973,6 +1003,10 @@ export default function AxisReplayClient({
   const cinemaState = memoryCinemaState(replayReveals)
   const replayReward = getReplayReward(replayReveals)
   const nextWarmup = getNextWarmupFromMission(session.mission)
+  const showFocus = replayOpenElapsed >= REPLAY_FOCUS_REVEAL_MS
+  const showState = replayOpenElapsed >= REPLAY_STATE_REVEAL_MS
+  const showNext = replayOpenElapsed >= REPLAY_NEXT_REVEAL_MS
+  const showForward = replayOpenElapsed >= REPLAY_FORWARD_REVEAL_MS
   const focusStart =
     replayReward.focus && duration > 0
       ? Math.max(
@@ -1000,7 +1034,11 @@ export default function AxisReplayClient({
     >
       <div className="px-5 py-8 lg:px-8 lg:py-10">
         <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col justify-between">
-          <div className="text-center">
+          <div
+            className={`text-center transition-opacity duration-1000 ${
+              showState ? "opacity-100" : "opacity-0"
+            }`}
+          >
             <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
               Returning
             </p>
@@ -1053,10 +1091,12 @@ export default function AxisReplayClient({
               onError={recoverReplay}
             />
 
-            <MemoryCinemaLayer
-              reveals={replayReveals}
-              state={cinemaState}
-            />
+            {showFocus ? (
+              <MemoryCinemaLayer
+                reveals={replayReveals}
+                state={cinemaState}
+              />
+            ) : null}
 
             <canvas
               ref={canvasRef}
@@ -1071,17 +1111,27 @@ export default function AxisReplayClient({
                 style={{
                   left: `${focusStart}%`,
                   width: `${focusWidth}%`,
-                  opacity: replayReward.focus ? 1 : 0,
+                  opacity: showFocus && replayReward.focus ? 1 : 0,
                 }}
               />
             </div>
           </div>
 
-          <ReplayReward
-            nextRep={replayReward.nextRep}
-          />
+          <div
+            className={`transition-opacity duration-1000 ${
+              showNext ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <ReplayReward
+              nextRep={replayReward.nextRep}
+            />
+          </div>
 
-          <div className="mt-8 flex justify-center">
+          <div
+            className={`mt-8 flex justify-center transition-opacity duration-1000 ${
+              showForward ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+          >
             <Link
               href={nextWarmup ? `/?warmup=${nextWarmup.id}` : "/"}
               className="bg-white px-6 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
