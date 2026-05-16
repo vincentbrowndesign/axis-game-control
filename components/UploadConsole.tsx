@@ -450,10 +450,12 @@ export default function UploadConsole({
                 Memory
               </p>
               <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
+                Continue
+                <br />
                 {missionName(selectedMission)}
               </h1>
               <p className="mt-6 max-w-xl text-xl leading-relaxed text-white/55">
-                Record session.
+                Add one session to the same memory.
               </p>
             </div>
 

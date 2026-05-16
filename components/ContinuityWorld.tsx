@@ -1,4 +1,6 @@
 import Link from "next/link"
+import ContinueMemory from "@/components/ContinueMemory"
+import type { ActiveContinuityState } from "@/lib/world/getActiveContinuity"
 
 type WorldLink = {
   href: string
@@ -13,6 +15,8 @@ type Props = {
   primaryHref?: string
   primaryLabel?: string
   links?: WorldLink[]
+  preferredWarmupId?: string | null
+  showContinuity?: boolean
 }
 
 const defaultLinks: WorldLink[] = [
@@ -50,7 +54,16 @@ export default function ContinuityWorld({
   primaryHref = "/archive",
   primaryLabel = "Open Memory",
   links = defaultLinks,
+  preferredWarmupId = null,
+  showContinuity = true,
 }: Props) {
+  const fallbackContinuity: ActiveContinuityState = {
+    title,
+    line,
+    href: primaryHref,
+    actionLabel: primaryLabel,
+  }
+
   return (
     <main className="axis-atmosphere min-h-screen bg-black px-5 py-10 text-white">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col justify-between">
@@ -79,12 +92,19 @@ export default function ContinuityWorld({
           <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
             {line}
           </p>
-          <Link
-            href={primaryHref}
-            className="mt-10 inline-flex bg-white px-8 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
-          >
-            {primaryLabel}
-          </Link>
+          {showContinuity ? (
+            <ContinueMemory
+              preferredWarmupId={preferredWarmupId}
+              fallback={fallbackContinuity}
+            />
+          ) : (
+            <Link
+              href={primaryHref}
+              className="mt-10 inline-flex bg-white px-8 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
+            >
+              {primaryLabel}
+            </Link>
+          )}
         </section>
 
         <nav className="grid gap-px border border-white/10 bg-white/10 md:grid-cols-5">

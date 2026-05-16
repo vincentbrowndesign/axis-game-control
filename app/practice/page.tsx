@@ -7,10 +7,11 @@ export default function PracticePage() {
   return (
     <ContinuityWorld
       eyebrow="Practice"
-      title="Add memory"
-      line="Record once. Let the archive carry what matters."
+      title="Continue memory"
+      line="Return to the thread already moving."
       primaryHref={firstMemorySource ? `/?warmup=${firstMemorySource.id}` : "/"}
       primaryLabel="Add Memory"
+      preferredWarmupId={firstMemorySource?.id}
       links={[
         {
           href: "/archive",
