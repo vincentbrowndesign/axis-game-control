@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import UploadConsole from "@/components/UploadConsole"
 import {
   coachingNoteLine,
+  constraintLabel,
   constructionZoneLabel,
   drillName,
   phaseLabel,
@@ -202,6 +203,11 @@ export default async function HomePage({ searchParams }: Props) {
                       <p className="mt-1 text-sm text-white/55">
                         {situationLabel(session)}
                       </p>
+                      {session.constraint ? (
+                        <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
+                          Constraint: {constraintLabel(session)}
+                        </p>
+                      ) : null}
                       {triggerLabel(session) ? (
                         <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
                           Trigger: {triggerLabel(session)}
@@ -258,6 +264,11 @@ export default async function HomePage({ searchParams }: Props) {
                     {triggerLabel(session) ? (
                       <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
                         Trigger: {triggerLabel(session)}
+                      </p>
+                    ) : null}
+                    {session.constraint ? (
+                      <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
+                        Constraint: {constraintLabel(session)}
                       </p>
                     ) : null}
                   </Link>

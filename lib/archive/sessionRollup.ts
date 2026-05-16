@@ -2,6 +2,7 @@ import { normalizeReplay } from "@/lib/normalizeReplay"
 import type {
   AxisReplaySession,
   ConstructionZoneStatus,
+  EnvironmentalConstraint,
   ReplaySessionView,
   StressPhase,
 } from "@/types/memory"
@@ -30,6 +31,16 @@ export const BASKETBALL_SITUATIONS = [
   "Closeout Attack",
   "Paint Touch",
   "Ball Screen Reject",
+]
+
+export const ENVIRONMENTAL_CONSTRAINTS: EnvironmentalConstraint[] = [
+  "2 dribbles max",
+  "Weak hand only",
+  "No middle drive",
+  "One-touch finish",
+  "No retreat dribble",
+  "Reject screen",
+  "Automatic kick on slot drive",
 ]
 
 export function normalizeSessions(rows: AxisReplaySession[] | null | undefined) {
@@ -140,11 +151,15 @@ export function coachingNoteLine(session: ReplaySessionView) {
   if (session.coachCorrection) return `Correction: ${session.coachCorrection}`
   if (session.coachNote) return `Note: ${session.coachNote}`
 
-  return "Add the coaching note."
+  return "Add flaw and correction."
 }
 
 export function situationLabel(session: ReplaySessionView) {
   return session.situation?.trim() || "Add situation"
+}
+
+export function constraintLabel(session: ReplaySessionView) {
+  return session.constraint?.trim() || "Add constraint"
 }
 
 export function triggerLabel(session: ReplaySessionView) {

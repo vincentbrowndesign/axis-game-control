@@ -13,6 +13,15 @@ export type StressPhase = "Block" | "Guided" | "Scrimmage" | "Game Ready"
 
 export type ConstructionZoneStatus = "Active" | "Stabilizing" | "Cleared"
 
+export type EnvironmentalConstraint =
+  | "2 dribbles max"
+  | "Weak hand only"
+  | "No middle drive"
+  | "One-touch finish"
+  | "No retreat dribble"
+  | "Reject screen"
+  | "Automatic kick on slot drive"
+
 export type AxisProfile = {
   id: string
   user_id: string
@@ -77,6 +86,7 @@ export type ReplaySessionView = {
   fileName?: string
   tags: string[]
   situation?: string
+  constraint?: string
   coachNote?: string
   coachFlaw?: string
   coachCorrection?: string

@@ -1,67 +1,30 @@
-# AXIS_CONSTITUTION
+# AXIS CONSTITUTION
 
-## Product
-Axis helps coaches and players store, organize, retrieve, and review basketball sessions over time.
+Axis is a coaching reinforcement and retrieval system for basketball.
 
-## Core Value
-- sessions are saved
-- useful film is easy to find
-- players can be held accountable
-- coaches can review patterns
-- teams can connect practice to games
+## Hard Rules
 
-## Not Allowed
-- fake AI coaching
-- fake psychological claims
-- dashboard overload
-- abstract philosophy language
-- drill-first product framing
-- replay-as-the-product framing
-- forced "memory" narration everywhere
-- feature stacking
+- Preserve working capture, upload, replay, and archive systems.
+- Keep product changes small and scoped.
+- Use basketball-first wording.
+- Build for coaches, players, practice, review, and team reinforcement.
+- Organize clips around situations, corrections, triggers, constraints, repeat work, and phases.
+- Human coaches define meaning. Axis stores, retrieves, and reinforces it.
 
-## Product Hierarchy
-Primary:
-- archive
-- retrieval
-- player/team continuity
+## Do Not Add
 
-Secondary:
-- practice
-- drills
-- recording
-- replay
+- Fake AI coaching.
+- Basketball IQ scores.
+- Neuroscience metrics.
+- Dashboard overload.
+- Social feed behavior.
+- Startup or platform language.
+- Abstract memory narration.
+- New product concepts unless explicitly requested.
 
-## Replay Rule
-Replay supports review.
-Replay is not the product.
+## Product Priority
 
-## UX Rule
-Use basketball words first.
-Use system words only when needed.
-
-Prefer:
-- Practice
-- Film
-- Sessions
-- Archive
-- Review
-- Team
-- Player
-- Notes
-- Clips
-
-Avoid overusing:
-- continuity
-- memory
-- signal
-- returning
-- carry forward
-- what returns
-- effort links
-
-## Development Rule
-Change one layer at a time.
-Preserve working systems.
-Do not rewrite architecture unless explicitly instructed.
-Every change must make the product more useful to a coach, player, or team.
+1. Archive retrieval.
+2. Team reinforcement.
+3. Lightweight capture.
+4. Replay review support.

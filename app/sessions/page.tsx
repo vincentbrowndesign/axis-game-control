@@ -5,8 +5,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
   BASKETBALL_SITUATIONS,
   CONSTRUCTION_ZONE_STATUSES,
+  ENVIRONMENTAL_CONSTRAINTS,
   STRESS_PHASES,
   coachingNoteLine,
+  constraintLabel,
   constructionZoneLabel,
   dateLabel,
   drillName,
@@ -87,6 +89,7 @@ function sessionText(session: ReplaySessionView) {
     session.mission,
     session.environment,
     session.situation,
+    session.constraint,
     session.coachNote,
     session.coachFlaw,
     session.coachCorrection,
@@ -200,6 +203,9 @@ async function saveCoachNote(formData: FormData) {
   const situation = String(formData.get("situation") || "")
     .trim()
     .slice(0, 80)
+  const constraint = String(formData.get("constraint") || "")
+    .trim()
+    .slice(0, 80)
   const coachFlaw = String(formData.get("coachFlaw") || "")
     .trim()
     .slice(0, 140)
@@ -262,6 +268,7 @@ async function saveCoachNote(formData: FormData) {
         ...metadata,
         coachNote,
         situation,
+        constraint,
         coachFlaw,
         coachCorrection,
         triggerWord,
@@ -292,6 +299,7 @@ export default async function SessionsPage({
     player: textParam(params.player).trim(),
     drill: textParam(params.drill).trim(),
     situation: textParam(params.situation).trim(),
+    constraint: textParam(params.constraint).trim(),
     trigger: textParam(params.trigger).trim(),
     tag: textParam(params.tag).trim(),
     note: textParam(params.note).trim(),
@@ -360,6 +368,7 @@ export default async function SessionsPage({
       const player = filters.player.toLowerCase()
       const drill = filters.drill.toLowerCase()
       const situation = filters.situation.toLowerCase()
+      const constraint = filters.constraint.toLowerCase()
       const trigger = filters.trigger.toLowerCase()
       const tag = filters.tag.toLowerCase()
       const note = filters.note.toLowerCase()
@@ -371,6 +380,8 @@ export default async function SessionsPage({
         (!drill || drillName(session).toLowerCase().includes(drill)) &&
         (!situation ||
           situationLabel(session).toLowerCase().includes(situation)) &&
+        (!constraint ||
+          constraintLabel(session).toLowerCase().includes(constraint)) &&
         (!trigger || triggerLabel(session).toLowerCase().includes(trigger)) &&
         (!tag ||
           session.tags.some((item) => item.toLowerCase().includes(tag))) &&
@@ -403,6 +414,7 @@ export default async function SessionsPage({
       filters.player ||
       filters.drill ||
       filters.situation ||
+      filters.constraint ||
       filters.trigger ||
       filters.tag ||
       filters.note ||
@@ -484,6 +496,12 @@ export default async function SessionsPage({
             >
               Construction Zone
             </Link>
+            <Link
+              href="/sessions?constraint=No+middle+drive"
+              className="border border-white/10 px-3 py-2 transition hover:text-white"
+            >
+              No middle drive
+            </Link>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/50">
@@ -514,7 +532,7 @@ export default async function SessionsPage({
           </summary>
           <form
             action="/sessions"
-            className="mt-3 grid gap-2 lg:grid-cols-[repeat(7,minmax(0,1fr))_auto]"
+            className="mt-3 grid gap-2 lg:grid-cols-[repeat(4,minmax(0,1fr))]"
           >
             <input type="hidden" name="sort" value={sort} />
             <input type="hidden" name="q" value={filters.q} />
@@ -557,6 +575,21 @@ export default async function SessionsPage({
                 placeholder="repeat"
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Constraint
+              <select
+                name="constraint"
+                defaultValue={filters.constraint}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                <option value="">Any</option>
+                {ENVIRONMENTAL_CONSTRAINTS.map((constraint) => (
+                  <option key={constraint} value={constraint}>
+                    {constraint}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Trigger
@@ -706,6 +739,11 @@ export default async function SessionsPage({
                       <p className="mt-1 text-sm text-white/60">
                         Situation: {situationLabel(session)}
                       </p>
+                      {session.constraint ? (
+                        <p className="mt-1 text-sm text-white/45">
+                          Constraint: {constraintLabel(session)}
+                        </p>
+                      ) : null}
                     </div>
                     {isRepeated(session, sessionRepeats, tags) ? (
                       <Link
@@ -733,6 +771,14 @@ export default async function SessionsPage({
                       <span className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
                         Phase: {phaseLabel(session)}
                       </span>
+                      {session.constraint ? (
+                        <Link
+                          href={`/sessions?constraint=${encodeURIComponent(constraintLabel(session))}`}
+                          className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45 transition hover:text-white"
+                        >
+                          Constraint: {constraintLabel(session)}
+                        </Link>
+                      ) : null}
                       <span className="px-1 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
                         {nextAction(session, sessionRepeats, tags)}
                       </span>
@@ -772,6 +818,18 @@ export default async function SessionsPage({
                         {BASKETBALL_SITUATIONS.map((situation) => (
                           <option key={situation} value={situation}>
                             {situation}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        name="constraint"
+                        defaultValue={session.constraint || ""}
+                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
+                      >
+                        <option value="">Constraint</option>
+                        {ENVIRONMENTAL_CONSTRAINTS.map((constraint) => (
+                          <option key={constraint} value={constraint}>
+                            {constraint}
                           </option>
                         ))}
                       </select>

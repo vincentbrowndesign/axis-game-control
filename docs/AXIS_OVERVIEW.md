@@ -1,28 +1,29 @@
 # Axis Overview
 
-Axis is behavioral basketball memory infrastructure.
+Axis is a lightweight coaching reinforcement system.
 
-Axis is not a replay app, dashboard, stat platform, upload tool, clip feed, or social media product.
+Axis is not a replay app, dashboard, stat platform, upload tool, clip feed, AI coach, or generic training app.
 
-The product tracks continuity across time:
+The product helps Coach V keep repeated basketball corrections close to practice:
 
-- repeated rhythm
-- recurring resets
-- progression patterns
-- practice lineage
-- retrieval history
-- team memory
+- capture a useful clip
+- tag the tactical situation
+- write the flaw and correction
+- assign one trigger word
+- define the practice constraint
+- mark repeat tomorrow
+- retrieve the clip before the next practice, scrimmage, or game
 
-Replay is one entry point into memory. The archive is the core product.
+Replay supports review. Archive and Team are the primary working surfaces.
 
 ## Product Loop
 
-`Practice -> record -> keep meaningful memory -> retrieve patterns -> repeat intentionally -> connect teammates -> observe transfer -> reinforce next practice`
+`Practice -> clip -> situation -> correction -> trigger -> constraint -> repeat -> retrieve -> reinforce under pressure`
 
-## Surface Law
+## Working Rule
 
-Complexity exists underneath.
+The coach defines meaning.
 
-Clarity exists on the surface.
+Axis stores, organizes, and retrieves it.
 
-The user should always know what matters next.
+The user should always know what to review, repeat, or correct next.

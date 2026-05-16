@@ -2,6 +2,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import {
   coachingNoteLine,
+  constraintLabel,
   constructionZoneLabel,
   drillName,
   phaseLabel,
@@ -101,6 +102,13 @@ export default async function TeamPage({ params }: Props) {
         .filter((situation): situation is string => Boolean(situation))
     ),
   ].slice(0, 5)
+  const constraintFocus = [
+    ...new Set(
+      sessions
+        .map((session) => session.constraint)
+        .filter((constraint): constraint is string => Boolean(constraint))
+    ),
+  ].slice(0, 5)
   const needsReview = sessions.filter((session) => !session.coachNote)
   const playerReview = players
     .map((player) => ({
@@ -181,6 +189,14 @@ export default async function TeamPage({ params }: Props) {
               ? `${activeConstruction.length} active construction clips`
               : "No active construction clips"}
           </Link>
+          <Link
+            href={constraintFocus[0] ? `/sessions?constraint=${encodeURIComponent(constraintFocus[0])}` : "/sessions"}
+            className="hover:text-white"
+          >
+            {constraintFocus[0]
+              ? `Constraint focus: ${constraintFocus[0]}`
+              : "No constraints tagged yet"}
+          </Link>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -201,6 +217,26 @@ export default async function TeamPage({ params }: Props) {
                 ))}
                 {situationFocus.length === 0 && (
                   <p className="text-sm text-white/45">No situations tagged yet.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="border-b border-white/10 pb-4">
+              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
+                Constraint focus
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {constraintFocus.map((constraint) => (
+                  <Link
+                    key={constraint}
+                    href={`/sessions?constraint=${encodeURIComponent(constraint)}`}
+                    className="border border-white/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/50 transition hover:text-white"
+                  >
+                    {constraint}
+                  </Link>
+                ))}
+                {constraintFocus.length === 0 && (
+                  <p className="text-sm text-white/45">No constraints tagged yet.</p>
                 )}
               </div>
             </section>
@@ -230,6 +266,11 @@ export default async function TeamPage({ params }: Props) {
                     {player.reviewSession && triggerLabel(player.reviewSession) ? (
                       <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
                         Trigger: {triggerLabel(player.reviewSession)}
+                      </p>
+                    ) : null}
+                    {player.reviewSession?.constraint ? (
+                      <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/45">
+                        Constraint: {constraintLabel(player.reviewSession)}
                       </p>
                     ) : null}
                     <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
@@ -277,6 +318,11 @@ export default async function TeamPage({ params }: Props) {
                       <p className="mt-1 text-sm text-white/45">
                         {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
                       </p>
+                      {session.constraint ? (
+                        <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
+                          Constraint: {constraintLabel(session)}
+                        </p>
+                      ) : null}
                     </div>
                     <p className="text-sm text-white/40">{relativeTime(session.createdAt)}</p>
                   </Link>
@@ -304,6 +350,11 @@ export default async function TeamPage({ params }: Props) {
                     <p className="mt-2 text-xs text-white/35">
                       {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
                     </p>
+                    {session.constraint ? (
+                      <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-white/40">
+                        Constraint: {constraintLabel(session)}
+                      </p>
+                    ) : null}
                     {triggerLabel(session) ? (
                       <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
                         Trigger: {triggerLabel(session)}
@@ -333,6 +384,11 @@ export default async function TeamPage({ params }: Props) {
                     <p className="mt-1 text-sm text-white/45">
                       {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
                     </p>
+                    {session.constraint ? (
+                      <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/40">
+                        Constraint: {constraintLabel(session)}
+                      </p>
+                    ) : null}
                     {isConstructionActive(session) ? (
                       <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/45">
                         Construction: {constructionZoneLabel(session)} / Focus: mechanical compliance

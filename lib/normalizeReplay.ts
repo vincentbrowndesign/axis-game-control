@@ -530,6 +530,7 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
       fileName: asString(raw.fileName ?? raw.file_name, ""),
       tags: asStringArray(raw.tags),
       situation: asOptionalString(raw.situation ?? metadata.situation),
+      constraint: asOptionalString(raw.constraint ?? metadata.constraint),
       coachNote: asOptionalString(raw.coachNote ?? metadata.coachNote),
       coachFlaw: asOptionalString(raw.coachFlaw ?? metadata.coachFlaw),
       coachCorrection: asOptionalString(

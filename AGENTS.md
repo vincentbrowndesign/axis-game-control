@@ -3,23 +3,31 @@
 Before making product changes, read `/AXIS_CONSTITUTION.md`.
 
 Codex must:
-- make small scoped changes
-- preserve working video/upload/replay systems
-- avoid broad rewrites
-- avoid abstract brand language
-- use basketball-first wording
-- keep UI practical and coach/player useful
-- isolate one broken layer at a time
+
+- Preserve working video, upload, replay, and archive systems.
+- Make small scoped changes.
+- Avoid broad rewrites.
+- Use basketball-first wording.
+- Keep UI practical, calm, and coach/player useful.
+- Prefer Archive and Team as primary product surfaces.
+- Treat capture as a lightweight action, not a new destination.
+- Keep AI positioned as assistive retrieval and organization only.
+- Avoid startup language, fake AI language, neuroscience language, and abstract product philosophy.
+- Isolate one broken layer at a time.
 
 Every task must identify:
-1. Goal
-2. Files changed
-3. What was intentionally not touched
-4. Verification run
 
-Do not invent new product philosophy.
-Do not create new major routes unless asked.
-Do not turn Axis into a dashboard, social feed, AI coach, or drill app.
+1. Goal.
+2. Files changed.
+3. What was intentionally not touched.
+4. Verification run.
+
+Do not:
+
+- Invent new product philosophy.
+- Create new major routes unless asked.
+- Turn Axis into a dashboard, social feed, AI coach, drill app, or sports-tech pitch.
+- Add basketball IQ scores, neuroscience metrics, or fake precision.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
