@@ -38,6 +38,22 @@ const VIEW_OPTIONS: { value: ArchiveView; label: string }[] = [
   { value: "repeated", label: "Repeated" },
 ]
 
+function PrimaryNav() {
+  return (
+    <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
+      <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
+        Today
+      </Link>
+      <Link className="border border-white/10 px-3 py-2 text-white" href="/sessions">
+        Archive
+      </Link>
+      <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/team/local">
+        Team
+      </Link>
+    </nav>
+  )
+}
+
 function textParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || ""
 }
@@ -319,19 +335,22 @@ export default async function SessionsPage({
               Archive
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Session review
+              Clip review
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
               Find clips by player, drill, tag, note, and practice type.
             </p>
           </div>
 
-          <Link
-            href="/"
-            className="w-fit border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-white/70 transition hover:border-white/35 hover:text-white"
-          >
-            Add session
-          </Link>
+          <div className="grid gap-3 lg:justify-items-end">
+            <PrimaryNav />
+            <Link
+              href="/"
+              className="w-fit border border-lime-300/25 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-lime-100 transition hover:border-lime-200/45 hover:text-white"
+            >
+              Record clip
+            </Link>
+          </div>
         </header>
 
         <section className="mb-4 border-b border-white/10 pb-4">

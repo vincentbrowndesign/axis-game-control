@@ -379,6 +379,12 @@ export default function UploadConsole({
 
           <div className="flex flex-wrap gap-2">
             <Link
+              href="/"
+              className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
+            >
+              Today
+            </Link>
+            <Link
               href="/sessions"
               className="border border-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
             >

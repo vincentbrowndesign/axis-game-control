@@ -22,7 +22,7 @@ function PrimaryNav() {
   return (
     <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/">
-        Home
+        Today
       </Link>
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/sessions">
         Archive
@@ -126,10 +126,10 @@ export default async function TeamPage({ params }: Props) {
               Team
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Team review
+              Team practice
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Prepare tomorrow from recent sessions, notes, and clips tagged repeat.
+              Review players, notes, and repeat clips before the next practice.
             </p>
           </div>
           <PrimaryNav />

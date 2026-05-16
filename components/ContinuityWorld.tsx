@@ -23,7 +23,7 @@ type Props = {
 const defaultLinks: WorldLink[] = [
   {
     href: "/",
-    label: "Home",
+    label: "Today",
     line: "Continue practice.",
   },
   {

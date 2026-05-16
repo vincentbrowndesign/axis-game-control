@@ -25,7 +25,7 @@ function PrimaryNav() {
   return (
     <nav className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
       <Link className="border border-white/10 px-3 py-2 text-white" href="/">
-        Home
+        Today
       </Link>
       <Link className="border border-white/10 px-3 py-2 hover:text-white" href="/sessions">
         Archive
@@ -117,13 +117,13 @@ export default async function HomePage({ searchParams }: Props) {
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
-              Home
+              Today
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Today&apos;s work
+              Practice stream
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Pick up practice, review recent clips, and check notes that still need attention.
+              Record clips, review notes, and keep repeat work close to practice.
             </p>
           </div>
           <PrimaryNav />
@@ -156,7 +156,7 @@ export default async function HomePage({ searchParams }: Props) {
             href={continueHref}
             className="w-fit border border-lime-300/20 px-4 py-3 text-xs font-black uppercase tracking-[0.2em] text-lime-100 transition hover:border-lime-200/45"
           >
-            Continue practice
+            Record clip
           </Link>
         </section>
 
@@ -168,7 +168,7 @@ export default async function HomePage({ searchParams }: Props) {
                   Recent clips
                 </h2>
                 <Link href="/sessions" className="text-xs font-bold text-white/45 hover:text-white">
-                  Open archive
+                  Review archive
                 </Link>
               </div>
               <div className="mt-3 grid gap-2">
@@ -195,7 +195,7 @@ export default async function HomePage({ searchParams }: Props) {
 
             <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Pending review
+                Needs review
               </h2>
               <div className="mt-3 grid gap-2">
                 {pendingReview.map((session) => (
@@ -243,7 +243,7 @@ export default async function HomePage({ searchParams }: Props) {
 
             <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Tagged repeats
+                Repeat clips
               </h2>
               <div className="mt-3 grid gap-2">
                 {repeatSessions.map((session) => (
