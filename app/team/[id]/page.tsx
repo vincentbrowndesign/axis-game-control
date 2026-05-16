@@ -1,7 +1,9 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import {
+  coachingNoteLine,
   drillName,
+  phaseLabel,
   isRepeated,
   normalizeSessions,
   playerName,
@@ -9,6 +11,7 @@ import {
   relativeTime,
   repeatCounts,
   tagCounts,
+  triggerLabel,
 } from "@/lib/archive/sessionRollup"
 import type { AxisReplaySession, ReplaySessionView } from "@/types/memory"
 
@@ -183,13 +186,21 @@ export default async function TeamPage({ params }: Props) {
                         ? `${drillName(player.reviewSession)} needs review`
                         : "Check recent practice work"}
                     </p>
-                    {player.reviewSession?.coachNote ? (
+                    {player.reviewSession ? (
                       <p className="mt-1 text-sm text-white/55">
-                        {player.reviewSession.coachNote}
+                        {coachingNoteLine(player.reviewSession)}
+                      </p>
+                    ) : null}
+                    {player.reviewSession && triggerLabel(player.reviewSession) ? (
+                      <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
+                        Trigger: {triggerLabel(player.reviewSession)}
                       </p>
                     ) : null}
                     <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
                       <span>{player.needsNotes} notes pending</span>
+                      {player.reviewSession ? (
+                        <span>phase {phaseLabel(player.reviewSession)}</span>
+                      ) : null}
                       <span>{player.recentSessions} recent</span>
                       <span>last practice {player.lastPractice}</span>
                     </div>
@@ -219,14 +230,16 @@ export default async function TeamPage({ params }: Props) {
                   >
                     <div>
                       <p className="text-sm text-lime-100/80">
-                        {session.coachNote ||
+                        {triggerLabel(session)
+                          ? `Trigger: ${triggerLabel(session)}`
+                          : session.coachNote ||
                           (isRepeated(session, repeats, tags)
                             ? "Repeat tomorrow"
                             : "Open for review")}
                       </p>
                       <p className="font-bold text-white">{drillName(session)}</p>
                       <p className="mt-1 text-sm text-white/45">
-                        {playerName(session)} / {session.environment}
+                        {playerName(session)} / {session.environment} / Phase: {phaseLabel(session)}
                       </p>
                     </div>
                     <p className="text-sm text-white/40">{relativeTime(session.createdAt)}</p>
@@ -253,8 +266,13 @@ export default async function TeamPage({ params }: Props) {
                   >
                     <p className="text-sm text-white/75">{session.coachNote}</p>
                     <p className="mt-2 text-xs text-white/35">
-                      {playerName(session)} / {drillName(session)}
+                      {playerName(session)} / {drillName(session)} / Phase: {phaseLabel(session)}
                     </p>
+                    {triggerLabel(session) ? (
+                      <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
+                        Trigger: {triggerLabel(session)}
+                      </p>
+                    ) : null}
                   </Link>
                 ))}
                 {coachNotes.length === 0 && (
@@ -277,8 +295,13 @@ export default async function TeamPage({ params }: Props) {
                     <p className="text-sm text-lime-100/80">Repeat tomorrow</p>
                     <p className="mt-1 font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
-                      {playerName(session)}
+                      {playerName(session)} / Phase: {phaseLabel(session)}
                     </p>
+                    {session.constructionZone ? (
+                      <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/45">
+                        Construction Zone / Focus: mechanical compliance
+                      </p>
+                    ) : null}
                   </Link>
                 ))}
                 {taggedRepeats.length === 0 && (

@@ -9,6 +9,8 @@ export type SessionEnvironment =
   | "mission"
   | "workout"
 
+export type StressPhase = "Block" | "Guided" | "Scrimmage" | "Game Ready"
+
 export type AxisProfile = {
   id: string
   user_id: string
@@ -73,6 +75,11 @@ export type ReplaySessionView = {
   fileName?: string
   tags: string[]
   coachNote?: string
+  coachFlaw?: string
+  coachCorrection?: string
+  triggerWord?: string
+  constructionZone?: boolean
+  stressPhase?: StressPhase
   memoryCount?: number
   lastSignal?: string
   archiveStatus?: string

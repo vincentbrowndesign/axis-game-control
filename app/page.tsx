@@ -2,13 +2,16 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import UploadConsole from "@/components/UploadConsole"
 import {
+  coachingNoteLine,
   drillName,
+  phaseLabel,
   isRepeated,
   normalizeSessions,
   playerName,
   relativeTime,
   repeatCounts,
   tagCounts,
+  triggerLabel,
 } from "@/lib/archive/sessionRollup"
 import { getCalibrationMissions } from "@/lib/missions/getCalibrationMissions"
 import { createClient } from "@/lib/supabase/server"
@@ -183,6 +186,11 @@ export default async function HomePage({ searchParams }: Props) {
                       <p className="mt-1 text-sm text-white/45">
                         {playerName(session)} / {session.environment}
                       </p>
+                      {triggerLabel(session) ? (
+                        <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
+                          Trigger: {triggerLabel(session)}
+                        </p>
+                      ) : null}
                     </div>
                     <p className="text-sm text-white/40">{relativeTime(session.createdAt)}</p>
                   </Link>
@@ -206,7 +214,7 @@ export default async function HomePage({ searchParams }: Props) {
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
-                      Add a coach note for {playerName(session)}.
+                      Add flaw, correction, and trigger for {playerName(session)}.
                     </p>
                   </Link>
                 ))}
@@ -233,6 +241,11 @@ export default async function HomePage({ searchParams }: Props) {
                     <p className="mt-2 text-xs text-white/35">
                       {playerName(session)} / {drillName(session)}
                     </p>
+                    {triggerLabel(session) ? (
+                      <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
+                        Trigger: {triggerLabel(session)}
+                      </p>
+                    ) : null}
                   </Link>
                 ))}
                 {notes.length === 0 && (
@@ -254,7 +267,10 @@ export default async function HomePage({ searchParams }: Props) {
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
-                      {playerName(session)}
+                      {playerName(session)} / Phase: {phaseLabel(session)}
+                    </p>
+                    <p className="mt-1 text-sm text-white/55">
+                      {coachingNoteLine(session)}
                     </p>
                   </Link>
                 ))}

@@ -3,8 +3,11 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
+  STRESS_PHASES,
+  coachingNoteLine,
   dateLabel,
   drillName,
+  phaseLabel,
   isRecent,
   isRepeated,
   normalizeSessions,
@@ -13,11 +16,13 @@ import {
   relativeTime,
   repeatCounts,
   tagCounts,
+  triggerLabel,
 } from "@/lib/archive/sessionRollup"
 import {
   type AxisReplaySession,
   type ReplaySessionView,
   type SessionEnvironment,
+  type StressPhase,
 } from "@/types/memory"
 
 type ArchiveSort = "date" | "player" | "drill" | "practice" | "scrimmage" | "game"
@@ -76,6 +81,10 @@ function sessionText(session: ReplaySessionView) {
     session.mission,
     session.environment,
     session.coachNote,
+    session.coachFlaw,
+    session.coachCorrection,
+    session.triggerWord,
+    session.stressPhase,
     playerName(session),
     ...session.tags,
   ]
@@ -147,7 +156,9 @@ function clipReason(
   sessionRepeats: Record<string, number>,
   tags: Record<string, number>
 ) {
-  if (session.coachNote) return `Note: ${session.coachNote}`
+  if (session.coachFlaw || session.coachCorrection || session.coachNote) {
+    return coachingNoteLine(session)
+  }
 
   if (isRepeated(session, sessionRepeats, tags)) return "Repeat tomorrow"
 
@@ -178,6 +189,24 @@ async function saveCoachNote(formData: FormData) {
   const coachNote = String(formData.get("coachNote") || "")
     .trim()
     .slice(0, 180)
+  const coachFlaw = String(formData.get("coachFlaw") || "")
+    .trim()
+    .slice(0, 140)
+  const coachCorrection = String(formData.get("coachCorrection") || "")
+    .trim()
+    .slice(0, 160)
+  const triggerWord = String(formData.get("triggerWord") || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 18)
+  const constructionZone = formData.get("constructionZone") === "on"
+  const stressPhaseValue = String(formData.get("stressPhase") || "Block")
+  const stressPhase: StressPhase = STRESS_PHASES.includes(
+    stressPhaseValue as StressPhase
+  )
+    ? (stressPhaseValue as StressPhase)
+    : "Block"
+  const shouldRepeat = formData.get("repeatTomorrow") === "on"
 
   if (!sessionId) return
 
@@ -190,20 +219,35 @@ async function saveCoachNote(formData: FormData) {
 
   const existing = await supabase
     .from("axis_sessions")
-    .select("metadata")
+    .select("metadata,tags")
     .eq("id", sessionId)
     .eq("user_id", user.id)
-    .single<{ metadata: Record<string, unknown> | null }>()
+    .single<{ metadata: Record<string, unknown> | null; tags: string[] | null }>()
 
   const metadata =
     existing.data?.metadata && typeof existing.data.metadata === "object"
       ? existing.data.metadata
       : {}
 
+  const tags = Array.isArray(existing.data?.tags)
+    ? existing.data.tags.filter((tag) => tag.toLowerCase() !== "repeat")
+    : []
+
+  if (shouldRepeat) tags.push("repeat")
+
   await supabase
     .from("axis_sessions")
     .update({
-      metadata: { ...metadata, coachNote },
+      tags,
+      metadata: {
+        ...metadata,
+        coachNote,
+        coachFlaw,
+        coachCorrection,
+        triggerWord,
+        constructionZone,
+        stressPhase,
+      },
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
@@ -574,9 +618,27 @@ export default async function SessionsPage({
                     <p className="text-sm text-white/70">
                       {clipReason(session, sessionRepeats, tags)}
                     </p>
-                    <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
-                      {nextAction(session, sessionRepeats, tags)}
-                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {triggerLabel(session) ? (
+                        <span className="border border-lime-300/25 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-lime-100">
+                          Trigger: {triggerLabel(session)}
+                        </span>
+                      ) : null}
+                      <span className="border border-white/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/70">
+                        {session.constructionZone ? "Construction Zone" : "Normal"}
+                      </span>
+                      <span className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                        Phase: {phaseLabel(session)}
+                      </span>
+                      <span className="px-1 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
+                        {nextAction(session, sessionRepeats, tags)}
+                      </span>
+                    </div>
+                    {session.constructionZone ? (
+                      <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
+                        Focus: mechanical compliance
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -597,15 +659,64 @@ export default async function SessionsPage({
 
                   <form action={saveCoachNote} className="grid gap-2">
                     <input type="hidden" name="sessionId" value={session.id} />
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <input
+                        name="coachFlaw"
+                        defaultValue={session.coachFlaw || ""}
+                        placeholder="Flaw: Stood tall on catch."
+                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
+                      />
+                      <input
+                        name="coachCorrection"
+                        defaultValue={session.coachCorrection || ""}
+                        placeholder="Correction: Drop hips before catch."
+                        className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
+                      />
                       <input
                         name="coachNote"
                         defaultValue={session.coachNote || ""}
-                        placeholder="Lost rhythm left."
+                        placeholder="Note: Repeat tomorrow."
                         className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
                       />
+                      <input
+                        name="triggerWord"
+                        defaultValue={triggerLabel(session)}
+                        placeholder="Trigger: SINK"
+                        className="border border-white/10 bg-black px-3 py-2 text-sm font-black uppercase tracking-[0.12em] text-white outline-none placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-white/25"
+                      />
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto_auto]">
+                      <label className="flex items-center gap-2 border border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/55">
+                        <input
+                          type="checkbox"
+                          name="repeatTomorrow"
+                          defaultChecked={isRepeated(session, sessionRepeats, tags)}
+                          className="accent-lime-300"
+                        />
+                        Repeat
+                      </label>
+                      <label className="flex items-center gap-2 border border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/55">
+                        <input
+                          type="checkbox"
+                          name="constructionZone"
+                          defaultChecked={Boolean(session.constructionZone)}
+                          className="accent-lime-300"
+                        />
+                        Construction Zone
+                      </label>
+                      <select
+                        name="stressPhase"
+                        defaultValue={phaseLabel(session)}
+                        className="border border-white/10 bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white/70 outline-none"
+                      >
+                        {STRESS_PHASES.map((phase) => (
+                          <option key={phase} value={phase}>
+                            {phase}
+                          </option>
+                        ))}
+                      </select>
                       <button className="border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white/70 transition hover:border-white/35 hover:text-white">
-                        Note
+                        Save
                       </button>
                     </div>
                   </form>

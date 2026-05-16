@@ -14,6 +14,7 @@ import type {
   ReplaySessionView,
   SessionEnvironment,
   SessionSource,
+  StressPhase,
 } from "@/types/memory"
 
 const DEFAULT_REPLAY = {
@@ -100,6 +101,19 @@ function asOptionalString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : undefined
+}
+
+function asStressPhase(value: unknown): StressPhase | undefined {
+  if (
+    value === "Block" ||
+    value === "Guided" ||
+    value === "Scrimmage" ||
+    value === "Game Ready"
+  ) {
+    return value
+  }
+
+  return undefined
 }
 
 function asTone(value: unknown): "lime" | "cyan" | "zinc" {
@@ -500,6 +514,15 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
       fileName: asString(raw.fileName ?? raw.file_name, ""),
       tags: asStringArray(raw.tags),
       coachNote: asOptionalString(raw.coachNote ?? metadata.coachNote),
+      coachFlaw: asOptionalString(raw.coachFlaw ?? metadata.coachFlaw),
+      coachCorrection: asOptionalString(
+        raw.coachCorrection ?? metadata.coachCorrection
+      ),
+      triggerWord: asOptionalString(raw.triggerWord ?? metadata.triggerWord),
+      constructionZone: Boolean(
+        raw.constructionZone ?? metadata.constructionZone
+      ),
+      stressPhase: asStressPhase(raw.stressPhase ?? metadata.stressPhase),
       memoryCount: memoryState?.memoryCount ?? memoryCount,
       lastSignal: asString(
         raw.lastSignal ?? metadata.lastSignal,

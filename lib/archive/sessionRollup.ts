@@ -1,5 +1,16 @@
 import { normalizeReplay } from "@/lib/normalizeReplay"
-import type { AxisReplaySession, ReplaySessionView } from "@/types/memory"
+import type {
+  AxisReplaySession,
+  ReplaySessionView,
+  StressPhase,
+} from "@/types/memory"
+
+export const STRESS_PHASES: StressPhase[] = [
+  "Block",
+  "Guided",
+  "Scrimmage",
+  "Game Ready",
+]
 
 export function normalizeSessions(rows: AxisReplaySession[] | null | undefined) {
   return (rows || []).map((session) => normalizeReplay(session))
@@ -91,9 +102,30 @@ export function isRepeated(
 ) {
   return (
     sessionRepeats[repeatKey(session)] > 1 ||
+    session.tags.some((tag) => tag.toLowerCase() === "repeat") ||
     session.tags.some((tag) => tags[tag.toLowerCase()] > 1) ||
     session.coachNote?.toLowerCase().includes("repeat")
   )
+}
+
+export function coachingNoteLine(session: ReplaySessionView) {
+  if (session.coachFlaw && session.coachCorrection) {
+    return `Flaw: ${session.coachFlaw} / Correction: ${session.coachCorrection}`
+  }
+
+  if (session.coachFlaw) return `Flaw: ${session.coachFlaw}`
+  if (session.coachCorrection) return `Correction: ${session.coachCorrection}`
+  if (session.coachNote) return `Note: ${session.coachNote}`
+
+  return "Add the coaching note."
+}
+
+export function triggerLabel(session: ReplaySessionView) {
+  return session.triggerWord?.trim().toUpperCase() || ""
+}
+
+export function phaseLabel(session: ReplaySessionView) {
+  return session.stressPhase || "Block"
 }
 
 function practiceDateKey(timestamp: number) {
