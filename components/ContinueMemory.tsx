@@ -9,11 +9,13 @@ import {
 
 type Props = {
   preferredWarmupId?: string | null
+  fallbackName?: string | null
   fallback: ActiveContinuityState
 }
 
 export default function ContinueMemory({
   preferredWarmupId = null,
+  fallbackName = null,
   fallback,
 }: Props) {
   const fallbackSnapshot = useMemo(
@@ -21,8 +23,11 @@ export default function ContinueMemory({
     [fallback]
   )
   const getSnapshot = useCallback(
-    () => JSON.stringify(getActiveContinuity({ preferredWarmupId })),
-    [preferredWarmupId]
+    () =>
+      JSON.stringify(
+        getActiveContinuity({ preferredWarmupId, fallbackName })
+      ),
+    [fallbackName, preferredWarmupId]
   )
   const snapshot = useSyncExternalStore(
     subscribeToContinuity,
@@ -35,7 +40,7 @@ export default function ContinueMemory({
   return (
     <div className="mt-10 max-w-xl border-t border-white/10 pt-6">
       <p className="text-[10px] uppercase tracking-[0.45em] text-white/30">
-        Active Continuity
+        {state.eyebrow}
       </p>
       <p className="mt-4 text-2xl font-black uppercase leading-tight tracking-[-0.035em] text-white">
         {state.title}

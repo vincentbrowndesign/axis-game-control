@@ -125,6 +125,10 @@ function missionName(mission: CalibrationMission) {
   return mission.title
 }
 
+function displayName(value?: string | null) {
+  return value?.trim() || "Local Player"
+}
+
 function MissionCard({
   mission,
   onSelect,
@@ -142,7 +146,7 @@ function MissionCard({
         {missionName(mission)}
       </h2>
       <p className="mt-8 text-sm uppercase tracking-[0.28em] opacity-55">
-        Add to archive
+        Carry forward
       </p>
     </button>
   )
@@ -385,22 +389,22 @@ export default function UploadConsole({
         {flowStep === "entry" ? (
           <section className="flex min-h-[calc(100vh-13rem)] flex-col justify-end pb-10">
             <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-              {twinName || "Local Player"}
+              {displayName(twinName)}
             </p>
             <h1 className="mt-6 text-[clamp(4.8rem,18vw,12rem)] font-black leading-[0.78] tracking-[-0.07em]">
-              RETURNING
+              {displayName(twinName)}
               <br />
-              MEMORY
+              RETURNING
             </h1>
             <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-              Rhythm held.
+              Continuity active.
             </p>
             <button
               type="button"
               onClick={() => setFlowStep("mission")}
               className="mt-10 w-fit bg-white px-9 py-5 text-sm font-black uppercase tracking-[0.28em] text-black transition hover:bg-lime-300"
             >
-              Enter Axis
+              Carry Forward
             </button>
           </section>
         ) : null}
@@ -409,15 +413,15 @@ export default function UploadConsole({
           <section className="pb-10">
             <div className="mb-8">
               <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-                Practice
+                Player Continuity
               </p>
               <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-                MEMORY
+                THREADS
                 <br />
-                SOURCE
+                ACTIVE
               </h1>
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/45">
-                Choose one way to add memory.
+                Choose what carries forward.
               </p>
             </div>
 
@@ -447,15 +451,15 @@ export default function UploadConsole({
                 Sources
               </button>
               <p className="text-[10px] uppercase tracking-[0.5em] text-lime-300">
-                Memory
+                Player Continuity
               </p>
               <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
-                Continue
+                {displayName(twinName)}
                 <br />
-                {missionName(selectedMission)}
+                RETURNING
               </h1>
               <p className="mt-6 max-w-xl text-xl leading-relaxed text-white/55">
-                Add one session to the same memory.
+                {missionName(selectedMission)} continuity active.
               </p>
             </div>
 
@@ -470,7 +474,7 @@ export default function UploadConsole({
                 }}
                 className="mt-8 w-full bg-lime-300 px-6 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-white disabled:opacity-50"
               >
-                Add Memory
+                Carry Forward
               </button>
             </div>
           </section>

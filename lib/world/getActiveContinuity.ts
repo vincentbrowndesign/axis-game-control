@@ -11,6 +11,7 @@ type StoredReplaySession = {
 }
 
 export type ActiveContinuityState = {
+  eyebrow: string
   title: string
   line: string
   href: string
@@ -113,10 +114,20 @@ function progressLine(mission: CalibrationMission) {
   return null
 }
 
+function playerName(fallbackName?: string | null) {
+  try {
+    return getActiveTwin(fallbackName).displayName
+  } catch {
+    return fallbackName?.trim() || "Local Player"
+  }
+}
+
 export function getActiveContinuity({
   preferredWarmupId,
+  fallbackName,
 }: {
   preferredWarmupId?: string | null
+  fallbackName?: string | null
 } = {}): ActiveContinuityState {
   const latestSession = sessionsFromStorage()[0]
   const latestMissionTitle = missionTitle(latestSession?.mission)
@@ -124,36 +135,43 @@ export function getActiveContinuity({
   const preferredMission = missionById(preferredWarmupId)
   const activeMission = latestMission || preferredMission
   const href = activeMission ? `/?warmup=${activeMission.id}` : "/practice"
+  const name = playerName(fallbackName)
 
   if (latestSession) {
     const lastSeen = relativeDays(latestSession.createdAt)
+    const chainLine = activeMission ? progressLine(activeMission) : null
     const line =
-      (activeMission ? progressLine(activeMission) : null) ||
-      (lastSeen ? `Last memory: ${lastSeen}.` : "Previous memory found.")
+      chainLine ||
+      (activeMission && lastSeen
+        ? `Last memory: ${lastSeen}. ${activeMission.title} continuity active.`
+        : lastSeen
+          ? `Last memory: ${lastSeen}. Continuity active.`
+          : "Previous memory found.")
 
     return {
-      title: activeMission
-        ? `Continue ${activeMission.title} memory`
-        : "Continue memory",
+      eyebrow: "Player Continuity",
+      title: `${name} returning`,
       line,
       href,
-      actionLabel: "Add Memory",
+      actionLabel: "Carry Forward",
     }
   }
 
   if (preferredMission) {
     return {
-      title: `Continue ${preferredMission.title} memory`,
-      line: "Add the next session to the archive.",
+      eyebrow: "Player Continuity",
+      title: `${name} returning`,
+      line: `${preferredMission.title} continuity ready.`,
       href,
-      actionLabel: "Add Memory",
+      actionLabel: "Carry Forward",
     }
   }
 
   return {
-    title: "Continue memory",
-    line: "Add the next session to the archive.",
+    eyebrow: "Player Continuity",
+    title: `${name} returning`,
+    line: "Continuity ready.",
     href,
-    actionLabel: "Add Memory",
+    actionLabel: "Carry Forward",
   }
 }

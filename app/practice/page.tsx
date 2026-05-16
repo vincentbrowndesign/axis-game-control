@@ -7,11 +7,12 @@ export default function PracticePage() {
   return (
     <ContinuityWorld
       eyebrow="Practice"
-      title="Continue memory"
-      line="Return to the thread already moving."
+      title="Player continuity"
+      line="Return to the player thread already moving."
       primaryHref={firstMemorySource ? `/?warmup=${firstMemorySource.id}` : "/"}
-      primaryLabel="Add Memory"
+      primaryLabel="Carry Forward"
       preferredWarmupId={firstMemorySource?.id}
+      identityName="Local Player"
       links={[
         {
           href: "/archive",

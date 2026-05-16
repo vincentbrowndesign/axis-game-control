@@ -42,13 +42,16 @@ export default async function HomePage({ searchParams }: Props) {
       )
     }
 
+    const playerName = profile.player_name || profile.display_name || "Player"
+
     return (
       <ContinuityWorld
         eyebrow="Returning"
-        title="Memory held"
-        line="Basketball life enters memory. Memory becomes retrieval, connections, and shared continuity."
+        title={`${playerName} returning`}
+        line="Continuity active."
         primaryHref="/archive"
-        primaryLabel="Enter Axis"
+        primaryLabel="Carry Forward"
+        identityName={playerName}
       />
     )
   }
@@ -65,13 +68,13 @@ export default async function HomePage({ searchParams }: Props) {
           MEMORY
         </h1>
         <p className="mt-8 max-w-2xl text-xl leading-relaxed text-white/45">
-          Build your basketball rhythm.
+          Enter your basketball continuity.
         </p>
         <Link
           href="/auth"
           className="mt-10 w-fit bg-white px-8 py-5 text-sm font-black uppercase tracking-[0.24em] text-black"
         >
-          Enter Axis
+          Start Memory
         </Link>
       </div>
     </main>

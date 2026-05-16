@@ -16,6 +16,7 @@ type Props = {
   primaryLabel?: string
   links?: WorldLink[]
   preferredWarmupId?: string | null
+  identityName?: string | null
   showContinuity?: boolean
 }
 
@@ -55,9 +56,11 @@ export default function ContinuityWorld({
   primaryLabel = "Open Memory",
   links = defaultLinks,
   preferredWarmupId = null,
+  identityName = null,
   showContinuity = true,
 }: Props) {
   const fallbackContinuity: ActiveContinuityState = {
+    eyebrow: "Player Continuity",
     title,
     line,
     href: primaryHref,
@@ -95,6 +98,7 @@ export default function ContinuityWorld({
           {showContinuity ? (
             <ContinueMemory
               preferredWarmupId={preferredWarmupId}
+              fallbackName={identityName}
               fallback={fallbackContinuity}
             />
           ) : (
