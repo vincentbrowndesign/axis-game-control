@@ -256,7 +256,10 @@ export default async function SessionsPage({
         (!drill || drillName(session).toLowerCase().includes(drill)) &&
         (!tag ||
           session.tags.some((item) => item.toLowerCase().includes(tag))) &&
-        (!note || session.coachNote?.toLowerCase().includes(note)) &&
+        (!note ||
+          (note === "missing"
+            ? !session.coachNote
+            : session.coachNote?.toLowerCase().includes(note))) &&
         matchesType(session, filters.type) &&
         (view !== "recent" || isRecent(session)) &&
         (view !== "repeated" || isRepeated(session, sessionRepeats, tags))
@@ -266,9 +269,10 @@ export default async function SessionsPage({
   )
   const players = playerSummaries(sessions)
   const taggedRepeats = sessions.filter((session) =>
-    session.tags.some((tag) => tags[tag.toLowerCase()] > 1)
-  ).length
-  const recentSessions = sessions.filter(isRecent).length
+    isRepeated(session, sessionRepeats, tags)
+  )
+  const pendingNotes = sessions.filter((session) => !session.coachNote)
+  const lastPractice = sessions.find((session) => session.environment === "practice")
 
   return (
     <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
@@ -294,38 +298,29 @@ export default async function SessionsPage({
           </Link>
         </header>
 
-        <section className="mb-4 grid gap-2 md:grid-cols-4">
-          <div className="border border-white/10 bg-white/[0.03] p-3">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Sessions
-            </p>
-            <p className="mt-1 text-2xl font-black">{sessions.length}</p>
-          </div>
-          <div className="border border-white/10 bg-white/[0.03] p-3">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Players
-            </p>
-            <p className="mt-1 text-2xl font-black">{players.length}</p>
-          </div>
-          <div className="border border-white/10 bg-white/[0.03] p-3">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Recent
-            </p>
-            <p className="mt-1 text-2xl font-black">{recentSessions}</p>
-          </div>
-          <div className="border border-white/10 bg-white/[0.03] p-3">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Tagged repeats
-            </p>
-            <p className="mt-1 text-2xl font-black">{taggedRepeats}</p>
-          </div>
+        <section className="mb-4 flex flex-wrap gap-x-5 gap-y-2 border-b border-white/10 pb-4 text-sm text-white/60">
+          <Link href="/sessions?view=repeated" className="hover:text-white">
+            {taggedRepeats.length
+              ? `${taggedRepeats.length} clips tagged repeat`
+              : "No repeat clips tagged"}
+          </Link>
+          <Link href="/sessions?note=missing" className="hover:text-white">
+            {pendingNotes.length
+              ? `${pendingNotes.length} clips need notes`
+              : "Notes are current"}
+          </Link>
+          <Link href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions"} className="hover:text-white">
+            {lastPractice
+              ? `Last practice: ${drillName(lastPractice)}`
+              : "No practice sessions yet"}
+          </Link>
         </section>
 
-        <section className="mb-4 border border-white/10 bg-white/[0.03] p-3">
-          <form action="/sessions" className="grid gap-2 lg:grid-cols-6">
+        <section className="mb-4 border-b border-white/10 pb-4">
+          <form action="/sessions" className="grid gap-2 lg:grid-cols-[1.4fr_repeat(5,minmax(0,1fr))_auto]">
             <input type="hidden" name="sort" value={sort} />
-            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35 lg:col-span-2">
-              Search
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Find
               <input
                 name="q"
                 defaultValue={filters.q}
@@ -333,7 +328,7 @@ export default async function SessionsPage({
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
             </label>
-            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Player
               <input
                 name="player"
@@ -341,7 +336,7 @@ export default async function SessionsPage({
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               />
             </label>
-            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Drill
               <input
                 name="drill"
@@ -349,7 +344,7 @@ export default async function SessionsPage({
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               />
             </label>
-            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Tag
               <input
                 name="tag"
@@ -358,16 +353,16 @@ export default async function SessionsPage({
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
             </label>
-            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Note
               <input
                 name="note"
                 defaultValue={filters.note}
-                placeholder="feet"
+                placeholder="feet or missing"
                 className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none placeholder:text-white/25"
               />
             </label>
-            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Type
               <select
                 name="type"
@@ -385,7 +380,7 @@ export default async function SessionsPage({
                 ))}
               </select>
             </label>
-            <label className="grid gap-2 text-[10px] uppercase tracking-[0.22em] text-white/35">
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Review
               <select
                 name="view"
@@ -399,9 +394,9 @@ export default async function SessionsPage({
                 ))}
               </select>
             </label>
-            <div className="flex items-end gap-2 lg:col-span-4">
+            <div className="flex items-end gap-2">
               <button className="border border-white/15 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:border-white/35 hover:text-white">
-                Find clips
+                Find
               </button>
               <Link
                 href="/sessions"
@@ -536,36 +531,33 @@ export default async function SessionsPage({
           </div>
 
           <aside className="grid h-fit gap-3">
-            <section className="border border-white/10 bg-white/[0.03] p-3">
+            <section className="border-b border-white/10 pb-4">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Team
+                Tomorrow
               </p>
-              <div className="mt-4 grid gap-3 text-sm text-white/60">
-                <div className="flex justify-between gap-3">
-                  <span>Players</span>
-                  <span className="font-bold text-white">{players.length}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span>Recent sessions</span>
-                  <span className="font-bold text-white">{recentSessions}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span>Tagged repeats</span>
-                  <span className="font-bold text-white">{taggedRepeats}</span>
-                </div>
+              <div className="mt-3 grid gap-2 text-sm text-white/60">
+                <Link href="/sessions?view=repeated" className="hover:text-white">
+                  Repeat clips for practice
+                </Link>
+                <Link href="/sessions?note=missing" className="hover:text-white">
+                  Clips missing coach notes
+                </Link>
+                <Link href="/team/local" className="hover:text-white">
+                  Team prep
+                </Link>
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-3">
+            <section className="border-b border-white/10 pb-4">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Players
+                Players to review
               </p>
-              <div className="mt-4 grid gap-3">
-                {players.map((player) => (
+              <div className="mt-3 grid gap-3">
+                {players.slice(0, 5).map((player) => (
                   <Link
                     key={player.name}
                     href={`/sessions?player=${encodeURIComponent(player.name)}`}
-                    className="border border-white/10 bg-black/35 p-3 transition hover:border-white/25"
+                    className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -578,7 +570,7 @@ export default async function SessionsPage({
                         {player.sessions}
                       </span>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
+                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
                       <span>{player.recentSessions} recent</span>
                       <span>{player.streak} day streak</span>
                     </div>

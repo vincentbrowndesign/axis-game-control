@@ -2,7 +2,6 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import {
   drillName,
-  isRecent,
   isRepeated,
   normalizeSessions,
   playerName,
@@ -11,7 +10,7 @@ import {
   repeatCounts,
   tagCounts,
 } from "@/lib/archive/sessionRollup"
-import type { AxisReplaySession } from "@/types/memory"
+import type { AxisReplaySession, ReplaySessionView } from "@/types/memory"
 
 type Props = {
   params: Promise<{
@@ -33,6 +32,12 @@ function PrimaryNav() {
       </Link>
     </nav>
   )
+}
+
+function sessionText(session: ReplaySessionView) {
+  return [session.title, session.mission, session.environment, ...session.tags]
+    .join(" ")
+    .toLowerCase()
 }
 
 export default async function TeamPage({ params }: Props) {
@@ -78,69 +83,91 @@ export default async function TeamPage({ params }: Props) {
   const tags = tagCounts(sessions)
   const repeats = repeatCounts(sessions)
   const players = playerSummaries(sessions)
-  const recentSessions = sessions.filter(isRecent)
   const taggedRepeats = sessions.filter((session) =>
     isRepeated(session, repeats, tags)
   )
   const coachNotes = sessions.filter((session) => session.coachNote).slice(0, 6)
+  const needsReview = sessions.filter((session) => !session.coachNote)
+  const playerReview = players
+    .map((player) => ({
+      ...player,
+      needsNotes: needsReview.filter(
+        (session) => playerName(session) === player.name
+      ).length,
+    }))
+    .filter((player) => player.needsNotes > 0)
+    .sort((a, b) => b.needsNotes - a.needsNotes)
+  const playersForReview = playerReview.length
+    ? playerReview
+    : players.slice(0, 4).map((player) => ({
+        ...player,
+        needsNotes: player.sessions,
+      }))
+  const latestPractice = sessions.find((session) => session.environment === "practice")
+  const lastScrimmage = sessions.find(
+    (session) =>
+      session.environment === "game" || sessionText(session).includes("scrimmage")
+  )
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-5 py-8 text-white">
+    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-8 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
               Team
             </p>
-            <h1 className="mt-3 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
+            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
               Team review
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
-              Roster, recent sessions, coach notes, and repeat clips in one place.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
+              Prepare tomorrow from recent sessions, notes, and clips tagged repeat.
             </p>
           </div>
           <PrimaryNav />
         </header>
 
-        <section className="mb-6 grid gap-3 md:grid-cols-4">
-          <div className="border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Players
-            </p>
-            <p className="mt-2 text-3xl font-black">{players.length}</p>
-          </div>
-          <div className="border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Sessions
-            </p>
-            <p className="mt-2 text-3xl font-black">{sessions.length}</p>
-          </div>
-          <div className="border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Recent
-            </p>
-            <p className="mt-2 text-3xl font-black">{recentSessions.length}</p>
-          </div>
-          <div className="border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Repeat
-            </p>
-            <p className="mt-2 text-3xl font-black">{taggedRepeats.length}</p>
-          </div>
+        <section className="mb-5 grid gap-3 border-b border-white/10 pb-5 text-sm text-white/65 md:grid-cols-4">
+          <Link href="/sessions?view=repeated" className="hover:text-white">
+            {taggedRepeats.length
+              ? `${taggedRepeats.length} clips tagged repeat for tomorrow`
+              : "No repeat clips tagged yet"}
+          </Link>
+          <Link href="/sessions?note=missing" className="hover:text-white">
+            {needsReview.length
+              ? `${needsReview.length} clips need coach notes`
+              : "Coach notes are current"}
+          </Link>
+          <Link
+            href={latestPractice ? `/replay/${latestPractice.id}` : "/sessions"}
+            className="hover:text-white"
+          >
+            {latestPractice
+              ? `Latest practice: ${drillName(latestPractice)}`
+              : "No practice session yet"}
+          </Link>
+          <Link
+            href={lastScrimmage ? `/replay/${lastScrimmage.id}` : "/sessions?type=scrimmage"}
+            className="hover:text-white"
+          >
+            {lastScrimmage
+              ? `Last scrimmage clips: ${playerName(lastScrimmage)}`
+              : "No scrimmage clips yet"}
+          </Link>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1fr_340px]">
           <div className="grid gap-4">
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+            <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Roster
+                Players needing review
               </h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {players.map((player) => (
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {playersForReview.map((player) => (
                   <Link
                     key={player.name}
                     href={`/sessions?player=${encodeURIComponent(player.name)}`}
-                    className="border border-white/10 bg-black/35 p-4 transition hover:border-white/25"
+                    className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -150,10 +177,10 @@ export default async function TeamPage({ params }: Props) {
                         </p>
                       </div>
                       <span className="text-sm font-black text-white">
-                        {player.sessions}
+                        {player.needsNotes}
                       </span>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
+                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
                       <span>{player.recentSessions} recent</span>
                       <span>{player.streak} day streak</span>
                     </div>
@@ -165,7 +192,7 @@ export default async function TeamPage({ params }: Props) {
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+            <section className="border-b border-white/10 pb-4">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                   Recent sessions
@@ -179,7 +206,7 @@ export default async function TeamPage({ params }: Props) {
                   <Link
                     key={session.id}
                     href={`/replay/${session.id}`}
-                    className="grid gap-2 border border-white/10 bg-black/35 p-3 transition hover:border-white/25 sm:grid-cols-[1fr_auto]"
+                    className="grid gap-2 border-t border-white/10 py-3 transition hover:text-white sm:grid-cols-[1fr_auto]"
                   >
                     <div>
                       <p className="font-bold text-white">{drillName(session)}</p>
@@ -198,16 +225,16 @@ export default async function TeamPage({ params }: Props) {
           </div>
 
           <aside className="grid h-fit gap-4">
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+            <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Coach notes
               </h2>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-3">
                 {coachNotes.map((session) => (
                   <Link
                     key={session.id}
                     href={`/replay/${session.id}`}
-                    className="border border-white/10 bg-black/35 p-3 transition hover:border-white/25"
+                    className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <p className="text-sm text-white/75">{session.coachNote}</p>
                     <p className="mt-2 text-xs text-white/35">
@@ -221,16 +248,16 @@ export default async function TeamPage({ params }: Props) {
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-5">
+            <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Repeat clips
               </h2>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-3">
                 {taggedRepeats.slice(0, 6).map((session) => (
                   <Link
                     key={session.id}
                     href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
-                    className="border border-white/10 bg-black/35 p-3 transition hover:border-white/25"
+                    className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">

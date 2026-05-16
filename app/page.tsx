@@ -3,11 +3,9 @@ import { redirect } from "next/navigation"
 import UploadConsole from "@/components/UploadConsole"
 import {
   drillName,
-  isRecent,
   isRepeated,
   normalizeSessions,
   playerName,
-  playerSummaries,
   relativeTime,
   repeatCounts,
   tagCounts,
@@ -103,15 +101,15 @@ export default async function HomePage({ searchParams }: Props) {
   const sessions = normalizeSessions(data)
   const tags = tagCounts(sessions)
   const repeats = repeatCounts(sessions)
-  const recentSessions = sessions.filter(isRecent)
   const pendingReview = sessions.filter((session) => !session.coachNote).slice(0, 4)
   const repeatSessions = sessions
     .filter((session) => isRepeated(session, repeats, tags))
     .slice(0, 4)
   const notes = sessions.filter((session) => session.coachNote).slice(0, 4)
-  const players = playerSummaries(sessions)
   const firstPractice = getCalibrationMissions()[0]
   const continueHref = firstPractice ? `/?warmup=${firstPractice.id}` : "/"
+  const lastSession = sessions[0]
+  const topReview = repeatSessions[0] || pendingReview[0] || lastSession
 
   return (
     <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
@@ -131,48 +129,40 @@ export default async function HomePage({ searchParams }: Props) {
           <PrimaryNav />
         </header>
 
-        <section className="mb-4 grid gap-2 md:grid-cols-4">
+        <section className="mb-5 grid gap-3 border-b border-white/10 pb-5 lg:grid-cols-[1fr_auto]">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/35">
+              Tomorrow prep
+            </p>
+            <div className="mt-3 grid gap-2 text-sm text-white/65 sm:grid-cols-3">
+              <Link href="/sessions?view=repeated" className="hover:text-white">
+                {repeatSessions.length
+                  ? `${repeatSessions.length} clips tagged repeat`
+                  : "No repeat clips tagged yet"}
+              </Link>
+              <Link href="/sessions?note=missing" className="hover:text-white">
+                {pendingReview.length
+                  ? `${pendingReview.length} clips need coach notes`
+                  : "Coach notes are current"}
+              </Link>
+              <Link href={topReview ? `/replay/${topReview.id}` : "/sessions"} className="hover:text-white">
+                {topReview
+                  ? `Review ${playerName(topReview)} - ${drillName(topReview)}`
+                  : "Record today's practice"}
+              </Link>
+            </div>
+          </div>
           <Link
             href={continueHref}
-            className="border border-lime-300/20 bg-lime-300/10 p-3 transition hover:border-lime-200/40"
+            className="w-fit border border-lime-300/20 px-4 py-3 text-xs font-black uppercase tracking-[0.2em] text-lime-100 transition hover:border-lime-200/45"
           >
-            <p className="text-[10px] uppercase tracking-[0.25em] text-lime-200/75">
-              Practice
-            </p>
-            <p className="mt-1 text-xl font-black">Continue practice</p>
-          </Link>
-          <Link
-            href="/sessions?view=recent"
-            className="border border-white/10 bg-white/[0.03] p-3 transition hover:border-white/25"
-          >
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Recent
-            </p>
-            <p className="mt-1 text-2xl font-black">{recentSessions.length}</p>
-          </Link>
-          <Link
-            href="/sessions?view=repeated"
-            className="border border-white/10 bg-white/[0.03] p-3 transition hover:border-white/25"
-          >
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Repeat
-            </p>
-            <p className="mt-1 text-2xl font-black">{repeatSessions.length}</p>
-          </Link>
-          <Link
-            href="/team/local"
-            className="border border-white/10 bg-white/[0.03] p-3 transition hover:border-white/25"
-          >
-            <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Team
-            </p>
-            <p className="mt-1 text-2xl font-black">{players.length}</p>
+            Continue practice
           </Link>
         </section>
 
         <section className="grid gap-3 lg:grid-cols-[1fr_320px]">
           <div className="grid gap-3">
-            <section className="border border-white/10 bg-white/[0.03] p-4">
+            <section className="border-b border-white/10 pb-4">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                   Recent clips
@@ -186,7 +176,7 @@ export default async function HomePage({ searchParams }: Props) {
                   <Link
                     key={session.id}
                     href={`/replay/${session.id}`}
-                    className="grid gap-2 border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25 sm:grid-cols-[1fr_auto]"
+                    className="grid gap-2 border-t border-white/10 py-3 transition hover:border-white/25 sm:grid-cols-[1fr_auto]"
                   >
                     <div>
                       <p className="font-bold text-white">{drillName(session)}</p>
@@ -203,7 +193,7 @@ export default async function HomePage({ searchParams }: Props) {
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-4">
+            <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Pending review
               </h2>
@@ -211,8 +201,8 @@ export default async function HomePage({ searchParams }: Props) {
                 {pendingReview.map((session) => (
                   <Link
                     key={session.id}
-                    href={`/sessions?note=&q=${encodeURIComponent(drillName(session))}`}
-                    className="border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25"
+                    href={`/sessions?note=missing&q=${encodeURIComponent(drillName(session))}`}
+                    className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
@@ -228,7 +218,7 @@ export default async function HomePage({ searchParams }: Props) {
           </div>
 
           <aside className="grid h-fit gap-3">
-            <section className="border border-white/10 bg-white/[0.03] p-4">
+            <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Coach notes
               </h2>
@@ -237,7 +227,7 @@ export default async function HomePage({ searchParams }: Props) {
                   <Link
                     key={session.id}
                     href={`/replay/${session.id}`}
-                    className="border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25"
+                    className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <p className="text-sm text-white/75">{session.coachNote}</p>
                     <p className="mt-2 text-xs text-white/35">
@@ -251,7 +241,7 @@ export default async function HomePage({ searchParams }: Props) {
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.03] p-4">
+            <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
                 Tagged repeats
               </h2>
@@ -260,7 +250,7 @@ export default async function HomePage({ searchParams }: Props) {
                   <Link
                     key={session.id}
                     href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
-                    className="border border-white/10 bg-black/35 p-2.5 transition hover:border-white/25"
+                    className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <p className="font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
