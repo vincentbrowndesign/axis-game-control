@@ -22,29 +22,19 @@ type Props = {
 
 const defaultLinks: WorldLink[] = [
   {
-    href: "/archive",
-    label: "Memory",
-    line: "Remembered effort.",
+    href: "/",
+    label: "Home",
+    line: "Continue practice.",
   },
   {
-    href: "/retrieve",
-    label: "Retrieve",
-    line: "Find what matters now.",
-  },
-  {
-    href: "/connections",
-    label: "Connections",
-    line: "See what keeps returning.",
+    href: "/sessions",
+    label: "Archive",
+    line: "Find clips.",
   },
   {
     href: "/team/local",
     label: "Team",
-    line: "Shared continuity.",
-  },
-  {
-    href: "/practice",
-    label: "Practice",
-    line: "Add memory.",
+    line: "Review players.",
   },
 ]
 
@@ -53,14 +43,14 @@ export default function ContinuityWorld({
   title,
   line,
   primaryHref = "/archive",
-  primaryLabel = "Open Memory",
+  primaryLabel = "Open Archive",
   links = defaultLinks,
   preferredWarmupId = null,
   identityName = null,
   showContinuity = true,
 }: Props) {
   const fallbackContinuity: ActiveContinuityState = {
-    eyebrow: "Continue Now",
+    eyebrow: "Review",
     title,
     line,
     href: primaryHref,
@@ -111,7 +101,7 @@ export default function ContinuityWorld({
           )}
         </section>
 
-        <nav className="grid gap-px border border-white/5 bg-white/5 opacity-55 transition hover:opacity-100 md:grid-cols-5">
+        <nav className="grid gap-px border border-white/5 bg-white/5 opacity-55 transition hover:opacity-100 md:grid-cols-3">
           {links.map((link) => (
             <Link
               key={link.href}

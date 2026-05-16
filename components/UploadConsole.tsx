@@ -31,10 +31,10 @@ const calibrationMissions = getCalibrationMissions()
 
 function toAxisErrorState(error: unknown) {
   const message =
-    error instanceof Error ? error.message : "MEMORY WAITING"
+    error instanceof Error ? error.message : "UPLOAD WAITING"
 
   if (message.includes("NON_JSON_RESPONSE")) {
-    return "MEMORY PROCESSING"
+    return "UPLOAD PROCESSING"
   }
 
   if (
@@ -49,14 +49,14 @@ function toAxisErrorState(error: unknown) {
     message.includes("NO FILE") ||
     message.includes("MEMORY LOAD FAILED")
   ) {
-    return "MEMORY INGEST FAILED"
+    return "UPLOAD FAILED"
   }
 
   if (
     message.includes("INVALID MEMORY FORMAT") ||
     message.includes("unsupported")
   ) {
-    return "INVALID MEMORY FORMAT"
+    return "INVALID VIDEO FORMAT"
   }
 
   if (
@@ -64,21 +64,21 @@ function toAxisErrorState(error: unknown) {
     message.includes("Load failed") ||
     message.includes("Failed")
   ) {
-    return "MEMORY WAITING"
+    return "UPLOAD WAITING"
   }
 
   if (
-    message === "MEMORY WAITING" ||
+    message === "UPLOAD WAITING" ||
     message === "AUTH REQUIRED" ||
-    message === "MEMORY INGEST FAILED" ||
-    message === "INVALID MEMORY FORMAT" ||
+    message === "UPLOAD FAILED" ||
+    message === "INVALID VIDEO FORMAT" ||
     message === "STORAGE KEY INVALID" ||
-    message === "MEMORY PROCESSING"
+    message === "UPLOAD PROCESSING"
   ) {
     return message
   }
 
-  return "MEMORY INGEST FAILED"
+  return "UPLOAD FAILED"
 }
 
 function parseUploadResponse(text: string) {
@@ -89,7 +89,7 @@ function parseUploadResponse(text: string) {
 
     return {
       ok: false,
-      error: "MEMORY PROCESSING",
+      error: "UPLOAD PROCESSING",
       detail: "UPLOAD RESPONSE UNAVAILABLE",
     }
   }
@@ -365,16 +365,16 @@ export default function UploadConsole({
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/archive"
+        href="/sessions"
               className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
             >
               Archive
             </Link>
             <Link
-              href="/player/local"
+              href="/team/local"
               className="border border-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-white/55 transition hover:text-white"
             >
-              Player
+              Team
             </Link>
             <button
               type="button"
@@ -394,17 +394,17 @@ export default function UploadConsole({
             <h1 className="mt-6 text-[clamp(4.8rem,18vw,12rem)] font-black leading-[0.78] tracking-[-0.07em]">
               {displayName(twinName)}
               <br />
-              RETURNING
+              PRACTICE
             </h1>
             <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-              Continuity active.
+              Ready for the next clip.
             </p>
             <button
               type="button"
               onClick={() => setFlowStep("mission")}
               className="mt-10 w-fit bg-white px-9 py-5 text-sm font-black uppercase tracking-[0.28em] text-black transition hover:bg-lime-300"
             >
-              Carry Forward
+              Continue
             </button>
           </section>
         ) : null}
@@ -413,15 +413,15 @@ export default function UploadConsole({
           <section className="pb-10">
             <div className="mb-8">
               <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-                Player Continuity
+                Practice
               </p>
               <h1 className="mt-4 text-[clamp(4rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-                THREADS
+                CLIPS
                 <br />
-                ACTIVE
+                READY
               </h1>
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/45">
-                Choose what carries forward.
+                Choose today&apos;s practice work.
               </p>
             </div>
 
@@ -451,15 +451,15 @@ export default function UploadConsole({
                 Sources
               </button>
               <p className="text-[10px] uppercase tracking-[0.5em] text-lime-300">
-                Player Continuity
+                Practice
               </p>
               <h1 className="mt-5 text-[clamp(4.2rem,16vw,10rem)] font-black leading-[0.78] tracking-[-0.07em]">
                 {displayName(twinName)}
                 <br />
-                RETURNING
+                PRACTICE
               </h1>
               <p className="mt-6 max-w-xl text-xl leading-relaxed text-white/55">
-                {missionName(selectedMission)} continuity active.
+                {missionName(selectedMission)} ready.
               </p>
             </div>
 
@@ -474,7 +474,7 @@ export default function UploadConsole({
                 }}
                 className="mt-8 w-full bg-lime-300 px-6 py-5 text-sm font-black uppercase tracking-[0.24em] text-black transition hover:bg-white disabled:opacity-50"
               >
-                Carry Forward
+                Record clip
               </button>
             </div>
           </section>
@@ -483,17 +483,17 @@ export default function UploadConsole({
         {flowStep === "capture" || flowStep === "processing" ? (
           <section className="flex min-h-[calc(100vh-13rem)] flex-col justify-end pb-10">
             <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-              {flowStep === "capture" ? "Live Capture" : "Memory Processing"}
+              {flowStep === "capture" ? "Live Capture" : "Saving Clip"}
             </p>
             <h1 className="mt-5 text-[clamp(3.8rem,14vw,9rem)] font-black leading-[0.82] tracking-[-0.07em]">
-              {status || "ADDING MEMORY"}
+              {status || "ADDING SESSION"}
             </h1>
             <p className="mt-6 text-sm uppercase tracking-[0.32em] text-white/35">
-              {selectedMission?.title || "Memory"}
+              {selectedMission?.title || "Open session"}
             </p>
             {flowStep === "processing" && progress === 100 ? (
               <p className="mt-4 text-sm uppercase tracking-[0.32em] text-lime-300">
-                MEMORY ADDED
+                SESSION SAVED
               </p>
             ) : null}
 
@@ -507,7 +507,7 @@ export default function UploadConsole({
             </div>
             <div className="mt-5 flex items-end justify-between gap-5">
               <p className="max-w-md text-sm leading-relaxed text-white/45">
-                Memory carries forward.
+                Session saved for review.
               </p>
               <p className="text-[clamp(4rem,18vw,8rem)] font-black leading-none tracking-[-0.08em] text-white/70">
                 {progress}%

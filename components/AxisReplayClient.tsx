@@ -543,7 +543,7 @@ export default function AxisReplayClient({
           createdAt: pendingMemory.createdAt,
           source: "camera",
           videoUrl,
-          title: "Memory",
+          title: "Session",
           mission: warmup
             ? `WARMUP ${warmup.order
                 .toString()
@@ -552,13 +552,13 @@ export default function AxisReplayClient({
           player: owner.displayName,
           environment: warmup ? "mission" : "practice",
           duration: pendingMemory.duration,
-          status: "MEMORY STORED",
+          status: "SESSION SAVED",
           fileName: pendingMemory.filename,
           tags: [],
           memoryCount: 1,
           archiveStatus: "Active",
-          context: "Memory stored. Replay ready.",
-          ambientLine: "Memory carries forward.",
+          context: "Session saved. Replay ready.",
+          ambientLine: "Clip ready for review.",
         })
 
         if (!cancelled) {
@@ -1040,7 +1040,7 @@ export default function AxisReplayClient({
             }`}
           >
             <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-              Returning
+              Review
             </p>
             <p className="mt-4 text-[clamp(2rem,7vw,5.8rem)] font-black uppercase leading-[0.88] tracking-[-0.06em] text-white">
               {replayReward.found}
@@ -1136,7 +1136,7 @@ export default function AxisReplayClient({
               href={nextWarmup ? `/?warmup=${nextWarmup.id}` : "/"}
               className="bg-white px-6 py-4 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-lime-300"
             >
-              Carry Forward
+              Continue practice
             </Link>
           </div>
 

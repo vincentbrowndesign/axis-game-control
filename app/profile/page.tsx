@@ -14,7 +14,7 @@ export default async function ProfilePage() {
       <main className="min-h-screen bg-black px-5 py-10 text-white">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-end">
           <p className="text-[10px] uppercase tracking-[0.5em] text-white/30">
-            Axis Memory System
+            Axis Profile
           </p>
           <h1 className="mt-5 text-[clamp(4rem,15vw,10rem)] font-black leading-[0.82] tracking-[-0.07em]">
             ACCESS

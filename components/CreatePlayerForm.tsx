@@ -54,8 +54,7 @@ export default function CreatePlayerForm() {
       </h1>
 
       <p className="mt-5 text-zinc-400 leading-relaxed">
-        Axis uses long-term behavioral memory
-        to connect sessions over time.
+        Save player details so sessions, notes, and clips stay organized.
       </p>
 
       <div className="mt-8 flex flex-col gap-4">

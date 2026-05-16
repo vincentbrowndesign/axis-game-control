@@ -9,12 +9,12 @@ type Mode = "login" | "signup"
 function authStatus(error: string) {
   const lower = error.toLowerCase()
 
-  if (lower.includes("rate limit")) return "MEMORY ACCESS WAITING"
-  if (lower.includes("invalid")) return "MEMORY ACCESS DENIED"
+  if (lower.includes("rate limit")) return "SIGN IN WAITING"
+  if (lower.includes("invalid")) return "SIGN IN DENIED"
   if (lower.includes("confirm")) return "CONFIRMATION REQUIRED"
-  if (lower.includes("password")) return "MEMORY ACCESS DENIED"
+  if (lower.includes("password")) return "SIGN IN DENIED"
 
-  return "MEMORY ACCESS WAITING"
+  return "SIGN IN WAITING"
 }
 
 export default function AuthConsole() {
@@ -80,7 +80,7 @@ export default function AuthConsole() {
     })
 
     if (!profile.ok) {
-      setStatus("MEMORY LOAD FAILED")
+      setStatus("PROFILE LOAD FAILED")
       setLoading(false)
       return
     }
@@ -125,7 +125,7 @@ export default function AuthConsole() {
     setStatus(
       error
         ? authStatus(error.message)
-        : "RECOVERY SIGNAL SENT"
+        : "RECOVERY EMAIL SENT"
     )
   }
 
@@ -134,16 +134,15 @@ export default function AuthConsole() {
       <div className="mx-auto grid min-h-[calc(100vh-5rem)] w-full max-w-6xl items-end gap-10 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="pb-8">
           <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-            Axis Identity Layer
+            Axis Account
           </p>
           <h1 className="mt-6 text-[clamp(4.5rem,15vw,10rem)] font-black leading-[0.82] tracking-[-0.07em]">
-            MEMORY
+            SESSION
             <br />
             ACCESS
           </h1>
           <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
-            Authenticate to attach uploads, replay archives, and future
-            behavioral memory to one persistent Axis profile.
+            Sign in to save uploads, review film, and keep notes attached to one Axis profile.
           </p>
         </div>
 

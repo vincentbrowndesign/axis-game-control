@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Axis",
-  description: "Behavioral basketball memory infrastructure.",
+  description: "Basketball sessions, film review, notes, and team practice.",
 };
 
 export default function RootLayout({
