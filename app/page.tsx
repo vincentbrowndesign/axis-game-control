@@ -30,10 +30,10 @@ export default async function HomePage({ searchParams }: Props) {
             Axis
           </p>
           <h1 className="mt-4 max-w-3xl text-5xl font-black tracking-[-0.04em] sm:text-7xl">
-            Basketball film, notes, and team review.
+            Record the moment. Replay the sentence.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
-            Save sessions, find useful clips, and keep practice work organized.
+            Save clips, speak naturally, and let players watch the behavior again.
           </p>
           <Link
             href="/auth"

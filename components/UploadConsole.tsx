@@ -220,8 +220,6 @@ export default function UploadConsole({
     }
   })
   const [newPlayerName, setNewPlayerName] = useState("")
-  const [newPlayerGrade, setNewPlayerGrade] = useState("")
-  const [newPlayerTeam, setNewPlayerTeam] = useState("")
   const [showAddPlayer, setShowAddPlayer] = useState(false)
   const [liveClips, setLiveClips] = useState(recentClips)
   const [isListening, setIsListening] = useState(false)
@@ -405,13 +403,9 @@ export default function UploadConsole({
       `axis-player-${cleanPlayer.toLowerCase()}`,
       JSON.stringify({
         name: cleanPlayer,
-        grade: newPlayerGrade.trim(),
-        team: newPlayerTeam.trim(),
       })
     )
     setNewPlayerName("")
-    setNewPlayerGrade("")
-    setNewPlayerTeam("")
     setShowAddPlayer(false)
     void assignPlayer(cleanPlayer)
   }
@@ -509,7 +503,7 @@ export default function UploadConsole({
         }
 
         setProgress(100)
-        setStatus("Session saved")
+        setStatus("Clip saved")
         if (pendingMemoryId) {
           setTimeout(() => {
             router.push(`/replay/${pendingMemoryId}`)
@@ -597,7 +591,7 @@ export default function UploadConsole({
         : "practice"
 
       setProgress(100)
-      setStatus("Session saved")
+      setStatus("Clip saved")
 
       if (pendingMemoryId) {
         await updatePendingMemoryStatus(pendingMemoryId, "synced")
@@ -631,7 +625,7 @@ export default function UploadConsole({
       console.error(error)
       if (pendingMemoryId) {
         await updatePendingMemoryStatus(pendingMemoryId, "failed")
-        setStatus("Session saved")
+        setStatus("Clip saved")
         setProgress(100)
         setTimeout(() => {
           router.push(`/replay/${pendingMemoryId}`)
@@ -814,18 +808,6 @@ export default function UploadConsole({
                   }}
                   placeholder="Name"
                   className="min-w-[180px] bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
-                />
-                <input
-                  value={newPlayerGrade}
-                  onChange={(event) => setNewPlayerGrade(event.target.value)}
-                      placeholder="Grade"
-                      className="w-24 bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
-                />
-                <input
-                  value={newPlayerTeam}
-                  onChange={(event) => setNewPlayerTeam(event.target.value)}
-                  placeholder="Team"
-                  className="w-28 bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
                 />
                 <button
                   type="button"
