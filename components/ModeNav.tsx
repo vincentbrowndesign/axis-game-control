@@ -3,9 +3,8 @@ import Link from "next/link"
 type Mode = "live" | "systems" | "review" | "team"
 
 const modes: { key: Mode; label: string; href: string }[] = [
-  { key: "live", label: "Live", href: "/" },
-  { key: "systems", label: "Systems", href: "/systems" },
-  { key: "review", label: "Review", href: "/sessions" },
+  { key: "live", label: "Record", href: "/" },
+  { key: "review", label: "Watch", href: "/sessions" },
   { key: "team", label: "Team", href: "/team/local" },
 ]
 

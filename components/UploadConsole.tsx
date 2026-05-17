@@ -4,8 +4,6 @@ import Link from "next/link"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import ModeNav from "@/components/ModeNav"
-import { suggestConstraint } from "@/lib/axis-ai/suggestConstraint"
-import { suggestSystem } from "@/lib/axis-ai/suggestSystem"
 import { suggestTrigger } from "@/lib/axis-ai/suggestTrigger"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -180,10 +178,6 @@ function missionName(mission: CalibrationMission) {
   return mission.title
 }
 
-function displayName(value?: string | null) {
-  return value?.trim() || "Local Player"
-}
-
 export default function UploadConsole({
   email,
   twinName = null,
@@ -218,13 +212,6 @@ export default function UploadConsole({
   const liveTriggers = [
     ...new Set([...recentTriggers, ...coreTriggers]),
   ].slice(0, 9)
-  const behaviorSuggestion = behaviorPhrase
-    ? {
-        system: suggestSystem(behaviorPhrase),
-        constraint: suggestConstraint(behaviorPhrase),
-        trigger: suggestTrigger(behaviorPhrase),
-      }
-    : null
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -242,7 +229,7 @@ export default function UploadConsole({
     setSavedTrigger(triggerWord)
     setRepeatTomorrow(repeat)
     setBehaviorPhrase(phrase)
-    setStatus(phrase ? "Behavior saved" : triggerWord ? "Trigger saved" : "Repeat saved")
+    setStatus(phrase ? "Sentence saved" : triggerWord ? "Saved" : "Saved")
 
     try {
       const response = await fetch("/api/session/quick-tag", {
@@ -520,15 +507,11 @@ export default function UploadConsole({
           <div className="border-b border-white/10 pb-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.24em] text-white/35">
-                  Live mode / {displayName(twinName)}
-                </p>
                 <h1 className="mt-1 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
                   That&apos;s the clip.
                 </h1>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-white/45">
-                  Record the moment. Say the correction in normal coach
-                  language. Axis can organize the folder later.
+                  Record it. Say the sentence. Keep coaching.
                 </p>
               </div>
               <button
@@ -585,21 +568,11 @@ export default function UploadConsole({
               />
             </div>
 
-            {behaviorSuggestion ? (
-              <div className="mt-3 border-y border-white/10 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
-                  Suggested for review
-                </p>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-white/55">
-                  <span>{behaviorSuggestion.system.system}</span>
-                  <span>{behaviorSuggestion.constraint.constraint}</span>
-                  <span>Trigger {behaviorSuggestion.trigger}</span>
-                  <span>Coach confirms later</span>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-5 flex flex-wrap gap-2">
+            <details className="mt-5 border-t border-white/10 pt-3">
+              <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-white/40 transition hover:text-white">
+                Cue word
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-2">
               {liveTriggers.map((trigger) => (
                 <button
                   key={trigger}
@@ -615,7 +588,8 @@ export default function UploadConsole({
                   {trigger}
                 </button>
               ))}
-            </div>
+              </div>
+            </details>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <button
@@ -632,13 +606,13 @@ export default function UploadConsole({
                     : "border-white/10 text-white/55 hover:text-white"
                 }`}
               >
-                Repeat tomorrow
+                Watch again
               </button>
               <Link
                 href={savedReplayId ? `/replay/${savedReplayId}` : "/sessions"}
                 className="border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/45 transition hover:text-white"
               >
-                Review later
+                Watch later
               </Link>
               {savedReplayId ? (
                 <button
@@ -705,7 +679,7 @@ export default function UploadConsole({
             ) : null}
             {savedReplayId ? (
               <p className="mt-3 text-sm text-amber-100/80">
-                Clip saved. Add the behavior phrase and get back to practice.
+                Clip saved. Add the sentence and get back to practice.
               </p>
             ) : null}
           </aside>

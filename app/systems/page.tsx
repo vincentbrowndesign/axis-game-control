@@ -40,10 +40,10 @@ export default async function SystemsPage() {
       <main className="min-h-screen bg-[#090806] px-5 py-10 text-stone-100">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-400/70">
-            Background folders
+            Saved clips
           </p>
           <h1 className="mt-4 text-5xl font-black tracking-[-0.04em] sm:text-7xl">
-            Sign in to manage behavior folders.
+            Sign in to watch saved clips.
           </h1>
           <Link
             href="/auth"
@@ -86,14 +86,13 @@ export default async function SystemsPage() {
         <header className="mb-8 flex flex-col gap-5 border-b border-stone-200/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-400/65">
-              Background folders
+              Saved clips
             </p>
             <h1 className="mt-2 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
-              Behavior reinforcement
+              Sentences to repeat
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-300/58">
-              Player language stays out front. Tactical structure sits behind
-              the clip so repeat work is easy to find later.
+              The clip stays first. The sentence stays simple.
             </p>
           </div>
           <ModeNav active="systems" />
@@ -101,11 +100,10 @@ export default async function SystemsPage() {
 
         <section className="mb-8 grid gap-3 border-y border-stone-200/10 py-4 md:grid-cols-5">
           {[
-            ["Player phrase", activeFolder],
-            ["Coach view", active.system.name],
-            ["Trigger", activeTrigger],
+            ["Sentence", activeFolder],
+            ["Cue", activeTrigger],
             ["Players", activePlayers],
-            ["Repeat", `${active.repeatClips.length} clips`],
+            ["Watch", `${active.repeatClips.length} clips`],
           ].map(([label, value]) => (
             <div key={label}>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
@@ -121,7 +119,7 @@ export default async function SystemsPage() {
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-100/55">
-                  Behavior folder
+                  Sentence
                 </p>
                 <h2 className="mt-2 text-4xl font-black tracking-[-0.04em] text-stone-50 sm:text-5xl">
                   {activeFolder}
@@ -136,33 +134,33 @@ export default async function SystemsPage() {
                 href={systemHref(active.system)}
                 className="w-fit border border-amber-100/25 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-amber-100 transition hover:border-amber-100/55"
               >
-                Review clips
+                Watch again
               </Link>
             </div>
 
             <div className="mt-6 grid gap-4 border-y border-stone-200/10 py-5 md:grid-cols-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
-                  Player sees
+                  Player
                 </p>
                 <p className="mt-2 text-sm font-bold text-stone-200">
-                  Short behavior phrase and clip.
+                  Watch the clip. Read the sentence.
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
-                  Coach sees
+                  Saved quietly
                 </p>
                 <p className="mt-2 text-sm font-bold text-stone-200">
-                  {active.system.name} / {active.constraint}
+                  Similar moments stay grouped in the background.
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
-                  Next rep
+                  Next watch
                 </p>
                 <p className="mt-2 text-sm font-bold text-stone-200">
-                  Trigger {activeTrigger}
+                  Cue {activeTrigger}
                 </p>
               </div>
             </div>
@@ -172,12 +170,12 @@ export default async function SystemsPage() {
             <TacticalCourt
               title={active.system.name}
               highlight={active.system.courtZone}
-              labels={[active.constraint, `Trigger ${activeTrigger}`]}
+              labels={[`Cue ${activeTrigger}`, `${active.repeatClips.length} clips`]}
               compact
             />
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-stone-500">
-                Current clip work
+                Clip work
               </p>
               <p className="mt-3 text-2xl font-black leading-tight tracking-[-0.03em] text-stone-100">
                 {active.issue === "No issue tagged yet"
@@ -185,15 +183,14 @@ export default async function SystemsPage() {
                   : active.issue}
               </p>
               <p className="mt-3 text-sm leading-6 text-stone-400">
-                Construction:{" "}
-                {active.activeConstruction.length ? "Active" : "Cleared"}
+                Keep the next rep simple.
               </p>
             </div>
 
             <div className="grid gap-3 border-y border-stone-200/10 py-5">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
-                  Trigger
+                  Cue
                 </span>
                 <span className="text-2xl font-black tracking-[0.08em] text-amber-100">
                   {activeTrigger}
@@ -201,10 +198,10 @@ export default async function SystemsPage() {
               </div>
               <div className="flex items-start justify-between gap-4">
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
-                  Repeat queue
+                  Watch list
                 </span>
                 <span className="text-right text-sm font-black text-stone-100">
-                  {active.repeatClips.length} clips tomorrow
+                  {active.repeatClips.length} clips
                 </span>
               </div>
               <div className="flex items-start justify-between gap-4">
@@ -220,7 +217,7 @@ export default async function SystemsPage() {
             {activeCorrection ? (
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
-                  Latest correction
+                  Latest sentence
                 </p>
                 <p className="mt-3 text-sm leading-6 text-stone-200/78">
                   {activeCorrection.flaw || "No flaw tagged yet"}
@@ -237,10 +234,10 @@ export default async function SystemsPage() {
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-stone-500">
-                Folder map
+                Similar groups
               </p>
               <h2 className="mt-2 text-2xl font-black tracking-[-0.03em]">
-                Behavior folders
+                Saved sentences
               </h2>
             </div>
           </div>
@@ -255,8 +252,8 @@ export default async function SystemsPage() {
                   title={summary.system.name}
                   highlight={summary.system.courtZone}
                   labels={[
-                    summary.triggers[0] || summary.system.defaultTrigger,
-                    summary.constraint,
+                    `Cue ${summary.triggers[0] || summary.system.defaultTrigger}`,
+                    `${summary.clips.length} clips`,
                   ]}
                   compact
                 />
@@ -266,7 +263,7 @@ export default async function SystemsPage() {
                       {behaviorFolderName(summary.system.id)}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-stone-400">
-                      {summary.system.name} / {summary.constraint}
+                      Quietly grouped for later.
                     </p>
                   </div>
                   <span className="text-sm font-black text-stone-300">
@@ -274,8 +271,8 @@ export default async function SystemsPage() {
                   </span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
-                  <span>{summary.repeatClips.length} repeat</span>
-                  <span>{summary.corrections.length} corrections</span>
+                  <span>{summary.repeatClips.length} saved</span>
+                  <span>{summary.corrections.length} sentences</span>
                   <span>{summary.clips.length} clips</span>
                 </div>
               </Link>

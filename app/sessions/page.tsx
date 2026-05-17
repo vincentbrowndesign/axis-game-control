@@ -167,7 +167,7 @@ function clipReason(
     return coachingNoteLine(session)
   }
 
-  if (isRepeated(session, sessionRepeats, tags)) return "Repeat tomorrow"
+  if (isRepeated(session, sessionRepeats, tags)) return "Watch again"
 
   return "Needs review"
 }
@@ -464,14 +464,13 @@ export default async function SessionsPage({
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
-              Review mode
+              Watch
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Behavior review
+              Watch again
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Retrieve the clip, the phrase players need to repeat, and the
-              coach structure behind it.
+              Find the clip and the sentence worth repeating.
             </p>
           </div>
 
@@ -511,13 +510,13 @@ export default async function SessionsPage({
               href="/sessions?view=repeated"
               className="border border-white/10 px-3 py-2 transition hover:text-white"
             >
-              Repeat clips
+              Watch again
             </Link>
             <Link
               href="/sessions?note=missing"
               className="border border-white/10 px-3 py-2 transition hover:text-white"
             >
-              Clips needing notes
+              Need a sentence
             </Link>
             <Link
               href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions?type=practice"}
@@ -529,26 +528,26 @@ export default async function SessionsPage({
               href="/sessions?construction=active"
               className="border border-white/10 px-3 py-2 transition hover:text-white"
             >
-              Construction Zone
+              Needs work
             </Link>
             <Link
               href="/sessions?constraint=No+middle+drive"
               className="border border-white/10 px-3 py-2 transition hover:text-white"
             >
-              No middle drive
+              Stop the drive
             </Link>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/50">
             <Link href="/sessions?view=repeated" className="hover:text-white">
               {taggedRepeats.length
-                ? `${taggedRepeats.length} clips tagged repeat`
-                : "No repeat clips tagged"}
+                ? `${taggedRepeats.length} clips saved to watch`
+                : "No clips saved to watch"}
             </Link>
             <Link href="/sessions?note=missing" className="hover:text-white">
               {pendingNotes.length
-                ? `${pendingNotes.length} clips need notes`
-                : "Notes are current"}
+                ? `${pendingNotes.length} clips need a sentence`
+                : "Sentences are current"}
             </Link>
             <Link href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions"} className="hover:text-white">
               {lastPractice
@@ -588,7 +587,7 @@ export default async function SessionsPage({
               />
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Situation
+              Clip type
               <select
                 name="situation"
                 defaultValue={filters.situation}
@@ -612,7 +611,7 @@ export default async function SessionsPage({
               />
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Constraint
+              Focus
               <select
                 name="constraint"
                 defaultValue={filters.constraint}
@@ -627,7 +626,7 @@ export default async function SessionsPage({
               </select>
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Trigger
+              Cue
               <input
                 name="trigger"
                 defaultValue={filters.trigger}
@@ -645,7 +644,7 @@ export default async function SessionsPage({
               />
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Phase
+              Speed
               <select
                 name="phase"
                 defaultValue={filters.phase}
@@ -660,7 +659,7 @@ export default async function SessionsPage({
               </select>
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
-              Zone
+              Status
               <select
                 name="construction"
                 defaultValue={filters.construction}
@@ -786,31 +785,11 @@ export default async function SessionsPage({
                   </div>
 
                   <div>
-                    <p className="text-sm font-bold text-white/65">
-                      Coach view
-                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
-                        {situationLabel(session)}
-                      </span>
                       {triggerLabel(session) ? (
                         <span className="border border-amber-100/25 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
-                          Trigger: {triggerLabel(session)}
+                          Cue: {triggerLabel(session)}
                         </span>
-                      ) : null}
-                      <span className="border border-white/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/70">
-                        Construction: {constructionZoneLabel(session)}
-                      </span>
-                      <span className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
-                        Phase: {phaseLabel(session)}
-                      </span>
-                      {session.constraint ? (
-                        <Link
-                          href={`/sessions?constraint=${encodeURIComponent(constraintLabel(session))}`}
-                          className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45 transition hover:text-white"
-                        >
-                          Constraint: {constraintLabel(session)}
-                        </Link>
                       ) : null}
                       <span className="px-1 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
                         {nextAction(session, sessionRepeats, tags)}
@@ -821,7 +800,7 @@ export default async function SessionsPage({
                     </p>
                     {isConstructionActive(session) ? (
                       <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
-                        Focus: mechanical compliance
+                        Keep this simple in the next rep.
                       </p>
                     ) : null}
                   </div>
@@ -844,7 +823,7 @@ export default async function SessionsPage({
 
                   <details className="border-t border-white/10 pt-2">
                     <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-white/45 transition hover:text-white">
-                      Review details
+                      More details
                     </summary>
                     <form action={saveCoachNote} className="mt-3 grid gap-2">
                       <input type="hidden" name="sessionId" value={session.id} />
@@ -854,7 +833,7 @@ export default async function SessionsPage({
                           defaultValue={session.situation || ""}
                           className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
                         >
-                          <option value="">Situation</option>
+                          <option value="">Clip type</option>
                           {BASKETBALL_SITUATIONS.map((situation) => (
                             <option key={situation} value={situation}>
                               {situation}
@@ -866,7 +845,7 @@ export default async function SessionsPage({
                           defaultValue={session.constraint || ""}
                           className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
                         >
-                          <option value="">Constraint</option>
+                          <option value="">Focus</option>
                           {ENVIRONMENTAL_CONSTRAINTS.map((constraint) => (
                             <option key={constraint} value={constraint}>
                               {constraint}
@@ -888,13 +867,13 @@ export default async function SessionsPage({
                         <input
                           name="coachNote"
                           defaultValue={session.coachNote || ""}
-                          placeholder="Note: Repeat tomorrow."
+                          placeholder="Sentence: Stay low and explode."
                           className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-white/25"
                         />
                         <input
                           name="triggerWord"
                           defaultValue={triggerLabel(session)}
-                          placeholder="Trigger: SINK"
+                          placeholder="Cue: SINK"
                           className="border border-white/10 bg-black px-3 py-2 text-sm font-black uppercase tracking-[0.12em] text-white outline-none placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-white/25"
                         />
                       </div>
@@ -976,7 +955,7 @@ export default async function SessionsPage({
           <aside className="grid h-fit gap-3">
             <section className="border-b border-white/10 pb-4">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Behavior clusters
+                Similar moments
               </p>
               <div className="mt-3 grid gap-3">
                 {behaviorClusters.slice(0, 4).map((cluster) => (
@@ -989,19 +968,17 @@ export default async function SessionsPage({
                       {cluster.behavior}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
-                      <span>{cluster.system}</span>
-                      <span>{cluster.constraint}</span>
-                      <span>Trigger {cluster.trigger}</span>
+                      <span>Cue {cluster.trigger}</span>
                       <span>{cluster.clips.length} clips</span>
                     </div>
                     <p className="mt-2 text-xs text-white/35">
-                      Suggested. Coach confirms in review.
+                      Grouped quietly. Change it anytime.
                     </p>
                   </Link>
                 ))}
                 {behaviorClusters.length === 0 ? (
                   <p className="text-sm text-white/40">
-                    Behavior phrases will appear after live capture.
+                    Saved sentences will appear here.
                   </p>
                 ) : null}
               </div>
@@ -1009,14 +986,14 @@ export default async function SessionsPage({
 
             <section className="border-b border-white/10 pb-4">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Tomorrow
+                Up next
               </p>
               <div className="mt-3 grid gap-2 text-sm text-white/60">
                 <Link href="/sessions?view=repeated" className="hover:text-white">
-                  Repeat clips for practice
+                  Clips to watch again
                 </Link>
                 <Link href="/sessions?note=missing" className="hover:text-white">
-                  Clips missing coach notes
+                  Clips missing a sentence
                 </Link>
                 <Link href="/team/local" className="hover:text-white">
                   Team prep

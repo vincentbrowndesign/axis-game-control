@@ -4,9 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import {
   coachingNoteLine,
   constraintLabel,
-  constructionZoneLabel,
   drillName,
-  phaseLabel,
   isConstructionActive,
   isRepeated,
   normalizeSessions,
@@ -178,15 +176,15 @@ export default async function TeamPage({ params }: Props) {
           </Link>
           <Link href="/sessions?construction=active" className="hover:text-white">
             {activeConstruction.length
-              ? `${activeConstruction.length} active construction clips`
-              : "No active construction clips"}
+              ? `${activeConstruction.length} clips need another look`
+              : "No clips waiting"}
           </Link>
           <Link
             href={constraintFocus[0] ? `/sessions?constraint=${encodeURIComponent(constraintFocus[0])}` : "/sessions"}
             className="hover:text-white"
           >
             {constraintFocus[0]
-              ? `Constraint focus: ${constraintFocus[0]}`
+              ? `Focus: ${constraintFocus[0]}`
               : "No constraints tagged yet"}
           </Link>
         </section>
@@ -215,7 +213,7 @@ export default async function TeamPage({ params }: Props) {
 
             <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Constraint focus
+                Current focus
               </h2>
               <div className="mt-3 flex flex-wrap gap-2">
                 {constraintFocus.map((constraint) => (
@@ -257,18 +255,18 @@ export default async function TeamPage({ params }: Props) {
                     ) : null}
                     {player.reviewSession && triggerLabel(player.reviewSession) ? (
                       <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-amber-100">
-                        Trigger: {triggerLabel(player.reviewSession)}
+                        Cue: {triggerLabel(player.reviewSession)}
                       </p>
                     ) : null}
                     {player.reviewSession?.constraint ? (
                       <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/45">
-                        Constraint: {constraintLabel(player.reviewSession)}
+                        Focus: {constraintLabel(player.reviewSession)}
                       </p>
                     ) : null}
                     <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
                       <span>{player.needsNotes} notes pending</span>
                       {player.reviewSession ? (
-                        <span>phase {phaseLabel(player.reviewSession)}</span>
+                        <span>watch again</span>
                       ) : null}
                       <span>{player.recentSessions} recent</span>
                       <span>last practice {player.lastPractice}</span>
@@ -287,7 +285,7 @@ export default async function TeamPage({ params }: Props) {
                   Recent sessions
                 </h2>
                 <Link href="/sessions" className="text-xs font-bold text-white/45 hover:text-white">
-                  Review clips
+                  Watch again
                 </Link>
               </div>
               <div className="mt-4 grid gap-3">
@@ -300,19 +298,19 @@ export default async function TeamPage({ params }: Props) {
                     <div>
                       <p className="text-sm text-amber-100/80">
                         {triggerLabel(session)
-                          ? `Trigger: ${triggerLabel(session)}`
+                          ? `Cue: ${triggerLabel(session)}`
                           : session.coachNote ||
                           (isRepeated(session, repeats, tags)
-                            ? "Repeat tomorrow"
+                            ? "Watch again"
                             : "Open for review")}
                       </p>
                       <p className="font-bold text-white">{drillName(session)}</p>
                       <p className="mt-1 text-sm text-white/45">
-                        {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
+                        {playerName(session)} / {situationLabel(session)}
                       </p>
                       {session.constraint ? (
                         <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
-                          Constraint: {constraintLabel(session)}
+                          Focus: {constraintLabel(session)}
                         </p>
                       ) : null}
                     </div>
@@ -340,16 +338,16 @@ export default async function TeamPage({ params }: Props) {
                   >
                     <p className="text-sm text-white/75">{session.coachNote}</p>
                     <p className="mt-2 text-xs text-white/35">
-                      {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
+                      {playerName(session)} / {situationLabel(session)}
                     </p>
                     {session.constraint ? (
                       <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-white/40">
-                        Constraint: {constraintLabel(session)}
+                        Focus: {constraintLabel(session)}
                       </p>
                     ) : null}
                     {triggerLabel(session) ? (
                       <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-amber-100">
-                        Trigger: {triggerLabel(session)}
+                        Cue: {triggerLabel(session)}
                       </p>
                     ) : null}
                   </Link>
@@ -362,7 +360,7 @@ export default async function TeamPage({ params }: Props) {
 
             <section className="border-b border-white/10 pb-4">
               <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Repeat clips
+                Watch again
               </h2>
               <div className="mt-3 grid gap-3">
                 {taggedRepeats.slice(0, 6).map((session) => (
@@ -371,19 +369,19 @@ export default async function TeamPage({ params }: Props) {
                     href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
                     className="border-t border-white/10 py-3 transition hover:text-white"
                   >
-                    <p className="text-sm text-amber-100/80">Repeat tomorrow</p>
+                    <p className="text-sm text-amber-100/80">Watch again</p>
                     <p className="mt-1 font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
-                      {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}
+                      {playerName(session)} / {situationLabel(session)}
                     </p>
                     {session.constraint ? (
                       <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/40">
-                        Constraint: {constraintLabel(session)}
+                        Focus: {constraintLabel(session)}
                       </p>
                     ) : null}
                     {isConstructionActive(session) ? (
                       <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-white/45">
-                        Construction: {constructionZoneLabel(session)} / Focus: mechanical compliance
+                        Keep this simple in the next rep.
                       </p>
                     ) : null}
                   </Link>
