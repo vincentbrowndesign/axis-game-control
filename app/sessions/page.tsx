@@ -19,7 +19,6 @@ import {
   dateLabel,
   drillName,
   phaseLabel,
-  isConstructionActive,
   isRecent,
   isRepeated,
   normalizeSessions,
@@ -490,10 +489,10 @@ export default async function SessionsPage({
             <input
               name="q"
               defaultValue={filters.q}
-              placeholder="Search clips, behavior phrases, players"
-              className="bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
+              placeholder="Search clips, sentences, players"
+              className="bg-black/25 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
             />
-            <button className="bg-white/[0.08] px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:bg-white hover:text-black">
+            <button className="bg-white/[0.08] px-5 py-3 text-sm font-bold text-white/75 transition hover:bg-white hover:text-black">
               Find
             </button>
           </form>
@@ -522,18 +521,6 @@ export default async function SessionsPage({
               className="transition hover:text-white"
             >
               Last practice
-            </Link>
-            <Link
-              href="/sessions?construction=active"
-              className="transition hover:text-white"
-            >
-              Needs work
-            </Link>
-            <Link
-              href="/sessions?constraint=No+middle+drive"
-              className="transition hover:text-white"
-            >
-              Stop the drive
             </Link>
           </div>
 
@@ -774,40 +761,21 @@ export default async function SessionsPage({
                   <div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {triggerLabel(session) ? (
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
-                          Cue: {triggerLabel(session)}
+                        <span className="text-xs font-bold text-amber-100/75">
+                          {triggerLabel(session)}
                         </span>
                       ) : null}
-                      <span className="px-1 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
+                      <span className="text-xs font-bold text-white/35">
                         {nextAction(session, sessionRepeats, tags)}
                       </span>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-white/45">
                       {clipReason(session, sessionRepeats, tags)}
                     </p>
-                    {isConstructionActive(session) ? (
-                      <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
-                        Keep this simple in the next rep.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {session.tags.length ? (
-                      session.tags.map((tag) => (
-                        <Link
-                          key={tag}
-                          href={`/sessions?tag=${encodeURIComponent(tag)}`}
-                          className="text-[10px] uppercase tracking-[0.18em] text-white/40 transition hover:text-white"
-                        >
-                          #{tag}
-                        </Link>
-                      ))
-                    ) : null}
                   </div>
 
                   <details className="pt-1">
-                    <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-white/35 transition hover:text-white">
+                    <summary className="cursor-pointer text-sm text-white/35 transition hover:text-white">
                       More details
                     </summary>
                     <form action={saveCoachNote} className="mt-3 grid gap-2">

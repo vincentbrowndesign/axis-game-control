@@ -2,12 +2,8 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import UploadConsole from "@/components/UploadConsole"
 import {
-  isRepeated,
   normalizeSessions,
   playerName,
-  repeatCounts,
-  tagCounts,
-  triggerLabel,
 } from "@/lib/archive/sessionRollup"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -82,19 +78,6 @@ export default async function HomePage({ searchParams }: Props) {
     })
   )
   const sessions = normalizeSessions(rowsWithUrls)
-  const tags = tagCounts(sessions)
-  const repeats = repeatCounts(sessions)
-  const pendingReview = sessions.filter((session) => !session.coachNote).slice(0, 4)
-  const repeatSessions = sessions
-    .filter((session) => isRepeated(session, repeats, tags))
-    .slice(0, 4)
-  const recentTriggers = [
-    ...new Set(
-      sessions
-        .map(triggerLabel)
-        .filter((trigger) => trigger.length > 0)
-    ),
-  ].slice(0, 7)
   const recentPlayers = [
     ...new Set(sessions.map(playerName).filter(Boolean)),
   ].slice(0, 8)
@@ -104,9 +87,6 @@ export default async function HomePage({ searchParams }: Props) {
       email={user.email}
       twinName={profile.player_name || profile.display_name}
       initialWarmupId={params?.warmup}
-      recentTriggers={recentTriggers}
-      repeatCount={repeatSessions.length}
-      reviewCount={pendingReview.length}
       recentClips={sessions}
       recentPlayers={recentPlayers}
     />

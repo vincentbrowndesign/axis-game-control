@@ -28,15 +28,11 @@ type Props = {
   email: string
   twinName?: string | null
   initialWarmupId?: string | null
-  recentTriggers?: string[]
-  repeatCount?: number
-  reviewCount?: number
   recentClips?: ReplaySessionView[]
   recentPlayers?: string[]
 }
 
 const calibrationMissions = getCalibrationMissions()
-const coreTriggers = ["TIGHT", "SINK", "LOW", "HIT", "ICE", "HOLD", "KICK"]
 const behaviorPhrases = [
   "Stay low and explode.",
   "Tag first before closing out.",
@@ -192,7 +188,6 @@ function isClipError(status?: string) {
 export default function UploadConsole({
   twinName = null,
   initialWarmupId = null,
-  recentTriggers = [],
   recentClips = [],
   recentPlayers = [],
 }: Props) {
@@ -233,15 +228,12 @@ export default function UploadConsole({
   const [flowStep, setFlowStep] = useState<FlowStep>(
     initialWarmupId ? "brief" : "entry"
   )
-  const [selectedMissionId, setSelectedMissionId] = useState(
+  const [selectedMissionId] = useState(
     initialWarmupId || calibrationMissions[0]?.id || "none"
   )
   const selectedMission =
     calibrationMissions.find((mission) => mission.id === selectedMissionId) ||
     calibrationMissions[0]
-  const liveTriggers = [
-    ...new Set([...recentTriggers, ...coreTriggers]),
-  ].slice(0, 9)
   const playerChips = [
     ...new Set([...roster, ...recentPlayers, "AJ", "Liam", "Kendal"]),
   ]
@@ -615,63 +607,77 @@ export default function UploadConsole({
   }
 
   return (
-    <main className="min-h-screen bg-[#090806] px-5 py-7 text-stone-100">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-10 flex items-center justify-between gap-4">
-          <Link href="/" className="text-sm font-black tracking-[-0.02em] text-white">
+    <main className="min-h-screen bg-[#0b0a08] px-4 py-5 text-stone-100 sm:px-6">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-8 flex items-center justify-between gap-4">
+          <Link href="/" className="text-sm font-black text-white/85">
             Axis
           </Link>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ModeNav active="live" />
             <button
               type="button"
               onClick={signOut}
-              className="px-2 py-2 text-xs font-black uppercase tracking-[0.18em] text-white/30 transition hover:text-white"
+              className="px-2 py-2 text-xs font-bold text-white/30 transition hover:text-white"
             >
               Exit
             </button>
           </div>
         </header>
 
-        <section className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div>
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h1 className="text-5xl font-black tracking-[-0.04em] sm:text-7xl">
-                  That&apos;s the clip.
-                </h1>
-                <p className="mt-4 max-w-xl text-base leading-7 text-white/45">
-                  Record it. Say the sentence. Keep coaching.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={isUploading || !selectedMission}
-                onClick={() => {
-                  setSavedReplayId("")
-                  setSavedTrigger("")
-                  setRepeatTomorrow(false)
-                  setFlowStep("capture")
-                  setStatus("Saving clip")
-                  cameraInputRef.current?.click()
-                }}
-                className="min-h-32 min-w-44 bg-amber-200 px-9 py-6 text-2xl font-black uppercase tracking-[0.1em] text-black transition hover:bg-stone-100 disabled:opacity-50"
-              >
-                Record
-              </button>
-            </div>
+        <section className="grid gap-8">
+          <div className="grid gap-5">
+            <button
+              type="button"
+              disabled={isUploading || !selectedMission}
+              onClick={() => {
+                setSavedReplayId("")
+                setSavedTrigger("")
+                setRepeatTomorrow(false)
+                setFlowStep("capture")
+                setStatus("Saving clip")
+                cameraInputRef.current?.click()
+              }}
+              className="min-h-[44vh] w-full bg-stone-100 px-8 py-14 text-5xl font-black tracking-[-0.05em] text-black transition hover:bg-amber-100 disabled:opacity-50 sm:text-7xl"
+            >
+              Record
+            </button>
 
-            <div className="mt-10 flex flex-wrap gap-2">
+            {status ? (
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-white/70">{status}</p>
+                  {progress > 0 ? (
+                    <p className="text-xs text-white/35">{progress}%</p>
+                  ) : null}
+                </div>
+                {progress > 0 ? (
+                  <div className="mt-2 h-1 overflow-hidden bg-white/10">
+                    <div
+                      className="h-full bg-amber-100 transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {savedReplayId ? (
+              <div className="grid gap-4">
+                <p className="text-sm text-white/45">
+                  Saved. Add player and sentence.
+                </p>
+                <div className="flex flex-wrap gap-2">
               {playerChips.map((player) => (
                 <button
                   key={player}
                   type="button"
                   disabled={!savedReplayId || isQuickTagging}
                   onClick={() => assignPlayer(player)}
-                  className={`px-4 py-3 text-sm font-black transition disabled:opacity-35 ${
+                      className={`px-4 py-3 text-sm font-bold transition disabled:opacity-35 ${
                     selectedPlayer === player
-                      ? "bg-amber-200 text-black"
-                      : "bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white"
+                          ? "bg-stone-100 text-black"
+                          : "bg-white/[0.04] text-white/65 hover:bg-white/[0.08] hover:text-white"
                   }`}
                 >
                   {player}
@@ -680,14 +686,14 @@ export default function UploadConsole({
               <button
                 type="button"
                 onClick={() => setShowAddPlayer((value) => !value)}
-                className="px-4 py-3 text-sm font-bold text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+                    className="px-4 py-3 text-sm font-bold text-white/40 transition hover:bg-white/[0.05] hover:text-white"
               >
                 Add Player
               </button>
-            </div>
+                </div>
 
             {showAddPlayer ? (
-              <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2">
                 <input
                   value={newPlayerName}
                   onChange={(event) => setNewPlayerName(event.target.value)}
@@ -700,8 +706,8 @@ export default function UploadConsole({
                 <input
                   value={newPlayerGrade}
                   onChange={(event) => setNewPlayerGrade(event.target.value)}
-                  placeholder="Grade"
-                  className="w-24 bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
+                      placeholder="Grade"
+                      className="w-24 bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
                 />
                 <input
                   value={newPlayerTeam}
@@ -712,14 +718,14 @@ export default function UploadConsole({
                 <button
                   type="button"
                   onClick={addPlayer}
-                  className="bg-white/[0.08] px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/70 transition hover:bg-white hover:text-black"
+                      className="bg-white/[0.08] px-4 py-3 text-xs font-bold text-white/70 transition hover:bg-white hover:text-black"
                 >
                   Save
                 </button>
               </div>
             ) : null}
 
-            <div className="mt-5 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
               {behaviorPhrases.map((phrase) => (
                 <button
                   key={phrase}
@@ -728,133 +734,56 @@ export default function UploadConsole({
                   onClick={() => saveBehaviorPhrase(phrase)}
                   className={`px-4 py-3 text-sm font-bold transition disabled:opacity-35 ${
                     behaviorPhrase === phrase
-                      ? "bg-amber-200 text-black"
-                      : "bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white"
+                          ? "bg-stone-100 text-black"
+                          : "bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white"
                   }`}
                 >
                   {phrase}
                 </button>
               ))}
-            </div>
+                </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 disabled={!savedReplayId || isListening || isQuickTagging}
                 onClick={startVoiceCapture}
-                className="bg-white/[0.04] px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/55 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-35"
+                    className="bg-white/[0.04] px-4 py-3 text-sm font-bold text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-35"
               >
-                {isListening ? "Listening" : "Speak correction"}
+                    {isListening ? "Listening" : "Speak"}
               </button>
               <input
                 value={behaviorPhrase}
                 disabled={!savedReplayId || isQuickTagging}
                 onChange={(event) => setBehaviorPhrase(event.target.value)}
                 onBlur={() => saveBehaviorPhrase(behaviorPhrase)}
-                placeholder="Type a quick behavior phrase"
+                    placeholder="Say what to repeat"
                 className="min-w-[240px] flex-1 bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 disabled:opacity-35"
               />
-            </div>
+                </div>
 
-            <details className="mt-5 pt-1">
-              <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-white/40 transition hover:text-white">
-                Cue
-              </summary>
-              <div className="mt-3 flex flex-wrap gap-2">
-              {liveTriggers.map((trigger) => (
-                <button
-                  key={trigger}
-                  type="button"
-                  disabled={!savedReplayId || isQuickTagging}
-                  onClick={() => quickTagClip(trigger)}
-                  className={`px-4 py-3 text-sm font-black uppercase tracking-[0.16em] transition disabled:opacity-35 ${
-                    savedTrigger === trigger
-                      ? "bg-amber-200 text-black"
-                      : "bg-white/[0.04] text-white/65 hover:bg-white/[0.08] hover:text-white"
-                  }`}
-                >
-                  {trigger}
-                </button>
-              ))}
-              </div>
-            </details>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={!savedReplayId || isQuickTagging}
-                onClick={() => {
-                  const nextRepeat = !repeatTomorrow
-                  setRepeatTomorrow(nextRepeat)
-                  void quickTagClip(savedTrigger, nextRepeat, behaviorPhrase)
-                }}
-                className={`px-4 py-3 text-xs font-black uppercase tracking-[0.18em] transition disabled:opacity-35 ${
-                  repeatTomorrow
-                    ? "bg-white/[0.08] text-amber-100"
-                    : "text-white/45 hover:bg-white/[0.05] hover:text-white"
-                }`}
-              >
-                Watch again
-              </button>
+                <div className="flex flex-wrap items-center gap-2">
               <Link
                 href={savedReplayId ? `/replay/${savedReplayId}` : "/sessions"}
-                className="px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+                    className="px-4 py-3 text-sm font-bold text-white/45 transition hover:bg-white/[0.05] hover:text-white"
               >
-                Watch later
+                    Watch
               </Link>
-              {savedReplayId ? (
                 <button
                   type="button"
                   onClick={resetLiveMode}
-                  className="px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+                    className="px-4 py-3 text-sm font-bold text-white/45 transition hover:bg-white/[0.05] hover:text-white"
                 >
-                  Next clip
+                    Done
                 </button>
-              ) : null}
-            </div>
-          </div>
-
-          <aside className="pt-1">
-            <select
-              value={selectedMissionId}
-              onChange={(event) => {
-                setSelectedMissionId(event.target.value)
-                setStatus("")
-                setProgress(0)
-              }}
-              className="mt-3 w-full bg-black/35 px-3 py-3 text-sm text-white outline-none"
-            >
-              {calibrationMissions.map((mission) => (
-                <option key={mission.id} value={mission.id}>
-                  {missionName(mission)}
-                </option>
-              ))}
-            </select>
-            {status ? (
-              <div className="mt-5">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-bold text-white">{status}</p>
-                  <p className="text-xs text-white/40">{progress}%</p>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden bg-white/10">
-                  <div
-                    className="h-full bg-amber-200 transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
                 </div>
               </div>
             ) : null}
-
-            {savedReplayId ? (
-              <p className="mt-3 text-sm text-amber-100/80">
-                Saved. Add the sentence and keep going.
-              </p>
-            ) : null}
-          </aside>
+          </div>
         </section>
 
-        <section className="mt-12">
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <section className="mt-10">
+          <div className="grid gap-8 md:grid-cols-2">
             {liveClips.slice(0, 9).map((clip) => (
               <article key={clip.id} className="group">
                 <Link
@@ -862,11 +791,11 @@ export default function UploadConsole({
                   className="block aspect-video overflow-hidden bg-black/70"
                 >
                   {isClipProcessing(clip.status) ? (
-                    <div className="grid h-full place-items-center text-xs font-black uppercase tracking-[0.18em] text-white/35">
+                    <div className="grid h-full place-items-center text-sm font-bold text-white/35">
                       Clip processing...
                     </div>
                   ) : isClipError(clip.status) ? (
-                    <div className="grid h-full place-items-center text-xs font-black uppercase tracking-[0.18em] text-white/35">
+                    <div className="grid h-full place-items-center text-sm font-bold text-white/35">
                       Clip unavailable
                     </div>
                   ) : clip.videoUrl ? (
@@ -878,7 +807,7 @@ export default function UploadConsole({
                       className="h-full w-full object-cover opacity-85 transition group-hover:opacity-100"
                     />
                   ) : (
-                    <div className="grid h-full place-items-center text-xs font-black uppercase tracking-[0.18em] text-white/30">
+                    <div className="grid h-full place-items-center text-sm font-bold text-white/30">
                       Clip saved
                     </div>
                   )}
@@ -895,14 +824,14 @@ export default function UploadConsole({
                   <div className="flex shrink-0 items-center gap-3">
                     <Link
                       href={`/replay/${clip.id}`}
-                      className="text-xs font-black uppercase tracking-[0.16em] text-white/40 transition hover:text-white"
+                      className="text-sm font-bold text-white/40 transition hover:text-white"
                     >
                       Watch
                     </Link>
                     <button
                       type="button"
                       onClick={() => deleteClip(clip.id)}
-                      className="text-xs font-black uppercase tracking-[0.16em] text-white/28 transition hover:text-red-200"
+                      className="text-sm font-bold text-white/25 transition hover:text-red-200"
                     >
                       Delete
                     </button>
