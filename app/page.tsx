@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import VoiceMemoryConsole from "@/components/VoiceMemoryConsole"
-import { clusterCoachingLanguage } from "@/lib/axis-ai/clusterCoachingLanguage"
+import UploadMemoryConsole from "@/components/UploadMemoryConsole"
 import {
   buildMemoryStream,
   type MemoryStreamNote,
@@ -33,23 +32,23 @@ type PlayerMention = {
   latestPhrase: string
 }
 
-type SessionCard = {
+type HomeReplayMoment = {
+  id: string
+  sessionId: string
+  title: string
+  caption: string
+  detail: string
+  timestamp: string
+  videoUrl?: string | null
+  sessionTitle: string
+}
+
+type HomeSession = {
   id: string
   title: string
   time: string
-  phrases: string[]
-  players: string[]
-  landmarks: {
-    id: string
-    phrase: string
-    caption: string
-    timestamp: string
-    videoWindow: string
-    player?: string
-    replayCount: number
-    audioUrl?: string | null
-    reason?: string
-  }[]
+  videoUrl?: string | null
+  captions: string[]
 }
 
 const fallbackPlayers = ["AJ", "Liam", "Kendal"]
@@ -121,56 +120,52 @@ function formatTimestamp(totalSeconds: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`
 }
 
-function formatVideoWindow(totalSeconds: number) {
-  const start = Math.max(0, totalSeconds - 5)
-  const end = totalSeconds + 5
+function metadataLandmarks(metadata: Record<string, unknown> | null) {
+  const landmarks = metadata?.candidateLandmarks || metadata?.captionLandmarks
 
-  return `${formatTimestamp(start)}-${formatTimestamp(end)}`
-}
+  if (!Array.isArray(landmarks)) return []
 
-function buildSessionCards(phrases: VoicePhrase[], mentions: PlayerMention[]) {
-  const grouped = new Map<string, VoicePhrase[]>()
+  return landmarks
+    .map((landmark, index) => {
+      if (!landmark || typeof landmark !== "object") return null
 
-  for (const phrase of phrases) {
-    const key = sessionDay(phrase.createdAt)
-    grouped.set(key, [...(grouped.get(key) || []), phrase])
-  }
+      const current = landmark as Record<string, unknown>
+      const title =
+        typeof current.title === "string" ? current.title : "Replay moment"
+      const caption =
+        typeof current.caption === "string"
+          ? current.caption
+          : title.toUpperCase()
+      const detail =
+        typeof current.detail === "string"
+          ? current.detail
+          : "Coach adds the meaning."
+      const timestamp =
+        typeof current.timestamp === "string"
+          ? current.timestamp
+          : formatTimestamp(
+              typeof current.timestampSeconds === "number"
+                ? current.timestampSeconds
+                : index * 12
+            )
 
-  return [...grouped.entries()].map(([day, items], index): SessionCard => {
-    const players = mentions
-      .filter((mention) =>
-        items.some((item) =>
-          item.phrase.toLowerCase().includes(mention.name.toLowerCase())
-        )
-      )
-      .map((mention) => mention.name)
-
-    return {
-      id: `${day}-${index}`,
-      title: index === 0 ? "Latest session" : `${day} session`,
-      time: day,
-      phrases: items.map((item) => item.phrase),
-      players: players.slice(0, 4),
-      landmarks: items.slice(0, 5).map((item, itemIndex) => {
-        const seconds = itemIndex * 18
-        const player = mentions.find((mention) =>
-          item.phrase.toLowerCase().includes(mention.name.toLowerCase())
-        )?.name
-
-        return {
-          id: item.id,
-          phrase: item.phrase,
-          caption: item.phrase.toUpperCase(),
-          timestamp: formatTimestamp(seconds),
-          videoWindow: formatVideoWindow(seconds),
-          player,
-          replayCount: item.replayCount || Math.max(1, 6 - itemIndex),
-          audioUrl: item.audioUrl || null,
-          reason: item.reason,
-        }
-      }),
-    }
-  })
+      return {
+        title,
+        caption,
+        detail,
+        timestamp,
+      }
+    })
+    .filter(
+      (
+        landmark
+      ): landmark is {
+        title: string
+        caption: string
+        detail: string
+        timestamp: string
+      } => Boolean(landmark)
+    )
 }
 
 export default async function HomePage() {
@@ -185,10 +180,10 @@ export default async function HomePage() {
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-center">
           <p className="text-sm font-bold text-white/42">Axis</p>
           <h1 className="mt-4 max-w-3xl text-5xl font-black tracking-[-0.05em] sm:text-7xl">
-            Coaching memory, playable.
+            Upload basketball footage.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
-            Record the session and replay the captions that matter.
+            Axis extracts replay moments, timestamps, and captions.
           </p>
           <Link
             href="/auth"
@@ -256,26 +251,41 @@ export default async function HomePage() {
   const recentPlayers = [
     ...new Set(sessions.map(playerName).filter(Boolean)),
   ].slice(0, 12)
-  const repeatedPhrases = clusterCoachingLanguage(
-    phrases.map((phrase) => ({
-      id: phrase.id,
-      phrase: phrase.phrase,
-      createdAt: new Date(phrase.createdAt).getTime(),
-    }))
-  ).map((cluster) => ({
-    id: cluster.id,
-    label: cluster.label,
-    count: cluster.count,
-  }))
   const playerMentions = buildPlayerMentions(phrases, recentPlayers)
-  const recentSessions = buildSessionCards(phrases, playerMentions)
+  const recentSessions: HomeSession[] = (sessionsData || []).map((session) => {
+    const landmarks = metadataLandmarks(session.metadata)
+
+    return {
+      id: session.id,
+      title: session.title || session.file_name || "Basketball video",
+      time: sessionDay(session.created_at),
+      videoUrl: session.video_url || null,
+      captions: landmarks.map((landmark) => landmark.caption).slice(0, 3),
+    }
+  })
+  const replayMoments: HomeReplayMoment[] = (sessionsData || []).flatMap(
+    (session) =>
+      metadataLandmarks(session.metadata).map((landmark, index) => ({
+        id: `${session.id}-${index}`,
+        sessionId: session.id,
+        title: landmark.title,
+        caption: landmark.caption,
+        detail: landmark.detail,
+        timestamp: landmark.timestamp,
+        videoUrl: session.video_url || null,
+        sessionTitle: session.title || session.file_name || "Basketball video",
+      }))
+  )
 
   return (
-    <VoiceMemoryConsole
-      recentPhrases={phrases.slice(0, 12)}
-      repeatedPhrases={repeatedPhrases}
-      playerMentions={playerMentions}
+    <UploadMemoryConsole
+      replayMoments={replayMoments}
       recentSessions={recentSessions}
+      playerMoments={playerMentions.map((mention) => ({
+        name: mention.name,
+        phrase: mention.latestPhrase,
+        count: mention.count,
+      }))}
     />
   )
 }

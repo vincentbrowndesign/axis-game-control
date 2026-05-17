@@ -1,26 +1,22 @@
 # AXIS CONSTITUTION
 
-Axis is a continuous AI-assisted behavioral reinforcement stream for basketball.
+Axis is AI-assisted coaching memory extraction for basketball.
 
 ## Product Truth
 
+- Uploads are the primary entry point.
 - Landmarks are the primary memory object.
 - Playback is the product experience.
 - Captions are the reinforcement layer.
-- Usage should make the stream better.
-- AI stays invisible.
+- AI stays invisible and assistive.
 
 ## Core Loop
 
-Coach opens Axis.
+Coach uploads basketball footage.
 
-Coach taps Record.
+Axis extracts candidate landmarks, timestamps, captions, and replay memory.
 
-Coach runs practice normally.
-
-Coach taps Landmark when a meaningful moment happens.
-
-Axis synchronizes voice, captions, timestamps, and surrounding session context.
+Coach lightly reinforces the moments that matter.
 
 Players replay meaningful moments later.
 
@@ -28,9 +24,9 @@ Replay behavior teaches Axis what should resurface.
 
 ## Hard Rules
 
-- Preserve auth, Supabase, uploads, replay routes, voice, and AI utility infrastructure.
-- Keep the app media-first, adaptive, calm, and lightweight.
-- Show Record, Landmark, live captions, timestamps, resurfaced sessions, and player mentions first.
+- Preserve auth, Supabase, uploads, Mux, replay routes, voice, and AI utility infrastructure.
+- Keep the app upload-first, media-first, adaptive, calm, and lightweight.
+- Show Choose File, keyframes, captions, timestamps, resurfaced sessions, and player mentions first.
 - Keep organization in the background.
 
 ## Do Not Add

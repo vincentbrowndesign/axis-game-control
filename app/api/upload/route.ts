@@ -8,6 +8,7 @@ import {
   normalizeSource,
 } from "@/lib/replayStorage"
 import { makeTimelineEvent } from "@/lib/axis/reinforcement"
+import { extractReplayLandmarks } from "@/lib/axis-ai/extractReplayLandmarks"
 import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
@@ -312,6 +313,12 @@ export async function POST(request: Request) {
     const workflowStage = mapWorkflowStage(
       formData.get("workflowStage") || formData.get("environment")
     )
+    const safeDuration = Number.isFinite(duration)
+      ? duration
+      : 0
+    const candidateLandmarks = extractReplayLandmarks({
+      durationSeconds: safeDuration,
+    })
 
     const inserted = await supabaseAdmin
       .from("axis_sessions")
@@ -330,19 +337,24 @@ export async function POST(request: Request) {
         environment: normalizeEnvironment(
           formData.get("environment")
         ),
-        duration_seconds: Number.isFinite(duration)
-          ? duration
-          : 0,
+        duration_seconds: safeDuration,
         status: "stored",
         tags: [],
+        transcript_text: candidateLandmarks
+          .map((landmark) => `[${landmark.timestamp}] ${landmark.title}`)
+          .join("\n"),
+        ai_summary: "Candidate replay moments ready for coach reinforcement.",
         embedding_status: "pending",
-        semantic_tags: [],
+        semantic_tags: candidateLandmarks.map((landmark) => landmark.title),
         metadata: {
           originalName: normalized.originalName,
           originalType: normalized.mime || null,
           originalSize: file.size,
           signedUrlExpiresIn: signedUrlTtl,
           workflowStage,
+          candidateLandmarks,
+          captionLandmarks: candidateLandmarks,
+          memoryExtractionStatus: "candidate-landmarks-ready",
           correctionTimelineEvents: [
             makeTimelineEvent("CLIP_CAPTURED", "Clip captured"),
           ],

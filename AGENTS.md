@@ -2,18 +2,18 @@
 
 Before making product changes, read `/AXIS_CONSTITUTION.md`.
 
-Axis is a continuous AI-assisted behavioral reinforcement stream.
+Axis is AI-assisted coaching memory extraction for basketball.
 
 The active product loop is:
 
-Coach taps Record -> coach taps Landmark on a meaningful moment -> coach speaks naturally -> Axis synchronizes voice, captions, timestamps, and surrounding context -> players replay meaningful moments -> replay behavior helps the stream resurface what matters.
+Coach chooses a video -> Axis extracts candidate landmarks, timestamps, captions, and replay memory -> coach lightly reinforces meaningful moments -> players replay meaningful moments -> replay behavior helps the stream resurface what matters.
 
 Codex must:
 
 - Preserve working auth, Supabase, upload, storage, replay, voice, and AI utility infrastructure.
 - Make small scoped changes.
-- Keep the frontend simple, adaptive, media-first, and lightweight.
-- Prioritize Record, Landmark, live captions, replay, timestamps, Sessions, Players, coaching phrases, player mentions, and resurfacing.
+- Keep the frontend simple, adaptive, upload-first, media-first, and lightweight.
+- Prioritize Choose File, keyframes, landmarks, captions, replay, timestamps, Sessions, Players, coaching phrases, player mentions, and resurfacing.
 - Keep AI invisible and assistive.
 - Use basketball-first wording.
 - Hide video-first UX, systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.

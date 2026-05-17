@@ -3,7 +3,7 @@ import Link from "next/link"
 type Mode = "record" | "sessions" | "players"
 
 const modes: { key: Mode; label: string; href: string }[] = [
-  { key: "record", label: "Record", href: "/#record" },
+  { key: "record", label: "Upload", href: "/#upload" },
   { key: "sessions", label: "Sessions", href: "/sessions" },
   { key: "players", label: "Players", href: "/players" },
 ]
