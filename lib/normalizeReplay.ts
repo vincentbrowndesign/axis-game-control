@@ -498,9 +498,23 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
     )
     const id = asString(raw.id, DEFAULT_REPLAY.id)
     const source = asSource(raw.source)
+    const muxPlaybackId = asOptionalString(
+      raw.muxPlaybackId ??
+        raw.mux_playback_id ??
+        raw.playback_id ??
+        metadata.muxPlaybackId
+    )
+    const muxAssetId = asOptionalString(
+      raw.muxAssetId ??
+        raw.mux_asset_id ??
+        raw.asset_id ??
+        metadata.muxAssetId
+    )
     const videoUrl = asString(
       raw.videoUrl ?? raw.video_url,
-      DEFAULT_REPLAY.videoUrl
+      muxPlaybackId
+        ? `https://stream.mux.com/${muxPlaybackId}.m3u8`
+        : DEFAULT_REPLAY.videoUrl
     )
     const memoryCount = Math.max(
       0,
@@ -549,15 +563,35 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
       videoUrl,
       title: asString(raw.title, "Axis Session"),
       mission: asString(raw.mission, "None"),
+      playerId: asOptionalString(raw.playerId ?? raw.player_id),
       player: asString(raw.player ?? raw.player_name, "Unassigned"),
       environment: asEnvironment(raw.environment),
       duration: asNumber(raw.duration ?? raw.duration_seconds, 0),
       status: asString(raw.status, DEFAULT_REPLAY.status),
       fileName: asString(raw.fileName ?? raw.file_name, ""),
+      muxAssetId,
+      muxPlaybackId,
+      behaviorSentence: asOptionalString(
+        raw.behaviorSentence ??
+          raw.behavior_sentence ??
+          metadata.behaviorSentence ??
+          metadata.behaviorPhrase
+      ),
       tags: asStringArray(raw.tags),
+      transcriptText: asOptionalString(raw.transcriptText ?? raw.transcript_text),
+      aiSummary: asOptionalString(raw.aiSummary ?? raw.ai_summary),
+      embeddingStatus: asOptionalString(
+        raw.embeddingStatus ?? raw.embedding_status
+      ),
+      semanticTags: asStringArray(raw.semanticTags ?? raw.semantic_tags),
       situation: asOptionalString(raw.situation ?? metadata.situation),
       constraint: asOptionalString(raw.constraint ?? metadata.constraint),
-      coachNote: asOptionalString(raw.coachNote ?? metadata.coachNote),
+      coachNote: asOptionalString(
+        raw.coachNote ??
+          raw.behavior_sentence ??
+          metadata.coachNote ??
+          metadata.behaviorPhrase
+      ),
       coachFlaw: asOptionalString(raw.coachFlaw ?? metadata.coachFlaw),
       coachCorrection: asOptionalString(
         raw.coachCorrection ?? metadata.coachCorrection

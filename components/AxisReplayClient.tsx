@@ -215,6 +215,14 @@ function EmptyReplay() {
   )
 }
 
+function isClipProcessing(status?: string) {
+  return status === "uploaded" || status === "processing" || status === "created"
+}
+
+function isClipError(status?: string) {
+  return status === "error"
+}
+
 export default function AxisReplayClient({
   playbackId,
   initialSession = null,
@@ -1002,6 +1010,8 @@ export default function AxisReplayClient({
   })
   const cinemaState = memoryCinemaState(replayReveals)
   const replayReward = getReplayReward(replayReveals)
+  const clipProcessing = isClipProcessing(session.status)
+  const clipUnavailable = isClipError(session.status) || !session.videoUrl
   const nextWarmup = getNextWarmupFromMission(session.mission)
   const showFocus = replayOpenElapsed >= REPLAY_FOCUS_REVEAL_MS
   const showState = replayOpenElapsed >= REPLAY_STATE_REVEAL_MS
@@ -1051,48 +1061,58 @@ export default function AxisReplayClient({
           </div>
 
           <div className="relative overflow-hidden border border-white/10 bg-white/[0.03]">
-            <video
-              ref={videoRef}
-              src={session.videoUrl}
-              controls
-              playsInline
-              preload="metadata"
-              className="aspect-video w-full bg-black object-cover"
-              onLoadedMetadata={(event) => {
-                if (!signalReadyRef.current) return
+            {clipProcessing ? (
+              <div className="grid aspect-video w-full place-items-center bg-black text-xs font-black uppercase tracking-[0.18em] text-white/35">
+                Clip processing...
+              </div>
+            ) : clipUnavailable ? (
+              <div className="grid aspect-video w-full place-items-center bg-black text-xs font-black uppercase tracking-[0.18em] text-white/35">
+                Clip unavailable
+              </div>
+            ) : (
+              <video
+                ref={videoRef}
+                src={session.videoUrl}
+                controls
+                playsInline
+                preload="metadata"
+                className="aspect-video w-full bg-black object-cover"
+                onLoadedMetadata={(event) => {
+                  if (!signalReadyRef.current) return
 
-                try {
-                  if (metadataTimeoutRef.current != null) {
-                    window.clearTimeout(metadataTimeoutRef.current)
-                    metadataTimeoutRef.current = null
+                  try {
+                    if (metadataTimeoutRef.current != null) {
+                      window.clearTimeout(metadataTimeoutRef.current)
+                      metadataTimeoutRef.current = null
+                    }
+                    setSignalDuration(
+                      signalAccumulatorRef.current,
+                      event.currentTarget.duration || duration
+                    )
+                    setExtractedSignals(
+                      extractSignals(signalAccumulatorRef.current)
+                    )
+                    updateSegmentedMemory(sessionRef.current)
+                  } catch (error) {
+                    console.warn("AXIS SIGNAL METADATA WAITING", error)
+                    setSignalStatus("unavailable")
                   }
-                  setSignalDuration(
-                    signalAccumulatorRef.current,
-                    event.currentTarget.duration || duration
-                  )
-                  setExtractedSignals(
-                    extractSignals(signalAccumulatorRef.current)
-                  )
-                  updateSegmentedMemory(sessionRef.current)
-                } catch (error) {
-                  console.warn("AXIS SIGNAL METADATA WAITING", error)
-                  setSignalStatus("unavailable")
-                }
-              }}
-              onTimeUpdate={(event) => {
-                const time = event.currentTarget.currentTime
+                }}
+                onTimeUpdate={(event) => {
+                  const time = event.currentTarget.currentTime
 
-                setLocalCurrentTime(time)
-                setCurrentTime(time)
-              }}
-              onPlay={() => {
-                setPlaying(true)
-                void connectAudioSignal()
-              }}
-              onPause={() => setPlaying(false)}
-              onEnded={() => setPlaying(false)}
-              onError={recoverReplay}
-            />
+                  setLocalCurrentTime(time)
+                  setCurrentTime(time)
+                }}
+                onPlay={() => {
+                  setPlaying(true)
+                  void connectAudioSignal()
+                }}
+                onPause={() => setPlaying(false)}
+                onEnded={() => setPlaying(false)}
+                onError={recoverReplay}
+              />
+            )}
 
             {showFocus ? (
               <MemoryCinemaLayer

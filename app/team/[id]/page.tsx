@@ -16,7 +16,7 @@ import {
   tagCounts,
   triggerLabel,
 } from "@/lib/archive/sessionRollup"
-import type { AxisReplaySession, ReplaySessionView } from "@/types/memory"
+import type { AxisReplaySession } from "@/types/memory"
 
 type Props = {
   params: Promise<{
@@ -28,12 +28,6 @@ function PrimaryNav() {
   return (
     <ModeNav active="team" />
   )
-}
-
-function sessionText(session: ReplaySessionView) {
-  return [session.title, session.mission, session.environment, ...session.tags]
-    .join(" ")
-    .toLowerCase()
 }
 
 export default async function TeamPage({ params }: Props) {
@@ -82,22 +76,7 @@ export default async function TeamPage({ params }: Props) {
   const taggedRepeats = sessions.filter((session) =>
     isRepeated(session, repeats, tags)
   )
-  const activeConstruction = sessions.filter(isConstructionActive)
   const coachNotes = sessions.filter((session) => session.coachNote).slice(0, 6)
-  const situationFocus = [
-    ...new Set(
-      sessions
-        .map((session) => session.situation)
-        .filter((situation): situation is string => Boolean(situation))
-    ),
-  ].slice(0, 5)
-  const constraintFocus = [
-    ...new Set(
-      sessions
-        .map((session) => session.constraint)
-        .filter((constraint): constraint is string => Boolean(constraint))
-    ),
-  ].slice(0, 5)
   const needsReview = sessions.filter((session) => !session.coachNote)
   const playerReview = players
     .map((player) => ({
@@ -120,127 +99,31 @@ export default async function TeamPage({ params }: Props) {
         ),
         needsNotes: player.sessions,
       }))
-  const recentPractice = sessions.find(
-    (session) => session.environment === "practice"
-  )
-  const lastScrimmage = sessions.find(
-    (session) =>
-      session.environment === "game" || sessionText(session).includes("scrimmage")
-  )
 
   return (
     <main className="min-h-screen bg-[#090806] px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
+        <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
+            <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">
               Team
-            </p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Reinforcement board
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              See players, repeat clips, active corrections, constraints, and
-              situation focus before the next practice.
-            </p>
           </div>
           <PrimaryNav />
         </header>
 
-        <section className="mb-5 grid gap-2 border-b border-white/10 pb-5 text-sm text-white/65 md:grid-cols-2">
-          <Link href="/sessions?view=repeated" className="hover:text-white">
-            {taggedRepeats.length
-              ? `${taggedRepeats.length} repeat clips`
-              : "No repeat clips tagged"}
-          </Link>
-          <Link href="/sessions?note=missing" className="hover:text-white">
-            {needsReview.length
-              ? `${needsReview.length} notes missing`
-              : "Notes are current"}
-          </Link>
-          <Link
-            href={recentPractice ? `/replay/${recentPractice.id}` : "/sessions?type=practice"}
-            className="hover:text-white"
-          >
-            {recentPractice
-              ? `Recent practice: ${drillName(recentPractice)}`
-              : "No recent practice"}
-          </Link>
-          <Link
-            href={lastScrimmage ? `/replay/${lastScrimmage.id}` : "/sessions?type=scrimmage"}
-            className="hover:text-white"
-          >
-            {lastScrimmage
-              ? `Last scrimmage clips: ${playerName(lastScrimmage)}`
-              : "No scrimmage clips yet"}
-          </Link>
-          <Link href="/sessions?construction=active" className="hover:text-white">
-            {activeConstruction.length
-              ? `${activeConstruction.length} clips need another look`
-              : "No clips waiting"}
-          </Link>
-          <Link
-            href={constraintFocus[0] ? `/sessions?constraint=${encodeURIComponent(constraintFocus[0])}` : "/sessions"}
-            className="hover:text-white"
-          >
-            {constraintFocus[0]
-              ? `Focus: ${constraintFocus[0]}`
-              : "No constraints tagged yet"}
-          </Link>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-[1fr_340px]">
-          <div className="grid gap-4">
-            <section className="border-b border-white/10 pb-4">
-              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Situation focus
-              </h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {situationFocus.map((situation) => (
-                  <Link
-                    key={situation}
-                    href={`/sessions?situation=${encodeURIComponent(situation)}`}
-                    className="border border-white/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/50 transition hover:text-white"
-                  >
-                    {situation}
-                  </Link>
-                ))}
-                {situationFocus.length === 0 && (
-                  <p className="text-sm text-white/45">No situations tagged yet.</p>
-                )}
-              </div>
-            </section>
-
-            <section className="border-b border-white/10 pb-4">
-              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Current focus
-              </h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {constraintFocus.map((constraint) => (
-                  <Link
-                    key={constraint}
-                    href={`/sessions?constraint=${encodeURIComponent(constraint)}`}
-                    className="border border-white/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/50 transition hover:text-white"
-                  >
-                    {constraint}
-                  </Link>
-                ))}
-                {constraintFocus.length === 0 && (
-                  <p className="text-sm text-white/45">No constraints tagged yet.</p>
-                )}
-              </div>
-            </section>
-
-            <section className="border-b border-white/10 pb-4">
-              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                Players needing review
+        <section className="grid gap-8 lg:grid-cols-[1fr_320px]">
+          <div className="grid gap-8">
+            <section>
+              <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/45">
+                Players
               </h2>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {playersForReview.map((player) => (
                   <Link
                     key={player.name}
                     href={`/sessions?player=${encodeURIComponent(player.name)}`}
-                    className="border-t border-white/10 py-3 transition hover:text-white"
+                    className="py-3 transition hover:text-white"
                   >
                     <p className="font-bold text-white">{player.name}</p>
                     <p className="mt-1 text-sm text-amber-100/80">
@@ -263,8 +146,7 @@ export default async function TeamPage({ params }: Props) {
                         Focus: {constraintLabel(player.reviewSession)}
                       </p>
                     ) : null}
-                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/35">
-                      <span>{player.needsNotes} notes pending</span>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.18em] text-white/30">
                       {player.reviewSession ? (
                         <span>watch again</span>
                       ) : null}
@@ -279,10 +161,10 @@ export default async function TeamPage({ params }: Props) {
               </div>
             </section>
 
-            <section className="border-b border-white/10 pb-4">
+            <section>
               <div className="flex items-center justify-between gap-4">
-                <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/65">
-                  Recent sessions
+                <h2 className="text-sm font-black uppercase tracking-[0.22em] text-white/45">
+                  Recent
                 </h2>
                 <Link href="/sessions" className="text-xs font-bold text-white/45 hover:text-white">
                   Watch again
@@ -387,7 +269,7 @@ export default async function TeamPage({ params }: Props) {
                   </Link>
                 ))}
                 {taggedRepeats.length === 0 && (
-                  <p className="text-sm text-white/45">No repeat clips yet.</p>
+                  <p className="text-sm text-white/45">No clips yet.</p>
                 )}
               </div>
             </section>

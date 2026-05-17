@@ -4,10 +4,12 @@ import UploadConsole from "@/components/UploadConsole"
 import {
   isRepeated,
   normalizeSessions,
+  playerName,
   repeatCounts,
   tagCounts,
   triggerLabel,
 } from "@/lib/archive/sessionRollup"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { AxisProfile, AxisReplaySession } from "@/types/memory"
 
@@ -66,7 +68,20 @@ export default async function HomePage({ searchParams }: Props) {
     .limit(12)
     .returns<AxisReplaySession[]>()
 
-  const sessions = normalizeSessions(data)
+  const rowsWithUrls = await Promise.all(
+    (data || []).map(async (session) => {
+      if (session.file_path) {
+        const signed = await supabaseAdmin.storage
+          .from("axis-replays")
+          .createSignedUrl(session.file_path, 60 * 60 * 24 * 7)
+
+        session.video_url = signed.data?.signedUrl || session.video_url
+      }
+
+      return session
+    })
+  )
+  const sessions = normalizeSessions(rowsWithUrls)
   const tags = tagCounts(sessions)
   const repeats = repeatCounts(sessions)
   const pendingReview = sessions.filter((session) => !session.coachNote).slice(0, 4)
@@ -80,6 +95,9 @@ export default async function HomePage({ searchParams }: Props) {
         .filter((trigger) => trigger.length > 0)
     ),
   ].slice(0, 7)
+  const recentPlayers = [
+    ...new Set(sessions.map(playerName).filter(Boolean)),
+  ].slice(0, 8)
 
   return (
     <UploadConsole
@@ -89,6 +107,8 @@ export default async function HomePage({ searchParams }: Props) {
       recentTriggers={recentTriggers}
       repeatCount={repeatSessions.length}
       reviewCount={pendingReview.length}
+      recentClips={sessions}
+      recentPlayers={recentPlayers}
     />
   )
 }

@@ -63,6 +63,14 @@ function safeJson(body: AxisUploadResponse, status = 200) {
   )
 }
 
+function playerIdFromName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60)
+}
+
 async function withTimeout<T>(
   operation: Promise<T>,
   timeoutMs: number,
@@ -296,6 +304,10 @@ export async function POST(request: Request) {
 
     console.log("AXIS SIGNED URL SUCCESS")
     console.log("AXIS SESSION CREATE START")
+    const playerName = cleanText(
+      formData.get("player"),
+      "Unassigned"
+    )
 
     const inserted = await supabaseAdmin
       .from("axis_sessions")
@@ -308,10 +320,8 @@ export async function POST(request: Request) {
         file_path: filePath,
         source: normalizeSource(formData.get("source")),
         mission: cleanText(formData.get("mission"), "None"),
-        player_name: cleanText(
-          formData.get("player"),
-          "Unassigned"
-        ),
+        player_name: playerName,
+        player_id: playerIdFromName(playerName),
         environment: normalizeEnvironment(
           formData.get("environment")
         ),
@@ -320,6 +330,8 @@ export async function POST(request: Request) {
           : 0,
         status: "stored",
         tags: [],
+        embedding_status: "pending",
+        semantic_tags: [],
         metadata: {
           originalName: normalized.originalName,
           originalType: normalized.mime || null,

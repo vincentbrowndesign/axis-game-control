@@ -37,6 +37,7 @@ export type AxisProfile = {
 export type AxisReplaySession = {
   id: string
   user_id: string
+  player_id: string | null
   created_at: string
   updated_at: string
   title: string | null
@@ -44,15 +45,22 @@ export type AxisReplaySession = {
   file_name: string | null
   playback_id: string | null
   asset_id: string | null
+  mux_playback_id: string | null
+  mux_asset_id: string | null
   upload_id: string | null
   file_path: string | null
   source: SessionSource | null
   mission: string | null
   player_name: string | null
+  behavior_sentence: string | null
   environment: SessionEnvironment | null
   duration_seconds: number | null
   status: string | null
   tags: string[] | null
+  transcript_text: string | null
+  ai_summary: string | null
+  embedding_status: string | null
+  semantic_tags: string[] | null
   metadata: Record<string, unknown> | null
 }
 
@@ -99,12 +107,20 @@ export type ReplaySessionView = {
   videoUrl: string
   title: string
   mission: string
+  playerId?: string
   player: string
   environment: SessionEnvironment
   duration?: number
   status?: string
   fileName?: string
+  muxAssetId?: string
+  muxPlaybackId?: string
+  behaviorSentence?: string
   tags: string[]
+  transcriptText?: string
+  aiSummary?: string
+  embeddingStatus?: string
+  semanticTags?: string[]
   situation?: string
   constraint?: string
   coachNote?: string

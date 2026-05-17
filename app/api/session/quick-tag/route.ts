@@ -16,6 +16,18 @@ function cleanBehaviorPhrase(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 180) : ""
 }
 
+function cleanPlayerName(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, 60) : ""
+}
+
+function playerIdFromName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60)
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
@@ -39,6 +51,7 @@ export async function POST(req: Request) {
       sessionId?: unknown
       triggerWord?: unknown
       behaviorPhrase?: unknown
+      playerName?: unknown
       repeatTomorrow?: unknown
     } = {}
 
@@ -52,6 +65,7 @@ export async function POST(req: Request) {
       typeof body.sessionId === "string" ? body.sessionId : ""
     const triggerWord = cleanTrigger(body.triggerWord)
     const behaviorPhrase = cleanBehaviorPhrase(body.behaviorPhrase)
+    const playerName = cleanPlayerName(body.playerName)
     const repeatTomorrow = body.repeatTomorrow === true
 
     if (!sessionId) {
@@ -111,11 +125,19 @@ export async function POST(req: Request) {
       .from("axis_sessions")
       .update({
         tags,
+        ...(playerName
+          ? {
+              player_name: playerName,
+              player_id: playerIdFromName(playerName),
+            }
+          : {}),
+        ...(behaviorPhrase ? { behavior_sentence: behaviorPhrase } : {}),
         metadata: {
           ...metadata,
           triggerWord,
           coachNote: behaviorPhrase || metadata.coachNote || "",
           behaviorPhrase: behaviorPhrase || metadata.behaviorPhrase || "",
+          playerName: playerName || metadata.playerName || "",
           repeatTomorrow,
           correctionTimelineEvents: appendTimelineEvents(
             metadata,
@@ -147,6 +169,7 @@ export async function POST(req: Request) {
       ok: true,
       triggerWord,
       behaviorPhrase,
+      playerName,
       repeatTomorrow,
     })
   } catch (error) {

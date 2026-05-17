@@ -23,6 +23,14 @@ export async function GET(
     const upload = await mux.video.uploads.retrieve(id)
 
     if (!upload.asset_id) {
+      await supabaseAdmin
+        .from("axis_sessions")
+        .update({
+          status: "processing",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("upload_id", id)
+
       return NextResponse.json({
         status: "processing",
       })
@@ -33,8 +41,18 @@ export async function GET(
     )
 
     if (asset.status !== "ready") {
+      await supabaseAdmin
+        .from("axis_sessions")
+        .update({
+          status: asset.status === "errored" ? "error" : "processing",
+          asset_id: asset.id,
+          mux_asset_id: asset.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("upload_id", id)
+
       return NextResponse.json({
-        status: "processing",
+        status: asset.status === "errored" ? "error" : "processing",
       })
     }
 
@@ -63,6 +81,19 @@ export async function GET(
     }
 
     if (existing.data) {
+      await supabaseAdmin
+        .from("axis_sessions")
+        .update({
+          status: "ready",
+          asset_id: asset.id,
+          mux_asset_id: asset.id,
+          playback_id: playbackId,
+          mux_playback_id: playbackId,
+          video_url: `https://stream.mux.com/${playbackId}.m3u8`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.data.id)
+
       return NextResponse.json({
         status: "ready",
         sessionId: existing.data.id,
@@ -75,8 +106,11 @@ export async function GET(
         title: "Axis Session",
         upload_id: id,
         asset_id: asset.id,
+        mux_asset_id: asset.id,
         playback_id: playbackId,
+        mux_playback_id: playbackId,
         video_url: `https://stream.mux.com/${playbackId}.m3u8`,
+        status: "ready",
       })
       .select()
       .single()

@@ -192,10 +192,19 @@ function sourceContext(session: ReplaySessionView) {
 function behaviorMomentLine(session: ReplaySessionView) {
   return (
     session.coachNote ||
+    session.behaviorSentence ||
     session.coachCorrection ||
     session.coachFlaw ||
     "Add the behavior phrase players should repeat."
   )
+}
+
+function isClipProcessing(status?: string) {
+  return status === "uploaded" || status === "processing" || status === "created"
+}
+
+function isClipError(status?: string) {
+  return status === "error"
 }
 
 async function saveCoachNote(formData: FormData) {
@@ -438,10 +447,6 @@ export default async function SessionsPage({
   )
   const players = playerSummaries(sessions)
   const behaviorClusters = clusterBehaviorMoments(sessions)
-  const taggedRepeats = sessions.filter((session) =>
-    isRepeated(session, sessionRepeats, tags)
-  )
-  const pendingNotes = sessions.filter((session) => !session.coachNote)
   const lastPractice = sessions.find((session) => session.environment === "practice")
   const filtersActive = Boolean(
     filters.q ||
@@ -461,108 +466,85 @@ export default async function SessionsPage({
   return (
     <main className="min-h-screen bg-[#090806] px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
+        <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
-              Watch
-            </p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+            <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">
               Watch again
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Find the clip and the sentence worth repeating.
-            </p>
           </div>
 
           <div className="grid gap-3 lg:justify-items-end">
             <PrimaryNav />
             <Link
               href="/"
-              className="w-fit border border-amber-100/25 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-amber-100 transition hover:border-amber-100/45 hover:text-white"
+              className="w-fit bg-amber-200 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white"
             >
               Record clip
             </Link>
           </div>
         </header>
 
-        <section className="mb-4 border-b border-white/10 pb-4">
+        <section className="mb-6">
           <form action="/sessions" className="grid gap-2 sm:grid-cols-[1fr_auto]">
             <input type="hidden" name="sort" value={sort} />
             <input
               name="q"
               defaultValue={filters.q}
               placeholder="Search clips, behavior phrases, players"
-              className="border border-white/10 bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
+              className="bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
             />
-            <button className="border border-amber-100/30 bg-amber-200 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white">
-              Find clips
+            <button className="bg-white/[0.08] px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/75 transition hover:bg-white hover:text-black">
+              Find
             </button>
           </form>
 
-          <div className="mt-3 flex flex-wrap gap-2 text-sm text-white/60">
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-white/50">
             <Link
               href="/sessions?view=recent"
-              className="border border-white/10 px-3 py-2 transition hover:text-white"
+              className="transition hover:text-white"
             >
               Recent
             </Link>
             <Link
               href="/sessions?view=repeated"
-              className="border border-white/10 px-3 py-2 transition hover:text-white"
+              className="transition hover:text-white"
             >
               Watch again
             </Link>
             <Link
               href="/sessions?note=missing"
-              className="border border-white/10 px-3 py-2 transition hover:text-white"
+              className="transition hover:text-white"
             >
               Need a sentence
             </Link>
             <Link
               href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions?type=practice"}
-              className="border border-white/10 px-3 py-2 transition hover:text-white"
+              className="transition hover:text-white"
             >
               Last practice
             </Link>
             <Link
               href="/sessions?construction=active"
-              className="border border-white/10 px-3 py-2 transition hover:text-white"
+              className="transition hover:text-white"
             >
               Needs work
             </Link>
             <Link
               href="/sessions?constraint=No+middle+drive"
-              className="border border-white/10 px-3 py-2 transition hover:text-white"
+              className="transition hover:text-white"
             >
               Stop the drive
             </Link>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/50">
-            <Link href="/sessions?view=repeated" className="hover:text-white">
-              {taggedRepeats.length
-                ? `${taggedRepeats.length} clips saved to watch`
-                : "No clips saved to watch"}
-            </Link>
-            <Link href="/sessions?note=missing" className="hover:text-white">
-              {pendingNotes.length
-                ? `${pendingNotes.length} clips need a sentence`
-                : "Sentences are current"}
-            </Link>
-            <Link href={lastPractice ? `/replay/${lastPractice.id}` : "/sessions"} className="hover:text-white">
-              {lastPractice
-                ? `Last practice: ${drillName(lastPractice)}`
-                : "No practice sessions yet"}
-            </Link>
-          </div>
         </section>
 
         <details
-          className="mb-4 border-b border-white/10 pb-4"
+          className="mb-6"
           open={filtersActive}
         >
-          <summary className="cursor-pointer text-sm font-bold text-white/55 transition hover:text-white">
-            Search and filters
+          <summary className="cursor-pointer text-sm text-white/40 transition hover:text-white">
+            More search
           </summary>
           <form
             action="/sessions"
@@ -575,7 +557,7 @@ export default async function SessionsPage({
               <input
                 name="player"
                 defaultValue={filters.player}
-                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+                className="bg-black/35 px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
               />
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
@@ -732,18 +714,26 @@ export default async function SessionsPage({
           </div>
         </details>
 
-        <section className="mb-8 grid gap-3 lg:grid-cols-[1fr_300px]">
-          <div className="grid gap-5">
+        <section className="mb-8 grid gap-8 lg:grid-cols-[1fr_260px]">
+          <div className="grid gap-8">
             {visibleSessions.map((session) => (
               <article
                 key={session.id}
-                className="grid gap-4 border-b border-white/10 py-5 lg:grid-cols-[minmax(220px,360px)_1fr]"
+                className="grid gap-5 py-3 lg:grid-cols-[minmax(260px,420px)_1fr]"
               >
                 <Link
                   href={`/replay/${session.id}`}
                   className="relative aspect-video bg-black/80"
                 >
-                  {session.videoUrl ? (
+                  {isClipProcessing(session.status) ? (
+                    <div className="grid h-full w-full place-items-center border border-white/10 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
+                      Clip processing...
+                    </div>
+                  ) : isClipError(session.status) ? (
+                    <div className="grid h-full w-full place-items-center border border-white/10 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
+                      Clip unavailable
+                    </div>
+                  ) : session.videoUrl ? (
                     <video
                       src={session.videoUrl}
                       muted
@@ -761,12 +751,9 @@ export default async function SessionsPage({
                 <div className="grid gap-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
-                        Player phrase
-                      </p>
                       <Link
                         href={`/replay/${session.id}`}
-                        className="mt-1 block text-2xl font-black leading-tight tracking-[-0.035em] text-white transition hover:text-amber-100"
+                        className="block text-3xl font-black leading-tight tracking-[-0.04em] text-white transition hover:text-amber-100"
                       >
                         {behaviorMomentLine(session)}
                       </Link>
@@ -777,9 +764,9 @@ export default async function SessionsPage({
                     {isRepeated(session, sessionRepeats, tags) ? (
                       <Link
                         href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
-                        className="border border-amber-100/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100"
+                        className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100"
                       >
-                        Repeat
+                        Watch
                       </Link>
                     ) : null}
                   </div>
@@ -787,7 +774,7 @@ export default async function SessionsPage({
                   <div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {triggerLabel(session) ? (
-                        <span className="border border-amber-100/25 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
+                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
                           Cue: {triggerLabel(session)}
                         </span>
                       ) : null}
@@ -795,7 +782,7 @@ export default async function SessionsPage({
                         {nextAction(session, sessionRepeats, tags)}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm text-white/45">
+                    <p className="mt-3 text-sm leading-6 text-white/45">
                       {clipReason(session, sessionRepeats, tags)}
                     </p>
                     {isConstructionActive(session) ? (
@@ -816,13 +803,11 @@ export default async function SessionsPage({
                           #{tag}
                         </Link>
                       ))
-                    ) : (
-                      <span className="text-sm text-white/30">No tags yet</span>
-                    )}
+                    ) : null}
                   </div>
 
-                  <details className="border-t border-white/10 pt-2">
-                    <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-white/45 transition hover:text-white">
+                  <details className="pt-1">
+                    <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-white/35 transition hover:text-white">
                       More details
                     </summary>
                     <form action={saveCoachNote} className="mt-3 grid gap-2">
@@ -919,7 +904,7 @@ export default async function SessionsPage({
                     </form>
                     <div className="mt-3 border-t border-white/10 pt-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
-                        Correction timeline
+                        Saved history
                       </p>
                       <div className="mt-2 grid gap-1.5 text-xs text-white/45">
                         {(session.correctionTimelineEvents?.length
