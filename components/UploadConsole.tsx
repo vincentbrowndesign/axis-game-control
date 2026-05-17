@@ -701,7 +701,7 @@ export default function UploadConsole({
   }
 
   return (
-    <main className="min-h-screen bg-[#0b0a08] px-4 py-5 text-stone-100 sm:px-6">
+    <main className="min-h-screen bg-[#0c0b09] px-4 py-5 text-stone-100 sm:px-6">
       <div className="mx-auto max-w-5xl">
         <header className="mb-8 flex items-center justify-between gap-4">
           <Link href="/" className="text-sm font-black text-white/85">
@@ -750,7 +750,7 @@ export default function UploadConsole({
                 setStatus("Saving clip")
                 cameraInputRef.current?.click()
               }}
-              className="min-h-[44vh] w-full bg-stone-100 px-8 py-14 text-5xl font-black tracking-[-0.05em] text-black transition hover:bg-amber-100 disabled:opacity-50 sm:text-7xl"
+              className="min-h-[46vh] w-full bg-stone-100 px-8 py-14 text-5xl font-black tracking-[-0.05em] text-black shadow-[0_28px_80px_rgba(0,0,0,0.35)] transition hover:bg-amber-100 disabled:opacity-50 sm:text-7xl"
             >
               Record
             </button>
@@ -777,7 +777,7 @@ export default function UploadConsole({
             {savedReplayId ? (
               <div className="grid gap-4">
                 <p className="text-sm text-white/45">
-                  Saved. Add player and sentence.
+                  Saved. Pick a player and say what to repeat.
                 </p>
                 <div className="flex flex-wrap gap-2">
               {playerChips.map((player) => (
@@ -908,13 +908,24 @@ export default function UploadConsole({
           </div>
         </section>
 
-        <section className="mt-10">
+        <section className="mt-12">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <h2 className="text-3xl font-black tracking-[-0.04em] text-white">
+              Watch again
+            </h2>
+            <Link
+              href="/sessions"
+              className="text-sm font-bold text-white/40 transition hover:text-white"
+            >
+              All clips
+            </Link>
+          </div>
           <div className="grid gap-8 md:grid-cols-2">
             {liveClips.slice(0, 9).map((clip) => (
               <article key={clip.id} className="group">
                 <Link
                   href={`/replay/${clip.id}`}
-                  className="block aspect-video overflow-hidden bg-black/70"
+                  className="block aspect-[4/5] overflow-hidden bg-black/70 sm:aspect-video"
                 >
                   {isClipProcessing(clip.status) ? (
                     <div className="grid h-full place-items-center text-sm font-bold text-white/35">

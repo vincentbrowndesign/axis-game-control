@@ -107,7 +107,7 @@ export default async function TeamPage({ params }: Props) {
       }))
 
   return (
-    <main className="min-h-screen bg-[#0b0a08] px-5 py-6 text-white">
+    <main className="min-h-screen bg-[#0c0b09] px-5 py-6 text-white">
       <div className="mx-auto max-w-5xl">
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>

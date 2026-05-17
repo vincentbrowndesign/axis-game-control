@@ -90,7 +90,7 @@ export default async function PlayersPage() {
   )
 
   return (
-    <main className="min-h-screen bg-[#0b0a08] px-5 py-6 text-white">
+    <main className="min-h-screen bg-[#0c0b09] px-5 py-6 text-white">
       <div className="mx-auto max-w-5xl">
         <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">
@@ -108,10 +108,10 @@ export default async function PlayersPage() {
             )
 
             return (
-              <article key={name} className="grid gap-4 md:grid-cols-[1fr_1fr]">
+              <article key={name} className="grid gap-5 md:grid-cols-[1fr_1fr]">
                 <Link
                   href={latest ? `/replay/${latest.id}` : `/sessions?player=${name}`}
-                  className="aspect-video overflow-hidden bg-black/70"
+                  className="aspect-[4/5] overflow-hidden bg-black/70 sm:aspect-video"
                 >
                   {latest && isClipProcessing(latest.status) ? (
                     <div className="grid h-full place-items-center text-sm font-bold text-white/35">

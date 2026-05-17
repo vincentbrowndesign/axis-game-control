@@ -439,8 +439,8 @@ export default async function SessionsPage({
   )
 
   return (
-    <main className="min-h-screen bg-[#090806] px-5 py-6 text-white">
-      <div className="mx-auto max-w-6xl">
+    <main className="min-h-screen bg-[#0c0b09] px-5 py-6 text-white">
+      <div className="mx-auto max-w-5xl">
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">
@@ -503,7 +503,7 @@ export default async function SessionsPage({
         </section>
 
         <details
-          className="mb-6"
+          className="hidden"
           open={filtersActive}
         >
           <summary className="cursor-pointer text-sm text-white/40 transition hover:text-white">
@@ -692,16 +692,16 @@ export default async function SessionsPage({
           </div>
         </details>
 
-        <section className="mb-8 grid gap-8 lg:grid-cols-[1fr_260px]">
-          <div className="grid gap-8">
+        <section className="mb-8 grid gap-10 lg:grid-cols-[1fr_260px]">
+          <div className="grid gap-10">
             {visibleSessions.map((session) => (
               <article
                 key={session.id}
-                className="grid gap-5 py-3 lg:grid-cols-[minmax(260px,420px)_1fr]"
+                className="grid gap-5 lg:grid-cols-[minmax(260px,520px)_1fr]"
               >
                 <Link
                   href={`/replay/${session.id}`}
-                  className="relative aspect-video bg-black/80"
+                  className="relative aspect-[4/5] overflow-hidden bg-black/80 sm:aspect-video"
                 >
                   {isClipProcessing(session.status) ? (
                     <div className="grid h-full w-full place-items-center border border-white/10 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
@@ -897,9 +897,9 @@ export default async function SessionsPage({
             )}
           </div>
 
-          <aside className="grid h-fit gap-3">
+          <aside className="grid h-fit gap-6">
             <section className="border-b border-white/10 pb-4">
-              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+              <p className="text-sm font-bold text-white/40">
                 Repeated today
               </p>
               <div className="mt-3 grid gap-3">
@@ -926,7 +926,7 @@ export default async function SessionsPage({
             </section>
 
             <section className="border-b border-white/10 pb-4">
-              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+              <p className="text-sm font-bold text-white/40">
                 Watch next
               </p>
               <div className="mt-3 grid gap-3">
@@ -948,8 +948,8 @@ export default async function SessionsPage({
             </section>
 
             <section className="border-b border-white/10 pb-4">
-              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Players to review
+              <p className="text-sm font-bold text-white/40">
+                Players
               </p>
               <div className="mt-3 grid gap-3">
                 {players.slice(0, 5).map((player) => (
