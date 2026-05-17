@@ -17,6 +17,7 @@ import type {
   SessionEnvironment,
   SessionSource,
   StressPhase,
+  WorkflowStage,
 } from "@/types/memory"
 
 const DEFAULT_REPLAY = {
@@ -111,6 +112,20 @@ function asStressPhase(value: unknown): StressPhase | undefined {
     value === "Guided" ||
     value === "Scrimmage" ||
     value === "Game Ready"
+  ) {
+    return value
+  }
+
+  return undefined
+}
+
+function asWorkflowStage(value: unknown): WorkflowStage | undefined {
+  if (
+    value === "GET_THERE" ||
+    value === "DRILL" ||
+    value === "SCRIMMAGE" ||
+    value === "REVIEW" ||
+    value === "GAME"
   ) {
     return value
   }
@@ -576,6 +591,15 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
           raw.behavior_sentence ??
           metadata.behaviorSentence ??
           metadata.behaviorPhrase
+      ),
+      workflowStage: asWorkflowStage(
+        raw.workflowStage ?? raw.workflow_stage ?? metadata.workflowStage
+      ),
+      aiSuggestedTags: asStringArray(
+        raw.aiSuggestedTags ?? raw.ai_suggested_tags ?? metadata.aiSuggestedTags
+      ),
+      aiClusterId: asOptionalString(
+        raw.aiClusterId ?? raw.ai_cluster_id ?? metadata.aiClusterId
       ),
       tags: asStringArray(raw.tags),
       transcriptText: asOptionalString(raw.transcriptText ?? raw.transcript_text),

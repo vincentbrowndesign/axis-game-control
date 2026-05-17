@@ -8,6 +8,7 @@ import {
   normalizeSource,
 } from "@/lib/replayStorage"
 import { makeTimelineEvent } from "@/lib/axis/reinforcement"
+import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
@@ -308,6 +309,9 @@ export async function POST(request: Request) {
       formData.get("player"),
       "Unassigned"
     )
+    const workflowStage = mapWorkflowStage(
+      formData.get("workflowStage") || formData.get("environment")
+    )
 
     const inserted = await supabaseAdmin
       .from("axis_sessions")
@@ -322,6 +326,7 @@ export async function POST(request: Request) {
         mission: cleanText(formData.get("mission"), "None"),
         player_name: playerName,
         player_id: playerIdFromName(playerName),
+        workflow_stage: workflowStage,
         environment: normalizeEnvironment(
           formData.get("environment")
         ),
@@ -337,6 +342,7 @@ export async function POST(request: Request) {
           originalType: normalized.mime || null,
           originalSize: file.size,
           signedUrlExpiresIn: signedUrlTtl,
+          workflowStage,
           correctionTimelineEvents: [
             makeTimelineEvent("CLIP_CAPTURED", "Clip captured"),
           ],

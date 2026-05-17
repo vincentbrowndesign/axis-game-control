@@ -9,6 +9,13 @@ export type SessionEnvironment =
   | "mission"
   | "workout"
 
+export type WorkflowStage =
+  | "GET_THERE"
+  | "DRILL"
+  | "SCRIMMAGE"
+  | "REVIEW"
+  | "GAME"
+
 export type StressPhase = "Block" | "Guided" | "Scrimmage" | "Game Ready"
 
 export type ConstructionZoneStatus = "Active" | "Stabilizing" | "Cleared"
@@ -53,6 +60,9 @@ export type AxisReplaySession = {
   mission: string | null
   player_name: string | null
   behavior_sentence: string | null
+  workflow_stage: WorkflowStage | null
+  ai_suggested_tags: string[] | null
+  ai_cluster_id: string | null
   environment: SessionEnvironment | null
   duration_seconds: number | null
   status: string | null
@@ -116,6 +126,9 @@ export type ReplaySessionView = {
   muxAssetId?: string
   muxPlaybackId?: string
   behaviorSentence?: string
+  workflowStage?: WorkflowStage
+  aiSuggestedTags?: string[]
+  aiClusterId?: string
   tags: string[]
   transcriptText?: string
   aiSummary?: string

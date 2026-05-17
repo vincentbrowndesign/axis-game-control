@@ -33,3 +33,7 @@ export function suggestBehaviorTags(behaviorSentence: string) {
 
   return tags.length ? tags : ["review"]
 }
+
+export function behaviorClusterId(behaviorSentence: string) {
+  return suggestBehaviorTags(behaviorSentence)[0] || "review"
+}

@@ -4,6 +4,11 @@ import {
   appendTimelineEvents,
   makeTimelineEvent,
 } from "@/lib/axis/reinforcement"
+import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
+import {
+  behaviorClusterId,
+  suggestBehaviorTags,
+} from "@/lib/axis-ai/suggestBehaviorTags"
 import { createClient } from "@/lib/supabase/server"
 
 function cleanTrigger(value: unknown) {
@@ -18,6 +23,10 @@ function cleanBehaviorPhrase(value: unknown) {
 
 function cleanPlayerName(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 60) : ""
+}
+
+function cleanWorkflowStage(value: unknown) {
+  return value ? mapWorkflowStage(value) : undefined
 }
 
 function playerIdFromName(value: string) {
@@ -53,6 +62,7 @@ export async function POST(req: Request) {
       behaviorPhrase?: unknown
       playerName?: unknown
       repeatTomorrow?: unknown
+      workflowStage?: unknown
     } = {}
 
     try {
@@ -66,7 +76,14 @@ export async function POST(req: Request) {
     const triggerWord = cleanTrigger(body.triggerWord)
     const behaviorPhrase = cleanBehaviorPhrase(body.behaviorPhrase)
     const playerName = cleanPlayerName(body.playerName)
+    const workflowStage = cleanWorkflowStage(body.workflowStage)
     const repeatTomorrow = body.repeatTomorrow === true
+    const aiSuggestedTags = behaviorPhrase
+      ? suggestBehaviorTags(behaviorPhrase)
+      : []
+    const aiClusterId = behaviorPhrase
+      ? behaviorClusterId(behaviorPhrase)
+      : undefined
 
     if (!sessionId) {
       return NextResponse.json(
@@ -132,12 +149,25 @@ export async function POST(req: Request) {
             }
           : {}),
         ...(behaviorPhrase ? { behavior_sentence: behaviorPhrase } : {}),
+        ...(workflowStage ? { workflow_stage: workflowStage } : {}),
+        ...(aiSuggestedTags.length
+          ? {
+              ai_suggested_tags: aiSuggestedTags,
+              ai_cluster_id: aiClusterId,
+              semantic_tags: aiSuggestedTags,
+            }
+          : {}),
         metadata: {
           ...metadata,
           triggerWord,
           coachNote: behaviorPhrase || metadata.coachNote || "",
           behaviorPhrase: behaviorPhrase || metadata.behaviorPhrase || "",
           playerName: playerName || metadata.playerName || "",
+          workflowStage: workflowStage || metadata.workflowStage || "",
+          aiSuggestedTags: aiSuggestedTags.length
+            ? aiSuggestedTags
+            : metadata.aiSuggestedTags || [],
+          aiClusterId: aiClusterId || metadata.aiClusterId || "",
           repeatTomorrow,
           correctionTimelineEvents: appendTimelineEvents(
             metadata,
@@ -170,6 +200,7 @@ export async function POST(req: Request) {
       triggerWord,
       behaviorPhrase,
       playerName,
+      workflowStage,
       repeatTomorrow,
     })
   } catch (error) {

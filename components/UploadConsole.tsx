@@ -4,6 +4,10 @@ import Link from "next/link"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import ModeNav from "@/components/ModeNav"
+import {
+  WORKFLOW_STAGES,
+  workflowStageLabel,
+} from "@/lib/axis-ai/mapWorkflowStage"
 import { suggestTrigger } from "@/lib/axis-ai/suggestTrigger"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -19,7 +23,7 @@ import {
   savePendingMemory,
   updatePendingMemoryStatus,
 } from "@/lib/video/recordingPersistence"
-import type { ReplaySessionView } from "@/types/memory"
+import type { ReplaySessionView, WorkflowStage } from "@/types/memory"
 
 type Source = "camera"
 type FlowStep = "entry" | "mission" | "brief" | "capture" | "processing"
@@ -224,6 +228,7 @@ export default function UploadConsole({
   const [liveClips, setLiveClips] = useState(recentClips)
   const [isListening, setIsListening] = useState(false)
   const [repeatTomorrow, setRepeatTomorrow] = useState(false)
+  const [workflowStage, setWorkflowStage] = useState<WorkflowStage>("DRILL")
   const [isQuickTagging, setIsQuickTagging] = useState(false)
   const [flowStep, setFlowStep] = useState<FlowStep>(
     initialWarmupId ? "brief" : "entry"
@@ -276,6 +281,7 @@ export default function UploadConsole({
           triggerWord,
           behaviorPhrase: phrase,
           playerName: player,
+          workflowStage,
           repeatTomorrow: repeat,
         }),
       })
@@ -292,6 +298,7 @@ export default function UploadConsole({
                 coachNote: phrase || clip.coachNote,
                 triggerWord: triggerWord || clip.triggerWord,
                 player: player || clip.player,
+                workflowStage,
                 repeatTomorrow: repeat,
               }
             : clip
@@ -482,6 +489,7 @@ export default function UploadConsole({
       formData.append("originalName", normalized.originalName)
       formData.append("mime", normalized.mime)
       formData.append("finalName", normalized.finalName)
+      formData.append("workflowStage", workflowStage)
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -541,6 +549,7 @@ export default function UploadConsole({
           environment,
           duration,
           status: "stored",
+          workflowStage,
           tags: [],
           coachNote: "",
         },
@@ -627,6 +636,23 @@ export default function UploadConsole({
 
         <section className="grid gap-8">
           <div className="grid gap-5">
+            <div className="flex flex-wrap gap-2 text-sm text-white/45">
+              {WORKFLOW_STAGES.slice(0, 4).map((stage) => (
+                <button
+                  key={stage.value}
+                  type="button"
+                  onClick={() => setWorkflowStage(stage.value)}
+                  className={`px-3 py-2 font-bold transition ${
+                    workflowStage === stage.value
+                      ? "bg-white/[0.08] text-white"
+                      : "hover:bg-white/[0.04] hover:text-white"
+                  }`}
+                >
+                  {stage.label}
+                </button>
+              ))}
+            </div>
+
             <button
               type="button"
               disabled={isUploading || !selectedMission}
@@ -819,6 +845,9 @@ export default function UploadConsole({
                     </p>
                     <p className="mt-1 line-clamp-2 text-sm leading-6 text-white/55">
                       {clip.coachNote || "Add a sentence."}
+                    </p>
+                    <p className="mt-1 text-xs text-white/30">
+                      {workflowStageLabel(clip.workflowStage)}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">

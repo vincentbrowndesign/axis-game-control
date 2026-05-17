@@ -5,7 +5,14 @@ import {
   appendTimelineEvents,
   makeTimelineEvent,
 } from "@/lib/axis/reinforcement"
+import { buildReviewQueue } from "@/lib/axis-ai/buildReviewQueue"
 import { clusterBehaviorMoments } from "@/lib/axis-ai/clusterBehaviorMoments"
+import {
+  WORKFLOW_STAGES,
+  mapWorkflowStage,
+  stageForSession,
+  workflowStageLabel,
+} from "@/lib/axis-ai/mapWorkflowStage"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
@@ -36,6 +43,7 @@ import {
   type ReplaySessionView,
   type SessionEnvironment,
   type StressPhase,
+  type WorkflowStage,
 } from "@/types/memory"
 
 type ArchiveSort = "date" | "player" | "drill" | "practice" | "scrimmage" | "game"
@@ -83,6 +91,7 @@ function sessionText(session: ReplaySessionView) {
     session.title,
     session.mission,
     session.environment,
+    workflowStageLabel(stageForSession(session)),
     session.situation,
     session.constraint,
     session.coachNote,
@@ -245,6 +254,7 @@ async function saveCoachNote(formData: FormData) {
     ? (stressPhaseValue as StressPhase)
     : "Block"
   const shouldRepeat = formData.get("repeatTomorrow") === "on"
+  const workflowStage = mapWorkflowStage(formData.get("workflowStage"))
 
   if (!sessionId) return
 
@@ -299,6 +309,7 @@ async function saveCoachNote(formData: FormData) {
     .from("axis_sessions")
     .update({
       tags,
+      workflow_stage: workflowStage,
       metadata: {
         ...metadata,
         coachNote,
@@ -311,6 +322,7 @@ async function saveCoachNote(formData: FormData) {
         constructionZone: constructionZoneStatus !== "Cleared",
         constructionZoneStatus,
         stressPhase,
+        workflowStage,
         correctionTimelineEvents: appendTimelineEvents(
           metadata,
           timelineEvents
@@ -347,6 +359,7 @@ export default async function SessionsPage({
     type: textParam(params.type).trim(),
     phase: textParam(params.phase).trim(),
     construction: textParam(params.construction).trim(),
+    stage: textParam(params.stage).trim(),
     view,
   }
 
@@ -438,6 +451,8 @@ export default async function SessionsPage({
             : filters.construction === "stabilizing"
               ? constructionZoneLabel(session) === "Stabilizing"
               : constructionZoneLabel(session) === "Cleared")) &&
+        (!filters.stage ||
+          stageForSession(session) === mapWorkflowStage(filters.stage)) &&
         (view !== "recent" || isRecent(session)) &&
         (view !== "repeated" || isRepeated(session, sessionRepeats, tags))
       )
@@ -446,6 +461,7 @@ export default async function SessionsPage({
   )
   const players = playerSummaries(sessions)
   const behaviorClusters = clusterBehaviorMoments(sessions)
+  const reviewQueue = buildReviewQueue(sessions).slice(0, 5)
   const lastPractice = sessions.find((session) => session.environment === "practice")
   const filtersActive = Boolean(
     filters.q ||
@@ -459,6 +475,7 @@ export default async function SessionsPage({
       filters.type ||
       filters.phase ||
       filters.construction ||
+      filters.stage ||
       view !== "all"
   )
 
@@ -522,6 +539,15 @@ export default async function SessionsPage({
             >
               Last practice
             </Link>
+            {WORKFLOW_STAGES.slice(0, 4).map((stage) => (
+              <Link
+                key={stage.value}
+                href={`/sessions?stage=${stage.value}`}
+                className="transition hover:text-white"
+              >
+                {stage.label}
+              </Link>
+            ))}
           </div>
 
         </section>
@@ -641,6 +667,21 @@ export default async function SessionsPage({
               </select>
             </label>
             <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+              Stage
+              <select
+                name="stage"
+                defaultValue={filters.stage}
+                className="border border-white/10 bg-black px-3 py-2 text-sm normal-case tracking-normal text-white outline-none"
+              >
+                <option value="">Any</option>
+                {WORKFLOW_STAGES.map((stage) => (
+                  <option key={stage.value} value={stage.value}>
+                    {stage.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
               Type
               <select
                 name="type"
@@ -747,6 +788,9 @@ export default async function SessionsPage({
                       <p className="mt-1 text-sm text-white/45">
                         {sourceContext(session)}
                       </p>
+                      <p className="mt-1 text-xs text-white/30">
+                        {workflowStageLabel(stageForSession(session))}
+                      </p>
                     </div>
                     {isRepeated(session, sessionRepeats, tags) ? (
                       <Link
@@ -781,6 +825,17 @@ export default async function SessionsPage({
                     <form action={saveCoachNote} className="mt-3 grid gap-2">
                       <input type="hidden" name="sessionId" value={session.id} />
                       <div className="grid gap-2 md:grid-cols-2">
+                        <select
+                          name="workflowStage"
+                          defaultValue={stageForSession(session)}
+                          className="border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none"
+                        >
+                          {WORKFLOW_STAGES.map((stage) => (
+                            <option key={stage.value} value={stage.value}>
+                              {stage.label}
+                            </option>
+                          ))}
+                        </select>
                         <select
                           name="situation"
                           defaultValue={session.situation || ""}
@@ -908,12 +963,34 @@ export default async function SessionsPage({
           <aside className="grid h-fit gap-3">
             <section className="border-b border-white/10 pb-4">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+                Watch next
+              </p>
+              <div className="mt-3 grid gap-3">
+                {reviewQueue.map((item) => (
+                  <Link
+                    key={item.session.id}
+                    href={`/replay/${item.session.id}`}
+                    className="border-t border-white/10 py-3 transition hover:text-white"
+                  >
+                    <p className="text-sm font-bold text-white">
+                      {behaviorMomentLine(item.session)}
+                    </p>
+                    <p className="mt-2 text-xs text-white/35">
+                      {playerName(item.session)} / {item.reason}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            <section className="border-b border-white/10 pb-4">
+              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
                 Similar moments
               </p>
               <div className="mt-3 grid gap-3">
                 {behaviorClusters.slice(0, 4).map((cluster) => (
                   <Link
-                    key={`${cluster.system}-${cluster.constraint}-${cluster.trigger}`}
+                    key={cluster.id}
                     href={`/sessions?q=${encodeURIComponent(cluster.behavior)}`}
                     className="border-t border-white/10 py-3 transition hover:text-white"
                   >
@@ -923,6 +1000,7 @@ export default async function SessionsPage({
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
                       <span>Cue {cluster.trigger}</span>
                       <span>{cluster.clips.length} clips</span>
+                      <span>{cluster.stages.map((stage) => workflowStageLabel(stage as WorkflowStage)).join(", ")}</span>
                     </div>
                     <p className="mt-2 text-xs text-white/35">
                       Grouped quietly. Change it anytime.
