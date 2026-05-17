@@ -4,6 +4,9 @@ import Link from "next/link"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import ModeNav from "@/components/ModeNav"
+import { suggestConstraint } from "@/lib/axis-ai/suggestConstraint"
+import { suggestSystem } from "@/lib/axis-ai/suggestSystem"
+import { suggestTrigger } from "@/lib/axis-ai/suggestTrigger"
 import { createClient } from "@/lib/supabase/client"
 import {
   isSupportedReplayFile,
@@ -33,6 +36,45 @@ type Props = {
 
 const calibrationMissions = getCalibrationMissions()
 const coreTriggers = ["TIGHT", "SINK", "LOW", "HIT", "ICE", "HOLD", "KICK"]
+const behaviorPhrases = [
+  "Stay low and explode.",
+  "Tag first before closing out.",
+  "Don't drift wide.",
+  "Beat him to the spot.",
+  "Sprint back.",
+  "Stop floating.",
+]
+
+type AxisSpeechRecognitionResult = {
+  readonly isFinal: boolean
+  readonly 0: {
+    readonly transcript: string
+  }
+}
+
+type AxisSpeechRecognitionEvent = {
+  readonly results: {
+    readonly length: number
+    readonly [index: number]: AxisSpeechRecognitionResult
+  }
+}
+
+type AxisSpeechRecognition = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onend: (() => void) | null
+  onerror: (() => void) | null
+  onresult: ((event: AxisSpeechRecognitionEvent) => void) | null
+  start: () => void
+}
+
+type AxisSpeechRecognitionConstructor = new () => AxisSpeechRecognition
+type AxisSpeechWindow = Window &
+  typeof globalThis & {
+    SpeechRecognition?: AxisSpeechRecognitionConstructor
+    webkitSpeechRecognition?: AxisSpeechRecognitionConstructor
+  }
 
 function toAxisErrorState(error: unknown) {
   const message =
@@ -160,6 +202,8 @@ export default function UploadConsole({
   const [isUploading, setIsUploading] = useState(false)
   const [savedReplayId, setSavedReplayId] = useState("")
   const [savedTrigger, setSavedTrigger] = useState("")
+  const [behaviorPhrase, setBehaviorPhrase] = useState("")
+  const [isListening, setIsListening] = useState(false)
   const [repeatTomorrow, setRepeatTomorrow] = useState(false)
   const [isQuickTagging, setIsQuickTagging] = useState(false)
   const [flowStep, setFlowStep] = useState<FlowStep>(
@@ -174,19 +218,31 @@ export default function UploadConsole({
   const liveTriggers = [
     ...new Set([...recentTriggers, ...coreTriggers]),
   ].slice(0, 9)
+  const behaviorSuggestion = behaviorPhrase
+    ? {
+        system: suggestSystem(behaviorPhrase),
+        constraint: suggestConstraint(behaviorPhrase),
+        trigger: suggestTrigger(behaviorPhrase),
+      }
+    : null
 
   async function signOut() {
     await supabase.auth.signOut()
     router.refresh()
   }
 
-  async function quickTagClip(triggerWord: string, repeat = repeatTomorrow) {
+  async function quickTagClip(
+    triggerWord: string,
+    repeat = repeatTomorrow,
+    phrase = behaviorPhrase
+  ) {
     if (!savedReplayId || isQuickTagging) return
 
     setIsQuickTagging(true)
     setSavedTrigger(triggerWord)
     setRepeatTomorrow(repeat)
-    setStatus(triggerWord ? "Trigger saved" : "Repeat saved")
+    setBehaviorPhrase(phrase)
+    setStatus(phrase ? "Behavior saved" : triggerWord ? "Trigger saved" : "Repeat saved")
 
     try {
       const response = await fetch("/api/session/quick-tag", {
@@ -197,6 +253,7 @@ export default function UploadConsole({
         body: JSON.stringify({
           sessionId: savedReplayId,
           triggerWord,
+          behaviorPhrase: phrase,
           repeatTomorrow: repeat,
         }),
       })
@@ -217,6 +274,7 @@ export default function UploadConsole({
   function resetLiveMode() {
     setSavedReplayId("")
     setSavedTrigger("")
+    setBehaviorPhrase("")
     setRepeatTomorrow(false)
     setStatus("")
     setProgress(0)
@@ -392,6 +450,47 @@ export default function UploadConsole({
     }
   }
 
+  function saveBehaviorPhrase(phrase: string) {
+    const cleanPhrase = phrase.trim()
+    if (!cleanPhrase) return
+
+    const trigger = savedTrigger || suggestTrigger(cleanPhrase)
+    void quickTagClip(trigger, repeatTomorrow, cleanPhrase)
+  }
+
+  function startVoiceCapture() {
+    if (!savedReplayId || isListening) return
+
+    const speechWindow = window as AxisSpeechWindow
+    const SpeechRecognition =
+      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      setStatus("Voice unavailable")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => {
+      setIsListening(false)
+      setStatus("Voice unavailable")
+    }
+    recognition.onresult = (event) => {
+      const result = event.results[event.results.length - 1]
+      const phrase = result?.[0]?.transcript?.trim() || ""
+
+      if (phrase) saveBehaviorPhrase(phrase)
+    }
+
+    setIsListening(true)
+    setStatus("Listening")
+    recognition.start()
+  }
+
   return (
     <main className="min-h-screen bg-[#090806] px-5 py-6 text-stone-100">
       <div className="mx-auto max-w-6xl">
@@ -428,8 +527,8 @@ export default function UploadConsole({
                   That&apos;s the clip.
                 </h1>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-white/45">
-                  Record the moment. Add a trigger if it needs to come back.
-                  Save the details for review.
+                  Record the moment. Say the correction in normal coach
+                  language. Axis can organize the folder later.
                 </p>
               </div>
               <button
@@ -448,6 +547,57 @@ export default function UploadConsole({
                 Record
               </button>
             </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {behaviorPhrases.map((phrase) => (
+                <button
+                  key={phrase}
+                  type="button"
+                  disabled={!savedReplayId || isQuickTagging}
+                  onClick={() => saveBehaviorPhrase(phrase)}
+                  className={`border px-4 py-3 text-sm font-bold transition disabled:opacity-35 ${
+                    behaviorPhrase === phrase
+                      ? "border-amber-100/60 bg-amber-200 text-black"
+                      : "border-white/10 text-white/70 hover:border-white/30 hover:text-white"
+                  }`}
+                >
+                  {phrase}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={!savedReplayId || isListening || isQuickTagging}
+                onClick={startVoiceCapture}
+                className="border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white/55 transition hover:text-white disabled:opacity-35"
+              >
+                {isListening ? "Listening" : "Speak correction"}
+              </button>
+              <input
+                value={behaviorPhrase}
+                disabled={!savedReplayId || isQuickTagging}
+                onChange={(event) => setBehaviorPhrase(event.target.value)}
+                onBlur={() => saveBehaviorPhrase(behaviorPhrase)}
+                placeholder="Type a quick behavior phrase"
+                className="min-w-[240px] flex-1 border border-white/10 bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 disabled:opacity-35"
+              />
+            </div>
+
+            {behaviorSuggestion ? (
+              <div className="mt-3 border-y border-white/10 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
+                  Suggested for review
+                </p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-white/55">
+                  <span>{behaviorSuggestion.system.system}</span>
+                  <span>{behaviorSuggestion.constraint.constraint}</span>
+                  <span>Trigger {behaviorSuggestion.trigger}</span>
+                  <span>Coach confirms later</span>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-5 flex flex-wrap gap-2">
               {liveTriggers.map((trigger) => (
@@ -474,7 +624,7 @@ export default function UploadConsole({
                 onClick={() => {
                   const nextRepeat = !repeatTomorrow
                   setRepeatTomorrow(nextRepeat)
-                  void quickTagClip(savedTrigger, nextRepeat)
+                  void quickTagClip(savedTrigger, nextRepeat, behaviorPhrase)
                 }}
                 className={`border px-4 py-3 text-xs font-black uppercase tracking-[0.18em] transition disabled:opacity-35 ${
                   repeatTomorrow
@@ -555,7 +705,7 @@ export default function UploadConsole({
             ) : null}
             {savedReplayId ? (
               <p className="mt-3 text-sm text-amber-100/80">
-                Clip saved. Tap a trigger and get back to practice.
+                Clip saved. Add the behavior phrase and get back to practice.
               </p>
             ) : null}
           </aside>

@@ -12,6 +12,10 @@ function cleanTrigger(value: unknown) {
     : ""
 }
 
+function cleanBehaviorPhrase(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, 180) : ""
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
@@ -34,6 +38,7 @@ export async function POST(req: Request) {
     let body: {
       sessionId?: unknown
       triggerWord?: unknown
+      behaviorPhrase?: unknown
       repeatTomorrow?: unknown
     } = {}
 
@@ -46,6 +51,7 @@ export async function POST(req: Request) {
     const sessionId =
       typeof body.sessionId === "string" ? body.sessionId : ""
     const triggerWord = cleanTrigger(body.triggerWord)
+    const behaviorPhrase = cleanBehaviorPhrase(body.behaviorPhrase)
     const repeatTomorrow = body.repeatTomorrow === true
 
     if (!sessionId) {
@@ -93,6 +99,9 @@ export async function POST(req: Request) {
       triggerWord
         ? makeTimelineEvent("TRIGGER_ASSIGNED", `Trigger: ${triggerWord}`)
         : null,
+      behaviorPhrase
+        ? makeTimelineEvent("CORRECTION_ADDED", `Behavior: ${behaviorPhrase}`)
+        : null,
       repeatTomorrow
         ? makeTimelineEvent("REPEAT_MARKED", "Repeat tomorrow")
         : null,
@@ -105,6 +114,8 @@ export async function POST(req: Request) {
         metadata: {
           ...metadata,
           triggerWord,
+          coachNote: behaviorPhrase || metadata.coachNote || "",
+          behaviorPhrase: behaviorPhrase || metadata.behaviorPhrase || "",
           repeatTomorrow,
           correctionTimelineEvents: appendTimelineEvents(
             metadata,
@@ -135,6 +146,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       triggerWord,
+      behaviorPhrase,
       repeatTomorrow,
     })
   } catch (error) {

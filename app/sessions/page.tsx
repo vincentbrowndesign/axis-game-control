@@ -5,6 +5,7 @@ import {
   appendTimelineEvents,
   makeTimelineEvent,
 } from "@/lib/axis/reinforcement"
+import { clusterBehaviorMoments } from "@/lib/axis-ai/clusterBehaviorMoments"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
@@ -186,6 +187,15 @@ function sourceContext(session: ReplaySessionView) {
   return `${playerName(session)} / ${collectionLabel(session)} / ${dateLabel(
     session.createdAt
   )} / ${relativeTime(session.createdAt)}`
+}
+
+function behaviorMomentLine(session: ReplaySessionView) {
+  return (
+    session.coachNote ||
+    session.coachCorrection ||
+    session.coachFlaw ||
+    "Add the behavior phrase players should repeat."
+  )
 }
 
 async function saveCoachNote(formData: FormData) {
@@ -427,6 +437,7 @@ export default async function SessionsPage({
     sort
   )
   const players = playerSummaries(sessions)
+  const behaviorClusters = clusterBehaviorMoments(sessions)
   const taggedRepeats = sessions.filter((session) =>
     isRepeated(session, sessionRepeats, tags)
   )
@@ -456,11 +467,11 @@ export default async function SessionsPage({
               Review mode
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Tactical archive
+              Behavior review
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Retrieve clips by situation, trigger, constraint, repeat work,
-              phase, player, and note.
+              Retrieve the clip, the phrase players need to repeat, and the
+              coach structure behind it.
             </p>
           </div>
 
@@ -481,7 +492,7 @@ export default async function SessionsPage({
             <input
               name="q"
               defaultValue={filters.q}
-              placeholder="Search clips, notes, players"
+              placeholder="Search clips, behavior phrases, players"
               className="border border-white/10 bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
             />
             <button className="border border-amber-100/30 bg-amber-200 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white">
@@ -723,15 +734,15 @@ export default async function SessionsPage({
         </details>
 
         <section className="mb-8 grid gap-3 lg:grid-cols-[1fr_300px]">
-          <div className="grid gap-3">
+          <div className="grid gap-5">
             {visibleSessions.map((session) => (
               <article
                 key={session.id}
-                className="grid border-b border-white/10 py-3 sm:grid-cols-[112px_1fr]"
+                className="grid gap-4 border-b border-white/10 py-5 lg:grid-cols-[minmax(220px,360px)_1fr]"
               >
                 <Link
                   href={`/replay/${session.id}`}
-                  className="relative aspect-video bg-black/70 md:my-1"
+                  className="relative aspect-video bg-black/80"
                 >
                   {session.videoUrl ? (
                     <video
@@ -739,7 +750,7 @@ export default async function SessionsPage({
                       muted
                       playsInline
                       preload="metadata"
-                      className="h-full w-full object-cover opacity-70"
+                      className="h-full w-full object-cover opacity-85"
                     />
                   ) : (
                     <div className="grid h-full w-full place-items-center border border-white/10 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
@@ -748,26 +759,21 @@ export default async function SessionsPage({
                   )}
                 </Link>
 
-                <div className="grid gap-2 md:pl-4">
+                <div className="grid gap-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
+                        Player phrase
+                      </p>
                       <Link
                         href={`/replay/${session.id}`}
-                        className="block text-lg font-black tracking-[-0.03em] text-white transition hover:text-amber-100"
+                        className="mt-1 block text-2xl font-black leading-tight tracking-[-0.035em] text-white transition hover:text-amber-100"
                       >
-                        {drillName(session)}
+                        {behaviorMomentLine(session)}
                       </Link>
                       <p className="mt-1 text-sm text-white/45">
                         {sourceContext(session)}
                       </p>
-                      <p className="mt-1 text-sm text-white/60">
-                        Situation: {situationLabel(session)}
-                      </p>
-                      {session.constraint ? (
-                        <p className="mt-1 text-sm text-white/45">
-                          Constraint: {constraintLabel(session)}
-                        </p>
-                      ) : null}
                     </div>
                     {isRepeated(session, sessionRepeats, tags) ? (
                       <Link
@@ -780,10 +786,13 @@ export default async function SessionsPage({
                   </div>
 
                   <div>
-                    <p className="text-sm text-white/70">
-                      {clipReason(session, sessionRepeats, tags)}
+                    <p className="text-sm font-bold text-white/65">
+                      Coach view
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                        {situationLabel(session)}
+                      </span>
                       {triggerLabel(session) ? (
                         <span className="border border-amber-100/25 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
                           Trigger: {triggerLabel(session)}
@@ -807,6 +816,9 @@ export default async function SessionsPage({
                         {nextAction(session, sessionRepeats, tags)}
                       </span>
                     </div>
+                    <p className="mt-3 text-sm text-white/45">
+                      {clipReason(session, sessionRepeats, tags)}
+                    </p>
                     {isConstructionActive(session) ? (
                       <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-white/35">
                         Focus: mechanical compliance
@@ -962,6 +974,39 @@ export default async function SessionsPage({
           </div>
 
           <aside className="grid h-fit gap-3">
+            <section className="border-b border-white/10 pb-4">
+              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+                Behavior clusters
+              </p>
+              <div className="mt-3 grid gap-3">
+                {behaviorClusters.slice(0, 4).map((cluster) => (
+                  <Link
+                    key={`${cluster.system}-${cluster.constraint}-${cluster.trigger}`}
+                    href={`/sessions?q=${encodeURIComponent(cluster.behavior)}`}
+                    className="border-t border-white/10 py-3 transition hover:text-white"
+                  >
+                    <p className="text-sm font-bold text-white">
+                      {cluster.behavior}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+                      <span>{cluster.system}</span>
+                      <span>{cluster.constraint}</span>
+                      <span>Trigger {cluster.trigger}</span>
+                      <span>{cluster.clips.length} clips</span>
+                    </div>
+                    <p className="mt-2 text-xs text-white/35">
+                      Suggested. Coach confirms in review.
+                    </p>
+                  </Link>
+                ))}
+                {behaviorClusters.length === 0 ? (
+                  <p className="text-sm text-white/40">
+                    Behavior phrases will appear after live capture.
+                  </p>
+                ) : null}
+              </div>
+            </section>
+
             <section className="border-b border-white/10 pb-4">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
                 Tomorrow

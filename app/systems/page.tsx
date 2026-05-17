@@ -11,6 +11,24 @@ import { normalizeSessions } from "@/lib/archive/sessionRollup"
 import { createClient } from "@/lib/supabase/server"
 import type { AxisReplaySession } from "@/types/memory"
 
+const behaviorFolders: Record<string, string> = {
+  "high-pnr": "Don't Get Screened",
+  "weak-side-tag": "Help Then Recover",
+  "screen-help": "Help Then Recover",
+  "transition-defense": "Sprint Back First",
+  "closeout-attack": "Stay Low",
+  "paint-touch": "Attack Before They Set",
+  "slot-drive": "Attack Before They Set",
+  "baseline-drift": "Keep Moving",
+  "corner-collapse": "Find The Next Pass",
+  "ball-screen-reject": "Don't Get Screened",
+  "dho-coverage": "Hit First",
+}
+
+function behaviorFolderName(systemId: string) {
+  return behaviorFolders[systemId] || "Repeat The Behavior"
+}
+
 export default async function SystemsPage() {
   const supabase = await createClient()
   const {
@@ -22,10 +40,10 @@ export default async function SystemsPage() {
       <main className="min-h-screen bg-[#090806] px-5 py-10 text-stone-100">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-400/70">
-            Systems
+            Background folders
           </p>
           <h1 className="mt-4 text-5xl font-black tracking-[-0.04em] sm:text-7xl">
-            Sign in to manage tactical systems.
+            Sign in to manage behavior folders.
           </h1>
           <Link
             href="/auth"
@@ -50,6 +68,7 @@ export default async function SystemsPage() {
   const queue = retrievalQueue(sessions)
   const active = summaries.find((summary) => summary.clips.length > 0) || summaries[0]
   const activeTrigger = active.triggers[0] || active.system.defaultTrigger
+  const activeFolder = behaviorFolderName(active.system.id)
   const activePlayers = active.players.length
     ? active.players.join(" / ")
     : "No players tagged"
@@ -67,14 +86,14 @@ export default async function SystemsPage() {
         <header className="mb-8 flex flex-col gap-5 border-b border-stone-200/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-400/65">
-              Systems
+              Background folders
             </p>
             <h1 className="mt-2 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
-              Tactical environments
+              Behavior reinforcement
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-300/58">
-              Situation plus constraint. Keep the current correction visible,
-              then retrieve the clips that need another live rep.
+              Player language stays out front. Tactical structure sits behind
+              the clip so repeat work is easy to find later.
             </p>
           </div>
           <ModeNav active="systems" />
@@ -82,11 +101,11 @@ export default async function SystemsPage() {
 
         <section className="mb-8 grid gap-3 border-y border-stone-200/10 py-4 md:grid-cols-5">
           {[
-            ["System", active.system.name],
-            ["Constraint", active.constraint],
+            ["Player phrase", activeFolder],
+            ["Coach view", active.system.name],
             ["Trigger", activeTrigger],
             ["Players", activePlayers],
-            ["Phase", active.phase],
+            ["Repeat", `${active.repeatClips.length} clips`],
           ].map(([label, value]) => (
             <div key={label}>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
@@ -97,16 +116,21 @@ export default async function SystemsPage() {
           ))}
         </section>
 
-        <section className="mb-10 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_380px]">
+        <section className="mb-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div>
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-100/55">
-                  Operational folder
+                  Behavior folder
                 </p>
                 <h2 className="mt-2 text-4xl font-black tracking-[-0.04em] text-stone-50 sm:text-5xl">
-                  {active.system.name} + {active.constraint}
+                  {activeFolder}
                 </h2>
+                <p className="mt-4 max-w-2xl text-xl font-black leading-snug tracking-[-0.03em] text-stone-200/80">
+                  {activeCorrection?.correction ||
+                    activeCorrection?.flaw ||
+                    "Add a simple phrase players can repeat tomorrow."}
+                </p>
               </div>
               <Link
                 href={systemHref(active.system)}
@@ -116,25 +140,49 @@ export default async function SystemsPage() {
               </Link>
             </div>
 
-            <TacticalCourt
-              title={active.system.name}
-              highlight={active.system.courtZone}
-              labels={[
-                `Trigger ${activeTrigger}`,
-                active.constraint,
-                `Phase ${active.phase}`,
-                `${active.repeatClips.length} repeat`,
-              ]}
-            />
+            <div className="mt-6 grid gap-4 border-y border-stone-200/10 py-5 md:grid-cols-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
+                  Player sees
+                </p>
+                <p className="mt-2 text-sm font-bold text-stone-200">
+                  Short behavior phrase and clip.
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
+                  Coach sees
+                </p>
+                <p className="mt-2 text-sm font-bold text-stone-200">
+                  {active.system.name} / {active.constraint}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
+                  Next rep
+                </p>
+                <p className="mt-2 text-sm font-bold text-stone-200">
+                  Trigger {activeTrigger}
+                </p>
+              </div>
+            </div>
           </div>
 
           <aside className="grid content-start gap-6 border-t border-stone-200/10 pt-5 lg:border-t-0 lg:pt-0">
+            <TacticalCourt
+              title={active.system.name}
+              highlight={active.system.courtZone}
+              labels={[active.constraint, `Trigger ${activeTrigger}`]}
+              compact
+            />
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-stone-500">
-                Current issue
+                Current clip work
               </p>
               <p className="mt-3 text-2xl font-black leading-tight tracking-[-0.03em] text-stone-100">
-                {active.issue}
+                {active.issue === "No issue tagged yet"
+                  ? "Waiting for behavior phrase"
+                  : active.issue}
               </p>
               <p className="mt-3 text-sm leading-6 text-stone-400">
                 Construction:{" "}
@@ -189,10 +237,10 @@ export default async function SystemsPage() {
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-stone-500">
-                System map
+                Folder map
               </p>
               <h2 className="mt-2 text-2xl font-black tracking-[-0.03em]">
-                Reinforcement folders
+                Behavior folders
               </h2>
             </div>
           </div>
@@ -210,14 +258,15 @@ export default async function SystemsPage() {
                     summary.triggers[0] || summary.system.defaultTrigger,
                     summary.constraint,
                   ]}
+                  compact
                 />
                 <div className="mt-4 flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xl font-black tracking-[-0.03em] text-stone-100 transition group-hover:text-amber-100">
-                      {summary.system.name}
+                      {behaviorFolderName(summary.system.id)}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-stone-400">
-                      {summary.constraint}
+                      {summary.system.name} / {summary.constraint}
                     </p>
                   </div>
                   <span className="text-sm font-black text-stone-300">

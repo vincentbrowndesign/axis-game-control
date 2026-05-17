@@ -15,6 +15,7 @@ type Props = {
   title?: string
   highlight?: CourtHighlight
   labels?: string[]
+  compact?: boolean
 }
 
 const highlightClass: Record<CourtHighlight, string> = {
@@ -49,11 +50,16 @@ export default function TacticalCourt({
   title = "Half court",
   highlight = "top",
   labels = [],
+  compact = false,
 }: Props) {
   const visibleLabels = labels.filter(Boolean).slice(0, 4)
 
   return (
-    <div className="relative min-h-[280px] overflow-hidden border border-stone-200/10 bg-[#11100d] shadow-[inset_0_0_80px_rgba(0,0,0,0.55)] sm:aspect-[16/10]">
+    <div
+      className={`relative overflow-hidden border border-stone-200/10 bg-[#11100d] shadow-[inset_0_0_80px_rgba(0,0,0,0.55)] ${
+        compact ? "min-h-[170px] sm:aspect-[16/9]" : "min-h-[280px] sm:aspect-[16/10]"
+      }`}
+    >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_72%,rgba(180,129,55,0.16),transparent_36%),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(0deg,rgba(180,129,55,0.055)_1px,transparent_1px)] bg-[length:auto,42px_42px,100%_38px]" />
       <div className="absolute inset-x-[5%] bottom-[7%] top-[7%] border border-amber-100/18" />
       <div className="absolute left-1/2 top-[7%] h-[86%] border-l border-amber-100/10" />
