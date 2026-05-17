@@ -755,7 +755,7 @@ export default async function SessionsPage({
                       : "Replay this moment."}
                   </p>
 
-                  <details className="pt-1">
+                  <details className="hidden">
                     <summary className="cursor-pointer text-sm text-white/35 transition hover:text-white">
                       More details
                     </summary>

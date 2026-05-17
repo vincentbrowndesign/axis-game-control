@@ -2,18 +2,31 @@
 
 Before making product changes, read `/AXIS_CONSTITUTION.md`.
 
+Axis is voice-linked behavioral replay.
+
+The active product loop is:
+
+Coach records clip -> coach speaks phrase -> player watches later -> behavior repeats.
+
 Codex must:
 
-- Preserve working video, upload, replay, and archive systems.
+- Preserve working auth, Supabase, upload, storage, replay, voice, and AI utility infrastructure.
 - Make small scoped changes.
-- Avoid broad rewrites.
+- Keep the frontend simple, fast, replay-focused, and consumer-friendly.
+- Prioritize clips, behavior phrases, players, and watch-again moments.
+- Keep AI invisible and assistive.
 - Use basketball-first wording.
-- Keep UI practical, calm, and coach/player useful.
-- Prefer Archive and Team as primary product surfaces.
-- Treat capture as a lightweight action, not a new destination.
-- Keep AI positioned as assistive retrieval and organization only.
-- Avoid startup language, fake AI language, neuroscience language, and abstract product philosophy.
-- Isolate one broken layer at a time.
+- Hide systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.
+
+Do not:
+
+- Rebuild backend systems.
+- Add dashboards.
+- Add scouting analytics.
+- Add basketball IQ scores.
+- Add AI coaching claims.
+- Add tactical software surfaces.
+- Add startup, platform, neuroscience, or abstract product language.
 
 Every task must identify:
 
@@ -21,13 +34,6 @@ Every task must identify:
 2. Files changed.
 3. What was intentionally not touched.
 4. Verification run.
-
-Do not:
-
-- Invent new product philosophy.
-- Create new major routes unless asked.
-- Turn Axis into a dashboard, social feed, AI coach, drill app, or sports-tech pitch.
-- Add basketball IQ scores, neuroscience metrics, or fake precision.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know

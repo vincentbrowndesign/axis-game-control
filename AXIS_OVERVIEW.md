@@ -1,60 +1,47 @@
 # AXIS OVERVIEW
 
-Axis is a lightweight coaching reinforcement and retrieval system for basketball.
+Axis is a behavioral replay app for basketball coaching.
 
-It helps coaches capture repeated tactical situations, attach clear corrections, assign trigger words, set practice constraints, and retrieve the right clips before the next practice, scrimmage, or game.
+It helps a coach save a clip, speak a simple behavior phrase, assign the clip to a player, and let the player watch it later.
 
-Axis is not a dashboard, AI coach, neuroscience product, replay app, or generic training app.
+AI quietly helps organize clips, phrases, players, and repeated behaviors in the background. The user should not feel like they are using AI.
 
-## Core Loop
+## Product Loop
 
-Practice shows a repeated situation.
+Coach:
 
-The coach saves a clip.
+- Record clip.
+- Speak phrase.
+- Assign player.
+- Save.
 
-The coach tags:
+Player:
 
-- Situation.
-- Flaw.
-- Correction.
-- Trigger.
-- Constraint.
-- Repeat status.
-- Construction Zone status.
-- Stress Phase.
+- Watch clip.
+- Hear or read the phrase.
+- Repeat the behavior.
 
-Before the next session, the coach retrieves the clip and reinforces the correction under the right amount of pressure.
+## App Tabs
 
-## Primary Surfaces
-
-Archive is the tactical retrieval engine.
-
-Team is the reinforcement board for players, repeat clips, active corrections, and current situation focus.
-
-Capture is a lightweight action inside practice.
-
-Replay supports review. It is not the product.
-
-## Product Language
-
-Use:
-
-- Practice.
-- Clip.
-- Situation.
-- Constraint.
-- Trigger.
-- Correction.
-- Repeat.
-- Review.
-- Phase.
-- Player.
+- Today.
+- Watch.
+- Players.
 - Team.
 
-Avoid:
+## Product Feel
 
-- Memory philosophy.
-- Continuity narration.
-- Startup positioning.
-- Fake intelligence language.
-- Neuroscience claims.
+Axis should feel like:
+
+- Basketball memory.
+- Replay feed.
+- Camera roll.
+- Voice-linked coaching moments.
+- A daily habit.
+
+Axis should not feel like:
+
+- Coaching software.
+- Sports SaaS.
+- Tactical dashboard.
+- Analytics platform.
+- AI product.
