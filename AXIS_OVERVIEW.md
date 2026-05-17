@@ -1,47 +1,35 @@
 # AXIS OVERVIEW
 
-Axis is a behavioral replay app for basketball coaching.
+Axis is AI-assisted coaching memory infrastructure.
 
-It helps a coach save a clip, speak a simple behavior phrase, assign the clip to a player, and let the player watch it later.
-
-AI quietly helps organize clips, phrases, players, and repeated behaviors in the background. The user should not feel like they are using AI.
+It helps a coach record a practice session, speak naturally, and turn repeated coaching language into searchable memory.
 
 ## Product Loop
 
-Coach:
+- Open Axis.
+- Tap Record.
+- Coach normally.
+- Stop session.
+- Review repeated phrases, player mentions, and recent emphasis.
 
-- Record clip.
-- Speak phrase.
-- Assign player.
-- Save.
+## App Sections
 
-Player:
-
-- Watch clip.
-- Hear or read the phrase.
-- Repeat the behavior.
-
-## App Tabs
-
+- Record.
 - Today.
-- Watch.
 - Players.
-- Team.
 
 ## Product Feel
 
 Axis should feel like:
 
-- Basketball memory.
-- Replay feed.
-- Camera roll.
-- Voice-linked coaching moments.
-- A daily habit.
+- Voice notes for basketball development.
+- Coaching memory.
+- A quiet practice companion.
+- A fast way to find repeated corrections.
 
 Axis should not feel like:
 
-- Coaching software.
-- Sports SaaS.
-- Tactical dashboard.
-- Analytics platform.
-- AI product.
+- Basketball analytics software.
+- Tactical dashboard software.
+- Video breakdown software.
+- AI coaching software.

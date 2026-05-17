@@ -1,38 +1,38 @@
 # AXIS CONSTITUTION
 
-Axis is voice-linked behavioral replay for basketball.
+Axis is AI-assisted coaching memory for basketball.
 
 ## Product Truth
 
-- The clip is the product.
-- The voice is the reinforcement.
-- The AI is invisible.
+- The coach speaks naturally.
+- The session becomes searchable memory.
+- AI stays invisible.
 
 ## Core Loop
 
-Coach records a moment.
+Coach opens Axis.
 
-Coach speaks naturally.
+Coach taps Record.
 
-Player watches later.
+Coach runs practice normally.
 
-Behavior repeats over time.
+Axis stores repeated coaching phrases.
+
+Players and phrases become easier to find later.
 
 ## Hard Rules
 
-- Preserve working auth, upload, storage, replay, voice, and AI utility infrastructure.
-- Keep the app simple, fast, emotional, replayable, and consumer-friendly.
-- Use basketball-first wording.
-- Show clips, players, and behavior phrases before anything else.
-- Keep intelligence in the background.
+- Preserve auth, Supabase, uploads, replay routes, voice, and AI utility infrastructure.
+- Keep the app voice-first, fast, calm, and lightweight.
+- Show record, recent sessions, repeated phrases, and player mentions first.
+- Keep organization in the background.
 
 ## Do Not Add
 
 - Dashboards.
+- Tactical software UI.
 - Basketball IQ scores.
 - Scouting analytics.
-- Tactical software UI.
+- AI assistant chat.
 - Ontology-heavy screens.
-- AI coaching claims.
 - Startup or platform language.
-- Neuroscience language.

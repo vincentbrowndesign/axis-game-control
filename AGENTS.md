@@ -2,21 +2,21 @@
 
 Before making product changes, read `/AXIS_CONSTITUTION.md`.
 
-Axis is voice-linked behavioral replay.
+Axis is AI-assisted coaching memory infrastructure.
 
 The active product loop is:
 
-Coach records clip -> coach speaks phrase -> player watches later -> behavior repeats.
+Coach taps Record -> coach speaks naturally -> Axis stores repeated coaching phrases -> sessions become searchable coaching memory.
 
 Codex must:
 
 - Preserve working auth, Supabase, upload, storage, replay, voice, and AI utility infrastructure.
 - Make small scoped changes.
-- Keep the frontend simple, fast, replay-focused, and consumer-friendly.
-- Prioritize clips, behavior phrases, players, and watch-again moments.
+- Keep the frontend simple, fast, voice-first, and lightweight.
+- Prioritize Record, Today, Players, coaching phrases, player mentions, and recent sessions.
 - Keep AI invisible and assistive.
 - Use basketball-first wording.
-- Hide systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.
+- Hide video-first UX, systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.
 
 Do not:
 
@@ -25,6 +25,7 @@ Do not:
 - Add scouting analytics.
 - Add basketball IQ scores.
 - Add AI coaching claims.
+- Add AI assistant chat UI.
 - Add tactical software surfaces.
 - Add startup, platform, neuroscience, or abstract product language.
 

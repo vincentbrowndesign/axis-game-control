@@ -1,12 +1,11 @@
 import Link from "next/link"
 
-type Mode = "today" | "watch" | "players" | "team"
+type Mode = "record" | "today" | "players"
 
 const modes: { key: Mode; label: string; href: string }[] = [
-  { key: "today", label: "Today", href: "/" },
-  { key: "watch", label: "Watch", href: "/sessions" },
+  { key: "record", label: "Record", href: "/#record" },
+  { key: "today", label: "Today", href: "/#today" },
   { key: "players", label: "Players", href: "/players" },
-  { key: "team", label: "Team", href: "/team/local" },
 ]
 
 export default function ModeNav({ active }: { active: Mode }) {

@@ -1,37 +1,54 @@
 import Link from "next/link"
 import ModeNav from "@/components/ModeNav"
-import { buildBehaviorMemory } from "@/lib/axis-ai/buildBehaviorMemory"
+import { clusterCoachingLanguage } from "@/lib/axis-ai/clusterCoachingLanguage"
 import {
-  isRepeated,
   normalizeSessions,
   playerName,
-  relativeTime,
-  repeatCounts,
-  tagCounts,
 } from "@/lib/archive/sessionRollup"
 import { createClient } from "@/lib/supabase/server"
-import { supabaseAdmin } from "@/lib/supabase/admin"
-import type { AxisReplaySession, ReplaySessionView } from "@/types/memory"
+import type { AxisReplaySession, AxisVoiceNote } from "@/types/memory"
 
-function behaviorLine(session: ReplaySessionView) {
+type Props = {
+  searchParams?: Promise<{
+    player?: string
+  }>
+}
+
+type PlayerMemory = {
+  name: string
+  phrases: AxisVoiceNote[]
+}
+
+const fallbackPlayers = ["AJ", "Liam", "Kendal"]
+
+function textParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] || "" : value || ""
+}
+
+function mentionsPlayer(phrase: string, player: string) {
+  const lowerPhrase = phrase.toLowerCase()
+  const lowerPlayer = player.toLowerCase()
+
   return (
-    session.coachNote ||
-    session.behaviorSentence ||
-    session.coachCorrection ||
-    session.coachFlaw ||
-    "Watch this again."
+    lowerPhrase.startsWith(`${lowerPlayer} `) ||
+    lowerPhrase.includes(` ${lowerPlayer} `) ||
+    lowerPhrase.endsWith(` ${lowerPlayer}`)
   )
 }
 
-function isClipProcessing(status?: string) {
-  return status === "uploaded" || status === "processing" || status === "created"
+function timeLabel(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Today"
+
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  })
 }
 
-function isClipError(status?: string) {
-  return status === "error"
-}
-
-export default async function PlayersPage() {
+export default async function PlayersPage({ searchParams }: Props) {
+  const params = await searchParams
+  const selectedPlayer = textParam(params?.player).trim()
   const supabase = await createClient()
   const {
     data: { user },
@@ -42,7 +59,7 @@ export default async function PlayersPage() {
       <main className="min-h-screen bg-[#0b0a08] px-5 py-10 text-white">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center">
           <h1 className="text-5xl font-black tracking-[-0.04em] sm:text-7xl">
-            Sign in to watch player clips.
+            Sign in to see player memory.
           </h1>
           <Link
             href="/auth"
@@ -55,116 +72,126 @@ export default async function PlayersPage() {
     )
   }
 
-  const { data } = await supabase
-    .from("axis_sessions")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .returns<AxisReplaySession[]>()
+  const [{ data: voiceNotes }, { data: sessionsData }] = await Promise.all([
+    supabase
+      .from("axis_voice_notes")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(120)
+      .returns<AxisVoiceNote[]>(),
+    supabase
+      .from("axis_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(80)
+      .returns<AxisReplaySession[]>(),
+  ])
 
-  const rowsWithUrls = await Promise.all(
-    (data || []).map(async (session) => {
-      if (session.file_path) {
-        const signed = await supabaseAdmin.storage
-          .from("axis-replays")
-          .createSignedUrl(session.file_path, 60 * 60 * 24 * 7)
-
-        session.video_url = signed.data?.signedUrl || session.video_url
-      }
-
-      return session
-    })
-  )
-  const sessions = normalizeSessions(rowsWithUrls)
-  const tags = tagCounts(sessions)
-  const repeats = repeatCounts(sessions)
-  const grouped = new Map<string, ReplaySessionView[]>()
-
-  for (const session of sessions) {
-    const name = playerName(session)
-    grouped.set(name, [...(grouped.get(name) || []), session])
-  }
-
-  const players = [...grouped.entries()].sort(
-    (a, b) => b[1].length - a[1].length
-  )
+  const phrases = voiceNotes || []
+  const sessions = normalizeSessions(sessionsData || [])
+  const players = [
+    ...new Set([...sessions.map(playerName), ...fallbackPlayers].filter(Boolean)),
+  ]
+  const playerMemories: PlayerMemory[] = players
+    .map((name) => ({
+      name,
+      phrases: phrases.filter((note) => mentionsPlayer(note.phrase, name)),
+    }))
+    .filter((player) => player.phrases.length > 0 || !selectedPlayer)
+    .sort((a, b) => b.phrases.length - a.phrases.length)
+  const visiblePlayers = selectedPlayer
+    ? playerMemories.filter(
+        (player) => player.name.toLowerCase() === selectedPlayer.toLowerCase()
+      )
+    : playerMemories
 
   return (
-    <main className="min-h-screen bg-[#0c0b09] px-5 py-6 text-white">
+    <main className="min-h-screen bg-[#0c0b09] px-4 py-5 text-stone-100 sm:px-6">
       <div className="mx-auto max-w-5xl">
-        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">
-            Players
-          </h1>
+        <header className="mb-8 flex items-center justify-between gap-4">
+          <Link href="/" className="text-sm font-black text-white/85">
+            Axis
+          </Link>
           <ModeNav active="players" />
         </header>
 
+        <section className="mb-12">
+          <p className="text-sm font-bold text-white/42">Players</p>
+          <h1 className="mt-2 text-5xl font-black tracking-[-0.05em] text-white sm:text-7xl">
+            Who came up.
+          </h1>
+          <p className="mt-4 max-w-xl text-base leading-7 text-white/48">
+            Player memory is built from the names and corrections spoken during practice.
+          </p>
+        </section>
+
         <section className="grid gap-10">
-          {players.map(([name, clips]) => {
-            const latest = clips[0]
-            const memory = buildBehaviorMemory({ sessions: clips })
-            const watchAgain = clips.filter((clip) =>
-              isRepeated(clip, repeats, tags)
+          {visiblePlayers.map((player) => {
+            const clusters = clusterCoachingLanguage(
+              player.phrases.map((note) => ({
+                id: note.id,
+                phrase: note.phrase,
+                createdAt: new Date(note.created_at).getTime(),
+              }))
             )
+            const latest = player.phrases[0]
 
             return (
-              <article key={name} className="grid gap-5 md:grid-cols-[1fr_1fr]">
-                <Link
-                  href={latest ? `/replay/${latest.id}` : `/sessions?player=${name}`}
-                  className="aspect-[4/5] overflow-hidden bg-black/70 sm:aspect-video"
-                >
-                  {latest && isClipProcessing(latest.status) ? (
-                    <div className="grid h-full place-items-center text-sm font-bold text-white/35">
-                      Clip processing...
-                    </div>
-                  ) : latest && isClipError(latest.status) ? (
-                    <div className="grid h-full place-items-center text-sm font-bold text-white/35">
-                      Clip unavailable
-                    </div>
-                  ) : latest?.videoUrl ? (
-                    <video
-                      src={latest.videoUrl}
-                      muted
-                      playsInline
-                      preload="metadata"
-                      className="h-full w-full object-cover opacity-85"
-                    />
-                  ) : (
-                    <div className="grid h-full place-items-center text-sm font-bold text-white/30">
-                      No clips yet
-                    </div>
-                  )}
-                </Link>
-
-                <div className="grid content-start gap-3">
+              <article
+                key={player.name}
+                className="grid gap-6 border-b border-white/8 pb-10 lg:grid-cols-[260px_1fr]"
+              >
+                <div>
                   <Link
-                    href={`/sessions?player=${encodeURIComponent(name)}`}
-                    className="text-3xl font-black tracking-[-0.04em] transition hover:text-amber-100"
+                    href={`/players?player=${encodeURIComponent(player.name)}`}
+                    className="text-4xl font-black tracking-[-0.05em] text-white transition hover:text-amber-100"
                   >
-                    {name}
+                    {player.name}
                   </Link>
+                  <p className="mt-3 text-sm text-white/42">
+                    {player.phrases.length
+                      ? `${player.phrases.length} mentions`
+                      : "No mentions yet"}
+                  </p>
+                </div>
+
+                <div className="grid gap-5">
                   {latest ? (
-                    <p className="text-lg leading-7 text-white/75">
-                      {behaviorLine(latest)}
+                    <div>
+                      <p className="text-2xl font-black leading-tight tracking-[-0.04em] text-white">
+                        {latest.phrase}
+                      </p>
+                      <p className="mt-2 text-sm text-white/35">
+                        {timeLabel(latest.created_at)}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-2xl font-black tracking-[-0.04em] text-white">
+                      Say {player.name} during practice to start a memory.
                     </p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-3 text-sm text-white/40">
-                    <span>{clips.length} clips</span>
-                    {watchAgain.length ? (
-                      <span>{watchAgain.length} to watch again</span>
-                    ) : null}
-                    {latest ? <span>{relativeTime(latest.createdAt)}</span> : null}
-                  </div>
-                  {memory.clusters.length ? (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {memory.clusters.slice(0, 3).map((cluster) => (
-                        <Link
+                  )}
+
+                  {clusters.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {clusters.slice(0, 5).map((cluster) => (
+                        <span
                           key={cluster.id}
-                          href={`/sessions?player=${encodeURIComponent(name)}&q=${encodeURIComponent(cluster.label)}`}
-                          className="bg-white/[0.04] px-3 py-2 text-sm font-bold text-white/55 transition hover:bg-white/[0.08] hover:text-white"
+                          className="bg-white/[0.04] px-4 py-3 text-sm font-bold text-white/58"
                         >
                           {cluster.label}
-                        </Link>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {player.phrases.length > 1 ? (
+                    <div className="grid gap-3">
+                      {player.phrases.slice(1, 4).map((note) => (
+                        <p key={note.id} className="text-sm leading-6 text-white/48">
+                          {note.phrase}
+                        </p>
                       ))}
                     </div>
                   ) : null}
@@ -173,18 +200,18 @@ export default async function PlayersPage() {
             )
           })}
 
-          {players.length === 0 ? (
-            <div className="py-20">
-              <p className="text-3xl font-black tracking-[-0.04em] text-white">
-                Record a clip to start a player feed.
+          {visiblePlayers.length === 0 ? (
+            <section className="py-20">
+              <p className="max-w-xl text-3xl font-black tracking-[-0.04em] text-white">
+                No player mentions yet. Start a session and say the player name with the correction.
               </p>
               <Link
-                href="/"
+                href="/#record"
                 className="mt-6 inline-block bg-stone-100 px-5 py-3 text-sm font-bold text-black transition hover:bg-amber-100"
               >
                 Record
               </Link>
-            </div>
+            </section>
           ) : null}
         </section>
       </div>
