@@ -63,6 +63,10 @@ export type AxisReplaySession = {
   workflow_stage: WorkflowStage | null
   ai_suggested_tags: string[] | null
   ai_cluster_id: string | null
+  session_transcript: string | null
+  behavior_clusters: Record<string, unknown>[] | null
+  ai_phrase_summary: string | null
+  clip_phrase_links: Record<string, unknown>[] | null
   environment: SessionEnvironment | null
   duration_seconds: number | null
   status: string | null
@@ -129,6 +133,10 @@ export type ReplaySessionView = {
   workflowStage?: WorkflowStage
   aiSuggestedTags?: string[]
   aiClusterId?: string
+  sessionTranscript?: string
+  behaviorClusters?: Record<string, unknown>[]
+  aiPhraseSummary?: string
+  clipPhraseLinks?: Record<string, unknown>[]
   tags: string[]
   transcriptText?: string
   aiSummary?: string
@@ -161,4 +169,16 @@ export type ReplaySessionView = {
   memoryState?: MemoryState
   signalRead?: ExtractedReplaySignals
   baseline?: CalibrationBaseline
+}
+
+export type AxisVoiceNote = {
+  id: string
+  user_id: string
+  session_id: string | null
+  phrase: string
+  normalized_phrase: string | null
+  workflow_stage: WorkflowStage | null
+  occurred_at_seconds: number | null
+  metadata: Record<string, unknown> | null
+  created_at: string
 }

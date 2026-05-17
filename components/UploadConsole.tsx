@@ -68,6 +68,7 @@ type AxisSpeechRecognition = {
   onerror: (() => void) | null
   onresult: ((event: AxisSpeechRecognitionEvent) => void) | null
   start: () => void
+  stop: () => void
 }
 
 type AxisSpeechRecognitionConstructor = new () => AxisSpeechRecognition
@@ -199,6 +200,7 @@ export default function UploadConsole({
   const supabase = createClient()
   const cameraInputRef =
     useRef<HTMLInputElement | null>(null)
+  const listeningRef = useRef<AxisSpeechRecognition | null>(null)
 
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState("")
@@ -227,6 +229,7 @@ export default function UploadConsole({
   const [showAddPlayer, setShowAddPlayer] = useState(false)
   const [liveClips, setLiveClips] = useState(recentClips)
   const [isListening, setIsListening] = useState(false)
+  const [coachingPhrases, setCoachingPhrases] = useState<string[]>([])
   const [repeatTomorrow, setRepeatTomorrow] = useState(false)
   const [workflowStage, setWorkflowStage] = useState<WorkflowStage>("DRILL")
   const [isQuickTagging, setIsQuickTagging] = useState(false)
@@ -310,6 +313,74 @@ export default function UploadConsole({
       setStatus("Clip saved")
     } finally {
       setIsQuickTagging(false)
+    }
+  }
+
+  async function saveVoicePhrase(phrase: string, sessionId = savedReplayId) {
+    const cleanPhrase = phrase.trim()
+    if (!cleanPhrase) return
+
+    setCoachingPhrases((phrases) => [cleanPhrase, ...phrases].slice(0, 8))
+
+    if (!behaviorPhrase) {
+      setBehaviorPhrase(cleanPhrase)
+    }
+
+    if (sessionId) {
+      const triggerWord = savedTrigger || suggestTrigger(cleanPhrase)
+
+      if (sessionId === savedReplayId) {
+        await quickTagClip(
+          triggerWord,
+          repeatTomorrow,
+          cleanPhrase,
+          selectedPlayer
+        )
+      } else {
+        await fetch("/api/session/quick-tag", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId,
+            triggerWord,
+            behaviorPhrase: cleanPhrase,
+            playerName: selectedPlayer,
+            workflowStage,
+            repeatTomorrow,
+          }),
+        })
+      }
+
+      setLiveClips((clips) =>
+        clips.map((clip) =>
+          clip.id === sessionId
+            ? {
+                ...clip,
+                coachNote: cleanPhrase,
+                triggerWord,
+                workflowStage,
+              }
+            : clip
+        )
+      )
+    }
+
+    try {
+      await fetch("/api/practice/voice", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId,
+          phrase: cleanPhrase,
+          workflowStage,
+        }),
+      })
+    } catch (error) {
+      console.error("VOICE PHRASE SAVE FAILED", error)
     }
   }
 
@@ -524,6 +595,7 @@ export default function UploadConsole({
 
       const replayId = result.replayId
       const videoUrl = result.videoUrl
+      const latestPhrase = behaviorPhrase || coachingPhrases[0] || ""
       const environment: ReplaySessionView["environment"] = selectedMission
         ? "mission"
         : "practice"
@@ -551,10 +623,13 @@ export default function UploadConsole({
           status: "stored",
           workflowStage,
           tags: [],
-          coachNote: "",
+          coachNote: latestPhrase,
         },
         ...clips,
       ].slice(0, 12))
+      if (latestPhrase) {
+        void saveVoicePhrase(latestPhrase, replayId)
+      }
       setFlowStep("entry")
     } catch (error) {
       console.error(error)
@@ -582,8 +657,8 @@ export default function UploadConsole({
     void quickTagClip(trigger, repeatTomorrow, cleanPhrase)
   }
 
-  function startVoiceCapture() {
-    if (!savedReplayId || isListening) return
+  function startVoiceCapture(requireClip = true) {
+    if ((requireClip && !savedReplayId) || isListening) return
 
     const speechWindow = window as AxisSpeechWindow
     const SpeechRecognition =
@@ -596,9 +671,12 @@ export default function UploadConsole({
 
     const recognition = new SpeechRecognition()
     recognition.lang = "en-US"
-    recognition.continuous = false
+    recognition.continuous = !requireClip
     recognition.interimResults = false
-    recognition.onend = () => setIsListening(false)
+    recognition.onend = () => {
+      listeningRef.current = null
+      setIsListening(false)
+    }
     recognition.onerror = () => {
       setIsListening(false)
       setStatus("Voice unavailable")
@@ -607,12 +685,23 @@ export default function UploadConsole({
       const result = event.results[event.results.length - 1]
       const phrase = result?.[0]?.transcript?.trim() || ""
 
-      if (phrase) saveBehaviorPhrase(phrase)
+      if (phrase) {
+        if (requireClip) saveBehaviorPhrase(phrase)
+        else void saveVoicePhrase(phrase)
+      }
     }
 
+    listeningRef.current = recognition
     setIsListening(true)
     setStatus("Listening")
     recognition.start()
+  }
+
+  function stopVoiceCapture() {
+    listeningRef.current?.stop()
+    listeningRef.current = null
+    setIsListening(false)
+    setStatus("")
   }
 
   return (
@@ -651,6 +740,20 @@ export default function UploadConsole({
                   {stage.label}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isListening) stopVoiceCapture()
+                  else startVoiceCapture(false)
+                }}
+                className={`px-3 py-2 font-bold transition ${
+                  isListening
+                    ? "bg-white/[0.08] text-white"
+                    : "hover:bg-white/[0.04] hover:text-white"
+                }`}
+              >
+                {isListening ? "Listening" : "Listen"}
+              </button>
             </div>
 
             <button
@@ -773,7 +876,7 @@ export default function UploadConsole({
               <button
                 type="button"
                 disabled={!savedReplayId || isListening || isQuickTagging}
-                onClick={startVoiceCapture}
+                onClick={() => startVoiceCapture(true)}
                     className="bg-white/[0.04] px-4 py-3 text-sm font-bold text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-35"
               >
                     {isListening ? "Listening" : "Speak"}
@@ -787,6 +890,20 @@ export default function UploadConsole({
                 className="min-w-[240px] flex-1 bg-black/35 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 disabled:opacity-35"
               />
                 </div>
+                {coachingPhrases.length ? (
+                  <div className="flex flex-wrap gap-2 text-sm text-white/35">
+                    {coachingPhrases.slice(0, 4).map((phrase) => (
+                      <button
+                        key={phrase}
+                        type="button"
+                        onClick={() => saveBehaviorPhrase(phrase)}
+                        className="transition hover:text-white"
+                      >
+                        {phrase}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
 
                 <div className="flex flex-wrap items-center gap-2">
               <Link

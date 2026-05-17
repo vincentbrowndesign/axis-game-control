@@ -100,6 +100,15 @@ function asStringArray(value: unknown) {
   )
 }
 
+function asRecordArray(value: unknown) {
+  if (!Array.isArray(value)) return []
+
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object"
+  )
+}
+
 function asOptionalString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
@@ -600,6 +609,26 @@ export function normalizeReplay(rawData: unknown): ReplaySessionView {
       ),
       aiClusterId: asOptionalString(
         raw.aiClusterId ?? raw.ai_cluster_id ?? metadata.aiClusterId
+      ),
+      sessionTranscript: asOptionalString(
+        raw.sessionTranscript ??
+          raw.session_transcript ??
+          metadata.sessionTranscript
+      ),
+      behaviorClusters: asRecordArray(
+        raw.behaviorClusters ??
+          raw.behavior_clusters ??
+          metadata.behaviorClusters
+      ),
+      aiPhraseSummary: asOptionalString(
+        raw.aiPhraseSummary ??
+          raw.ai_phrase_summary ??
+          metadata.aiPhraseSummary
+      ),
+      clipPhraseLinks: asRecordArray(
+        raw.clipPhraseLinks ??
+          raw.clip_phrase_links ??
+          metadata.clipPhraseLinks
       ),
       tags: asStringArray(raw.tags),
       transcriptText: asOptionalString(raw.transcriptText ?? raw.transcript_text),

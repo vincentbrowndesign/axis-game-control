@@ -1,3 +1,5 @@
+import { transcribeSession } from "@/lib/axis-ai/transcribeSession"
+
 export type BehaviorNoteTranscript = {
   text: string
   source: "typed" | "voice" | "empty"
@@ -11,10 +13,14 @@ export async function transcribeBehaviorNote(input?: {
   const typedText = input?.typedText?.trim()
 
   if (typedText) {
+    const result = await transcribeSession({
+      fallbackText: typedText,
+    })
+
     return {
-      text: typedText,
+      text: result.text,
       source: "typed",
-      usedMock: false,
+      usedMock: result.usedMock,
     }
   }
 

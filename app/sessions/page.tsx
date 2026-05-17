@@ -5,6 +5,7 @@ import {
   appendTimelineEvents,
   makeTimelineEvent,
 } from "@/lib/axis/reinforcement"
+import { buildBehaviorMemory } from "@/lib/axis-ai/buildBehaviorMemory"
 import { buildReviewQueue } from "@/lib/axis-ai/buildReviewQueue"
 import { clusterBehaviorMoments } from "@/lib/axis-ai/clusterBehaviorMoments"
 import {
@@ -462,6 +463,7 @@ export default async function SessionsPage({
   const players = playerSummaries(sessions)
   const behaviorClusters = clusterBehaviorMoments(sessions)
   const reviewQueue = buildReviewQueue(sessions).slice(0, 5)
+  const behaviorMemory = buildBehaviorMemory({ sessions })
   const lastPractice = sessions.find((session) => session.environment === "practice")
   const filtersActive = Boolean(
     filters.q ||
@@ -961,6 +963,33 @@ export default async function SessionsPage({
           </div>
 
           <aside className="grid h-fit gap-3">
+            <section className="border-b border-white/10 pb-4">
+              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
+                Repeated today
+              </p>
+              <div className="mt-3 grid gap-3">
+                {behaviorMemory.clusters.slice(0, 4).map((cluster) => (
+                  <Link
+                    key={cluster.id}
+                    href={`/sessions?q=${encodeURIComponent(cluster.label)}`}
+                    className="border-t border-white/10 py-3 transition hover:text-white"
+                  >
+                    <p className="text-sm font-bold text-white">
+                      {cluster.label}
+                    </p>
+                    <p className="mt-2 text-xs text-white/35">
+                      {cluster.count} clips or phrases
+                    </p>
+                  </Link>
+                ))}
+                {behaviorMemory.clusters.length === 0 ? (
+                  <p className="text-sm text-white/40">
+                    Repeated phrases will appear here.
+                  </p>
+                ) : null}
+              </div>
+            </section>
+
             <section className="border-b border-white/10 pb-4">
               <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
                 Watch next
