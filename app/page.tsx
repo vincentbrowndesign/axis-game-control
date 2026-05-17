@@ -3,6 +3,10 @@ import { redirect } from "next/navigation"
 import VoiceMemoryConsole from "@/components/VoiceMemoryConsole"
 import { clusterCoachingLanguage } from "@/lib/axis-ai/clusterCoachingLanguage"
 import {
+  buildMemoryStream,
+  type MemoryStreamNote,
+} from "@/lib/axis-ai/buildMemoryStream"
+import {
   normalizeSessions,
   playerName,
 } from "@/lib/archive/sessionRollup"
@@ -19,6 +23,8 @@ type VoicePhrase = {
   phrase: string
   createdAt: string
   audioUrl?: string | null
+  replayCount?: number
+  reason?: string
 }
 
 type PlayerMention = {
@@ -42,6 +48,7 @@ type SessionCard = {
     player?: string
     replayCount: number
     audioUrl?: string | null
+    reason?: string
   }[]
 }
 
@@ -157,8 +164,9 @@ function buildSessionCards(phrases: VoicePhrase[], mentions: PlayerMention[]) {
           timestamp: formatTimestamp(seconds),
           videoWindow: formatVideoWindow(seconds),
           player,
-          replayCount: Math.max(1, 6 - itemIndex),
+          replayCount: item.replayCount || Math.max(1, 6 - itemIndex),
           audioUrl: item.audioUrl || null,
+          reason: item.reason,
         }
       }),
     }
@@ -220,12 +228,30 @@ export default async function HomePage() {
       .returns<AxisReplaySession[]>(),
   ])
 
-  const phrases: VoicePhrase[] = await Promise.all((voiceNotes || []).map(async (note) => ({
-    id: note.id,
-    phrase: note.phrase,
-    createdAt: note.created_at,
-    audioUrl: await signedAudioUrl(metadataText(note.metadata, "audioPath")),
-  })))
+  const notesWithAudio: MemoryStreamNote[] = await Promise.all(
+    (voiceNotes || []).map(async (note) => ({
+      ...note,
+      audioUrl: await signedAudioUrl(metadataText(note.metadata, "audioPath")),
+    }))
+  )
+  const stream = buildMemoryStream({
+    notes: notesWithAudio,
+    playerNames: [
+      ...new Set(
+        normalizeSessions(sessionsData || [])
+          .map(playerName)
+          .filter(Boolean)
+      ),
+    ],
+  })
+  const phrases: VoicePhrase[] = stream.items.map((item) => ({
+    id: item.note.id,
+    phrase: item.note.phrase,
+    createdAt: item.note.created_at,
+    audioUrl: item.note.audioUrl,
+    replayCount: item.replayCount,
+    reason: item.reason,
+  }))
   const sessions = normalizeSessions(sessionsData || [])
   const recentPlayers = [
     ...new Set(sessions.map(playerName).filter(Boolean)),

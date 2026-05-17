@@ -143,6 +143,7 @@ export default function VoiceMemoryConsole({
   const [isLandmarking, setIsLandmarking] = useState(false)
   const [status, setStatus] = useState("")
   const [manualPhrase, setManualPhrase] = useState("")
+  const [liveTranscript, setLiveTranscript] = useState("")
   const [liveLandmarks, setLiveLandmarks] = useState<ReinforcementLandmark[]>([])
   const [activeCaptionIndex, setActiveCaptionIndex] = useState(0)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -312,6 +313,15 @@ export default function VoiceMemoryConsole({
       })
 
       if (!response.ok) throw new Error("Phrase save failed")
+      const result: { phraseId?: string } = await response.json()
+
+      if (result.phraseId) {
+        setLiveLandmarks((items) =>
+          items.map((item) =>
+            item.id === landmark.id ? { ...item, id: result.phraseId || item.id } : item
+          )
+        )
+      }
     } catch (error) {
       console.error(error)
       setStatus("Saved locally")
@@ -327,6 +337,24 @@ export default function VoiceMemoryConsole({
     setIsPlaying(true)
     setStatus(`Landmark ${formatTimestamp(timestampSeconds)}. Speak naturally.`)
     startLandmarkAudio()
+  }
+
+  function draftLandmark(phrase: string) {
+    const clean = cleanPhrase(phrase)
+    if (!clean) return
+
+    if (!isLandmarking) {
+      const timestampSeconds = elapsedSeconds
+
+      landmarkTimeRef.current = timestampSeconds
+      setPendingLandmarkSeconds(timestampSeconds)
+      setIsLandmarking(true)
+      setIsPlaying(true)
+    }
+
+    setManualPhrase(clean)
+    setLiveTranscript("")
+    setStatus("Edit text, then save landmark")
   }
 
   async function startSession() {
@@ -347,15 +375,17 @@ export default function VoiceMemoryConsole({
     const recognition = new SpeechRecognition()
     recognition.lang = "en-US"
     recognition.continuous = true
-    recognition.interimResults = false
+    recognition.interimResults = true
     recognition.onresult = (event) => {
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index]
         const phrase = result?.[0]?.transcript || ""
 
         if (result?.isFinal && phrase) {
-          setManualPhrase(cleanPhrase(phrase))
-          setStatus("Edit text, then save landmark")
+          draftLandmark(phrase)
+        } else if (phrase) {
+          setLiveTranscript(cleanPhrase(phrase))
+          setStatus("Listening")
         }
       }
     }
@@ -500,7 +530,13 @@ export default function VoiceMemoryConsole({
                     ) : null}
                   </>
                 ) : (
-                  <div className="mt-4 min-h-28" aria-label="No landmark stored yet" />
+                  <div className="mt-4 min-h-28" aria-label="No landmark stored yet">
+                    {liveTranscript ? (
+                      <p className="text-3xl font-black leading-tight tracking-[-0.04em] text-white/38">
+                        {liveTranscript}
+                      </p>
+                    ) : null}
+                  </div>
                 )}
               </div>
 
@@ -553,6 +589,11 @@ export default function VoiceMemoryConsole({
                 Save landmark
               </button>
             </div>
+            {manualPhrase ? (
+              <p className="text-sm font-bold text-white/42">
+                Draft landmark. Edit before saving.
+              </p>
+            ) : null}
           </div>
 
           <aside className="grid gap-5">

@@ -1,5 +1,7 @@
 import Link from "next/link"
+import LandmarkAudio from "@/components/LandmarkAudio"
 import ModeNav from "@/components/ModeNav"
+import { buildMemoryStream } from "@/lib/axis-ai/buildMemoryStream"
 import { clusterCoachingLanguage } from "@/lib/axis-ai/clusterCoachingLanguage"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -129,7 +131,8 @@ export default async function SessionsPage() {
       audioUrl: await signedAudioUrl(metadataText(note.metadata, "audioPath")),
     }))
   )
-  const sessions = groupBySession(notesWithAudio)
+  const stream = buildMemoryStream({ notes: notesWithAudio })
+  const sessions = groupBySession(stream.items.map((item) => item.note))
 
   return (
     <main className="min-h-screen bg-[#090806] px-4 py-5 text-stone-100 sm:px-6">
@@ -204,11 +207,9 @@ export default async function SessionsPage() {
                         {formatVideoWindow(Number(note.occurred_at_seconds || 0))}
                       </p>
                       {note.audioUrl ? (
-                        <audio
-                          src={note.audioUrl}
-                          controls
-                          className="mt-3 w-full"
-                        />
+                        <div className="mt-3">
+                          <LandmarkAudio noteId={note.id} src={note.audioUrl} />
+                        </div>
                       ) : null}
                     </div>
                   ))}

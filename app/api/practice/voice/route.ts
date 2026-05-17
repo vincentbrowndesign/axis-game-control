@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
-import {
-  clusterCoachingLanguage,
-  normalizeCoachingPhrase,
-} from "@/lib/axis-ai/clusterCoachingLanguage"
+import { normalizeCoachingPhrase } from "@/lib/axis-ai/clusterCoachingLanguage"
 import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
 import { suggestBehaviorTags } from "@/lib/axis-ai/suggestBehaviorTags"
+import { buildReinforcementMemory } from "@/lib/mcp/reinforcementMemory"
+import { retrieveVoiceNoteMemory } from "@/lib/mcp/supabaseMemory"
 import { createClient } from "@/lib/supabase/server"
 
 function cleanPhrase(value: unknown) {
@@ -84,6 +83,14 @@ export async function POST(req: Request) {
     }
 
     const aiTags = suggestBehaviorTags(phrase)
+    const landmarkMetadata = {
+      aiTags,
+      audioPath: audioPath || null,
+      audioMimeType: audioMimeType || null,
+      audioSizeBytes,
+      audioDurationSeconds,
+      hasReplayAudio: Boolean(audioPath),
+    }
     const inserted = await supabase
       .from("axis_voice_notes")
       .insert({
@@ -93,14 +100,7 @@ export async function POST(req: Request) {
         normalized_phrase: normalizeCoachingPhrase(phrase),
         workflow_stage: workflowStage,
         occurred_at_seconds: occurredAtSeconds,
-        metadata: {
-          aiTags,
-          audioPath: audioPath || null,
-          audioMimeType: audioMimeType || null,
-          audioSizeBytes,
-          audioDurationSeconds,
-          hasReplayAudio: Boolean(audioPath),
-        },
+        metadata: landmarkMetadata,
       })
       .select("id")
       .single<{ id: string }>()
@@ -116,13 +116,34 @@ export async function POST(req: Request) {
       )
     }
 
-    const clusters = clusterCoachingLanguage([
-      {
-        id: inserted.data.id,
-        phrase,
-        workflowStage,
-      },
-    ])
+    const recentNotes = await retrieveVoiceNoteMemory({
+      supabase,
+      userId: user.id,
+    })
+    const memory = buildReinforcementMemory({
+      notes: recentNotes.data || [],
+    })
+    const clusters = memory.clusters
+    const currentLandmark = memory.items.find(
+      (item) => item.note.id === inserted.data.id
+    )
+
+    if (currentLandmark) {
+      await supabase
+        .from("axis_voice_notes")
+        .update({
+          metadata: {
+            ...landmarkMetadata,
+            recurrenceCount: currentLandmark.recurrenceCount,
+            resurfacingPriority: currentLandmark.score,
+            similarLandmarkIds: currentLandmark.landmarkMemory.similarMoments.map(
+              (note) => note.id
+            ),
+          },
+        })
+        .eq("id", inserted.data.id)
+        .eq("user_id", user.id)
+    }
 
     if (sessionId) {
       await supabase.from("axis_clip_phrase_links").insert({
@@ -184,6 +205,9 @@ export async function POST(req: Request) {
             sessionTranscript: transcript,
             aiSuggestedTags: aiTags,
             behaviorClusters: clusters,
+            sessionMemory: memory.sessions.find(
+              (session) => session.sessionId === sessionId
+            ),
           },
           updated_at: new Date().toISOString(),
         })

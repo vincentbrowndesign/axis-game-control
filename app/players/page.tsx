@@ -1,5 +1,7 @@
 import Link from "next/link"
+import LandmarkAudio from "@/components/LandmarkAudio"
 import ModeNav from "@/components/ModeNav"
+import { buildMemoryStream } from "@/lib/axis-ai/buildMemoryStream"
 import { clusterCoachingLanguage } from "@/lib/axis-ai/clusterCoachingLanguage"
 import {
   normalizeSessions,
@@ -122,7 +124,7 @@ export default async function PlayersPage({ searchParams }: Props) {
       .returns<AxisReplaySession[]>(),
   ])
 
-  const phrases = await Promise.all(
+  const phrasesWithAudio = await Promise.all(
     (voiceNotes || []).map(async (note): Promise<VoiceNoteWithAudio> => ({
       ...note,
       audioUrl: await signedAudioUrl(metadataText(note.metadata, "audioPath")),
@@ -132,6 +134,11 @@ export default async function PlayersPage({ searchParams }: Props) {
   const players = [
     ...new Set([...sessions.map(playerName), ...fallbackPlayers].filter(Boolean)),
   ]
+  const stream = buildMemoryStream({
+    notes: phrasesWithAudio,
+    playerNames: players,
+  })
+  const phrases = stream.items.map((item) => item.note)
   const playerMemories: PlayerMemory[] = players
     .map((name) => ({
       name,
@@ -206,11 +213,9 @@ export default async function PlayersPage({ searchParams }: Props) {
                         {formatTimestamp(Number(latest.occurred_at_seconds || 0))}
                       </p>
                       {latest.audioUrl ? (
-                        <audio
-                          src={latest.audioUrl}
-                          controls
-                          className="mt-4 w-full"
-                        />
+                        <div className="mt-4">
+                          <LandmarkAudio noteId={latest.id} src={latest.audioUrl} />
+                        </div>
                       ) : null}
                     </div>
                   ) : (
@@ -251,11 +256,7 @@ export default async function PlayersPage({ searchParams }: Props) {
                             {note.phrase}
                           </p>
                           {note.audioUrl ? (
-                            <audio
-                              src={note.audioUrl}
-                              controls
-                              className="w-full"
-                            />
+                            <LandmarkAudio noteId={note.id} src={note.audioUrl} />
                           ) : null}
                         </div>
                       ))}

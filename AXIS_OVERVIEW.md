@@ -1,8 +1,8 @@
 # AXIS OVERVIEW
 
-Axis is multimodal behavioral reinforcement memory.
+Axis is a continuous AI-assisted behavioral reinforcement stream.
 
-It helps a coach record a continuous session, tap Landmark when a meaningful moment happens, speak naturally, and turn that moment into playable captions, timestamps, and player memory.
+It helps a coach record a continuous session, tap Landmark when a meaningful moment happens, speak naturally, and turn that moment into playable captions, timestamps, player memory, and resurfacing replay loops.
 
 ## Product Loop
 
@@ -13,6 +13,7 @@ It helps a coach record a continuous session, tap Landmark when a meaningful mom
 - Speak naturally.
 - Axis synchronizes voice, captions, timestamps, and surrounding session context.
 - Players replay meaningful moments.
+- Replayed and repeated moments resurface more often.
 - Behavior gets reinforced over time.
 
 ## App Sections
@@ -29,6 +30,7 @@ Axis should feel like:
 - Coaching memory becoming playable media.
 - Caption-led session playback.
 - Reinforcement landmarks.
+- A stream that adapts to replay behavior.
 - A quiet practice companion.
 - A fast way to find repeated corrections.
 
