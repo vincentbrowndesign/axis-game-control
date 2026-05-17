@@ -25,6 +25,15 @@ type PlayerMention = {
   latestPhrase: string
 }
 
+type SessionCard = {
+  id: string
+  title: string
+  time: string
+  phrases: string[]
+  players: string[]
+  landmarks: string[]
+}
+
 const fallbackPlayers = ["AJ", "Liam", "Kendal"]
 
 function buildPlayerMentions(phrases: VoicePhrase[], players: string[]) {
@@ -57,6 +66,44 @@ function buildPlayerMentions(phrases: VoicePhrase[], players: string[]) {
   return [...mentions.values()].sort((a, b) => b.count - a.count)
 }
 
+function sessionDay(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Today"
+
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function buildSessionCards(phrases: VoicePhrase[], mentions: PlayerMention[]) {
+  const grouped = new Map<string, VoicePhrase[]>()
+
+  for (const phrase of phrases) {
+    const key = sessionDay(phrase.createdAt)
+    grouped.set(key, [...(grouped.get(key) || []), phrase])
+  }
+
+  return [...grouped.entries()].map(([day, items], index): SessionCard => {
+    const players = mentions
+      .filter((mention) =>
+        items.some((item) =>
+          item.phrase.toLowerCase().includes(mention.name.toLowerCase())
+        )
+      )
+      .map((mention) => mention.name)
+
+    return {
+      id: `${day}-${index}`,
+      title: index === 0 ? "Today session" : `${day} session`,
+      time: day,
+      phrases: items.map((item) => item.phrase),
+      players: players.slice(0, 4),
+      landmarks: items.slice(0, 5).map((item) => item.phrase.toUpperCase()),
+    }
+  })
+}
+
 export default async function HomePage() {
   const supabase = await createClient()
   const {
@@ -69,10 +116,10 @@ export default async function HomePage() {
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-center">
           <p className="text-sm font-bold text-white/42">Axis</p>
           <h1 className="mt-4 max-w-3xl text-5xl font-black tracking-[-0.05em] sm:text-7xl">
-            Voice notes for basketball coaching.
+            Coaching memory, playable.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
-            Tap record, coach normally, and keep the phrases that keep coming back.
+            Record the session and replay the captions that matter.
           </p>
           <Link
             href="/auth"
@@ -133,12 +180,14 @@ export default async function HomePage() {
     count: cluster.count,
   }))
   const playerMentions = buildPlayerMentions(phrases, recentPlayers)
+  const recentSessions = buildSessionCards(phrases, playerMentions)
 
   return (
     <VoiceMemoryConsole
       recentPhrases={phrases.slice(0, 12)}
       repeatedPhrases={repeatedPhrases}
       playerMentions={playerMentions}
+      recentSessions={recentSessions}
     />
   )
 }

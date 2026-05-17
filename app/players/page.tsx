@@ -20,6 +20,7 @@ type PlayerMemory = {
 }
 
 const fallbackPlayers = ["AJ", "Liam", "Kendal"]
+const waveformBars = [38, 72, 46, 84, 54, 66, 92, 42, 76, 58, 88, 50]
 
 function textParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || ""
@@ -120,10 +121,10 @@ export default async function PlayersPage({ searchParams }: Props) {
         <section className="mb-12">
           <p className="text-sm font-bold text-white/42">Players</p>
           <h1 className="mt-2 text-5xl font-black tracking-[-0.05em] text-white sm:text-7xl">
-            Who came up.
+            Player replay.
           </h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-white/48">
-            Player memory is built from the names and corrections spoken during practice.
+            Each player gets the moments, captions, and phrases connected to their name.
           </p>
         </section>
 
@@ -141,7 +142,7 @@ export default async function PlayersPage({ searchParams }: Props) {
             return (
               <article
                 key={player.name}
-                className="grid gap-6 border-b border-white/8 pb-10 lg:grid-cols-[260px_1fr]"
+                className="grid gap-6 bg-white/[0.035] p-5 lg:grid-cols-[260px_1fr]"
               >
                 <div>
                   <Link
@@ -152,7 +153,7 @@ export default async function PlayersPage({ searchParams }: Props) {
                   </Link>
                   <p className="mt-3 text-sm text-white/42">
                     {player.phrases.length
-                      ? `${player.phrases.length} mentions`
+                      ? `${player.phrases.length} replay moments`
                       : "No mentions yet"}
                   </p>
                 </div>
@@ -161,7 +162,7 @@ export default async function PlayersPage({ searchParams }: Props) {
                   {latest ? (
                     <div>
                       <p className="text-2xl font-black leading-tight tracking-[-0.04em] text-white">
-                        {latest.phrase}
+                        {latest.phrase.toUpperCase()}
                       </p>
                       <p className="mt-2 text-sm text-white/35">
                         {timeLabel(latest.created_at)}
@@ -185,6 +186,16 @@ export default async function PlayersPage({ searchParams }: Props) {
                       ))}
                     </div>
                   ) : null}
+
+                  <div className="flex h-12 items-end gap-1">
+                    {waveformBars.map((height, index) => (
+                      <span
+                        key={`${player.name}-${height}-${index}`}
+                        className="w-full rounded-full bg-white/14"
+                        style={{ height: `${height}%` }}
+                      />
+                    ))}
+                  </div>
 
                   {player.phrases.length > 1 ? (
                     <div className="grid gap-3">
