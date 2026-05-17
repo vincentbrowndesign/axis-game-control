@@ -1,8 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import ModeNav from "@/components/ModeNav"
+import {
+  extractReplayLandmarks,
+  type CandidateReplayLandmark,
+} from "@/lib/axis-ai/extractReplayLandmarks"
 import {
   parseUploadResponseText,
   type AxisUploadResponse,
@@ -15,7 +19,9 @@ type ReplayMoment = {
   caption: string
   detail: string
   timestamp: string
+  timestampSeconds?: number
   videoUrl?: string | null
+  keyframeUrl?: string | null
   sessionTitle: string
 }
 
@@ -48,8 +54,8 @@ function uploadStatus(data: AxisUploadResponse) {
   return "Upload failed"
 }
 
-function readDuration(file: File) {
-  return new Promise<number>((resolve) => {
+function readVideoMetadata(file: File) {
+  return new Promise<{ duration: number; url: string }>((resolve) => {
     const url = URL.createObjectURL(file)
     const video = document.createElement("video")
 
@@ -57,15 +63,88 @@ function readDuration(file: File) {
     video.onloadedmetadata = () => {
       const duration = Number.isFinite(video.duration) ? video.duration : 0
 
-      URL.revokeObjectURL(url)
-      resolve(duration)
+      resolve({
+        duration,
+        url,
+      })
     }
     video.onerror = () => {
-      URL.revokeObjectURL(url)
-      resolve(0)
+      resolve({
+        duration: 0,
+        url,
+      })
     }
     video.src = url
   })
+}
+
+function seekVideo(video: HTMLVideoElement, seconds: number) {
+  return new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(() => {
+      video.removeEventListener("seeked", cleanup)
+      resolve()
+    }, 1200)
+    const cleanup = () => {
+      window.clearTimeout(timeout)
+      video.removeEventListener("seeked", cleanup)
+      resolve()
+    }
+
+    video.addEventListener("seeked", cleanup)
+    video.currentTime = seconds
+  })
+}
+
+async function captureKeyframes({
+  videoUrl,
+  landmarks,
+}: {
+  videoUrl: string
+  landmarks: CandidateReplayLandmark[]
+}) {
+  const video = document.createElement("video")
+  video.crossOrigin = "anonymous"
+  video.muted = true
+  video.playsInline = true
+  video.preload = "auto"
+  video.src = videoUrl
+
+  await new Promise<void>((resolve) => {
+    video.onloadedmetadata = () => resolve()
+    video.onerror = () => resolve()
+  })
+
+  const canvas = document.createElement("canvas")
+  const width = 420
+  const height = 236
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext("2d")
+
+  if (!context) {
+    return landmarks.map((landmark) => ({
+      landmark,
+      keyframeUrl: null,
+    }))
+  }
+
+  const frames: {
+    landmark: CandidateReplayLandmark
+    keyframeUrl: string | null
+  }[] = []
+
+  for (const landmark of landmarks) {
+    await seekVideo(video, landmark.timestampSeconds)
+    context.fillStyle = "#090806"
+    context.fillRect(0, 0, width, height)
+    context.drawImage(video, 0, 0, width, height)
+    frames.push({
+      landmark,
+      keyframeUrl: canvas.toDataURL("image/jpeg", 0.72),
+    })
+  }
+
+  return frames
 }
 
 export default function UploadMemoryConsole({
@@ -74,25 +153,76 @@ export default function UploadMemoryConsole({
   playerMoments,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const previewRef = useRef<HTMLVideoElement | null>(null)
+  const localVideoUrlRef = useRef<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState("")
   const [selectedMoment, setSelectedMoment] = useState(replayMoments[0])
+  const [localMoments, setLocalMoments] = useState<ReplayMoment[]>([])
+
+  useEffect(() => {
+    const video = previewRef.current
+
+    if (!video || typeof selectedMoment?.timestampSeconds !== "number") return
+
+    video.currentTime = selectedMoment.timestampSeconds
+  }, [selectedMoment])
+
+  useEffect(
+    () => () => {
+      if (localVideoUrlRef.current) {
+        URL.revokeObjectURL(localVideoUrlRef.current)
+      }
+    },
+    []
+  )
 
   async function chooseFile(file: File | undefined) {
     if (!file || isUploading) return
 
     setIsUploading(true)
-    setStatus("Uploading video")
+    setStatus("Extracting keyframes")
 
     try {
-      const duration = await readDuration(file)
+      if (localVideoUrlRef.current) {
+        URL.revokeObjectURL(localVideoUrlRef.current)
+      }
+
+      const metadata = await readVideoMetadata(file)
+      localVideoUrlRef.current = metadata.url
+      const landmarks = extractReplayLandmarks({
+        durationSeconds: metadata.duration,
+      })
+      const keyframes = await captureKeyframes({
+        videoUrl: metadata.url,
+        landmarks,
+      })
+      const moments = keyframes.map(({ landmark, keyframeUrl }) => ({
+        id: `local-${landmark.id}`,
+        sessionId: "local-upload",
+        title: landmark.title,
+        caption: landmark.caption,
+        detail: landmark.detail,
+        timestamp: landmark.timestamp,
+        timestampSeconds: landmark.timestampSeconds,
+        videoUrl: metadata.url,
+        keyframeUrl,
+        sessionTitle: file.name,
+      }))
+
+      setLocalMoments(moments)
+      setSelectedMoment(moments[0])
+      setStatus("Keyframes ready")
+
       const formData = new FormData()
       formData.append("file", file)
       formData.append("source", "upload")
       formData.append("environment", "practice")
       formData.append("mission", "Replay memory")
       formData.append("player", "Unassigned")
-      formData.append("duration", String(duration))
+      formData.append("duration", String(metadata.duration))
+
+      setStatus("Uploading video")
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -111,7 +241,8 @@ export default function UploadMemoryConsole({
     }
   }
 
-  const activeMoment = selectedMoment || replayMoments[0]
+  const visibleMoments = localMoments.length ? localMoments : replayMoments
+  const activeMoment = selectedMoment || visibleMoments[0]
 
   return (
     <main className="min-h-screen bg-[#0a0907] px-4 py-5 text-stone-100 sm:px-6">
@@ -163,6 +294,7 @@ export default function UploadMemoryConsole({
             <div className="aspect-[9/14] bg-black">
               {activeMoment?.videoUrl ? (
                 <video
+                  ref={previewRef}
                   src={activeMoment.videoUrl}
                   className="h-full w-full object-cover opacity-80"
                   muted
@@ -186,7 +318,7 @@ export default function UploadMemoryConsole({
               </p>
               <p className="mt-4 text-sm leading-6 text-white/42">
                 {activeMoment?.detail ||
-                  "AI extracts candidate moments. Coach adds the meaning."}
+                    "Keyframes mark where to start watching."}
               </p>
               <div className="mt-6 flex h-12 items-end gap-1">
                 {waveformBars.map((height, index) => (
@@ -219,7 +351,7 @@ export default function UploadMemoryConsole({
 
           <div className="grid gap-10 lg:grid-cols-[1fr_320px]">
             <div className="grid gap-4 sm:grid-cols-2">
-              {replayMoments.slice(0, 6).map((moment) => (
+              {visibleMoments.slice(0, 6).map((moment) => (
                 <button
                   key={moment.id}
                   type="button"
@@ -227,7 +359,15 @@ export default function UploadMemoryConsole({
                   className="group overflow-hidden rounded-[1.5rem] bg-white/[0.035] text-left transition hover:bg-white/[0.06]"
                 >
                   <div className="aspect-video bg-black">
-                    {moment.videoUrl ? (
+                    {moment.keyframeUrl ? (
+                      <div
+                        className="h-full w-full bg-cover bg-center opacity-80 transition group-hover:opacity-95"
+                        style={{
+                          backgroundImage: `url(${moment.keyframeUrl})`,
+                        }}
+                        aria-hidden="true"
+                      />
+                    ) : moment.videoUrl ? (
                       <video
                         src={moment.videoUrl}
                         className="h-full w-full object-cover opacity-70 transition group-hover:opacity-90"
@@ -250,7 +390,7 @@ export default function UploadMemoryConsole({
                   </div>
                 </button>
               ))}
-              {replayMoments.length === 0 ? (
+              {visibleMoments.length === 0 ? (
                 <div className="py-16">
                   <p className="max-w-xl text-3xl font-black tracking-[-0.04em] text-white">
                     Choose a video and Axis will build replay moments.
