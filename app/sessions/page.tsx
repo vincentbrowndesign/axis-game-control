@@ -339,7 +339,7 @@ export default async function SessionsPage({
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-zinc-950 px-5 py-10 text-white">
+      <main className="min-h-screen bg-[#090806] px-5 py-10 text-white">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
             Archive
@@ -448,7 +448,7 @@ export default async function SessionsPage({
   )
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
+    <main className="min-h-screen bg-[#090806] px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -468,7 +468,7 @@ export default async function SessionsPage({
             <PrimaryNav />
             <Link
               href="/"
-              className="w-fit border border-lime-300/25 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-lime-100 transition hover:border-lime-200/45 hover:text-white"
+              className="w-fit border border-amber-100/25 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-amber-100 transition hover:border-amber-100/45 hover:text-white"
             >
               Record clip
             </Link>
@@ -484,7 +484,7 @@ export default async function SessionsPage({
               placeholder="Search clips, notes, players"
               className="border border-white/10 bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25"
             />
-            <button className="border border-lime-300/30 bg-lime-300 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white">
+            <button className="border border-amber-100/30 bg-amber-200 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white">
               Find clips
             </button>
           </form>
@@ -753,7 +753,7 @@ export default async function SessionsPage({
                     <div>
                       <Link
                         href={`/replay/${session.id}`}
-                        className="block text-lg font-black tracking-[-0.03em] text-white transition hover:text-lime-200"
+                        className="block text-lg font-black tracking-[-0.03em] text-white transition hover:text-amber-100"
                       >
                         {drillName(session)}
                       </Link>
@@ -772,7 +772,7 @@ export default async function SessionsPage({
                     {isRepeated(session, sessionRepeats, tags) ? (
                       <Link
                         href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
-                        className="border border-lime-300/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-lime-100"
+                        className="border border-amber-100/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100"
                       >
                         Repeat
                       </Link>
@@ -785,7 +785,7 @@ export default async function SessionsPage({
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {triggerLabel(session) ? (
-                        <span className="border border-lime-300/25 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-lime-100">
+                        <span className="border border-amber-100/25 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
                           Trigger: {triggerLabel(session)}
                         </span>
                       ) : null}
@@ -895,7 +895,7 @@ export default async function SessionsPage({
                               Boolean(session.repeatTomorrow) ||
                               isRepeated(session, sessionRepeats, tags)
                             }
-                            className="accent-lime-300"
+                            className="accent-amber-200"
                           />
                           Repeat
                         </label>

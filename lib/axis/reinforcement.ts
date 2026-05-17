@@ -35,7 +35,18 @@ export type TacticalSystem = {
   id: string
   name: string
   aliases: string[]
-  courtZone: "top" | "slot" | "corner" | "paint" | "baseline" | "wing"
+  courtZone:
+    | "top"
+    | "slot"
+    | "corner"
+    | "paint"
+    | "baseline"
+    | "wing"
+    | "weakSide"
+    | "screen"
+    | "tag"
+    | "collapse"
+    | "help"
   defaultTrigger: string
   defaultConstraint: string
 }
@@ -60,7 +71,7 @@ export const TACTICAL_SYSTEMS: TacticalSystem[] = [
     id: "high-pnr",
     name: "High PNR",
     aliases: ["High PNR", "High Pick-and-Roll", "Ball Screen Reject"],
-    courtZone: "top",
+    courtZone: "screen",
     defaultTrigger: "TIGHT",
     defaultConstraint: "Reject screen",
   },
@@ -68,7 +79,7 @@ export const TACTICAL_SYSTEMS: TacticalSystem[] = [
     id: "weak-side-tag",
     name: "Weak-Side Tag",
     aliases: ["Weak-Side Tag", "Nail Help"],
-    courtZone: "paint",
+    courtZone: "tag",
     defaultTrigger: "TAG",
     defaultConstraint: "Tag before closeout",
   },
@@ -76,7 +87,7 @@ export const TACTICAL_SYSTEMS: TacticalSystem[] = [
     id: "screen-help",
     name: "Screen Help",
     aliases: ["Screen Help", "Nail Help"],
-    courtZone: "paint",
+    courtZone: "help",
     defaultTrigger: "LOW",
     defaultConstraint: "No middle drive",
   },
@@ -124,7 +135,7 @@ export const TACTICAL_SYSTEMS: TacticalSystem[] = [
     id: "corner-collapse",
     name: "Corner Collapse",
     aliases: ["Corner Collapse", "Corner Kick"],
-    courtZone: "corner",
+    courtZone: "collapse",
     defaultTrigger: "NEXT",
     defaultConstraint: "One-touch finish",
   },

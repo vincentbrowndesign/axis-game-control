@@ -48,7 +48,7 @@ export default async function TeamPage({ params }: Props) {
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-zinc-950 px-5 py-10 text-white">
+      <main className="min-h-screen bg-[#090806] px-5 py-10 text-white">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
             Team
@@ -131,7 +131,7 @@ export default async function TeamPage({ params }: Props) {
   )
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
+    <main className="min-h-screen bg-[#090806] px-5 py-6 text-white">
       <div className="mx-auto max-w-6xl">
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -245,7 +245,7 @@ export default async function TeamPage({ params }: Props) {
                     className="border-t border-white/10 py-3 transition hover:text-white"
                   >
                     <p className="font-bold text-white">{player.name}</p>
-                    <p className="mt-1 text-sm text-lime-100/80">
+                    <p className="mt-1 text-sm text-amber-100/80">
                       {player.reviewSession
                         ? `${drillName(player.reviewSession)} needs review`
                         : "Check recent practice work"}
@@ -256,7 +256,7 @@ export default async function TeamPage({ params }: Props) {
                       </p>
                     ) : null}
                     {player.reviewSession && triggerLabel(player.reviewSession) ? (
-                      <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
+                      <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-amber-100">
                         Trigger: {triggerLabel(player.reviewSession)}
                       </p>
                     ) : null}
@@ -298,7 +298,7 @@ export default async function TeamPage({ params }: Props) {
                     className="grid gap-2 border-t border-white/10 py-3 transition hover:text-white sm:grid-cols-[1fr_auto]"
                   >
                     <div>
-                      <p className="text-sm text-lime-100/80">
+                      <p className="text-sm text-amber-100/80">
                         {triggerLabel(session)
                           ? `Trigger: ${triggerLabel(session)}`
                           : session.coachNote ||
@@ -348,7 +348,7 @@ export default async function TeamPage({ params }: Props) {
                       </p>
                     ) : null}
                     {triggerLabel(session) ? (
-                      <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-lime-100">
+                      <p className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-amber-100">
                         Trigger: {triggerLabel(session)}
                       </p>
                     ) : null}
@@ -371,7 +371,7 @@ export default async function TeamPage({ params }: Props) {
                     href={`/sessions?view=repeated&player=${encodeURIComponent(playerName(session))}`}
                     className="border-t border-white/10 py-3 transition hover:text-white"
                   >
-                    <p className="text-sm text-lime-100/80">Repeat tomorrow</p>
+                    <p className="text-sm text-amber-100/80">Repeat tomorrow</p>
                     <p className="mt-1 font-bold text-white">{drillName(session)}</p>
                     <p className="mt-1 text-sm text-white/45">
                       {playerName(session)} / {situationLabel(session)} / Phase: {phaseLabel(session)}

@@ -19,9 +19,9 @@ export default async function SystemsPage() {
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-zinc-950 px-5 py-10 text-white">
+      <main className="min-h-screen bg-[#090806] px-5 py-10 text-stone-100">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-400/70">
             Systems
           </p>
           <h1 className="mt-4 text-5xl font-black tracking-[-0.04em] sm:text-7xl">
@@ -29,7 +29,7 @@ export default async function SystemsPage() {
           </h1>
           <Link
             href="/auth"
-            className="mt-8 w-fit border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-white/70 transition hover:border-white/35 hover:text-white"
+            className="mt-8 w-fit border border-stone-200/15 px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-stone-200/70 transition hover:border-amber-100/35 hover:text-amber-100"
           >
             Sign in
           </Link>
@@ -49,6 +49,10 @@ export default async function SystemsPage() {
   const summaries = systemSummaries(sessions)
   const queue = retrievalQueue(sessions)
   const active = summaries.find((summary) => summary.clips.length > 0) || summaries[0]
+  const activeTrigger = active.triggers[0] || active.system.defaultTrigger
+  const activePlayers = active.players.length
+    ? active.players.join(" / ")
+    : "No players tagged"
   const activeCorrection = active.clips[0]
     ? correctionFromSession(
         active.clips[0],
@@ -57,86 +61,123 @@ export default async function SystemsPage() {
     : null
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
+    <main className="min-h-screen bg-[#090806] px-5 py-7 text-stone-100">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_52%_18%,rgba(188,125,46,0.13),transparent_34%),radial-gradient(circle_at_82%_72%,rgba(255,255,255,0.05),transparent_28%)]" />
+      <div className="relative mx-auto max-w-7xl">
+        <header className="mb-8 flex flex-col gap-5 border-b border-stone-200/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/40">
-              Systems mode
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-400/65">
+              Systems
             </p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-              Tactical systems
+            <h1 className="mt-2 text-4xl font-black tracking-[-0.04em] sm:text-6xl">
+              Tactical environments
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              Manage the environments where corrections must survive pressure,
-              time, and changing spacing.
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-300/58">
+              Situation plus constraint. Keep the current correction visible,
+              then retrieve the clips that need another live rep.
             </p>
           </div>
           <ModeNav active="systems" />
         </header>
 
-        <section className="mb-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="border-b border-white/10 pb-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+        <section className="mb-8 grid gap-3 border-y border-stone-200/10 py-4 md:grid-cols-5">
+          {[
+            ["System", active.system.name],
+            ["Constraint", active.constraint],
+            ["Trigger", activeTrigger],
+            ["Players", activePlayers],
+            ["Phase", active.phase],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
+                {label}
+              </p>
+              <p className="mt-1 text-sm font-black text-stone-100">{value}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="mb-10 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_380px]">
+          <div>
+            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/35">
-                  Current focus
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-100/55">
+                  Operational folder
                 </p>
-                <h2 className="mt-2 text-3xl font-black tracking-[-0.04em]">
-                  {active.system.name}
+                <h2 className="mt-2 text-4xl font-black tracking-[-0.04em] text-stone-50 sm:text-5xl">
+                  {active.system.name} + {active.constraint}
                 </h2>
               </div>
               <Link
                 href={systemHref(active.system)}
-                className="border border-lime-300/25 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-lime-100 transition hover:border-lime-200/45"
+                className="w-fit border border-amber-100/25 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-amber-100 transition hover:border-amber-100/55"
               >
                 Review clips
               </Link>
             </div>
-            <div className="mt-4">
-              <TacticalCourt
-                title={active.system.name}
-                highlight={active.system.courtZone}
-                labels={[
-                  active.triggers[0] || active.system.defaultTrigger,
-                  active.constraint,
-                  `Phase: ${active.phase}`,
-                  `${active.repeatClips.length} repeat`,
-                ]}
-              />
-            </div>
+
+            <TacticalCourt
+              title={active.system.name}
+              highlight={active.system.courtZone}
+              labels={[
+                `Trigger ${activeTrigger}`,
+                active.constraint,
+                `Phase ${active.phase}`,
+                `${active.repeatClips.length} repeat`,
+              ]}
+            />
           </div>
 
-          <aside className="border-b border-white/10 pb-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/35">
-              System state
-            </p>
-            <div className="mt-4 grid gap-3 text-sm">
-              <p className="text-lime-100/85">
-                Trigger: {active.triggers[0] || active.system.defaultTrigger}
+          <aside className="grid content-start gap-6 border-t border-stone-200/10 pt-5 lg:border-t-0 lg:pt-0">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-stone-500">
+                Current issue
               </p>
-              <p className="text-white/65">Constraint: {active.constraint}</p>
-              <p className="text-white/65">Issue: {active.issue}</p>
-              <p className="text-white/65">Phase: {active.phase}</p>
-              <p className="text-white/65">
-                Players: {active.players.length ? active.players.join(", ") : "None tagged"}
+              <p className="mt-3 text-2xl font-black leading-tight tracking-[-0.03em] text-stone-100">
+                {active.issue}
               </p>
-              <p className="text-white/65">
-                Repeat: {active.repeatClips.length} clips tomorrow
-              </p>
-              <p className="text-white/65">
-                Construction: {active.activeConstruction.length ? "Active" : "Cleared"}
+              <p className="mt-3 text-sm leading-6 text-stone-400">
+                Construction:{" "}
+                {active.activeConstruction.length ? "Active" : "Cleared"}
               </p>
             </div>
+
+            <div className="grid gap-3 border-y border-stone-200/10 py-5">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
+                  Trigger
+                </span>
+                <span className="text-2xl font-black tracking-[0.08em] text-amber-100">
+                  {activeTrigger}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
+                  Repeat queue
+                </span>
+                <span className="text-right text-sm font-black text-stone-100">
+                  {active.repeatClips.length} clips tomorrow
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
+                  Players
+                </span>
+                <span className="text-right text-sm font-black text-stone-100">
+                  {activePlayers}
+                </span>
+              </div>
+            </div>
+
             {activeCorrection ? (
-              <div className="mt-5 border-t border-white/10 pt-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-stone-500">
                   Latest correction
                 </p>
-                <p className="mt-2 text-sm text-white/70">
+                <p className="mt-3 text-sm leading-6 text-stone-200/78">
                   {activeCorrection.flaw || "No flaw tagged yet"}
                 </p>
-                <p className="mt-2 text-sm text-white/50">
+                <p className="mt-2 text-sm leading-6 text-stone-400">
                   {activeCorrection.correction || "Add correction in Review."}
                 </p>
               </div>
@@ -144,51 +185,65 @@ export default async function SystemsPage() {
           </aside>
         </section>
 
-        <section className="grid gap-3 lg:grid-cols-3">
-          {summaries.map((summary) => (
-            <Link
-              key={summary.system.id}
-              href={systemHref(summary.system)}
-              className="border-b border-white/10 py-4 transition hover:border-white/25"
-            >
-              <TacticalCourt
-                title={summary.system.name}
-                highlight={summary.system.courtZone}
-                labels={[
-                  summary.triggers[0] || summary.system.defaultTrigger,
-                  summary.constraint,
-                ]}
-              />
-              <div className="mt-3 flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-black text-white">{summary.system.name}</p>
-                  <p className="mt-1 text-sm text-white/45">
-                    {summary.issue}
-                  </p>
+        <section className="mb-10">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-stone-500">
+                System map
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-[-0.03em]">
+                Reinforcement folders
+              </h2>
+            </div>
+          </div>
+          <div className="grid gap-x-6 gap-y-7 md:grid-cols-2 xl:grid-cols-3">
+            {summaries.map((summary) => (
+              <Link
+                key={summary.system.id}
+                href={systemHref(summary.system)}
+                className="group border-t border-stone-200/10 pt-4 transition hover:border-amber-100/35"
+              >
+                <TacticalCourt
+                  title={summary.system.name}
+                  highlight={summary.system.courtZone}
+                  labels={[
+                    summary.triggers[0] || summary.system.defaultTrigger,
+                    summary.constraint,
+                  ]}
+                />
+                <div className="mt-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xl font-black tracking-[-0.03em] text-stone-100 transition group-hover:text-amber-100">
+                      {summary.system.name}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-stone-400">
+                      {summary.constraint}
+                    </p>
+                  </div>
+                  <span className="text-sm font-black text-stone-300">
+                    {summary.phase}
+                  </span>
                 </div>
-                <span className="text-xs font-black text-lime-100">
-                  {summary.clips.length}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/35">
-                <span>{summary.repeatClips.length} repeat</span>
-                <span>{summary.corrections.length} corrections</span>
-                <span>{summary.phase}</span>
-              </div>
-            </Link>
-          ))}
+                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
+                  <span>{summary.repeatClips.length} repeat</span>
+                  <span>{summary.corrections.length} corrections</span>
+                  <span>{summary.clips.length} clips</span>
+                </div>
+              </Link>
+            ))}
+          </div>
         </section>
 
-        <section className="mt-8 border-t border-white/10 pt-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/35">
+        <section className="border-t border-stone-200/10 pt-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-stone-500">
             Retrieval queue
           </p>
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             {queue.slice(0, 6).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="border border-white/10 px-3 py-3 text-sm text-white/60 transition hover:text-white"
+                className="border-t border-stone-200/10 py-3 text-sm text-stone-300/70 transition hover:border-amber-100/30 hover:text-amber-100"
               >
                 {item.label}
               </Link>

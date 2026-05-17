@@ -393,7 +393,7 @@ export default function UploadConsole({
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-5 py-6 text-white">
+    <main className="min-h-screen bg-[#090806] px-5 py-6 text-stone-100">
       <div className="mx-auto max-w-6xl">
         <header className="mb-5 flex items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div>
@@ -443,7 +443,7 @@ export default function UploadConsole({
                   setStatus("Saving clip")
                   cameraInputRef.current?.click()
                 }}
-                className="min-h-24 border border-lime-300/25 bg-lime-300 px-8 py-5 text-xl font-black uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
+                className="min-h-24 border border-amber-100/30 bg-amber-200 px-8 py-5 text-xl font-black uppercase tracking-[0.12em] text-black transition hover:bg-stone-100 disabled:opacity-50"
               >
                 Record
               </button>
@@ -458,7 +458,7 @@ export default function UploadConsole({
                   onClick={() => quickTagClip(trigger)}
                   className={`border px-4 py-3 text-sm font-black uppercase tracking-[0.16em] transition disabled:opacity-35 ${
                     savedTrigger === trigger
-                      ? "border-lime-300/60 bg-lime-300 text-black"
+                      ? "border-amber-100/60 bg-amber-200 text-black"
                       : "border-white/10 text-white/65 hover:border-white/30 hover:text-white"
                   }`}
                 >
@@ -478,7 +478,7 @@ export default function UploadConsole({
                 }}
                 className={`border px-4 py-3 text-xs font-black uppercase tracking-[0.18em] transition disabled:opacity-35 ${
                   repeatTomorrow
-                    ? "border-lime-300/50 text-lime-100"
+                    ? "border-amber-100/50 text-amber-100"
                     : "border-white/10 text-white/55 hover:text-white"
                 }`}
               >
@@ -541,7 +541,7 @@ export default function UploadConsole({
                 </div>
                 <div className="mt-3 h-2 overflow-hidden bg-white/10">
                   <div
-                    className="h-full bg-lime-300 transition-all duration-300"
+                    className="h-full bg-amber-200 transition-all duration-300"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
@@ -554,7 +554,7 @@ export default function UploadConsole({
               </p>
             ) : null}
             {savedReplayId ? (
-              <p className="mt-3 text-sm text-lime-100/80">
+              <p className="mt-3 text-sm text-amber-100/80">
                 Clip saved. Tap a trigger and get back to practice.
               </p>
             ) : null}
@@ -562,14 +562,14 @@ export default function UploadConsole({
         </section>
 
         {flowStep === "processing" && progress > 0 ? (
-          <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-zinc-950/95 px-5 py-3 backdrop-blur">
+          <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-[#090806]/95 px-5 py-3 backdrop-blur">
             <div className="mx-auto flex max-w-6xl items-center gap-4">
               <p className="w-32 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
                 {status || "Saving clip"}
               </p>
               <div className="h-2 flex-1 overflow-hidden bg-white/10">
                 <div
-                  className="h-full bg-lime-300 transition-all duration-300"
+                  className="h-full bg-amber-200 transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
