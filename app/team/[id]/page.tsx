@@ -1,5 +1,6 @@
 import Link from "next/link"
 import ModeNav from "@/components/ModeNav"
+import { buildBehaviorMemory } from "@/lib/axis-ai/buildBehaviorMemory"
 import { createClient } from "@/lib/supabase/server"
 import {
   isRepeated,
@@ -80,6 +81,7 @@ export default async function TeamPage({ params }: Props) {
   const watchAgain = sessions.filter((session) =>
     isRepeated(session, repeats, tags)
   )
+  const behaviorMemory = buildBehaviorMemory({ sessions })
   const coachNotes = sessions.filter((session) => session.coachNote).slice(0, 6)
   const needsReview = sessions.filter((session) => !session.coachNote)
   const playerReview = players
@@ -182,6 +184,29 @@ export default async function TeamPage({ params }: Props) {
           </div>
 
           <aside className="grid h-fit gap-4">
+            <section className="pb-4">
+              <h2 className="text-xl font-black tracking-[-0.03em] text-white/90">
+                Common phrases
+              </h2>
+              <div className="mt-3 grid gap-3">
+                {behaviorMemory.clusters.slice(0, 5).map((cluster) => (
+                  <Link
+                    key={cluster.id}
+                    href={`/sessions?q=${encodeURIComponent(cluster.label)}`}
+                    className="py-2 transition hover:text-white"
+                  >
+                    <p className="font-bold text-white">{cluster.label}</p>
+                    <p className="mt-1 text-sm text-white/40">
+                      {cluster.count} clips or notes
+                    </p>
+                  </Link>
+                ))}
+                {behaviorMemory.clusters.length === 0 ? (
+                  <p className="text-sm text-white/45">No repeated phrases yet.</p>
+                ) : null}
+              </div>
+            </section>
+
             <section className="pb-4">
               <h2 className="text-xl font-black tracking-[-0.03em] text-white/90">
                 Notes

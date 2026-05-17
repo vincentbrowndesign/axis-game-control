@@ -7,7 +7,6 @@ import {
 } from "@/lib/axis/reinforcement"
 import { buildBehaviorMemory } from "@/lib/axis-ai/buildBehaviorMemory"
 import { buildReviewQueue } from "@/lib/axis-ai/buildReviewQueue"
-import { clusterBehaviorMoments } from "@/lib/axis-ai/clusterBehaviorMoments"
 import {
   WORKFLOW_STAGES,
   mapWorkflowStage,
@@ -21,10 +20,8 @@ import {
   CONSTRUCTION_ZONE_STATUSES,
   ENVIRONMENTAL_CONSTRAINTS,
   STRESS_PHASES,
-  coachingNoteLine,
   constraintLabel,
   constructionZoneLabel,
-  dateLabel,
   drillName,
   phaseLabel,
   isRecent,
@@ -44,7 +41,6 @@ import {
   type ReplaySessionView,
   type SessionEnvironment,
   type StressPhase,
-  type WorkflowStage,
 } from "@/types/memory"
 
 type ArchiveSort = "date" | "player" | "drill" | "practice" | "scrimmage" | "game"
@@ -67,7 +63,7 @@ const VIEW_OPTIONS: { value: ArchiveView; label: string }[] = [
 
 function PrimaryNav() {
   return (
-    <ModeNav active="review" />
+    <ModeNav active="watch" />
   )
 }
 
@@ -158,44 +154,6 @@ function hrefWithSort(sort: ArchiveSort, filters: Record<string, string>) {
   }
 
   return `/sessions?${params.toString()}`
-}
-
-function collectionLabel(session: ReplaySessionView) {
-  if (session.environment === "game") return "Game"
-  if (sessionText(session).includes("scrimmage")) return "Scrimmage"
-
-  return "Practice"
-}
-
-function clipReason(
-  session: ReplaySessionView,
-  sessionRepeats: Record<string, number>,
-  tags: Record<string, number>
-) {
-  if (session.coachFlaw || session.coachCorrection || session.coachNote) {
-    return coachingNoteLine(session)
-  }
-
-  if (isRepeated(session, sessionRepeats, tags)) return "Watch again"
-
-  return "Needs review"
-}
-
-function nextAction(
-  session: ReplaySessionView,
-  sessionRepeats: Record<string, number>,
-  tags: Record<string, number>
-) {
-  if (!session.coachNote) return "Add note"
-  if (isRepeated(session, sessionRepeats, tags)) return "Review before practice"
-
-  return "Review clip"
-}
-
-function sourceContext(session: ReplaySessionView) {
-  return `${playerName(session)} / ${collectionLabel(session)} / ${dateLabel(
-    session.createdAt
-  )} / ${relativeTime(session.createdAt)}`
 }
 
 function behaviorMomentLine(session: ReplaySessionView) {
@@ -461,7 +419,6 @@ export default async function SessionsPage({
     sort
   )
   const players = playerSummaries(sessions)
-  const behaviorClusters = clusterBehaviorMoments(sessions)
   const reviewQueue = buildReviewQueue(sessions).slice(0, 5)
   const behaviorMemory = buildBehaviorMemory({ sessions })
   const lastPractice = sessions.find((session) => session.environment === "practice")
@@ -487,7 +444,7 @@ export default async function SessionsPage({
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">
-              Watch again
+              Watch
             </h1>
           </div>
 
@@ -495,9 +452,9 @@ export default async function SessionsPage({
             <PrimaryNav />
             <Link
               href="/"
-              className="w-fit bg-amber-200 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-white"
+              className="w-fit bg-stone-100 px-5 py-3 text-sm font-bold text-black transition hover:bg-amber-100"
             >
-              Record clip
+              Record
             </Link>
           </div>
         </header>
@@ -541,15 +498,6 @@ export default async function SessionsPage({
             >
               Last practice
             </Link>
-            {WORKFLOW_STAGES.slice(0, 4).map((stage) => (
-              <Link
-                key={stage.value}
-                href={`/sessions?stage=${stage.value}`}
-                className="transition hover:text-white"
-              >
-                {stage.label}
-              </Link>
-            ))}
           </div>
 
         </section>
@@ -788,10 +736,7 @@ export default async function SessionsPage({
                         {behaviorMomentLine(session)}
                       </Link>
                       <p className="mt-1 text-sm text-white/45">
-                        {sourceContext(session)}
-                      </p>
-                      <p className="mt-1 text-xs text-white/30">
-                        {workflowStageLabel(stageForSession(session))}
+                        {playerName(session)} / {relativeTime(session.createdAt)}
                       </p>
                     </div>
                     {isRepeated(session, sessionRepeats, tags) ? (
@@ -804,21 +749,11 @@ export default async function SessionsPage({
                     ) : null}
                   </div>
 
-                  <div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {triggerLabel(session) ? (
-                        <span className="text-xs font-bold text-amber-100/75">
-                          {triggerLabel(session)}
-                        </span>
-                      ) : null}
-                      <span className="text-xs font-bold text-white/35">
-                        {nextAction(session, sessionRepeats, tags)}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-white/45">
-                      {clipReason(session, sessionRepeats, tags)}
-                    </p>
-                  </div>
+                  <p className="text-sm leading-6 text-white/45">
+                    {isRepeated(session, sessionRepeats, tags)
+                      ? "Watch this again."
+                      : "Replay this moment."}
+                  </p>
 
                   <details className="pt-1">
                     <summary className="cursor-pointer text-sm text-white/35 transition hover:text-white">
@@ -1009,55 +944,6 @@ export default async function SessionsPage({
                     </p>
                   </Link>
                 ))}
-              </div>
-            </section>
-
-            <section className="border-b border-white/10 pb-4">
-              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Similar moments
-              </p>
-              <div className="mt-3 grid gap-3">
-                {behaviorClusters.slice(0, 4).map((cluster) => (
-                  <Link
-                    key={cluster.id}
-                    href={`/sessions?q=${encodeURIComponent(cluster.behavior)}`}
-                    className="border-t border-white/10 py-3 transition hover:text-white"
-                  >
-                    <p className="text-sm font-bold text-white">
-                      {cluster.behavior}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
-                      <span>Cue {cluster.trigger}</span>
-                      <span>{cluster.clips.length} clips</span>
-                      <span>{cluster.stages.map((stage) => workflowStageLabel(stage as WorkflowStage)).join(", ")}</span>
-                    </div>
-                    <p className="mt-2 text-xs text-white/35">
-                      Grouped quietly. Change it anytime.
-                    </p>
-                  </Link>
-                ))}
-                {behaviorClusters.length === 0 ? (
-                  <p className="text-sm text-white/40">
-                    Saved sentences will appear here.
-                  </p>
-                ) : null}
-              </div>
-            </section>
-
-            <section className="border-b border-white/10 pb-4">
-              <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Up next
-              </p>
-              <div className="mt-3 grid gap-2 text-sm text-white/60">
-                <Link href="/sessions?view=repeated" className="hover:text-white">
-                  Clips to watch again
-                </Link>
-                <Link href="/sessions?note=missing" className="hover:text-white">
-                  Clips missing a sentence
-                </Link>
-                <Link href="/team/local" className="hover:text-white">
-                  Team prep
-                </Link>
               </div>
             </section>
 

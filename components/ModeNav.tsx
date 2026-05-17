@@ -1,10 +1,11 @@
 import Link from "next/link"
 
-type Mode = "live" | "systems" | "review" | "team"
+type Mode = "today" | "watch" | "players" | "team"
 
 const modes: { key: Mode; label: string; href: string }[] = [
-  { key: "live", label: "Record", href: "/" },
-  { key: "review", label: "Watch", href: "/sessions" },
+  { key: "today", label: "Today", href: "/" },
+  { key: "watch", label: "Watch", href: "/sessions" },
+  { key: "players", label: "Players", href: "/players" },
   { key: "team", label: "Team", href: "/team/local" },
 ]
 

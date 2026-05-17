@@ -95,7 +95,7 @@ export default async function SystemsPage() {
               The clip stays first. The sentence stays simple.
             </p>
           </div>
-          <ModeNav active="systems" />
+          <ModeNav active="watch" />
         </header>
 
         <section className="mb-8 grid gap-3 border-y border-stone-200/10 py-4 md:grid-cols-5">

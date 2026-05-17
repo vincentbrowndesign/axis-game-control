@@ -4,10 +4,6 @@ import Link from "next/link"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import ModeNav from "@/components/ModeNav"
-import {
-  WORKFLOW_STAGES,
-  workflowStageLabel,
-} from "@/lib/axis-ai/mapWorkflowStage"
 import { suggestTrigger } from "@/lib/axis-ai/suggestTrigger"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -231,7 +227,7 @@ export default function UploadConsole({
   const [isListening, setIsListening] = useState(false)
   const [coachingPhrases, setCoachingPhrases] = useState<string[]>([])
   const [repeatTomorrow, setRepeatTomorrow] = useState(false)
-  const [workflowStage, setWorkflowStage] = useState<WorkflowStage>("DRILL")
+  const [workflowStage] = useState<WorkflowStage>("DRILL")
   const [isQuickTagging, setIsQuickTagging] = useState(false)
   const [flowStep, setFlowStep] = useState<FlowStep>(
     initialWarmupId ? "brief" : "entry"
@@ -712,7 +708,7 @@ export default function UploadConsole({
             Axis
           </Link>
           <div className="flex flex-wrap items-center gap-2">
-            <ModeNav active="live" />
+            <ModeNav active="today" />
             <button
               type="button"
               onClick={signOut}
@@ -725,21 +721,8 @@ export default function UploadConsole({
 
         <section className="grid gap-8">
           <div className="grid gap-5">
-            <div className="flex flex-wrap gap-2 text-sm text-white/45">
-              {WORKFLOW_STAGES.slice(0, 4).map((stage) => (
-                <button
-                  key={stage.value}
-                  type="button"
-                  onClick={() => setWorkflowStage(stage.value)}
-                  className={`px-3 py-2 font-bold transition ${
-                    workflowStage === stage.value
-                      ? "bg-white/[0.08] text-white"
-                      : "hover:bg-white/[0.04] hover:text-white"
-                  }`}
-                >
-                  {stage.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-white/45">
+              <p className="font-bold text-white/65">Today</p>
               <button
                 type="button"
                 onClick={() => {
@@ -962,9 +945,6 @@ export default function UploadConsole({
                     </p>
                     <p className="mt-1 line-clamp-2 text-sm leading-6 text-white/55">
                       {clip.coachNote || "Add a sentence."}
-                    </p>
-                    <p className="mt-1 text-xs text-white/30">
-                      {workflowStageLabel(clip.workflowStage)}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
