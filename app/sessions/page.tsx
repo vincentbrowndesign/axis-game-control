@@ -1,8 +1,13 @@
 import Link from "next/link"
 import ModeNav from "@/components/ModeNav"
 import { clusterCoachingLanguage } from "@/lib/axis-ai/clusterCoachingLanguage"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { AxisVoiceNote } from "@/types/memory"
+
+type VoiceNoteWithAudio = AxisVoiceNote & {
+  audioUrl?: string | null
+}
 
 const waveformBars = [
   34, 62, 44, 76, 52, 88, 38, 68, 96, 48, 72, 42, 84, 58, 36, 74,
@@ -11,7 +16,7 @@ const waveformBars = [
 
 function sessionDay(value: string) {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Today"
+  if (Number.isNaN(date.getTime())) return "Recent"
 
   return date.toLocaleDateString([], {
     month: "short",
@@ -21,7 +26,7 @@ function sessionDay(value: string) {
 
 function timeLabel(value: string) {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Today"
+  if (Number.isNaN(date.getTime())) return "Recent"
 
   return date.toLocaleTimeString([], {
     hour: "numeric",
@@ -44,8 +49,27 @@ function formatVideoWindow(totalSeconds: number) {
   return `${formatTimestamp(start)}-${formatTimestamp(end)}`
 }
 
-function groupBySession(notes: AxisVoiceNote[]) {
-  const grouped = new Map<string, AxisVoiceNote[]>()
+function metadataText(
+  metadata: Record<string, unknown> | null,
+  key: string
+) {
+  const value = metadata?.[key]
+
+  return typeof value === "string" && value.trim() ? value : ""
+}
+
+async function signedAudioUrl(path: string) {
+  if (!path) return null
+
+  const signed = await supabaseAdmin.storage
+    .from("axis-replays")
+    .createSignedUrl(path, 60 * 60 * 24)
+
+  return signed.data?.signedUrl || null
+}
+
+function groupBySession(notes: VoiceNoteWithAudio[]) {
+  const grouped = new Map<string, VoiceNoteWithAudio[]>()
 
   for (const note of notes) {
     const key = note.session_id || sessionDay(note.created_at)
@@ -54,7 +78,7 @@ function groupBySession(notes: AxisVoiceNote[]) {
 
   return [...grouped.entries()].map(([id, phrases], index) => ({
     id,
-    title: index === 0 ? "Today session" : `${sessionDay(phrases[0]?.created_at)} session`,
+    title: index === 0 ? "Latest session" : `${sessionDay(phrases[0]?.created_at)} session`,
     time: sessionDay(phrases[0]?.created_at || ""),
     phrases,
     clusters: clusterCoachingLanguage(
@@ -99,7 +123,13 @@ export default async function SessionsPage() {
     .limit(160)
     .returns<AxisVoiceNote[]>()
 
-  const sessions = groupBySession(data || [])
+  const notesWithAudio = await Promise.all(
+    (data || []).map(async (note): Promise<VoiceNoteWithAudio> => ({
+      ...note,
+      audioUrl: await signedAudioUrl(metadataText(note.metadata, "audioPath")),
+    }))
+  )
+  const sessions = groupBySession(notesWithAudio)
 
   return (
     <main className="min-h-screen bg-[#090806] px-4 py-5 text-stone-100 sm:px-6">
@@ -173,6 +203,13 @@ export default async function SessionsPage() {
                         {formatTimestamp(Number(note.occurred_at_seconds || 0))} /{" "}
                         {formatVideoWindow(Number(note.occurred_at_seconds || 0))}
                       </p>
+                      {note.audioUrl ? (
+                        <audio
+                          src={note.audioUrl}
+                          controls
+                          className="mt-3 w-full"
+                        />
+                      ) : null}
                     </div>
                   ))}
                 </div>

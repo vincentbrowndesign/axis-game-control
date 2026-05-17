@@ -113,7 +113,7 @@ export default function ProfileConsole({
                 Last Signal
               </p>
               <p className="mt-3 text-sm uppercase tracking-[0.18em] text-white/70">
-                {sessionCount ? "Today" : "Waiting"}
+                {sessionCount ? "Ready" : "Waiting"}
               </p>
             </div>
             <div className="border border-white/10 bg-white/[0.03] p-4">

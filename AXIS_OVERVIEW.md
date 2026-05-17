@@ -18,7 +18,6 @@ It helps a coach record a continuous session, tap Landmark when a meaningful mom
 ## App Sections
 
 - Record.
-- Today.
 - Sessions.
 - Players.
 

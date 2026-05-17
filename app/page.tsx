@@ -6,6 +6,7 @@ import {
   normalizeSessions,
   playerName,
 } from "@/lib/archive/sessionRollup"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type {
   AxisProfile,
@@ -17,6 +18,7 @@ type VoicePhrase = {
   id: string
   phrase: string
   createdAt: string
+  audioUrl?: string | null
 }
 
 type PlayerMention = {
@@ -39,6 +41,7 @@ type SessionCard = {
     videoWindow: string
     player?: string
     replayCount: number
+    audioUrl?: string | null
   }[]
 }
 
@@ -74,9 +77,28 @@ function buildPlayerMentions(phrases: VoicePhrase[], players: string[]) {
   return [...mentions.values()].sort((a, b) => b.count - a.count)
 }
 
+function metadataText(
+  metadata: Record<string, unknown> | null,
+  key: string
+) {
+  const value = metadata?.[key]
+
+  return typeof value === "string" && value.trim() ? value : ""
+}
+
+async function signedAudioUrl(path: string) {
+  if (!path) return null
+
+  const signed = await supabaseAdmin.storage
+    .from("axis-replays")
+    .createSignedUrl(path, 60 * 60 * 24)
+
+  return signed.data?.signedUrl || null
+}
+
 function sessionDay(value: string) {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Today"
+  if (Number.isNaN(date.getTime())) return "Recent"
 
   return date.toLocaleDateString([], {
     month: "short",
@@ -118,7 +140,7 @@ function buildSessionCards(phrases: VoicePhrase[], mentions: PlayerMention[]) {
 
     return {
       id: `${day}-${index}`,
-      title: index === 0 ? "Today session" : `${day} session`,
+      title: index === 0 ? "Latest session" : `${day} session`,
       time: day,
       phrases: items.map((item) => item.phrase),
       players: players.slice(0, 4),
@@ -136,6 +158,7 @@ function buildSessionCards(phrases: VoicePhrase[], mentions: PlayerMention[]) {
           videoWindow: formatVideoWindow(seconds),
           player,
           replayCount: Math.max(1, 6 - itemIndex),
+          audioUrl: item.audioUrl || null,
         }
       }),
     }
@@ -197,11 +220,12 @@ export default async function HomePage() {
       .returns<AxisReplaySession[]>(),
   ])
 
-  const phrases: VoicePhrase[] = (voiceNotes || []).map((note) => ({
+  const phrases: VoicePhrase[] = await Promise.all((voiceNotes || []).map(async (note) => ({
     id: note.id,
     phrase: note.phrase,
     createdAt: note.created_at,
-  }))
+    audioUrl: await signedAudioUrl(metadataText(note.metadata, "audioPath")),
+  })))
   const sessions = normalizeSessions(sessionsData || [])
   const recentPlayers = [
     ...new Set(sessions.map(playerName).filter(Boolean)),

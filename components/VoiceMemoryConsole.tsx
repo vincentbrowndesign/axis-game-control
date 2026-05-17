@@ -1,13 +1,15 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import ModeNav from "@/components/ModeNav"
+import { createClient } from "@/lib/supabase/client"
 
 type VoicePhrase = {
   id: string
   phrase: string
   createdAt: string
+  audioUrl?: string | null
 }
 
 type PhraseCluster = {
@@ -39,6 +41,7 @@ type ReinforcementLandmark = {
   videoWindow: string
   player?: string
   replayCount: number
+  audioUrl?: string | null
 }
 
 type Props = {
@@ -80,29 +83,6 @@ type AxisSpeechWindow = Window &
     SpeechRecognition?: AxisSpeechRecognitionConstructor
     webkitSpeechRecognition?: AxisSpeechRecognitionConstructor
   }
-
-const demoCaptions = [
-  "SPREAD YOUR FEET",
-  "STAY LOW",
-  "SPRINT BACK",
-  "BEAT HIM THERE",
-  "DON'T DRIFT",
-]
-
-const demoLandmarks: ReinforcementLandmark[] = demoCaptions.map(
-  (caption, index) => {
-    const seconds = index * 22 + 8
-
-    return {
-      id: `demo-${caption}`,
-      phrase: caption.toLowerCase(),
-      caption,
-      timestamp: formatTimestamp(seconds),
-      videoWindow: formatVideoWindow(seconds),
-      replayCount: index + 2,
-    }
-  }
-)
 
 const waveformBars = [
   34, 62, 44, 76, 52, 88, 38, 68, 96, 48, 72, 42, 84, 58, 36, 74,
@@ -148,12 +128,14 @@ function detectPlayer(phrase: string, players: PlayerMention[]) {
 }
 
 export default function VoiceMemoryConsole({
-  recentPhrases,
   repeatedPhrases,
   playerMentions,
   recentSessions,
 }: Props) {
   const recognitionRef = useRef<AxisSpeechRecognition | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const audioRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
   const startedAtRef = useRef<number | null>(null)
   const landmarkTimeRef = useRef(0)
   const [isRecording, setIsRecording] = useState(false)
@@ -161,37 +143,14 @@ export default function VoiceMemoryConsole({
   const [isLandmarking, setIsLandmarking] = useState(false)
   const [status, setStatus] = useState("")
   const [manualPhrase, setManualPhrase] = useState("")
-  const [livePhrases, setLivePhrases] = useState<VoicePhrase[]>([])
   const [liveLandmarks, setLiveLandmarks] = useState<ReinforcementLandmark[]>([])
   const [activeCaptionIndex, setActiveCaptionIndex] = useState(0)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
-
-  const phrases = useMemo(
-    () => [...livePhrases, ...recentPhrases].slice(0, 12),
-    [livePhrases, recentPhrases]
-  )
-  const captions = phrases.length
-    ? phrases.map((item) => captionText(item.phrase))
-    : demoCaptions
+  const [pendingLandmarkSeconds, setPendingLandmarkSeconds] = useState(0)
+  const supabase = createClient()
+  const captions = liveLandmarks.map((landmark) => landmark.caption)
   const activeCaption = captions[activeCaptionIndex % captions.length]
-  const storedLandmarks = phrases.slice(0, 6).map((item, index) => {
-    const seconds = Math.max(0, index * 18)
-
-    return {
-      id: item.id,
-      phrase: item.phrase,
-      caption: captionText(item.phrase),
-      timestamp: formatTimestamp(seconds),
-      videoWindow: formatVideoWindow(seconds),
-      player: detectPlayer(item.phrase, playerMentions),
-      replayCount: Math.max(1, 8 - index),
-    }
-  })
-  const landmarks = liveLandmarks.length
-    ? liveLandmarks
-    : storedLandmarks.length
-      ? storedLandmarks
-      : demoLandmarks
+  const landmarks = liveLandmarks
   const activeLandmark =
     landmarks[activeCaptionIndex % landmarks.length] || landmarks[0]
 
@@ -217,9 +176,109 @@ export default function VoiceMemoryConsole({
     return () => window.clearInterval(interval)
   }, [captions.length, isPlaying])
 
+  async function ensureAudioStream() {
+    if (audioStreamRef.current) return audioStreamRef.current
+
+    if (!navigator.mediaDevices?.getUserMedia) return null
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioStreamRef.current = stream
+
+      return stream
+    } catch (error) {
+      console.error("AUDIO CAPTURE UNAVAILABLE", error)
+      setStatus("Mic unavailable")
+
+      return null
+    }
+  }
+
+  function startLandmarkAudio() {
+    const stream = audioStreamRef.current
+    if (!stream || typeof MediaRecorder === "undefined") return
+
+    audioRecorderRef.current?.stop()
+    audioChunksRef.current = []
+
+    try {
+      const recorder = new MediaRecorder(stream)
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+      recorder.start()
+      audioRecorderRef.current = recorder
+    } catch (error) {
+      console.error("LANDMARK AUDIO RECORDER FAILED", error)
+    }
+  }
+
+  async function stopLandmarkAudio() {
+    const recorder = audioRecorderRef.current
+
+    if (!recorder) return null
+
+    if (recorder.state === "inactive") {
+      const mimeType = audioChunksRef.current[0]?.type || "audio/webm"
+      return audioChunksRef.current.length
+        ? new Blob(audioChunksRef.current, { type: mimeType })
+        : null
+    }
+
+    return new Promise<Blob | null>((resolve) => {
+      recorder.onstop = () => {
+        const mimeType = audioChunksRef.current[0]?.type || recorder.mimeType || "audio/webm"
+        const blob = audioChunksRef.current.length
+          ? new Blob(audioChunksRef.current, { type: mimeType })
+          : null
+
+        audioRecorderRef.current = null
+        resolve(blob)
+      }
+      recorder.stop()
+    })
+  }
+
+  async function uploadLandmarkAudio(blob: Blob | null) {
+    if (!blob) return null
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return null
+
+    const extension = blob.type.includes("mp4") ? "m4a" : "webm"
+    const path = `${user.id}/voice-landmarks/${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}.${extension}`
+    const upload = await supabase.storage
+      .from("axis-replays")
+      .upload(path, blob, {
+        contentType: blob.type || "audio/webm",
+        upsert: false,
+      })
+
+    if (upload.error) {
+      console.error("LANDMARK AUDIO UPLOAD FAILED", upload.error)
+      return null
+    }
+
+    return {
+      path,
+      url: URL.createObjectURL(blob),
+      mimeType: blob.type || "audio/webm",
+      sizeBytes: blob.size,
+    }
+  }
+
   async function savePhrase(phrase: string, timestampSeconds = landmarkTimeRef.current) {
     const clean = cleanPhrase(phrase)
     if (!clean) return
+    const audioBlob = await stopLandmarkAudio()
+    const audio = await uploadLandmarkAudio(audioBlob)
 
     const landmark: ReinforcementLandmark = {
       id: `${Date.now()}-${clean}`,
@@ -229,14 +288,8 @@ export default function VoiceMemoryConsole({
       videoWindow: formatVideoWindow(timestampSeconds),
       player: detectPlayer(clean, playerMentions),
       replayCount: 1,
+      audioUrl: audio?.url || null,
     }
-    const tempPhrase = {
-      id: landmark.id,
-      phrase: clean,
-      createdAt: new Date().toISOString(),
-    }
-
-    setLivePhrases((items) => [tempPhrase, ...items].slice(0, 12))
     setLiveLandmarks((items) => [landmark, ...items].slice(0, 8))
     setActiveCaptionIndex(0)
     setIsLandmarking(false)
@@ -251,6 +304,10 @@ export default function VoiceMemoryConsole({
         body: JSON.stringify({
           phrase: clean,
           occurredAtSeconds: timestampSeconds,
+          audioPath: audio?.path || null,
+          audioMimeType: audio?.mimeType || null,
+          audioSizeBytes: audio?.sizeBytes || null,
+          audioDurationSeconds: null,
         }),
       })
 
@@ -265,13 +322,17 @@ export default function VoiceMemoryConsole({
     const timestampSeconds = elapsedSeconds
 
     landmarkTimeRef.current = timestampSeconds
+    setPendingLandmarkSeconds(timestampSeconds)
     setIsLandmarking(true)
     setIsPlaying(true)
     setStatus(`Landmark ${formatTimestamp(timestampSeconds)}. Speak naturally.`)
+    startLandmarkAudio()
   }
 
-  function startSession() {
+  async function startSession() {
     if (isRecording) return
+
+    await ensureAudioStream()
 
     const speechWindow = window as AxisSpeechWindow
     const SpeechRecognition =
@@ -293,7 +354,8 @@ export default function VoiceMemoryConsole({
         const phrase = result?.[0]?.transcript || ""
 
         if (result?.isFinal && phrase) {
-          void savePhrase(phrase, landmarkTimeRef.current || elapsedSeconds)
+          setManualPhrase(cleanPhrase(phrase))
+          setStatus("Edit text, then save landmark")
         }
       }
     }
@@ -321,6 +383,10 @@ export default function VoiceMemoryConsole({
   function stopSession() {
     recognitionRef.current?.stop()
     recognitionRef.current = null
+    audioRecorderRef.current?.stop()
+    audioRecorderRef.current = null
+    audioStreamRef.current?.getTracks().forEach((track) => track.stop())
+    audioStreamRef.current = null
     startedAtRef.current = null
     setIsRecording(false)
     setIsPlaying(false)
@@ -400,21 +466,42 @@ export default function VoiceMemoryConsole({
               <div className="mt-8 min-h-48">
                 <div className="flex flex-wrap items-center gap-3 text-sm font-bold text-amber-100/70">
                   <span>Live caption</span>
-                  <span>{activeLandmark?.timestamp || formatTimestamp(elapsedSeconds)}</span>
-                  <span>
-                    {activeLandmark?.videoWindow || formatVideoWindow(elapsedSeconds)}
-                  </span>
-                </div>
-                <p className="mt-4 text-5xl font-black leading-[0.95] tracking-[-0.05em] text-white sm:text-6xl">
-                  {activeCaption}
-                </p>
-                <div className="mt-5 flex flex-wrap gap-2 text-sm font-bold text-white/38">
-                  {activeLandmark?.player ? (
-                    <span>{activeLandmark.player}</span>
+                  {isLandmarking || activeLandmark ? (
+                    <>
+                      <span>
+                        {activeLandmark?.timestamp ||
+                          formatTimestamp(pendingLandmarkSeconds)}
+                      </span>
+                      <span>
+                        {activeLandmark?.videoWindow ||
+                          formatVideoWindow(pendingLandmarkSeconds)}
+                      </span>
+                    </>
                   ) : null}
+                </div>
+                {activeCaption ? (
+                  <>
+                    <p className="mt-4 text-5xl font-black leading-[0.95] tracking-[-0.05em] text-white sm:text-6xl">
+                      {activeCaption}
+                    </p>
+                    <div className="mt-5 flex flex-wrap gap-2 text-sm font-bold text-white/38">
+                      {activeLandmark?.player ? (
+                        <span>{activeLandmark.player}</span>
+                      ) : null}
                   <span>voice focused</span>
                   <span>{activeLandmark?.replayCount || 1} replays</span>
                 </div>
+                    {activeLandmark?.audioUrl ? (
+                      <audio
+                        src={activeLandmark.audioUrl}
+                        controls
+                        className="mt-5 w-full"
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="mt-4 min-h-28" aria-label="No landmark stored yet" />
+                )}
               </div>
 
               <div className="mt-8 flex h-20 items-end gap-1">
@@ -422,8 +509,13 @@ export default function VoiceMemoryConsole({
                   <button
                     key={`${height}-${index}`}
                     type="button"
-                    onClick={() => setActiveCaptionIndex(index % captions.length)}
+                    onClick={() => {
+                      if (captions.length) {
+                        setActiveCaptionIndex(index % captions.length)
+                      }
+                    }}
                     className={`w-full rounded-full transition ${
+                      captions.length &&
                       index % captions.length === activeCaptionIndex % captions.length
                         ? "bg-amber-100"
                         : "bg-white/16 hover:bg-white/30"
@@ -446,7 +538,11 @@ export default function VoiceMemoryConsole({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") saveManualPhrase()
                 }}
-                placeholder="Landmark phrase: AJ spread your feet."
+                placeholder={
+                  isLandmarking
+                    ? "Edit landmark text before saving"
+                    : "Tap Landmark, speak, then edit here"
+                }
                 className="bg-black/25 px-4 py-4 text-base text-white outline-none placeholder:text-white/25"
               />
               <button
@@ -481,17 +577,28 @@ export default function VoiceMemoryConsole({
                     <span className="mt-1 block text-xs font-bold text-white/36">
                       {landmark.timestamp} / {landmark.videoWindow}
                     </span>
+                    {landmark.audioUrl ? (
+                      <audio
+                        src={landmark.audioUrl}
+                        controls
+                        className="mt-3 w-full"
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    ) : null}
                   </button>
                 ))}
+                {landmarks.length === 0 ? (
+                  <div className="min-h-40" aria-label="No stored landmarks yet" />
+                ) : null}
               </div>
             </div>
           </aside>
         </section>
 
-        <section id="today" className="grid gap-12 border-t border-white/8 py-12">
+        <section className="grid gap-12 border-t border-white/8 py-12">
           <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <p className="text-sm font-bold text-white/42">Today</p>
+              <p className="text-sm font-bold text-white/42">Playback</p>
               <h2 className="mt-2 text-4xl font-black tracking-[-0.05em] text-white sm:text-5xl">
                 Replay moments.
               </h2>

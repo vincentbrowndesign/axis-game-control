@@ -702,7 +702,7 @@ export default function UploadConsole({
             Axis
           </Link>
           <div className="flex flex-wrap items-center gap-2">
-            <ModeNav active="today" />
+            <ModeNav active="record" />
             <button
               type="button"
               onClick={signOut}
@@ -716,7 +716,7 @@ export default function UploadConsole({
         <section className="grid gap-8">
           <div className="grid gap-5">
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-white/45">
-              <p className="font-bold text-white/65">Today</p>
+              <p className="font-bold text-white/65">Record</p>
               <button
                 type="button"
                 onClick={() => {

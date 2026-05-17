@@ -12,6 +12,14 @@ function cleanPhrase(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 220) : ""
 }
 
+function cleanText(value: unknown, maxLength = 320) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : ""
+}
+
+function cleanNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
@@ -36,6 +44,10 @@ export async function POST(req: Request) {
       phrase?: unknown
       workflowStage?: unknown
       occurredAtSeconds?: unknown
+      audioPath?: unknown
+      audioMimeType?: unknown
+      audioSizeBytes?: unknown
+      audioDurationSeconds?: unknown
     } = {}
 
     try {
@@ -55,6 +67,10 @@ export async function POST(req: Request) {
       Number.isFinite(body.occurredAtSeconds)
         ? body.occurredAtSeconds
         : null
+    const audioPath = cleanText(body.audioPath)
+    const audioMimeType = cleanText(body.audioMimeType, 120)
+    const audioSizeBytes = cleanNumber(body.audioSizeBytes)
+    const audioDurationSeconds = cleanNumber(body.audioDurationSeconds)
 
     if (!phrase) {
       return NextResponse.json(
@@ -79,6 +95,11 @@ export async function POST(req: Request) {
         occurred_at_seconds: occurredAtSeconds,
         metadata: {
           aiTags,
+          audioPath: audioPath || null,
+          audioMimeType: audioMimeType || null,
+          audioSizeBytes,
+          audioDurationSeconds,
+          hasReplayAudio: Boolean(audioPath),
         },
       })
       .select("id")

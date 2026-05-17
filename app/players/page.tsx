@@ -5,6 +5,7 @@ import {
   normalizeSessions,
   playerName,
 } from "@/lib/archive/sessionRollup"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { AxisReplaySession, AxisVoiceNote } from "@/types/memory"
 
@@ -16,7 +17,11 @@ type Props = {
 
 type PlayerMemory = {
   name: string
-  phrases: AxisVoiceNote[]
+  phrases: VoiceNoteWithAudio[]
+}
+
+type VoiceNoteWithAudio = AxisVoiceNote & {
+  audioUrl?: string | null
 }
 
 const fallbackPlayers = ["AJ", "Liam", "Kendal"]
@@ -39,12 +44,31 @@ function mentionsPlayer(phrase: string, player: string) {
 
 function timeLabel(value: string) {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Today"
+  if (Number.isNaN(date.getTime())) return "Recent"
 
   return date.toLocaleDateString([], {
     month: "short",
     day: "numeric",
   })
+}
+
+function metadataText(
+  metadata: Record<string, unknown> | null,
+  key: string
+) {
+  const value = metadata?.[key]
+
+  return typeof value === "string" && value.trim() ? value : ""
+}
+
+async function signedAudioUrl(path: string) {
+  if (!path) return null
+
+  const signed = await supabaseAdmin.storage
+    .from("axis-replays")
+    .createSignedUrl(path, 60 * 60 * 24)
+
+  return signed.data?.signedUrl || null
 }
 
 function formatTimestamp(totalSeconds: number) {
@@ -98,7 +122,12 @@ export default async function PlayersPage({ searchParams }: Props) {
       .returns<AxisReplaySession[]>(),
   ])
 
-  const phrases = voiceNotes || []
+  const phrases = await Promise.all(
+    (voiceNotes || []).map(async (note): Promise<VoiceNoteWithAudio> => ({
+      ...note,
+      audioUrl: await signedAudioUrl(metadataText(note.metadata, "audioPath")),
+    }))
+  )
   const sessions = normalizeSessions(sessionsData || [])
   const players = [
     ...new Set([...sessions.map(playerName), ...fallbackPlayers].filter(Boolean)),
@@ -176,6 +205,13 @@ export default async function PlayersPage({ searchParams }: Props) {
                         {timeLabel(latest.created_at)} /{" "}
                         {formatTimestamp(Number(latest.occurred_at_seconds || 0))}
                       </p>
+                      {latest.audioUrl ? (
+                        <audio
+                          src={latest.audioUrl}
+                          controls
+                          className="mt-4 w-full"
+                        />
+                      ) : null}
                     </div>
                   ) : (
                     <p className="text-2xl font-black tracking-[-0.04em] text-white">
@@ -209,10 +245,19 @@ export default async function PlayersPage({ searchParams }: Props) {
                   {player.phrases.length > 1 ? (
                     <div className="grid gap-3">
                       {player.phrases.slice(1, 4).map((note) => (
-                        <p key={note.id} className="text-sm leading-6 text-white/48">
-                          {formatTimestamp(Number(note.occurred_at_seconds || 0))} /{" "}
-                          {note.phrase}
-                        </p>
+                        <div key={note.id} className="grid gap-2">
+                          <p className="text-sm leading-6 text-white/48">
+                            {formatTimestamp(Number(note.occurred_at_seconds || 0))} /{" "}
+                            {note.phrase}
+                          </p>
+                          {note.audioUrl ? (
+                            <audio
+                              src={note.audioUrl}
+                              controls
+                              className="w-full"
+                            />
+                          ) : null}
+                        </div>
                       ))}
                     </div>
                   ) : null}
