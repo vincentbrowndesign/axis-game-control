@@ -31,7 +31,15 @@ type SessionCard = {
   time: string
   phrases: string[]
   players: string[]
-  landmarks: string[]
+  landmarks: {
+    id: string
+    phrase: string
+    caption: string
+    timestamp: string
+    videoWindow: string
+    player?: string
+    replayCount: number
+  }[]
 }
 
 const fallbackPlayers = ["AJ", "Liam", "Kendal"]
@@ -76,6 +84,21 @@ function sessionDay(value: string) {
   })
 }
 
+function formatTimestamp(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`
+}
+
+function formatVideoWindow(totalSeconds: number) {
+  const start = Math.max(0, totalSeconds - 5)
+  const end = totalSeconds + 5
+
+  return `${formatTimestamp(start)}-${formatTimestamp(end)}`
+}
+
 function buildSessionCards(phrases: VoicePhrase[], mentions: PlayerMention[]) {
   const grouped = new Map<string, VoicePhrase[]>()
 
@@ -99,7 +122,22 @@ function buildSessionCards(phrases: VoicePhrase[], mentions: PlayerMention[]) {
       time: day,
       phrases: items.map((item) => item.phrase),
       players: players.slice(0, 4),
-      landmarks: items.slice(0, 5).map((item) => item.phrase.toUpperCase()),
+      landmarks: items.slice(0, 5).map((item, itemIndex) => {
+        const seconds = itemIndex * 18
+        const player = mentions.find((mention) =>
+          item.phrase.toLowerCase().includes(mention.name.toLowerCase())
+        )?.name
+
+        return {
+          id: item.id,
+          phrase: item.phrase,
+          caption: item.phrase.toUpperCase(),
+          timestamp: formatTimestamp(seconds),
+          videoWindow: formatVideoWindow(seconds),
+          player,
+          replayCount: Math.max(1, 6 - itemIndex),
+        }
+      }),
     }
   })
 }

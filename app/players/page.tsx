@@ -47,6 +47,14 @@ function timeLabel(value: string) {
   })
 }
 
+function formatTimestamp(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`
+}
+
 export default async function PlayersPage({ searchParams }: Props) {
   const params = await searchParams
   const selectedPlayer = textParam(params?.player).trim()
@@ -165,7 +173,8 @@ export default async function PlayersPage({ searchParams }: Props) {
                         {latest.phrase.toUpperCase()}
                       </p>
                       <p className="mt-2 text-sm text-white/35">
-                        {timeLabel(latest.created_at)}
+                        {timeLabel(latest.created_at)} /{" "}
+                        {formatTimestamp(Number(latest.occurred_at_seconds || 0))}
                       </p>
                     </div>
                   ) : (
@@ -201,6 +210,7 @@ export default async function PlayersPage({ searchParams }: Props) {
                     <div className="grid gap-3">
                       {player.phrases.slice(1, 4).map((note) => (
                         <p key={note.id} className="text-sm leading-6 text-white/48">
+                          {formatTimestamp(Number(note.occurred_at_seconds || 0))} /{" "}
                           {note.phrase}
                         </p>
                       ))}

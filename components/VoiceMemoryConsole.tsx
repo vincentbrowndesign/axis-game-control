@@ -28,7 +28,17 @@ type SessionCard = {
   time: string
   phrases: string[]
   players: string[]
-  landmarks: string[]
+  landmarks: ReinforcementLandmark[]
+}
+
+type ReinforcementLandmark = {
+  id: string
+  phrase: string
+  caption: string
+  timestamp: string
+  videoWindow: string
+  player?: string
+  replayCount: number
 }
 
 type Props = {
@@ -79,6 +89,21 @@ const demoCaptions = [
   "DON'T DRIFT",
 ]
 
+const demoLandmarks: ReinforcementLandmark[] = demoCaptions.map(
+  (caption, index) => {
+    const seconds = index * 22 + 8
+
+    return {
+      id: `demo-${caption}`,
+      phrase: caption.toLowerCase(),
+      caption,
+      timestamp: formatTimestamp(seconds),
+      videoWindow: formatVideoWindow(seconds),
+      replayCount: index + 2,
+    }
+  }
+)
+
 const waveformBars = [
   34, 62, 44, 76, 52, 88, 38, 68, 96, 48, 72, 42, 84, 58, 36, 74,
   54, 92, 46, 66, 40, 78, 50, 86, 60, 44, 70, 98, 52, 64, 38, 82,
@@ -92,6 +117,36 @@ function captionText(value: string) {
   return cleanPhrase(value).toUpperCase()
 }
 
+function formatTimestamp(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`
+}
+
+function formatVideoWindow(totalSeconds: number) {
+  const start = Math.max(0, totalSeconds - 5)
+  const end = totalSeconds + 5
+
+  return `${formatTimestamp(start)}-${formatTimestamp(end)}`
+}
+
+function detectPlayer(phrase: string, players: PlayerMention[]) {
+  const lowerPhrase = phrase.toLowerCase()
+  const match = players.find((player) => {
+    const lowerName = player.name.toLowerCase()
+
+    return (
+      lowerPhrase.startsWith(`${lowerName} `) ||
+      lowerPhrase.includes(` ${lowerName} `) ||
+      lowerPhrase.endsWith(` ${lowerName}`)
+    )
+  })
+
+  return match?.name
+}
+
 export default function VoiceMemoryConsole({
   recentPhrases,
   repeatedPhrases,
@@ -99,12 +154,17 @@ export default function VoiceMemoryConsole({
   recentSessions,
 }: Props) {
   const recognitionRef = useRef<AxisSpeechRecognition | null>(null)
+  const startedAtRef = useRef<number | null>(null)
+  const landmarkTimeRef = useRef(0)
   const [isRecording, setIsRecording] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isLandmarking, setIsLandmarking] = useState(false)
   const [status, setStatus] = useState("")
   const [manualPhrase, setManualPhrase] = useState("")
   const [livePhrases, setLivePhrases] = useState<VoicePhrase[]>([])
+  const [liveLandmarks, setLiveLandmarks] = useState<ReinforcementLandmark[]>([])
   const [activeCaptionIndex, setActiveCaptionIndex] = useState(0)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
   const phrases = useMemo(
     () => [...livePhrases, ...recentPhrases].slice(0, 12),
@@ -114,9 +174,38 @@ export default function VoiceMemoryConsole({
     ? phrases.map((item) => captionText(item.phrase))
     : demoCaptions
   const activeCaption = captions[activeCaptionIndex % captions.length]
-  const landmarks = phrases.length
-    ? phrases.slice(0, 6).map((item) => captionText(item.phrase))
-    : demoCaptions
+  const storedLandmarks = phrases.slice(0, 6).map((item, index) => {
+    const seconds = Math.max(0, index * 18)
+
+    return {
+      id: item.id,
+      phrase: item.phrase,
+      caption: captionText(item.phrase),
+      timestamp: formatTimestamp(seconds),
+      videoWindow: formatVideoWindow(seconds),
+      player: detectPlayer(item.phrase, playerMentions),
+      replayCount: Math.max(1, 8 - index),
+    }
+  })
+  const landmarks = liveLandmarks.length
+    ? liveLandmarks
+    : storedLandmarks.length
+      ? storedLandmarks
+      : demoLandmarks
+  const activeLandmark =
+    landmarks[activeCaptionIndex % landmarks.length] || landmarks[0]
+
+  useEffect(() => {
+    if (!isRecording) return
+
+    const interval = window.setInterval(() => {
+      if (!startedAtRef.current) return
+
+      setElapsedSeconds(Math.floor((Date.now() - startedAtRef.current) / 1000))
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [isRecording])
 
   useEffect(() => {
     if (!isPlaying || captions.length === 0) return
@@ -128,18 +217,29 @@ export default function VoiceMemoryConsole({
     return () => window.clearInterval(interval)
   }, [captions.length, isPlaying])
 
-  async function savePhrase(phrase: string) {
+  async function savePhrase(phrase: string, timestampSeconds = landmarkTimeRef.current) {
     const clean = cleanPhrase(phrase)
     if (!clean) return
 
-    const tempPhrase = {
+    const landmark: ReinforcementLandmark = {
       id: `${Date.now()}-${clean}`,
+      phrase: clean,
+      caption: captionText(clean),
+      timestamp: formatTimestamp(timestampSeconds),
+      videoWindow: formatVideoWindow(timestampSeconds),
+      player: detectPlayer(clean, playerMentions),
+      replayCount: 1,
+    }
+    const tempPhrase = {
+      id: landmark.id,
       phrase: clean,
       createdAt: new Date().toISOString(),
     }
 
     setLivePhrases((items) => [tempPhrase, ...items].slice(0, 12))
+    setLiveLandmarks((items) => [landmark, ...items].slice(0, 8))
     setActiveCaptionIndex(0)
+    setIsLandmarking(false)
     setStatus("Landmark saved")
 
     try {
@@ -150,6 +250,7 @@ export default function VoiceMemoryConsole({
         },
         body: JSON.stringify({
           phrase: clean,
+          occurredAtSeconds: timestampSeconds,
         }),
       })
 
@@ -158,6 +259,15 @@ export default function VoiceMemoryConsole({
       console.error(error)
       setStatus("Saved locally")
     }
+  }
+
+  function markLandmark() {
+    const timestampSeconds = elapsedSeconds
+
+    landmarkTimeRef.current = timestampSeconds
+    setIsLandmarking(true)
+    setIsPlaying(true)
+    setStatus(`Landmark ${formatTimestamp(timestampSeconds)}. Speak naturally.`)
   }
 
   function startSession() {
@@ -183,7 +293,7 @@ export default function VoiceMemoryConsole({
         const phrase = result?.[0]?.transcript || ""
 
         if (result?.isFinal && phrase) {
-          void savePhrase(phrase)
+          void savePhrase(phrase, landmarkTimeRef.current || elapsedSeconds)
         }
       }
     }
@@ -199,6 +309,9 @@ export default function VoiceMemoryConsole({
     }
 
     recognitionRef.current = recognition
+    startedAtRef.current = Date.now()
+    landmarkTimeRef.current = 0
+    setElapsedSeconds(0)
     recognition.start()
     setIsRecording(true)
     setIsPlaying(true)
@@ -208,8 +321,10 @@ export default function VoiceMemoryConsole({
   function stopSession() {
     recognitionRef.current?.stop()
     recognitionRef.current = null
+    startedAtRef.current = null
     setIsRecording(false)
     setIsPlaying(false)
+    setIsLandmarking(false)
     setStatus("Session saved")
   }
 
@@ -218,7 +333,7 @@ export default function VoiceMemoryConsole({
     if (!phrase) return
 
     setManualPhrase("")
-    void savePhrase(phrase)
+    void savePhrase(phrase, landmarkTimeRef.current || elapsedSeconds)
   }
 
   return (
@@ -241,10 +356,10 @@ export default function VoiceMemoryConsole({
                 Behavioral playback
               </p>
               <h1 className="mt-3 max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.06em] text-white sm:text-7xl">
-                Coaching memory, playable.
+                Tap Landmark. Speak naturally.
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-white/48">
-                Record the session. Axis turns the coaching voice into captions, landmarks, and replay moments.
+                Record the session. When a meaningful moment happens, tap Landmark and Axis syncs voice, captions, timestamp, and surrounding context.
               </p>
             </div>
 
@@ -263,6 +378,18 @@ export default function VoiceMemoryConsole({
                 </button>
                 <button
                   type="button"
+                  disabled={!isRecording}
+                  onClick={markLandmark}
+                  className={`grid h-24 w-24 place-items-center rounded-full text-sm font-black uppercase tracking-[0.12em] transition disabled:opacity-30 ${
+                    isLandmarking
+                      ? "bg-amber-100 text-black"
+                      : "bg-white/[0.08] text-white/74 hover:bg-white hover:text-black"
+                  }`}
+                >
+                  Landmark
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsPlaying((value) => !value)}
                   className="grid h-16 w-16 place-items-center rounded-full bg-white/[0.06] text-sm font-black text-white/70 transition hover:bg-white hover:text-black"
                 >
@@ -271,12 +398,23 @@ export default function VoiceMemoryConsole({
               </div>
 
               <div className="mt-8 min-h-48">
-                <p className="text-sm font-bold text-amber-100/70">
-                  Live caption
-                </p>
+                <div className="flex flex-wrap items-center gap-3 text-sm font-bold text-amber-100/70">
+                  <span>Live caption</span>
+                  <span>{activeLandmark?.timestamp || formatTimestamp(elapsedSeconds)}</span>
+                  <span>
+                    {activeLandmark?.videoWindow || formatVideoWindow(elapsedSeconds)}
+                  </span>
+                </div>
                 <p className="mt-4 text-5xl font-black leading-[0.95] tracking-[-0.05em] text-white sm:text-6xl">
                   {activeCaption}
                 </p>
+                <div className="mt-5 flex flex-wrap gap-2 text-sm font-bold text-white/38">
+                  {activeLandmark?.player ? (
+                    <span>{activeLandmark.player}</span>
+                  ) : null}
+                  <span>voice focused</span>
+                  <span>{activeLandmark?.replayCount || 1} replays</span>
+                </div>
               </div>
 
               <div className="mt-8 flex h-20 items-end gap-1">
@@ -308,7 +446,7 @@ export default function VoiceMemoryConsole({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") saveManualPhrase()
                 }}
-                placeholder="Or type: AJ spread your feet."
+                placeholder="Landmark phrase: AJ spread your feet."
                 className="bg-black/25 px-4 py-4 text-base text-white outline-none placeholder:text-white/25"
               />
               <button
@@ -316,7 +454,7 @@ export default function VoiceMemoryConsole({
                 onClick={saveManualPhrase}
                 className="bg-white/[0.07] px-5 py-4 text-sm font-bold text-white/70 transition hover:bg-white hover:text-black"
               >
-                Add landmark
+                Save landmark
               </button>
             </div>
           </div>
@@ -327,7 +465,7 @@ export default function VoiceMemoryConsole({
               <div className="mt-3 grid gap-2">
                 {landmarks.map((landmark, index) => (
                   <button
-                    key={`${landmark}-${index}`}
+                    key={`${landmark.id}-${index}`}
                     type="button"
                     onClick={() => {
                       setActiveCaptionIndex(index)
@@ -339,7 +477,10 @@ export default function VoiceMemoryConsole({
                         : "bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-white"
                     }`}
                   >
-                    {landmark}
+                    <span className="block">{landmark.caption}</span>
+                    <span className="mt-1 block text-xs font-bold text-white/36">
+                      {landmark.timestamp} / {landmark.videoWindow}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -398,7 +539,7 @@ export default function VoiceMemoryConsole({
                       ))}
                     </div>
                     <p className="mt-5 text-xl font-black leading-tight tracking-[-0.03em] text-white/86">
-                      {session.landmarks[0] || "Session ready"}
+                      {session.landmarks[0]?.caption || "Session ready"}
                     </p>
                   </Link>
                 ))}

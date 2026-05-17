@@ -29,6 +29,21 @@ function timeLabel(value: string) {
   })
 }
 
+function formatTimestamp(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`
+}
+
+function formatVideoWindow(totalSeconds: number) {
+  const start = Math.max(0, totalSeconds - 5)
+  const end = totalSeconds + 5
+
+  return `${formatTimestamp(start)}-${formatTimestamp(end)}`
+}
+
 function groupBySession(notes: AxisVoiceNote[]) {
   const grouped = new Map<string, AxisVoiceNote[]>()
 
@@ -119,7 +134,7 @@ export default async function SessionsPage() {
                       {session.title}
                     </p>
                     <p className="mt-2 text-sm text-white/38">
-                      {session.time} / {session.phrases.length} landmarks
+                      {session.time} / {session.phrases.length} landmarks / voice synced
                     </p>
                   </div>
                   <Link
@@ -151,10 +166,12 @@ export default async function SessionsPage() {
                   {session.phrases.slice(0, 6).map((note) => (
                     <div key={note.id} className="border-b border-white/8 pb-3">
                       <p className="text-sm font-black text-white">
-                        {note.phrase}
+                        {note.phrase.toUpperCase()}
                       </p>
                       <p className="mt-1 text-xs text-white/35">
-                        {timeLabel(note.created_at)}
+                        {timeLabel(note.created_at)} /{" "}
+                        {formatTimestamp(Number(note.occurred_at_seconds || 0))} /{" "}
+                        {formatVideoWindow(Number(note.occurred_at_seconds || 0))}
                       </p>
                     </div>
                   ))}
