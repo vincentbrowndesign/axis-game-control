@@ -1,5 +1,10 @@
-import { createRunId, type Run } from "@/lib/run/runState"
-import type { RunMedia } from "@/lib/run/runState"
+import {
+  createRunId,
+  type Run,
+  type RunAudioContext,
+  type RunInterpretation,
+  type RunMedia,
+} from "@/lib/run/runState"
 import type { RunSignal } from "@/lib/run/signals"
 
 export const activeRunKey = "axis-active-run"
@@ -104,6 +109,132 @@ function normalizeRun(value: unknown): Run | null {
               : Date.now(),
         }
       : undefined
+  const openAiInterpretations: RunInterpretation[] = Array.isArray(
+    run.openAiInterpretations
+  )
+    ? run.openAiInterpretations
+        .filter((interpretation) => interpretation && typeof interpretation === "object")
+        .map((interpretation) => {
+          const record = interpretation as Partial<RunInterpretation>
+          const source: RunInterpretation["source"] =
+            record.source === "openai" ? "openai" : "local"
+
+          return {
+            id: typeof record.id === "string" ? record.id : createRunId(),
+            label:
+              typeof record.label === "string" && record.label
+                ? record.label
+                : "HOT",
+            name:
+              typeof record.name === "string" && record.name
+                ? record.name
+                : "Sequence",
+            summary:
+              typeof record.summary === "string" && record.summary
+                ? record.summary
+                : "Temporal sequence",
+            start:
+              typeof record.start === "number" && Number.isFinite(record.start)
+                ? record.start
+                : 0,
+            end:
+              typeof record.end === "number" && Number.isFinite(record.end)
+                ? record.end
+                : 0,
+            signalIds: Array.isArray(record.signalIds)
+              ? record.signalIds.filter((id): id is string => typeof id === "string")
+              : [],
+            source,
+            generatedAt:
+              typeof record.generatedAt === "number" && Number.isFinite(record.generatedAt)
+                ? record.generatedAt
+                : Date.now(),
+          }
+        })
+        .slice(0, 8)
+    : []
+  const audioContext: RunAudioContext | undefined =
+    run.audioContext && typeof run.audioContext === "object"
+      ? {
+          id:
+            typeof run.audioContext.id === "string" && run.audioContext.id
+              ? run.audioContext.id
+              : createRunId(),
+          source: "deepgram",
+          speechSegments: Array.isArray(run.audioContext.speechSegments)
+            ? run.audioContext.speechSegments
+                .filter((segment) => segment && typeof segment === "object")
+                .map((segment) => {
+                  const record = segment as Partial<
+                    RunAudioContext["speechSegments"][number]
+                  >
+
+                  return {
+                    start:
+                      typeof record.start === "number" && Number.isFinite(record.start)
+                        ? record.start
+                        : 0,
+                    end:
+                      typeof record.end === "number" && Number.isFinite(record.end)
+                        ? record.end
+                        : 0,
+                    confidence:
+                      typeof record.confidence === "number" &&
+                      Number.isFinite(record.confidence)
+                        ? record.confidence
+                        : 0,
+                  }
+                })
+                .slice(0, 80)
+            : [],
+          silenceWindows: Array.isArray(run.audioContext.silenceWindows)
+            ? run.audioContext.silenceWindows
+                .filter((window) => window && typeof window === "object")
+                .map((window) => {
+                  const record = window as Partial<
+                    RunAudioContext["silenceWindows"][number]
+                  >
+
+                  return {
+                    start:
+                      typeof record.start === "number" && Number.isFinite(record.start)
+                        ? record.start
+                        : 0,
+                    end:
+                      typeof record.end === "number" && Number.isFinite(record.end)
+                        ? record.end
+                        : 0,
+                    duration:
+                      typeof record.duration === "number" &&
+                      Number.isFinite(record.duration)
+                        ? record.duration
+                        : 0,
+                  }
+                })
+                .slice(0, 80)
+            : [],
+          pacing:
+            typeof run.audioContext.pacing === "number" &&
+            Number.isFinite(run.audioContext.pacing)
+              ? run.audioContext.pacing
+              : 0,
+          interruptionCount:
+            typeof run.audioContext.interruptionCount === "number" &&
+            Number.isFinite(run.audioContext.interruptionCount)
+              ? run.audioContext.interruptionCount
+              : 0,
+          escalation:
+            typeof run.audioContext.escalation === "number" &&
+            Number.isFinite(run.audioContext.escalation)
+              ? run.audioContext.escalation
+              : 0,
+          generatedAt:
+            typeof run.audioContext.generatedAt === "number" &&
+            Number.isFinite(run.audioContext.generatedAt)
+              ? run.audioContext.generatedAt
+              : Date.now(),
+        }
+      : undefined
 
   return {
     id,
@@ -116,6 +247,8 @@ function normalizeRun(value: unknown): Run | null {
     moments: Array.isArray(run.moments) ? run.moments : [],
     memories: Array.isArray(run.memories) ? run.memories : [],
     media: media?.url ? media : undefined,
+    openAiInterpretations,
+    audioContext,
   }
 }
 

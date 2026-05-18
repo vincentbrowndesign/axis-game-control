@@ -5,20 +5,20 @@ import { ControlBar } from "@/components/axis/ControlBar"
 import { ControlPad } from "@/components/axis/ControlPad"
 import { RunHeader } from "@/components/axis/RunHeader"
 import { StateBar } from "@/components/axis/StateBar"
-import { inferTrack } from "@/lib/engine/inference"
 import { buildMemories, buildMoments } from "@/lib/engine/memory"
 import { deriveAxisState } from "@/lib/engine/state"
+import { calculateSystemPlusMinus } from "@/lib/engine/systemPlusMinus"
 import {
   createRun,
   createRunId,
   elapsedRunMs,
   formatRunTime,
   type Run,
+  type RunInterpretation,
   type RunMedia,
 } from "@/lib/run/runState"
 import {
   readStoredRun,
-  storeRun,
   writeStoredRun,
 } from "@/lib/run/runStore"
 import type { SignalResult, SignalSide } from "@/lib/run/signals"
@@ -218,101 +218,6 @@ async function completeUpload({
   return result
 }
 
-function artifactName(run: Run, extension: "png" | "pdf") {
-  return `${run.home}-vs-${run.away}-axis-archive`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .concat(`.${extension}`)
-}
-
-function mediaName(run: Run, extension: string) {
-  return `${run.home}-vs-${run.away}-axis-memory`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .concat(`.${extension}`)
-}
-
-function extensionForType(type: string, fallback: string) {
-  if (type.includes("quicktime")) return "mov"
-  if (type.includes("mp4")) return "mp4"
-  if (type.includes("png")) return "png"
-  if (type.includes("jpeg") || type.includes("jpg")) return "jpg"
-
-  return fallback
-}
-
-function createShareFile(blob: Blob, name: string, type: string) {
-  if (typeof File === "undefined") return null
-
-  try {
-    return new File([blob], name, {
-      type,
-      lastModified: Date.now(),
-    })
-  } catch {
-    return null
-  }
-}
-
-function canNativeShareFile(file: File) {
-  return (
-    typeof navigator !== "undefined" &&
-    typeof navigator.share === "function" &&
-    typeof navigator.canShare === "function" &&
-    navigator.canShare({ files: [file] })
-  )
-}
-
-async function nativeShareFile(file: File, title: string, text: string) {
-  if (!canNativeShareFile(file)) return false
-
-  await navigator.share({
-    files: [file],
-    title,
-    text,
-  })
-
-  return true
-}
-
-function waitForPaint() {
-  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
-    return Promise.resolve()
-  }
-
-  return new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => resolve())
-    })
-  })
-}
-
-async function fetchBlobWithTimeout(url: string, timeoutMs = 12_000) {
-  const controller = new AbortController()
-  const timeout =
-    typeof window !== "undefined"
-      ? window.setTimeout(() => controller.abort(), timeoutMs)
-      : undefined
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-    })
-
-    if (!response.ok) throw new Error(`Media fetch ${response.status}`)
-
-    const blob = await response.blob()
-
-    if (!blob.size) throw new Error("Empty media blob")
-
-    return blob
-  } finally {
-    if (timeout) window.clearTimeout(timeout)
-  }
-}
-
 function compactTime(value: number) {
   const totalSeconds = Math.max(0, Math.round(value / 1000))
 
@@ -415,6 +320,25 @@ function activeMedia({
   }
 }
 
+function trackInterpretations(
+  moments: TrackMoment[],
+  source: TrackIntelligence["source"]
+): RunInterpretation[] {
+  const generatedAt = Date.now()
+
+  return moments.map((moment) => ({
+    id: moment.id,
+    label: moment.label,
+    name: moment.name,
+    summary: moment.summary,
+    start: moment.start,
+    end: moment.end,
+    signalIds: moment.signalIds,
+    source,
+    generatedAt,
+  }))
+}
+
 export default function UploadMemoryConsole({
   initialMode = "tap",
 }: {
@@ -431,6 +355,37 @@ export default function UploadMemoryConsole({
   const [hasLoadedStoredRun, setHasLoadedStoredRun] = useState(false)
   const [openAiTrack, setOpenAiTrack] = useState<TrackIntelligence | null>(null)
   const isRunning = !run.pausedAt
+  const signalSignature = useMemo(
+    () => run.signals.map((signal) => signal.id).join("|"),
+    [run.signals]
+  )
+  const trackRun = useMemo(
+    () => ({
+      id: run.id,
+      home: run.home,
+      away: run.away,
+      startedAt: run.startedAt,
+      pausedAt: run.pausedAt,
+      pausedMs: run.pausedMs,
+      signals: run.signals,
+      moments: run.moments,
+      memories: run.memories,
+      media: run.media,
+      openAiInterpretations: [],
+    }),
+    [
+      run.away,
+      run.home,
+      run.id,
+      run.media,
+      run.memories,
+      run.moments,
+      run.pausedAt,
+      run.pausedMs,
+      run.signals,
+      run.startedAt,
+    ]
+  )
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -474,12 +429,12 @@ export default function UploadMemoryConsole({
   const elapsedMs = elapsedRunMs(run, now)
   const elapsed = formatRunTime(elapsedMs)
   const axisState = useMemo(() => deriveAxisState(run, elapsedMs), [run, elapsedMs])
-  const track = useMemo(() => inferTrack(run), [run])
+  const systemValue = useMemo(() => calculateSystemPlusMinus(run), [run])
   const localTrack = useMemo(() => localTrackIntelligence(run), [run])
   const visibleTrack = openAiTrack || localTrack
 
   useEffect(() => {
-    if (run.signals.length < 3) return
+    if (trackRun.signals.length < 3) return
     if (typeof window === "undefined") return
 
     const controller = new AbortController()
@@ -489,17 +444,23 @@ export default function UploadMemoryConsole({
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify(trackPayload(run, playbackId)),
+        body: JSON.stringify(trackPayload(trackRun, playbackId)),
         signal: controller.signal,
       })
         .then((response) => (response.ok ? response.json() : null))
         .then((data) => {
           if (!data?.track?.moments || !Array.isArray(data.track.moments)) return
+          const source = data.track.source === "openai" ? "openai" : "local"
+          const moments = data.track.moments.slice(0, 4)
 
           setOpenAiTrack({
-            moments: data.track.moments.slice(0, 4),
-            source: data.track.source === "openai" ? "openai" : "local",
+            moments,
+            source,
           })
+          setRun((current) => ({
+            ...current,
+            openAiInterpretations: trackInterpretations(moments, source),
+          }))
         })
         .catch(() => {
           setOpenAiTrack(null)
@@ -510,7 +471,7 @@ export default function UploadMemoryConsole({
       controller.abort()
       window.clearTimeout(timeout)
     }
-  }, [playbackId, run])
+  }, [playbackId, signalSignature, trackRun])
 
   function updateRun(next: Run) {
     setRun({
@@ -600,162 +561,6 @@ export default function UploadMemoryConsole({
       ...current,
       media,
     }))
-  }
-
-  function storeCurrentRun() {
-    const next = {
-      ...run,
-      moments: buildMoments(run.signals),
-      memories: buildMemories(
-        {
-          ...run,
-          moments: buildMoments(run.signals),
-        },
-        playbackId
-      ),
-    }
-
-    storeRun(next)
-    setRun(next)
-    setStatus("Run archived.")
-  }
-
-  function renderExportArtifact() {
-    if (typeof document === "undefined") return null
-
-    const artifact = document.createElement("div")
-    artifact.style.position = "fixed"
-    artifact.style.left = "-1200px"
-    artifact.style.top = "0"
-    artifact.style.width = "720px"
-    artifact.style.background = "#050505"
-    artifact.style.color = "#f4f4f5"
-    artifact.style.padding = "32px"
-    artifact.style.pointerEvents = "none"
-    artifact.style.zIndex = "-1"
-    artifact.innerHTML = `
-      <div style="font-family: Arial, sans-serif;">
-        <p style="margin:0;color:#6ee7b7;font-size:11px;font-weight:900;letter-spacing:0.28em;text-transform:uppercase;">Axis Archive</p>
-        <h1 style="margin:28px 0 0;font-size:52px;line-height:0.9;font-weight:900;letter-spacing:-0.05em;">${escapeHtml(run.home)} / ${escapeHtml(run.away)}</h1>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:30px;padding:22px 0;border-top:1px solid #27272a;border-bottom:1px solid #27272a;">
-          ${artifactNumberHtml("Signals", run.signals.length)}
-          ${artifactNumberHtml("Moments", run.moments.length)}
-          ${artifactNumberHtml("State", axisState.label)}
-        </div>
-        <div style="display:grid;gap:12px;margin-top:28px;font-size:28px;line-height:1;font-weight:900;letter-spacing:-0.04em;">
-          <p style="margin:0;color:#fdba74;">${escapeHtml(track.control)}</p>
-          <p style="margin:0;color:#7dd3fc;">${escapeHtml(track.momentum)}</p>
-          <p style="margin:0;color:#f4f4f5;">${escapeHtml(track.pressure)}</p>
-          <p style="margin:0;color:#6ee7b7;">${escapeHtml(track.strongestMoment)}</p>
-        </div>
-      </div>
-    `
-    document.body.appendChild(artifact)
-
-    return artifact
-  }
-
-  async function generateArchiveImageBlob() {
-    if (typeof document === "undefined") return null
-    let artifact: HTMLDivElement | null = null
-
-    try {
-      artifact = renderExportArtifact()
-
-      if (!artifact) return null
-
-      await waitForPaint()
-      const { toBlob } = await import("html-to-image")
-      const blob = await toBlob(artifact, {
-        cacheBust: true,
-        pixelRatio: 1,
-        backgroundColor: "#050505",
-        canvasWidth: 720,
-        canvasHeight: artifact.scrollHeight,
-      })
-
-      if (!blob?.size || !blob.type.startsWith("image/")) return null
-
-      return blob
-    } catch {
-      return null
-    } finally {
-      artifact?.remove()
-    }
-  }
-
-  async function shareArchiveImage() {
-    storeCurrentRun()
-    setStatus("Preparing share.")
-    const blob = await generateArchiveImageBlob()
-
-    if (!blob) {
-      setStatus("Share unavailable.")
-      return false
-    }
-
-    const file = createShareFile(blob, artifactName(run, "png"), "image/png")
-
-    if (file) {
-      try {
-        const shared = await nativeShareFile(file, "Axis Memory", "Axis replay memory")
-
-        if (shared) {
-          setStatus("Shared.")
-          return true
-        }
-      } catch {
-        setStatus("Share canceled.")
-        return false
-      }
-    }
-
-    setStatus("Share unavailable.")
-
-    return false
-  }
-
-  async function shareReplayVideo() {
-    if (!playbackId) return false
-
-    try {
-      setStatus("Preparing share.")
-      const blob = await fetchBlobWithTimeout(playbackId)
-      const type = blob.type || "video/mp4"
-
-      if (!blob.size || (!type.startsWith("video/") && !type.includes("octet-stream"))) {
-        return false
-      }
-
-      const shareType = type.includes("octet-stream") ? "video/mp4" : type
-      const extension = extensionForType(shareType, "mp4")
-      const file = createShareFile(blob, mediaName(run, extension), shareType)
-
-      if (file) {
-        const shared = await nativeShareFile(file, "Axis Replay", "Axis replay memory")
-
-        if (shared) {
-          setStatus("Shared.")
-          return true
-        }
-      }
-
-      setStatus("Share unavailable.")
-
-      return false
-    } catch {
-      return false
-    }
-  }
-
-  async function shareBestMedia(preferVideo = false) {
-    if (isUploading) return
-
-    const videoShared = preferVideo ? await shareReplayVideo() : false
-
-    if (videoShared) return
-
-    await shareArchiveImage()
   }
 
   async function chooseFile(file: File | undefined, source: UploadSource) {
@@ -876,8 +681,8 @@ export default function UploadMemoryConsole({
           run={run}
           elapsed={elapsed}
           isRunning={isRunning}
-          homeScore={axisState.home.makes}
-          awayScore={axisState.away.makes}
+          homeScore={Math.round(systemValue.homeValue)}
+          awayScore={Math.round(systemValue.awayValue)}
           media={run.media}
           onName={updateName}
           onPause={pauseClock}
@@ -905,33 +710,9 @@ export default function UploadMemoryConsole({
         onChange={(event) => void chooseFile(event.target.files?.[0], "upload")}
       />
 
-      <ControlBar
-        onCamera={() => recordInputRef.current?.click()}
-        onUpload={() => uploadInputRef.current?.click()}
-        onSave={() => void shareBestMedia(true)}
-        onShare={() => void shareBestMedia(true)}
-        disabled={isUploading}
-      />
+      <ControlBar />
     </main>
   )
-}
-
-function escapeHtml(value: string | number) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
-}
-
-function artifactNumberHtml(label: string, value: number | string) {
-  return `
-    <div>
-      <p style="margin:0;color:#71717a;font-size:10px;font-weight:900;letter-spacing:0.18em;text-transform:uppercase;">${escapeHtml(label)}</p>
-      <p style="margin:8px 0 0;color:#f4f4f5;font-family:monospace;font-size:38px;line-height:1;font-weight:900;">${escapeHtml(value)}</p>
-    </div>
-  `
 }
 
 function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }) {
@@ -960,7 +741,7 @@ function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }
             return (
               <span
                 key={signal.id}
-                title={moment?.name || signal.result}
+                title={moment?.name || (signal.result === "make" ? "+" : "-")}
                 className={`block rounded-full transition ${
                   moment ? "h-4 w-4 shadow-[0_0_14px_rgba(244,244,245,0.25)]" : "h-2.5 w-2.5"
                 } ${tone}`}

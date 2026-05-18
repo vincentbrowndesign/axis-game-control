@@ -42,7 +42,7 @@ function TeamLane({
       <TeamSignal
         side={homeAway}
         result="make"
-        label={`${name} make`}
+        label={`${name} structural gain`}
         name={name}
         onSignal={onSignal}
         size="primary"
@@ -50,7 +50,7 @@ function TeamLane({
       <TeamSignal
         side={homeAway}
         result="miss"
-        label={`${name} miss`}
+        label={`${name} structural loss`}
         name={name}
         onSignal={onSignal}
         size="secondary"
@@ -74,15 +74,16 @@ function TeamSignal({
   onSignal: (side: SignalSide, result: SignalResult) => void
   size: "primary" | "secondary"
 }) {
-  const makeTone =
+  const positiveTone =
     side === "home"
       ? "border-orange-400/70 bg-orange-400 text-black hover:bg-orange-300"
       : "border-sky-400/70 bg-sky-400 text-black hover:bg-sky-300"
-  const missTone =
+  const negativeTone =
     side === "home"
       ? "border-orange-400/25 bg-orange-950/30 text-orange-200 hover:bg-orange-900/40"
       : "border-sky-400/25 bg-sky-950/30 text-sky-200 hover:bg-sky-900/40"
-  const classes = result === "make" ? makeTone : missTone
+  const classes = result === "make" ? positiveTone : negativeTone
+  const display = result === "make" ? "+" : "-"
 
   return (
     <button
@@ -100,7 +101,7 @@ function TeamSignal({
           size === "primary" ? "mt-8 text-5xl sm:text-7xl" : "mt-4 text-3xl sm:text-4xl"
         }`}
       >
-        {result}
+        {display}
       </span>
       <span className="sr-only">{label}</span>
     </button>

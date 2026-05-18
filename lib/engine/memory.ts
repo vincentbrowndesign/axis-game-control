@@ -73,6 +73,20 @@ export function buildMemories(run: Run, playbackId?: string): RunMemory[] {
     signals: run.signals.filter(
       (signal) => signal.time >= moment.start && signal.time <= moment.end
     ),
-    playbackId,
+    playbackId: playbackId || run.media?.url,
+    mediaId: run.media?.id,
+    momentId: moment.id,
+    temporalLabel: moment.label,
+    interpretation:
+      run.openAiInterpretations?.find((item) =>
+        item.signalIds.some((signalId) =>
+          run.signals.some(
+            (signal) =>
+              signal.id === signalId &&
+              signal.time >= moment.start &&
+              signal.time <= moment.end
+          )
+        )
+      )?.summary || moment.label,
   }))
 }

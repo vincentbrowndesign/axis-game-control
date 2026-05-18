@@ -14,6 +14,10 @@ export type RunMemory = {
   end: number
   signals: RunSignal[]
   playbackId?: string
+  mediaId?: string
+  momentId?: string
+  temporalLabel?: string
+  interpretation?: string
 }
 
 export type RunMedia = {
@@ -24,6 +28,37 @@ export type RunMedia = {
   contentType: string
   source: "camera" | "upload"
   attachedAt: number
+}
+
+export type RunInterpretation = {
+  id: string
+  label: "SPURT" | "HOT" | "COLD" | "SWING" | string
+  name: string
+  summary: string
+  start: number
+  end: number
+  signalIds: string[]
+  source: "local" | "openai"
+  generatedAt: number
+}
+
+export type RunAudioContext = {
+  id: string
+  source: "deepgram"
+  speechSegments: {
+    start: number
+    end: number
+    confidence: number
+  }[]
+  silenceWindows: {
+    start: number
+    end: number
+    duration: number
+  }[]
+  pacing: number
+  interruptionCount: number
+  escalation: number
+  generatedAt: number
 }
 
 export type Run = {
@@ -37,6 +72,8 @@ export type Run = {
   moments: RunMoment[]
   memories: RunMemory[]
   media?: RunMedia
+  openAiInterpretations?: RunInterpretation[]
+  audioContext?: RunAudioContext
 }
 
 export function createRunId() {

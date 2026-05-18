@@ -13,7 +13,7 @@ type TrackSignal = {
 
 type TrackMoment = {
   id: string
-  label: "HOT" | "COLD" | "SPURT" | "SWING"
+  label: "HOT" | "COLD" | "SPURT" | "SWING" | "BREAK"
   name: string
   summary: string
   start: number
@@ -85,7 +85,7 @@ function localTrack(signals: TrackSignal[]): TrackMoment[] {
       (signal, index) => index > 0 && signal.side !== cluster[index - 1].side
     ).length
     const label: TrackMoment["label"] =
-      misses >= 3 ? "COLD" : swings >= 2 ? "SWING" : makes >= 3 ? "SPURT" : "HOT"
+      misses >= 4 ? "BREAK" : misses >= 3 ? "COLD" : swings >= 2 ? "SWING" : makes >= 3 ? "SPURT" : "HOT"
     const first = cluster[0]
     const last = cluster[cluster.length - 1]
 
@@ -95,6 +95,8 @@ function localTrack(signals: TrackSignal[]): TrackMoment[] {
       name:
         label === "COLD"
           ? "Cold Stretch"
+          : label === "BREAK"
+            ? "Flow Break"
           : label === "SWING"
             ? "Momentum Swing"
             : label === "SPURT"
@@ -134,7 +136,7 @@ function cleanMoment(value: unknown, fallback: TrackMoment): TrackMoment {
   if (!value || typeof value !== "object") return fallback
 
   const moment = value as Partial<TrackMoment>
-  const allowed = new Set(["HOT", "COLD", "SPURT", "SWING"])
+  const allowed = new Set(["HOT", "COLD", "SPURT", "SWING", "BREAK"])
   const label = allowed.has(String(moment.label))
     ? (moment.label as TrackMoment["label"])
     : fallback.label
@@ -175,6 +177,7 @@ async function inferTrack(body: Record<string, unknown>) {
       moments: temporal.moments.length ? temporal.moments : fallback,
       state: temporal.state,
       analysis: temporal.analysis,
+      system: temporal.system,
       source: "local",
     }
   }
@@ -192,19 +195,36 @@ async function inferTrack(body: Record<string, unknown>) {
         {
           role: "system",
           content:
-            "You label basketball replay signal clusters. Return only JSON. Keep labels short and human. Allowed moment labels: HOT, COLD, SPURT, SWING. No analytics jargon.",
+            "You label basketball system plus-minus signal clusters. Return only JSON. Keep labels short and human. Allowed moment labels: HOT, COLD, SPURT, SWING, BREAK. Interpret structural gain/loss, continuity, pressure, interruptions, and sequence flow. No analytics jargon.",
         },
         {
           role: "user",
           content: JSON.stringify({
-            task: "Cluster make/miss signal sequence into replay memories.",
+            task: "Cluster positive/negative structural signal sequence into replay memories.",
             outputShape:
-              '{ "moments": [{ "id": string, "label": "HOT|COLD|SPURT|SWING", "name": string, "summary": string, "start": number, "end": number, "signalIds": string[] }] }',
+              '{ "moments": [{ "id": string, "label": "HOT|COLD|SPURT|SWING|BREAK", "name": string, "summary": string, "start": number, "end": number, "signalIds": string[] }] }',
             run: body.run,
             signals,
             moments: body.moments,
             temporal: {
               state: temporal.state,
+              system: {
+                label: temporal.system.label,
+                summary: temporal.system.summary,
+                structuralIntegrity: temporal.system.structuralIntegrity,
+                pressure: temporal.system.pressure,
+                netValue: temporal.system.netValue,
+                events: temporal.system.events.map((event) => ({
+                  id: event.id,
+                  team: event.team,
+                  outcome: event.outcome,
+                  process: event.process,
+                  context: event.context,
+                  missRisk: event.missRisk,
+                  timestamp: event.timestamp,
+                  value: event.value,
+                })),
+              },
               analysis: {
                 frequency: temporal.analysis.frequency,
                 recency: temporal.analysis.recency,
@@ -245,6 +265,7 @@ async function inferTrack(body: Record<string, unknown>) {
       moments: moments.length ? moments : fallback,
       state: temporal.state,
       analysis: temporal.analysis,
+      system: temporal.system,
       source: "openai",
     }
   } catch (error) {
@@ -254,6 +275,7 @@ async function inferTrack(body: Record<string, unknown>) {
       moments: temporal.moments.length ? temporal.moments : fallback,
       state: temporal.state,
       analysis: temporal.analysis,
+      system: temporal.system,
       source: "local",
     }
   }

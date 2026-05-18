@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { buildActiveTemporalSession } from "@/lib/engine/memoryGeneration"
 import type { TemporalMoment } from "@/lib/engine/momentDetection"
 import { runTemporalEngine } from "@/lib/engine/temporalEngine"
 import { createRun, elapsedRunMs, formatRunTime, type Run } from "@/lib/run/runState"
-import { readStoredRun, subscribeTemporalRun } from "@/lib/run/runStore"
+import { readStoredRun, subscribeTemporalRun, writeStoredRun } from "@/lib/run/runStore"
 import type { RunSignal, SignalSide } from "@/lib/run/signals"
 
 type TrackMoment = Pick<
@@ -27,12 +28,6 @@ function sideName(run: Run, side: SignalSide | "neutral") {
 
 function seconds(value: number) {
   return `${Math.max(0, Math.round(value / 1000))}s`
-}
-
-function scoreFor(run: Run, side: SignalSide) {
-  return run.signals.filter(
-    (signal) => signal.side === side && signal.result === "make"
-  ).length
 }
 
 function signalColor(signal: RunSignal) {
@@ -123,6 +118,7 @@ export function TrackConsole() {
   const elapsedMs = elapsedRunMs(run, now)
   const elapsed = formatRunTime(elapsedMs)
   const temporal = useMemo(() => runTemporalEngine(run, now), [run, now])
+  const session = useMemo(() => buildActiveTemporalSession(run, now), [run, now])
   const localMoments = useMemo(() => fallbackMoments(temporal.moments), [temporal.moments])
   const signalSignature = useMemo(
     () =>
@@ -198,10 +194,58 @@ export function TrackConsole() {
     signalSignature,
   ])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!run.media?.url || run.audioContext) return
+    if (!/^https?:\/\//i.test(run.media.url)) return
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/deepgram", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mediaUrl: run.media?.url,
+          }),
+          signal: controller.signal,
+        })
+
+        if (!response.ok) return
+
+        const data = (await response.json()) as {
+          audioContext?: Run["audioContext"] | null
+        }
+
+        if (!data.audioContext) return
+
+        setRun((current) => {
+          const next = {
+            ...current,
+            audioContext: data.audioContext ?? undefined,
+          }
+
+          writeStoredRun(next)
+
+          return next
+        })
+      } catch (error) {
+        if (!controller.signal.aborted) console.error(error)
+      }
+    }, 1000)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [run.audioContext, run.media?.url])
+
   const activeInference = run.signals.length >= 3 ? trackInference : null
   const moments = activeInference?.moments.length ? activeInference.moments : localMoments
-  const homeScore = scoreFor(run, "home")
-  const awayScore = scoreFor(run, "away")
+  const homeScore = session.score.home
+  const awayScore = session.score.away
   const timelineMs = Math.max(
     elapsedMs,
     run.signals[run.signals.length - 1]?.time ?? 0,
@@ -320,7 +364,7 @@ export function TrackConsole() {
                       signal.result === "make" ? "h-5 w-5" : "h-3 w-3"
                     }`}
                     style={{ left: `${left}%`, top }}
-                    title={`${sideName(run, signal.side)} ${signal.result} ${seconds(signal.time)}`}
+                    title={`${sideName(run, signal.side)} ${signal.result === "make" ? "+" : "-"} ${seconds(signal.time)}`}
                   />
                 )
               })}
@@ -332,7 +376,7 @@ export function TrackConsole() {
                       Awaiting Signals
                     </p>
                     <p className="mt-2 text-sm font-bold text-zinc-600">
-                      Make and miss signals from Tap appear here.
+                      + and - signals from Tap appear here.
                     </p>
                   </div>
                 </div>
@@ -363,7 +407,7 @@ export function TrackConsole() {
                       className={`block shrink-0 rounded-full ${signalColor(signal)} ${
                         signal.result === "make" ? "h-3.5 w-3.5" : "h-2 w-2"
                       }`}
-                      title={`${sideName(run, signal.side)} ${signal.result}`}
+                      title={`${sideName(run, signal.side)} ${signal.result === "make" ? "+" : "-"}`}
                     />
                   ))
                 ) : (
