@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
+import { Upload } from "lucide-react"
 import ModeNav from "@/components/ModeNav"
 import {
   extractReplayLandmarks,
@@ -48,10 +49,55 @@ type Props = {
 const waveformBars = [42, 72, 48, 86, 56, 64, 94, 44, 78, 52, 88, 60, 46, 82]
 
 function uploadStatus(data: AxisUploadResponse) {
-  if (data.ok) return "Memory processing"
+  if (data.ok) return "Saved. Memory is processing."
   if (data.error) return data.error.toLowerCase()
 
   return "Upload failed"
+}
+
+function safeParseUploadResponse(text: string) {
+  try {
+    return parseUploadResponseText(text)
+  } catch {
+    return {
+      ok: false,
+      error: "Upload response unreadable",
+    } satisfies AxisUploadResponse
+  }
+}
+
+function uploadWithProgress({
+  formData,
+  onProgress,
+}: {
+  formData: FormData
+  onProgress: (progress: number) => void
+}) {
+  return new Promise<AxisUploadResponse>((resolve, reject) => {
+    const request = new XMLHttpRequest()
+
+    request.open("POST", "/api/upload")
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+
+      onProgress(Math.round((event.loaded / event.total) * 100))
+    }
+    request.onload = () => {
+      const result = safeParseUploadResponse(request.responseText)
+
+      if (request.status >= 200 && request.status < 300 && result.ok) {
+        onProgress(100)
+        resolve(result)
+      } else {
+        reject(
+          new Error(result.detail || result.error || `Upload ${request.status}`)
+        )
+      }
+    }
+    request.onerror = () => reject(new Error("Network interrupted"))
+    request.onabort = () => reject(new Error("Upload cancelled"))
+    request.send(formData)
+  })
 }
 
 function readVideoMetadata(file: File) {
@@ -80,6 +126,10 @@ function readVideoMetadata(file: File) {
 
 function seekVideo(video: HTMLVideoElement, seconds: number) {
   return new Promise<void>((resolve) => {
+    const duration = Number.isFinite(video.duration) ? video.duration : 0
+    const safeSeconds = duration
+      ? Math.min(Math.max(0, seconds), Math.max(0, duration - 0.2))
+      : Math.max(0, seconds)
     const timeout = window.setTimeout(() => {
       video.removeEventListener("seeked", cleanup)
       resolve()
@@ -91,7 +141,7 @@ function seekVideo(video: HTMLVideoElement, seconds: number) {
     }
 
     video.addEventListener("seeked", cleanup)
-    video.currentTime = seconds
+    video.currentTime = safeSeconds
   })
 }
 
@@ -193,6 +243,8 @@ export default function UploadMemoryConsole({
   const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState("")
   const [processingLine, setProcessingLine] = useState("")
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [transcriptLines, setTranscriptLines] = useState<string[]>([])
   const [selectedMoment, setSelectedMoment] = useState<
     ReplayMoment | undefined
   >(replayMoments[0])
@@ -203,7 +255,16 @@ export default function UploadMemoryConsole({
 
     if (!video || typeof selectedMoment?.timestampSeconds !== "number") return
 
-    video.currentTime = selectedMoment.timestampSeconds
+    const duration = Number.isFinite(video.duration) ? video.duration : 0
+    const safeSeconds = duration
+      ? Math.min(
+          Math.max(0, selectedMoment.timestampSeconds),
+          Math.max(0, duration - 0.2)
+        )
+      : Math.max(0, selectedMoment.timestampSeconds)
+
+    video.currentTime = safeSeconds
+    void video.play().catch(() => undefined)
   }, [selectedMoment])
 
   useEffect(
@@ -221,6 +282,9 @@ export default function UploadMemoryConsole({
     setIsUploading(true)
     setStatus("Extracting keyframes")
     setProcessingLine("Reading the footage")
+    setUploadProgress(0)
+    setTranscriptLines([])
+    let extractedMoments = false
 
     try {
       if (localVideoUrlRef.current) {
@@ -254,11 +318,18 @@ export default function UploadMemoryConsole({
           })
           setSelectedMoment((current) => current || moment)
           setProcessingLine(`${landmark.caption} / ${landmark.timestamp}`)
+          setTranscriptLines((lines) =>
+            [
+              ...lines,
+              `[${landmark.timestamp}] ${landmark.title}`,
+            ].slice(-5)
+          )
         },
       })
 
       setStatus("Keyframes ready")
       setProcessingLine("Memory stream ready")
+      extractedMoments = true
 
       const formData = new FormData()
       formData.append("file", file)
@@ -271,19 +342,34 @@ export default function UploadMemoryConsole({
       setStatus("Uploading video")
       setProcessingLine("Saving replay memory")
 
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      })
-      const text = await response.text()
-      const result = parseUploadResponseText(text)
+      let result: AxisUploadResponse
+
+      try {
+        result = await uploadWithProgress({
+          formData,
+          onProgress: setUploadProgress,
+        })
+      } catch (error) {
+        console.warn("UPLOAD RETRY", error)
+        setStatus("Connection paused. Retrying.")
+        setProcessingLine("Keeping keyframes ready")
+        setUploadProgress(0)
+        result = await uploadWithProgress({
+          formData,
+          onProgress: setUploadProgress,
+        })
+      }
 
       setStatus(uploadStatus(result))
       setProcessingLine(result.ok ? "Saved to Axis" : "Upload needs another try")
     } catch (error) {
       console.error("UPLOAD MEMORY FAILED", error)
       setStatus("Upload failed")
-      setProcessingLine("Could not extract this video")
+      setProcessingLine(
+        extractedMoments
+          ? "Keyframes stayed ready. Try upload again."
+          : "Could not extract this video"
+      )
     } finally {
       setIsUploading(false)
       if (inputRef.current) inputRef.current.value = ""
@@ -308,13 +394,14 @@ export default function UploadMemoryConsole({
           className="grid min-h-[78vh] gap-10 py-8 lg:grid-cols-[1fr_420px] lg:items-center"
         >
           <div>
-            <p className="text-sm font-bold text-white/38">Memory extraction</p>
+            <p className="text-sm font-bold text-white/38">Upload first</p>
             <h1 className="mt-4 max-w-4xl text-6xl font-black leading-[0.9] tracking-[-0.065em] text-white sm:text-8xl">
-              Upload the footage.
+              Find the moments.
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-white/48">
-              Axis turns long basketball video into replay moments, captions,
-              timestamps, and player memory.
+              Choose messy basketball footage. Axis pulls out keyframes,
+              timestamps, and coachable replay anchors before the film gets
+              hard to navigate.
             </p>
 
             <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -322,14 +409,16 @@ export default function UploadMemoryConsole({
                 type="button"
                 onClick={() => inputRef.current?.click()}
                 disabled={isUploading}
-                className="rounded-full bg-stone-100 px-8 py-5 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-amber-100 disabled:opacity-50"
+                className="inline-flex items-center gap-3 rounded-full bg-stone-100 px-8 py-5 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-amber-100 disabled:opacity-50"
               >
+                <Upload className="h-4 w-4" aria-hidden="true" />
                 {isUploading ? "Uploading" : "Choose file"}
               </button>
               <input
                 ref={inputRef}
                 type="file"
-                accept="video/*"
+                accept="video/*,.mov,.mp4,.m4v"
+                capture="environment"
                 className="hidden"
                 onChange={(event) => void chooseFile(event.target.files?.[0])}
               />
@@ -342,9 +431,24 @@ export default function UploadMemoryConsole({
                 {processingLine}
               </p>
             ) : null}
+            {isUploading || uploadProgress > 0 ? (
+              <div className="mt-5 max-w-sm">
+                <div className="h-1 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-amber-100 transition-all duration-500"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-xs font-bold text-white/35">
+                  {uploadProgress
+                    ? `${uploadProgress}% uploaded`
+                    : "Keyframes appear before the upload finishes"}
+                </p>
+              </div>
+            ) : null}
           </div>
 
-          <div className="overflow-hidden rounded-[2rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
+          <div className="overflow-hidden rounded-[1.5rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
             <div className="aspect-[9/14] bg-black">
               {activeMoment?.videoUrl ? (
                 <video
@@ -353,6 +457,7 @@ export default function UploadMemoryConsole({
                   className="h-full w-full object-cover opacity-80"
                   muted
                   playsInline
+                  loop
                   preload="metadata"
                 />
               ) : (
@@ -387,6 +492,18 @@ export default function UploadMemoryConsole({
                   />
                 ))}
               </div>
+              {transcriptLines.length ? (
+                <div className="mt-5 grid gap-2">
+                  {transcriptLines.slice(-3).map((line) => (
+                    <p
+                      key={line}
+                      className="text-sm font-bold uppercase tracking-[0.08em] text-white/34"
+                    >
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
@@ -402,7 +519,7 @@ export default function UploadMemoryConsole({
                     key={`rail-${moment.id}`}
                     type="button"
                     onClick={() => setSelectedMoment(moment)}
-                    className={`min-w-44 overflow-hidden rounded-2xl text-left transition ${
+                    className={`min-w-44 overflow-hidden rounded-xl text-left transition ${
                       active
                         ? "bg-stone-100 text-black"
                         : "bg-white/[0.045] text-white/70 hover:bg-white/[0.075] hover:text-white"
@@ -434,9 +551,9 @@ export default function UploadMemoryConsole({
         <section className="grid gap-12 border-t border-white/8 py-12">
           <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <p className="text-sm font-bold text-white/38">Memory stream</p>
+              <p className="text-sm font-bold text-white/38">Replay anchors</p>
               <h2 className="mt-2 text-4xl font-black tracking-[-0.05em] text-white sm:text-5xl">
-                Anchors from the footage.
+                The meaningful parts rise up.
               </h2>
             </div>
             <Link
@@ -454,7 +571,7 @@ export default function UploadMemoryConsole({
                   key={moment.id}
                   type="button"
                   onClick={() => setSelectedMoment(moment)}
-                  className="group overflow-hidden rounded-[1.5rem] bg-white/[0.035] text-left transition hover:bg-white/[0.06]"
+                  className="group overflow-hidden rounded-xl bg-white/[0.035] text-left transition hover:bg-white/[0.06]"
                 >
                   <div className="aspect-video bg-black">
                     {moment.keyframeUrl ? (
@@ -491,7 +608,7 @@ export default function UploadMemoryConsole({
               {visibleMoments.length === 0 ? (
                 <div className="py-16">
                   <p className="max-w-xl text-3xl font-black tracking-[-0.04em] text-white">
-                    Choose a video and Axis will build replay moments.
+                    Choose a video. The first replay anchors will appear here.
                   </p>
                 </div>
               ) : null}
@@ -500,14 +617,14 @@ export default function UploadMemoryConsole({
             <aside className="grid h-fit gap-9">
               <section>
                 <h3 className="text-sm font-bold text-white/38">
-                  Recent sessions
+                  Resurfaced sessions
                 </h3>
                 <div className="mt-4 grid gap-4">
                   {recentSessions.slice(0, 5).map((session) => (
                     <Link
                       key={session.id}
                       href={`/replay/${session.id}`}
-                      className="block rounded-[1.25rem] bg-white/[0.035] p-4 transition hover:bg-white/[0.06]"
+                      className="block rounded-xl bg-white/[0.035] p-4 transition hover:bg-white/[0.06]"
                     >
                       <p className="text-lg font-black text-white">
                         {session.title}
@@ -525,7 +642,7 @@ export default function UploadMemoryConsole({
 
               <section>
                 <h3 className="text-sm font-bold text-white/38">
-                  Player resurfacing
+                  Player mentions
                 </h3>
                 <div className="mt-4 grid gap-4">
                   {playerMoments.slice(0, 5).map((player) => (
