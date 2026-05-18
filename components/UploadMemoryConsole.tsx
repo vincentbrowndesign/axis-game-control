@@ -98,9 +98,14 @@ function seekVideo(video: HTMLVideoElement, seconds: number) {
 async function captureKeyframes({
   videoUrl,
   landmarks,
+  onFrame,
 }: {
   videoUrl: string
   landmarks: CandidateReplayLandmark[]
+  onFrame?: (frame: {
+    landmark: CandidateReplayLandmark
+    keyframeUrl: string | null
+  }) => void
 }) {
   const video = document.createElement("video")
   video.crossOrigin = "anonymous"
@@ -122,10 +127,14 @@ async function captureKeyframes({
   const context = canvas.getContext("2d")
 
   if (!context) {
-    return landmarks.map((landmark) => ({
+    const frames = landmarks.map((landmark) => ({
       landmark,
       keyframeUrl: null,
     }))
+
+    frames.forEach((frame) => onFrame?.(frame))
+
+    return frames
   }
 
   const frames: {
@@ -142,9 +151,35 @@ async function captureKeyframes({
       landmark,
       keyframeUrl: canvas.toDataURL("image/jpeg", 0.72),
     })
+    onFrame?.(frames[frames.length - 1])
   }
 
   return frames
+}
+
+function momentFromFrame({
+  landmark,
+  keyframeUrl,
+  videoUrl,
+  fileName,
+}: {
+  landmark: CandidateReplayLandmark
+  keyframeUrl: string | null
+  videoUrl: string
+  fileName: string
+}): ReplayMoment {
+  return {
+    id: `local-${landmark.id}`,
+    sessionId: "local-upload",
+    title: landmark.title,
+    caption: landmark.caption,
+    detail: landmark.detail,
+    timestamp: landmark.timestamp,
+    timestampSeconds: landmark.timestampSeconds,
+    videoUrl,
+    keyframeUrl,
+    sessionTitle: fileName,
+  }
 }
 
 export default function UploadMemoryConsole({
@@ -157,7 +192,10 @@ export default function UploadMemoryConsole({
   const localVideoUrlRef = useRef<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState("")
-  const [selectedMoment, setSelectedMoment] = useState(replayMoments[0])
+  const [processingLine, setProcessingLine] = useState("")
+  const [selectedMoment, setSelectedMoment] = useState<
+    ReplayMoment | undefined
+  >(replayMoments[0])
   const [localMoments, setLocalMoments] = useState<ReplayMoment[]>([])
 
   useEffect(() => {
@@ -182,6 +220,7 @@ export default function UploadMemoryConsole({
 
     setIsUploading(true)
     setStatus("Extracting keyframes")
+    setProcessingLine("Reading the footage")
 
     try {
       if (localVideoUrlRef.current) {
@@ -193,26 +232,33 @@ export default function UploadMemoryConsole({
       const landmarks = extractReplayLandmarks({
         durationSeconds: metadata.duration,
       })
-      const keyframes = await captureKeyframes({
+      setLocalMoments([])
+      setSelectedMoment(undefined)
+      setProcessingLine("Finding memory anchors")
+
+      await captureKeyframes({
         videoUrl: metadata.url,
         landmarks,
-      })
-      const moments = keyframes.map(({ landmark, keyframeUrl }) => ({
-        id: `local-${landmark.id}`,
-        sessionId: "local-upload",
-        title: landmark.title,
-        caption: landmark.caption,
-        detail: landmark.detail,
-        timestamp: landmark.timestamp,
-        timestampSeconds: landmark.timestampSeconds,
-        videoUrl: metadata.url,
-        keyframeUrl,
-        sessionTitle: file.name,
-      }))
+        onFrame: ({ landmark, keyframeUrl }) => {
+          const moment = momentFromFrame({
+            landmark,
+            keyframeUrl,
+            videoUrl: metadata.url,
+            fileName: file.name,
+          })
 
-      setLocalMoments(moments)
-      setSelectedMoment(moments[0])
+          setLocalMoments((items) => {
+            if (items.some((item) => item.id === moment.id)) return items
+
+            return [...items, moment]
+          })
+          setSelectedMoment((current) => current || moment)
+          setProcessingLine(`${landmark.caption} / ${landmark.timestamp}`)
+        },
+      })
+
       setStatus("Keyframes ready")
+      setProcessingLine("Memory stream ready")
 
       const formData = new FormData()
       formData.append("file", file)
@@ -223,6 +269,7 @@ export default function UploadMemoryConsole({
       formData.append("duration", String(metadata.duration))
 
       setStatus("Uploading video")
+      setProcessingLine("Saving replay memory")
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -232,9 +279,11 @@ export default function UploadMemoryConsole({
       const result = parseUploadResponseText(text)
 
       setStatus(uploadStatus(result))
+      setProcessingLine(result.ok ? "Saved to Axis" : "Upload needs another try")
     } catch (error) {
       console.error("UPLOAD MEMORY FAILED", error)
       setStatus("Upload failed")
+      setProcessingLine("Could not extract this video")
     } finally {
       setIsUploading(false)
       if (inputRef.current) inputRef.current.value = ""
@@ -288,6 +337,11 @@ export default function UploadMemoryConsole({
                 <p className="text-sm font-bold text-white/42">{status}</p>
               ) : null}
             </div>
+            {processingLine ? (
+              <p className="mt-5 text-2xl font-black tracking-[-0.04em] text-amber-100/80">
+                {processingLine}
+              </p>
+            ) : null}
           </div>
 
           <div className="overflow-hidden rounded-[2rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
@@ -324,7 +378,11 @@ export default function UploadMemoryConsole({
                 {waveformBars.map((height, index) => (
                   <span
                     key={`${height}-${index}`}
-                    className="w-full rounded-full bg-white/16"
+                    className={`w-full rounded-full transition ${
+                      isUploading && index % 3 === 0
+                        ? "bg-amber-100/70"
+                        : "bg-white/16"
+                    }`}
                     style={{ height: `${height}%` }}
                   />
                 ))}
@@ -333,12 +391,52 @@ export default function UploadMemoryConsole({
           </div>
         </section>
 
+        {visibleMoments.length ? (
+          <section className="pb-10">
+            <div className="flex gap-3 overflow-x-auto pb-3">
+              {visibleMoments.slice(0, 8).map((moment) => {
+                const active = activeMoment?.id === moment.id
+
+                return (
+                  <button
+                    key={`rail-${moment.id}`}
+                    type="button"
+                    onClick={() => setSelectedMoment(moment)}
+                    className={`min-w-44 overflow-hidden rounded-2xl text-left transition ${
+                      active
+                        ? "bg-stone-100 text-black"
+                        : "bg-white/[0.045] text-white/70 hover:bg-white/[0.075] hover:text-white"
+                    }`}
+                  >
+                    <div className="h-24 bg-black">
+                      {moment.keyframeUrl ? (
+                        <div
+                          className="h-full w-full bg-cover bg-center opacity-80"
+                          style={{
+                            backgroundImage: `url(${moment.keyframeUrl})`,
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                    <div className="p-3">
+                      <p className="text-xs font-black">{moment.timestamp}</p>
+                      <p className="mt-1 text-sm font-black leading-tight">
+                        {moment.caption}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        ) : null}
+
         <section className="grid gap-12 border-t border-white/8 py-12">
           <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <p className="text-sm font-bold text-white/38">Replay memory</p>
+              <p className="text-sm font-bold text-white/38">Memory stream</p>
               <h2 className="mt-2 text-4xl font-black tracking-[-0.05em] text-white sm:text-5xl">
-                Recent moments.
+                Anchors from the footage.
               </h2>
             </div>
             <Link
