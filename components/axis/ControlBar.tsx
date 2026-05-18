@@ -1,17 +1,15 @@
-import { Camera, Download, RotateCcw, Share2, Upload } from "lucide-react"
+import { Camera, Download, Share2, Upload } from "lucide-react"
 import type { ReactNode } from "react"
 
 export function ControlBar({
   onCamera,
   onUpload,
-  onUndo,
   onSave,
   onShare,
   disabled = false,
 }: {
   onCamera: () => void
   onUpload: () => void
-  onUndo: () => void
   onSave: () => void
   onShare: () => void
   disabled?: boolean
@@ -25,9 +23,6 @@ export function ControlBar({
           </IconButton>
           <IconButton label="Choose File" onClick={onUpload} disabled={disabled}>
             <Upload className="h-5 w-5 stroke-[1.7]" />
-          </IconButton>
-          <IconButton label="Undo" onClick={onUndo}>
-            <RotateCcw className="h-5 w-5 stroke-[1.7]" />
           </IconButton>
         </div>
         <div className="flex items-center gap-2">

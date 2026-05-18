@@ -28,9 +28,22 @@ export type Run = {
   memories: RunMemory[]
 }
 
+export function createRunId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID()
+  }
+
+  return `axis-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+}
+
 export function createRun(): Run {
   return {
-    id: crypto.randomUUID(),
+    id: createRunId(),
     home: "Home",
     away: "Away",
     startedAt: Date.now(),

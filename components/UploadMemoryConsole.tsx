@@ -8,7 +8,13 @@ import { StateBar } from "@/components/axis/StateBar"
 import { inferTrack } from "@/lib/engine/inference"
 import { buildMemories, buildMoments } from "@/lib/engine/memory"
 import { deriveAxisState } from "@/lib/engine/state"
-import { createRun, elapsedRunMs, formatRunTime, type Run } from "@/lib/run/runState"
+import {
+  createRun,
+  createRunId,
+  elapsedRunMs,
+  formatRunTime,
+  type Run,
+} from "@/lib/run/runState"
 import {
   readStoredRun,
   storeRun,
@@ -67,13 +73,16 @@ function safeStorageName(name: string) {
 }
 
 function mobileUploadInfo(file: File): ClientUploadInfo {
-  const userAgent = navigator.userAgent || ""
+  const userAgent =
+    typeof navigator !== "undefined" ? navigator.userAgent || "" : ""
   const isIOS = /iPad|iPhone|iPod/.test(userAgent)
   const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent)
   const isMobile =
     isIOS ||
     /Android|Mobi|Mobile/i.test(userAgent) ||
-    window.matchMedia("(pointer: coarse)").matches
+    (typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches)
   const inferredType =
     file.type ||
     (file.name.toLowerCase().endsWith(".mov")
@@ -85,10 +94,15 @@ function mobileUploadInfo(file: File): ClientUploadInfo {
   let uploadFile: File | Blob = file
 
   try {
-    uploadFile = new File([file], uploadName, {
-      type: inferredType,
-      lastModified: file.lastModified || Date.now(),
-    })
+    uploadFile =
+      typeof File !== "undefined"
+        ? new File([file], uploadName, {
+            type: inferredType,
+            lastModified: file.lastModified || Date.now(),
+          })
+        : new Blob([file], {
+            type: inferredType,
+          })
   } catch {
     uploadFile = new Blob([file], {
       type: inferredType,
@@ -96,7 +110,7 @@ function mobileUploadInfo(file: File): ClientUploadInfo {
   }
 
   return {
-    traceId: crypto.randomUUID(),
+    traceId: createRunId(),
     uploadFile,
     uploadName,
     uploadType: inferredType,
@@ -104,12 +118,23 @@ function mobileUploadInfo(file: File): ClientUploadInfo {
     isIOS,
     isSafari,
     userAgent,
-    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    viewport:
+      typeof window !== "undefined"
+        ? `${window.innerWidth}x${window.innerHeight}`
+        : "unknown",
   }
 }
 
 function readVideoMetadata(url: string) {
   return new Promise<{ duration: number; url: string }>((resolve) => {
+    if (typeof document === "undefined") {
+      resolve({
+        duration: 0,
+        url,
+      })
+      return
+    }
+
     const video = document.createElement("video")
 
     video.preload = "metadata"
@@ -194,26 +219,44 @@ export default function UploadMemoryConsole({
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const artifactRef = useRef<HTMLDivElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
-  const [run, setRun] = useState<Run>(() => readStoredRun() || createRun())
+  const [run, setRun] = useState<Run>(() => createRun())
   const [now, setNow] = useState(() => Date.now())
   const [status, setStatus] = useState("")
   const [isUploading, setIsUploading] = useState(false)
   const [playbackId, setPlaybackId] = useState<string | undefined>()
+  const [hasLoadedStoredRun, setHasLoadedStoredRun] = useState(false)
   const isRunning = !run.pausedAt
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
 
     return () => window.clearInterval(interval)
   }, [])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const timeout = window.setTimeout(() => {
+      const stored = readStoredRun()
+
+      if (stored) setRun(stored)
+      setHasLoadedStoredRun(true)
+    }, 0)
+
+    return () => window.clearTimeout(timeout)
+  }, [])
+
+  useEffect(() => {
+    if (!hasLoadedStoredRun) return
+
     writeStoredRun(run)
-  }, [run])
+  }, [hasLoadedStoredRun, run])
 
   useEffect(
     () => () => {
-      if (localVideoUrlRef.current) {
+      if (localVideoUrlRef.current && typeof URL !== "undefined") {
         URL.revokeObjectURL(localVideoUrlRef.current)
       }
     },
@@ -243,7 +286,7 @@ export default function UploadMemoryConsole({
     if (run.pausedAt) resumeClock()
 
     const signal = {
-      id: crypto.randomUUID(),
+      id: createRunId(),
       side,
       result,
       time: elapsedMs,
@@ -326,53 +369,75 @@ export default function UploadMemoryConsole({
   async function exportPng(share = false) {
     if (!artifactRef.current) return
 
-    storeCurrentRun()
-    setStatus("Archive rendering.")
-    const { toPng } = await import("html-to-image")
-    const dataUrl = await toPng(artifactRef.current, {
-      cacheBust: true,
-      pixelRatio: 2,
-      backgroundColor: "#050505",
-    })
-    const response = await fetch(dataUrl)
-    const blob = await response.blob()
-    const validBlob = blob.size > 0 && blob.type.startsWith("image/")
+    try {
+      storeCurrentRun()
+      setStatus("Archive rendering.")
+      const { toPng } = await import("html-to-image")
+      const dataUrl = await toPng(artifactRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#050505",
+      })
+      const response = await fetch(dataUrl)
+      const blob = await response.blob()
+      const validBlob = blob.size > 0 && blob.type.startsWith("image/")
 
-    if (!validBlob) {
-      setStatus("Archive unavailable.")
-      return
-    }
-
-    const file = new File([blob], artifactName(run, "png"), {
-      type: "image/png",
-    })
-    const nativeReady =
-      navigator.canShare?.({ files: [file] }) &&
-      (share ||
-        /iPad|iPhone|iPod|Android|Mobi|Mobile/i.test(navigator.userAgent || "") ||
-        window.matchMedia("(pointer: coarse)").matches)
-
-    if (nativeReady) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: "Axis Archive",
-          text: "Tap. Track. Archive.",
-        })
-        setStatus("Archive shared.")
+      if (!validBlob) {
+        setStatus("Archive unavailable.")
         return
-      } catch {
-        setStatus("Archive save fallback.")
       }
-    }
 
-    const objectUrl = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = objectUrl
-    link.download = file.name
-    link.click()
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
-    setStatus("Archive saved.")
+      const file =
+        typeof File !== "undefined"
+          ? new File([blob], artifactName(run, "png"), {
+              type: "image/png",
+            })
+          : null
+      const nativeReady = file
+        ? typeof navigator !== "undefined" &&
+          typeof navigator.canShare === "function" &&
+          typeof navigator.share === "function" &&
+          navigator.canShare({ files: [file] }) &&
+          (share ||
+            /iPad|iPhone|iPod|Android|Mobi|Mobile/i.test(navigator.userAgent || "") ||
+            (typeof window !== "undefined" &&
+              typeof window.matchMedia === "function" &&
+              window.matchMedia("(pointer: coarse)").matches))
+        : false
+
+      if (nativeReady && file) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: "Axis Archive",
+            text: "Tap. Track. Archive.",
+          })
+          setStatus("Archive shared.")
+          return
+        } catch {
+          setStatus("Archive save fallback.")
+        }
+      }
+
+      if (typeof URL === "undefined" || typeof document === "undefined") {
+        setStatus("Archive unavailable.")
+        return
+      }
+
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = objectUrl
+      link.download = file?.name || artifactName(run, "png")
+      link.click()
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+      } else {
+        URL.revokeObjectURL(objectUrl)
+      }
+      setStatus("Archive saved.")
+    } catch {
+      setStatus("Archive unavailable.")
+    }
   }
 
   async function chooseFile(file: File | undefined, source: UploadSource) {
@@ -383,6 +448,11 @@ export default function UploadMemoryConsole({
     const uploadInfo = mobileUploadInfo(file)
 
     try {
+      if (typeof URL === "undefined") {
+        setStatus("Memory unavailable.")
+        return
+      }
+
       if (localVideoUrlRef.current) URL.revokeObjectURL(localVideoUrlRef.current)
 
       const localUrl = URL.createObjectURL(file)
@@ -511,7 +581,6 @@ export default function UploadMemoryConsole({
       <ControlBar
         onCamera={() => recordInputRef.current?.click()}
         onUpload={() => uploadInputRef.current?.click()}
-        onUndo={undoSignal}
         onSave={() => void exportPng(false)}
         onShare={() => void exportPng(true)}
         disabled={isUploading}

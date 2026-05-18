@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
+import UploadMemoryConsole from "@/components/UploadMemoryConsole"
 import { createClient } from "@/lib/supabase/server"
 
 export default async function HomePage() {
@@ -30,5 +30,5 @@ export default async function HomePage() {
     )
   }
 
-  redirect("/tap")
+  return <UploadMemoryConsole />
 }
