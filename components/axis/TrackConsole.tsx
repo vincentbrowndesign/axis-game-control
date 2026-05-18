@@ -293,6 +293,30 @@ export function TrackConsole() {
   const activeMoment = moments[0]
   const recentSignals = run.signals.slice(-36)
   const detailSignals = run.signals.slice(-12).reverse()
+  const detailClusters = useMemo(() => {
+    const clustered = moments
+      .slice(0, 4)
+      .map((moment) => ({
+        id: moment.id,
+        label: moment.label,
+        title: moment.name,
+        signals: run.signals.filter((signal) => moment.signalIds.includes(signal.id)),
+      }))
+      .filter((cluster) => cluster.signals.length)
+
+    if (clustered.length) return clustered
+
+    return detailSignals.length
+      ? [
+          {
+            id: "recent-flow",
+            label: "FLOW",
+            title: "Recent Flow",
+            signals: [...detailSignals].reverse(),
+          },
+        ]
+      : []
+  }, [detailSignals, moments, run.signals])
   const source = activeInference?.source === "openai" ? "AI" : "LOCAL"
 
   return (
@@ -593,43 +617,55 @@ export function TrackConsole() {
                 </span>
               </summary>
 
-              <div className="mt-4 grid gap-2">
-                {detailSignals.length ? (
-                  detailSignals.map((signal) => {
-                    const eventPlayer = playerLabel(run.players, signal.playerId)
-
-                    return (
-                      <div
-                        key={`${signal.id}-detail`}
-                        className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2"
-                      >
-                        <span
-                          className={`grid h-7 w-7 place-items-center rounded-full border font-mono text-xs font-black ${
-                            isPositiveSignal(signal.result)
-                              ? signal.side === "home"
-                                ? "border-orange-300/50 bg-orange-300 text-black"
-                                : "border-sky-300/50 bg-sky-300 text-black"
-                              : signal.side === "home"
-                                ? "border-orange-300/35 bg-orange-950 text-orange-200"
-                                : "border-sky-300/35 bg-sky-950 text-sky-200"
-                          }`}
-                        >
-                          {isPositiveSignal(signal.result) ? "+" : "-"}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate font-mono text-xs font-black text-zinc-200">
-                            {signal.stat} {eventPlayer ? `/ ${eventPlayer}` : ""}
-                          </p>
-                          <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-700">
-                            {sideName(run, signal.side)}
-                          </p>
-                        </div>
-                        <span className="font-mono text-[10px] font-black text-zinc-600">
-                          {seconds(signal.time)}
-                        </span>
+              <div className="mt-4 grid gap-3">
+                {detailClusters.length ? (
+                  detailClusters.map((cluster) => (
+                    <div
+                      key={`${cluster.id}-detail`}
+                      className="rounded-lg border border-zinc-900 bg-black/70 px-3 py-3"
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className={`truncate text-[10px] font-black uppercase tracking-[0.18em] ${labelTone(cluster.label)}`}>
+                          {cluster.label}
+                        </p>
+                        <p className="truncate text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700">
+                          {cluster.title}
+                        </p>
                       </div>
-                    )
-                  })
+                      <div className="grid gap-1.5">
+                        {cluster.signals.slice(0, 5).map((signal) => {
+                          const eventPlayer = playerLabel(run.players, signal.playerId)
+
+                          return (
+                            <div
+                              key={`${signal.id}-cluster-detail`}
+                              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-full bg-zinc-950 px-2 py-1.5"
+                            >
+                              <span
+                                className={`grid h-7 w-7 place-items-center rounded-full border font-mono text-xs font-black ${
+                                  isPositiveSignal(signal.result)
+                                    ? signal.side === "home"
+                                      ? "border-orange-300/50 bg-orange-300 text-black"
+                                      : "border-sky-300/50 bg-sky-300 text-black"
+                                    : signal.side === "home"
+                                      ? "border-orange-300/35 bg-orange-950 text-orange-200"
+                                      : "border-sky-300/35 bg-sky-950 text-sky-200"
+                                }`}
+                              >
+                                {isPositiveSignal(signal.result) ? "+" : "-"}
+                              </span>
+                              <p className="min-w-0 truncate font-mono text-xs font-black text-zinc-200">
+                                {signal.stat} {eventPlayer ? `/ ${eventPlayer}` : ""}
+                              </p>
+                              <span className="font-mono text-[10px] font-black text-zinc-600">
+                                {seconds(signal.time)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))
                 ) : (
                   <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
                     Event detail appears as the rail fills.

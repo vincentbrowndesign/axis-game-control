@@ -33,15 +33,25 @@ export function ControlPad({
   onUndo: () => void
 }) {
   const [pending, setPending] = useState<PendingEvent | null>(null)
+  const [selectedPlayerBySide, setSelectedPlayerBySide] = useState<
+    Partial<Record<SignalSide, string>>
+  >({})
 
-  function commit(playerId?: string) {
-    if (!pending?.stat) return
+  function commit(stat: SignalStat, playerId = pending ? selectedPlayerBySide[pending.side] : undefined) {
+    if (!pending) return
 
     onSignal(pending.side, pending.result, {
-      stat: pending.stat,
+      stat,
       playerId,
     })
     setPending(null)
+  }
+
+  function selectPlayer(side: SignalSide, playerId: string) {
+    setSelectedPlayerBySide((current) => ({
+      ...current,
+      [side]: playerId,
+    }))
   }
 
   return (
@@ -66,10 +76,18 @@ export function ControlPad({
           pending={pending}
           teamName={pending.side === "home" ? home : away}
           players={players.filter((player) => player.team === pending.side)}
-          onStat={(stat) => setPending((current) => (current ? { ...current, stat } : current))}
+          selectedPlayerId={selectedPlayerBySide[pending.side]}
+          onSelectPlayer={(playerId) => selectPlayer(pending.side, playerId)}
+          onStat={(stat) => commit(stat)}
           onCommit={commit}
           onCancel={() => setPending(null)}
-          onAddPlayer={onAddPlayer}
+          onAddPlayer={(side, player) => {
+            const nextPlayer = onAddPlayer(side, player)
+
+            selectPlayer(side, nextPlayer.id)
+
+            return nextPlayer
+          }}
         />
       ) : null}
 
@@ -143,6 +161,8 @@ function DisclosurePanel({
   pending,
   teamName,
   players,
+  selectedPlayerId,
+  onSelectPlayer,
   onStat,
   onCommit,
   onCancel,
@@ -151,8 +171,10 @@ function DisclosurePanel({
   pending: PendingEvent
   teamName: string
   players: RunPlayer[]
+  selectedPlayerId?: string
+  onSelectPlayer: (playerId: string) => void
   onStat: (stat: SignalStat) => void
-  onCommit: (playerId?: string) => void
+  onCommit: (stat: SignalStat, playerId?: string) => void
   onCancel: () => void
   onAddPlayer: (side: SignalSide, player: { number: string; name?: string }) => RunPlayer
 }) {
@@ -170,7 +192,8 @@ function DisclosurePanel({
       name: name.trim() || undefined,
     })
 
-    onCommit(player.id)
+    onSelectPlayer(player.id)
+    if (pending.stat) onCommit(pending.stat, player.id)
     setNumber("")
     setName("")
     setIsAdding(false)
@@ -191,81 +214,72 @@ function DisclosurePanel({
         </button>
       </div>
 
+      <div className="mt-3 flex gap-2 overflow-x-auto border-t border-zinc-900 pt-3">
+        {players.map((player) => (
+          <button
+            key={player.id}
+            type="button"
+            onClick={() => onSelectPlayer(player.id)}
+            className={`h-11 min-w-14 rounded-full border px-4 font-mono text-sm font-black transition active:scale-[0.98] ${
+              selectedPlayerId === player.id
+                ? "border-zinc-200 bg-zinc-100 text-black"
+                : "border-zinc-800 bg-black text-zinc-300 hover:border-zinc-600"
+            }`}
+            title={player.name || `#${player.number}`}
+          >
+            {player.number}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setIsAdding((current) => !current)}
+          className="h-11 min-w-11 rounded-full border border-dashed border-zinc-700 bg-black px-4 font-mono text-sm font-black text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-200"
+          aria-label="Add player"
+          title="Add player"
+        >
+          +
+        </button>
+      </div>
+
+      {isAdding ? (
+        <div className="mt-3 grid grid-cols-[0.36fr_1fr_auto] gap-2">
+          <input
+            value={number}
+            onChange={(event) => setNumber(event.target.value)}
+            inputMode="numeric"
+            placeholder="#"
+            aria-label="Jersey number"
+            className="h-10 rounded-full border border-zinc-800 bg-black px-3 font-mono text-sm font-black text-zinc-100 outline-none placeholder:text-zinc-700"
+          />
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Name"
+            aria-label="Player name"
+            className="h-10 rounded-full border border-zinc-800 bg-black px-3 text-sm font-bold text-zinc-100 outline-none placeholder:text-zinc-700"
+          />
+          <button
+            type="button"
+            onClick={addPlayer}
+            className="h-10 rounded-full border border-emerald-500/40 bg-emerald-950/40 px-4 text-xs font-black uppercase tracking-[0.14em] text-emerald-200 transition active:scale-[0.98]"
+          >
+            Done
+          </button>
+        </div>
+      ) : null}
+
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
         {stats.map((stat) => (
           <button
             key={stat}
             type="button"
             onClick={() => onStat(stat)}
-            className={`h-11 min-w-16 rounded-full border px-4 font-black uppercase tracking-[0.14em] transition active:scale-[0.98] ${
-              pending.stat === stat
-                ? "border-zinc-200 bg-zinc-100 text-black"
-                : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-600 hover:text-zinc-100"
-            }`}
+            className="h-12 min-w-16 rounded-full border border-zinc-800 bg-black px-4 font-black uppercase tracking-[0.14em] text-zinc-200 transition active:scale-[0.98] hover:border-zinc-500 hover:bg-zinc-900"
           >
             {stat}
           </button>
         ))}
       </div>
-
-      {pending.stat ? (
-        <div className="mt-3 border-t border-zinc-900 pt-3">
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => onCommit()}
-              className="h-11 min-w-20 rounded-full border border-zinc-700 bg-zinc-900 px-4 text-xs font-black uppercase tracking-[0.14em] text-zinc-200 transition active:scale-[0.98]"
-            >
-              Team
-            </button>
-            {players.map((player) => (
-              <button
-                key={player.id}
-                type="button"
-                onClick={() => onCommit(player.id)}
-                className="h-11 min-w-14 rounded-full border border-zinc-800 bg-black px-4 font-mono text-sm font-black text-zinc-200 transition active:scale-[0.98] hover:border-zinc-600"
-                title={player.name || `#${player.number}`}
-              >
-                {player.number}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setIsAdding((current) => !current)}
-              className="h-11 min-w-28 rounded-full border border-dashed border-zinc-700 bg-black px-4 text-xs font-black uppercase tracking-[0.14em] text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-200"
-            >
-              Add Player
-            </button>
-          </div>
-
-          {isAdding ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-[0.4fr_1fr_auto]">
-              <input
-                value={number}
-                onChange={(event) => setNumber(event.target.value)}
-                inputMode="numeric"
-                placeholder="#"
-                aria-label="Jersey number"
-                className="h-11 rounded-full border border-zinc-800 bg-black px-4 font-mono text-sm font-black text-zinc-100 outline-none placeholder:text-zinc-700"
-              />
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Name"
-                aria-label="Player name"
-                className="h-11 rounded-full border border-zinc-800 bg-black px-4 text-sm font-bold text-zinc-100 outline-none placeholder:text-zinc-700"
-              />
-              <button
-                type="button"
-                onClick={addPlayer}
-                className="h-11 rounded-full border border-emerald-500/40 bg-emerald-950/40 px-5 text-xs font-black uppercase tracking-[0.14em] text-emerald-200 transition active:scale-[0.98]"
-              >
-                Add
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   )
 }
