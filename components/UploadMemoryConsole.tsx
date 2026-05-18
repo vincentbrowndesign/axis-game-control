@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Upload, Video } from "lucide-react"
+import { Camera, Timer, Undo2, Upload } from "lucide-react"
 import { calculateStreamMetrics } from "@/lib/metrics/calculateMetrics"
 import { compareSessions } from "@/lib/progression/compareSessions"
 import { applySessionEvent } from "@/lib/session/applySessionEvent"
@@ -618,9 +618,11 @@ export default function UploadMemoryConsole() {
             <h1 className="mt-4 max-w-4xl text-6xl font-black leading-[0.9] tracking-[-0.065em] text-white sm:text-8xl">
               Tally. Time. Behavior.
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-white/48">
-              Axis measures basketball behavior with marks and elapsed time.
-            </p>
+            {!sessionStarted ? (
+              <p className="mt-6 max-w-xl text-base leading-7 text-white/48">
+                Axis measures basketball behavior with marks and elapsed time.
+              </p>
+            ) : null}
 
             {!sessionStarted ? (
               <div className="mt-8 grid gap-3 sm:max-w-xl">
@@ -645,18 +647,74 @@ export default function UploadMemoryConsole() {
                 </button>
               </div>
             ) : (
-              <div className="mt-8 max-w-xl rounded-[0.75rem] bg-white/[0.04] p-5">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-white/32">
+              <div className="mt-8 max-w-xl">
+                <p className="text-sm font-black uppercase tracking-[0.22em] text-white/34">
                   {sessionState.sessionName}
                 </p>
-                <div className="mt-3 text-6xl font-black leading-none tracking-[-0.06em] text-white sm:text-7xl">
-                  {metrics.makes} / {metrics.attempts}
+                <div className="mt-5 grid gap-2 border-y border-white/10 py-6">
+                  <div className="grid grid-cols-[1fr_auto] items-end gap-5">
+                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/42">
+                      Makes
+                    </p>
+                    <p className="font-mono text-8xl font-black leading-[0.8] tracking-[-0.06em] text-white sm:text-9xl">
+                      {metrics.makes}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto] items-end gap-5">
+                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/42">
+                      Misses
+                    </p>
+                    <p className="font-mono text-8xl font-black leading-[0.8] tracking-[-0.06em] text-amber-100/82 sm:text-9xl">
+                      {metrics.misses}
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-2 text-sm font-bold text-white/44">
-                  {formatElapsedMs(sessionState.elapsedMs)} elapsed
-                </p>
 
-                <div className="mt-6 grid gap-3 text-2xl font-black tracking-[-0.04em] text-amber-100/86">
+                <div className="mt-5 flex items-center justify-between gap-4">
+                  <p className="font-mono text-xl font-black text-white/68">
+                    {formatElapsedMs(sessionState.elapsedMs)}
+                  </p>
+                  <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.025] p-1">
+                    <button
+                      type="button"
+                      onClick={() => recordInputRef.current?.click()}
+                      disabled={isUploading}
+                      aria-label="Camera"
+                      className="grid h-10 w-10 place-items-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-amber-100 disabled:opacity-30"
+                    >
+                      <Camera className="h-4 w-4 stroke-[1.5]" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => uploadInputRef.current?.click()}
+                      disabled={isUploading}
+                      aria-label="Upload"
+                      className="grid h-10 w-10 place-items-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-amber-100 disabled:opacity-30"
+                    >
+                      <Upload className="h-4 w-4 stroke-[1.5]" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleTimer}
+                      aria-label="Timer"
+                      className={`grid h-10 w-10 place-items-center rounded-full transition hover:bg-white/[0.06] hover:text-amber-100 ${
+                        sessionState.timerRunning ? "text-amber-100/72" : "text-white/42"
+                      }`}
+                    >
+                      <Timer className="h-4 w-4 stroke-[1.5]" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={undoEvent}
+                      aria-label="Undo"
+                      className="grid h-10 w-10 place-items-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-amber-100"
+                    >
+                      <Undo2 className="h-4 w-4 stroke-[1.5]" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-7 grid gap-3 text-2xl font-black tracking-[-0.04em] text-amber-100/86">
                   <p>{metrics.intervalRange}</p>
                   <p>{metrics.longestDroughtSeconds}s longest drought</p>
                   <p>{rushLine(metrics.rushAfterMissPct)}</p>
@@ -692,28 +750,6 @@ export default function UploadMemoryConsole() {
                   ))}
                 </div>
               ) : null}
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => recordInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="inline-flex min-h-20 items-center justify-center gap-3 rounded-[0.75rem] bg-amber-200 px-6 py-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:bg-amber-100 disabled:opacity-50"
-                >
-                  <Video className="h-4 w-4" aria-hidden="true" />
-                  Record play
-                </button>
-                <button
-                  type="button"
-                  onClick={() => uploadInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="inline-flex min-h-20 items-center justify-center gap-3 rounded-[0.75rem] bg-stone-100 px-6 py-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:bg-white disabled:opacity-50"
-                >
-                  <Upload className="h-4 w-4" aria-hidden="true" />
-                  Upload clip
-                </button>
-              </div>
-
               <input
                 ref={recordInputRef}
                 type="file"
@@ -746,22 +782,6 @@ export default function UploadMemoryConsole() {
                       className="min-h-28 rounded-[0.75rem] bg-white/[0.06] text-3xl font-black uppercase tracking-[0.12em] text-white transition hover:bg-white/[0.1]"
                     >
                       Miss
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={undoEvent}
-                      className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white"
-                    >
-                      Undo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={toggleTimer}
-                      className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white"
-                    >
-                      {sessionState.timerRunning ? "Pause time" : "Start time"}
                     </button>
                   </div>
                 </>
