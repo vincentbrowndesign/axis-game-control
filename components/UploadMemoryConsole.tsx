@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Square, Upload, Video } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -201,6 +201,7 @@ export default function UploadMemoryConsole() {
   const [isUploading, setIsUploading] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
+  const [liveStreamId, setLiveStreamId] = useState("axis-live-preview")
   const [status, setStatus] = useState("")
   const [processingLine, setProcessingLine] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -233,11 +234,48 @@ export default function UploadMemoryConsole() {
     streamRef.current = null
     recorderRef.current = null
     setCameraReady(false)
+    setLiveStreamId("axis-live-preview")
 
     if (livePreviewRef.current) {
       livePreviewRef.current.srcObject = null
     }
   }
+
+  const attachLivePreview = useCallback(async (stream: MediaStream) => {
+    const video = livePreviewRef.current
+
+    if (!video) return
+
+    video.srcObject = stream
+    video.muted = true
+    video.autoplay = true
+    video.playsInline = true
+    video.setAttribute("playsinline", "true")
+    video.setAttribute("webkit-playsinline", "true")
+
+    console.log({
+      streamActive: !!stream,
+      videoTracks: stream?.getVideoTracks()?.length,
+      readyState: video.readyState,
+    })
+
+    await video.play()
+
+    console.log({
+      streamActive: !!stream,
+      videoTracks: stream?.getVideoTracks()?.length,
+      readyState: video.readyState,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!cameraReady || !streamRef.current) return
+    if (livePreviewRef.current?.srcObject === streamRef.current) return
+
+    void attachLivePreview(streamRef.current).catch((error) => {
+      console.warn("AXIS LIVE PREVIEW PLAY FAILED", error)
+    })
+  }, [attachLivePreview, cameraReady, liveStreamId])
 
   async function startRecording() {
     if (isUploading || isRecording) return
@@ -269,21 +307,18 @@ export default function UploadMemoryConsole() {
           aspectRatio: { ideal: 9 / 16 },
         },
       })
+
+      streamRef.current = stream
+      setLiveStreamId(stream.id)
+      setCameraReady(true)
+      await attachLivePreview(stream)
+
       const recorder = createRecorder({
         stream,
         timeslice: 1000,
       })
 
-      streamRef.current = stream
       recorderRef.current = recorder
-      setCameraReady(true)
-
-      if (livePreviewRef.current) {
-        livePreviewRef.current.srcObject = stream
-        livePreviewRef.current.muted = true
-        livePreviewRef.current.playsInline = true
-        void livePreviewRef.current.play().catch(() => undefined)
-      }
 
       recorder.start()
       setIsRecording(true)
@@ -647,31 +682,43 @@ export default function UploadMemoryConsole() {
           </div>
 
           <div className="overflow-hidden rounded-[1.5rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
-            <div className="aspect-[9/14] bg-black">
-              {cameraReady ? (
-                <video
-                  ref={livePreviewRef}
-                  className="h-full w-full object-cover opacity-90"
-                  autoPlay
-                  muted
-                  playsInline
-                />
-              ) : playbackUrl ? (
+            <div className="relative min-h-[420px] aspect-[9/14] bg-transparent sm:min-h-[560px]">
+              <video
+                key={liveStreamId}
+                ref={livePreviewRef}
+                className={`absolute inset-0 h-full w-full bg-transparent object-cover ${
+                  cameraReady
+                    ? "visible z-20 opacity-100"
+                    : "invisible z-0 opacity-0"
+                }`}
+                style={{
+                  background: "transparent",
+                  objectFit: "cover",
+                  visibility: cameraReady ? "visible" : "hidden",
+                  opacity: cameraReady ? 1 : 0,
+                  zIndex: cameraReady ? 20 : 0,
+                }}
+                autoPlay
+                muted
+                playsInline
+              />
+              {!cameraReady && playbackUrl ? (
                 <video
                   ref={previewRef}
                   src={playbackUrl}
-                  className="h-full w-full object-cover opacity-80"
+                  className="h-full w-full bg-transparent object-cover opacity-80"
                   controls
                   playsInline
                   preload="metadata"
                 />
-              ) : (
+              ) : null}
+              {!cameraReady && !playbackUrl ? (
                 <div className="grid h-full place-items-center bg-[radial-gradient(circle_at_center,#2a2117_0%,#090806_68%)] px-8 text-center">
                   <p className="text-4xl font-black leading-none tracking-[-0.05em] text-white">
                     Playback appears here.
                   </p>
                 </div>
-              )}
+              ) : null}
             </div>
             <div className="p-6">
               <p className="text-sm font-bold text-amber-100/65">
