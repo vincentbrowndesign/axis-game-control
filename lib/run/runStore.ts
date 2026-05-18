@@ -1,4 +1,5 @@
 import { createRunId, type Run } from "@/lib/run/runState"
+import type { RunMedia } from "@/lib/run/runState"
 import type { RunSignal } from "@/lib/run/signals"
 
 export const activeRunKey = "axis-active-run"
@@ -72,6 +73,37 @@ function normalizeRun(value: unknown): Run | null {
           }
         })
     : []
+  const media: RunMedia | undefined =
+    run.media && typeof run.media === "object"
+      ? {
+          id:
+            typeof run.media.id === "string" && run.media.id
+              ? run.media.id
+              : createRunId(),
+          name:
+            typeof run.media.name === "string" && run.media.name
+              ? run.media.name
+              : "Active footage",
+          url:
+            typeof run.media.url === "string" && run.media.url
+              ? run.media.url
+              : "",
+          durationSeconds:
+            typeof run.media.durationSeconds === "number" &&
+            Number.isFinite(run.media.durationSeconds)
+              ? run.media.durationSeconds
+              : 0,
+          contentType:
+            typeof run.media.contentType === "string" && run.media.contentType
+              ? run.media.contentType
+              : "video/mp4",
+          source: run.media.source === "camera" ? "camera" : "upload",
+          attachedAt:
+            typeof run.media.attachedAt === "number" && Number.isFinite(run.media.attachedAt)
+              ? run.media.attachedAt
+              : Date.now(),
+        }
+      : undefined
 
   return {
     id,
@@ -83,6 +115,7 @@ function normalizeRun(value: unknown): Run | null {
     signals,
     moments: Array.isArray(run.moments) ? run.moments : [],
     memories: Array.isArray(run.memories) ? run.memories : [],
+    media: media?.url ? media : undefined,
   }
 }
 

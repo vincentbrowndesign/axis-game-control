@@ -14,6 +14,7 @@ import {
   elapsedRunMs,
   formatRunTime,
   type Run,
+  type RunMedia,
 } from "@/lib/run/runState"
 import {
   readStoredRun,
@@ -392,6 +393,28 @@ function trackPayload(run: Run, playbackId?: string) {
   }
 }
 
+function activeMedia({
+  file,
+  url,
+  metadata,
+  source,
+}: {
+  file: File
+  url: string
+  metadata: { duration: number }
+  source: UploadSource
+}): RunMedia {
+  return {
+    id: createRunId(),
+    name: file.name || "Active footage",
+    url,
+    durationSeconds: metadata.duration,
+    contentType: file.type || "video/mp4",
+    source,
+    attachedAt: Date.now(),
+  }
+}
+
 export default function UploadMemoryConsole({
   initialMode = "tap",
 }: {
@@ -423,7 +446,10 @@ export default function UploadMemoryConsole({
     const timeout = window.setTimeout(() => {
       const stored = readStoredRun()
 
-      if (stored) setRun(stored)
+      if (stored) {
+        setRun(stored)
+        if (stored.media?.url) setPlaybackId(stored.media.url)
+      }
       setHasLoadedStoredRun(true)
     }, 0)
 
@@ -566,6 +592,13 @@ export default function UploadMemoryConsole({
     setRun((current) => ({
       ...current,
       [side]: value || (side === "home" ? "Home" : "Away"),
+    }))
+  }
+
+  function attachMedia(media: RunMedia) {
+    setRun((current) => ({
+      ...current,
+      media,
     }))
   }
 
@@ -743,6 +776,15 @@ export default function UploadMemoryConsole({
       const localUrl = URL.createObjectURL(file)
       localVideoUrlRef.current = localUrl
       const metadata = await readVideoMetadata(localUrl)
+      attachMedia(
+        activeMedia({
+          file,
+          url: localUrl,
+          metadata,
+          source,
+        })
+      )
+      setPlaybackId(localUrl)
       const supabase = createClient()
       const {
         data: { user },
@@ -750,7 +792,6 @@ export default function UploadMemoryConsole({
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        setPlaybackId(localUrl)
         setStatus("Memory local.")
         return
       }
@@ -769,7 +810,17 @@ export default function UploadMemoryConsole({
         .from("axis-replays")
         .createSignedUrl(filePath, 60 * 60 * 24 * 7)
 
-      if (!signed.error && signed.data?.signedUrl) setPlaybackId(signed.data.signedUrl)
+      if (!signed.error && signed.data?.signedUrl) {
+        setPlaybackId(signed.data.signedUrl)
+        attachMedia(
+          activeMedia({
+            file,
+            url: signed.data.signedUrl,
+            metadata,
+            source,
+          })
+        )
+      }
 
       const result = await completeUpload({
         traceId: uploadInfo.traceId,
@@ -795,7 +846,17 @@ export default function UploadMemoryConsole({
       })
 
       setStatus(uploadStatus(result))
-      if (result.videoUrl) setPlaybackId(result.videoUrl)
+      if (result.videoUrl) {
+        setPlaybackId(result.videoUrl)
+        attachMedia(
+          activeMedia({
+            file,
+            url: result.videoUrl,
+            metadata,
+            source,
+          })
+        )
+      }
     } catch {
       setStatus("Memory local.")
     } finally {
@@ -817,6 +878,7 @@ export default function UploadMemoryConsole({
           isRunning={isRunning}
           homeScore={axisState.home.makes}
           awayScore={axisState.away.makes}
+          media={run.media}
           onName={updateName}
           onPause={pauseClock}
           onResume={resumeClock}

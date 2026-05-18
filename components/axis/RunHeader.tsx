@@ -1,4 +1,4 @@
-import type { Run } from "@/lib/run/runState"
+import type { Run, RunMedia } from "@/lib/run/runState"
 
 export function RunHeader({
   run,
@@ -6,6 +6,7 @@ export function RunHeader({
   isRunning,
   homeScore,
   awayScore,
+  media,
   onName,
   onPause,
   onResume,
@@ -16,6 +17,7 @@ export function RunHeader({
   isRunning: boolean
   homeScore: number
   awayScore: number
+  media?: RunMedia
   onName: (side: "home" | "away", value: string) => void
   onPause: () => void
   onResume: () => void
@@ -64,11 +66,43 @@ export function RunHeader({
         />
       </div>
 
+      <ActiveMediaStrip media={media} />
+
       <div className="flex items-center justify-center gap-2">
         <ClockButton label={isRunning ? "Pause" : "Start"} onClick={isRunning ? onPause : onResume} />
         <ClockButton label="Reset" onClick={onReset} />
       </div>
     </header>
+  )
+}
+
+function ActiveMediaStrip({ media }: { media?: RunMedia }) {
+  const duration = media?.durationSeconds
+    ? `${Math.max(0, Math.round(media.durationSeconds)).toString().padStart(2, "0")}s`
+    : "00s"
+
+  return (
+    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2">
+      <span
+        className={`h-2 w-2 rounded-full ${
+          media ? "bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.55)]" : "bg-zinc-700"
+        }`}
+      />
+      <div className="min-w-0">
+        <p className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
+          {media ? "Active footage attached" : "No footage attached"}
+        </p>
+        <p className="truncate text-xs font-bold text-zinc-400">
+          {media?.name || "Record or choose file"}
+        </p>
+      </div>
+      <div className="grid justify-items-end gap-0.5">
+        <span className="font-mono text-xs font-black text-zinc-500">{duration}</span>
+        <span className="text-[9px] font-black uppercase tracking-[0.16em] text-zinc-700">
+          {media?.source || "media"}
+        </span>
+      </div>
+    </div>
   )
 }
 

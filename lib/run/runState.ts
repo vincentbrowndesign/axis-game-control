@@ -16,6 +16,16 @@ export type RunMemory = {
   playbackId?: string
 }
 
+export type RunMedia = {
+  id: string
+  name: string
+  url: string
+  durationSeconds: number
+  contentType: string
+  source: "camera" | "upload"
+  attachedAt: number
+}
+
 export type Run = {
   id: string
   home: string
@@ -26,6 +36,7 @@ export type Run = {
   signals: RunSignal[]
   moments: RunMoment[]
   memories: RunMemory[]
+  media?: RunMedia
 }
 
 export function createRunId() {
