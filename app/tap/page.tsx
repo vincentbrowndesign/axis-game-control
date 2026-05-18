@@ -1,8 +1,8 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
+import UploadMemoryConsole from "@/components/UploadMemoryConsole"
 import { createClient } from "@/lib/supabase/server"
 
-export default async function HomePage() {
+export default async function TapPage() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -10,18 +10,20 @@ export default async function HomePage() {
 
   if (!user?.email) {
     return (
-      <main className="min-h-screen bg-[#0c0b09] px-5 py-10 text-white">
+      <main className="min-h-screen bg-[#050505] px-5 py-10 text-zinc-100">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-center">
-          <p className="text-sm font-bold text-white/42">Axis</p>
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-zinc-500">
+            Axis
+          </p>
           <h1 className="mt-4 max-w-3xl text-5xl font-black tracking-[-0.05em] sm:text-7xl">
             Tap the signal.
           </h1>
-          <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
+          <p className="mt-5 max-w-xl text-base font-bold leading-7 text-zinc-500">
             Track the shift. Store the memory.
           </p>
           <Link
             href="/auth"
-            className="mt-8 w-fit bg-stone-100 px-5 py-3 text-sm font-bold text-black transition hover:bg-amber-100"
+            className="mt-8 w-fit rounded-full bg-zinc-100 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-black transition hover:bg-emerald-200"
           >
             Sign in
           </Link>
@@ -30,5 +32,5 @@ export default async function HomePage() {
     )
   }
 
-  redirect("/tap")
+  return <UploadMemoryConsole initialMode="tap" />
 }
