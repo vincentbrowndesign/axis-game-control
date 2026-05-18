@@ -14,40 +14,8 @@ export function ControlPad({
   return (
     <section className="grid gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <TeamSignal
-          side="home"
-          result="make"
-          label={`${home} make`}
-          name={home}
-          onSignal={onSignal}
-          size="primary"
-        />
-        <TeamSignal
-          side="away"
-          result="make"
-          label={`${away} make`}
-          name={away}
-          onSignal={onSignal}
-          size="primary"
-        />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <TeamSignal
-          side="home"
-          result="miss"
-          label={`${home} miss`}
-          name={home}
-          onSignal={onSignal}
-          size="secondary"
-        />
-        <TeamSignal
-          side="away"
-          result="miss"
-          label={`${away} miss`}
-          name={away}
-          onSignal={onSignal}
-          size="secondary"
-        />
+        <TeamLane homeAway="home" name={home} onSignal={onSignal} />
+        <TeamLane homeAway="away" name={away} onSignal={onSignal} />
       </div>
       <button
         type="button"
@@ -57,6 +25,37 @@ export function ControlPad({
         Undo
       </button>
     </section>
+  )
+}
+
+function TeamLane({
+  homeAway,
+  name,
+  onSignal,
+}: {
+  homeAway: SignalSide
+  name: string
+  onSignal: (side: SignalSide, result: SignalResult) => void
+}) {
+  return (
+    <div className="grid gap-2">
+      <TeamSignal
+        side={homeAway}
+        result="make"
+        label={`${name} make`}
+        name={name}
+        onSignal={onSignal}
+        size="primary"
+      />
+      <TeamSignal
+        side={homeAway}
+        result="miss"
+        label={`${name} miss`}
+        name={name}
+        onSignal={onSignal}
+        size="secondary"
+      />
+    </div>
   )
 }
 

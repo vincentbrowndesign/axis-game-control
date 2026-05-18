@@ -312,7 +312,6 @@ export default function UploadMemoryConsole({
 }) {
   const recordInputRef = useRef<HTMLInputElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
-  const artifactRef = useRef<HTMLDivElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
   const [run, setRun] = useState<Run>(() => createRun())
   const [now, setNow] = useState(() => Date.now())
@@ -501,18 +500,66 @@ export default function UploadMemoryConsole({
     setStatus("Run archived.")
   }
 
+  function renderExportArtifact() {
+    if (typeof document === "undefined") return null
+
+    const artifact = document.createElement("div")
+    artifact.style.position = "fixed"
+    artifact.style.left = "-1200px"
+    artifact.style.top = "0"
+    artifact.style.width = "720px"
+    artifact.style.background = "#050505"
+    artifact.style.color = "#f4f4f5"
+    artifact.style.padding = "32px"
+    artifact.style.pointerEvents = "none"
+    artifact.style.zIndex = "-1"
+    artifact.innerHTML = `
+      <div style="font-family: Arial, sans-serif;">
+        <p style="margin:0;color:#6ee7b7;font-size:11px;font-weight:900;letter-spacing:0.28em;text-transform:uppercase;">Axis Archive</p>
+        <h1 style="margin:28px 0 0;font-size:52px;line-height:0.9;font-weight:900;letter-spacing:-0.05em;">${escapeHtml(run.home)} / ${escapeHtml(run.away)}</h1>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:30px;padding:22px 0;border-top:1px solid #27272a;border-bottom:1px solid #27272a;">
+          ${artifactNumberHtml("Signals", run.signals.length)}
+          ${artifactNumberHtml("Moments", run.moments.length)}
+          ${artifactNumberHtml("State", axisState.label)}
+        </div>
+        <div style="display:grid;gap:12px;margin-top:28px;font-size:28px;line-height:1;font-weight:900;letter-spacing:-0.04em;">
+          <p style="margin:0;color:#fdba74;">${escapeHtml(track.control)}</p>
+          <p style="margin:0;color:#7dd3fc;">${escapeHtml(track.momentum)}</p>
+          <p style="margin:0;color:#f4f4f5;">${escapeHtml(track.pressure)}</p>
+          <p style="margin:0;color:#6ee7b7;">${escapeHtml(track.strongestMoment)}</p>
+        </div>
+      </div>
+    `
+    document.body.appendChild(artifact)
+
+    return artifact
+  }
+
   async function exportPng(share = false) {
-    if (!artifactRef.current) return
+    if (typeof document === "undefined") return
+    let artifact: HTMLDivElement | null = null
 
     try {
       storeCurrentRun()
       setStatus("Archive rendering.")
+      artifact = renderExportArtifact()
+
+      if (!artifact) {
+        setStatus("Archive unavailable.")
+        return
+      }
+
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
       const { toPng } = await import("html-to-image")
-      const dataUrl = await toPng(artifactRef.current, {
+      const dataUrl = await toPng(artifact, {
         cacheBust: true,
-        pixelRatio: 2,
+        pixelRatio: 1,
         backgroundColor: "#050505",
+        canvasWidth: 720,
+        canvasHeight: artifact.scrollHeight,
       })
+      artifact.remove()
+      artifact = null
       const response = await fetch(dataUrl)
       const blob = await response.blob()
       const validBlob = blob.size > 0 && blob.type.startsWith("image/")
@@ -572,6 +619,8 @@ export default function UploadMemoryConsole({
       setStatus("Archive saved.")
     } catch {
       setStatus("Archive unavailable.")
+    } finally {
+      artifact?.remove()
     }
   }
 
@@ -693,29 +742,6 @@ export default function UploadMemoryConsole({
         onChange={(event) => void chooseFile(event.target.files?.[0], "upload")}
       />
 
-      <div
-        ref={artifactRef}
-        className="pointer-events-none fixed -left-[9999px] top-0 w-[1080px] bg-[#050505] p-14 text-zinc-100"
-      >
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-emerald-300">
-          Axis Archive
-        </p>
-        <h1 className="mt-8 text-7xl font-black leading-none tracking-[-0.06em]">
-          {run.home} / {run.away}
-        </h1>
-        <div className="mt-10 grid grid-cols-3 gap-5 border-y border-zinc-800 py-8">
-          <ArtifactNumber label="Signals" value={run.signals.length} />
-          <ArtifactNumber label="Moments" value={run.moments.length} />
-          <ArtifactNumber label="State" value={axisState.label} />
-        </div>
-        <div className="mt-10 grid gap-5 text-4xl font-black leading-tight tracking-[-0.04em]">
-          <p className="text-orange-300">{track.control}</p>
-          <p className="text-sky-300">{track.momentum}</p>
-          <p className="text-zinc-100">{track.pressure}</p>
-          <p className="text-emerald-300">{track.strongestMoment}</p>
-        </div>
-      </div>
-
       <ControlBar
         onCamera={() => recordInputRef.current?.click()}
         onUpload={() => uploadInputRef.current?.click()}
@@ -727,17 +753,22 @@ export default function UploadMemoryConsole({
   )
 }
 
-function ArtifactNumber({ label, value }: { label: string; value: number | string }) {
-  return (
+function escapeHtml(value: string | number) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
+function artifactNumberHtml(label: string, value: number | string) {
+  return `
     <div>
-      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-        {label}
-      </p>
-      <p className="mt-2 font-mono text-5xl font-black leading-none text-zinc-100">
-        {value}
-      </p>
+      <p style="margin:0;color:#71717a;font-size:10px;font-weight:900;letter-spacing:0.18em;text-transform:uppercase;">${escapeHtml(label)}</p>
+      <p style="margin:8px 0 0;color:#f4f4f5;font-family:monospace;font-size:38px;line-height:1;font-weight:900;">${escapeHtml(value)}</p>
     </div>
-  )
+  `
 }
 
 function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }) {
