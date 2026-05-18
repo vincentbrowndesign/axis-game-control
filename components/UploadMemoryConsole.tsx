@@ -21,6 +21,7 @@ import {
   readStoredRun,
   writeStoredRun,
 } from "@/lib/run/runStore"
+import { scoreFor } from "@/lib/run/score"
 import type { SignalResult, SignalSide } from "@/lib/run/signals"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -368,6 +369,7 @@ export default function UploadMemoryConsole({
       pausedAt: run.pausedAt,
       pausedMs: run.pausedMs,
       signals: run.signals,
+      scoreEvents: run.scoreEvents,
       moments: run.moments,
       memories: run.memories,
       media: run.media,
@@ -382,6 +384,7 @@ export default function UploadMemoryConsole({
       run.moments,
       run.pausedAt,
       run.pausedMs,
+      run.scoreEvents,
       run.signals,
       run.startedAt,
     ]
@@ -430,6 +433,7 @@ export default function UploadMemoryConsole({
   const elapsed = formatRunTime(elapsedMs)
   const axisState = useMemo(() => deriveAxisState(run, elapsedMs), [run, elapsedMs])
   const systemValue = useMemo(() => calculateSystemPlusMinus(run), [run])
+  const scoreboard = useMemo(() => scoreFor(run), [run])
   const localTrack = useMemo(() => localTrackIntelligence(run), [run])
   const visibleTrack = openAiTrack || localTrack
 
@@ -681,8 +685,10 @@ export default function UploadMemoryConsole({
           run={run}
           elapsed={elapsed}
           isRunning={isRunning}
-          homeScore={Math.round(systemValue.homeValue)}
-          awayScore={Math.round(systemValue.awayValue)}
+          homeScore={scoreboard.home}
+          awayScore={scoreboard.away}
+          systemLabel={systemValue.label}
+          systemValue={Math.round(systemValue.netValue)}
           media={run.media}
           onName={updateName}
           onPause={pauseClock}

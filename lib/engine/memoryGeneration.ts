@@ -7,6 +7,7 @@ import {
   type RunMemory,
   type RunMoment,
 } from "@/lib/run/runState"
+import { scoreFor } from "@/lib/run/score"
 import type { RunSignal } from "@/lib/run/signals"
 
 export type ActiveSequence = {
@@ -37,15 +38,6 @@ export type ActiveTemporalSession = {
   openAiInterpretations: RunInterpretation[]
 }
 
-function score(signals: RunSignal[]) {
-  return {
-    home: signals.filter((signal) => signal.side === "home" && signal.result === "make")
-      .length,
-    away: signals.filter((signal) => signal.side === "away" && signal.result === "make")
-      .length,
-  }
-}
-
 export function buildActiveTemporalSession(
   run: Run,
   now = Date.now()
@@ -73,12 +65,7 @@ export function buildActiveTemporalSession(
 
   return {
     id: run.id,
-    score: temporal.system.events.length
-      ? {
-          home: Math.round(temporal.system.homeValue),
-          away: Math.round(temporal.system.awayValue),
-        }
-      : score(run.signals),
+    score: scoreFor(run),
     runtime: elapsedRunMs(run, now),
     signals: run.signals,
     sequences,

@@ -4,6 +4,7 @@ import {
   type RunAudioContext,
   type RunInterpretation,
   type RunMedia,
+  type RunScoreEvent,
 } from "@/lib/run/runState"
 import type { RunSignal } from "@/lib/run/signals"
 
@@ -77,6 +78,28 @@ function normalizeRun(value: unknown): Run | null {
             time,
           }
         })
+    : []
+  const scoreEvents: RunScoreEvent[] = Array.isArray(run.scoreEvents)
+    ? run.scoreEvents
+        .filter((event) => event && typeof event === "object")
+        .map((event) => {
+          const record = event as Partial<RunScoreEvent>
+          const team: RunScoreEvent["team"] = record.team === "away" ? "away" : "home"
+
+          return {
+            id: typeof record.id === "string" ? record.id : createRunId(),
+            team,
+            points:
+              typeof record.points === "number" && Number.isFinite(record.points)
+                ? record.points
+                : 0,
+            timestamp:
+              typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+                ? record.timestamp
+                : 0,
+          }
+        })
+        .filter((event) => event.points > 0)
     : []
   const media: RunMedia | undefined =
     run.media && typeof run.media === "object"
@@ -244,6 +267,7 @@ function normalizeRun(value: unknown): Run | null {
     pausedAt,
     pausedMs,
     signals,
+    scoreEvents,
     moments: Array.isArray(run.moments) ? run.moments : [],
     memories: Array.isArray(run.memories) ? run.memories : [],
     media: media?.url ? media : undefined,

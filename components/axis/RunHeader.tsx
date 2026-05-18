@@ -6,6 +6,8 @@ export function RunHeader({
   isRunning,
   homeScore,
   awayScore,
+  systemLabel,
+  systemValue,
   onName,
   onPause,
   onResume,
@@ -16,6 +18,8 @@ export function RunHeader({
   isRunning: boolean
   homeScore: number
   awayScore: number
+  systemLabel?: string
+  systemValue?: number
   media?: RunMedia
   sequenceHref?: string
   onName: (side: "home" | "away", value: string) => void
@@ -64,6 +68,19 @@ export function RunHeader({
           aria-label="Away"
           className="min-w-0 bg-transparent text-right text-lg font-black uppercase leading-none text-sky-300 outline-none sm:text-2xl"
         />
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
+          Signal state
+        </p>
+        <p className="truncate text-xs font-black uppercase tracking-[0.18em] text-emerald-300">
+          {systemLabel || "STABLE FLOW"}
+        </p>
+        <p className="font-mono text-xs font-black text-zinc-500">
+          {systemValue && systemValue > 0 ? "+" : ""}
+          {systemValue ?? 0}
+        </p>
       </div>
 
       <div className="flex items-center justify-center gap-2">

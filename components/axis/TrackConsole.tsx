@@ -308,6 +308,18 @@ export function TrackConsole() {
               {source}
             </span>
           </div>
+          <div className="flex items-center justify-center gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
+              Signal state
+            </span>
+            <span className={`text-xs font-black uppercase tracking-[0.18em] ${labelTone(temporal.system.label)}`}>
+              {temporal.system.label}
+            </span>
+            <span className="font-mono text-xs font-black text-zinc-500">
+              {Math.round(temporal.system.netValue) > 0 ? "+" : ""}
+              {Math.round(temporal.system.netValue)}
+            </span>
+          </div>
         </header>
 
         <section className="relative overflow-hidden rounded-lg border border-zinc-800 bg-black">

@@ -20,6 +20,13 @@ export type RunMemory = {
   interpretation?: string
 }
 
+export type RunScoreEvent = {
+  id: string
+  team: "home" | "away"
+  points: number
+  timestamp: number
+}
+
 export type RunMedia = {
   id: string
   name: string
@@ -69,6 +76,7 @@ export type Run = {
   pausedAt?: number
   pausedMs?: number
   signals: RunSignal[]
+  scoreEvents: RunScoreEvent[]
   moments: RunMoment[]
   memories: RunMemory[]
   media?: RunMedia
@@ -97,6 +105,7 @@ export function createRun(): Run {
     startedAt: Date.now(),
     pausedMs: 0,
     signals: [],
+    scoreEvents: [],
     moments: [],
     memories: [],
   }

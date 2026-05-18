@@ -127,6 +127,7 @@ function runFromTrackBody(body: Record<string, unknown>, signals: TrackSignal[])
       result: signal.result,
       time: signal.time,
     })),
+    scoreEvents: [],
     moments: [],
     memories: [],
   }
