@@ -6,6 +6,8 @@ export const emptyStreamMetrics: StreamMetrics = {
   makes: 0,
   misses: 0,
   makeRate: 0,
+  makesPerMinute: 0,
+  attemptsPerMinute: 0,
   elapsedMs: 0,
   avgIntervalSeconds: 0,
   intervalRange: "No attempts yet.",
@@ -154,12 +156,15 @@ export function calculateStreamMetrics({
     .map((event, index) => event.timestampMs - attempts[index].timestampMs)
   const hot = cluster(attempts, "INCREMENT")
   const empty = cluster(attempts, "DECREMENT")
+  const minutes = elapsedMs > 0 ? elapsedMs / 60000 : 0
 
   return {
     attempts: attempts.length,
     makes,
     misses,
     makeRate: attempts.length ? makes / attempts.length : 0,
+    makesPerMinute: minutes ? round(makes / minutes) : 0,
+    attemptsPerMinute: minutes ? round(attempts.length / minutes) : 0,
     elapsedMs,
     avgIntervalSeconds: round(average(intervals) / 1000),
     intervalRange: intervalRange(intervals),

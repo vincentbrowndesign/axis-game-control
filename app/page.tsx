@@ -14,10 +14,10 @@ export default async function HomePage() {
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-center">
           <p className="text-sm font-bold text-white/42">Axis</p>
           <h1 className="mt-4 max-w-3xl text-5xl font-black tracking-[-0.05em] sm:text-7xl">
-            Save basketball footage.
+            Tally behavior.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
-            Sign in, record or choose footage, and play it back.
+            Sign in, choose a session, and let Axis keep the memory.
           </p>
           <Link
             href="/auth"

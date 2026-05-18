@@ -8,6 +8,8 @@ export type StreamMetrics = {
   makes: number
   misses: number
   makeRate: number
+  makesPerMinute: number
+  attemptsPerMinute: number
   elapsedMs: number
   avgIntervalSeconds: number
   intervalRange: string
