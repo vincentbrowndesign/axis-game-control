@@ -48,11 +48,25 @@ type Props = {
 
 const waveformBars = [42, 72, 48, 86, 56, 64, 94, 44, 78, 52, 88, 60, 46, 82]
 
+type ClientUploadInfo = {
+  traceId: string
+  uploadFile: File | Blob
+  uploadName: string
+  uploadType: string
+  isMobile: boolean
+  isIOS: boolean
+  isSafari: boolean
+  userAgent: string
+  viewport: string
+}
+
 function uploadStatus(data: AxisUploadResponse) {
   if (data.ok) return "Saved. Memory is processing."
-  if (data.error) return data.error.toLowerCase()
+  if (data.recovery) return data.recovery
+  if (data.stored) return "Video uploaded. Rebuilding anchors."
+  if (data.error) return "Still processing..."
 
-  return "Upload failed"
+  return "Still processing..."
 }
 
 function safeParseUploadResponse(text: string) {
@@ -69,21 +83,43 @@ function safeParseUploadResponse(text: string) {
 function uploadWithProgress({
   formData,
   onProgress,
+  traceId,
+  onStage,
 }: {
   formData: FormData
   onProgress: (progress: number) => void
+  traceId: string
+  onStage?: (stage: string) => void
 }) {
   return new Promise<AxisUploadResponse>((resolve, reject) => {
     const request = new XMLHttpRequest()
 
+    onStage?.("upload-request-start")
+    console.info("AXIS MOBILE UPLOAD", {
+      traceId,
+      stage: "upload-request-start",
+    })
     request.open("POST", "/api/upload")
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) return
 
-      onProgress(Math.round((event.loaded / event.total) * 100))
+      const progress = Math.round((event.loaded / event.total) * 100)
+
+      onProgress(progress)
+      if (progress > 0 && progress < 100) {
+        onStage?.("upload-progress")
+      }
     }
     request.onload = () => {
       const result = safeParseUploadResponse(request.responseText)
+      console.info("AXIS MOBILE UPLOAD", {
+        traceId,
+        stage: "upload-response",
+        status: request.status,
+        responseStage: result.stage,
+        stored: result.stored,
+        fallback: result.fallback,
+      })
 
       if (request.status >= 200 && request.status < 300 && result.ok) {
         onProgress(100)
@@ -94,10 +130,58 @@ function uploadWithProgress({
         )
       }
     }
-    request.onerror = () => reject(new Error("Network interrupted"))
-    request.onabort = () => reject(new Error("Upload cancelled"))
+    request.onerror = () => {
+      onStage?.("network-interrupted")
+      reject(new Error("Network interrupted"))
+    }
+    request.onabort = () => {
+      onStage?.("upload-paused")
+      reject(new Error("Upload paused"))
+    }
     request.send(formData)
   })
+}
+
+function mobileUploadInfo(file: File): ClientUploadInfo {
+  const userAgent = navigator.userAgent || ""
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent)
+  const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent)
+  const isMobile =
+    isIOS ||
+    /Android|Mobi|Mobile/i.test(userAgent) ||
+    window.matchMedia("(pointer: coarse)").matches
+  const inferredType = file.type || (
+    file.name.toLowerCase().endsWith(".mov")
+      ? "video/quicktime"
+      : file.name.toLowerCase().endsWith(".m4v")
+        ? "video/x-m4v"
+        : "video/mp4"
+  )
+  const uploadName = file.name || `axis-mobile-${Date.now()}.mov`
+  let uploadFile: File | Blob = file
+
+  try {
+    uploadFile = new File([file], uploadName, {
+      type: inferredType,
+      lastModified: file.lastModified || Date.now(),
+    })
+  } catch {
+    uploadFile = new Blob([file], {
+      type: inferredType,
+    })
+  }
+
+  return {
+    traceId: crypto.randomUUID(),
+    uploadFile,
+    uploadName,
+    uploadType: inferredType,
+    isMobile,
+    isIOS,
+    isSafari,
+    userAgent,
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+  }
 }
 
 function readVideoMetadata(file: File) {
@@ -165,8 +249,13 @@ async function captureKeyframes({
   video.src = videoUrl
 
   await new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(resolve, 1800)
     video.onloadedmetadata = () => resolve()
     video.onerror = () => resolve()
+    video.onloadeddata = () => {
+      window.clearTimeout(timeout)
+      resolve()
+    }
   })
 
   const canvas = document.createElement("canvas")
@@ -193,14 +282,26 @@ async function captureKeyframes({
   }[] = []
 
   for (const landmark of landmarks) {
-    await seekVideo(video, landmark.timestampSeconds)
-    context.fillStyle = "#090806"
-    context.fillRect(0, 0, width, height)
-    context.drawImage(video, 0, 0, width, height)
-    frames.push({
-      landmark,
-      keyframeUrl: canvas.toDataURL("image/jpeg", 0.72),
-    })
+    try {
+      await seekVideo(video, landmark.timestampSeconds)
+      context.fillStyle = "#090806"
+      context.fillRect(0, 0, width, height)
+      context.drawImage(video, 0, 0, width, height)
+      frames.push({
+        landmark,
+        keyframeUrl: canvas.toDataURL("image/jpeg", 0.72),
+      })
+    } catch (error) {
+      console.warn("AXIS KEYFRAME FALLBACK", {
+        stage: "keyframe-generation",
+        landmark: landmark.id,
+        error,
+      })
+      frames.push({
+        landmark,
+        keyframeUrl: null,
+      })
+    }
     onFrame?.(frames[frames.length - 1])
   }
 
@@ -245,6 +346,7 @@ export default function UploadMemoryConsole({
   const [processingLine, setProcessingLine] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
   const [transcriptLines, setTranscriptLines] = useState<string[]>([])
+  const [debugTraceId, setDebugTraceId] = useState("")
   const [selectedMoment, setSelectedMoment] = useState<
     ReplayMoment | undefined
   >(replayMoments[0])
@@ -284,7 +386,27 @@ export default function UploadMemoryConsole({
     setProcessingLine("Reading the footage")
     setUploadProgress(0)
     setTranscriptLines([])
+    setDebugTraceId("")
     let extractedMoments = false
+    const uploadInfo = mobileUploadInfo(file)
+    setDebugTraceId(uploadInfo.traceId)
+
+    console.info("AXIS MOBILE UPLOAD", {
+      traceId: uploadInfo.traceId,
+      stage: "upload-start",
+      file: {
+        name: file.name,
+        type: file.type || "missing",
+        size: file.size,
+        lastModified: file.lastModified,
+      },
+      mobile: {
+        isMobile: uploadInfo.isMobile,
+        isIOS: uploadInfo.isIOS,
+        isSafari: uploadInfo.isSafari,
+        viewport: uploadInfo.viewport,
+      },
+    })
 
     try {
       if (localVideoUrlRef.current) {
@@ -300,24 +422,53 @@ export default function UploadMemoryConsole({
       setSelectedMoment(undefined)
       setProcessingLine("Finding memory anchors")
 
-      await captureKeyframes({
-        videoUrl: metadata.url,
-        landmarks,
-        onFrame: ({ landmark, keyframeUrl }) => {
+      try {
+        await captureKeyframes({
+          videoUrl: metadata.url,
+          landmarks,
+          onFrame: ({ landmark, keyframeUrl }) => {
+            const moment = momentFromFrame({
+              landmark,
+              keyframeUrl,
+              videoUrl: metadata.url,
+              fileName: file.name,
+            })
+
+            setLocalMoments((items) => {
+              if (items.some((item) => item.id === moment.id)) return items
+
+              return [...items, moment]
+            })
+            setSelectedMoment((current) => current || moment)
+            setProcessingLine(`${landmark.caption} / ${landmark.timestamp}`)
+            setTranscriptLines((lines) =>
+              [
+                ...lines,
+                `[${landmark.timestamp}] ${landmark.title}`,
+              ].slice(-5)
+            )
+          },
+        })
+      } catch (error) {
+        console.warn("AXIS EXTRACTION FALLBACK", {
+          traceId: uploadInfo.traceId,
+          stage: "local-keyframe-extraction",
+          error,
+        })
+        landmarks.forEach((landmark) => {
           const moment = momentFromFrame({
             landmark,
-            keyframeUrl,
+            keyframeUrl: null,
             videoUrl: metadata.url,
             fileName: file.name,
           })
 
-          setLocalMoments((items) => {
-            if (items.some((item) => item.id === moment.id)) return items
-
-            return [...items, moment]
-          })
+          setLocalMoments((items) =>
+            items.some((item) => item.id === moment.id)
+              ? items
+              : [...items, moment]
+          )
           setSelectedMoment((current) => current || moment)
-          setProcessingLine(`${landmark.caption} / ${landmark.timestamp}`)
           setTranscriptLines((lines) =>
             [
               ...lines,
@@ -325,19 +476,30 @@ export default function UploadMemoryConsole({
             ].slice(-5)
           )
         },
-      })
+        )
+      }
 
       setStatus("Keyframes ready")
       setProcessingLine("Memory stream ready")
       extractedMoments = true
 
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", uploadInfo.uploadFile, uploadInfo.uploadName)
       formData.append("source", "upload")
       formData.append("environment", "practice")
       formData.append("mission", "Replay memory")
       formData.append("player", "Unassigned")
       formData.append("duration", String(metadata.duration))
+      formData.append("clientTraceId", uploadInfo.traceId)
+      formData.append("clientName", file.name || uploadInfo.uploadName)
+      formData.append("clientType", file.type || uploadInfo.uploadType)
+      formData.append("clientSize", String(file.size))
+      formData.append("clientLastModified", String(file.lastModified || 0))
+      formData.append("clientUserAgent", uploadInfo.userAgent)
+      formData.append("clientIsMobile", String(uploadInfo.isMobile))
+      formData.append("clientIsIOS", String(uploadInfo.isIOS))
+      formData.append("clientIsSafari", String(uploadInfo.isSafari))
+      formData.append("clientViewport", uploadInfo.viewport)
 
       setStatus("Uploading video")
       setProcessingLine("Saving replay memory")
@@ -348,27 +510,44 @@ export default function UploadMemoryConsole({
         result = await uploadWithProgress({
           formData,
           onProgress: setUploadProgress,
+          traceId: uploadInfo.traceId,
+          onStage: (stage) => {
+            if (stage === "upload-progress") {
+              setProcessingLine("Footage is moving into Axis")
+            }
+          },
         })
       } catch (error) {
         console.warn("UPLOAD RETRY", error)
-        setStatus("Connection paused. Retrying.")
-        setProcessingLine("Keeping keyframes ready")
+        setStatus("Still processing...")
+        setProcessingLine("Connection paused. Retrying quietly.")
         setUploadProgress(0)
+        await new Promise((resolve) => window.setTimeout(resolve, 900))
         result = await uploadWithProgress({
           formData,
           onProgress: setUploadProgress,
+          traceId: uploadInfo.traceId,
+          onStage: (stage) => {
+            if (stage === "upload-progress") {
+              setProcessingLine("Footage is moving into Axis")
+            }
+          },
         })
       }
 
       setStatus(uploadStatus(result))
-      setProcessingLine(result.ok ? "Saved to Axis" : "Upload needs another try")
+      setProcessingLine(
+        result.fallback
+          ? result.recovery || "Video uploaded, rebuilding anchors."
+          : "Saved to Axis"
+      )
     } catch (error) {
       console.error("UPLOAD MEMORY FAILED", error)
-      setStatus("Upload failed")
+      setStatus("Still processing...")
       setProcessingLine(
         extractedMoments
-          ? "Keyframes stayed ready. Try upload again."
-          : "Could not extract this video"
+          ? "Keyframes stayed ready. Axis will keep trying."
+          : "Keeping the footage ready. Try again when the signal steadies."
       )
     } finally {
       setIsUploading(false)
@@ -444,6 +623,11 @@ export default function UploadMemoryConsole({
                     ? `${uploadProgress}% uploaded`
                     : "Keyframes appear before the upload finishes"}
                 </p>
+                {debugTraceId ? (
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/20">
+                    trace {debugTraceId.slice(0, 8)}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>

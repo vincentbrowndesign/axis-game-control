@@ -12,8 +12,15 @@ export async function GET(
   _req: Request,
   context: Context
 ) {
+  const traceId = crypto.randomUUID()
+
   try {
     const { id } = await context.params
+    console.log("AXIS MUX UPLOAD PIPELINE", {
+      traceId,
+      stage: "mux-upload-poll-start",
+      uploadId: id,
+    })
 
     const mux = new Mux({
       tokenId: process.env.MUX_TOKEN_ID!,
@@ -21,6 +28,13 @@ export async function GET(
     })
 
     const upload = await mux.video.uploads.retrieve(id)
+    console.log("AXIS MUX UPLOAD PIPELINE", {
+      traceId,
+      stage: "mux-upload-result",
+      uploadId: id,
+      assetId: upload.asset_id || null,
+      status: upload.status || "unknown",
+    })
 
     if (!upload.asset_id) {
       await supabaseAdmin
@@ -33,12 +47,21 @@ export async function GET(
 
       return NextResponse.json({
         status: "processing",
+        traceId,
       })
     }
 
     const asset = await mux.video.assets.retrieve(
       upload.asset_id
     )
+    console.log("AXIS MUX UPLOAD PIPELINE", {
+      traceId,
+      stage: "mux-asset-result",
+      uploadId: id,
+      assetId: asset.id,
+      status: asset.status,
+      playbackIds: asset.playback_ids?.length || 0,
+    })
 
     if (asset.status !== "ready") {
       await supabaseAdmin
@@ -53,6 +76,7 @@ export async function GET(
 
       return NextResponse.json({
         status: asset.status === "errored" ? "error" : "processing",
+        traceId,
       })
     }
 
@@ -62,6 +86,7 @@ export async function GET(
     if (!playbackId) {
       return NextResponse.json({
         status: "processing",
+        traceId,
       })
     }
 
@@ -72,11 +97,16 @@ export async function GET(
       .maybeSingle()
 
     if (existing.error) {
-      console.error(existing.error)
+      console.error("AXIS MUX UPLOAD PIPELINE FAILURE", {
+        traceId,
+        stage: "session-lookup",
+        error: existing.error.message,
+      })
 
       return NextResponse.json({
         status: "database_error",
         error: existing.error.message,
+        traceId,
       })
     }
 
@@ -97,6 +127,7 @@ export async function GET(
       return NextResponse.json({
         status: "ready",
         sessionId: existing.data.id,
+        traceId,
       })
     }
 
@@ -116,24 +147,35 @@ export async function GET(
       .single()
 
     if (inserted.error) {
-      console.error(inserted.error)
+      console.error("AXIS MUX UPLOAD PIPELINE FAILURE", {
+        traceId,
+        stage: "session-create",
+        error: inserted.error.message,
+      })
 
       return NextResponse.json({
         status: "database_error",
         error: inserted.error.message,
+        traceId,
       })
     }
 
     return NextResponse.json({
       status: "ready",
       sessionId: inserted.data.id,
+      traceId,
     })
   } catch (error) {
-    console.error(error)
+    console.error("AXIS MUX UPLOAD PIPELINE FAILURE", {
+      traceId,
+      stage: "unhandled",
+      error: error instanceof Error ? error.message : "Mux upload polling failed",
+    })
 
     return NextResponse.json({
       status: "server_error",
       error: "Mux upload polling failed",
+      traceId,
     })
   }
 }

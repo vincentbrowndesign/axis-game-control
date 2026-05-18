@@ -5,6 +5,11 @@ export type AxisUploadResponse = {
   createdAt?: number
   error?: string
   detail?: string
+  stage?: string
+  traceId?: string
+  recovery?: string
+  stored?: boolean
+  fallback?: boolean
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -37,6 +42,11 @@ export function normalizeUploadResponse(
     createdAt: asNumber(record.createdAt),
     error: asString(record.error),
     detail: asString(record.detail),
+    stage: asString(record.stage),
+    traceId: asString(record.traceId),
+    recovery: asString(record.recovery),
+    stored: record.stored === true,
+    fallback: record.fallback === true,
   }
 }
 

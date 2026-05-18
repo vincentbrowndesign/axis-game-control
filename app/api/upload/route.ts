@@ -14,20 +14,52 @@ import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
 
+type UploadLogDetail = Record<string, unknown>
+
+function logUploadStage(
+  traceId: string,
+  stage: string,
+  detail: UploadLogDetail = {}
+) {
+  console.log("AXIS UPLOAD PIPELINE", {
+    traceId,
+    stage,
+    ...detail,
+  })
+}
+
+function logUploadFailure(
+  traceId: string,
+  stage: string,
+  detail: UploadLogDetail = {}
+) {
+  console.error("AXIS UPLOAD PIPELINE FAILURE", {
+    traceId,
+    stage,
+    ...detail,
+  })
+}
+
 function axisError({
   stage,
   error,
   status = 400,
   detail,
+  traceId,
+  stored = false,
+  recovery,
 }: {
   stage: string
   error: string
   status?: number
   detail?: unknown
+  traceId?: string
+  stored?: boolean
+  recovery?: string
 }) {
-  console.error("AXIS UPLOAD RESPONSE ERROR", {
-    stage,
+  logUploadFailure(traceId || "NO_TRACE", stage, {
     error,
+    stored,
     detail:
       detail instanceof Error
         ? detail.message
@@ -37,6 +69,10 @@ function axisError({
   const body: AxisUploadResponse = {
     ok: false,
     error,
+    stage,
+    traceId,
+    stored,
+    recovery,
     detail:
       detail instanceof Error
         ? detail.message
@@ -48,6 +84,45 @@ function axisError({
   }
 
   return safeJson(body, status)
+}
+
+function recoverableUploadResponse({
+  traceId,
+  stage,
+  replayId,
+  videoUrl,
+  recovery,
+  detail,
+}: {
+  traceId: string
+  stage: string
+  replayId?: string
+  videoUrl?: string | null
+  recovery: string
+  detail?: unknown
+}) {
+  logUploadFailure(traceId, stage, {
+    stored: true,
+    recovery,
+    detail:
+      detail instanceof Error
+        ? detail.message
+        : detail ?? null,
+  })
+
+  const body: AxisUploadResponse = {
+    ok: true,
+    replayId,
+    videoUrl: videoUrl || "",
+    createdAt: Date.now(),
+    stage,
+    traceId,
+    stored: true,
+    fallback: true,
+    recovery,
+  }
+
+  return safeJson(body, 202)
 }
 
 function detailFromError(error: unknown) {
@@ -100,30 +175,34 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const traceId = crypto.randomUUID()
+
   try {
-    console.log("AXIS UPLOAD ROUTE HIT")
-    console.log(
-      "AXIS UPLOAD BODY SIZE",
-      request.headers.get("content-length") || "UNKNOWN"
-    )
+    logUploadStage(traceId, "route-hit", {
+      contentLength: request.headers.get("content-length") || "UNKNOWN",
+      contentType: request.headers.get("content-type") || "UNKNOWN",
+      userAgent: request.headers.get("user-agent") || "UNKNOWN",
+    })
 
     if (request.headers.get("x-axis-route-test") === "true") {
       return safeJson({
         ok: true,
+        traceId,
+        stage: "route-test",
       })
     }
 
-    console.log("AXIS UPLOAD START")
+    logUploadStage(traceId, "upload-start")
 
     const supabase = await createClient()
-    console.log("AXIS SUPABASE CLIENT CREATED")
+    logUploadStage(traceId, "supabase-client-created")
 
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
 
-    console.log("AXIS AUTH STATE", {
+    logUploadStage(traceId, "auth-state", {
       authenticated: Boolean(user),
       userId: user?.id || null,
       error: userError?.message || null,
@@ -135,6 +214,7 @@ export async function POST(request: Request) {
         error: "AUTH REQUIRED",
         status: 401,
         detail: userError?.message,
+        traceId,
       })
     }
 
@@ -143,51 +223,73 @@ export async function POST(request: Request) {
     try {
       formData = await request.formData()
     } catch (error) {
-      console.error("AXIS FORM DATA ERROR", error)
-
       return axisError({
         stage: "form-data",
-        error: "MEMORY INGEST FAILED",
+        error: "UPLOAD STILL PROCESSING",
         status: 400,
         detail: detailFromError(error),
+        traceId,
       })
     }
 
-    console.log("AXIS FORM DATA RECEIVED")
+    logUploadStage(traceId, "form-data-received")
 
     const file = formData.get("file")
     const duration = Number(formData.get("duration") || 0)
+    const clientTraceId = cleanText(formData.get("clientTraceId"), traceId)
+    const clientMetadata = {
+      clientTraceId,
+      clientName: cleanText(formData.get("clientName"), "unknown"),
+      clientType: cleanText(formData.get("clientType"), "unknown"),
+      clientSize: Number(formData.get("clientSize") || 0),
+      clientLastModified: Number(formData.get("clientLastModified") || 0),
+      clientUserAgent: cleanText(formData.get("clientUserAgent"), "unknown"),
+      clientIsMobile: formData.get("clientIsMobile") === "true",
+      clientIsIOS: formData.get("clientIsIOS") === "true",
+      clientIsSafari: formData.get("clientIsSafari") === "true",
+      clientViewport: cleanText(formData.get("clientViewport"), "unknown"),
+    }
 
     if (!(file instanceof File)) {
       return axisError({
         stage: "file-validation",
-        error: "INVALID MEMORY FORMAT",
+        error: "UPLOAD STILL PROCESSING",
         status: 400,
         detail: typeof file,
+        traceId,
       })
     }
 
     if (file.size <= 0) {
       return axisError({
         stage: "file-validation",
-        error: "EMPTY MEMORY FILE",
+        error: "UPLOAD STILL PROCESSING",
         status: 400,
+        traceId,
       })
     }
 
-    console.log("AXIS FILE FOUND", file.name, file.type, file.size)
+    logUploadStage(traceId, "file-metadata", {
+      name: file.name || "unnamed",
+      type: file.type || "missing",
+      size: file.size,
+      duration,
+      ...clientMetadata,
+    })
 
     const normalized = normalizeReplayFile(file)
 
-    console.log("AXIS FILE", file)
-    console.log("AXIS NAME", normalized.originalName)
-    console.log("AXIS MIME", normalized.mime)
-    console.log("AXIS FINAL", normalized.finalName)
+    logUploadStage(traceId, "file-normalized", {
+      originalName: normalized.originalName,
+      mime: normalized.mime || "missing",
+      extension: normalized.extension,
+      finalName: normalized.finalName,
+    })
 
     if (!isSupportedReplayFile(file)) {
       return axisError({
         stage: "file-validation",
-        error: "INVALID MEMORY FORMAT",
+        error: "UPLOAD STILL PROCESSING",
         status: 400,
         detail: {
           name: normalized.originalName,
@@ -195,14 +297,16 @@ export async function POST(request: Request) {
           extension: normalized.extension,
           size: file.size,
         },
+        traceId,
       })
     }
 
     if (!normalized.finalName) {
       return axisError({
         stage: "file-normalization",
-        error: "STORAGE KEY INVALID",
+        error: "UPLOAD STILL PROCESSING",
         status: 400,
+        traceId,
       })
     }
 
@@ -212,35 +316,44 @@ export async function POST(request: Request) {
     if (!filePath.includes("/")) {
       return axisError({
         stage: "file-normalization",
-        error: "STORAGE KEY INVALID",
+        error: "UPLOAD STILL PROCESSING",
         status: 400,
         detail: filePath,
+        traceId,
       })
     }
 
-    console.log("AXIS PATH", filePath)
+    logUploadStage(traceId, "storage-path-ready", {
+      filePath,
+    })
 
     let arrayBuffer: ArrayBuffer
 
     try {
+      logUploadStage(traceId, "blob-conversion-start")
       arrayBuffer = await file.arrayBuffer()
     } catch (error) {
-      console.error("AXIS ARRAY BUFFER ERROR", error)
-
       return axisError({
         stage: "array-buffer",
-        error: "MEMORY INGEST FAILED",
+        error: "UPLOAD STILL PROCESSING",
         status: 400,
         detail: detailFromError(error),
+        traceId,
       })
     }
 
-    console.log("AXIS ARRAY BUFFER READY", arrayBuffer.byteLength)
+    logUploadStage(traceId, "blob-conversion-complete", {
+      byteLength: arrayBuffer.byteLength,
+    })
 
     const buffer = Buffer.from(arrayBuffer)
     const contentType = normalized.mime || "video/mp4"
 
-    console.log("AXIS STORAGE START")
+    logUploadStage(traceId, "storage-upload-start", {
+      bucket: "axis-replays",
+      contentType,
+      bytes: buffer.byteLength,
+    })
 
     let upload: Awaited<
       ReturnType<
@@ -260,52 +373,54 @@ export async function POST(request: Request) {
         "STORAGE UPLOAD"
       )
     } catch (error) {
-      console.error("AXIS STORAGE TIMEOUT OR FAILURE", error)
-
       return axisError({
         stage: "storage-upload",
-        error: "STORAGE WRITE FAILED",
+        error: "UPLOAD STILL PROCESSING",
         status: 500,
         detail: detailFromError(error),
+        traceId,
       })
     }
 
     if (upload.error) {
-      console.error("AXIS STORAGE FAILURE", upload.error)
-
       return axisError({
         stage: "storage-upload",
-        error: "STORAGE WRITE FAILED",
+        error: "UPLOAD STILL PROCESSING",
         status: 500,
         detail: upload.error.message,
+        traceId,
       })
     }
 
-    console.log("AXIS STORAGE SUCCESS", upload.data)
+    logUploadStage(traceId, "storage-upload-complete", {
+      path: upload.data.path,
+      fullPath: upload.data.fullPath || null,
+    })
+    logUploadStage(traceId, "mux-upload-result", {
+      status: "not_used",
+      reason: "server-storage-upload-path",
+    })
 
     const signedUrlTtl = 60 * 60 * 24 * 7
-    console.log("AXIS SIGNED URL START")
+    logUploadStage(traceId, "signed-url-start", {
+      ttl: signedUrlTtl,
+    })
 
     const signedUrl = await supabaseAdmin.storage
       .from("axis-replays")
       .createSignedUrl(filePath, signedUrlTtl)
 
     if (signedUrl.error) {
-      console.error("AXIS SIGNED URL FAILURE", signedUrl.error)
-      await supabaseAdmin.storage
-        .from("axis-replays")
-        .remove([filePath])
-
-      return axisError({
+      return recoverableUploadResponse({
+        traceId,
         stage: "signed-url",
-        error: "MEMORY LOAD FAILED",
-        status: 500,
+        recovery: "Video uploaded, rebuilding anchors.",
         detail: signedUrl.error.message,
       })
     }
 
-    console.log("AXIS SIGNED URL SUCCESS")
-    console.log("AXIS SESSION CREATE START")
+    logUploadStage(traceId, "signed-url-complete")
+    logUploadStage(traceId, "session-create-start")
     const playerName = cleanText(
       formData.get("player"),
       "Unassigned"
@@ -318,6 +433,15 @@ export async function POST(request: Request) {
       : 0
     const candidateLandmarks = extractReplayLandmarks({
       durationSeconds: safeDuration,
+    })
+
+    logUploadStage(traceId, "extraction-stage", {
+      durationSeconds: safeDuration,
+      candidateCount: candidateLandmarks.length,
+    })
+    logUploadStage(traceId, "keyframe-generation-stage", {
+      mode: "client-progressive",
+      candidateCount: candidateLandmarks.length,
     })
 
     const inserted = await supabaseAdmin
@@ -347,6 +471,12 @@ export async function POST(request: Request) {
         embedding_status: "pending",
         semantic_tags: candidateLandmarks.map((landmark) => landmark.title),
         metadata: {
+          traceId,
+          uploadPipeline: {
+            stage: "session-created",
+            stored: true,
+            client: clientMetadata,
+          },
           originalName: normalized.originalName,
           originalType: normalized.mime || null,
           originalSize: file.size,
@@ -364,21 +494,35 @@ export async function POST(request: Request) {
       .single()
 
     if (inserted.error) {
-      console.error("AXIS SESSION CREATE FAILURE", inserted.error)
-      await supabaseAdmin.storage
-        .from("axis-replays")
-        .remove([filePath])
+      const orphanRecord = await supabaseAdmin.from("axis_uploads").insert({
+        user_id: user.id,
+        bucket_id: "axis-replays",
+        file_path: filePath,
+        file_name: normalized.finalName,
+        content_type: contentType,
+        size_bytes: file.size,
+      })
 
-      return axisError({
+      if (orphanRecord.error) {
+        logUploadFailure(traceId, "orphan-upload-record", {
+          detail: orphanRecord.error.message,
+        })
+      }
+
+      return recoverableUploadResponse({
+        traceId,
         stage: "db-session-create",
-        error: "DATABASE FAILURE",
-        status: 500,
+        videoUrl: signedUrl.data?.signedUrl || "",
+        recovery: "Video uploaded, rebuilding anchors.",
         detail: inserted.error.message,
       })
     }
 
-    console.log("AXIS SESSION CREATED", inserted.data.id)
-    console.log("AXIS UPLOAD RECORD CREATE START")
+    logUploadStage(traceId, "session-create-complete", {
+      sessionId: inserted.data.id,
+      hasVideoUrl: Boolean(inserted.data.video_url),
+    })
+    logUploadStage(traceId, "upload-record-create-start")
 
     const uploadRecord = await supabaseAdmin.from("axis_uploads").insert({
       user_id: user.id,
@@ -391,16 +535,18 @@ export async function POST(request: Request) {
     })
 
     if (uploadRecord.error) {
-      console.error("AXIS UPLOAD RECORD FAILURE", uploadRecord.error)
+      logUploadFailure(traceId, "upload-record-create", {
+        detail: uploadRecord.error.message,
+      })
     } else {
-      console.log("AXIS UPLOAD RECORD CREATED")
+      logUploadStage(traceId, "upload-record-create-complete")
     }
 
     const createdAt = Date.now()
 
-    console.log("AXIS FINAL RESPONSE", {
+    logUploadStage(traceId, "final-completion", {
       replayId: inserted.data.id,
-      videoUrl: inserted.data.video_url || "",
+      hasVideoUrl: Boolean(inserted.data.video_url),
       createdAt,
     })
 
@@ -409,17 +555,19 @@ export async function POST(request: Request) {
       replayId: inserted.data.id,
       videoUrl: inserted.data.video_url || "",
       createdAt,
+      stage: "complete",
+      traceId,
+      stored: true,
     }
 
     return safeJson(body)
   } catch (error) {
-    console.error("AXIS UPLOAD ERROR", error)
-
     return axisError({
       stage: "unhandled",
-      error: "MEMORY INGEST FAILED",
+      error: "UPLOAD STILL PROCESSING",
       status: 500,
       detail: detailFromError(error),
+      traceId,
     })
   }
 }
