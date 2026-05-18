@@ -7,12 +7,16 @@ import {
 } from "@/lib/engine/processWeighting"
 import { riskMultiplier, type MissRisk } from "@/lib/engine/transitionRisk"
 import type { Run } from "@/lib/run/runState"
-import type { RunSignal } from "@/lib/run/signals"
+import {
+  isNegativeSignal,
+  isPositiveSignal,
+  type RunSignal,
+} from "@/lib/run/signals"
 
 export type SystemEvent = {
   id: string
   team: "HOME" | "AWAY"
-  outcome: "MAKE" | "MISS"
+  outcome: "PLUS" | "MINUS"
   process: ProcessGrade
   context: ActionContext
   missRisk?: MissRisk
@@ -32,15 +36,19 @@ export type SystemPlusMinus = {
 }
 
 function baseOutcome(signal: RunSignal) {
-  return signal.result === "make" ? 1 : -1
+  return isPositiveSignal(signal.result) ? 1 : -1
 }
 
 function inferProcess(signals: RunSignal[], index: number): ProcessGrade {
   const signal = signals[index]
   const previous = signals[index - 1]
   if (!signal || !previous) return "NEUTRAL"
-  if (signal.result === "make" && previous.side === signal.side) return "CORRECT"
-  if (signal.result === "miss" && previous.result === "miss" && previous.side === signal.side) {
+  if (isPositiveSignal(signal.result) && previous.side === signal.side) return "CORRECT"
+  if (
+    isNegativeSignal(signal.result) &&
+    isNegativeSignal(previous.result) &&
+    previous.side === signal.side
+  ) {
     return "BROKEN"
   }
 
@@ -53,10 +61,14 @@ function inferContext(signals: RunSignal[], index: number): ActionContext {
   if (!signal || !previous) return "NEUTRAL"
 
   const interval = signal.time - previous.time
-  if (signal.result === "make" && previous.side === signal.side && interval <= 8_000) {
+  if (isPositiveSignal(signal.result) && previous.side === signal.side && interval <= 8_000) {
     return "ADVANTAGE"
   }
-  if (signal.result === "miss" && previous.result === "miss" && interval <= 8_000) {
+  if (
+    isNegativeSignal(signal.result) &&
+    isNegativeSignal(previous.result) &&
+    interval <= 8_000
+  ) {
     return "FORCED"
   }
 
@@ -66,9 +78,9 @@ function inferContext(signals: RunSignal[], index: number): ActionContext {
 function inferMissRisk(signals: RunSignal[], index: number): MissRisk | undefined {
   const signal = signals[index]
   const next = signals[index + 1]
-  if (!signal || signal.result === "make") return undefined
+  if (!signal || isPositiveSignal(signal.result)) return undefined
   if (!next) return "NORMAL"
-  if (next.side !== signal.side && next.result === "make" && next.time - signal.time <= 8_000) {
+  if (next.side !== signal.side && isPositiveSignal(next.result) && next.time - signal.time <= 8_000) {
     return "LIVE_BALL_RUNOUT"
   }
   if (next.side !== signal.side && next.time - signal.time <= 12_000) return "LIVE_BALL"
@@ -86,7 +98,7 @@ export function calculateSystemPlusMinus(run: Run): SystemPlusMinus {
     const process = inferProcess(signals, index)
     const context = inferContext(signals, index)
     const missRisk = inferMissRisk(signals, index)
-    const outcome = signal.result === "make" ? "MAKE" : "MISS"
+    const outcome = isPositiveSignal(signal.result) ? "PLUS" : "MINUS"
     const value =
       baseOutcome(signal) *
       processMultiplier(process) *

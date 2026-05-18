@@ -1,5 +1,5 @@
 import type { Run } from "@/lib/run/runState"
-import type { RunSignal } from "@/lib/run/signals"
+import { isNegativeSignal, isPositiveSignal, type RunSignal } from "@/lib/run/signals"
 import type { BehavioralLabel } from "./behavioralState"
 import type { SequenceAnalysis } from "./sequenceAnalysis"
 
@@ -14,15 +14,15 @@ export type TemporalMoment = {
 }
 
 function labelCluster(signals: RunSignal[]): BehavioralLabel {
-  const makes = signals.filter((signal) => signal.result === "make").length
-  const misses = signals.length - makes
+  const positive = signals.filter((signal) => isPositiveSignal(signal.result)).length
+  const negative = signals.filter((signal) => isNegativeSignal(signal.result)).length
   const alternations = signals.filter(
     (signal, index) => index > 0 && signal.side !== signals[index - 1].side
   ).length
 
-  if (misses >= 3) return "COLD"
+  if (negative >= 3) return "COLD"
   if (alternations >= 2) return "SWING"
-  if (makes >= 3) return "SPURT"
+  if (positive >= 3) return "SPURT"
 
   return "HOT"
 }
@@ -93,7 +93,7 @@ export function detectTemporalMoments(run: Run, analysis: SequenceAnalysis): Tem
       id: `temporal-live-${first.id}-${last.id}`,
       label: "HOT",
       name: `${analysis.unanswered.side.toUpperCase()} Hot`,
-      summary: `${cluster.length} unanswered makes`,
+      summary: `${cluster.length} unanswered positive signals`,
       start: first.time,
       end: last.time,
       signalIds: cluster.map((signal) => signal.id),

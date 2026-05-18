@@ -5,8 +5,8 @@ export type MissRisk =
   | "LIVE_BALL"
   | "LIVE_BALL_RUNOUT"
 
-export function riskMultiplier(risk: MissRisk | undefined, outcome: "MAKE" | "MISS") {
-  if (outcome === "MAKE") return 1
+export function riskMultiplier(risk: MissRisk | undefined, outcome: "PLUS" | "MINUS") {
+  if (outcome === "PLUS") return 1
   if (risk === "DEAD_BALL") return 0.25
   if (risk === "OREB_RECOVERED") return 0.15
   if (risk === "LIVE_BALL") return 1.75
@@ -14,4 +14,3 @@ export function riskMultiplier(risk: MissRisk | undefined, outcome: "MAKE" | "MI
 
   return 1
 }
-

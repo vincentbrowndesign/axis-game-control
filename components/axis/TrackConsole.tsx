@@ -7,7 +7,12 @@ import type { TemporalMoment } from "@/lib/engine/momentDetection"
 import { runTemporalEngine } from "@/lib/engine/temporalEngine"
 import { createRun, elapsedRunMs, formatRunTime, type Run } from "@/lib/run/runState"
 import { readStoredRun, subscribeTemporalRun, writeStoredRun } from "@/lib/run/runStore"
-import type { RunSignal, SignalSide } from "@/lib/run/signals"
+import {
+  isPositiveSignal,
+  signalEventLabel,
+  type RunSignal,
+  type SignalSide,
+} from "@/lib/run/signals"
 
 type TrackMoment = Pick<
   TemporalMoment,
@@ -32,12 +37,12 @@ function seconds(value: number) {
 
 function signalColor(signal: RunSignal) {
   if (signal.side === "home") {
-    return signal.result === "make"
+    return isPositiveSignal(signal.result)
       ? "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.44)]"
       : "border border-orange-300/50 bg-orange-950"
   }
 
-  return signal.result === "make"
+  return isPositiveSignal(signal.result)
     ? "bg-sky-300 shadow-[0_0_24px_rgba(125,211,252,0.44)]"
     : "border border-sky-300/50 bg-sky-950"
 }
@@ -155,6 +160,9 @@ export function TrackConsole() {
               id: signal.id,
               side: signal.side,
               result: signal.result,
+              polarity: signal.polarity,
+              stat: signal.stat,
+              playerId: signal.playerId,
               time: signal.time,
               order: index + 1,
               interval: index > 0 ? signal.time - run.signals[index - 1].time : 0,
@@ -373,10 +381,10 @@ export function TrackConsole() {
                   <span
                     key={signal.id}
                     className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full ${signalColor(signal)} ${
-                      signal.result === "make" ? "h-5 w-5" : "h-3 w-3"
+                      isPositiveSignal(signal.result) ? "h-5 w-5" : "h-3 w-3"
                     }`}
                     style={{ left: `${left}%`, top }}
-                    title={`${sideName(run, signal.side)} ${signal.result === "make" ? "+" : "-"} ${seconds(signal.time)}`}
+                    title={`${sideName(run, signal.side)} ${signalEventLabel(signal)} ${seconds(signal.time)}`}
                   />
                 )
               })}
@@ -388,7 +396,7 @@ export function TrackConsole() {
                       Awaiting Signals
                     </p>
                     <p className="mt-2 text-sm font-bold text-zinc-600">
-                      + and - signals from Tap appear here.
+                      Objective stat signals from Tap appear here.
                     </p>
                   </div>
                 </div>
@@ -417,9 +425,9 @@ export function TrackConsole() {
                     <span
                       key={`${signal.id}-recent`}
                       className={`block shrink-0 rounded-full ${signalColor(signal)} ${
-                        signal.result === "make" ? "h-3.5 w-3.5" : "h-2 w-2"
+                        isPositiveSignal(signal.result) ? "h-3.5 w-3.5" : "h-2 w-2"
                       }`}
-                      title={`${sideName(run, signal.side)} ${signal.result === "make" ? "+" : "-"}`}
+                      title={`${sideName(run, signal.side)} ${signalEventLabel(signal)}`}
                     />
                   ))
                 ) : (

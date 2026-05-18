@@ -19,7 +19,7 @@ export default async function TrackPage() {
             Track the shift.
           </h1>
           <p className="mt-5 max-w-xl text-base font-bold leading-7 text-zinc-500">
-            Tap the signal. Archive the memory.
+            Tap the signal. Track the shift.
           </p>
           <Link
             href="/auth"

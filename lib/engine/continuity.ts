@@ -1,4 +1,8 @@
-import type { RunSignal, SignalSide } from "@/lib/run/signals"
+import {
+  isPositiveSignal,
+  type RunSignal,
+  type SignalSide,
+} from "@/lib/run/signals"
 
 export type ContinuityRun = {
   side: SignalSide | "none"
@@ -38,7 +42,7 @@ export function currentContinuity(signals: RunSignal[]): ContinuityRun {
 
 export function unansweredMakes(signals: RunSignal[]): UnansweredRun {
   const latest = signals[signals.length - 1]
-  if (!latest || latest.result !== "make") {
+  if (!latest || !isPositiveSignal(latest.result)) {
     return {
       side: "none",
       count: 0,
@@ -49,7 +53,7 @@ export function unansweredMakes(signals: RunSignal[]): UnansweredRun {
 
   for (let index = signals.length - 1; index >= 0; index -= 1) {
     const signal = signals[index]
-    if (signal.side !== latest.side || signal.result !== "make") break
+    if (signal.side !== latest.side || !isPositiveSignal(signal.result)) break
     count += 1
   }
 

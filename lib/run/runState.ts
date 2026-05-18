@@ -1,5 +1,12 @@
 import type { RunSignal } from "@/lib/run/signals"
 
+export type RunPlayer = {
+  id: string
+  team: "home" | "away"
+  number: string
+  name?: string
+}
+
 export type RunMoment = {
   id: string
   label: string
@@ -22,6 +29,7 @@ export type RunMemory = {
 
 export type RunScoreEvent = {
   id: string
+  signalId?: string
   team: "home" | "away"
   points: number
   timestamp: number
@@ -77,6 +85,7 @@ export type Run = {
   pausedMs?: number
   signals: RunSignal[]
   scoreEvents: RunScoreEvent[]
+  players: RunPlayer[]
   moments: RunMoment[]
   memories: RunMemory[]
   media?: RunMedia
@@ -106,6 +115,7 @@ export function createRun(): Run {
     pausedMs: 0,
     signals: [],
     scoreEvents: [],
+    players: [],
     moments: [],
     memories: [],
   }

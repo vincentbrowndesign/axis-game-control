@@ -1,6 +1,6 @@
 import { deriveAxisState } from "@/lib/engine/state"
 import type { Run } from "@/lib/run/runState"
-import type { RunSignal, SignalSide } from "@/lib/run/signals"
+import { isNegativeSignal, type RunSignal, type SignalSide } from "@/lib/run/signals"
 
 export type TrackInference = {
   control: string
@@ -48,7 +48,7 @@ export function inferTrack(run: Run): TrackInference {
   const latestCluster = latestRun(run.signals)
   const recent = run.signals.slice(-6)
   const shifts = shiftCount(recent)
-  const misses = recent.filter((signal) => signal.result === "miss").length
+  const misses = recent.filter((signal) => isNegativeSignal(signal.result)).length
   const strongest = run.moments[0]
   const silence = axisState.silenceMs
 

@@ -1,5 +1,9 @@
 import type { Run } from "@/lib/run/runState"
-import type { SignalSide } from "@/lib/run/signals"
+import {
+  isNegativeSignal,
+  isPositiveSignal,
+  type SignalSide,
+} from "@/lib/run/signals"
 
 export type AxisStateLabel =
   | "EVEN"
@@ -58,7 +62,7 @@ export function deriveAxisState(run: Run, elapsedMs?: number): AxisState {
     const weight = weightForAge(Math.max(0, currentTime - signal.time))
 
     side.signals += 1
-    if (signal.result === "make") {
+    if (isPositiveSignal(signal.result)) {
       side.makes += 1
       side.run += 1
       side.density += weight
@@ -69,7 +73,7 @@ export function deriveAxisState(run: Run, elapsedMs?: number): AxisState {
         awayControl += weight
         home.run = 0
       }
-    } else {
+    } else if (isNegativeSignal(signal.result)) {
       side.misses += 1
       side.run = Math.max(0, side.run - 1)
       if (signal.side === "home") homeControl -= weight * 0.65
@@ -82,7 +86,7 @@ export function deriveAxisState(run: Run, elapsedMs?: number): AxisState {
   const alternations = recent.filter(
     (signal, index) => index > 0 && signal.side !== recent[index - 1].side
   ).length
-  const misses = recent.filter((signal) => signal.result === "miss").length
+  const misses = recent.filter((signal) => isNegativeSignal(signal.result)).length
   const latestRun = recent.filter(
     (signal) =>
       signal.side === run.signals[run.signals.length - 1]?.side &&

@@ -1,5 +1,5 @@
 import type { Run, RunMemory, RunMoment } from "@/lib/run/runState"
-import type { RunSignal } from "@/lib/run/signals"
+import { isNegativeSignal, isPositiveSignal, type RunSignal } from "@/lib/run/signals"
 
 function momentId(parts: Array<string | number>) {
   return parts.join("-").toLowerCase().replace(/[^a-z0-9_-]/g, "")
@@ -7,16 +7,16 @@ function momentId(parts: Array<string | number>) {
 
 function labelCluster(signals: RunSignal[]) {
   const first = signals[0]
-  const makes = signals.filter((signal) => signal.result === "make").length
-  const misses = signals.filter((signal) => signal.result === "miss").length
+  const positive = signals.filter((signal) => isPositiveSignal(signal.result)).length
+  const negative = signals.filter((signal) => isNegativeSignal(signal.result)).length
   const sameSide = signals.filter((signal) => signal.side === first?.side).length
   const alternations = signals.filter(
     (signal, index) => index > 0 && signal.side !== signals[index - 1].side
   ).length
 
   if (!first) return "Moment"
-  if (sameSide >= 3 && makes >= 3) return `${first.side.toUpperCase()} HOT SPURT`
-  if (misses >= 3) return "COLD WINDOW"
+  if (sameSide >= 3 && positive >= 3) return `${first.side.toUpperCase()} HOT SPURT`
+  if (negative >= 3) return "COLD WINDOW"
   if (alternations >= 2) return "VOLATILE SHIFT"
 
   return `${first.side.toUpperCase()} SHIFT`

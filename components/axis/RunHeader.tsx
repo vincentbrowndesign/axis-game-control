@@ -1,4 +1,4 @@
-import type { Run, RunMedia } from "@/lib/run/runState"
+import type { Run } from "@/lib/run/runState"
 
 export function RunHeader({
   run,
@@ -9,6 +9,7 @@ export function RunHeader({
   systemLabel,
   systemValue,
   onName,
+  onScore,
   onPause,
   onResume,
   onReset,
@@ -20,9 +21,8 @@ export function RunHeader({
   awayScore: number
   systemLabel?: string
   systemValue?: number
-  media?: RunMedia
-  sequenceHref?: string
   onName: (side: "home" | "away", value: string) => void
+  onScore: (side: "home" | "away", points: number) => void
   onPause: () => void
   onResume: () => void
   onReset: () => void
@@ -46,12 +46,15 @@ export function RunHeader({
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3 shadow-[inset_0_0_24px_rgba(39,39,42,0.45)]">
-        <input
-          value={run.home}
-          onChange={(event) => onName("home", event.target.value)}
-          aria-label="Home"
-          className="min-w-0 bg-transparent text-left text-lg font-black uppercase leading-none text-orange-300 outline-none sm:text-2xl"
-        />
+        <div className="grid min-w-0 gap-2">
+          <input
+            value={run.home}
+            onChange={(event) => onName("home", event.target.value)}
+            aria-label="Home"
+            className="min-w-0 bg-transparent text-left text-lg font-black uppercase leading-none text-orange-300 outline-none sm:text-2xl"
+          />
+          <ScoreButton label="+1" onClick={() => onScore("home", 1)} />
+        </div>
         <div className="grid min-w-24 justify-items-center gap-1">
           <div className="font-mono text-3xl font-black leading-none tracking-[-0.05em] text-zinc-100 sm:text-4xl">
             <span className="text-orange-300">{homeScore}</span>
@@ -62,12 +65,15 @@ export function RunHeader({
             {elapsed}
           </div>
         </div>
-        <input
-          value={run.away}
-          onChange={(event) => onName("away", event.target.value)}
-          aria-label="Away"
-          className="min-w-0 bg-transparent text-right text-lg font-black uppercase leading-none text-sky-300 outline-none sm:text-2xl"
-        />
+        <div className="grid min-w-0 justify-items-end gap-2">
+          <input
+            value={run.away}
+            onChange={(event) => onName("away", event.target.value)}
+            aria-label="Away"
+            className="min-w-0 bg-transparent text-right text-lg font-black uppercase leading-none text-sky-300 outline-none sm:text-2xl"
+          />
+          <ScoreButton label="+1" onClick={() => onScore("away", 1)} />
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2">
@@ -97,6 +103,18 @@ function ClockButton({ label, onClick }: { label: string; onClick: () => void })
       type="button"
       onClick={onClick}
       className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-200"
+    >
+      {label}
+    </button>
+  )
+}
+
+function ScoreButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-8 rounded-full border border-zinc-800 bg-black px-3 font-mono text-xs font-black text-zinc-400 transition active:scale-[0.98] hover:border-zinc-600 hover:text-zinc-100"
     >
       {label}
     </button>

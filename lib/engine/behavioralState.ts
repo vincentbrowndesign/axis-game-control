@@ -1,5 +1,5 @@
 import type { Run } from "@/lib/run/runState"
-import type { SignalSide } from "@/lib/run/signals"
+import { isPositiveSignal, type SignalSide } from "@/lib/run/signals"
 import type { SequenceAnalysis } from "./sequenceAnalysis"
 
 export type BehavioralLabel = "HOT" | "COLD" | "SPURT" | "SWING" | "SET"
@@ -52,7 +52,9 @@ export function deriveBehavioralState(run: Run, analysis: SequenceAnalysis): Beh
   if (analysis.clusteredMisses >= 3 || analysis.currentDroughtMs >= 25_000) label = "COLD"
   else if (analysis.alternatingInstability >= 3 || analysis.interruption >= 0.65) label = "SWING"
   else if (analysis.unanswered.count >= 3 || (density >= 0.65 && continuity >= 0.45)) label = "SPURT"
-  else if (analysis.windows.lastFiveSeconds.some((signal) => signal.result === "make")) label = "HOT"
+  else if (analysis.windows.lastFiveSeconds.some((signal) => isPositiveSignal(signal.result))) {
+    label = "HOT"
+  }
 
   const owner = sideName(run, side)
   const momentum =
@@ -73,7 +75,7 @@ export function deriveBehavioralState(run: Run, analysis: SequenceAnalysis): Beh
         : label === "SPURT"
           ? "Signals are clustering."
           : label === "HOT"
-            ? "Recent make pressure."
+            ? "Recent positive pressure."
             : "Awaiting a shift."
 
   return {

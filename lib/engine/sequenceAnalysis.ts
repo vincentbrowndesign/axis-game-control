@@ -1,5 +1,10 @@
 import { elapsedRunMs, type Run } from "@/lib/run/runState"
-import type { RunSignal, SignalSide } from "@/lib/run/signals"
+import {
+  isNegativeSignal,
+  isPositiveSignal,
+  type RunSignal,
+  type SignalSide,
+} from "@/lib/run/signals"
 import {
   continuityScore,
   currentContinuity,
@@ -65,7 +70,7 @@ function clusteredMisses(signals: RunSignal[]) {
   let count = 0
 
   for (let index = signals.length - 1; index >= 0; index -= 1) {
-    if (signals[index].result !== "miss") break
+    if (!isNegativeSignal(signals[index].result)) break
     count += 1
   }
 
@@ -84,23 +89,26 @@ function alternatingInstability(signals: RunSignal[]) {
 }
 
 function droughts(signals: RunSignal[], currentTime: number) {
-  const makes = signals.filter((signal) => signal.result === "make")
+  const positive = signals.filter((signal) => isPositiveSignal(signal.result))
 
-  if (!signals.length || !makes.length) {
+  if (!signals.length || !positive.length) {
     return {
       longestDroughtMs: signals.length ? currentTime : 0,
       currentDroughtMs: signals.length ? currentTime : 0,
     }
   }
 
-  let longestDroughtMs = makes[0].time
+  let longestDroughtMs = positive[0].time
 
-  for (let index = 1; index < makes.length; index += 1) {
-    longestDroughtMs = Math.max(longestDroughtMs, makes[index].time - makes[index - 1].time)
+  for (let index = 1; index < positive.length; index += 1) {
+    longestDroughtMs = Math.max(
+      longestDroughtMs,
+      positive[index].time - positive[index - 1].time
+    )
   }
 
-  const latestMake = makes[makes.length - 1]
-  const currentDroughtMs = Math.max(0, currentTime - latestMake.time)
+  const latestPositive = positive[positive.length - 1]
+  const currentDroughtMs = Math.max(0, currentTime - latestPositive.time)
 
   return {
     longestDroughtMs: Math.max(longestDroughtMs, currentDroughtMs),
@@ -112,7 +120,10 @@ function responseDelay(signals: RunSignal[]) {
   const delays: number[] = []
 
   for (let index = 1; index < signals.length; index += 1) {
-    if (signals[index - 1].result === "miss" && signals[index].result === "make") {
+    if (
+      isNegativeSignal(signals[index - 1].result) &&
+      isPositiveSignal(signals[index].result)
+    ) {
       delays.push(Math.max(0, signals[index].time - signals[index - 1].time))
     }
   }
@@ -139,8 +150,8 @@ export function analyzeSequence(run: Run, now = Date.now()): SequenceAnalysis {
   const currentTime = elapsedRunMs(run, now)
   const signals = [...run.signals].sort((a, b) => a.time - b.time)
   const attempts = signals.length
-  const makes = signals.filter((signal) => signal.result === "make").length
-  const misses = attempts - makes
+  const makes = signals.filter((signal) => isPositiveSignal(signal.result)).length
+  const misses = signals.filter((signal) => isNegativeSignal(signal.result)).length
   const windows: SequenceWindow = {
     recent: signals.filter((signal) => currentTime - signal.time <= 60_000),
     lastFiveSeconds: signals.filter((signal) => currentTime - signal.time <= 5_000),

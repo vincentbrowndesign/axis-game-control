@@ -21,8 +21,16 @@ import {
   readStoredRun,
   writeStoredRun,
 } from "@/lib/run/runStore"
-import { scoreFor } from "@/lib/run/score"
-import type { SignalResult, SignalSide } from "@/lib/run/signals"
+import { removeScoreEvent, scoreFor } from "@/lib/run/score"
+import {
+  isNegativeSignal,
+  isPositiveSignal,
+  polarityForResult,
+  signalEventLabel,
+  type SignalStat,
+  type SignalResult,
+  type SignalSide,
+} from "@/lib/run/signals"
 import { createClient } from "@/lib/supabase/client"
 import {
   parseUploadResponseText,
@@ -230,12 +238,12 @@ function localTrackIntelligence(run: Run): TrackIntelligence {
     const signals = run.signals.filter(
       (signal) => signal.time >= moment.start && signal.time <= moment.end
     )
-    const makes = signals.filter((signal) => signal.result === "make").length
-    const misses = signals.length - makes
+    const positive = signals.filter((signal) => isPositiveSignal(signal.result)).length
+    const negative = signals.filter((signal) => isNegativeSignal(signal.result)).length
     const label =
-      makes >= 3 && makes >= misses
+      positive >= 3 && positive >= negative
         ? "SPURT"
-        : misses >= 3
+        : negative >= 3
           ? "COLD"
           : signals.some(
                 (signal, index) => index > 0 && signal.side !== signals[index - 1].side
@@ -268,6 +276,8 @@ function localTrackIntelligence(run: Run): TrackIntelligence {
 }
 
 function trackPayload(run: Run, playbackId?: string) {
+  const score = scoreFor(run)
+
   return {
     type: "track",
     run: {
@@ -276,6 +286,8 @@ function trackPayload(run: Run, playbackId?: string) {
       away: run.away,
       startedAt: run.startedAt,
       playbackId: playbackId || null,
+      score,
+      scoreEvents: run.scoreEvents,
     },
     signals: run.signals.map((signal, index) => {
       const previous = run.signals[index - 1]
@@ -284,6 +296,9 @@ function trackPayload(run: Run, playbackId?: string) {
         id: signal.id,
         side: signal.side,
         result: signal.result,
+        polarity: signal.polarity,
+        stat: signal.stat,
+        playerId: signal.playerId,
         time: signal.time,
         order: index + 1,
         interval: previous ? signal.time - previous.time : 0,
@@ -370,6 +385,7 @@ export default function UploadMemoryConsole({
       pausedMs: run.pausedMs,
       signals: run.signals,
       scoreEvents: run.scoreEvents,
+      players: run.players,
       moments: run.moments,
       memories: run.memories,
       media: run.media,
@@ -384,6 +400,7 @@ export default function UploadMemoryConsole({
       run.moments,
       run.pausedAt,
       run.pausedMs,
+      run.players,
       run.scoreEvents,
       run.signals,
       run.startedAt,
@@ -491,28 +508,53 @@ export default function UploadMemoryConsole({
     })
   }
 
-  function tapSignal(side: SignalSide, result: SignalResult) {
+  function tapSignal(
+    side: SignalSide,
+    result: SignalResult,
+    detail: { stat: SignalStat; playerId?: string }
+  ) {
     if (run.pausedAt) resumeClock()
 
     const signal = {
       id: createRunId(),
       side,
       result,
+      polarity: polarityForResult(result),
+      stat: detail.stat,
+      playerId: detail.playerId,
       time: elapsedMs,
     }
+    const scoreEvent =
+      detail.stat === "PTS"
+        ? {
+            id: createRunId(),
+            signalId: signal.id,
+            team: side,
+            points: 1,
+            timestamp: elapsedMs,
+          }
+        : null
 
     updateRun({
       ...run,
       signals: [...run.signals, signal],
+      scoreEvents: scoreEvent
+        ? [...(run.scoreEvents ?? []), scoreEvent]
+        : run.scoreEvents,
     })
     setOpenAiTrack(null)
     setStatus("")
   }
 
   function undoSignal() {
+    const latest = run.signals[run.signals.length - 1]
+
     updateRun({
       ...run,
       signals: run.signals.slice(0, -1),
+      scoreEvents: latest
+        ? removeScoreEvent(run.scoreEvents, latest.id)
+        : run.scoreEvents,
     })
     setOpenAiTrack(null)
     setStatus("")
@@ -558,6 +600,44 @@ export default function UploadMemoryConsole({
       ...current,
       [side]: value || (side === "home" ? "Home" : "Away"),
     }))
+  }
+
+  function addScore(side: SignalSide, points: number) {
+    setRun((current) => ({
+      ...current,
+      scoreEvents: [
+        ...(current.scoreEvents ?? []),
+        {
+          id: createRunId(),
+          team: side,
+          points,
+          timestamp: elapsedRunMs(current),
+        },
+      ],
+    }))
+    setStatus("")
+  }
+
+  function addPlayer(
+    side: SignalSide,
+    player: {
+      number: string
+      name?: string
+    }
+  ) {
+    const nextPlayer = {
+      id: createRunId(),
+      team: side,
+      number: player.number.trim().slice(0, 4),
+      name: player.name?.trim().slice(0, 24) || undefined,
+    }
+
+    setRun((current) => ({
+      ...current,
+      players: [...current.players, nextPlayer],
+    }))
+
+    return nextPlayer
   }
 
   function attachMedia(media: RunMedia) {
@@ -689,13 +769,20 @@ export default function UploadMemoryConsole({
           awayScore={scoreboard.away}
           systemLabel={systemValue.label}
           systemValue={Math.round(systemValue.netValue)}
-          media={run.media}
           onName={updateName}
+          onScore={addScore}
           onPause={pauseClock}
           onResume={resumeClock}
           onReset={resetClock}
         />
-        <ControlPad home={run.home} away={run.away} onSignal={tapSignal} onUndo={undoSignal} />
+        <ControlPad
+          home={run.home}
+          away={run.away}
+          players={run.players}
+          onSignal={tapSignal}
+          onAddPlayer={addPlayer}
+          onUndo={undoSignal}
+        />
         <ReplayMemoryRail run={run} track={visibleTrack} />
         <StateBar state={axisState} status={status} />
       </div>
@@ -737,17 +824,17 @@ function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }
             const moment = momentsBySignal.get(signal.id)
             const tone =
               signal.side === "home"
-                ? signal.result === "make"
+                ? isPositiveSignal(signal.result)
                   ? "bg-orange-300"
                   : "border border-orange-400/40 bg-orange-950"
-                : signal.result === "make"
+                : isPositiveSignal(signal.result)
                   ? "bg-sky-300"
                   : "border border-sky-400/40 bg-sky-950"
 
             return (
               <span
                 key={signal.id}
-                title={moment?.name || (signal.result === "make" ? "+" : "-")}
+                title={moment?.name || signalEventLabel(signal)}
                 className={`block rounded-full transition ${
                   moment ? "h-4 w-4 shadow-[0_0_14px_rgba(244,244,245,0.25)]" : "h-2.5 w-2.5"
                 } ${tone}`}

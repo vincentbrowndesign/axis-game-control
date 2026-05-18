@@ -19,5 +19,7 @@ export function removeScoreEvent(
   scoreEvents: RunScoreEvent[] | undefined,
   eventId: string
 ) {
-  return (scoreEvents ?? []).filter((event) => event.id !== eventId)
+  return (scoreEvents ?? []).filter(
+    (event) => event.id !== eventId && event.signalId !== eventId
+  )
 }

@@ -5,15 +5,20 @@ import { useEffect, useMemo, useState } from "react"
 import { buildActiveTemporalSession } from "@/lib/engine/memoryGeneration"
 import { createRun, formatRunTime, type Run } from "@/lib/run/runState"
 import { readStoredRun, subscribeTemporalRun } from "@/lib/run/runStore"
+import {
+  isPositiveSignal,
+  signalEventLabel,
+  type SignalResult,
+} from "@/lib/run/signals"
 
-function pulseTone(side: "home" | "away", result: "make" | "miss") {
+function pulseTone(side: "home" | "away", result: SignalResult) {
   if (side === "home") {
-    return result === "make"
+    return isPositiveSignal(result)
       ? "bg-orange-300 shadow-[0_0_18px_rgba(253,186,116,0.4)]"
       : "border border-orange-300/50 bg-orange-950"
   }
 
-  return result === "make"
+  return isPositiveSignal(result)
     ? "bg-sky-300 shadow-[0_0_18px_rgba(125,211,252,0.4)]"
     : "border border-sky-300/50 bg-sky-950"
 }
@@ -58,7 +63,6 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
   const signals = selectedSequence?.signals.length
     ? selectedSequence.signals
     : session.signals
-  const media = selectedSequence?.media || session.footage[0]
 
   if (!selectedSequence) {
     return (
@@ -71,7 +75,7 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
             No sequence yet
           </h1>
           <p className="mt-3 text-sm font-bold leading-6 text-zinc-600">
-            Tap + or - to create the first structural sequence.
+            Tap objective stat events to create the first temporal sequence.
           </p>
           <Link
             href="/tap"
@@ -128,25 +132,7 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
         </header>
 
         <section className="grid gap-4 rounded-lg border border-zinc-800 bg-black p-4">
-          <div className="grid gap-3 sm:grid-cols-[0.8fr_1.2fr]">
-            <div className="overflow-hidden rounded-md border border-zinc-900 bg-zinc-950">
-              {media ? (
-                <video
-                  src={media.url}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="aspect-video w-full bg-black object-cover"
-                />
-              ) : (
-                <div className="grid aspect-video place-items-center bg-black px-5 text-center">
-                  <p className="text-sm font-black uppercase tracking-[0.18em] text-zinc-600">
-                    No footage attached
-                  </p>
-                </div>
-              )}
-            </div>
-
+          <div className="grid gap-4">
             <div className="grid content-between gap-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
@@ -175,9 +161,9 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
                 signals.map((signal) => (
                   <span
                     key={signal.id}
-                    title={`${sideName(run, signal.side)} ${signal.result === "make" ? "+" : "-"}`}
+                    title={`${sideName(run, signal.side)} ${signalEventLabel(signal)}`}
                     className={`block shrink-0 rounded-full ${pulseTone(signal.side, signal.result)} ${
-                      signal.result === "make" ? "h-5 w-5" : "h-3 w-3"
+                      isPositiveSignal(signal.result) ? "h-5 w-5" : "h-3 w-3"
                     }`}
                   />
                 ))

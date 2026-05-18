@@ -1,22 +1,78 @@
-import type { SignalResult, SignalSide } from "@/lib/run/signals"
+"use client"
+
+import { useState } from "react"
+import type { RunPlayer } from "@/lib/run/runState"
+import type { SignalResult, SignalSide, SignalStat } from "@/lib/run/signals"
+
+type PendingEvent = {
+  side: SignalSide
+  result: SignalResult
+  stat?: SignalStat
+}
+
+const plusStats: SignalStat[] = ["PTS", "REB", "AST", "STL", "BLK"]
+const minusStats: SignalStat[] = ["TO", "FOUL", "MISS"]
 
 export function ControlPad({
   home,
   away,
+  players,
   onSignal,
+  onAddPlayer,
   onUndo,
 }: {
   home: string
   away: string
-  onSignal: (side: SignalSide, result: SignalResult) => void
+  players: RunPlayer[]
+  onSignal: (
+    side: SignalSide,
+    result: SignalResult,
+    detail: { stat: SignalStat; playerId?: string }
+  ) => void
+  onAddPlayer: (side: SignalSide, player: { number: string; name?: string }) => RunPlayer
   onUndo: () => void
 }) {
+  const [pending, setPending] = useState<PendingEvent | null>(null)
+
+  function commit(playerId?: string) {
+    if (!pending?.stat) return
+
+    onSignal(pending.side, pending.result, {
+      stat: pending.stat,
+      playerId,
+    })
+    setPending(null)
+  }
+
   return (
     <section className="grid gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <TeamLane homeAway="home" name={home} onSignal={onSignal} />
-        <TeamLane homeAway="away" name={away} onSignal={onSignal} />
+        <BehaviorLane
+          side="home"
+          name={home}
+          active={pending?.side === "home"}
+          onPick={(result) => setPending({ side: "home", result })}
+        />
+        <BehaviorLane
+          side="away"
+          name={away}
+          active={pending?.side === "away"}
+          onPick={(result) => setPending({ side: "away", result })}
+        />
       </div>
+
+      {pending ? (
+        <DisclosurePanel
+          pending={pending}
+          teamName={pending.side === "home" ? home : away}
+          players={players.filter((player) => player.team === pending.side)}
+          onStat={(stat) => setPending((current) => (current ? { ...current, stat } : current))}
+          onCommit={commit}
+          onCancel={() => setPending(null)}
+          onAddPlayer={onAddPlayer}
+        />
+      ) : null}
+
       <button
         type="button"
         onClick={onUndo}
@@ -28,82 +84,188 @@ export function ControlPad({
   )
 }
 
-function TeamLane({
-  homeAway,
+function BehaviorLane({
+  side,
   name,
-  onSignal,
+  active,
+  onPick,
 }: {
-  homeAway: SignalSide
+  side: SignalSide
   name: string
-  onSignal: (side: SignalSide, result: SignalResult) => void
+  active: boolean
+  onPick: (result: SignalResult) => void
 }) {
+  const positiveTone =
+    side === "home"
+      ? "border-orange-400/80 bg-orange-400 text-black hover:bg-orange-300"
+      : "border-sky-400/80 bg-sky-400 text-black hover:bg-sky-300"
+  const negativeTone =
+    side === "home"
+      ? "border-orange-400/25 bg-orange-950/40 text-orange-200 hover:bg-orange-900/50"
+      : "border-sky-400/25 bg-sky-950/40 text-sky-200 hover:bg-sky-900/50"
+
   return (
-    <div className="grid gap-2">
-      <TeamSignal
-        side={homeAway}
-        result="make"
-        label={`${name} structural gain`}
-        name={name}
-        onSignal={onSignal}
-        size="primary"
-      />
-      <TeamSignal
-        side={homeAway}
-        result="miss"
-        label={`${name} structural loss`}
-        name={name}
-        onSignal={onSignal}
-        size="secondary"
-      />
+    <div
+      className={`grid gap-2 rounded-lg border bg-black/40 p-2 transition ${
+        active ? "border-zinc-600" : "border-zinc-900"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onPick("plus")}
+        className={`min-h-40 rounded-lg border p-5 text-left transition active:scale-[0.99] sm:min-h-48 ${positiveTone}`}
+      >
+        <span className="block truncate text-[10px] font-black uppercase tracking-[0.2em] opacity-65">
+          {name}
+        </span>
+        <span className="mt-8 block font-mono text-7xl font-black uppercase leading-none tracking-[-0.05em] sm:text-8xl">
+          +
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onPick("minus")}
+        className={`min-h-24 rounded-lg border p-4 text-left transition active:scale-[0.99] sm:min-h-28 ${negativeTone}`}
+      >
+        <span className="block truncate text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
+          {name}
+        </span>
+        <span className="mt-3 block font-mono text-5xl font-black uppercase leading-none tracking-[-0.05em] sm:text-6xl">
+          -
+        </span>
+      </button>
     </div>
   )
 }
 
-function TeamSignal({
-  side,
-  result,
-  label,
-  name,
-  onSignal,
-  size,
+function DisclosurePanel({
+  pending,
+  teamName,
+  players,
+  onStat,
+  onCommit,
+  onCancel,
+  onAddPlayer,
 }: {
-  side: SignalSide
-  result: SignalResult
-  label: string
-  name: string
-  onSignal: (side: SignalSide, result: SignalResult) => void
-  size: "primary" | "secondary"
+  pending: PendingEvent
+  teamName: string
+  players: RunPlayer[]
+  onStat: (stat: SignalStat) => void
+  onCommit: (playerId?: string) => void
+  onCancel: () => void
+  onAddPlayer: (side: SignalSide, player: { number: string; name?: string }) => RunPlayer
 }) {
-  const positiveTone =
-    side === "home"
-      ? "border-orange-400/70 bg-orange-400 text-black hover:bg-orange-300"
-      : "border-sky-400/70 bg-sky-400 text-black hover:bg-sky-300"
-  const negativeTone =
-    side === "home"
-      ? "border-orange-400/25 bg-orange-950/30 text-orange-200 hover:bg-orange-900/40"
-      : "border-sky-400/25 bg-sky-950/30 text-sky-200 hover:bg-sky-900/40"
-  const classes = result === "make" ? positiveTone : negativeTone
-  const display = result === "make" ? "+" : "-"
+  const [isAdding, setIsAdding] = useState(false)
+  const [number, setNumber] = useState("")
+  const [name, setName] = useState("")
+  const stats = pending.result === "plus" ? plusStats : minusStats
+
+  function addPlayer() {
+    const cleanNumber = number.trim()
+    if (!cleanNumber) return
+
+    const player = onAddPlayer(pending.side, {
+      number: cleanNumber,
+      name: name.trim() || undefined,
+    })
+
+    onCommit(player.id)
+    setNumber("")
+    setName("")
+    setIsAdding(false)
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() => onSignal(side, result)}
-      className={`rounded-lg border p-5 text-left transition active:scale-[0.99] ${
-        size === "primary" ? "min-h-44 sm:min-h-56" : "min-h-24 sm:min-h-28"
-      } ${classes}`}
-    >
-      <span className="block text-xs font-black uppercase tracking-[0.22em] opacity-65">
-        {name}
-      </span>
-      <span
-        className={`block truncate font-black uppercase leading-none tracking-[-0.04em] ${
-          size === "primary" ? "mt-8 text-5xl sm:text-7xl" : "mt-4 text-3xl sm:text-4xl"
-        }`}
-      >
-        {display}
-      </span>
-      <span className="sr-only">{label}</span>
-    </button>
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-3 shadow-[inset_0_0_24px_rgba(39,39,42,0.28)]">
+      <div className="flex items-center justify-between gap-3">
+        <p className="truncate text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
+          {teamName} {pending.result === "plus" ? "+" : "-"}
+        </p>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600 transition hover:text-zinc-300"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {stats.map((stat) => (
+          <button
+            key={stat}
+            type="button"
+            onClick={() => onStat(stat)}
+            className={`h-11 min-w-16 rounded-full border px-4 font-black uppercase tracking-[0.14em] transition active:scale-[0.98] ${
+              pending.stat === stat
+                ? "border-zinc-200 bg-zinc-100 text-black"
+                : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-600 hover:text-zinc-100"
+            }`}
+          >
+            {stat}
+          </button>
+        ))}
+      </div>
+
+      {pending.stat ? (
+        <div className="mt-3 border-t border-zinc-900 pt-3">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => onCommit()}
+              className="h-11 min-w-20 rounded-full border border-zinc-700 bg-zinc-900 px-4 text-xs font-black uppercase tracking-[0.14em] text-zinc-200 transition active:scale-[0.98]"
+            >
+              Team
+            </button>
+            {players.map((player) => (
+              <button
+                key={player.id}
+                type="button"
+                onClick={() => onCommit(player.id)}
+                className="h-11 min-w-14 rounded-full border border-zinc-800 bg-black px-4 font-mono text-sm font-black text-zinc-200 transition active:scale-[0.98] hover:border-zinc-600"
+                title={player.name || `#${player.number}`}
+              >
+                {player.number}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setIsAdding((current) => !current)}
+              className="h-11 min-w-28 rounded-full border border-dashed border-zinc-700 bg-black px-4 text-xs font-black uppercase tracking-[0.14em] text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-200"
+            >
+              Add Player
+            </button>
+          </div>
+
+          {isAdding ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-[0.4fr_1fr_auto]">
+              <input
+                value={number}
+                onChange={(event) => setNumber(event.target.value)}
+                inputMode="numeric"
+                placeholder="#"
+                aria-label="Jersey number"
+                className="h-11 rounded-full border border-zinc-800 bg-black px-4 font-mono text-sm font-black text-zinc-100 outline-none placeholder:text-zinc-700"
+              />
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Name"
+                aria-label="Player name"
+                className="h-11 rounded-full border border-zinc-800 bg-black px-4 text-sm font-bold text-zinc-100 outline-none placeholder:text-zinc-700"
+              />
+              <button
+                type="button"
+                onClick={addPlayer}
+                className="h-11 rounded-full border border-emerald-500/40 bg-emerald-950/40 px-5 text-xs font-black uppercase tracking-[0.14em] text-emerald-200 transition active:scale-[0.98]"
+              >
+                Add
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   )
 }

@@ -4,9 +4,15 @@ import {
   type RunAudioContext,
   type RunInterpretation,
   type RunMedia,
+  type RunPlayer,
   type RunScoreEvent,
 } from "@/lib/run/runState"
 import type { RunSignal } from "@/lib/run/signals"
+import {
+  normalizeSignalResult,
+  normalizeSignalStat,
+  polarityForResult,
+} from "@/lib/run/signals"
 
 export const activeRunKey = "axis-active-run"
 export const storedRunsKey = "axis-stored-runs"
@@ -64,8 +70,8 @@ function normalizeRun(value: unknown): Run | null {
         .map((signal) => {
           const record = signal as Partial<RunSignal>
           const side: RunSignal["side"] = record.side === "away" ? "away" : "home"
-          const result: RunSignal["result"] =
-            record.result === "miss" ? "miss" : "make"
+          const result = normalizeSignalResult(record.result)
+          const stat = normalizeSignalStat(record.stat, result)
           const time =
             typeof record.time === "number" && Number.isFinite(record.time)
               ? record.time
@@ -75,9 +81,34 @@ function normalizeRun(value: unknown): Run | null {
             id: typeof record.id === "string" ? record.id : createRunId(),
             side,
             result,
+            polarity: record.polarity === "MINUS" ? "MINUS" : polarityForResult(result),
+            stat,
+            playerId: typeof record.playerId === "string" ? record.playerId : undefined,
             time,
           }
         })
+    : []
+  const players: RunPlayer[] = Array.isArray(run.players)
+    ? run.players
+        .filter((player) => player && typeof player === "object")
+        .map((player) => {
+          const record = player as Partial<RunPlayer>
+          const team: RunPlayer["team"] = record.team === "away" ? "away" : "home"
+
+          return {
+            id: typeof record.id === "string" ? record.id : createRunId(),
+            team,
+            number:
+              typeof record.number === "string" && record.number.trim()
+                ? record.number.trim().slice(0, 4)
+                : "0",
+            name:
+              typeof record.name === "string" && record.name.trim()
+                ? record.name.trim().slice(0, 24)
+                : undefined,
+          }
+        })
+        .slice(0, 24)
     : []
   const scoreEvents: RunScoreEvent[] = Array.isArray(run.scoreEvents)
     ? run.scoreEvents
@@ -89,6 +120,7 @@ function normalizeRun(value: unknown): Run | null {
           return {
             id: typeof record.id === "string" ? record.id : createRunId(),
             team,
+            signalId: typeof record.signalId === "string" ? record.signalId : undefined,
             points:
               typeof record.points === "number" && Number.isFinite(record.points)
                 ? record.points
@@ -268,6 +300,7 @@ function normalizeRun(value: unknown): Run | null {
     pausedMs,
     signals,
     scoreEvents,
+    players,
     moments: Array.isArray(run.moments) ? run.moments : [],
     memories: Array.isArray(run.memories) ? run.memories : [],
     media: media?.url ? media : undefined,

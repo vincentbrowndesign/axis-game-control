@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server"
 import { runTemporalEngine } from "@/lib/engine/temporalEngine"
 import type { Run } from "@/lib/run/runState"
+import {
+  isNegativeSignal,
+  isPositiveSignal,
+  normalizeSignalResult,
+  normalizeSignalStat,
+  polarityForResult,
+  type SignalResult,
+  type SignalStat,
+} from "@/lib/run/signals"
 
 type TrackSignal = {
   id: string
   side: "home" | "away"
-  result: "make" | "miss"
+  result: SignalResult
+  stat: SignalStat
+  playerId?: string
   time: number
   order: number
   interval: number
@@ -42,15 +53,17 @@ function asSignal(value: unknown): TrackSignal | null {
 
   const signal = value as Partial<TrackSignal>
   const side = signal.side === "away" ? "away" : signal.side === "home" ? "home" : null
-  const result =
-    signal.result === "miss" ? "miss" : signal.result === "make" ? "make" : null
+  const result = normalizeSignalResult(signal.result)
+  const stat = normalizeSignalStat(signal.stat, result)
 
-  if (!side || !result || typeof signal.id !== "string") return null
+  if (!side || typeof signal.id !== "string") return null
 
   return {
     id: signal.id,
     side,
     result,
+    stat,
+    playerId: typeof signal.playerId === "string" ? signal.playerId : undefined,
     time: typeof signal.time === "number" ? signal.time : 0,
     order: typeof signal.order === "number" ? signal.order : 0,
     interval: typeof signal.interval === "number" ? signal.interval : 0,
@@ -79,13 +92,21 @@ function localTrack(signals: TrackSignal[]): TrackMoment[] {
 
     if (cluster.length < 3) continue
 
-    const makes = cluster.filter((signal) => signal.result === "make").length
-    const misses = cluster.length - makes
+    const positives = cluster.filter((signal) => isPositiveSignal(signal.result)).length
+    const negatives = cluster.filter((signal) => isNegativeSignal(signal.result)).length
     const swings = cluster.filter(
       (signal, index) => index > 0 && signal.side !== cluster[index - 1].side
     ).length
     const label: TrackMoment["label"] =
-      misses >= 4 ? "BREAK" : misses >= 3 ? "COLD" : swings >= 2 ? "SWING" : makes >= 3 ? "SPURT" : "HOT"
+      negatives >= 4
+        ? "BREAK"
+        : negatives >= 3
+          ? "COLD"
+          : swings >= 2
+            ? "SWING"
+            : positives >= 3
+              ? "SPURT"
+              : "HOT"
     const first = cluster[0]
     const last = cluster[cluster.length - 1]
 
@@ -125,9 +146,13 @@ function runFromTrackBody(body: Record<string, unknown>, signals: TrackSignal[])
       id: signal.id,
       side: signal.side,
       result: signal.result,
+      polarity: polarityForResult(signal.result),
+      stat: signal.stat,
+      playerId: signal.playerId,
       time: signal.time,
     })),
     scoreEvents: [],
+    players: [],
     moments: [],
     memories: [],
   }
@@ -196,16 +221,17 @@ async function inferTrack(body: Record<string, unknown>) {
         {
           role: "system",
           content:
-            "You label basketball system plus-minus signal clusters. Return only JSON. Keep labels short and human. Allowed moment labels: HOT, COLD, SPURT, SWING, BREAK. Interpret structural gain/loss, continuity, pressure, interruptions, and sequence flow. No analytics jargon.",
+            "You label basketball contextual momentum clusters. Return only JSON. Keep labels short and human. Allowed moment labels: HOT, COLD, SPURT, SWING, BREAK. Interpret how objective score context interacts with structural plus/minus behavior, continuity, pressure, interruptions, density, and sequence flow. No analytics jargon.",
         },
         {
           role: "user",
           content: JSON.stringify({
-            task: "Cluster positive/negative structural signal sequence into replay memories.",
+            task: "Cluster structural plus/minus behavior signals with score context into temporal memories.",
             outputShape:
               '{ "moments": [{ "id": string, "label": "HOT|COLD|SPURT|SWING|BREAK", "name": string, "summary": string, "start": number, "end": number, "signalIds": string[] }] }',
             run: body.run,
             signals,
+            score: (body.run as { score?: unknown } | undefined)?.score,
             moments: body.moments,
             temporal: {
               state: temporal.state,
