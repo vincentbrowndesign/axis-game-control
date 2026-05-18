@@ -1,13 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { Square, Upload, Video } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Upload, Video } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
   parseUploadResponseText,
   type AxisUploadResponse,
 } from "@/lib/uploadResponse"
-import { createRecorder, type AxisRecorder } from "@/lib/video/createRecorder"
 
 const waveformBars = [42, 72, 48, 86, 56, 64, 94, 44, 78, 52, 88, 60, 46, 82]
 const showDebug = process.env.NODE_ENV !== "production"
@@ -23,12 +22,6 @@ type ClientUploadInfo = {
   isSafari: boolean
   userAgent: string
   viewport: string
-}
-
-type CameraDiagnostics = {
-  streamActive: boolean
-  trackCount: number
-  readyState: number
 }
 
 function uploadStatus(data: AxisUploadResponse) {
@@ -50,14 +43,6 @@ function safeStorageName(name: string) {
     : "mov"
 
   return `${Date.now()}_${cleanName || "axis_upload"}.${extension}`
-}
-
-function recordingExtension(mimeType: string) {
-  if (mimeType.includes("mp4")) return "mp4"
-  if (mimeType.includes("quicktime")) return "mov"
-  if (mimeType.includes("webm")) return "webm"
-
-  return "mp4"
 }
 
 function safeParseUploadResponse(text: string) {
@@ -197,22 +182,11 @@ function formatBytes(bytes: number) {
 }
 
 export default function UploadMemoryConsole() {
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const recordFallbackRef = useRef<HTMLInputElement | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const recordInputRef = useRef<HTMLInputElement | null>(null)
   const previewRef = useRef<HTMLVideoElement | null>(null)
-  const livePreviewRef = useRef<HTMLVideoElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
-  const recorderRef = useRef<AxisRecorder | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
-  const [cameraReady, setCameraReady] = useState(false)
-  const [cameraError, setCameraError] = useState("")
-  const [cameraDiagnostics, setCameraDiagnostics] = useState<CameraDiagnostics>({
-    streamActive: false,
-    trackCount: 0,
-    readyState: 0,
-  })
   const [status, setStatus] = useState("")
   const [processingLine, setProcessingLine] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -235,204 +209,9 @@ export default function UploadMemoryConsole() {
       if (localVideoUrlRef.current) {
         URL.revokeObjectURL(localVideoUrlRef.current)
       }
-      stopCameraStream()
     },
     []
   )
-
-  function stopCameraStream() {
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    streamRef.current = null
-    recorderRef.current = null
-    setCameraReady(false)
-    setCameraDiagnostics({
-      streamActive: false,
-      trackCount: 0,
-      readyState: livePreviewRef.current?.readyState || 0,
-    })
-
-    if (livePreviewRef.current) {
-      livePreviewRef.current.srcObject = null
-    }
-  }
-
-  const updateCameraDiagnostics = useCallback((stream: MediaStream | null) => {
-    setCameraDiagnostics({
-      streamActive: Boolean(stream?.active),
-      trackCount: stream?.getVideoTracks()?.length || 0,
-      readyState: livePreviewRef.current?.readyState || 0,
-    })
-  }, [])
-
-  const attachLivePreview = useCallback(async (stream: MediaStream) => {
-    const video = livePreviewRef.current
-
-    if (!video) return
-
-    video.srcObject = stream
-    video.muted = true
-    video.autoplay = true
-    video.playsInline = true
-    video.setAttribute("playsinline", "true")
-    video.setAttribute("webkit-playsinline", "true")
-
-    console.log({
-      streamActive: !!stream,
-      videoTracks: stream?.getVideoTracks()?.length,
-      readyState: video.readyState,
-    })
-
-    await new Promise<void>((resolve) => {
-      if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-        resolve()
-        return
-      }
-
-      video.onloadedmetadata = () => resolve()
-    })
-
-    await video.play()
-
-    console.log({
-      streamActive: !!stream,
-      videoTracks: stream?.getVideoTracks()?.length,
-      readyState: video.readyState,
-    })
-
-    setCameraDiagnostics({
-      streamActive: !!stream,
-      trackCount: stream?.getVideoTracks()?.length || 0,
-      readyState: video.readyState,
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!cameraReady || !streamRef.current) return
-    if (livePreviewRef.current?.srcObject === streamRef.current) return
-
-    void attachLivePreview(streamRef.current).catch((error) => {
-      console.warn("AXIS LIVE PREVIEW PLAY FAILED", error)
-      setCameraError(String(error))
-      updateCameraDiagnostics(streamRef.current)
-    })
-  }, [attachLivePreview, cameraReady, updateCameraDiagnostics])
-
-  async function startRecording() {
-    if (isUploading || isRecording) return
-
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices?.getUserMedia ||
-      typeof MediaRecorder === "undefined"
-    ) {
-      setStatus("Camera capture unavailable. Choose video.")
-      setProcessingLine("Pick the saved clip from your camera roll.")
-      recordFallbackRef.current?.click()
-      return
-    }
-
-    try {
-      setStatus("Camera ready")
-      setProcessingLine("Tap stop when the play is captured.")
-      setUploadProgress(0)
-      setCreatedLabel("")
-      setDebugLines([])
-      setCameraError("")
-      setCameraDiagnostics({
-        streamActive: false,
-        trackCount: 0,
-        readyState: livePreviewRef.current?.readyState || 0,
-      })
-
-      let stream: MediaStream
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        })
-
-        console.log("STREAM OK", stream)
-      } catch (err) {
-        console.error("CAMERA ERROR", err)
-        setCameraError(String(err))
-        setStatus("Camera unavailable")
-        setProcessingLine("Choose the clip from your camera roll.")
-        updateCameraDiagnostics(null)
-        return
-      }
-
-      streamRef.current = stream
-      setCameraReady(true)
-
-      try {
-        await attachLivePreview(stream)
-      } catch (error) {
-        console.error("CAMERA ERROR", error)
-        setCameraError(String(error))
-        updateCameraDiagnostics(stream)
-      }
-
-      const recorder = createRecorder({
-        stream,
-        timeslice: 1000,
-      })
-
-      recorderRef.current = recorder
-
-      recorder.start()
-      setIsRecording(true)
-      setStatus("Recording")
-      setProcessingLine("Axis is capturing.")
-      updateCameraDiagnostics(stream)
-      addDebug(`recording mime: ${recorder.mimeType || "browser default"}`)
-    } catch (error) {
-      console.warn("AXIS RECORDING START FAILED", error)
-      setCameraError(String(error))
-      stopCameraStream()
-      setIsRecording(false)
-      setStatus("Camera unavailable")
-      setProcessingLine("Choose the clip from your camera roll.")
-    }
-  }
-
-  async function stopRecording() {
-    if (!recorderRef.current || !isRecording) return
-
-    const recorder = recorderRef.current
-
-    try {
-      setIsRecording(false)
-      setStatus("Saving recording")
-      setProcessingLine("Building playback now.")
-
-      const blob = await recorder.stop()
-      stopCameraStream()
-
-      if (blob.size <= 0) {
-        throw new Error("Empty recording")
-      }
-
-      const mimeType = blob.type || recorder.mimeType || "video/mp4"
-      const extension = recordingExtension(mimeType)
-      const file = new File(
-        [blob],
-        `axis-recording-${Date.now()}.${extension}`,
-        {
-          type: mimeType,
-          lastModified: Date.now(),
-        }
-      )
-
-      await chooseFile(file, "camera")
-    } catch (error) {
-      console.error("AXIS RECORDING STOP FAILED", error)
-      stopCameraStream()
-      setIsRecording(false)
-      setStatus("Recording paused")
-      setProcessingLine("Choose a saved clip to keep playback moving.")
-    }
-  }
 
   async function chooseFile(file: File | undefined, source: UploadSource = "upload") {
     if (!file || isUploading) return
@@ -644,7 +423,8 @@ export default function UploadMemoryConsole() {
       setProcessingLine("Playback stays here. Axis will keep trying.")
     } finally {
       setIsUploading(false)
-      if (inputRef.current) inputRef.current.value = ""
+      if (uploadInputRef.current) uploadInputRef.current.value = ""
+      if (recordInputRef.current) recordInputRef.current.value = ""
     }
   }
 
@@ -674,58 +454,39 @@ export default function UploadMemoryConsole() {
             <div className="mt-9 grid gap-3 sm:max-w-md">
               <button
                 type="button"
-                onClick={() => {
-                  if (isRecording) void stopRecording()
-                  else void startRecording()
-                }}
+                onClick={() => recordInputRef.current?.click()}
                 disabled={isUploading}
                 className="order-1 inline-flex min-h-24 items-center justify-center gap-3 rounded-[0.75rem] bg-amber-200 px-8 py-5 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-amber-100 disabled:opacity-50 sm:order-2"
               >
-                {isRecording ? (
-                  <Square className="h-4 w-4 fill-current" aria-hidden="true" />
-                ) : (
-                  <Video className="h-4 w-4" aria-hidden="true" />
-                )}
-                {isRecording ? "Stop" : "Record"}
+                <Video className="h-4 w-4" aria-hidden="true" />
+                Record play
               </button>
               <button
                 type="button"
-                onClick={() => inputRef.current?.click()}
-                disabled={isUploading || isRecording}
+                onClick={() => uploadInputRef.current?.click()}
+                disabled={isUploading}
                 className="order-2 inline-flex min-h-24 items-center justify-center gap-3 rounded-[0.75rem] bg-stone-100 px-8 py-5 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-white disabled:opacity-50 sm:order-1"
               >
                 <Upload className="h-4 w-4" aria-hidden="true" />
-                {isUploading ? "Uploading" : "Choose file"}
+                {isUploading ? "Uploading" : "Upload clip"}
               </button>
               <input
-                ref={inputRef}
+                ref={recordInputRef}
                 type="file"
-                accept="video/*,.mov,.mp4,.m4v"
-                className="hidden"
-                onChange={(event) => void chooseFile(event.target.files?.[0], "upload")}
-              />
-              <input
-                ref={recordFallbackRef}
-                type="file"
-                accept="video/*,.mov,.mp4,.m4v"
+                accept="video/*"
                 capture="environment"
                 className="hidden"
                 onChange={(event) => void chooseFile(event.target.files?.[0], "camera")}
               />
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(event) => void chooseFile(event.target.files?.[0], "upload")}
+              />
               {status ? (
                 <p className="text-sm font-bold text-white/42">{status}</p>
-              ) : null}
-              {cameraReady || cameraError ? (
-                <div className="grid gap-1 text-xs font-bold uppercase tracking-[0.14em] text-white/34">
-                  <p>Camera status: {cameraDiagnostics.streamActive ? "stream active" : "no stream"}</p>
-                  <p>Track count: {cameraDiagnostics.trackCount}</p>
-                  <p>Ready state: {cameraDiagnostics.readyState}</p>
-                  {cameraError ? (
-                    <p className="normal-case tracking-normal text-red-200">
-                      {cameraError}
-                    </p>
-                  ) : null}
-                </div>
               ) : null}
             </div>
             {processingLine ? (
@@ -756,49 +517,30 @@ export default function UploadMemoryConsole() {
           </div>
 
           <div className="overflow-hidden rounded-[1.5rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
-            <div className="relative min-h-[420px] aspect-[9/14] bg-transparent sm:min-h-[560px]">
-              <video
-                ref={livePreviewRef}
-                className="pointer-events-none absolute inset-0 z-20 h-full w-full bg-transparent object-cover opacity-100"
-                style={{
-                  background: "transparent",
-                  objectFit: "cover",
-                  visibility: "visible",
-                  opacity: 1,
-                  zIndex: 20,
-                }}
-                autoPlay
-                muted
-                playsInline
-              />
-              {!cameraReady && playbackUrl ? (
+            <div className="aspect-[9/14] bg-black">
+              {playbackUrl ? (
                 <video
                   ref={previewRef}
                   src={playbackUrl}
-                  className="h-full w-full bg-transparent object-cover opacity-80"
+                  className="h-full w-full object-cover opacity-80"
                   controls
                   playsInline
                   preload="metadata"
                 />
-              ) : null}
-              {!cameraReady && !playbackUrl ? (
+              ) : (
                 <div className="grid h-full place-items-center bg-[radial-gradient(circle_at_center,#2a2117_0%,#090806_68%)] px-8 text-center">
                   <p className="text-4xl font-black leading-none tracking-[-0.05em] text-white">
                     Playback appears here.
                   </p>
                 </div>
-              ) : null}
+              )}
             </div>
             <div className="p-6">
               <p className="text-sm font-bold text-amber-100/65">
                 {durationLabel}
               </p>
               <p className="mt-3 text-4xl font-black leading-[0.95] tracking-[-0.05em] text-white">
-                {isRecording
-                  ? "RECORDING"
-                  : playbackUrl
-                    ? "PLAYBACK READY"
-                    : "READY"}
+                {playbackUrl ? "PLAYBACK READY" : "READY"}
               </p>
               <p className="mt-4 text-sm leading-6 text-white/42">
                 {playbackTitle || "The saved video becomes watchable first."}
