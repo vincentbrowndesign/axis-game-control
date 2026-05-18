@@ -19,8 +19,14 @@ export function undoSessionEvent(state: SessionState): SessionState {
       }
     }
 
-    const makes = Math.max(0, stream.makes - (latestEvent.type === "MAKE" ? 1 : 0))
-    const misses = Math.max(0, stream.misses - (latestEvent.type === "MISS" ? 1 : 0))
+    const makes = Math.max(
+      0,
+      stream.makes - (latestEvent.type === "INCREMENT" ? 1 : 0)
+    )
+    const misses = Math.max(
+      0,
+      stream.misses - (latestEvent.type === "DECREMENT" ? 1 : 0)
+    )
 
     return {
       ...stream,

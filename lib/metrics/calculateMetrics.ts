@@ -49,7 +49,7 @@ function longestStreak(events: TimelineEvent[]) {
   let current = 0
 
   for (const event of events) {
-    if (event.type === "MAKE") {
+    if (event.type === "INCREMENT") {
       current += 1
       best = Math.max(best, current)
     } else {
@@ -63,7 +63,7 @@ function longestStreak(events: TimelineEvent[]) {
 function longestDrought(events: TimelineEvent[], elapsedMs: number) {
   if (!events.length) return 0
 
-  const makes = events.filter((event) => event.type === "MAKE")
+  const makes = events.filter((event) => event.type === "INCREMENT")
 
   if (!makes.length) return seconds(elapsedMs || events[events.length - 1].timestampMs)
 
@@ -78,7 +78,7 @@ function longestDrought(events: TimelineEvent[], elapsedMs: number) {
   return seconds(longest)
 }
 
-function cluster(events: TimelineEvent[], type: "MAKE" | "MISS") {
+function cluster(events: TimelineEvent[], type: "INCREMENT" | "DECREMENT") {
   const matches = events.filter((event) => event.type === type)
 
   if (!matches.length) {
@@ -124,7 +124,7 @@ function rushAfterMiss(events: TimelineEvent[], intervals: number[]) {
   const postMissIntervals: number[] = []
 
   for (let index = 1; index < events.length; index += 1) {
-    if (events[index - 1].type === "MISS") {
+    if (events[index - 1].type === "DECREMENT") {
       postMissIntervals.push(events[index].timestampMs - events[index - 1].timestampMs)
     }
   }
@@ -147,13 +147,13 @@ export function calculateStreamMetrics({
   elapsedMs: number
 }): StreamMetrics {
   const attempts = attemptsForStream(events, streamId)
-  const makes = attempts.filter((event) => event.type === "MAKE").length
-  const misses = attempts.filter((event) => event.type === "MISS").length
+  const makes = attempts.filter((event) => event.type === "INCREMENT").length
+  const misses = attempts.filter((event) => event.type === "DECREMENT").length
   const intervals = attempts
     .slice(1)
     .map((event, index) => event.timestampMs - attempts[index].timestampMs)
-  const hot = cluster(attempts, "MAKE")
-  const empty = cluster(attempts, "MISS")
+  const hot = cluster(attempts, "INCREMENT")
+  const empty = cluster(attempts, "DECREMENT")
 
   return {
     attempts: attempts.length,

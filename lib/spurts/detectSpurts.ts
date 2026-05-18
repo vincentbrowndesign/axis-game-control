@@ -21,7 +21,7 @@ function bestCluster({
   windowMs,
 }: {
   events: TimelineEvent[]
-  type: "MAKE" | "MISS"
+  type: "INCREMENT" | "DECREMENT"
   windowMs: number
 }) {
   const matches = events.filter((event) => event.type === type)
@@ -48,7 +48,7 @@ function bestCluster({
   return best
 }
 
-function longestRun(events: TimelineEvent[], type: "MAKE" | "MISS") {
+function longestRun(events: TimelineEvent[], type: "INCREMENT" | "DECREMENT") {
   let best: TimelineEvent[] = []
   let current: TimelineEvent[] = []
 
@@ -65,8 +65,10 @@ function longestRun(events: TimelineEvent[], type: "MAKE" | "MISS") {
 }
 
 function longestGapWithoutMake(events: TimelineEvent[]) {
-  const attempts = events.filter((event) => event.type === "MAKE" || event.type === "MISS")
-  const makes = attempts.filter((event) => event.type === "MAKE")
+  const attempts = events.filter(
+    (event) => event.type === "INCREMENT" || event.type === "DECREMENT"
+  )
+  const makes = attempts.filter((event) => event.type === "INCREMENT")
 
   if (!attempts.length) return undefined
   if (!makes.length) {
@@ -130,15 +132,15 @@ export function detectSpurts(events: TimelineEvent[]): Spurt[] {
     const streamLabel = streamEvents[0]?.streamLabel || "Stream"
     const hot = bestCluster({
       events: streamEvents,
-      type: "MAKE",
+      type: "INCREMENT",
       windowMs: 60_000,
     })
     const empty = bestCluster({
       events: streamEvents,
-      type: "MISS",
+      type: "DECREMENT",
       windowMs: 60_000,
     })
-    const streak = longestRun(streamEvents, "MAKE")
+    const streak = longestRun(streamEvents, "INCREMENT")
     const drought = longestGapWithoutMake(streamEvents)
 
     if (hot.length) {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Camera, Timer, Undo2, Upload } from "lucide-react"
+import { Camera, Download, FileText, Timer, Undo2, Upload } from "lucide-react"
 import {
   calculateStreamMetrics,
   emptyStreamMetrics,
@@ -211,9 +211,9 @@ function writeSessionSummary(summary: StoredSessionSummary) {
 }
 
 function rushLine(value: number) {
-  if (!value) return "No post-miss response yet."
+  if (!value) return "No response shift yet."
 
-  return `${Math.abs(value)}% ${value > 0 ? "faster" : "slower"} after misses`
+  return `${Math.abs(value)}% ${value > 0 ? "faster" : "slower"} after -`
 }
 
 function setupFromTallies(sessionName: string, tallyNames: string[]): SessionSetupInput {
@@ -240,10 +240,15 @@ function createTally(label: string): Stream {
   }
 }
 
+function tallyValue(stream: Stream) {
+  return stream.makes - stream.misses
+}
+
 export default function UploadMemoryConsole() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const recordInputRef = useRef<HTMLInputElement | null>(null)
   const evidenceVideoRef = useRef<HTMLVideoElement | null>(null)
+  const archiveRef = useRef<HTMLDivElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
   const [sessionName, setSessionName] = useState(initialSetup.sessionName)
   const [tallyNames, setTallyNames] = useState(initialSetup.streamLabels)
@@ -377,7 +382,7 @@ export default function UploadMemoryConsole() {
     })
   }
 
-  function mark(type: "MAKE" | "MISS") {
+  function mark(type: "INCREMENT" | "DECREMENT") {
     setSessionState((state) => {
       const next = applySessionEvent({
         state,
@@ -428,6 +433,86 @@ export default function UploadMemoryConsole() {
       timerRunning: !state.timerRunning,
       updatedAt: Date.now(),
     }))
+  }
+
+  async function archivePng() {
+    if (!archiveRef.current) return
+
+    setStatus("Crystallizing.")
+    const { toPng } = await import("html-to-image")
+    const dataUrl = await toPng(archiveRef.current, {
+      cacheBust: true,
+      pixelRatio: 2,
+      backgroundColor: "#0a0907",
+    })
+    const response = await fetch(dataUrl)
+    const blob = await response.blob()
+    const file = new File([blob], `${sessionState.sessionName}-axis.png`, {
+      type: "image/png",
+    })
+
+    if (
+      navigator.canShare?.({
+        files: [file],
+      })
+    ) {
+      await navigator.share({
+        files: [file],
+      })
+      setStatus("Saved.")
+      return
+    }
+
+    const link = document.createElement("a")
+    link.href = dataUrl
+    link.download = file.name
+    link.click()
+    setStatus("Saved.")
+  }
+
+  function archivePdf() {
+    const active = activeStream
+    const html = `
+      <html>
+        <head>
+          <title>${sessionState.sessionName} Axis Archive</title>
+          <style>
+            body { margin: 0; background: #0a0907; color: #f5efe3; font-family: Arial, sans-serif; }
+            main { padding: 56px; }
+            h1 { font-size: 56px; line-height: .9; margin: 0 0 40px; letter-spacing: -3px; }
+            .row { display: flex; justify-content: space-between; border-top: 1px solid rgba(245,239,227,.18); padding: 22px 0; font-size: 28px; font-weight: 800; text-transform: uppercase; }
+            .metric { margin-top: 36px; color: #e8d39b; font-size: 30px; font-weight: 900; }
+            @media print { body { background: #0a0907; color: #f5efe3; } }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>${sessionState.sessionName}</h1>
+            ${sessionState.streams
+              .map(
+                (stream) =>
+                  `<div class="row"><span>${stream.label}</span><span>${tallyValue(
+                    stream
+                  )}</span></div>`
+              )
+              .join("")}
+            <div class="metric">${formatElapsedMs(sessionState.elapsedMs)}</div>
+            <div class="metric">${active.metrics.intervalRange}</div>
+            <div class="metric">${active.metrics.longestDroughtSeconds}s longest drought</div>
+            <div class="metric">${rushLine(active.metrics.rushAfterMissPct)}</div>
+            <div class="metric">Best spurt: ${active.metrics.bestSpurt.makes} in ${active.metrics.bestSpurt.seconds}s</div>
+          </main>
+        </body>
+      </html>
+    `
+    const popup = window.open("", "_blank", "noopener,noreferrer")
+
+    if (!popup) return
+
+    popup.document.write(html)
+    popup.document.close()
+    popup.focus()
+    popup.print()
   }
 
   async function chooseFile(file: File | undefined, source: UploadSource = "upload") {
@@ -688,7 +773,7 @@ export default function UploadMemoryConsole() {
                     aria-label="Enter"
                     className="grid h-12 w-12 place-items-center rounded-full bg-amber-200 text-2xl font-black text-black transition hover:bg-amber-100"
                   >
-                    →
+                    &rarr;
                   </button>
                 </div>
               </div>
@@ -697,23 +782,34 @@ export default function UploadMemoryConsole() {
                 <p className="text-5xl font-black leading-none tracking-[-0.06em] text-white sm:text-7xl">
                   {sessionState.sessionName}
                 </p>
-                <div className="mt-8 grid gap-2 border-y border-white/10 py-6">
-                  <div className="grid grid-cols-[1fr_auto] items-end gap-5">
-                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/48">
-                      Makes
-                    </p>
-                    <p className="font-mono text-8xl font-black leading-[0.8] tracking-[-0.06em] text-white sm:text-9xl">
-                      {metrics.makes}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-[1fr_auto] items-end gap-5">
-                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/48">
-                      Misses
-                    </p>
-                    <p className="font-mono text-8xl font-black leading-[0.8] tracking-[-0.06em] text-amber-100/82 sm:text-9xl">
-                      {metrics.misses}
-                    </p>
-                  </div>
+                <div className="mt-8 grid gap-3 border-y border-white/10 py-6">
+                  {sessionState.streams.map((stream) => (
+                    <button
+                      key={stream.id}
+                      type="button"
+                      onClick={() => setActiveStream(stream.id)}
+                      className={`grid grid-cols-[1fr_auto] items-end gap-5 text-left transition ${
+                        stream.id === activeStream.id
+                          ? "text-white"
+                          : "text-white/34 hover:text-white/60"
+                      }`}
+                    >
+                      <span className="text-2xl font-black uppercase tracking-[0.14em]">
+                        {stream.label}
+                      </span>
+                      <span className="font-mono text-8xl font-black leading-[0.8] tracking-[-0.06em] sm:text-9xl">
+                        {tallyValue(stream)}
+                      </span>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addLiveTally}
+                    aria-label="Add tally"
+                    className="mt-2 grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/[0.025] text-2xl font-black text-white/42 transition hover:border-amber-100/30 hover:text-amber-100"
+                  >
+                    +
+                  </button>
                 </div>
 
                 <div className="mt-5 flex items-center justify-between gap-4">
@@ -757,6 +853,22 @@ export default function UploadMemoryConsole() {
                     >
                       <Undo2 className="h-4 w-4 stroke-[1.5]" aria-hidden="true" />
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => void archivePng()}
+                      aria-label="Save archive"
+                      className="grid h-10 w-10 place-items-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-amber-100"
+                    >
+                      <Download className="h-4 w-4 stroke-[1.5]" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={archivePdf}
+                      aria-label="Print archive"
+                      className="grid h-10 w-10 place-items-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-amber-100"
+                    >
+                      <FileText className="h-4 w-4 stroke-[1.5]" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
 
@@ -778,32 +890,6 @@ export default function UploadMemoryConsole() {
             )}
 
             <div className="mt-8 grid gap-3 sm:max-w-xl">
-              {sessionStarted ? (
-                <div className="flex flex-wrap gap-2">
-                  {sessionState.streams.map((stream) => (
-                    <button
-                      key={stream.id}
-                      type="button"
-                      onClick={() => setActiveStream(stream.id)}
-                      className={`min-h-12 rounded-[0.75rem] px-4 text-sm font-black uppercase tracking-[0.12em] transition ${
-                        stream.id === activeStream.id
-                          ? "bg-amber-200 text-black"
-                          : "bg-white/[0.06] text-white/58 hover:bg-white/[0.1]"
-                      }`}
-                    >
-                      {stream.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addLiveTally}
-                    aria-label="Add tally"
-                    className="grid min-h-12 min-w-12 place-items-center rounded-[0.75rem] bg-white/[0.025] text-xl font-black text-white/42 transition hover:bg-white/[0.06] hover:text-amber-100"
-                  >
-                    +
-                  </button>
-                </div>
-              ) : null}
               <input
                 ref={recordInputRef}
                 type="file"
@@ -825,17 +911,19 @@ export default function UploadMemoryConsole() {
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => mark("MAKE")}
-                      className="min-h-28 rounded-[0.75rem] bg-amber-200 text-3xl font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-100"
+                      onClick={() => mark("INCREMENT")}
+                      aria-label="Add event"
+                      className="min-h-32 rounded-[0.75rem] bg-amber-200 text-6xl font-black text-black transition hover:bg-amber-100"
                     >
-                      Make
+                      +
                     </button>
                     <button
                       type="button"
-                      onClick={() => mark("MISS")}
-                      className="min-h-28 rounded-[0.75rem] bg-white/[0.06] text-3xl font-black uppercase tracking-[0.12em] text-white transition hover:bg-white/[0.1]"
+                      onClick={() => mark("DECREMENT")}
+                      aria-label="Subtract event"
+                      className="min-h-32 rounded-[0.75rem] bg-white/[0.06] text-6xl font-black text-white transition hover:bg-white/[0.1]"
                     >
-                      Miss
+                      -
                     </button>
                   </div>
                 </>
@@ -867,6 +955,42 @@ export default function UploadMemoryConsole() {
               preload="metadata"
             />
           ) : null}
+          <div
+            ref={archiveRef}
+            className="pointer-events-none fixed -left-[9999px] top-0 w-[1080px] bg-[#0a0907] p-16 text-stone-100"
+          >
+            <p className="text-2xl font-black uppercase tracking-[0.28em] text-white/38">
+              Axis
+            </p>
+            <h2 className="mt-10 text-8xl font-black leading-[0.86] tracking-[-0.06em] text-white">
+              {sessionState.sessionName}
+            </h2>
+            <div className="mt-14 grid gap-5 border-y border-white/12 py-10">
+              {sessionState.streams.map((stream) => (
+                <div
+                  key={stream.id}
+                  className="grid grid-cols-[1fr_auto] items-end gap-8"
+                >
+                  <p className="text-4xl font-black uppercase tracking-[0.12em] text-white/54">
+                    {stream.label}
+                  </p>
+                  <p className="font-mono text-8xl font-black leading-none text-white">
+                    {tallyValue(stream)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-12 grid gap-5 text-4xl font-black tracking-[-0.04em] text-amber-100">
+              <p>{formatElapsedMs(sessionState.elapsedMs)}</p>
+              <p>{metrics.intervalRange}</p>
+              <p>{metrics.longestDroughtSeconds}s longest drought</p>
+              <p>{rushLine(metrics.rushAfterMissPct)}</p>
+              <p>
+                Best spurt: {metrics.bestSpurt.makes} in{" "}
+                {metrics.bestSpurt.seconds}s
+              </p>
+            </div>
+          </div>
         </section>
       </div>
     </main>
