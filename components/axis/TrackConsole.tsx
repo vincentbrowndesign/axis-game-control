@@ -1,11 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { TemporalMoment } from "@/lib/engine/momentDetection"
 import { runTemporalEngine } from "@/lib/engine/temporalEngine"
 import { createRun, elapsedRunMs, formatRunTime, type Run } from "@/lib/run/runState"
-import { activeRunKey, readStoredRun } from "@/lib/run/runStore"
+import { readStoredRun, subscribeTemporalRun } from "@/lib/run/runStore"
 import type { RunSignal, SignalSide } from "@/lib/run/signals"
 
 type TrackMoment = Pick<
@@ -85,6 +85,7 @@ export function TrackConsole() {
   const [run, setRun] = useState<Run>(() => createRun())
   const [now, setNow] = useState(() => Date.now())
   const [trackInference, setTrackInference] = useState<TrackInference | null>(null)
+  const runSnapshotRef = useRef("")
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -92,22 +93,30 @@ export function TrackConsole() {
     const read = () => {
       const stored = readStoredRun()
 
-      if (stored) setRun(stored)
-    }
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === activeRunKey) read()
+      if (!stored) return
+
+      const snapshot = JSON.stringify(stored)
+
+      if (snapshot === runSnapshotRef.current) return
+
+      runSnapshotRef.current = snapshot
+      setRun(stored)
     }
     const interval = window.setInterval(() => {
       setNow(Date.now())
       read()
     }, 1000)
+    const unsubscribe = subscribeTemporalRun((nextRun) => {
+      runSnapshotRef.current = JSON.stringify(nextRun)
+      setRun(nextRun)
+      setNow(Date.now())
+    })
 
     read()
-    window.addEventListener("storage", onStorage)
 
     return () => {
       window.clearInterval(interval)
-      window.removeEventListener("storage", onStorage)
+      unsubscribe()
     }
   }, [])
 
@@ -131,6 +140,7 @@ export function TrackConsole() {
     const controller = new AbortController()
     const timeout = window.setTimeout(async () => {
       try {
+        const apiMoments = fallbackMoments(runTemporalEngine(run, Date.now()).moments)
         const response = await fetch("/api/infer", {
           method: "POST",
           headers: {
@@ -153,7 +163,7 @@ export function TrackConsole() {
               order: index + 1,
               interval: index > 0 ? signal.time - run.signals[index - 1].time : 0,
             })),
-            moments: localMoments,
+            moments: apiMoments,
           }),
           signal: controller.signal,
         })
@@ -168,7 +178,7 @@ export function TrackConsole() {
         }
         const moments = Array.isArray(data.track?.moments)
           ? data.track.moments
-          : localMoments
+          : apiMoments
 
         setTrackInference({
           moments,
@@ -184,14 +194,7 @@ export function TrackConsole() {
       window.clearTimeout(timeout)
     }
   }, [
-    localMoments,
-    run.away,
-    run.home,
-    run.id,
-    run.pausedMs,
-    run.signals,
-    run.signals.length,
-    run.startedAt,
+    run,
     signalSignature,
   ])
 
@@ -279,6 +282,14 @@ export function TrackConsole() {
               <div className="absolute inset-x-5 top-1/2 h-px -translate-y-1/2 bg-zinc-800" />
               <div className="absolute inset-y-8 left-5 w-px bg-zinc-900" />
               <div className="absolute inset-y-8 right-5 w-px bg-zinc-900" />
+              <div className="absolute left-5 right-5 top-[42%] h-px bg-orange-300/10" />
+              <div className="absolute left-5 right-5 top-[58%] h-px bg-sky-300/10" />
+              <p className="absolute left-5 top-[calc(42%-1.7rem)] text-[10px] font-black uppercase tracking-[0.2em] text-orange-300/40">
+                {run.home}
+              </p>
+              <p className="absolute left-5 top-[calc(58%+0.8rem)] text-[10px] font-black uppercase tracking-[0.2em] text-sky-300/40">
+                {run.away}
+              </p>
 
               {moments.map((moment, index) => {
                 const left = positionFor(moment.start, timelineMs)
@@ -373,31 +384,38 @@ export function TrackConsole() {
             </p>
           </div>
 
-          <div className="flex gap-3 overflow-x-auto pb-1">
+          <div className="relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50 px-4 py-4">
+            <div className="absolute left-4 right-4 top-1/2 h-px bg-zinc-800" />
             {moments.length ? (
-              moments.map((moment) => (
-                <article
+              <div className="flex gap-8 overflow-x-auto pb-1">
+                {moments.map((moment) => (
+                  <article
                   key={moment.id}
-                  className="min-w-64 rounded-lg border border-zinc-800 bg-zinc-950/70 p-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className={`text-xs font-black uppercase tracking-[0.18em] ${labelTone(moment.label)}`}>
-                      {moment.label}
+                    className="relative min-w-56 bg-transparent py-2"
+                  >
+                    <span
+                      className={`absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-zinc-700 bg-black ${
+                        moment.label === "SPURT"
+                          ? "shadow-[0_0_18px_rgba(253,186,116,0.34)]"
+                          : moment.label === "SWING"
+                            ? "shadow-[0_0_18px_rgba(110,231,183,0.28)]"
+                            : ""
+                      }`}
+                    />
+                    <p className={`ml-7 text-xs font-black uppercase tracking-[0.18em] ${labelTone(moment.label)}`}>
+                      {moment.label} / {seconds(moment.end)}
                     </p>
-                    <p className="font-mono text-xs font-black text-zinc-600">
-                      {seconds(moment.end)}
+                    <p className="ml-7 mt-5 truncate text-xl font-black uppercase tracking-[-0.04em] text-zinc-100">
+                      {moment.name}
                     </p>
-                  </div>
-                  <p className="mt-5 truncate text-xl font-black uppercase tracking-[-0.04em] text-zinc-100">
-                    {moment.name}
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-sm font-bold leading-5 text-zinc-600">
-                    {moment.summary}
-                  </p>
-                </article>
-              ))
+                    <p className="ml-7 mt-1 line-clamp-2 text-sm font-bold leading-5 text-zinc-600">
+                      {moment.summary}
+                    </p>
+                  </article>
+                ))}
+              </div>
             ) : (
-              <div className="min-w-full rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+              <div className="relative z-10">
                 <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
                   Signals will cluster into moments here.
                 </p>

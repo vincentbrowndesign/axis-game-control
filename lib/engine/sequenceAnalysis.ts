@@ -1,5 +1,11 @@
 import { elapsedRunMs, type Run } from "@/lib/run/runState"
 import type { RunSignal, SignalSide } from "@/lib/run/signals"
+import {
+  continuityScore,
+  currentContinuity,
+  momentumPersistence,
+  unansweredMakes,
+} from "./continuity"
 
 export type SequenceWindow = {
   recent: RunSignal[]
@@ -53,52 +59,6 @@ function intervalAverage(signals: RunSignal[]) {
   }
 
   return total / (signals.length - 1)
-}
-
-function currentContinuity(signals: RunSignal[]) {
-  const latest = signals[signals.length - 1]
-  if (!latest) {
-    return {
-      side: "none" as const,
-      count: 0,
-    }
-  }
-
-  let count = 0
-
-  for (let index = signals.length - 1; index >= 0; index -= 1) {
-    const signal = signals[index]
-    if (signal.side !== latest.side || signal.result !== latest.result) break
-    count += 1
-  }
-
-  return {
-    side: latest.side,
-    count,
-  }
-}
-
-function unansweredMakes(signals: RunSignal[]) {
-  const latest = signals[signals.length - 1]
-  if (!latest || latest.result !== "make") {
-    return {
-      side: "none" as const,
-      count: 0,
-    }
-  }
-
-  let count = 0
-
-  for (let index = signals.length - 1; index >= 0; index -= 1) {
-    const signal = signals[index]
-    if (signal.side !== latest.side || signal.result !== "make") break
-    count += 1
-  }
-
-  return {
-    side: latest.side,
-    count,
-  }
 }
 
 function clusteredMisses(signals: RunSignal[]) {
@@ -192,6 +152,7 @@ export function analyzeSequence(run: Run, now = Date.now()): SequenceAnalysis {
     0
   )
   const continuity = currentContinuity(signals)
+  const persistence = momentumPersistence(signals)
   const interruptions = signals.filter(
     (signal, index) =>
       index > 0 &&
@@ -207,7 +168,9 @@ export function analyzeSequence(run: Run, now = Date.now()): SequenceAnalysis {
     misses,
     frequency: attempts ? attempts / Math.max(1, currentTime / 60_000) : 0,
     recency: clamp(weightedSignals / Math.max(1, attempts)),
-    continuity: clamp(continuity.count / 5),
+    continuity: clamp(
+      continuityScore(continuity) * 0.74 + persistence.score * 0.26
+    ),
     interruption: attempts > 1 ? clamp(interruptions / (attempts - 1)) : 0,
     responseDelay: recoveryDelay,
     signalDensity: averageInterval ? clamp(1 - averageInterval / 20_000) : 0,

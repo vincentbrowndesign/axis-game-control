@@ -1,4 +1,5 @@
-import { Camera, Download, Share2, Upload } from "lucide-react"
+import Link from "next/link"
+import { Activity, Camera, Download, Share2, Upload } from "lucide-react"
 import type { ReactNode } from "react"
 
 export function ControlBar({
@@ -25,6 +26,14 @@ export function ControlBar({
             <Upload className="h-5 w-5 stroke-[1.7]" />
           </IconButton>
         </div>
+        <Link
+          href="/track"
+          aria-label="Track"
+          title="Track"
+          className="grid h-12 min-w-12 place-items-center rounded-full border border-emerald-500/30 bg-zinc-950 px-3 text-emerald-200 transition hover:border-emerald-300/60 hover:text-white"
+        >
+          <Activity className="h-5 w-5 stroke-[1.7]" />
+        </Link>
         <div className="flex items-center gap-2">
           <IconButton label="Save" onClick={onSave}>
             <Download className="h-5 w-5 stroke-[1.7]" />

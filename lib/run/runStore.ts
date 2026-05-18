@@ -3,6 +3,34 @@ import type { RunSignal } from "@/lib/run/signals"
 
 export const activeRunKey = "axis-active-run"
 export const storedRunsKey = "axis-stored-runs"
+export const temporalRunEventName = "axis-temporal-run"
+const temporalRunChannelName = "axis-temporal-run-channel"
+
+type TemporalRunListener = (run: Run) => void
+
+function publishTemporalRun(run: Run) {
+  if (typeof window === "undefined") return
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent<Run>(temporalRunEventName, {
+        detail: run,
+      })
+    )
+  } catch {
+    // Keep capture stable if CustomEvent is unavailable.
+  }
+
+  try {
+    if (typeof BroadcastChannel === "undefined") return
+
+    const channel = new BroadcastChannel(temporalRunChannelName)
+    channel.postMessage(run)
+    channel.close()
+  } catch {
+    // BroadcastChannel is optional, especially on older mobile browsers.
+  }
+}
 
 function normalizeRun(value: unknown): Run | null {
   if (!value || typeof value !== "object") return null
@@ -75,8 +103,10 @@ export function writeStoredRun(run: Run) {
 
   try {
     window.localStorage.setItem(activeRunKey, JSON.stringify(run))
+    publishTemporalRun(run)
   } catch {
     // Mobile Safari can deny storage in constrained/private contexts.
+    publishTemporalRun(run)
   }
 }
 
@@ -111,7 +141,47 @@ export function storeRun(run: Run) {
 
     window.localStorage.setItem(storedRunsKey, JSON.stringify(next))
     window.localStorage.setItem(activeRunKey, JSON.stringify(run))
+    publishTemporalRun(run)
   } catch {
     // Keep the live screen running even when persistent storage is unavailable.
+    publishTemporalRun(run)
+  }
+}
+
+export function subscribeTemporalRun(listener: TemporalRunListener) {
+  if (typeof window === "undefined") return () => {}
+
+  const onEvent = (event: Event) => {
+    const run = (event as CustomEvent<Run>).detail
+
+    if (run) listener(run)
+  }
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== activeRunKey) return
+
+    const run = readStoredRun()
+
+    if (run) listener(run)
+  }
+  let channel: BroadcastChannel | null = null
+
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel(temporalRunChannelName)
+      channel.onmessage = (event: MessageEvent<Run>) => {
+        if (event.data) listener(event.data)
+      }
+    }
+  } catch {
+    channel = null
+  }
+
+  window.addEventListener(temporalRunEventName, onEvent)
+  window.addEventListener("storage", onStorage)
+
+  return () => {
+    window.removeEventListener(temporalRunEventName, onEvent)
+    window.removeEventListener("storage", onStorage)
+    channel?.close()
   }
 }
