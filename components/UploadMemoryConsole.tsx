@@ -69,10 +69,10 @@ function safeParseUploadResponse(text: string) {
 }
 
 function uploadStatus(data: AxisUploadResponse) {
-  if (data.ok || data.recovery || data.stored) return "Memory attached."
-  if (data.error) return "Memory local."
+  if (data.ok || data.recovery || data.stored) return "Attached."
+  if (data.error) return "Local."
 
-  return "Memory local."
+  return "Local."
 }
 
 function safeStorageName(name: string) {
@@ -272,25 +272,6 @@ async function nativeShareFile(file: File, title: string, text: string) {
     title,
     text,
   })
-
-  return true
-}
-
-function fallbackDownloadBlob(blob: Blob, name: string) {
-  if (typeof URL === "undefined" || typeof document === "undefined") return false
-
-  const objectUrl = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = objectUrl
-  link.download = name
-  link.rel = "noopener"
-  link.click()
-
-  if (typeof window !== "undefined") {
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
-  } else {
-    URL.revokeObjectURL(objectUrl)
-  }
 
   return true
 }
@@ -672,11 +653,11 @@ export default function UploadMemoryConsole({
 
   async function shareArchiveImage() {
     storeCurrentRun()
-    setStatus("Preparing image.")
+    setStatus("Preparing share.")
     const blob = await generateArchiveImageBlob()
 
     if (!blob) {
-      setStatus("Image unavailable.")
+      setStatus("Share unavailable.")
       return false
     }
 
@@ -692,20 +673,20 @@ export default function UploadMemoryConsole({
         }
       } catch {
         setStatus("Share canceled.")
+        return false
       }
     }
 
-    const downloaded = fallbackDownloadBlob(blob, artifactName(run, "png"))
-    setStatus(downloaded ? "Image saved." : "Image unavailable.")
+    setStatus("Share unavailable.")
 
-    return downloaded
+    return false
   }
 
   async function shareReplayVideo() {
     if (!playbackId) return false
 
     try {
-      setStatus("Preparing video.")
+      setStatus("Preparing share.")
       const blob = await fetchBlobWithTimeout(playbackId)
       const type = blob.type || "video/mp4"
 
@@ -713,8 +694,9 @@ export default function UploadMemoryConsole({
         return false
       }
 
-      const extension = extensionForType(type, "mp4")
-      const file = createShareFile(blob, mediaName(run, extension), type)
+      const shareType = type.includes("octet-stream") ? "video/mp4" : type
+      const extension = extensionForType(shareType, "mp4")
+      const file = createShareFile(blob, mediaName(run, extension), shareType)
 
       if (file) {
         const shared = await nativeShareFile(file, "Axis Replay", "Axis replay memory")
@@ -725,10 +707,9 @@ export default function UploadMemoryConsole({
         }
       }
 
-      const downloaded = fallbackDownloadBlob(blob, mediaName(run, extension))
-      setStatus(downloaded ? "Video saved." : "Video unavailable.")
+      setStatus("Share unavailable.")
 
-      return downloaded
+      return false
     } catch {
       return false
     }
@@ -866,7 +847,7 @@ export default function UploadMemoryConsole({
         onCamera={() => recordInputRef.current?.click()}
         onUpload={() => uploadInputRef.current?.click()}
         onSave={() => void shareBestMedia(true)}
-        onShare={() => void shareBestMedia(false)}
+        onShare={() => void shareBestMedia(true)}
         disabled={isUploading}
       />
     </main>
@@ -900,8 +881,8 @@ function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }
   }
 
   return (
-    <section className="grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3">
-      <div className="flex min-h-6 items-center gap-1.5 overflow-hidden">
+    <section className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3">
+      <div className="flex min-h-8 items-center gap-1.5 overflow-hidden">
         {signals.length ? (
           signals.map((signal) => {
             const moment = momentsBySignal.get(signal.id)
@@ -927,14 +908,6 @@ function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }
         ) : (
           <span className="h-1 w-full rounded-full bg-zinc-900" />
         )}
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
-          {track.moments[0]?.name || "Memory rail"}
-        </p>
-        <p className="truncate text-right text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-          {track.moments[0]?.label || (run.signals.length ? "TRACK" : "READY")}
-        </p>
       </div>
     </section>
   )
