@@ -25,6 +25,12 @@ type ClientUploadInfo = {
   viewport: string
 }
 
+type CameraDiagnostics = {
+  streamActive: boolean
+  trackCount: number
+  readyState: number
+}
+
 function uploadStatus(data: AxisUploadResponse) {
   if (data.ok) return "Playback ready."
   if (data.recovery) return "Playback ready."
@@ -201,7 +207,12 @@ export default function UploadMemoryConsole() {
   const [isUploading, setIsUploading] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
-  const [liveStreamId, setLiveStreamId] = useState("axis-live-preview")
+  const [cameraError, setCameraError] = useState("")
+  const [cameraDiagnostics, setCameraDiagnostics] = useState<CameraDiagnostics>({
+    streamActive: false,
+    trackCount: 0,
+    readyState: 0,
+  })
   const [status, setStatus] = useState("")
   const [processingLine, setProcessingLine] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -234,12 +245,24 @@ export default function UploadMemoryConsole() {
     streamRef.current = null
     recorderRef.current = null
     setCameraReady(false)
-    setLiveStreamId("axis-live-preview")
+    setCameraDiagnostics({
+      streamActive: false,
+      trackCount: 0,
+      readyState: livePreviewRef.current?.readyState || 0,
+    })
 
     if (livePreviewRef.current) {
       livePreviewRef.current.srcObject = null
     }
   }
+
+  const updateCameraDiagnostics = useCallback((stream: MediaStream | null) => {
+    setCameraDiagnostics({
+      streamActive: Boolean(stream?.active),
+      trackCount: stream?.getVideoTracks()?.length || 0,
+      readyState: livePreviewRef.current?.readyState || 0,
+    })
+  }, [])
 
   const attachLivePreview = useCallback(async (stream: MediaStream) => {
     const video = livePreviewRef.current
@@ -259,11 +282,26 @@ export default function UploadMemoryConsole() {
       readyState: video.readyState,
     })
 
+    await new Promise<void>((resolve) => {
+      if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        resolve()
+        return
+      }
+
+      video.onloadedmetadata = () => resolve()
+    })
+
     await video.play()
 
     console.log({
       streamActive: !!stream,
       videoTracks: stream?.getVideoTracks()?.length,
+      readyState: video.readyState,
+    })
+
+    setCameraDiagnostics({
+      streamActive: !!stream,
+      trackCount: stream?.getVideoTracks()?.length || 0,
       readyState: video.readyState,
     })
   }, [])
@@ -274,8 +312,10 @@ export default function UploadMemoryConsole() {
 
     void attachLivePreview(streamRef.current).catch((error) => {
       console.warn("AXIS LIVE PREVIEW PLAY FAILED", error)
+      setCameraError(String(error))
+      updateCameraDiagnostics(streamRef.current)
     })
-  }, [attachLivePreview, cameraReady, liveStreamId])
+  }, [attachLivePreview, cameraReady, updateCameraDiagnostics])
 
   async function startRecording() {
     if (isUploading || isRecording) return
@@ -297,21 +337,41 @@ export default function UploadMemoryConsole() {
       setUploadProgress(0)
       setCreatedLabel("")
       setDebugLines([])
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-          aspectRatio: { ideal: 9 / 16 },
-        },
+      setCameraError("")
+      setCameraDiagnostics({
+        streamActive: false,
+        trackCount: 0,
+        readyState: livePreviewRef.current?.readyState || 0,
       })
 
+      let stream: MediaStream
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        })
+
+        console.log("STREAM OK", stream)
+      } catch (err) {
+        console.error("CAMERA ERROR", err)
+        setCameraError(String(err))
+        setStatus("Camera unavailable")
+        setProcessingLine("Choose the clip from your camera roll.")
+        updateCameraDiagnostics(null)
+        return
+      }
+
       streamRef.current = stream
-      setLiveStreamId(stream.id)
       setCameraReady(true)
-      await attachLivePreview(stream)
+
+      try {
+        await attachLivePreview(stream)
+      } catch (error) {
+        console.error("CAMERA ERROR", error)
+        setCameraError(String(error))
+        updateCameraDiagnostics(stream)
+      }
 
       const recorder = createRecorder({
         stream,
@@ -324,9 +384,11 @@ export default function UploadMemoryConsole() {
       setIsRecording(true)
       setStatus("Recording")
       setProcessingLine("Axis is capturing.")
+      updateCameraDiagnostics(stream)
       addDebug(`recording mime: ${recorder.mimeType || "browser default"}`)
     } catch (error) {
       console.warn("AXIS RECORDING START FAILED", error)
+      setCameraError(String(error))
       stopCameraStream()
       setIsRecording(false)
       setStatus("Camera unavailable")
@@ -653,6 +715,18 @@ export default function UploadMemoryConsole() {
               {status ? (
                 <p className="text-sm font-bold text-white/42">{status}</p>
               ) : null}
+              {cameraReady || cameraError ? (
+                <div className="grid gap-1 text-xs font-bold uppercase tracking-[0.14em] text-white/34">
+                  <p>Camera status: {cameraDiagnostics.streamActive ? "stream active" : "no stream"}</p>
+                  <p>Track count: {cameraDiagnostics.trackCount}</p>
+                  <p>Ready state: {cameraDiagnostics.readyState}</p>
+                  {cameraError ? (
+                    <p className="normal-case tracking-normal text-red-200">
+                      {cameraError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             {processingLine ? (
               <p className="mt-5 text-2xl font-black tracking-[-0.04em] text-amber-100/80">
@@ -684,19 +758,14 @@ export default function UploadMemoryConsole() {
           <div className="overflow-hidden rounded-[1.5rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
             <div className="relative min-h-[420px] aspect-[9/14] bg-transparent sm:min-h-[560px]">
               <video
-                key={liveStreamId}
                 ref={livePreviewRef}
-                className={`absolute inset-0 h-full w-full bg-transparent object-cover ${
-                  cameraReady
-                    ? "visible z-20 opacity-100"
-                    : "invisible z-0 opacity-0"
-                }`}
+                className="pointer-events-none absolute inset-0 z-20 h-full w-full bg-transparent object-cover opacity-100"
                 style={{
                   background: "transparent",
                   objectFit: "cover",
-                  visibility: cameraReady ? "visible" : "hidden",
-                  opacity: cameraReady ? 1 : 0,
-                  zIndex: cameraReady ? 20 : 0,
+                  visibility: "visible",
+                  opacity: 1,
+                  zIndex: 20,
                 }}
                 autoPlay
                 muted
