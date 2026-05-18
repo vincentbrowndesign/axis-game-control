@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Axis",
-  description: "Tap the signal. Track the shift. Store the memory.",
+  description: "Tap the signal. Track the shift. Archive the memory.",
 };
 
 export default function RootLayout({

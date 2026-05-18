@@ -13,10 +13,6 @@ export type TrackInference = {
   strongestMoment: string
 }
 
-function seconds(value: number) {
-  return `${Math.max(0, Math.round(value / 1000))}s`
-}
-
 function sideName(run: Run, side: SignalSide) {
   return side === "home" ? run.home : run.away
 }
@@ -29,7 +25,7 @@ function latestRun(signals: RunSignal[]) {
 
   for (let index = signals.length - 1; index >= 0; index -= 1) {
     const signal = signals[index]
-    if (signal.side !== latest.side) break
+    if (signal.side !== latest.side || signal.result !== latest.result) break
     run.unshift(signal)
   }
 
@@ -52,6 +48,7 @@ export function inferTrack(run: Run): TrackInference {
   const latestCluster = latestRun(run.signals)
   const recent = run.signals.slice(-6)
   const shifts = shiftCount(recent)
+  const misses = recent.filter((signal) => signal.result === "miss").length
   const strongest = run.moments[0]
   const silence = axisState.silenceMs
 
@@ -61,24 +58,23 @@ export function inferTrack(run: Run): TrackInference {
         ? "Control even"
         : `${sideName(run, axisState.leader)} control`,
     momentum: latest
-      ? `${sideName(run, latest.side)} at ${seconds(latest.time)}`
+      ? `${sideName(run, latest.side)} ${latest.result.toUpperCase()}`
       : "Awaiting first signal",
     instability:
-      silence >= 18_000
+      silence >= 18_000 || misses >= 3
         ? "Pressure silence"
         : shifts >= 3
-          ? "Control shifting"
+          ? "Volatile"
           : "Flow stable",
-    recovery:
-      shifts >= 2 ? "Response active" : "Recovery quiet",
+    recovery: shifts >= 2 ? "Response" : "Quiet",
     pressure:
       axisState.label === "BREAKING"
-        ? "Pressure breaking"
+        ? "Cold"
         : axisState.label === "UNSTABLE"
-          ? "Pressure unstable"
-          : "Pressure contained",
+          ? "Cold"
+          : "Set",
     streak: latestCluster.length
-      ? `${latestCluster.length} signal streak`
+      ? `${latestCluster.length} ${latestCluster[0].result.toUpperCase()}`
       : "No streak yet",
     shift: shifts ? `${shifts} recent control shifts` : "No shift yet",
     strongestMoment: strongest?.label || "No moment stored yet",

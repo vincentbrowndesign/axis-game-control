@@ -17,7 +17,7 @@ export default async function HomePage() {
             Tap the signal.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
-            Track the shift. Store the memory.
+            Track the shift. Archive the memory.
           </p>
           <Link
             href="/auth"

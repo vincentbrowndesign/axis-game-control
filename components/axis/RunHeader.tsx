@@ -4,7 +4,7 @@ import type { Run } from "@/lib/run/runState"
 const nav = [
   { href: "/tap", label: "Tap" },
   { href: "/track", label: "Track" },
-  { href: "/store", label: "Store" },
+  { href: "/archive", label: "Archive" },
 ]
 
 export function RunHeader({
@@ -15,7 +15,7 @@ export function RunHeader({
 }: {
   run: Run
   elapsed: string
-  mode: "tap" | "track" | "store"
+  mode: "tap" | "track" | "archive"
   onName: (side: "home" | "away", value: string) => void
 }) {
   return (

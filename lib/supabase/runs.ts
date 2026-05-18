@@ -12,7 +12,7 @@ export async function saveRunMemory({
     id: run.id,
     session_name: `${run.home} / ${run.away}`,
     metadata: {
-      system: "tap-track-store",
+      system: "tap-track-archive",
       home: run.home,
       away: run.away,
       signals: run.signals,

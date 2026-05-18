@@ -17,14 +17,14 @@ import {
   storeRun,
   writeStoredRun,
 } from "@/lib/run/runStore"
-import type { SignalSide } from "@/lib/run/signals"
+import type { SignalResult, SignalSide } from "@/lib/run/signals"
 import { createClient } from "@/lib/supabase/client"
 import {
   parseUploadResponseText,
   type AxisUploadResponse,
 } from "@/lib/uploadResponse"
 
-type AxisMode = "tap" | "track" | "store"
+type AxisMode = "tap" | "track" | "archive"
 type UploadSource = "camera" | "upload"
 
 type ClientUploadInfo = {
@@ -52,9 +52,9 @@ function safeParseUploadResponse(text: string) {
 
 function uploadStatus(data: AxisUploadResponse) {
   if (data.ok || data.recovery || data.stored) return "Memory attached."
-  if (data.error) return "Stored local."
+  if (data.error) return "Memory local."
 
-  return "Stored local."
+  return "Memory local."
 }
 
 function safeStorageName(name: string) {
@@ -181,7 +181,7 @@ async function completeUpload({
 }
 
 function artifactName(run: Run, extension: "png" | "pdf") {
-  return `${run.home}-vs-${run.away}-axis-store`
+  return `${run.home}-vs-${run.away}-axis-archive`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -242,10 +242,11 @@ export default function UploadMemoryConsole({
     })
   }
 
-  function tapSignal(side: SignalSide) {
+  function tapSignal(side: SignalSide, result: SignalResult) {
     const signal = {
       id: crypto.randomUUID(),
       side,
+      result,
       time: elapsedMs,
     }
 
@@ -294,14 +295,14 @@ export default function UploadMemoryConsole({
     storeRun(next)
     setRun(next)
     setStoredRuns(readStoredRuns())
-    setStatus("Run stored.")
+    setStatus("Run archived.")
   }
 
   async function exportPng(share = false) {
     if (!artifactRef.current) return
 
     storeCurrentRun()
-    setStatus("Store rendering.")
+    setStatus("Archive rendering.")
     const { toPng } = await import("html-to-image")
     const dataUrl = await toPng(artifactRef.current, {
       cacheBust: true,
@@ -310,6 +311,13 @@ export default function UploadMemoryConsole({
     })
     const response = await fetch(dataUrl)
     const blob = await response.blob()
+    const validBlob = blob.size > 0 && blob.type.startsWith("image/")
+
+    if (!validBlob) {
+      setStatus("Archive unavailable.")
+      return
+    }
+
     const file = new File([blob], artifactName(run, "png"), {
       type: "image/png",
     })
@@ -320,47 +328,26 @@ export default function UploadMemoryConsole({
         window.matchMedia("(pointer: coarse)").matches)
 
     if (nativeReady) {
-      await navigator.share({
-        files: [file],
-        title: "Axis Store",
-        text: "Tap the signal. Track the shift. Store the memory.",
-      })
-      setStatus("Store shared.")
-      return
+      try {
+        await navigator.share({
+          files: [file],
+          title: "Axis Archive",
+          text: "Tap. Track. Archive.",
+        })
+        setStatus("Archive shared.")
+        return
+      } catch {
+        setStatus("Archive save fallback.")
+      }
     }
 
+    const objectUrl = URL.createObjectURL(blob)
     const link = document.createElement("a")
-    link.href = dataUrl
+    link.href = objectUrl
     link.download = file.name
     link.click()
-    setStatus("Store saved.")
-  }
-
-  function exportPdf() {
-    if (!artifactRef.current) return
-
-    storeCurrentRun()
-    const popup = window.open("", "_blank", "noopener,noreferrer")
-
-    if (!popup) return
-
-    popup.document.write(`
-      <html>
-        <head>
-          <title>Axis Store</title>
-          <style>
-            body { margin: 0; background: #050505; color: #f4f0e8; font-family: Arial, sans-serif; }
-            @page { size: portrait; margin: 0; }
-            .print { min-height: 100vh; padding: 48px; box-sizing: border-box; }
-            p, h1, h2 { margin: 0; }
-          </style>
-        </head>
-        <body><main class="print">${artifactRef.current.innerHTML}</main></body>
-      </html>
-    `)
-    popup.document.close()
-    popup.focus()
-    popup.print()
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    setStatus("Archive saved.")
   }
 
   async function chooseFile(file: File | undefined, source: UploadSource) {
@@ -444,6 +431,26 @@ export default function UploadMemoryConsole({
         <RunHeader run={run} elapsed={elapsed} mode={initialMode} onName={updateName} />
         <StateBar state={axisState} />
 
+        {initialMode === "tap" ? (
+          <section className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+            {playbackId ? (
+              <video
+                src={playbackId}
+                className="aspect-video w-full bg-black object-contain"
+                controls
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <div className="grid aspect-video place-items-center bg-black">
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-600">
+                  Replay preview
+                </p>
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <section
           className={`grid gap-6 ${
             initialMode === "tap" ? "" : "lg:grid-cols-[minmax(0,1fr)_340px]"
@@ -476,7 +483,7 @@ export default function UploadMemoryConsole({
         {initialMode === "track" ? (
           <section className="grid gap-4 border-t border-zinc-800 pt-6">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
-              Behavioral replay
+              Replay rail
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(track).map(([key, value]) => (
@@ -493,10 +500,10 @@ export default function UploadMemoryConsole({
           </section>
         ) : null}
 
-        {initialMode === "store" ? (
+        {initialMode === "archive" ? (
           <section className="grid gap-4 border-t border-zinc-800 pt-6">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
-              Stored runs
+              Archive
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {storedRuns.length ? (
@@ -511,13 +518,13 @@ export default function UploadMemoryConsole({
                       {stored.home} / {stored.away}
                     </p>
                     <p className="mt-2 font-mono text-sm font-black text-zinc-500">
-                      {stored.signals.length} signals
+                      {stored.moments.length} moments
                     </p>
                   </button>
                 ))
               ) : (
                 <div className="border border-zinc-800 bg-zinc-950/70 p-4">
-                  <p className="text-xl font-black text-zinc-100">No stored runs yet.</p>
+                  <p className="text-xl font-black text-zinc-100">No archived runs yet.</p>
                 </div>
               )}
             </div>
@@ -546,7 +553,7 @@ export default function UploadMemoryConsole({
         className="pointer-events-none fixed -left-[9999px] top-0 w-[1080px] bg-[#050505] p-14 text-zinc-100"
       >
         <p className="text-xs font-black uppercase tracking-[0.3em] text-emerald-300">
-          Axis Store
+          Axis Archive
         </p>
         <h1 className="mt-8 text-7xl font-black leading-none tracking-[-0.06em]">
           {run.home} / {run.away}
@@ -564,34 +571,24 @@ export default function UploadMemoryConsole({
         </div>
       </div>
 
-      {initialMode === "tap" ? (
+      <ControlBar
+        onCamera={() => recordInputRef.current?.click()}
+        onUpload={() => uploadInputRef.current?.click()}
+        onUndo={undoSignal}
+        onSave={() => void exportPng(false)}
+        onShare={() => void exportPng(true)}
+        disabled={isUploading}
+      />
+
+      {initialMode !== "tap" ? (
         <button
           type="button"
-          onClick={undoSignal}
-          className="fixed inset-x-4 bottom-4 z-40 h-16 rounded-lg border border-zinc-700 bg-zinc-950 text-sm font-black uppercase tracking-[0.2em] text-zinc-200 transition active:scale-[0.99] hover:border-zinc-500 sm:inset-x-auto sm:right-6 sm:w-56"
+          onClick={newRun}
+          className="fixed bottom-20 right-4 z-40 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-zinc-300 transition hover:text-white sm:right-6"
         >
-          Undo
+          New run
         </button>
-      ) : (
-        <>
-          <ControlBar
-            onCamera={() => recordInputRef.current?.click()}
-            onUpload={() => uploadInputRef.current?.click()}
-            onUndo={undoSignal}
-            onSave={() => void exportPng(false)}
-            onShare={() => void exportPng(true)}
-            onPdf={exportPdf}
-            disabled={isUploading}
-          />
-          <button
-            type="button"
-            onClick={newRun}
-            className="fixed bottom-20 right-4 z-40 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-zinc-300 transition hover:text-white sm:right-6"
-          >
-            New run
-          </button>
-        </>
-      )}
+      ) : null}
     </main>
   )
 }

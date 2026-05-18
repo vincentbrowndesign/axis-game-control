@@ -4,6 +4,14 @@ export function StateBar({ state }: { state: AxisState }) {
   const warning = state.label === "UNSTABLE" || state.label === "BREAKING"
   const control =
     state.leader === "even" ? "EVEN" : state.leader === "home" ? "HOME" : "AWAY"
+  const runState =
+    warning
+      ? "COLD"
+      : Math.max(state.home.run, state.away.run) >= 3
+        ? "SPURT"
+        : state.leader === "even"
+          ? "EVEN"
+          : "HOT"
 
   return (
     <section
@@ -18,9 +26,9 @@ export function StateBar({ state }: { state: AxisState }) {
           Score
         </p>
         <p className="mt-1 font-mono text-5xl font-black leading-none tracking-[-0.06em] text-zinc-100">
-          <span className="text-orange-300">{state.home.signals}</span>
+          <span className="text-orange-300">{state.home.makes}</span>
           <span className="px-2 text-zinc-600">-</span>
-          <span className="text-sky-300">{state.away.signals}</span>
+          <span className="text-sky-300">{state.away.makes}</span>
         </p>
       </div>
       <div>
@@ -40,7 +48,7 @@ export function StateBar({ state }: { state: AxisState }) {
             warning ? "text-orange-300" : "text-emerald-300"
           }`}
         >
-          {state.label}
+          {runState}
         </p>
       </div>
     </section>

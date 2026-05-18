@@ -1,4 +1,5 @@
-import { Camera, Download, FileText, RotateCcw, Share2, Upload } from "lucide-react"
+import { Camera, Download, RotateCcw, Share2, Upload } from "lucide-react"
+import type { ReactNode } from "react"
 
 export function ControlBar({
   onCamera,
@@ -6,7 +7,6 @@ export function ControlBar({
   onUndo,
   onSave,
   onShare,
-  onPdf,
   disabled = false,
 }: {
   onCamera: () => void
@@ -14,17 +14,16 @@ export function ControlBar({
   onUndo: () => void
   onSave: () => void
   onShare: () => void
-  onPdf: () => void
   disabled?: boolean
 }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-black/92 px-4 py-3 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <IconButton label="Camera" onClick={onCamera} disabled={disabled}>
+          <IconButton label="Record" onClick={onCamera} disabled={disabled}>
             <Camera className="h-5 w-5 stroke-[1.7]" />
           </IconButton>
-          <IconButton label="Upload" onClick={onUpload} disabled={disabled}>
+          <IconButton label="Choose File" onClick={onUpload} disabled={disabled}>
             <Upload className="h-5 w-5 stroke-[1.7]" />
           </IconButton>
           <IconButton label="Undo" onClick={onUndo}>
@@ -37,9 +36,6 @@ export function ControlBar({
           </IconButton>
           <IconButton label="Share" onClick={onShare}>
             <Share2 className="h-5 w-5 stroke-[1.7]" />
-          </IconButton>
-          <IconButton label="PDF" onClick={onPdf}>
-            <FileText className="h-5 w-5 stroke-[1.7]" />
           </IconButton>
         </div>
       </div>
@@ -56,7 +52,7 @@ function IconButton({
   label: string
   onClick: () => void
   disabled?: boolean
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <button
@@ -65,7 +61,7 @@ function IconButton({
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="grid h-12 w-12 place-items-center rounded-full border border-zinc-700 bg-zinc-950 text-zinc-300 transition hover:border-zinc-500 hover:text-white disabled:opacity-30"
+      className="grid h-12 min-w-12 place-items-center rounded-full border border-zinc-700 bg-zinc-950 px-3 text-zinc-300 transition hover:border-zinc-500 hover:text-white disabled:opacity-30"
     >
       {children}
     </button>

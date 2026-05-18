@@ -19,7 +19,7 @@ export default async function TapPage() {
             Tap the signal.
           </h1>
           <p className="mt-5 max-w-xl text-base font-bold leading-7 text-zinc-500">
-            Track the shift. Store the memory.
+            Track the shift. Archive the memory.
           </p>
           <Link
             href="/auth"

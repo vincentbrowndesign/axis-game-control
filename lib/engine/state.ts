@@ -11,6 +11,8 @@ export type AxisStateLabel =
 
 export type SideState = {
   signals: number
+  makes: number
+  misses: number
   run: number
   density: number
 }
@@ -27,6 +29,8 @@ export type AxisState = {
 function emptySide(): SideState {
   return {
     signals: 0,
+    makes: 0,
+    misses: 0,
     run: 0,
     density: 0,
   }
@@ -54,14 +58,22 @@ export function deriveAxisState(run: Run, elapsedMs?: number): AxisState {
     const weight = weightForAge(Math.max(0, currentTime - signal.time))
 
     side.signals += 1
-    side.run += 1
-    side.density += weight
-    if (signal.side === "home") {
-      homeControl += weight
-      away.run = 0
+    if (signal.result === "make") {
+      side.makes += 1
+      side.run += 1
+      side.density += weight
+      if (signal.side === "home") {
+        homeControl += weight
+        away.run = 0
+      } else {
+        awayControl += weight
+        home.run = 0
+      }
     } else {
-      awayControl += weight
-      home.run = 0
+      side.misses += 1
+      side.run = Math.max(0, side.run - 1)
+      if (signal.side === "home") homeControl -= weight * 0.65
+      if (signal.side === "away") awayControl -= weight * 0.65
     }
   }
 
@@ -70,15 +82,18 @@ export function deriveAxisState(run: Run, elapsedMs?: number): AxisState {
   const alternations = recent.filter(
     (signal, index) => index > 0 && signal.side !== recent[index - 1].side
   ).length
+  const misses = recent.filter((signal) => signal.result === "miss").length
   const latestRun = recent.filter(
-    (signal) => signal.side === run.signals[run.signals.length - 1]?.side
+    (signal) =>
+      signal.side === run.signals[run.signals.length - 1]?.side &&
+      signal.result === run.signals[run.signals.length - 1]?.result
   ).length
   const leader: AxisState["leader"] =
     Math.abs(margin) < 1.1 ? "even" : margin > 0 ? "home" : "away"
   let label: AxisStateLabel = "EVEN"
 
-  if (silenceMs >= 35_000 && run.signals.length) label = "BREAKING"
-  else if (silenceMs >= 18_000 || alternations >= 3) label = "UNSTABLE"
+  if ((silenceMs >= 35_000 || misses >= 4) && run.signals.length) label = "BREAKING"
+  else if (silenceMs >= 18_000 || alternations >= 3 || misses >= 3) label = "UNSTABLE"
   else if (alternations >= 2) label = "SHIFTING"
   else if (latestRun >= 3 && leader === "home") label = "HOME CONTROL"
   else if (latestRun >= 3 && leader === "away") label = "AWAY CONTROL"

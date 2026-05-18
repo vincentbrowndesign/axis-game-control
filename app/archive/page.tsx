@@ -2,7 +2,7 @@ import Link from "next/link"
 import UploadMemoryConsole from "@/components/UploadMemoryConsole"
 import { createClient } from "@/lib/supabase/server"
 
-export default async function TrackPage() {
+export default async function ArchivePage() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -13,13 +13,13 @@ export default async function TrackPage() {
       <main className="min-h-screen bg-[#050505] px-5 py-10 text-zinc-100">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col justify-center">
           <p className="text-sm font-black uppercase tracking-[0.18em] text-zinc-500">
-            Axis Track
+            Axis Archive
           </p>
           <h1 className="mt-4 max-w-3xl text-5xl font-black tracking-[-0.05em] sm:text-7xl">
-            Track the shift.
+            Archive the memory.
           </h1>
           <p className="mt-5 max-w-xl text-base font-bold leading-7 text-zinc-500">
-            Tap the signal. Archive the memory.
+            Tap the signal. Track the shift.
           </p>
           <Link
             href="/auth"
@@ -32,5 +32,5 @@ export default async function TrackPage() {
     )
   }
 
-  return <UploadMemoryConsole initialMode="track" />
+  return <UploadMemoryConsole initialMode="archive" />
 }
