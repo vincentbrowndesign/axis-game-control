@@ -7,12 +7,14 @@ function momentId(parts: Array<string | number>) {
 
 function labelCluster(signals: RunSignal[]) {
   const first = signals[0]
-  const makes = signals.filter((signal) => signal.result === "make").length
-  const misses = signals.filter((signal) => signal.result === "miss").length
+  const sameSide = signals.filter((signal) => signal.side === first?.side).length
+  const alternations = signals.filter(
+    (signal, index) => index > 0 && signal.side !== signals[index - 1].side
+  ).length
 
   if (!first) return "Moment"
-  if (makes >= 3) return `${first.side.toUpperCase()} CONTROL SPURT`
-  if (misses >= 3) return `${first.side.toUpperCase()} PRESSURE WINDOW`
+  if (sameSide >= 3) return `${first.side.toUpperCase()} CONTROL SPURT`
+  if (alternations >= 2) return "VOLATILE SHIFT"
 
   return `${first.side.toUpperCase()} SHIFT`
 }
@@ -28,7 +30,9 @@ export function buildMoments(signals: RunSignal[]): RunMoment[] {
       const first = cluster[0]
 
       if (next.time - first.time > 45_000) break
-      if (next.side === first.side || next.result === first.result) cluster.push(next)
+      if (next.side === first.side || next.time - cluster[cluster.length - 1].time <= 8_000) {
+        cluster.push(next)
+      }
     }
 
     if (cluster.length >= 3) {

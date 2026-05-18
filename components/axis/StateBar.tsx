@@ -2,10 +2,12 @@ import type { AxisState } from "@/lib/engine/state"
 
 export function StateBar({ state }: { state: AxisState }) {
   const warning = state.label === "UNSTABLE" || state.label === "BREAKING"
+  const control =
+    state.leader === "even" ? "EVEN" : state.leader === "home" ? "HOME" : "AWAY"
 
   return (
     <section
-      className={`grid gap-3 border px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center ${
+      className={`grid gap-4 border px-4 py-4 sm:grid-cols-[1fr_1fr_1fr] sm:items-center ${
         warning
           ? "border-orange-500/35 bg-orange-950/20"
           : "border-zinc-800 bg-zinc-950/70"
@@ -13,20 +15,33 @@ export function StateBar({ state }: { state: AxisState }) {
     >
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-          State
+          Score
+        </p>
+        <p className="mt-1 font-mono text-5xl font-black leading-none tracking-[-0.06em] text-zinc-100">
+          <span className="text-orange-300">{state.home.signals}</span>
+          <span className="px-2 text-zinc-600">-</span>
+          <span className="text-sky-300">{state.away.signals}</span>
+        </p>
+      </div>
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+          Control
+        </p>
+        <p className="mt-1 text-4xl font-black leading-none tracking-[-0.04em] text-zinc-100">
+          {control}
+        </p>
+      </div>
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+          Run state
         </p>
         <p
           className={`mt-1 text-4xl font-black leading-none tracking-[-0.04em] ${
-            warning ? "text-orange-300" : "text-zinc-100"
+            warning ? "text-orange-300" : "text-emerald-300"
           }`}
         >
           {state.label}
         </p>
-      </div>
-      <div className="grid grid-cols-3 gap-3 text-right font-mono text-sm font-black text-zinc-400">
-        <span>H {state.home.run}</span>
-        <span>{state.margin > 0 ? "+" : ""}{state.margin}</span>
-        <span>A {state.away.run}</span>
       </div>
     </section>
   )

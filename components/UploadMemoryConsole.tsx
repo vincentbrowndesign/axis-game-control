@@ -17,7 +17,7 @@ import {
   storeRun,
   writeStoredRun,
 } from "@/lib/run/runStore"
-import type { SignalResult, SignalSide } from "@/lib/run/signals"
+import type { SignalSide } from "@/lib/run/signals"
 import { createClient } from "@/lib/supabase/client"
 import {
   parseUploadResponseText,
@@ -225,7 +225,7 @@ export default function UploadMemoryConsole({
 
   const elapsedMs = elapsedRunMs(run, now)
   const elapsed = formatRunTime(elapsedMs)
-  const axisState = useMemo(() => deriveAxisState(run), [run])
+  const axisState = useMemo(() => deriveAxisState(run, elapsedMs), [run, elapsedMs])
   const track = useMemo(() => inferTrack(run), [run])
 
   function updateRun(next: Run) {
@@ -242,11 +242,10 @@ export default function UploadMemoryConsole({
     })
   }
 
-  function tapSignal(side: SignalSide, result: SignalResult) {
+  function tapSignal(side: SignalSide) {
     const signal = {
       id: crypto.randomUUID(),
       side,
-      result,
       time: elapsedMs,
     }
 
@@ -445,29 +444,33 @@ export default function UploadMemoryConsole({
         <RunHeader run={run} elapsed={elapsed} mode={initialMode} onName={updateName} />
         <StateBar state={axisState} />
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <section
+          className={`grid gap-6 ${
+            initialMode === "tap" ? "" : "lg:grid-cols-[minmax(0,1fr)_340px]"
+          }`}
+        >
           <div className="grid content-start gap-6">
-            <ControlPad home={run.home} away={run.away} onSignal={tapSignal} />
+            <ControlPad
+              home={run.home}
+              away={run.away}
+              onSignal={tapSignal}
+            />
 
-            <div className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
-                Strongest signals only
-              </p>
-              <p className="text-3xl font-black leading-tight tracking-[-0.04em] text-zinc-100">
-                Tap the signal. Track the shift. Store the memory.
-              </p>
-              {status ? (
+            {initialMode !== "tap" && status ? (
+              <div className="border border-zinc-800 bg-zinc-950/70 p-4">
                 <p className="text-sm font-black uppercase tracking-[0.16em] text-emerald-300">
                   {status}
                 </p>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </div>
 
-          <div className="grid content-start gap-8">
-            <TrackRail inference={track} />
-            <MemoryRail run={run} />
-          </div>
+          {initialMode !== "tap" ? (
+            <div className="grid content-start gap-8">
+              <TrackRail inference={track} />
+              <MemoryRail run={run} />
+            </div>
+          ) : null}
         </section>
 
         {initialMode === "track" ? (
@@ -561,23 +564,34 @@ export default function UploadMemoryConsole({
         </div>
       </div>
 
-      <ControlBar
-        onCamera={() => recordInputRef.current?.click()}
-        onUpload={() => uploadInputRef.current?.click()}
-        onUndo={undoSignal}
-        onSave={() => void exportPng(false)}
-        onShare={() => void exportPng(true)}
-        onPdf={exportPdf}
-        disabled={isUploading}
-      />
-
-      <button
-        type="button"
-        onClick={newRun}
-        className="fixed bottom-20 right-4 z-40 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-zinc-300 transition hover:text-white sm:right-6"
-      >
-        New run
-      </button>
+      {initialMode === "tap" ? (
+        <button
+          type="button"
+          onClick={undoSignal}
+          className="fixed inset-x-4 bottom-4 z-40 h-16 rounded-lg border border-zinc-700 bg-zinc-950 text-sm font-black uppercase tracking-[0.2em] text-zinc-200 transition active:scale-[0.99] hover:border-zinc-500 sm:inset-x-auto sm:right-6 sm:w-56"
+        >
+          Undo
+        </button>
+      ) : (
+        <>
+          <ControlBar
+            onCamera={() => recordInputRef.current?.click()}
+            onUpload={() => uploadInputRef.current?.click()}
+            onUndo={undoSignal}
+            onSave={() => void exportPng(false)}
+            onShare={() => void exportPng(true)}
+            onPdf={exportPdf}
+            disabled={isUploading}
+          />
+          <button
+            type="button"
+            onClick={newRun}
+            className="fixed bottom-20 right-4 z-40 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-zinc-300 transition hover:text-white sm:right-6"
+          >
+            New run
+          </button>
+        </>
+      )}
     </main>
   )
 }
