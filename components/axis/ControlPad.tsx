@@ -4,17 +4,58 @@ export function ControlPad({
   home,
   away,
   onSignal,
+  onUndo,
 }: {
   home: string
   away: string
   onSignal: (side: SignalSide, result: SignalResult) => void
+  onUndo: () => void
 }) {
   return (
-    <section className="grid gap-3 sm:grid-cols-2">
-      <TeamSignal side="home" result="make" label={`${home} make`} onSignal={onSignal} />
-      <TeamSignal side="home" result="miss" label={`${home} miss`} onSignal={onSignal} />
-      <TeamSignal side="away" result="make" label={`${away} make`} onSignal={onSignal} />
-      <TeamSignal side="away" result="miss" label={`${away} miss`} onSignal={onSignal} />
+    <section className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TeamSignal
+          side="home"
+          result="make"
+          label={`${home} make`}
+          name={home}
+          onSignal={onSignal}
+          size="primary"
+        />
+        <TeamSignal
+          side="away"
+          result="make"
+          label={`${away} make`}
+          name={away}
+          onSignal={onSignal}
+          size="primary"
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TeamSignal
+          side="home"
+          result="miss"
+          label={`${home} miss`}
+          name={home}
+          onSignal={onSignal}
+          size="secondary"
+        />
+        <TeamSignal
+          side="away"
+          result="miss"
+          label={`${away} miss`}
+          name={away}
+          onSignal={onSignal}
+          size="secondary"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={onUndo}
+        className="mx-auto h-16 w-full max-w-sm rounded-full border border-zinc-700 bg-zinc-950 text-sm font-black uppercase tracking-[0.22em] text-zinc-300 transition active:scale-[0.99] hover:border-zinc-500 hover:text-white"
+      >
+        Undo
+      </button>
     </section>
   )
 }
@@ -23,12 +64,16 @@ function TeamSignal({
   side,
   result,
   label,
+  name,
   onSignal,
+  size,
 }: {
   side: SignalSide
   result: SignalResult
   label: string
+  name: string
   onSignal: (side: SignalSide, result: SignalResult) => void
+  size: "primary" | "secondary"
 }) {
   const makeTone =
     side === "home"
@@ -44,12 +89,18 @@ function TeamSignal({
     <button
       type="button"
       onClick={() => onSignal(side, result)}
-      className={`min-h-36 rounded-lg border p-5 text-left transition active:scale-[0.99] sm:min-h-48 ${classes}`}
+      className={`rounded-lg border p-5 text-left transition active:scale-[0.99] ${
+        size === "primary" ? "min-h-44 sm:min-h-56" : "min-h-24 sm:min-h-28"
+      } ${classes}`}
     >
       <span className="block text-xs font-black uppercase tracking-[0.22em] opacity-65">
-        {side}
+        {name}
       </span>
-      <span className="mt-8 block truncate text-5xl font-black uppercase leading-none tracking-[-0.06em] sm:text-6xl">
+      <span
+        className={`block truncate font-black uppercase leading-none tracking-[-0.04em] ${
+          size === "primary" ? "mt-8 text-5xl sm:text-7xl" : "mt-4 text-3xl sm:text-4xl"
+        }`}
+      >
         {result}
       </span>
       <span className="sr-only">{label}</span>

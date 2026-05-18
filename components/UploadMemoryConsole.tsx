@@ -3,17 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ControlBar } from "@/components/axis/ControlBar"
 import { ControlPad } from "@/components/axis/ControlPad"
-import { MemoryRail } from "@/components/axis/MemoryRail"
 import { RunHeader } from "@/components/axis/RunHeader"
 import { StateBar } from "@/components/axis/StateBar"
-import { TrackRail } from "@/components/axis/TrackRail"
 import { inferTrack } from "@/lib/engine/inference"
 import { buildMemories, buildMoments } from "@/lib/engine/memory"
 import { deriveAxisState } from "@/lib/engine/state"
 import { createRun, elapsedRunMs, formatRunTime, type Run } from "@/lib/run/runState"
 import {
   readStoredRun,
-  readStoredRuns,
   storeRun,
   writeStoredRun,
 } from "@/lib/run/runStore"
@@ -202,7 +199,7 @@ export default function UploadMemoryConsole({
   const [status, setStatus] = useState("")
   const [isUploading, setIsUploading] = useState(false)
   const [playbackId, setPlaybackId] = useState<string | undefined>()
-  const [storedRuns, setStoredRuns] = useState<Run[]>(() => readStoredRuns())
+  const isRunning = !run.pausedAt
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
@@ -243,6 +240,8 @@ export default function UploadMemoryConsole({
   }
 
   function tapSignal(side: SignalSide, result: SignalResult) {
+    if (run.pausedAt) resumeClock()
+
     const signal = {
       id: crypto.randomUUID(),
       side,
@@ -254,7 +253,7 @@ export default function UploadMemoryConsole({
       ...run,
       signals: [...run.signals, signal],
     })
-    setStatus("Signal stored.")
+    setStatus("")
   }
 
   function undoSignal() {
@@ -262,7 +261,41 @@ export default function UploadMemoryConsole({
       ...run,
       signals: run.signals.slice(0, -1),
     })
-    setStatus("Signal removed.")
+    setStatus("")
+  }
+
+  function pauseClock() {
+    setRun((current) =>
+      current.pausedAt
+        ? current
+        : {
+            ...current,
+            pausedAt: Date.now(),
+          }
+    )
+    setStatus("")
+  }
+
+  function resumeClock() {
+    setRun((current) => {
+      if (!current.pausedAt) return current
+
+      return {
+        ...current,
+        pausedMs: (current.pausedMs ?? 0) + Date.now() - current.pausedAt,
+        pausedAt: undefined,
+      }
+    })
+    setStatus("")
+  }
+
+  function resetClock() {
+    setRun((current) => ({
+      ...createRun(),
+      home: current.home,
+      away: current.away,
+    }))
+    setStatus("")
   }
 
   function updateName(side: SignalSide, value: string) {
@@ -270,13 +303,6 @@ export default function UploadMemoryConsole({
       ...current,
       [side]: value || (side === "home" ? "Home" : "Away"),
     }))
-  }
-
-  function newRun() {
-    const next = createRun()
-
-    setRun(next)
-    setStatus("New run.")
   }
 
   function storeCurrentRun() {
@@ -294,7 +320,6 @@ export default function UploadMemoryConsole({
 
     storeRun(next)
     setRun(next)
-    setStoredRuns(readStoredRuns())
     setStatus("Run archived.")
   }
 
@@ -426,110 +451,22 @@ export default function UploadMemoryConsole({
   }
 
   return (
-    <main className="min-h-screen bg-[#050505] px-4 pb-28 pt-5 text-zinc-100 sm:px-6">
-      <div className="mx-auto grid max-w-6xl gap-6">
-        <RunHeader run={run} elapsed={elapsed} mode={initialMode} onName={updateName} />
-        <StateBar state={axisState} />
-
-        {initialMode === "tap" ? (
-          <section className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
-            {playbackId ? (
-              <video
-                src={playbackId}
-                className="aspect-video w-full bg-black object-contain"
-                controls
-                playsInline
-                preload="metadata"
-              />
-            ) : (
-              <div className="grid aspect-video place-items-center bg-black">
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-600">
-                  Replay preview
-                </p>
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        <section
-          className={`grid gap-6 ${
-            initialMode === "tap" ? "" : "lg:grid-cols-[minmax(0,1fr)_340px]"
-          }`}
-        >
-          <div className="grid content-start gap-6">
-            <ControlPad
-              home={run.home}
-              away={run.away}
-              onSignal={tapSignal}
-            />
-
-            {initialMode !== "tap" && status ? (
-              <div className="border border-zinc-800 bg-zinc-950/70 p-4">
-                <p className="text-sm font-black uppercase tracking-[0.16em] text-emerald-300">
-                  {status}
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          {initialMode !== "tap" ? (
-            <div className="grid content-start gap-8">
-              <TrackRail inference={track} />
-              <MemoryRail run={run} />
-            </div>
-          ) : null}
-        </section>
-
-        {initialMode === "track" ? (
-          <section className="grid gap-4 border-t border-zinc-800 pt-6">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
-              Replay rail
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {Object.entries(track).map(([key, value]) => (
-                <div key={key} className="border border-zinc-800 bg-zinc-950/70 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
-                    {key}
-                  </p>
-                  <p className="mt-2 text-lg font-black leading-tight text-zinc-100">
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {initialMode === "archive" ? (
-          <section className="grid gap-4 border-t border-zinc-800 pt-6">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
-              Archive
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {storedRuns.length ? (
-                storedRuns.map((stored) => (
-                  <button
-                    key={stored.id}
-                    type="button"
-                    onClick={() => setRun(stored)}
-                    className="border border-zinc-800 bg-zinc-950/70 p-4 text-left transition hover:border-zinc-600"
-                  >
-                    <p className="text-xl font-black text-zinc-100">
-                      {stored.home} / {stored.away}
-                    </p>
-                    <p className="mt-2 font-mono text-sm font-black text-zinc-500">
-                      {stored.moments.length} moments
-                    </p>
-                  </button>
-                ))
-              ) : (
-                <div className="border border-zinc-800 bg-zinc-950/70 p-4">
-                  <p className="text-xl font-black text-zinc-100">No archived runs yet.</p>
-                </div>
-              )}
-            </div>
-          </section>
-        ) : null}
+    <main
+      data-axis-mode={initialMode}
+      className="min-h-screen bg-[#050505] px-4 pb-28 pt-5 text-zinc-100 sm:px-6"
+    >
+      <div className="mx-auto grid max-w-4xl gap-5">
+        <RunHeader
+          run={run}
+          elapsed={elapsed}
+          isRunning={isRunning}
+          onName={updateName}
+          onPause={pauseClock}
+          onResume={resumeClock}
+          onReset={resetClock}
+        />
+        <ControlPad home={run.home} away={run.away} onSignal={tapSignal} onUndo={undoSignal} />
+        <StateBar state={axisState} status={status} />
       </div>
 
       <input
@@ -579,16 +516,6 @@ export default function UploadMemoryConsole({
         onShare={() => void exportPng(true)}
         disabled={isUploading}
       />
-
-      {initialMode !== "tap" ? (
-        <button
-          type="button"
-          onClick={newRun}
-          className="fixed bottom-20 right-4 z-40 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-zinc-300 transition hover:text-white sm:right-6"
-        >
-          New run
-        </button>
-      ) : null}
     </main>
   )
 }

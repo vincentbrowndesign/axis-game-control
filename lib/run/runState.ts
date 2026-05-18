@@ -21,6 +21,8 @@ export type Run = {
   home: string
   away: string
   startedAt: number
+  pausedAt?: number
+  pausedMs?: number
   signals: RunSignal[]
   moments: RunMoment[]
   memories: RunMemory[]
@@ -32,6 +34,7 @@ export function createRun(): Run {
     home: "Home",
     away: "Away",
     startedAt: Date.now(),
+    pausedMs: 0,
     signals: [],
     moments: [],
     memories: [],
@@ -39,7 +42,9 @@ export function createRun(): Run {
 }
 
 export function elapsedRunMs(run: Run, now = Date.now()) {
-  return Math.max(0, now - run.startedAt)
+  const clockNow = run.pausedAt ?? now
+
+  return Math.max(0, clockNow - run.startedAt - (run.pausedMs ?? 0))
 }
 
 export function formatRunTime(value: number) {

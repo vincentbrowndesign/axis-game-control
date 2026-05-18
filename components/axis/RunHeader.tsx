@@ -1,66 +1,75 @@
-import Link from "next/link"
 import type { Run } from "@/lib/run/runState"
-
-const nav = [
-  { href: "/tap", label: "Tap" },
-  { href: "/track", label: "Track" },
-  { href: "/archive", label: "Archive" },
-]
 
 export function RunHeader({
   run,
   elapsed,
-  mode,
+  isRunning,
   onName,
+  onPause,
+  onResume,
+  onReset,
 }: {
   run: Run
   elapsed: string
-  mode: "tap" | "track" | "archive"
+  isRunning: boolean
   onName: (side: "home" | "away", value: string) => void
+  onPause: () => void
+  onResume: () => void
+  onReset: () => void
 }) {
   return (
-    <header className="grid gap-5">
-      <div className="flex items-center justify-between gap-4">
-        <Link
-          href="/tap"
-          className="text-sm font-black uppercase tracking-[0.18em] text-zinc-200"
-        >
+    <header className="grid gap-4 border-b border-zinc-800 pb-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
           Axis
-        </Link>
-        <div className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-950/80 p-1">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.16em] transition ${
-                mode === item.label.toLowerCase()
-                  ? "bg-zinc-100 text-black"
-                  : "text-zinc-500 hover:text-zinc-200"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+        </p>
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              isRunning ? "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.75)]" : "bg-zinc-600"
+            }`}
+          />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+            {isRunning ? "REC" : "PAUSE"}
+          </span>
         </div>
       </div>
 
-      <div className="grid gap-4 border-y border-zinc-800 py-5 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+      <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
         <input
           value={run.home}
           onChange={(event) => onName("home", event.target.value)}
           aria-label="Home"
-          className="min-w-0 bg-transparent text-5xl font-black leading-none tracking-[-0.05em] text-orange-300 outline-none sm:text-7xl"
+          className="min-w-0 bg-transparent text-4xl font-black uppercase leading-none text-orange-300 outline-none sm:text-6xl"
         />
-        <div className="font-mono text-4xl font-black tracking-[-0.04em] text-emerald-300 sm:text-6xl">
-          {elapsed}
+        <div className="grid justify-start gap-2 sm:justify-center">
+          <div className="rounded-full border border-zinc-800 bg-black px-5 py-3 font-mono text-3xl font-black text-emerald-300 shadow-[inset_0_0_24px_rgba(39,39,42,0.65)] sm:text-4xl">
+            {elapsed}
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <ClockButton label={isRunning ? "Pause" : "Start"} onClick={isRunning ? onPause : onResume} />
+            <ClockButton label="Reset" onClick={onReset} />
+          </div>
         </div>
         <input
           value={run.away}
           onChange={(event) => onName("away", event.target.value)}
           aria-label="Away"
-          className="min-w-0 bg-transparent text-left text-5xl font-black leading-none tracking-[-0.05em] text-sky-300 outline-none sm:text-right sm:text-7xl"
+          className="min-w-0 bg-transparent text-left text-4xl font-black uppercase leading-none text-sky-300 outline-none sm:text-right sm:text-6xl"
         />
       </div>
     </header>
+  )
+}
+
+function ClockButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-200"
+    >
+      {label}
+    </button>
   )
 }
