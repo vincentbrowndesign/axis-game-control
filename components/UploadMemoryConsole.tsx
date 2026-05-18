@@ -2,12 +2,19 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Camera, Timer, Undo2, Upload } from "lucide-react"
-import { calculateStreamMetrics } from "@/lib/metrics/calculateMetrics"
+import {
+  calculateStreamMetrics,
+  emptyStreamMetrics,
+} from "@/lib/metrics/calculateMetrics"
 import { compareSessions } from "@/lib/progression/compareSessions"
 import { applySessionEvent } from "@/lib/session/applySessionEvent"
 import { formatElapsedMs } from "@/lib/session/clock"
 import { createSessionState } from "@/lib/session/createSessionState"
-import type { SessionSetupInput, StoredSessionSummary } from "@/lib/session/types"
+import type {
+  SessionSetupInput,
+  StoredSessionSummary,
+  Stream,
+} from "@/lib/session/types"
 import { undoSessionEvent } from "@/lib/session/undoSessionEvent"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -20,7 +27,7 @@ type UploadSource = "camera" | "upload"
 
 const initialSetup: SessionSetupInput = {
   sessionName: "Corner threes",
-  streamLabels: ["AJ"],
+  streamLabels: ["Makes", "Misses"],
 }
 
 type ClientUploadInfo = {
@@ -36,10 +43,10 @@ type ClientUploadInfo = {
 }
 
 function uploadStatus(data: AxisUploadResponse) {
-  if (data.ok || data.recovery || data.stored) return "Replay evidence attached."
-  if (data.error) return "Replay evidence is still saving."
+  if (data.ok || data.recovery || data.stored) return "Attached."
+  if (data.error) return "Saving."
 
-  return "Replay evidence is still saving."
+  return "Saving."
 }
 
 function safeStorageName(name: string) {
@@ -209,15 +216,27 @@ function rushLine(value: number) {
   return `${Math.abs(value)}% ${value > 0 ? "faster" : "slower"} after misses`
 }
 
-function setupFromText(sessionName: string, streamText: string): SessionSetupInput {
-  const streamLabels = streamText
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-
+function setupFromTallies(sessionName: string, tallyNames: string[]): SessionSetupInput {
   return {
     sessionName,
-    streamLabels: streamLabels.length ? streamLabels : ["AJ"],
+    streamLabels: cleanTallyNames(tallyNames),
+  }
+}
+
+function cleanTallyNames(tallyNames: string[]) {
+  const clean = tallyNames.map((value) => value.trim()).filter(Boolean)
+
+  return clean.length ? clean : ["Tally"]
+}
+
+function createTally(label: string): Stream {
+  return {
+    id: crypto.randomUUID(),
+    label,
+    attempts: 0,
+    makes: 0,
+    misses: 0,
+    metrics: emptyStreamMetrics,
   }
 }
 
@@ -227,7 +246,7 @@ export default function UploadMemoryConsole() {
   const evidenceVideoRef = useRef<HTMLVideoElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
   const [sessionName, setSessionName] = useState(initialSetup.sessionName)
-  const [streamText, setStreamText] = useState(initialSetup.streamLabels.join(", "))
+  const [tallyNames, setTallyNames] = useState(initialSetup.streamLabels)
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionState, setSessionState] = useState(() =>
     createSessionState(initialSetup)
@@ -301,7 +320,7 @@ export default function UploadMemoryConsole() {
   }, [sessionStarted, sessionState])
 
   function startSession() {
-    const setup = setupFromText(sessionName, streamText)
+    const setup = setupFromTallies(sessionName, tallyNames)
     const next = createSessionState(setup)
 
     setSessionState({
@@ -311,6 +330,30 @@ export default function UploadMemoryConsole() {
     setSessionStarted(true)
     setStatus("")
     setUploadProgress(0)
+  }
+
+  function addSetupTally() {
+    setTallyNames((names) => [...names, `Tally ${names.length + 1}`])
+  }
+
+  function updateSetupTally(index: number, label: string) {
+    setTallyNames((names) =>
+      names.map((name, itemIndex) => (itemIndex === index ? label : name))
+    )
+  }
+
+  function addLiveTally() {
+    setSessionState((state) => {
+      const label = `Tally ${state.streams.length + 1}`
+      const tally = createTally(label)
+
+      return {
+        ...state,
+        activeStreamId: tally.id,
+        streams: [...state.streams, tally],
+        updatedAt: Date.now(),
+      }
+    })
   }
 
   function currentReplayTimestamp() {
@@ -391,7 +434,7 @@ export default function UploadMemoryConsole() {
     if (!file || isUploading) return
 
     setIsUploading(true)
-    setStatus("Attaching replay evidence.")
+    setStatus("Attaching.")
     setUploadProgress(0)
     const uploadInfo = mobileUploadInfo(file)
 
@@ -419,7 +462,7 @@ export default function UploadMemoryConsole() {
       const localUrl = URL.createObjectURL(file)
       localVideoUrlRef.current = localUrl
       setPlaybackUrl(localUrl)
-      setStatus("Replay evidence ready locally.")
+      setStatus("Attached.")
       setSessionState((state) => ({
         ...state,
         playback: {
@@ -522,7 +565,7 @@ export default function UploadMemoryConsole() {
           traceId: uploadInfo.traceId,
           error,
         })
-        setStatus("Replay evidence is retrying quietly.")
+        setStatus("Retrying.")
         setUploadProgress(18)
         await new Promise((resolve) => window.setTimeout(resolve, 900))
 
@@ -584,7 +627,7 @@ export default function UploadMemoryConsole() {
       }
     } catch (error) {
       console.error("AXIS EVIDENCE FAILED", error)
-      setStatus("Replay evidence stays local for now.")
+      setStatus("Local.")
     } finally {
       setIsUploading(false)
       if (uploadInputRef.current) uploadInputRef.current.value = ""
@@ -596,9 +639,6 @@ export default function UploadMemoryConsole() {
     sessionState.streams.find((stream) => stream.id === sessionState.activeStreamId) ||
     sessionState.streams[0]
   const metrics = activeStream.metrics
-  const streamSpurts = sessionState.spurts
-    .filter((spurt) => spurt.streamId === activeStream.id)
-    .slice(0, 4)
 
   return (
     <main className="min-h-screen bg-[#0a0907] px-4 py-5 text-stone-100 sm:px-6">
@@ -612,48 +652,54 @@ export default function UploadMemoryConsole() {
           ) : null}
         </header>
 
-        <section className="grid min-h-[78vh] gap-8 py-8 lg:grid-cols-[1fr_380px] lg:items-start">
+        <section className="grid min-h-[78vh] gap-8 py-8 lg:grid-cols-[1fr_340px] lg:items-start">
           <div>
-            <p className="text-sm font-bold text-white/38">Basketball ledger</p>
-            <h1 className="mt-4 max-w-4xl text-6xl font-black leading-[0.9] tracking-[-0.065em] text-white sm:text-8xl">
-              Tally. Time. Behavior.
-            </h1>
             {!sessionStarted ? (
-              <p className="mt-6 max-w-xl text-base leading-7 text-white/48">
-                Axis measures basketball behavior with marks and elapsed time.
-              </p>
-            ) : null}
-
-            {!sessionStarted ? (
-              <div className="mt-8 grid gap-3 sm:max-w-xl">
+              <div className="mt-8 grid gap-5 sm:max-w-xl">
                 <input
                   value={sessionName}
                   onChange={(event) => setSessionName(event.target.value)}
                   placeholder="Session name"
-                  className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                  className="bg-transparent text-5xl font-black leading-none tracking-[-0.06em] text-white outline-none placeholder:text-white/22 sm:text-7xl"
                 />
-                <input
-                  value={streamText}
-                  onChange={(event) => setStreamText(event.target.value)}
-                  placeholder="Streams: Black, Gold, AJ"
-                  className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                />
-                <button
-                  type="button"
-                  onClick={startSession}
-                  className="min-h-16 rounded-[0.75rem] bg-amber-200 px-6 py-4 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-amber-100"
-                >
-                  Start ledger
-                </button>
+                <div className="grid gap-2 border-y border-white/10 py-5">
+                  {tallyNames.map((name, index) => (
+                    <input
+                      key={index}
+                      value={name}
+                      onChange={(event) => updateSetupTally(index, event.target.value)}
+                      placeholder="Tally"
+                      className="bg-transparent py-2 text-3xl font-black uppercase tracking-[0.06em] text-white/78 outline-none placeholder:text-white/20"
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={addSetupTally}
+                    aria-label="Add tally"
+                    className="grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/[0.025] text-2xl font-black text-white/48 transition hover:border-amber-100/30 hover:text-amber-100"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startSession}
+                    aria-label="Enter"
+                    className="grid h-12 w-12 place-items-center rounded-full bg-amber-200 text-2xl font-black text-black transition hover:bg-amber-100"
+                  >
+                    →
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="mt-8 max-w-xl">
-                <p className="text-sm font-black uppercase tracking-[0.22em] text-white/34">
+                <p className="text-5xl font-black leading-none tracking-[-0.06em] text-white sm:text-7xl">
                   {sessionState.sessionName}
                 </p>
-                <div className="mt-5 grid gap-2 border-y border-white/10 py-6">
+                <div className="mt-8 grid gap-2 border-y border-white/10 py-6">
                   <div className="grid grid-cols-[1fr_auto] items-end gap-5">
-                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/42">
+                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/48">
                       Makes
                     </p>
                     <p className="font-mono text-8xl font-black leading-[0.8] tracking-[-0.06em] text-white sm:text-9xl">
@@ -661,7 +707,7 @@ export default function UploadMemoryConsole() {
                     </p>
                   </div>
                   <div className="grid grid-cols-[1fr_auto] items-end gap-5">
-                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/42">
+                    <p className="text-2xl font-black uppercase tracking-[0.14em] text-white/48">
                       Misses
                     </p>
                     <p className="font-mono text-8xl font-black leading-[0.8] tracking-[-0.06em] text-amber-100/82 sm:text-9xl">
@@ -748,6 +794,14 @@ export default function UploadMemoryConsole() {
                       {stream.label}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={addLiveTally}
+                    aria-label="Add tally"
+                    className="grid min-h-12 min-w-12 place-items-center rounded-[0.75rem] bg-white/[0.025] text-xl font-black text-white/42 transition hover:bg-white/[0.06] hover:text-amber-100"
+                  >
+                    +
+                  </button>
                 </div>
               ) : null}
               <input
@@ -803,72 +857,16 @@ export default function UploadMemoryConsole() {
             </div>
           </div>
 
-          <aside className="grid gap-4">
-            <section className="rounded-[0.75rem] bg-[#16120d] p-5">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
-                Compared to last session
-              </p>
-              <div className="mt-4 grid gap-3">
-                {sessionState.progression.map((item) => (
-                  <p key={item.id} className="text-lg font-black tracking-[-0.03em] text-white">
-                    {item.label}
-                  </p>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-[0.75rem] bg-[#16120d] p-5">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
-                Spurts
-              </p>
-              <div className="mt-4 grid gap-3">
-                {streamSpurts.length ? (
-                  streamSpurts.map((spurt) => (
-                    <article key={spurt.id} className="border-t border-white/10 pt-3">
-                      <p className="text-sm font-black uppercase tracking-[0.12em] text-amber-100/70">
-                        {spurt.label}
-                      </p>
-                      <p className="mt-1 text-2xl font-black tracking-[-0.05em] text-white">
-                        {spurt.type === "LONGEST_DROUGHT"
-                          ? `0 makes in ${spurt.seconds} seconds`
-                          : `${spurt.count} ${
-                              spurt.type === "EMPTY_SPURT" ? "misses" : "makes"
-                            } in ${spurt.seconds} seconds`}
-                      </p>
-                    </article>
-                  ))
-                ) : (
-                  <p className="text-sm font-bold text-white/38">
-                    Spurts appear when the stream changes shape.
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-[0.75rem] bg-[#16120d] p-5">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
-                Replay evidence
-              </p>
-              <p className="mt-3 text-sm font-bold text-white/44">
-                {playbackUrl ? "Attached quietly." : "Optional."}
-              </p>
-              {playbackUrl ? (
-                <details className="mt-4">
-                  <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.14em] text-amber-100/70">
-                    Open replay
-                  </summary>
-                  <video
-                    ref={evidenceVideoRef}
-                    src={playbackUrl}
-                    className="mt-4 aspect-video w-full rounded-[0.75rem] bg-black object-cover"
-                    controls
-                    playsInline
-                    preload="metadata"
-                  />
-                </details>
-              ) : null}
-            </section>
-          </aside>
+          {playbackUrl ? (
+            <video
+              ref={evidenceVideoRef}
+              src={playbackUrl}
+              className="hidden"
+              controls
+              playsInline
+              preload="metadata"
+            />
+          ) : null}
         </section>
       </div>
     </main>
