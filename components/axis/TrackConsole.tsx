@@ -5,7 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { buildActiveTemporalSession } from "@/lib/engine/memoryGeneration"
 import type { TemporalMoment } from "@/lib/engine/momentDetection"
 import { runTemporalEngine } from "@/lib/engine/temporalEngine"
-import { createRun, elapsedRunMs, formatRunTime, type Run } from "@/lib/run/runState"
+import {
+  createRun,
+  elapsedRunMs,
+  formatRunTime,
+  type Run,
+  type RunPlayer,
+} from "@/lib/run/runState"
 import { readStoredRun, subscribeTemporalRun, writeStoredRun } from "@/lib/run/runStore"
 import {
   isPositiveSignal,
@@ -14,10 +20,12 @@ import {
   type SignalSide,
 } from "@/lib/run/signals"
 
-type TrackMoment = Pick<
-  TemporalMoment,
-  "id" | "label" | "name" | "summary" | "start" | "end" | "signalIds"
->
+type TrackMoment = Omit<
+  Pick<TemporalMoment, "id" | "name" | "summary" | "start" | "end" | "signalIds">,
+  never
+> & {
+  label: string
+}
 
 type TrackInference = {
   moments: TrackMoment[]
@@ -38,17 +46,19 @@ function seconds(value: number) {
 function signalColor(signal: RunSignal) {
   if (signal.side === "home") {
     return isPositiveSignal(signal.result)
-      ? "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.44)]"
-      : "border border-orange-300/50 bg-orange-950"
+      ? "border-orange-200 bg-orange-300 shadow-[0_0_26px_rgba(253,186,116,0.5)]"
+      : "border-orange-300/45 bg-orange-950 shadow-[0_0_14px_rgba(251,146,60,0.12)]"
   }
 
   return isPositiveSignal(signal.result)
-    ? "bg-sky-300 shadow-[0_0_24px_rgba(125,211,252,0.44)]"
-    : "border border-sky-300/50 bg-sky-950"
+    ? "border-sky-200 bg-sky-300 shadow-[0_0_26px_rgba(125,211,252,0.5)]"
+    : "border-sky-300/45 bg-sky-950 shadow-[0_0_14px_rgba(56,189,248,0.12)]"
 }
 
 function labelTone(label: string) {
   if (label === "COLD") return "text-sky-200"
+  if (label === "BREAK") return "text-red-300"
+  if (label === "RECOVERY") return "text-emerald-200"
   if (label === "SPURT") return "text-orange-200"
   if (label === "SWING") return "text-emerald-200"
   if (label === "HOT") return "text-orange-300"
@@ -79,6 +89,27 @@ function fallbackMoments(temporalMoments: TemporalMoment[]): TrackMoment[] {
     end: moment.end,
     signalIds: moment.signalIds,
   }))
+}
+
+function playerLabel(players: RunPlayer[], playerId?: string) {
+  const player = players.find((item) => item.id === playerId)
+
+  if (!player) return null
+
+  return player.name ? `#${player.number} ${player.name}` : `#${player.number}`
+}
+
+function audioEnergyAt(run: Run, time: number) {
+  const context = run.audioContext
+  if (!context) return 0
+
+  const segment = context.speechSegments.find(
+    (item) => time >= item.start * 1000 && time <= item.end * 1000
+  )
+
+  if (!segment) return 0
+
+  return Math.max(0.18, Math.min(1, segment.confidence + context.escalation * 0.35))
 }
 
 export function TrackConsole() {
@@ -261,6 +292,7 @@ export function TrackConsole() {
   )
   const activeMoment = moments[0]
   const recentSignals = run.signals.slice(-36)
+  const detailSignals = run.signals.slice(-12).reverse()
   const source = activeInference?.source === "openai" ? "AI" : "LOCAL"
 
   return (
@@ -330,30 +362,58 @@ export function TrackConsole() {
           </div>
         </header>
 
-        <section className="relative overflow-hidden rounded-lg border border-zinc-800 bg-black">
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-zinc-500/40 to-transparent" />
-          <div className="grid min-h-[30rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[34rem] sm:p-5">
+        <section className="relative overflow-hidden rounded-lg border border-zinc-800 bg-black shadow-[0_18px_80px_rgba(0,0,0,0.42)]">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-zinc-400/40 to-transparent" />
+          <div className="grid min-h-[31rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[35rem] sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
-                Behavioral Timeline
+                Continuity Rail
               </p>
-              <p className="font-mono text-[10px] font-black text-zinc-600">
-                {run.signals.length} SIGNALS
-              </p>
+              <div className="flex items-center gap-2">
+                {run.audioContext ? (
+                  <span className="rounded-full border border-emerald-400/20 bg-emerald-950/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-emerald-300/70">
+                    Audio
+                  </span>
+                ) : null}
+                <p className="font-mono text-[10px] font-black text-zinc-600">
+                  {run.signals.length} EVENTS
+                </p>
+              </div>
             </div>
 
             <div className="relative overflow-hidden rounded-md border border-zinc-900 bg-[#070707]">
-              <div className="absolute inset-x-5 top-1/2 h-px -translate-y-1/2 bg-zinc-800" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(39,39,42,0.28),transparent_44%)]" />
+              <div className="absolute inset-x-5 top-1/2 h-px -translate-y-1/2 bg-zinc-800/80" />
               <div className="absolute inset-y-8 left-5 w-px bg-zinc-900" />
               <div className="absolute inset-y-8 right-5 w-px bg-zinc-900" />
-              <div className="absolute left-5 right-5 top-[42%] h-px bg-orange-300/10" />
-              <div className="absolute left-5 right-5 top-[58%] h-px bg-sky-300/10" />
-              <p className="absolute left-5 top-[calc(42%-1.7rem)] text-[10px] font-black uppercase tracking-[0.2em] text-orange-300/40">
+              <div className="absolute left-5 right-5 top-[38%] h-px bg-orange-300/12" />
+              <div className="absolute left-5 right-5 top-[62%] h-px bg-sky-300/12" />
+              <p className="absolute left-5 top-[calc(38%-1.7rem)] text-[10px] font-black uppercase tracking-[0.2em] text-orange-300/40">
                 {run.home}
               </p>
-              <p className="absolute left-5 top-[calc(58%+0.8rem)] text-[10px] font-black uppercase tracking-[0.2em] text-sky-300/40">
+              <p className="absolute left-5 top-[calc(62%+0.8rem)] text-[10px] font-black uppercase tracking-[0.2em] text-sky-300/40">
                 {run.away}
               </p>
+
+              {run.audioContext ? (
+                <div className="absolute inset-x-5 top-1/2 flex h-16 -translate-y-1/2 items-center gap-1 opacity-45">
+                  {Array.from({ length: 42 }).map((_, index) => {
+                    const time = (timelineMs / 41) * index
+                    const energy = audioEnergyAt(run, time)
+
+                    return (
+                      <span
+                        key={`audio-${index}`}
+                        className="w-full rounded-full bg-emerald-300/30"
+                        style={{
+                          height: `${Math.max(2, energy * 54)}px`,
+                          opacity: energy ? 0.35 + energy * 0.45 : 0.08,
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              ) : null}
 
               {moments.map((moment, index) => {
                 const left = positionFor(moment.start, timelineMs)
@@ -362,30 +422,54 @@ export function TrackConsole() {
                 return (
                   <span
                     key={`${moment.id}-strip`}
-                    className="absolute h-8 rounded-full border border-zinc-700/60 bg-zinc-900/80"
+                    className="absolute h-7 rounded-full border border-zinc-700/45 bg-zinc-950/80 shadow-[0_0_22px_rgba(244,244,245,0.08)]"
                     style={{
                       left: `${left}%`,
-                      top: `${28 + index * 20}px`,
+                      top: `${26 + index * 18}px`,
                       width: `${width}%`,
                     }}
                     title={`${moment.name}: ${moment.summary}`}
-                  />
+                  >
+                    <span className={`absolute -top-5 left-2 text-[9px] font-black uppercase tracking-[0.18em] ${labelTone(moment.label)}`}>
+                      {moment.label}
+                    </span>
+                  </span>
                 )
               })}
 
               {run.signals.map((signal) => {
                 const left = positionFor(signal.time, timelineMs)
-                const top = signal.side === "home" ? "42%" : "58%"
+                const top = signal.side === "home" ? "38%" : "62%"
+                const labelTop = signal.side === "home" ? "-1.6rem" : "1.05rem"
+                const eventPlayer = playerLabel(run.players, signal.playerId)
 
                 return (
                   <span
                     key={signal.id}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full ${signalColor(signal)} ${
-                      isPositiveSignal(signal.result) ? "h-5 w-5" : "h-3 w-3"
-                    }`}
+                    className="group absolute -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${left}%`, top }}
                     title={`${sideName(run, signal.side)} ${signalEventLabel(signal)} ${seconds(signal.time)}`}
-                  />
+                  >
+                    <span
+                      className={`block rounded-full border transition group-hover:scale-110 ${signalColor(signal)} ${
+                        isPositiveSignal(signal.result) ? "h-5 w-5" : "h-3 w-3"
+                      }`}
+                    />
+                    <span
+                      className={`absolute left-1/2 min-w-14 -translate-x-1/2 whitespace-nowrap rounded-full border border-zinc-800 bg-black/80 px-2 py-1 text-center font-mono text-[9px] font-black text-zinc-300 opacity-80 backdrop-blur transition group-hover:border-zinc-500 group-hover:opacity-100`}
+                      style={{ top: labelTop }}
+                    >
+                      {signalEventLabel(signal)}
+                    </span>
+                    {eventPlayer ? (
+                      <span
+                        className="absolute left-1/2 hidden min-w-12 -translate-x-1/2 whitespace-nowrap rounded-full bg-zinc-950 px-2 py-1 text-center text-[9px] font-bold text-zinc-500 group-hover:block"
+                        style={{ top: signal.side === "home" ? "-3.05rem" : "2.55rem" }}
+                      >
+                        {eventPlayer}
+                      </span>
+                    ) : null}
+                  </span>
                 )
               })}
 
@@ -396,7 +480,7 @@ export function TrackConsole() {
                       Awaiting Signals
                     </p>
                     <p className="mt-2 text-sm font-bold text-zinc-600">
-                      Objective stat signals from Tap appear here.
+                      Tap + or - to build the flow.
                     </p>
                   </div>
                 </div>
@@ -410,8 +494,17 @@ export function TrackConsole() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-[1.15fr_0.85fr]">
-              <div className="min-w-0 rounded-md border border-zinc-900 bg-zinc-950/70 px-4 py-3">
-                <p className={`text-3xl font-black uppercase tracking-[-0.04em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
+              <div className="min-w-0 rounded-md border border-zinc-900 bg-zinc-950/60 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
+                    {activeMoment?.label || temporal.state.label}
+                  </span>
+                  <span className="h-1 w-1 rounded-full bg-zinc-700" />
+                  <span className="font-mono text-[10px] font-black text-zinc-600">
+                    {activeMoment ? seconds(activeMoment.end) : elapsed}
+                  </span>
+                </div>
+                <p className={`mt-2 truncate text-3xl font-black uppercase tracking-[-0.04em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
                   {activeMoment?.name || temporal.state.momentum}
                 </p>
                 <p className="mt-1 truncate text-sm font-bold text-zinc-600">
@@ -441,50 +534,109 @@ export function TrackConsole() {
         <section className="grid gap-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
-              Generated Moments
+              Flow Overlay
             </p>
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-700">
               {activeInference?.source === "openai" ? "OpenAI" : "Temporal"}
             </p>
           </div>
 
-          <div className="relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50 px-4 py-4">
-            <div className="absolute left-4 right-4 top-1/2 h-px bg-zinc-800" />
-            {moments.length ? (
-              <div className="flex gap-8 overflow-x-auto pb-1">
-                {moments.map((moment) => (
-                  <article
-                  key={moment.id}
-                    className="relative min-w-56 bg-transparent py-2"
-                  >
-                    <span
-                      className={`absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-zinc-700 bg-black ${
-                        moment.label === "SPURT"
-                          ? "shadow-[0_0_18px_rgba(253,186,116,0.34)]"
-                          : moment.label === "SWING"
-                            ? "shadow-[0_0_18px_rgba(110,231,183,0.28)]"
-                            : ""
-                      }`}
-                    />
-                    <p className={`ml-7 text-xs font-black uppercase tracking-[0.18em] ${labelTone(moment.label)}`}>
-                      {moment.label} / {seconds(moment.end)}
-                    </p>
-                    <p className="ml-7 mt-5 truncate text-xl font-black uppercase tracking-[-0.04em] text-zinc-100">
-                      {moment.name}
-                    </p>
-                    <p className="ml-7 mt-1 line-clamp-2 text-sm font-bold leading-5 text-zinc-600">
-                      {moment.summary}
-                    </p>
-                  </article>
-                ))}
+          <div className="grid gap-3 lg:grid-cols-[1fr_0.85fr]">
+            <div className="relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/45 px-4 py-4">
+              <div className="absolute left-4 right-4 top-1/2 h-px bg-zinc-800" />
+              {moments.length ? (
+                <div className="flex gap-8 overflow-x-auto pb-1">
+                  {moments.map((moment) => (
+                    <article
+                      key={moment.id}
+                      className="relative min-w-56 bg-transparent py-2"
+                    >
+                      <span
+                        className={`absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-zinc-700 bg-black ${
+                          moment.label === "SPURT"
+                            ? "shadow-[0_0_18px_rgba(253,186,116,0.34)]"
+                            : moment.label === "SWING"
+                              ? "shadow-[0_0_18px_rgba(110,231,183,0.28)]"
+                              : moment.label === "BREAK"
+                                ? "shadow-[0_0_18px_rgba(248,113,113,0.24)]"
+                                : ""
+                        }`}
+                      />
+                      <p className={`ml-7 text-xs font-black uppercase tracking-[0.18em] ${labelTone(moment.label)}`}>
+                        {moment.label} / {seconds(moment.end)}
+                      </p>
+                      <p className="ml-7 mt-5 truncate text-xl font-black uppercase tracking-[-0.04em] text-zinc-100">
+                        {moment.name}
+                      </p>
+                      <p className="ml-7 mt-1 line-clamp-2 text-sm font-bold leading-5 text-zinc-600">
+                        {moment.summary}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="relative z-10">
+                  <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
+                    Signals will cluster into moments here.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <details className="group rounded-lg border border-zinc-800 bg-zinc-950/45 px-4 py-4" open>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
+                  Event Detail
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition group-open:text-zinc-500">
+                  Expand
+                </span>
+              </summary>
+
+              <div className="mt-4 grid gap-2">
+                {detailSignals.length ? (
+                  detailSignals.map((signal) => {
+                    const eventPlayer = playerLabel(run.players, signal.playerId)
+
+                    return (
+                      <div
+                        key={`${signal.id}-detail`}
+                        className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2"
+                      >
+                        <span
+                          className={`grid h-7 w-7 place-items-center rounded-full border font-mono text-xs font-black ${
+                            isPositiveSignal(signal.result)
+                              ? signal.side === "home"
+                                ? "border-orange-300/50 bg-orange-300 text-black"
+                                : "border-sky-300/50 bg-sky-300 text-black"
+                              : signal.side === "home"
+                                ? "border-orange-300/35 bg-orange-950 text-orange-200"
+                                : "border-sky-300/35 bg-sky-950 text-sky-200"
+                          }`}
+                        >
+                          {isPositiveSignal(signal.result) ? "+" : "-"}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-mono text-xs font-black text-zinc-200">
+                            {signal.stat} {eventPlayer ? `/ ${eventPlayer}` : ""}
+                          </p>
+                          <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-700">
+                            {sideName(run, signal.side)}
+                          </p>
+                        </div>
+                        <span className="font-mono text-[10px] font-black text-zinc-600">
+                          {seconds(signal.time)}
+                        </span>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
+                    Event detail appears as the rail fills.
+                  </p>
+                )}
               </div>
-            ) : (
-              <div className="relative z-10">
-                <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
-                  Signals will cluster into moments here.
-                </p>
-              </div>
-            )}
+            </details>
           </div>
         </section>
       </div>
