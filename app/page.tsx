@@ -17,7 +17,7 @@ export default async function HomePage() {
             Save basketball footage.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-white/55">
-            Sign in, choose a video, and play it back.
+            Sign in, record or choose footage, and play it back.
           </p>
           <Link
             href="/auth"
