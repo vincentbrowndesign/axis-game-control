@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Upload } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 import {
   parseUploadResponseText,
   type AxisUploadResponse,
@@ -36,6 +37,18 @@ function uploadStatus(data: AxisUploadResponse) {
   return "Still processing..."
 }
 
+function safeStorageName(name: string) {
+  const cleanName = name
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 60)
+  const extension = name.includes(".")
+    ? name.split(".").pop()?.toLowerCase() || "mov"
+    : "mov"
+
+  return `${Date.now()}_${cleanName || "axis_upload"}.${extension}`
+}
+
 function safeParseUploadResponse(text: string) {
   try {
     return parseUploadResponseText(text)
@@ -45,68 +58,6 @@ function safeParseUploadResponse(text: string) {
       error: "Upload response unreadable",
     } satisfies AxisUploadResponse
   }
-}
-
-function uploadWithProgress({
-  formData,
-  onProgress,
-  traceId,
-  onStage,
-}: {
-  formData: FormData
-  onProgress: (progress: number) => void
-  traceId: string
-  onStage?: (stage: string) => void
-}) {
-  return new Promise<AxisUploadResponse>((resolve, reject) => {
-    const request = new XMLHttpRequest()
-
-    onStage?.("upload-request-start")
-    console.info("AXIS MOBILE UPLOAD", {
-      traceId,
-      stage: "upload-request-start",
-    })
-    request.open("POST", "/api/upload")
-    request.upload.onprogress = (event) => {
-      if (!event.lengthComputable) return
-
-      const progress = Math.round((event.loaded / event.total) * 100)
-
-      onProgress(progress)
-      if (progress > 0 && progress < 100) {
-        onStage?.("upload-progress")
-      }
-    }
-    request.onload = () => {
-      const result = safeParseUploadResponse(request.responseText)
-      console.info("AXIS MOBILE UPLOAD", {
-        traceId,
-        stage: "upload-response",
-        status: request.status,
-        responseStage: result.stage,
-        stored: result.stored,
-        fallback: result.fallback,
-      })
-
-      if (request.status >= 200 && request.status < 300 && result.ok) {
-        onProgress(100)
-        resolve(result)
-      } else {
-        reject(
-          new Error(result.detail || result.error || `Upload ${request.status}`)
-        )
-      }
-    }
-    request.onerror = () => {
-      onStage?.("network-interrupted")
-      reject(new Error("Network interrupted"))
-    }
-    request.onabort = () => {
-      onStage?.("upload-paused")
-      reject(new Error("Upload paused"))
-    }
-    request.send(formData)
-  })
 }
 
 function triggerDelayedExtraction(replayId: string, traceId: string) {
@@ -139,6 +90,52 @@ function triggerDelayedExtraction(replayId: string, traceId: string) {
         error,
       })
     })
+}
+
+async function completeUpload({
+  traceId,
+  filePath,
+  fileName,
+  contentType,
+  sizeBytes,
+  durationSeconds,
+  client,
+}: {
+  traceId: string
+  filePath: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  durationSeconds: number
+  client: Record<string, unknown>
+}) {
+  const response = await fetch("/api/upload/complete", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      traceId,
+      filePath,
+      fileName,
+      contentType,
+      sizeBytes,
+      durationSeconds,
+      source: "upload",
+      environment: "practice",
+      mission: "Replay memory",
+      player: "Unassigned",
+      client,
+    }),
+  })
+  const text = await response.text()
+  const result = safeParseUploadResponse(text)
+
+  if (!response.ok && !result.ok) {
+    throw new Error(result.detail || result.error || `Complete ${response.status}`)
+  }
+
+  return result
 }
 
 function mobileUploadInfo(file: File): ClientUploadInfo {
@@ -277,74 +274,135 @@ export default function UploadMemoryConsole(props: Props) {
       setDurationLabel(`${minutes}:${seconds.toString().padStart(2, "0")}`)
       localVideoUrlRef.current = metadata.url
 
-      const formData = new FormData()
-      formData.append("file", uploadInfo.uploadFile, uploadInfo.uploadName)
-      formData.append("source", "upload")
-      formData.append("environment", "practice")
-      formData.append("mission", "Replay memory")
-      formData.append("player", "Unassigned")
-      formData.append("duration", String(metadata.duration))
-      formData.append("clientTraceId", uploadInfo.traceId)
-      formData.append("clientName", file.name || uploadInfo.uploadName)
-      formData.append("clientType", file.type || uploadInfo.uploadType)
-      formData.append("clientSize", String(file.size))
-      formData.append("clientLastModified", String(file.lastModified || 0))
-      formData.append("clientUserAgent", uploadInfo.userAgent)
-      formData.append("clientIsMobile", String(uploadInfo.isMobile))
-      formData.append("clientIsIOS", String(uploadInfo.isIOS))
-      formData.append("clientIsSafari", String(uploadInfo.isSafari))
-      formData.append("clientViewport", uploadInfo.viewport)
-
       setStatus("Uploading video")
-      setProcessingLine("Saving playback copy.")
+      setProcessingLine("Saving directly to playback storage.")
+      setUploadProgress(12)
 
-      let result: AxisUploadResponse
+      const supabase = createClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        throw new Error(userError?.message || "Sign in required")
+      }
+
+      const filePath = `${user.id}/${safeStorageName(uploadInfo.uploadName)}`
+      const clientDebug = {
+        clientTraceId: uploadInfo.traceId,
+        clientName: file.name || uploadInfo.uploadName,
+        clientType: file.type || uploadInfo.uploadType,
+        clientSize: file.size,
+        clientLastModified: file.lastModified || 0,
+        clientUserAgent: uploadInfo.userAgent,
+        clientIsMobile: uploadInfo.isMobile,
+        clientIsIOS: uploadInfo.isIOS,
+        clientIsSafari: uploadInfo.isSafari,
+        clientViewport: uploadInfo.viewport,
+      }
 
       try {
-        result = await uploadWithProgress({
-          formData,
-          onProgress: setUploadProgress,
+        const uploaded = await supabase.storage
+          .from("axis-replays")
+          .upload(filePath, uploadInfo.uploadFile, {
+            contentType: uploadInfo.uploadType,
+            upsert: false,
+          })
+
+        if (uploaded.error) {
+          throw uploaded.error
+        }
+
+        setUploadProgress(78)
+        setProcessingLine("Playback copy saved. Opening it now.")
+
+        const signed = await supabase.storage
+          .from("axis-replays")
+          .createSignedUrl(filePath, 60 * 60 * 24 * 7)
+
+        if (!signed.error && signed.data?.signedUrl) {
+          setPlaybackUrl(signed.data.signedUrl)
+        }
+
+        const result = await completeUpload({
           traceId: uploadInfo.traceId,
-          onStage: (stage) => {
-            if (stage === "upload-progress") {
-              setProcessingLine("Footage is moving into Axis.")
-            }
-          },
+          filePath,
+          fileName: uploadInfo.uploadName,
+          contentType: uploadInfo.uploadType,
+          sizeBytes: file.size,
+          durationSeconds: metadata.duration,
+          client: clientDebug,
         })
+
+        setUploadProgress(100)
+        setStatus(uploadStatus(result))
+        if (result.videoUrl) {
+          setPlaybackUrl(result.videoUrl)
+        }
+        setProcessingLine("Playback ready. Extraction continuing.")
+        if (result.replayId) {
+          triggerDelayedExtraction(
+            result.replayId,
+            result.traceId || uploadInfo.traceId
+          )
+        }
       } catch (error) {
-        console.warn("UPLOAD RETRY", error)
+        console.warn("AXIS DIRECT UPLOAD RETRY", {
+          traceId: uploadInfo.traceId,
+          error,
+        })
         setStatus("Still processing...")
         setProcessingLine("Connection paused. Retrying quietly.")
-        setUploadProgress(0)
+        setUploadProgress(18)
         await new Promise((resolve) => window.setTimeout(resolve, 900))
-        result = await uploadWithProgress({
-          formData,
-          onProgress: setUploadProgress,
+
+        const retryPath = `${user.id}/${safeStorageName(uploadInfo.uploadName)}`
+        const retry = await supabase.storage
+          .from("axis-replays")
+          .upload(retryPath, uploadInfo.uploadFile, {
+            contentType: uploadInfo.uploadType,
+            upsert: false,
+          })
+
+        if (retry.error) {
+          throw retry.error
+        }
+
+        setUploadProgress(82)
+        const signed = await supabase.storage
+          .from("axis-replays")
+          .createSignedUrl(retryPath, 60 * 60 * 24 * 7)
+
+        if (!signed.error && signed.data?.signedUrl) {
+          setPlaybackUrl(signed.data.signedUrl)
+        }
+
+        const result = await completeUpload({
           traceId: uploadInfo.traceId,
-          onStage: (stage) => {
-            if (stage === "upload-progress") {
-              setProcessingLine("Footage is moving into Axis.")
-            }
+          filePath: retryPath,
+          fileName: uploadInfo.uploadName,
+          contentType: uploadInfo.uploadType,
+          sizeBytes: file.size,
+          durationSeconds: metadata.duration,
+          client: {
+            ...clientDebug,
+            retry: true,
           },
         })
-      }
 
-      setStatus(uploadStatus(result))
-      if (result.videoUrl) {
-        setPlaybackUrl(result.videoUrl)
-      }
-      setProcessingLine(
-        result.fallback
-          ? "Playback ready. Extraction continuing."
-          : result.extractionStatus === "poster-ready"
-            ? "Playback ready."
-            : "Playback ready. Extraction continuing."
-      )
-      if (result.replayId) {
-        triggerDelayedExtraction(
-          result.replayId,
-          result.traceId || uploadInfo.traceId
-        )
+        setUploadProgress(100)
+        setStatus(uploadStatus(result))
+        if (result.videoUrl) {
+          setPlaybackUrl(result.videoUrl)
+        }
+        setProcessingLine("Playback ready. Extraction continuing.")
+        if (result.replayId) {
+          triggerDelayedExtraction(
+            result.replayId,
+            result.traceId || uploadInfo.traceId
+          )
+        }
       }
     } catch (error) {
       console.error("UPLOAD MEMORY FAILED", error)
