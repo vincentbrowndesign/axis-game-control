@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Upload, Video } from "lucide-react"
+import { applySessionEvent } from "@/lib/session/applySessionEvent"
+import { createSessionState } from "@/lib/session/createSessionState"
+import { formatClockMs } from "@/lib/session/clock"
+import { undoSessionEvent } from "@/lib/session/undoSessionEvent"
+import type { SessionMode, SessionSetupInput, TeamSide } from "@/lib/session/types"
 import { createClient } from "@/lib/supabase/client"
 import {
   parseUploadResponseText,
@@ -11,6 +16,26 @@ import {
 const waveformBars = [42, 72, 48, 86, 56, 64, 94, 44, 78, 52, 88, 60, 46, 82]
 const showDebug = process.env.NODE_ENV !== "production"
 type UploadSource = "camera" | "upload"
+type ClockAction = "toggle" | "reset"
+
+const gameSetup: SessionSetupInput = {
+  mode: "GAME",
+  sessionName: "Open run",
+  leftLabel: "Black",
+  rightLabel: "Gold",
+  startingLeftScore: 0,
+  startingRightScore: 0,
+  clockEnabled: true,
+  periodLengthMinutes: 8,
+}
+
+const repSetup: SessionSetupInput = {
+  mode: "REP",
+  drillName: "Corner threes",
+  durationMinutes: 5,
+  targetMakes: 25,
+  clockEnabled: true,
+}
 
 type ClientUploadInfo = {
   traceId: string
@@ -112,13 +137,13 @@ function mobileUploadInfo(file: File): ClientUploadInfo {
     isIOS ||
     /Android|Mobi|Mobile/i.test(userAgent) ||
     window.matchMedia("(pointer: coarse)").matches
-  const inferredType = file.type || (
-    file.name.toLowerCase().endsWith(".mov")
+  const inferredType =
+    file.type ||
+    (file.name.toLowerCase().endsWith(".mov")
       ? "video/quicktime"
       : file.name.toLowerCase().endsWith(".m4v")
         ? "video/x-m4v"
-        : "video/mp4"
-  )
+        : "video/mp4")
   const uploadName = file.name || `axis-mobile-${Date.now()}.mov`
   let uploadFile: File | Blob = file
 
@@ -181,11 +206,22 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 
+function percent(value: number) {
+  return `${Math.round(value * 100)}%`
+}
+
+function modeSetup(mode: SessionMode): SessionSetupInput {
+  return mode === "GAME" ? gameSetup : repSetup
+}
+
 export default function UploadMemoryConsole() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const recordInputRef = useRef<HTMLInputElement | null>(null)
   const previewRef = useRef<HTMLVideoElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
+  const [setup, setSetup] = useState<SessionSetupInput>(gameSetup)
+  const [sessionStarted, setSessionStarted] = useState(false)
+  const [sessionState, setSessionState] = useState(() => createSessionState(gameSetup))
   const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState("")
   const [processingLine, setProcessingLine] = useState("")
@@ -212,6 +248,96 @@ export default function UploadMemoryConsole() {
     },
     []
   )
+
+  useEffect(() => {
+    if (!sessionState.clockEnabled || !sessionState.clockRunning) return
+
+    const interval = window.setInterval(() => {
+      setSessionState((state) => {
+        if (!state.clockEnabled || !state.clockRunning) return state
+
+        const nextClockMs = Math.max(0, state.clockMs - 1000)
+
+        return {
+          ...state,
+          clockMs: nextClockMs,
+          clockRunning: nextClockMs > 0,
+          updatedAt: Date.now(),
+        }
+      })
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [sessionState.clockEnabled, sessionState.clockRunning])
+
+  function switchMode(mode: SessionMode) {
+    const nextSetup = modeSetup(mode)
+
+    setSetup(nextSetup)
+    setSessionState(createSessionState(nextSetup))
+    setSessionStarted(false)
+  }
+
+  function startSession() {
+    setSessionState(createSessionState(setup))
+    setSessionStarted(true)
+    setStatus("")
+  }
+
+  function currentReplayTimestamp() {
+    return Math.max(0, Math.floor(previewRef.current?.currentTime || 0))
+  }
+
+  function score(side: TeamSide, points: 1 | 2 | 3) {
+    setSessionState((state) =>
+      applySessionEvent({
+        state,
+        event: {
+          type: "SCORE",
+          side,
+          points,
+          replayTimestamp: currentReplayTimestamp(),
+        },
+      })
+    )
+  }
+
+  function markRep(type: "MAKE" | "MISS") {
+    setSessionState((state) =>
+      applySessionEvent({
+        state,
+        event: {
+          type,
+          replayTimestamp: currentReplayTimestamp(),
+        },
+      })
+    )
+  }
+
+  function undoEvent() {
+    setSessionState((state) => undoSessionEvent(state))
+  }
+
+  function updateClock(action: ClockAction) {
+    setSessionState((state) => {
+      if (!state.clockEnabled) return state
+
+      if (action === "reset") {
+        return {
+          ...state,
+          clockRunning: false,
+          clockMs: state.periodLengthMs || state.clockMs,
+          updatedAt: Date.now(),
+        }
+      }
+
+      return {
+        ...state,
+        clockRunning: !state.clockRunning,
+        updatedAt: Date.now(),
+      }
+    })
+  }
 
   async function chooseFile(file: File | undefined, source: UploadSource = "upload") {
     if (!file || isUploading) return
@@ -260,6 +386,15 @@ export default function UploadMemoryConsole() {
       setFileSizeLabel(formatBytes(file.size))
       setStatus("Playback ready. Saving video.")
       setProcessingLine("Your footage is safe here first.")
+      setSessionState((state) => ({
+        ...state,
+        playback: {
+          ...state.playback,
+          videoUrl: localUrl,
+          fileName: file.name || "Basketball footage",
+        },
+        updatedAt: Date.now(),
+      }))
       void previewRef.current?.play().catch(() => undefined)
 
       const metadata = await readVideoMetadata(localUrl)
@@ -268,6 +403,14 @@ export default function UploadMemoryConsole() {
       const seconds = safeDuration % 60
       setDurationLabel(`${minutes}:${seconds.toString().padStart(2, "0")}`)
       localVideoUrlRef.current = metadata.url
+      setSessionState((state) => ({
+        ...state,
+        playback: {
+          ...state.playback,
+          durationSeconds: metadata.duration,
+        },
+        updatedAt: Date.now(),
+      }))
 
       setStatus("Uploading video")
       setProcessingLine("Saving directly to playback storage.")
@@ -322,6 +465,14 @@ export default function UploadMemoryConsole() {
 
         if (!signed.error && signed.data?.signedUrl) {
           setPlaybackUrl(signed.data.signedUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              videoUrl: signed.data.signedUrl,
+            },
+            updatedAt: Date.now(),
+          }))
           addDebug("playback URL created")
         }
 
@@ -340,6 +491,15 @@ export default function UploadMemoryConsole() {
         setStatus(uploadStatus(result))
         if (result.videoUrl) {
           setPlaybackUrl(result.videoUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              replayId: result.replayId,
+              videoUrl: result.videoUrl,
+            },
+            updatedAt: Date.now(),
+          }))
         }
         setCreatedLabel(new Date(result.createdAt || Date.now()).toLocaleString())
         addDebug(
@@ -382,6 +542,14 @@ export default function UploadMemoryConsole() {
 
         if (!signed.error && signed.data?.signedUrl) {
           setPlaybackUrl(signed.data.signedUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              videoUrl: signed.data.signedUrl,
+            },
+            updatedAt: Date.now(),
+          }))
           addDebug("playback URL created")
         }
 
@@ -403,6 +571,15 @@ export default function UploadMemoryConsole() {
         setStatus(uploadStatus(result))
         if (result.videoUrl) {
           setPlaybackUrl(result.videoUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              replayId: result.replayId,
+              videoUrl: result.videoUrl,
+            },
+            updatedAt: Date.now(),
+          }))
         }
         setCreatedLabel(new Date(result.createdAt || Date.now()).toLocaleString())
         addDebug(
@@ -428,13 +605,14 @@ export default function UploadMemoryConsole() {
     }
   }
 
+  const isGame = sessionState.mode === "GAME"
+  const metrics = sessionState.metrics
+
   return (
     <main className="min-h-screen bg-[#0a0907] px-4 py-5 text-stone-100 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 flex items-center justify-between gap-4">
-          <span className="text-sm font-black text-white/85">
-            Axis
-          </span>
+          <span className="text-sm font-black text-white/85">Axis</span>
         </header>
 
         <section
@@ -442,14 +620,235 @@ export default function UploadMemoryConsole() {
           className="grid min-h-[78vh] gap-10 py-8 lg:grid-cols-[1fr_420px] lg:items-center"
         >
           <div>
-            <p className="text-sm font-bold text-white/38">Basketball camera</p>
+            <p className="text-sm font-bold text-white/38">
+              Basketball ledger
+            </p>
             <h1 className="mt-4 max-w-4xl text-6xl font-black leading-[0.9] tracking-[-0.065em] text-white sm:text-8xl">
-              Capture. Save. Play.
+              Tally. Time. Replay.
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-white/48">
-              Record the play or choose existing footage. Playback appears
-              first, then Axis saves it quietly.
+              Every tap becomes a timestamp, a replay anchor, and a measurable
+              basketball memory.
             </p>
+
+            {!sessionStarted ? (
+              <div className="mt-8 grid gap-3 sm:max-w-xl">
+                <div className="grid grid-cols-2 gap-2">
+                  {(["GAME", "REP"] as SessionMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => switchMode(mode)}
+                      className={`min-h-14 rounded-[0.75rem] text-xs font-black uppercase tracking-[0.14em] transition ${
+                        setup.mode === mode
+                          ? "bg-amber-200 text-black"
+                          : "bg-white/[0.06] text-white/58 hover:bg-white/[0.1]"
+                      }`}
+                    >
+                      {mode} mode
+                    </button>
+                  ))}
+                </div>
+
+                {setup.mode === "GAME" ? (
+                  <>
+                    <input
+                      value={setup.sessionName}
+                      onChange={(event) =>
+                        setSetup((value) =>
+                          value.mode === "GAME"
+                            ? { ...value, sessionName: event.target.value }
+                            : value
+                        )
+                      }
+                      placeholder="Session name"
+                      className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        value={setup.leftLabel}
+                        onChange={(event) =>
+                          setSetup((value) =>
+                            value.mode === "GAME"
+                              ? { ...value, leftLabel: event.target.value }
+                              : value
+                          )
+                        }
+                        placeholder="Left team name"
+                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                      />
+                      <input
+                        value={setup.rightLabel}
+                        onChange={(event) =>
+                          setSetup((value) =>
+                            value.mode === "GAME"
+                              ? { ...value, rightLabel: event.target.value }
+                              : value
+                          )
+                        }
+                        placeholder="Right team name"
+                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <input
+                        value={setup.startingLeftScore}
+                        type="number"
+                        min={0}
+                        onChange={(event) =>
+                          setSetup((value) =>
+                            value.mode === "GAME"
+                              ? {
+                                  ...value,
+                                  startingLeftScore: Number(event.target.value),
+                                }
+                              : value
+                          )
+                        }
+                        placeholder="Left score"
+                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                      />
+                      <input
+                        value={setup.startingRightScore}
+                        type="number"
+                        min={0}
+                        onChange={(event) =>
+                          setSetup((value) =>
+                            value.mode === "GAME"
+                              ? {
+                                  ...value,
+                                  startingRightScore: Number(event.target.value),
+                                }
+                              : value
+                          )
+                        }
+                        placeholder="Right score"
+                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                      />
+                      <input
+                        value={setup.periodLengthMinutes || ""}
+                        type="number"
+                        min={1}
+                        onChange={(event) =>
+                          setSetup((value) =>
+                            value.mode === "GAME"
+                              ? {
+                                  ...value,
+                                  periodLengthMinutes: Number(event.target.value),
+                                }
+                              : value
+                          )
+                        }
+                        placeholder="Period min"
+                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      value={setup.drillName}
+                      onChange={(event) =>
+                        setSetup((value) =>
+                          value.mode === "REP"
+                            ? { ...value, drillName: event.target.value }
+                            : value
+                        )
+                      }
+                      placeholder="Drill name"
+                      className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        value={setup.durationMinutes}
+                        type="number"
+                        min={1}
+                        onChange={(event) =>
+                          setSetup((value) =>
+                            value.mode === "REP"
+                              ? {
+                                  ...value,
+                                  durationMinutes: Number(event.target.value),
+                                }
+                              : value
+                          )
+                        }
+                        placeholder="Duration min"
+                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                      />
+                      <input
+                        value={setup.targetMakes || ""}
+                        type="number"
+                        min={0}
+                        onChange={(event) =>
+                          setSetup((value) =>
+                            value.mode === "REP"
+                              ? {
+                                  ...value,
+                                  targetMakes: Number(event.target.value),
+                                }
+                              : value
+                          )
+                        }
+                        placeholder="Target makes"
+                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <label className="flex items-center gap-3 text-sm font-bold text-white/58">
+                  <input
+                    type="checkbox"
+                    checked={setup.clockEnabled}
+                    onChange={(event) =>
+                      setSetup((value) => ({
+                        ...value,
+                        clockEnabled: event.target.checked,
+                      }))
+                    }
+                    className="h-5 w-5 accent-amber-200"
+                  />
+                  Enable clock: {setup.clockEnabled ? "YES" : "NO"}
+                </label>
+                <button
+                  type="button"
+                  onClick={startSession}
+                  className="min-h-16 rounded-[0.75rem] bg-amber-200 px-6 py-4 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-amber-100"
+                >
+                  Start session
+                </button>
+              </div>
+            ) : (
+              <div className="mt-8 max-w-xl rounded-[0.75rem] bg-white/[0.04] p-5">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-white/32">
+                  {sessionState.sessionName}
+                </p>
+                {isGame ? (
+                  <div className="mt-3 text-4xl font-black leading-none tracking-[-0.05em] text-white sm:text-5xl">
+                    {sessionState.leftLabel} {sessionState.leftScore} -{" "}
+                    {sessionState.rightScore} {sessionState.rightLabel}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-5xl font-black leading-none tracking-[-0.05em] text-white sm:text-6xl">
+                    {sessionState.makes || 0} makes / {sessionState.misses || 0} misses
+                  </div>
+                )}
+                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm font-bold text-amber-100/72">
+                  {isGame ? <span>Q{sessionState.period}</span> : null}
+                  <span>
+                    {sessionState.clockEnabled
+                      ? formatClockMs(sessionState.clockMs)
+                      : "Open clock"}
+                  </span>
+                  <span>
+                    {isGame
+                      ? sessionState.runState.label
+                      : `${metrics.attemptsPerMinute} attempts/min`}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="mt-9 grid gap-3 sm:max-w-md">
               <button
@@ -485,9 +884,7 @@ export default function UploadMemoryConsole() {
                 className="hidden"
                 onChange={(event) => void chooseFile(event.target.files?.[0], "upload")}
               />
-              {status ? (
-                <p className="text-sm font-bold text-white/42">{status}</p>
-              ) : null}
+              {status ? <p className="text-sm font-bold text-white/42">{status}</p> : null}
             </div>
             {processingLine ? (
               <p className="mt-5 text-2xl font-black tracking-[-0.04em] text-amber-100/80">
@@ -514,10 +911,94 @@ export default function UploadMemoryConsole() {
                 ) : null}
               </div>
             ) : null}
+            {sessionStarted ? (
+              <div className="mt-8 grid max-w-xl gap-4">
+                {isGame ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-white/34">
+                        {sessionState.leftLabel}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[1, 2, 3].map((points) => (
+                          <button
+                            key={`left-${points}`}
+                            type="button"
+                            onClick={() => score("LEFT", points as 1 | 2 | 3)}
+                            className="min-h-16 rounded-[0.75rem] bg-white/[0.06] text-2xl font-black text-white transition hover:bg-amber-100 hover:text-black"
+                          >
+                            +{points}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-white/34">
+                        {sessionState.rightLabel}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[1, 2, 3].map((points) => (
+                          <button
+                            key={`right-${points}`}
+                            type="button"
+                            onClick={() => score("RIGHT", points as 1 | 2 | 3)}
+                            className="min-h-16 rounded-[0.75rem] bg-white/[0.06] text-2xl font-black text-white transition hover:bg-amber-100 hover:text-black"
+                          >
+                            +{points}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => markRep("MAKE")}
+                      className="min-h-24 rounded-[0.75rem] bg-amber-200 text-2xl font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-100"
+                    >
+                      Make
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => markRep("MISS")}
+                      className="min-h-24 rounded-[0.75rem] bg-white/[0.06] text-2xl font-black uppercase tracking-[0.12em] text-white transition hover:bg-white/[0.1]"
+                    >
+                      Miss
+                    </button>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={undoEvent}
+                    className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white"
+                  >
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateClock("toggle")}
+                    disabled={!sessionState.clockEnabled}
+                    className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-30"
+                  >
+                    {sessionState.clockRunning ? "Stop clock" : "Start clock"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateClock("reset")}
+                    disabled={!sessionState.clockEnabled}
+                    className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-30"
+                  >
+                    Reset clock
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="overflow-hidden rounded-[1.5rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
-            <div className="aspect-[9/14] bg-black">
+            <div className="aspect-[9/14] bg-[#0a0907]">
               {playbackUrl ? (
                 <video
                   ref={previewRef}
@@ -552,6 +1033,46 @@ export default function UploadMemoryConsole() {
                   <p className="break-all">Playback URL: {playbackUrl}</p>
                 ) : null}
               </div>
+              {sessionStarted && !isGame ? (
+                <div className="mt-6 grid gap-2 border-t border-white/10 pt-5 text-sm text-white/46">
+                  <p>Attempts: {metrics.attempts}</p>
+                  <p>Make rate: {percent(metrics.makeRate)}</p>
+                  <p>Best stretch: {metrics.heatWindow.makes} makes in {metrics.heatWindow.seconds} seconds.</p>
+                  <p>Longest empty stretch: {metrics.droughtSeconds} seconds.</p>
+                  <p>
+                    Shot changed from {percent(metrics.earlyRate)} early to{" "}
+                    {percent(metrics.lateRate)} late.
+                  </p>
+                  <p>
+                    {metrics.rushChange
+                      ? `Shoots ${Math.abs(metrics.rushChange)}% ${
+                          metrics.rushChange > 0 ? "faster" : "slower"
+                        } after misses.`
+                      : "No post-miss pace change yet."}
+                  </p>
+                  <p>{metrics.rhythmWindow}</p>
+                </div>
+              ) : null}
+              {sessionState.timeline.length ? (
+                <div className="mt-6 grid gap-3 border-t border-white/10 pt-5">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
+                    Replay memory
+                  </p>
+                  {sessionState.timeline.slice(0, 6).map((event) => (
+                    <article key={event.id} className="rounded-[0.75rem] bg-black/24 p-4">
+                      <p className="text-xs font-bold text-amber-100/58">
+                        [{event.gameClock}]
+                      </p>
+                      <p className="mt-2 text-lg font-black tracking-[-0.03em] text-white">
+                        {event.type === "SCORE"
+                          ? `${event.sideLabel} +${event.points}`
+                          : event.type}
+                      </p>
+                      <p className="mt-1 text-sm text-white/42">{event.label}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
               <div className="mt-6 flex h-12 items-end gap-1">
                 {waveformBars.map((height, index) => (
                   <span
