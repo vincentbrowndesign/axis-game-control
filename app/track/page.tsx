@@ -1,5 +1,5 @@
 import Link from "next/link"
-import UploadMemoryConsole from "@/components/UploadMemoryConsole"
+import { TrackConsole } from "@/components/axis/TrackConsole"
 import { createClient } from "@/lib/supabase/server"
 
 export default async function TrackPage() {
@@ -32,5 +32,5 @@ export default async function TrackPage() {
     )
   }
 
-  return <UploadMemoryConsole initialMode="track" />
+  return <TrackConsole />
 }

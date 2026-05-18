@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { runTemporalEngine } from "@/lib/engine/temporalEngine"
+import type { Run } from "@/lib/run/runState"
 
 type TrackSignal = {
   id: string
@@ -108,6 +110,26 @@ function localTrack(signals: TrackSignal[]): TrackMoment[] {
   return moments.slice(-4).reverse()
 }
 
+function runFromTrackBody(body: Record<string, unknown>, signals: TrackSignal[]): Run {
+  const run = body.run && typeof body.run === "object" ? (body.run as Partial<Run>) : {}
+
+  return {
+    id: typeof run.id === "string" ? run.id : "track-run",
+    home: typeof run.home === "string" ? run.home : "Home",
+    away: typeof run.away === "string" ? run.away : "Away",
+    startedAt: typeof run.startedAt === "number" ? run.startedAt : Date.now(),
+    pausedMs: typeof run.pausedMs === "number" ? run.pausedMs : 0,
+    signals: signals.map((signal) => ({
+      id: signal.id,
+      side: signal.side,
+      result: signal.result,
+      time: signal.time,
+    })),
+    moments: [],
+    memories: [],
+  }
+}
+
 function cleanMoment(value: unknown, fallback: TrackMoment): TrackMoment {
   if (!value || typeof value !== "object") return fallback
 
@@ -145,10 +167,14 @@ async function inferTrack(body: Record<string, unknown>) {
       })
     : []
   const fallback = localTrack(signals)
+  const run = runFromTrackBody(body, signals)
+  const temporal = runTemporalEngine(run)
 
   if (!process.env.OPENAI_API_KEY || signals.length < 3) {
     return {
-      moments: fallback,
+      moments: temporal.moments.length ? temporal.moments : fallback,
+      state: temporal.state,
+      analysis: temporal.analysis,
       source: "local",
     }
   }
@@ -177,6 +203,23 @@ async function inferTrack(body: Record<string, unknown>) {
             run: body.run,
             signals,
             moments: body.moments,
+            temporal: {
+              state: temporal.state,
+              analysis: {
+                frequency: temporal.analysis.frequency,
+                recency: temporal.analysis.recency,
+                continuity: temporal.analysis.continuity,
+                interruption: temporal.analysis.interruption,
+                responseDelay: temporal.analysis.responseDelay,
+                signalDensity: temporal.analysis.signalDensity,
+                unanswered: temporal.analysis.unanswered,
+                clusteredMisses: temporal.analysis.clusteredMisses,
+                currentDroughtMs: temporal.analysis.currentDroughtMs,
+                alternatingInstability: temporal.analysis.alternatingInstability,
+                acceleration: temporal.analysis.acceleration,
+              },
+              detectedMoments: temporal.moments,
+            },
           }),
         },
       ],
@@ -200,13 +243,17 @@ async function inferTrack(body: Record<string, unknown>) {
 
     return {
       moments: moments.length ? moments : fallback,
+      state: temporal.state,
+      analysis: temporal.analysis,
       source: "openai",
     }
   } catch (error) {
     console.error(error)
 
     return {
-      moments: fallback,
+      moments: temporal.moments.length ? temporal.moments : fallback,
+      state: temporal.state,
+      analysis: temporal.analysis,
       source: "local",
     }
   }
