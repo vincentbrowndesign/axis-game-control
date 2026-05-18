@@ -225,6 +225,112 @@ function artifactName(run: Run, extension: "png" | "pdf") {
     .concat(`.${extension}`)
 }
 
+function mediaName(run: Run, extension: string) {
+  return `${run.home}-vs-${run.away}-axis-memory`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .concat(`.${extension}`)
+}
+
+function extensionForType(type: string, fallback: string) {
+  if (type.includes("quicktime")) return "mov"
+  if (type.includes("mp4")) return "mp4"
+  if (type.includes("png")) return "png"
+  if (type.includes("jpeg") || type.includes("jpg")) return "jpg"
+
+  return fallback
+}
+
+function createShareFile(blob: Blob, name: string, type: string) {
+  if (typeof File === "undefined") return null
+
+  try {
+    return new File([blob], name, {
+      type,
+      lastModified: Date.now(),
+    })
+  } catch {
+    return null
+  }
+}
+
+function canNativeShareFile(file: File) {
+  return (
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({ files: [file] })
+  )
+}
+
+async function nativeShareFile(file: File, title: string, text: string) {
+  if (!canNativeShareFile(file)) return false
+
+  await navigator.share({
+    files: [file],
+    title,
+    text,
+  })
+
+  return true
+}
+
+function fallbackDownloadBlob(blob: Blob, name: string) {
+  if (typeof URL === "undefined" || typeof document === "undefined") return false
+
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = objectUrl
+  link.download = name
+  link.rel = "noopener"
+  link.click()
+
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+  } else {
+    URL.revokeObjectURL(objectUrl)
+  }
+
+  return true
+}
+
+function waitForPaint() {
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve())
+    })
+  })
+}
+
+async function fetchBlobWithTimeout(url: string, timeoutMs = 12_000) {
+  const controller = new AbortController()
+  const timeout =
+    typeof window !== "undefined"
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : undefined
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+    })
+
+    if (!response.ok) throw new Error(`Media fetch ${response.status}`)
+
+    const blob = await response.blob()
+
+    if (!blob.size) throw new Error("Empty media blob")
+
+    return blob
+  } finally {
+    if (timeout) window.clearTimeout(timeout)
+  }
+}
+
 function compactTime(value: number) {
   const totalSeconds = Math.max(0, Math.round(value / 1000))
 
@@ -535,93 +641,107 @@ export default function UploadMemoryConsole({
     return artifact
   }
 
-  async function exportPng(share = false) {
-    if (typeof document === "undefined") return
+  async function generateArchiveImageBlob() {
+    if (typeof document === "undefined") return null
     let artifact: HTMLDivElement | null = null
 
     try {
-      storeCurrentRun()
-      setStatus("Archive rendering.")
       artifact = renderExportArtifact()
 
-      if (!artifact) {
-        setStatus("Archive unavailable.")
-        return
-      }
+      if (!artifact) return null
 
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
-      const { toPng } = await import("html-to-image")
-      const dataUrl = await toPng(artifact, {
+      await waitForPaint()
+      const { toBlob } = await import("html-to-image")
+      const blob = await toBlob(artifact, {
         cacheBust: true,
         pixelRatio: 1,
         backgroundColor: "#050505",
         canvasWidth: 720,
         canvasHeight: artifact.scrollHeight,
       })
-      artifact.remove()
-      artifact = null
-      const response = await fetch(dataUrl)
-      const blob = await response.blob()
-      const validBlob = blob.size > 0 && blob.type.startsWith("image/")
 
-      if (!validBlob) {
-        setStatus("Archive unavailable.")
-        return
-      }
+      if (!blob?.size || !blob.type.startsWith("image/")) return null
 
-      const file =
-        typeof File !== "undefined"
-          ? new File([blob], artifactName(run, "png"), {
-              type: "image/png",
-            })
-          : null
-      const nativeReady = file
-        ? typeof navigator !== "undefined" &&
-          typeof navigator.canShare === "function" &&
-          typeof navigator.share === "function" &&
-          navigator.canShare({ files: [file] }) &&
-          (share ||
-            /iPad|iPhone|iPod|Android|Mobi|Mobile/i.test(navigator.userAgent || "") ||
-            (typeof window !== "undefined" &&
-              typeof window.matchMedia === "function" &&
-              window.matchMedia("(pointer: coarse)").matches))
-        : false
-
-      if (nativeReady && file) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: "Axis Archive",
-            text: "Tap. Track. Archive.",
-          })
-          setStatus("Archive shared.")
-          return
-        } catch {
-          setStatus("Archive save fallback.")
-        }
-      }
-
-      if (typeof URL === "undefined" || typeof document === "undefined") {
-        setStatus("Archive unavailable.")
-        return
-      }
-
-      const objectUrl = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = objectUrl
-      link.download = file?.name || artifactName(run, "png")
-      link.click()
-      if (typeof window !== "undefined") {
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
-      } else {
-        URL.revokeObjectURL(objectUrl)
-      }
-      setStatus("Archive saved.")
+      return blob
     } catch {
-      setStatus("Archive unavailable.")
+      return null
     } finally {
       artifact?.remove()
     }
+  }
+
+  async function shareArchiveImage() {
+    storeCurrentRun()
+    setStatus("Preparing image.")
+    const blob = await generateArchiveImageBlob()
+
+    if (!blob) {
+      setStatus("Image unavailable.")
+      return false
+    }
+
+    const file = createShareFile(blob, artifactName(run, "png"), "image/png")
+
+    if (file) {
+      try {
+        const shared = await nativeShareFile(file, "Axis Memory", "Axis replay memory")
+
+        if (shared) {
+          setStatus("Shared.")
+          return true
+        }
+      } catch {
+        setStatus("Share canceled.")
+      }
+    }
+
+    const downloaded = fallbackDownloadBlob(blob, artifactName(run, "png"))
+    setStatus(downloaded ? "Image saved." : "Image unavailable.")
+
+    return downloaded
+  }
+
+  async function shareReplayVideo() {
+    if (!playbackId) return false
+
+    try {
+      setStatus("Preparing video.")
+      const blob = await fetchBlobWithTimeout(playbackId)
+      const type = blob.type || "video/mp4"
+
+      if (!blob.size || (!type.startsWith("video/") && !type.includes("octet-stream"))) {
+        return false
+      }
+
+      const extension = extensionForType(type, "mp4")
+      const file = createShareFile(blob, mediaName(run, extension), type)
+
+      if (file) {
+        const shared = await nativeShareFile(file, "Axis Replay", "Axis replay memory")
+
+        if (shared) {
+          setStatus("Shared.")
+          return true
+        }
+      }
+
+      const downloaded = fallbackDownloadBlob(blob, mediaName(run, extension))
+      setStatus(downloaded ? "Video saved." : "Video unavailable.")
+
+      return downloaded
+    } catch {
+      return false
+    }
+  }
+
+  async function shareBestMedia(preferVideo = false) {
+    if (isUploading) return
+
+    const videoShared = preferVideo ? await shareReplayVideo() : false
+
+    if (videoShared) return
+
+    await shareArchiveImage()
   }
 
   async function chooseFile(file: File | undefined, source: UploadSource) {
@@ -737,7 +857,7 @@ export default function UploadMemoryConsole({
       <input
         ref={uploadInputRef}
         type="file"
-        accept="video/*"
+        accept="image/*,video/*,.mov,.mp4,.m4v"
         className="hidden"
         onChange={(event) => void chooseFile(event.target.files?.[0], "upload")}
       />
@@ -745,8 +865,8 @@ export default function UploadMemoryConsole({
       <ControlBar
         onCamera={() => recordInputRef.current?.click()}
         onUpload={() => uploadInputRef.current?.click()}
-        onSave={() => void exportPng(false)}
-        onShare={() => void exportPng(true)}
+        onSave={() => void shareBestMedia(true)}
+        onShare={() => void shareBestMedia(false)}
         disabled={isUploading}
       />
     </main>
