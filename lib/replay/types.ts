@@ -36,7 +36,7 @@ export type ReplayMoment = {
   eventId: string
   timestampMs: number
   replayTimestamp: number
-  eventType: "MAKE" | "MISS" | "SCORE"
+  eventType: "MAKE" | "MISS"
   label: string
   videoUrl?: string
   createdAt: number

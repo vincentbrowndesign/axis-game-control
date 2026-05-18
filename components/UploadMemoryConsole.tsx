@@ -2,39 +2,25 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Upload, Video } from "lucide-react"
+import { calculateStreamMetrics } from "@/lib/metrics/calculateMetrics"
+import { compareSessions } from "@/lib/progression/compareSessions"
 import { applySessionEvent } from "@/lib/session/applySessionEvent"
+import { formatElapsedMs } from "@/lib/session/clock"
 import { createSessionState } from "@/lib/session/createSessionState"
-import { formatClockMs } from "@/lib/session/clock"
+import type { SessionSetupInput, StoredSessionSummary } from "@/lib/session/types"
 import { undoSessionEvent } from "@/lib/session/undoSessionEvent"
-import type { SessionMode, SessionSetupInput, TeamSide } from "@/lib/session/types"
 import { createClient } from "@/lib/supabase/client"
 import {
   parseUploadResponseText,
   type AxisUploadResponse,
 } from "@/lib/uploadResponse"
 
-const waveformBars = [42, 72, 48, 86, 56, 64, 94, 44, 78, 52, 88, 60, 46, 82]
-const showDebug = process.env.NODE_ENV !== "production"
+const storageKey = "axis-stream-session-history"
 type UploadSource = "camera" | "upload"
-type ClockAction = "toggle" | "reset"
 
-const gameSetup: SessionSetupInput = {
-  mode: "GAME",
-  sessionName: "Open run",
-  leftLabel: "Black",
-  rightLabel: "Gold",
-  startingLeftScore: 0,
-  startingRightScore: 0,
-  clockEnabled: true,
-  periodLengthMinutes: 8,
-}
-
-const repSetup: SessionSetupInput = {
-  mode: "REP",
-  drillName: "Corner threes",
-  durationMinutes: 5,
-  targetMakes: 25,
-  clockEnabled: true,
+const initialSetup: SessionSetupInput = {
+  sessionName: "Corner threes",
+  streamLabels: ["AJ"],
 }
 
 type ClientUploadInfo = {
@@ -50,12 +36,10 @@ type ClientUploadInfo = {
 }
 
 function uploadStatus(data: AxisUploadResponse) {
-  if (data.ok) return "Playback ready."
-  if (data.recovery) return "Playback ready."
-  if (data.stored) return "Playback ready."
-  if (data.error) return "Still processing..."
+  if (data.ok || data.recovery || data.stored) return "Replay evidence attached."
+  if (data.error) return "Replay evidence is still saving."
 
-  return "Still processing..."
+  return "Replay evidence is still saving."
 }
 
 function safeStorageName(name: string) {
@@ -114,7 +98,7 @@ async function completeUpload({
       durationSeconds,
       source,
       environment: "practice",
-      mission: "Replay memory",
+      mission: "Behavior ledger",
       player: "Unassigned",
       client,
     }),
@@ -177,10 +161,8 @@ function readVideoMetadata(url: string) {
 
     video.preload = "metadata"
     video.onloadedmetadata = () => {
-      const duration = Number.isFinite(video.duration) ? video.duration : 0
-
       resolve({
-        duration,
+        duration: Number.isFinite(video.duration) ? video.duration : 0,
         url,
       })
     }
@@ -194,51 +176,69 @@ function readVideoMetadata(url: string) {
   })
 }
 
-function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB"]
-  const index = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
-    units.length - 1
-  )
-  const value = bytes / 1024 ** index
+function readPreviousSession() {
+  if (typeof window === "undefined") return undefined
 
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    const history = raw ? (JSON.parse(raw) as StoredSessionSummary[]) : []
+
+    return history[0]
+  } catch {
+    return undefined
+  }
 }
 
-function percent(value: number) {
-  return `${Math.round(value * 100)}%`
+function writeSessionSummary(summary: StoredSessionSummary) {
+  if (typeof window === "undefined") return
+
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    const history = raw ? (JSON.parse(raw) as StoredSessionSummary[]) : []
+    const next = [summary, ...history.filter((item) => item.sessionId !== summary.sessionId)]
+
+    window.localStorage.setItem(storageKey, JSON.stringify(next.slice(0, 8)))
+  } catch {
+    return
+  }
 }
 
-function modeSetup(mode: SessionMode): SessionSetupInput {
-  return mode === "GAME" ? gameSetup : repSetup
+function rushLine(value: number) {
+  if (!value) return "No post-miss response yet."
+
+  return `${Math.abs(value)}% ${value > 0 ? "faster" : "slower"} after misses`
+}
+
+function setupFromText(sessionName: string, streamText: string): SessionSetupInput {
+  const streamLabels = streamText
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  return {
+    sessionName,
+    streamLabels: streamLabels.length ? streamLabels : ["AJ"],
+  }
 }
 
 export default function UploadMemoryConsole() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const recordInputRef = useRef<HTMLInputElement | null>(null)
-  const previewRef = useRef<HTMLVideoElement | null>(null)
+  const evidenceVideoRef = useRef<HTMLVideoElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
-  const [setup, setSetup] = useState<SessionSetupInput>(gameSetup)
+  const [sessionName, setSessionName] = useState(initialSetup.sessionName)
+  const [streamText, setStreamText] = useState(initialSetup.streamLabels.join(", "))
   const [sessionStarted, setSessionStarted] = useState(false)
-  const [sessionState, setSessionState] = useState(() => createSessionState(gameSetup))
+  const [sessionState, setSessionState] = useState(() =>
+    createSessionState(initialSetup)
+  )
+  const [previousSession] = useState<StoredSessionSummary | undefined>(() =>
+    readPreviousSession()
+  )
   const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState("")
-  const [processingLine, setProcessingLine] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [debugTraceId, setDebugTraceId] = useState("")
   const [playbackUrl, setPlaybackUrl] = useState("")
-  const [playbackTitle, setPlaybackTitle] = useState("")
-  const [durationLabel, setDurationLabel] = useState("0:00")
-  const [fileSizeLabel, setFileSizeLabel] = useState("")
-  const [createdLabel, setCreatedLabel] = useState("")
-  const [debugLines, setDebugLines] = useState<string[]>([])
-
-  function addDebug(line: string) {
-    if (!showDebug) return
-
-    setDebugLines((lines) => [...lines, line].slice(-12))
-  }
 
   useEffect(
     () => () => {
@@ -250,121 +250,158 @@ export default function UploadMemoryConsole() {
   )
 
   useEffect(() => {
-    if (!sessionState.clockEnabled || !sessionState.clockRunning) return
+    if (!sessionState.timerRunning) return
 
     const interval = window.setInterval(() => {
       setSessionState((state) => {
-        if (!state.clockEnabled || !state.clockRunning) return state
+        if (!state.timerRunning) return state
 
-        const nextClockMs = Math.max(0, state.clockMs - 1000)
+        const elapsedMs = state.elapsedMs + 1000
+        const streams = state.streams.map((stream) => ({
+          ...stream,
+          metrics: calculateStreamMetrics({
+            events: state.timeline,
+            streamId: stream.id,
+            elapsedMs,
+          }),
+        }))
+        const activeStream =
+          streams.find((stream) => stream.id === state.activeStreamId) || streams[0]
 
         return {
           ...state,
-          clockMs: nextClockMs,
-          clockRunning: nextClockMs > 0,
+          elapsedMs,
+          streams,
+          progression: activeStream
+            ? compareSessions({
+                current: activeStream,
+                previous: previousSession,
+              })
+            : state.progression,
           updatedAt: Date.now(),
         }
       })
     }, 1000)
 
     return () => window.clearInterval(interval)
-  }, [sessionState.clockEnabled, sessionState.clockRunning])
+  }, [previousSession, sessionState.timerRunning])
 
-  function switchMode(mode: SessionMode) {
-    const nextSetup = modeSetup(mode)
+  useEffect(() => {
+    if (!sessionStarted || !sessionState.timeline.length) return
 
-    setSetup(nextSetup)
-    setSessionState(createSessionState(nextSetup))
-    setSessionStarted(false)
-  }
+    writeSessionSummary({
+      sessionId: sessionState.sessionId,
+      sessionName: sessionState.sessionName,
+      completedAt: Date.now(),
+      streams: sessionState.streams.map((stream) => ({
+        label: stream.label,
+        metrics: stream.metrics,
+      })),
+    })
+  }, [sessionStarted, sessionState])
 
   function startSession() {
-    setSessionState(createSessionState(setup))
+    const setup = setupFromText(sessionName, streamText)
+    const next = createSessionState(setup)
+
+    setSessionState({
+      ...next,
+      timerRunning: true,
+    })
     setSessionStarted(true)
     setStatus("")
+    setUploadProgress(0)
   }
 
   function currentReplayTimestamp() {
-    return Math.max(0, Math.floor(previewRef.current?.currentTime || 0))
+    return Math.max(0, Math.floor(evidenceVideoRef.current?.currentTime || 0))
   }
 
-  function score(side: TeamSide, points: 1 | 2 | 3) {
-    setSessionState((state) =>
-      applySessionEvent({
-        state,
-        event: {
-          type: "SCORE",
-          side,
-          points,
-          replayTimestamp: currentReplayTimestamp(),
-        },
-      })
-    )
+  function setActiveStream(streamId: string) {
+    setSessionState((state) => {
+      const activeStream = state.streams.find((stream) => stream.id === streamId)
+
+      return {
+        ...state,
+        activeStreamId: streamId,
+        progression: activeStream
+          ? compareSessions({
+              current: activeStream,
+              previous: previousSession,
+            })
+          : state.progression,
+      }
+    })
   }
 
-  function markRep(type: "MAKE" | "MISS") {
-    setSessionState((state) =>
-      applySessionEvent({
+  function mark(type: "MAKE" | "MISS") {
+    setSessionState((state) => {
+      const next = applySessionEvent({
         state,
         event: {
+          streamId: state.activeStreamId,
           type,
           replayTimestamp: currentReplayTimestamp(),
         },
       })
-    )
+      const activeStream =
+        next.streams.find((stream) => stream.id === next.activeStreamId) ||
+        next.streams[0]
+
+      return {
+        ...next,
+        progression: activeStream
+          ? compareSessions({
+              current: activeStream,
+              previous: previousSession,
+            })
+          : next.progression,
+      }
+    })
   }
 
   function undoEvent() {
-    setSessionState((state) => undoSessionEvent(state))
-  }
-
-  function updateClock(action: ClockAction) {
     setSessionState((state) => {
-      if (!state.clockEnabled) return state
-
-      if (action === "reset") {
-        return {
-          ...state,
-          clockRunning: false,
-          clockMs: state.periodLengthMs || state.clockMs,
-          updatedAt: Date.now(),
-        }
-      }
+      const next = undoSessionEvent(state)
+      const activeStream =
+        next.streams.find((stream) => stream.id === next.activeStreamId) ||
+        next.streams[0]
 
       return {
-        ...state,
-        clockRunning: !state.clockRunning,
-        updatedAt: Date.now(),
+        ...next,
+        progression: activeStream
+          ? compareSessions({
+              current: activeStream,
+              previous: previousSession,
+            })
+          : next.progression,
       }
     })
+  }
+
+  function toggleTimer() {
+    setSessionState((state) => ({
+      ...state,
+      timerRunning: !state.timerRunning,
+      updatedAt: Date.now(),
+    }))
   }
 
   async function chooseFile(file: File | undefined, source: UploadSource = "upload") {
     if (!file || isUploading) return
 
     setIsUploading(true)
-    setStatus("Preparing playback")
-    setProcessingLine("Reading the footage")
+    setStatus("Attaching replay evidence.")
     setUploadProgress(0)
-    setDebugTraceId("")
-    setDebugLines([])
-    setFileSizeLabel("")
-    setCreatedLabel("")
     const uploadInfo = mobileUploadInfo(file)
-    setDebugTraceId(uploadInfo.traceId)
-    addDebug(`source: ${source}`)
-    addDebug(`file selected: ${file.name || uploadInfo.uploadName}`)
-    addDebug(`file type: ${file.type || uploadInfo.uploadType}`)
-    addDebug(`file size: ${formatBytes(file.size)}`)
 
-    console.info("AXIS MOBILE UPLOAD", {
+    console.info("AXIS EVIDENCE UPLOAD", {
       traceId: uploadInfo.traceId,
-      stage: "upload-start",
+      source,
       file: {
         name: file.name,
         type: file.type || "missing",
         size: file.size,
-        lastModified: file.lastModified,
       },
       mobile: {
         isMobile: uploadInfo.isMobile,
@@ -382,27 +419,18 @@ export default function UploadMemoryConsole() {
       const localUrl = URL.createObjectURL(file)
       localVideoUrlRef.current = localUrl
       setPlaybackUrl(localUrl)
-      setPlaybackTitle(file.name || "Basketball footage")
-      setFileSizeLabel(formatBytes(file.size))
-      setStatus("Playback ready. Saving video.")
-      setProcessingLine("Your footage is safe here first.")
+      setStatus("Replay evidence ready locally.")
       setSessionState((state) => ({
         ...state,
         playback: {
           ...state.playback,
           videoUrl: localUrl,
-          fileName: file.name || "Basketball footage",
+          attachedAt: Date.now(),
         },
         updatedAt: Date.now(),
       }))
-      void previewRef.current?.play().catch(() => undefined)
 
       const metadata = await readVideoMetadata(localUrl)
-      const safeDuration = Math.max(0, Math.floor(metadata.duration))
-      const minutes = Math.floor(safeDuration / 60)
-      const seconds = safeDuration % 60
-      setDurationLabel(`${minutes}:${seconds.toString().padStart(2, "0")}`)
-      localVideoUrlRef.current = metadata.url
       setSessionState((state) => ({
         ...state,
         playback: {
@@ -411,11 +439,7 @@ export default function UploadMemoryConsole() {
         },
         updatedAt: Date.now(),
       }))
-
-      setStatus("Uploading video")
-      setProcessingLine("Saving directly to playback storage.")
       setUploadProgress(12)
-      addDebug("upload started")
 
       const supabase = createClient()
       const {
@@ -428,7 +452,6 @@ export default function UploadMemoryConsole() {
       }
 
       const filePath = `${user.id}/${safeStorageName(uploadInfo.uploadName)}`
-      addDebug(`storage path: ${filePath}`)
       const clientDebug = {
         clientTraceId: uploadInfo.traceId,
         clientName: file.name || uploadInfo.uploadName,
@@ -450,15 +473,9 @@ export default function UploadMemoryConsole() {
             upsert: false,
           })
 
-        if (uploaded.error) {
-          addDebug(`storage failure: ${uploaded.error.message}`)
-          throw uploaded.error
-        }
+        if (uploaded.error) throw uploaded.error
 
-        addDebug("storage success")
         setUploadProgress(78)
-        setProcessingLine("Playback copy saved. Opening it now.")
-
         const signed = await supabase.storage
           .from("axis-replays")
           .createSignedUrl(filePath, 60 * 60 * 24 * 7)
@@ -473,7 +490,6 @@ export default function UploadMemoryConsole() {
             },
             updatedAt: Date.now(),
           }))
-          addDebug("playback URL created")
         }
 
         const result = await completeUpload({
@@ -501,23 +517,12 @@ export default function UploadMemoryConsole() {
             updatedAt: Date.now(),
           }))
         }
-        setCreatedLabel(new Date(result.createdAt || Date.now()).toLocaleString())
-        addDebug(
-          result.replayId
-            ? `database insert success: ${result.replayId}`
-            : "database insert deferred"
-        )
-        setProcessingLine("Playback ready.")
       } catch (error) {
-        addDebug(
-          `storage failure: ${error instanceof Error ? error.message : "unknown"}`
-        )
-        console.warn("AXIS DIRECT UPLOAD RETRY", {
+        console.warn("AXIS EVIDENCE RETRY", {
           traceId: uploadInfo.traceId,
           error,
         })
-        setStatus("Still processing...")
-        setProcessingLine("Connection paused. Retrying quietly.")
+        setStatus("Replay evidence is retrying quietly.")
         setUploadProgress(18)
         await new Promise((resolve) => window.setTimeout(resolve, 900))
 
@@ -529,12 +534,8 @@ export default function UploadMemoryConsole() {
             upsert: false,
           })
 
-        if (retry.error) {
-          addDebug(`storage failure: ${retry.error.message}`)
-          throw retry.error
-        }
+        if (retry.error) throw retry.error
 
-        addDebug("storage success")
         setUploadProgress(82)
         const signed = await supabase.storage
           .from("axis-replays")
@@ -550,7 +551,6 @@ export default function UploadMemoryConsole() {
             },
             updatedAt: Date.now(),
           }))
-          addDebug("playback URL created")
         }
 
         const result = await completeUpload({
@@ -581,23 +581,10 @@ export default function UploadMemoryConsole() {
             updatedAt: Date.now(),
           }))
         }
-        setCreatedLabel(new Date(result.createdAt || Date.now()).toLocaleString())
-        addDebug(
-          result.replayId
-            ? `database insert success: ${result.replayId}`
-            : "database insert deferred"
-        )
-        setProcessingLine("Playback ready.")
       }
     } catch (error) {
-      console.error("UPLOAD MEMORY FAILED", error)
-      addDebug(
-        `database insert failure: ${
-          error instanceof Error ? error.message : "unknown"
-        }`
-      )
-      setStatus("Still processing...")
-      setProcessingLine("Playback stays here. Axis will keep trying.")
+      console.error("AXIS EVIDENCE FAILED", error)
+      setStatus("Replay evidence stays local for now.")
     } finally {
       setIsUploading(false)
       if (uploadInputRef.current) uploadInputRef.current.value = ""
@@ -605,218 +592,56 @@ export default function UploadMemoryConsole() {
     }
   }
 
-  const isGame = sessionState.mode === "GAME"
-  const metrics = sessionState.metrics
+  const activeStream =
+    sessionState.streams.find((stream) => stream.id === sessionState.activeStreamId) ||
+    sessionState.streams[0]
+  const metrics = activeStream.metrics
+  const streamSpurts = sessionState.spurts
+    .filter((spurt) => spurt.streamId === activeStream.id)
+    .slice(0, 4)
 
   return (
     <main className="min-h-screen bg-[#0a0907] px-4 py-5 text-stone-100 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 flex items-center justify-between gap-4">
           <span className="text-sm font-black text-white/85">Axis</span>
+          {sessionStarted ? (
+            <span className="font-mono text-sm font-black text-amber-100/78">
+              {formatElapsedMs(sessionState.elapsedMs)}
+            </span>
+          ) : null}
         </header>
 
-        <section
-          id="upload"
-          className="grid min-h-[78vh] gap-10 py-8 lg:grid-cols-[1fr_420px] lg:items-center"
-        >
+        <section className="grid min-h-[78vh] gap-8 py-8 lg:grid-cols-[1fr_380px] lg:items-start">
           <div>
-            <p className="text-sm font-bold text-white/38">
-              Basketball ledger
-            </p>
+            <p className="text-sm font-bold text-white/38">Basketball ledger</p>
             <h1 className="mt-4 max-w-4xl text-6xl font-black leading-[0.9] tracking-[-0.065em] text-white sm:text-8xl">
-              Tally. Time. Replay.
+              Tally. Time. Behavior.
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-white/48">
-              Every tap becomes a timestamp, a replay anchor, and a measurable
-              basketball memory.
+              Axis measures basketball behavior with marks and elapsed time.
             </p>
 
             {!sessionStarted ? (
               <div className="mt-8 grid gap-3 sm:max-w-xl">
-                <div className="grid grid-cols-2 gap-2">
-                  {(["GAME", "REP"] as SessionMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => switchMode(mode)}
-                      className={`min-h-14 rounded-[0.75rem] text-xs font-black uppercase tracking-[0.14em] transition ${
-                        setup.mode === mode
-                          ? "bg-amber-200 text-black"
-                          : "bg-white/[0.06] text-white/58 hover:bg-white/[0.1]"
-                      }`}
-                    >
-                      {mode} mode
-                    </button>
-                  ))}
-                </div>
-
-                {setup.mode === "GAME" ? (
-                  <>
-                    <input
-                      value={setup.sessionName}
-                      onChange={(event) =>
-                        setSetup((value) =>
-                          value.mode === "GAME"
-                            ? { ...value, sessionName: event.target.value }
-                            : value
-                        )
-                      }
-                      placeholder="Session name"
-                      className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                    />
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <input
-                        value={setup.leftLabel}
-                        onChange={(event) =>
-                          setSetup((value) =>
-                            value.mode === "GAME"
-                              ? { ...value, leftLabel: event.target.value }
-                              : value
-                          )
-                        }
-                        placeholder="Left team name"
-                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                      />
-                      <input
-                        value={setup.rightLabel}
-                        onChange={(event) =>
-                          setSetup((value) =>
-                            value.mode === "GAME"
-                              ? { ...value, rightLabel: event.target.value }
-                              : value
-                          )
-                        }
-                        placeholder="Right team name"
-                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <input
-                        value={setup.startingLeftScore}
-                        type="number"
-                        min={0}
-                        onChange={(event) =>
-                          setSetup((value) =>
-                            value.mode === "GAME"
-                              ? {
-                                  ...value,
-                                  startingLeftScore: Number(event.target.value),
-                                }
-                              : value
-                          )
-                        }
-                        placeholder="Left score"
-                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                      />
-                      <input
-                        value={setup.startingRightScore}
-                        type="number"
-                        min={0}
-                        onChange={(event) =>
-                          setSetup((value) =>
-                            value.mode === "GAME"
-                              ? {
-                                  ...value,
-                                  startingRightScore: Number(event.target.value),
-                                }
-                              : value
-                          )
-                        }
-                        placeholder="Right score"
-                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                      />
-                      <input
-                        value={setup.periodLengthMinutes || ""}
-                        type="number"
-                        min={1}
-                        onChange={(event) =>
-                          setSetup((value) =>
-                            value.mode === "GAME"
-                              ? {
-                                  ...value,
-                                  periodLengthMinutes: Number(event.target.value),
-                                }
-                              : value
-                          )
-                        }
-                        placeholder="Period min"
-                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <input
-                      value={setup.drillName}
-                      onChange={(event) =>
-                        setSetup((value) =>
-                          value.mode === "REP"
-                            ? { ...value, drillName: event.target.value }
-                            : value
-                        )
-                      }
-                      placeholder="Drill name"
-                      className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                    />
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <input
-                        value={setup.durationMinutes}
-                        type="number"
-                        min={1}
-                        onChange={(event) =>
-                          setSetup((value) =>
-                            value.mode === "REP"
-                              ? {
-                                  ...value,
-                                  durationMinutes: Number(event.target.value),
-                                }
-                              : value
-                          )
-                        }
-                        placeholder="Duration min"
-                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                      />
-                      <input
-                        value={setup.targetMakes || ""}
-                        type="number"
-                        min={0}
-                        onChange={(event) =>
-                          setSetup((value) =>
-                            value.mode === "REP"
-                              ? {
-                                  ...value,
-                                  targetMakes: Number(event.target.value),
-                                }
-                              : value
-                          )
-                        }
-                        placeholder="Target makes"
-                        className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
-                      />
-                    </div>
-                  </>
-                )}
-
-                <label className="flex items-center gap-3 text-sm font-bold text-white/58">
-                  <input
-                    type="checkbox"
-                    checked={setup.clockEnabled}
-                    onChange={(event) =>
-                      setSetup((value) => ({
-                        ...value,
-                        clockEnabled: event.target.checked,
-                      }))
-                    }
-                    className="h-5 w-5 accent-amber-200"
-                  />
-                  Enable clock: {setup.clockEnabled ? "YES" : "NO"}
-                </label>
+                <input
+                  value={sessionName}
+                  onChange={(event) => setSessionName(event.target.value)}
+                  placeholder="Session name"
+                  className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                />
+                <input
+                  value={streamText}
+                  onChange={(event) => setStreamText(event.target.value)}
+                  placeholder="Streams: Black, Gold, AJ"
+                  className="rounded-[0.75rem] bg-white/[0.06] px-4 py-4 text-sm font-bold text-white outline-none placeholder:text-white/25"
+                />
                 <button
                   type="button"
                   onClick={startSession}
                   className="min-h-16 rounded-[0.75rem] bg-amber-200 px-6 py-4 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-amber-100"
                 >
-                  Start session
+                  Start ledger
                 </button>
               </div>
             ) : (
@@ -824,51 +649,71 @@ export default function UploadMemoryConsole() {
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-white/32">
                   {sessionState.sessionName}
                 </p>
-                {isGame ? (
-                  <div className="mt-3 text-4xl font-black leading-none tracking-[-0.05em] text-white sm:text-5xl">
-                    {sessionState.leftLabel} {sessionState.leftScore} -{" "}
-                    {sessionState.rightScore} {sessionState.rightLabel}
-                  </div>
-                ) : (
-                  <div className="mt-3 text-5xl font-black leading-none tracking-[-0.05em] text-white sm:text-6xl">
-                    {sessionState.makes || 0} makes / {sessionState.misses || 0} misses
-                  </div>
-                )}
-                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm font-bold text-amber-100/72">
-                  {isGame ? <span>Q{sessionState.period}</span> : null}
-                  <span>
-                    {sessionState.clockEnabled
-                      ? formatClockMs(sessionState.clockMs)
-                      : "Open clock"}
-                  </span>
-                  <span>
-                    {isGame
-                      ? sessionState.runState.label
-                      : `${metrics.attemptsPerMinute} attempts/min`}
-                  </span>
+                <div className="mt-3 text-6xl font-black leading-none tracking-[-0.06em] text-white sm:text-7xl">
+                  {metrics.makes} / {metrics.attempts}
+                </div>
+                <p className="mt-2 text-sm font-bold text-white/44">
+                  {formatElapsedMs(sessionState.elapsedMs)} elapsed
+                </p>
+
+                <div className="mt-6 grid gap-3 text-2xl font-black tracking-[-0.04em] text-amber-100/86">
+                  <p>{metrics.intervalRange}</p>
+                  <p>{metrics.longestDroughtSeconds}s longest drought</p>
+                  <p>{rushLine(metrics.rushAfterMissPct)}</p>
+                </div>
+
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
+                    Best spurt
+                  </p>
+                  <p className="mt-2 text-3xl font-black tracking-[-0.05em] text-white">
+                    {metrics.bestSpurt.makes} makes in {metrics.bestSpurt.seconds} seconds
+                  </p>
                 </div>
               </div>
             )}
 
-            <div className="mt-9 grid gap-3 sm:max-w-md">
-              <button
-                type="button"
-                onClick={() => recordInputRef.current?.click()}
-                disabled={isUploading}
-                className="order-1 inline-flex min-h-24 items-center justify-center gap-3 rounded-[0.75rem] bg-amber-200 px-8 py-5 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-amber-100 disabled:opacity-50 sm:order-2"
-              >
-                <Video className="h-4 w-4" aria-hidden="true" />
-                Record play
-              </button>
-              <button
-                type="button"
-                onClick={() => uploadInputRef.current?.click()}
-                disabled={isUploading}
-                className="order-2 inline-flex min-h-24 items-center justify-center gap-3 rounded-[0.75rem] bg-stone-100 px-8 py-5 text-sm font-black uppercase tracking-[0.16em] text-black transition hover:bg-white disabled:opacity-50 sm:order-1"
-              >
-                <Upload className="h-4 w-4" aria-hidden="true" />
-                {isUploading ? "Uploading" : "Upload clip"}
-              </button>
+            <div className="mt-8 grid gap-3 sm:max-w-xl">
+              {sessionStarted ? (
+                <div className="flex flex-wrap gap-2">
+                  {sessionState.streams.map((stream) => (
+                    <button
+                      key={stream.id}
+                      type="button"
+                      onClick={() => setActiveStream(stream.id)}
+                      className={`min-h-12 rounded-[0.75rem] px-4 text-sm font-black uppercase tracking-[0.12em] transition ${
+                        stream.id === activeStream.id
+                          ? "bg-amber-200 text-black"
+                          : "bg-white/[0.06] text-white/58 hover:bg-white/[0.1]"
+                      }`}
+                    >
+                      {stream.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => recordInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="inline-flex min-h-20 items-center justify-center gap-3 rounded-[0.75rem] bg-amber-200 px-6 py-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:bg-amber-100 disabled:opacity-50"
+                >
+                  <Video className="h-4 w-4" aria-hidden="true" />
+                  Record play
+                </button>
+                <button
+                  type="button"
+                  onClick={() => uploadInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="inline-flex min-h-20 items-center justify-center gap-3 rounded-[0.75rem] bg-stone-100 px-6 py-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:bg-white disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                  Upload clip
+                </button>
+              </div>
+
               <input
                 ref={recordInputRef}
                 type="file"
@@ -884,222 +729,126 @@ export default function UploadMemoryConsole() {
                 className="hidden"
                 onChange={(event) => void chooseFile(event.target.files?.[0], "upload")}
               />
-              {status ? <p className="text-sm font-bold text-white/42">{status}</p> : null}
-            </div>
-            {processingLine ? (
-              <p className="mt-5 text-2xl font-black tracking-[-0.04em] text-amber-100/80">
-                {processingLine}
-              </p>
-            ) : null}
-            {isUploading || uploadProgress > 0 ? (
-              <div className="mt-5 max-w-sm">
-                <div className="h-1 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-amber-100 transition-all duration-500"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-xs font-bold text-white/35">
-                  {uploadProgress
-                    ? `${uploadProgress}% uploaded`
-                    : "Playback appears as soon as the video is ready"}
-                </p>
-                {debugTraceId ? (
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/20">
-                    trace {debugTraceId.slice(0, 8)}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {sessionStarted ? (
-              <div className="mt-8 grid max-w-xl gap-4">
-                {isGame ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-white/34">
-                        {sessionState.leftLabel}
-                      </p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[1, 2, 3].map((points) => (
-                          <button
-                            key={`left-${points}`}
-                            type="button"
-                            onClick={() => score("LEFT", points as 1 | 2 | 3)}
-                            className="min-h-16 rounded-[0.75rem] bg-white/[0.06] text-2xl font-black text-white transition hover:bg-amber-100 hover:text-black"
-                          >
-                            +{points}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-white/34">
-                        {sessionState.rightLabel}
-                      </p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[1, 2, 3].map((points) => (
-                          <button
-                            key={`right-${points}`}
-                            type="button"
-                            onClick={() => score("RIGHT", points as 1 | 2 | 3)}
-                            className="min-h-16 rounded-[0.75rem] bg-white/[0.06] text-2xl font-black text-white transition hover:bg-amber-100 hover:text-black"
-                          >
-                            +{points}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
+
+              {sessionStarted ? (
+                <>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => markRep("MAKE")}
-                      className="min-h-24 rounded-[0.75rem] bg-amber-200 text-2xl font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-100"
+                      onClick={() => mark("MAKE")}
+                      className="min-h-28 rounded-[0.75rem] bg-amber-200 text-3xl font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-100"
                     >
                       Make
                     </button>
                     <button
                       type="button"
-                      onClick={() => markRep("MISS")}
-                      className="min-h-24 rounded-[0.75rem] bg-white/[0.06] text-2xl font-black uppercase tracking-[0.12em] text-white transition hover:bg-white/[0.1]"
+                      onClick={() => mark("MISS")}
+                      className="min-h-28 rounded-[0.75rem] bg-white/[0.06] text-3xl font-black uppercase tracking-[0.12em] text-white transition hover:bg-white/[0.1]"
                     >
                       Miss
                     </button>
                   </div>
-                )}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={undoEvent}
-                    className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white"
-                  >
-                    Undo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateClock("toggle")}
-                    disabled={!sessionState.clockEnabled}
-                    className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-30"
-                  >
-                    {sessionState.clockRunning ? "Stop clock" : "Start clock"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateClock("reset")}
-                    disabled={!sessionState.clockEnabled}
-                    className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-30"
-                  >
-                    Reset clock
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={undoEvent}
+                      className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white"
+                    >
+                      Undo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleTimer}
+                      className="min-h-14 rounded-[0.75rem] bg-white/[0.04] text-xs font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/[0.08] hover:text-white"
+                    >
+                      {sessionState.timerRunning ? "Pause time" : "Start time"}
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              {status ? (
+                <div className="text-sm font-bold text-white/42">
+                  <p>{status}</p>
+                  {isUploading || uploadProgress > 0 ? (
+                    <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-amber-100 transition-all duration-500"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
 
-          <div className="overflow-hidden rounded-[1.5rem] bg-[#16120d] shadow-[0_42px_140px_rgba(0,0,0,0.55)]">
-            <div className="aspect-[9/14] bg-[#0a0907]">
-              {playbackUrl ? (
-                <video
-                  ref={previewRef}
-                  src={playbackUrl}
-                  className="h-full w-full object-cover opacity-80"
-                  controls
-                  playsInline
-                  preload="metadata"
-                />
-              ) : (
-                <div className="grid h-full place-items-center bg-[radial-gradient(circle_at_center,#2a2117_0%,#090806_68%)] px-8 text-center">
-                  <p className="text-4xl font-black leading-none tracking-[-0.05em] text-white">
-                    Playback appears here.
-                  </p>
-                </div>
-              )}
-            </div>
-            <div className="p-6">
-              <p className="text-sm font-bold text-amber-100/65">
-                {durationLabel}
+          <aside className="grid gap-4">
+            <section className="rounded-[0.75rem] bg-[#16120d] p-5">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
+                Compared to last session
               </p>
-              <p className="mt-3 text-4xl font-black leading-[0.95] tracking-[-0.05em] text-white">
-                {playbackUrl ? "PLAYBACK READY" : "READY"}
-              </p>
-              <p className="mt-4 text-sm leading-6 text-white/42">
-                {playbackTitle || "The saved video becomes watchable first."}
-              </p>
-              <div className="mt-5 grid gap-2 text-sm text-white/38">
-                {fileSizeLabel ? <p>Size: {fileSizeLabel}</p> : null}
-                {createdLabel ? <p>Saved: {createdLabel}</p> : null}
-                {playbackUrl ? (
-                  <p className="break-all">Playback URL: {playbackUrl}</p>
-                ) : null}
-              </div>
-              {sessionStarted && !isGame ? (
-                <div className="mt-6 grid gap-2 border-t border-white/10 pt-5 text-sm text-white/46">
-                  <p>Attempts: {metrics.attempts}</p>
-                  <p>Make rate: {percent(metrics.makeRate)}</p>
-                  <p>Best stretch: {metrics.heatWindow.makes} makes in {metrics.heatWindow.seconds} seconds.</p>
-                  <p>Longest empty stretch: {metrics.droughtSeconds} seconds.</p>
-                  <p>
-                    Shot changed from {percent(metrics.earlyRate)} early to{" "}
-                    {percent(metrics.lateRate)} late.
+              <div className="mt-4 grid gap-3">
+                {sessionState.progression.map((item) => (
+                  <p key={item.id} className="text-lg font-black tracking-[-0.03em] text-white">
+                    {item.label}
                   </p>
-                  <p>
-                    {metrics.rushChange
-                      ? `Shoots ${Math.abs(metrics.rushChange)}% ${
-                          metrics.rushChange > 0 ? "faster" : "slower"
-                        } after misses.`
-                      : "No post-miss pace change yet."}
-                  </p>
-                  <p>{metrics.rhythmWindow}</p>
-                </div>
-              ) : null}
-              {sessionState.timeline.length ? (
-                <div className="mt-6 grid gap-3 border-t border-white/10 pt-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
-                    Replay memory
-                  </p>
-                  {sessionState.timeline.slice(0, 6).map((event) => (
-                    <article key={event.id} className="rounded-[0.75rem] bg-black/24 p-4">
-                      <p className="text-xs font-bold text-amber-100/58">
-                        [{event.gameClock}]
-                      </p>
-                      <p className="mt-2 text-lg font-black tracking-[-0.03em] text-white">
-                        {event.type === "SCORE"
-                          ? `${event.sideLabel} +${event.points}`
-                          : event.type}
-                      </p>
-                      <p className="mt-1 text-sm text-white/42">{event.label}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-              <div className="mt-6 flex h-12 items-end gap-1">
-                {waveformBars.map((height, index) => (
-                  <span
-                    key={`${height}-${index}`}
-                    className={`w-full rounded-full transition ${
-                      isUploading && index % 3 === 0
-                        ? "bg-amber-100/70"
-                        : "bg-white/16"
-                    }`}
-                    style={{ height: `${height}%` }}
-                  />
                 ))}
               </div>
-              {showDebug && debugLines.length ? (
-                <div className="mt-6 border-t border-white/10 pt-4">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-white/24">
-                    Debug
+            </section>
+
+            <section className="rounded-[0.75rem] bg-[#16120d] p-5">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
+                Spurts
+              </p>
+              <div className="mt-4 grid gap-3">
+                {streamSpurts.length ? (
+                  streamSpurts.map((spurt) => (
+                    <article key={spurt.id} className="border-t border-white/10 pt-3">
+                      <p className="text-sm font-black uppercase tracking-[0.12em] text-amber-100/70">
+                        {spurt.label}
+                      </p>
+                      <p className="mt-1 text-2xl font-black tracking-[-0.05em] text-white">
+                        {spurt.type === "LONGEST_DROUGHT"
+                          ? `0 makes in ${spurt.seconds} seconds`
+                          : `${spurt.count} ${
+                              spurt.type === "EMPTY_SPURT" ? "misses" : "makes"
+                            } in ${spurt.seconds} seconds`}
+                      </p>
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm font-bold text-white/38">
+                    Spurts appear when the stream changes shape.
                   </p>
-                  <div className="mt-3 grid gap-1 text-xs text-white/38">
-                    {debugLines.map((line, index) => (
-                      <p key={`${line}-${index}`}>{line}</p>
-                    ))}
-                  </div>
-                </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[0.75rem] bg-[#16120d] p-5">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-white/30">
+                Replay evidence
+              </p>
+              <p className="mt-3 text-sm font-bold text-white/44">
+                {playbackUrl ? "Attached quietly." : "Optional."}
+              </p>
+              {playbackUrl ? (
+                <details className="mt-4">
+                  <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.14em] text-amber-100/70">
+                    Open replay
+                  </summary>
+                  <video
+                    ref={evidenceVideoRef}
+                    src={playbackUrl}
+                    className="mt-4 aspect-video w-full rounded-[0.75rem] bg-black object-cover"
+                    controls
+                    playsInline
+                    preload="metadata"
+                  />
+                </details>
               ) : null}
-            </div>
-          </div>
+            </section>
+          </aside>
         </section>
       </div>
     </main>

@@ -1,38 +1,25 @@
-import type { SessionMetrics } from "@/lib/session/types"
+import type { StreamMetrics } from "@/lib/session/types"
 import type { TimelineEvent } from "@/lib/timeline/types"
 
-export const emptyMetrics: SessionMetrics = {
+export const emptyStreamMetrics: StreamMetrics = {
   attempts: 0,
   makes: 0,
   misses: 0,
   makeRate: 0,
-  makesPerMinute: 0,
-  attemptsPerMinute: 0,
-  avgInterval: 0,
-  makeStreak: 0,
-  missStreak: 0,
-  heatWindow: {
+  elapsedMs: 0,
+  avgIntervalSeconds: 0,
+  intervalRange: "No attempts yet.",
+  longestStreak: 0,
+  longestDroughtSeconds: 0,
+  bestSpurt: {
     makes: 0,
     seconds: 0,
   },
-  droughtSeconds: 0,
-  earlyRate: 0,
-  lateRate: 0,
-  dropoff: 0,
-  rushChange: 0,
-  rhythmWindow: "No attempt rhythm yet.",
-}
-
-function round(value: number, digits = 1) {
-  const scale = 10 ** digits
-
-  return Math.round(value * scale) / scale
-}
-
-function rate(makes: number, attempts: number) {
-  if (!attempts) return 0
-
-  return makes / attempts
+  emptySpurt: {
+    misses: 0,
+    seconds: 0,
+  },
+  rushAfterMissPct: 0,
 }
 
 function average(values: number[]) {
@@ -41,18 +28,28 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
-function attemptEvents(events: TimelineEvent[]) {
+function round(value: number, digits = 1) {
+  const scale = 10 ** digits
+
+  return Math.round(value * scale) / scale
+}
+
+function seconds(value: number) {
+  return Math.max(0, Math.round(value / 1000))
+}
+
+function attemptsForStream(events: TimelineEvent[], streamId: string) {
   return events
-    .filter((event) => event.type === "MAKE" || event.type === "MISS")
+    .filter((event) => event.streamId === streamId)
     .sort((a, b) => a.timestampMs - b.timestampMs)
 }
 
-function longestStreak(events: TimelineEvent[], type: "MAKE" | "MISS") {
+function longestStreak(events: TimelineEvent[]) {
   let best = 0
   let current = 0
 
   for (const event of events) {
-    if (event.type === type) {
+    if (event.type === "MAKE") {
       current += 1
       best = Math.max(best, current)
     } else {
@@ -63,84 +60,65 @@ function longestStreak(events: TimelineEvent[], type: "MAKE" | "MISS") {
   return best
 }
 
-function calculateHeatWindow(events: TimelineEvent[]) {
+function longestDrought(events: TimelineEvent[], elapsedMs: number) {
+  if (!events.length) return 0
+
   const makes = events.filter((event) => event.type === "MAKE")
 
-  if (!makes.length) {
-    return {
-      makes: 0,
-      seconds: 0,
-    }
-  }
+  if (!makes.length) return seconds(elapsedMs || events[events.length - 1].timestampMs)
 
-  let bestMakes = 1
-  let bestSeconds = 0
-
-  for (let start = 0; start < makes.length; start += 1) {
-    for (let end = start; end < makes.length; end += 1) {
-      const seconds = Math.max(
-        0,
-        Math.round((makes[end].timestampMs - makes[start].timestampMs) / 1000)
-      )
-      const count = end - start + 1
-
-      if (
-        count > bestMakes ||
-        (count === bestMakes && (bestSeconds === 0 || seconds < bestSeconds))
-      ) {
-        bestMakes = count
-        bestSeconds = seconds
-      }
-    }
-  }
-
-  return {
-    makes: bestMakes,
-    seconds: bestSeconds,
-  }
-}
-
-function calculateDrought(events: TimelineEvent[], sessionSeconds: number) {
-  const attempts = attemptEvents(events)
-  const makes = attempts.filter((event) => event.type === "MAKE")
-
-  if (!attempts.length) return 0
-  if (!makes.length) return Math.max(0, Math.round(sessionSeconds))
-
-  let longest = Math.max(0, makes[0].timestampMs - attempts[0].timestampMs)
+  let longest = makes[0].timestampMs
 
   for (let index = 1; index < makes.length; index += 1) {
     longest = Math.max(longest, makes[index].timestampMs - makes[index - 1].timestampMs)
   }
 
-  const lastAttempt = attempts[attempts.length - 1]
-  const lastMake = makes[makes.length - 1]
-  longest = Math.max(longest, lastAttempt.timestampMs - lastMake.timestampMs)
+  longest = Math.max(longest, Math.max(0, elapsedMs - makes[makes.length - 1].timestampMs))
 
-  return Math.round(longest / 1000)
+  return seconds(longest)
 }
 
-function splitRates(events: TimelineEvent[], sessionMs: number) {
-  if (!events.length || sessionMs <= 0) {
+function cluster(events: TimelineEvent[], type: "MAKE" | "MISS") {
+  const matches = events.filter((event) => event.type === type)
+
+  if (!matches.length) {
     return {
-      earlyRate: 0,
-      lateRate: 0,
+      count: 0,
+      seconds: 0,
     }
   }
 
-  const third = sessionMs / 3
-  const early = events.filter((event) => event.timestampMs <= third)
-  const late = events.filter((event) => event.timestampMs > third * 2)
-  const earlyMakes = early.filter((event) => event.type === "MAKE").length
-  const lateMakes = late.filter((event) => event.type === "MAKE").length
+  let best = matches.slice(0, 1)
+
+  for (let start = 0; start < matches.length; start += 1) {
+    for (let end = start; end < matches.length; end += 1) {
+      const count = end - start + 1
+      const span = matches[end].timestampMs - matches[start].timestampMs
+      const bestSpan = best[best.length - 1].timestampMs - best[0].timestampMs
+
+      if (count > best.length || (count === best.length && span < bestSpan)) {
+        best = matches.slice(start, end + 1)
+      }
+    }
+  }
 
   return {
-    earlyRate: rate(earlyMakes, early.length),
-    lateRate: rate(lateMakes, late.length),
+    count: best.length,
+    seconds: seconds(best[best.length - 1].timestampMs - best[0].timestampMs),
   }
 }
 
-function calculateRushChange(events: TimelineEvent[], intervals: number[]) {
+function intervalRange(intervals: number[]) {
+  if (!intervals.length) return "No attempt rhythm yet."
+
+  const sorted = intervals.map((value) => value / 1000).sort((a, b) => a - b)
+  const low = Math.max(0, Math.floor(sorted[Math.floor(sorted.length * 0.25)]))
+  const high = Math.max(low + 1, Math.ceil(sorted[Math.floor(sorted.length * 0.75)]))
+
+  return `${low}-${high}s between attempts`
+}
+
+function rushAfterMiss(events: TimelineEvent[], intervals: number[]) {
   if (events.length < 3 || !intervals.length) return 0
 
   const postMissIntervals: number[] = []
@@ -152,57 +130,49 @@ function calculateRushChange(events: TimelineEvent[], intervals: number[]) {
   }
 
   const normal = average(intervals)
-  const postMiss = average(postMissIntervals)
+  const afterMiss = average(postMissIntervals)
 
-  if (!normal || !postMiss) return 0
+  if (!normal || !afterMiss) return 0
 
-  return round(((normal - postMiss) / normal) * 100, 0)
+  return Math.round(((normal - afterMiss) / normal) * 100)
 }
 
-function rhythmWindow(intervals: number[]) {
-  if (!intervals.length) return "No attempt rhythm yet."
-
-  const seconds = intervals.map((interval) => interval / 1000).sort((a, b) => a - b)
-  const middle = seconds[Math.floor(seconds.length / 2)]
-  const low = Math.max(0, Math.floor(middle))
-  const high = Math.max(low + 1, Math.ceil(middle))
-
-  return `Most attempts came every ${low}-${high} seconds.`
-}
-
-export function calculateMetrics({
+export function calculateStreamMetrics({
   events,
-  sessionMs,
+  streamId,
+  elapsedMs,
 }: {
   events: TimelineEvent[]
-  sessionMs: number
-}): SessionMetrics {
-  const attempts = attemptEvents(events)
+  streamId: string
+  elapsedMs: number
+}): StreamMetrics {
+  const attempts = attemptsForStream(events, streamId)
   const makes = attempts.filter((event) => event.type === "MAKE").length
   const misses = attempts.filter((event) => event.type === "MISS").length
   const intervals = attempts
     .slice(1)
     .map((event, index) => event.timestampMs - attempts[index].timestampMs)
-  const sessionSeconds = Math.max(1, sessionMs / 1000)
-  const sessionMinutes = sessionSeconds / 60
-  const { earlyRate, lateRate } = splitRates(attempts, sessionMs)
+  const hot = cluster(attempts, "MAKE")
+  const empty = cluster(attempts, "MISS")
 
   return {
     attempts: attempts.length,
     makes,
     misses,
-    makeRate: rate(makes, attempts.length),
-    makesPerMinute: round(makes / sessionMinutes),
-    attemptsPerMinute: round(attempts.length / sessionMinutes),
-    avgInterval: round(average(intervals) / 1000),
-    makeStreak: longestStreak(attempts, "MAKE"),
-    missStreak: longestStreak(attempts, "MISS"),
-    heatWindow: calculateHeatWindow(attempts),
-    droughtSeconds: calculateDrought(attempts, sessionSeconds),
-    earlyRate,
-    lateRate,
-    dropoff: earlyRate - lateRate,
-    rushChange: calculateRushChange(attempts, intervals),
-    rhythmWindow: rhythmWindow(intervals),
+    makeRate: attempts.length ? makes / attempts.length : 0,
+    elapsedMs,
+    avgIntervalSeconds: round(average(intervals) / 1000),
+    intervalRange: intervalRange(intervals),
+    longestStreak: longestStreak(attempts),
+    longestDroughtSeconds: longestDrought(attempts, elapsedMs),
+    bestSpurt: {
+      makes: hot.count,
+      seconds: hot.seconds,
+    },
+    emptySpurt: {
+      misses: empty.count,
+      seconds: empty.seconds,
+    },
+    rushAfterMissPct: rushAfterMiss(attempts, intervals),
   }
 }

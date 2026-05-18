@@ -1,96 +1,78 @@
+import type { ProgressionSignal } from "@/lib/progression/types"
 import type { ReplayMoment } from "@/lib/replay/types"
-import type { RunState } from "@/lib/runs/types"
+import type { Spurt } from "@/lib/spurts/types"
 import type { TimelineEvent } from "@/lib/timeline/types"
 
-export type SessionMode = "GAME" | "REP"
-
-export type TeamSide = "LEFT" | "RIGHT"
-
-export type TimelineEventType = "MAKE" | "MISS" | "SCORE"
-
-export type SessionMetrics = {
+export type StreamMetrics = {
   attempts: number
   makes: number
   misses: number
   makeRate: number
-  makesPerMinute: number
-  attemptsPerMinute: number
-  avgInterval: number
-  makeStreak: number
-  missStreak: number
-  heatWindow: {
+  elapsedMs: number
+  avgIntervalSeconds: number
+  intervalRange: string
+  longestStreak: number
+  longestDroughtSeconds: number
+  bestSpurt: {
     makes: number
     seconds: number
   }
-  droughtSeconds: number
-  earlyRate: number
-  lateRate: number
-  dropoff: number
-  rushChange: number
-  rhythmWindow: string
+  emptySpurt: {
+    misses: number
+    seconds: number
+  }
+  rushAfterMissPct: number
+}
+
+export type Stream = {
+  id: string
+  label: string
+  attempts: number
+  makes: number
+  misses: number
+  metrics: StreamMetrics
 }
 
 export type SessionPlayback = {
   replayId?: string
   videoUrl?: string
-  fileName?: string
   durationSeconds: number
+  attachedAt?: number
 }
 
 export type SessionState = {
   sessionId: string
-  mode: SessionMode
   sessionName: string
   createdAt: number
   updatedAt: number
-  leftLabel?: string
-  rightLabel?: string
-  leftScore?: number
-  rightScore?: number
-  makes?: number
-  misses?: number
-  clockMs: number
-  clockRunning: boolean
-  clockEnabled: boolean
-  period?: number
-  periodLengthMs?: number
-  targetMakes?: number
+  elapsedMs: number
+  timerRunning: boolean
+  activeStreamId: string
+  streams: Stream[]
   timeline: TimelineEvent[]
+  spurts: Spurt[]
   replayMoments: ReplayMoment[]
-  metrics: SessionMetrics
-  runState: RunState
+  progression: ProgressionSignal[]
   playback: SessionPlayback
 }
 
-export type GameSetupInput = {
-  mode: "GAME"
+export type SessionSetupInput = {
   sessionName: string
-  leftLabel: string
-  rightLabel: string
-  startingLeftScore: number
-  startingRightScore: number
-  clockEnabled: boolean
-  periodLengthMinutes?: number
+  streamLabels: string[]
 }
 
-export type RepSetupInput = {
-  mode: "REP"
-  drillName: string
-  durationMinutes: number
-  targetMakes?: number
-  clockEnabled: boolean
+export type SessionEventInput = {
+  streamId: string
+  type: "MAKE" | "MISS"
+  replayTimestamp: number
 }
 
-export type SessionSetupInput = GameSetupInput | RepSetupInput
-
-export type SessionEventInput =
-  | {
-      type: "SCORE"
-      side: TeamSide
-      points: 1 | 2 | 3
-      replayTimestamp: number
-    }
-  | {
-      type: "MAKE" | "MISS"
-      replayTimestamp: number
-    }
+export type StoredSessionSummary = {
+  sessionId: string
+  sessionName: string
+  completedAt: number
+  streams: Array<{
+    label: string
+    metrics: StreamMetrics
+  }>
+}

@@ -15,7 +15,7 @@ export function createReplayMoment({
     timestampMs: event.timestampMs,
     replayTimestamp: event.replayTimestamp,
     eventType: event.type,
-    label: event.label,
+    label: `${event.streamLabel} ${event.type.toLowerCase()}`,
     videoUrl,
     createdAt: event.createdAt,
   }
