@@ -142,6 +142,38 @@ function uploadWithProgress({
   })
 }
 
+function triggerDelayedExtraction(replayId: string, traceId: string) {
+  console.info("AXIS MOBILE UPLOAD", {
+    traceId,
+    stage: "delayed-extraction-start",
+    replayId,
+  })
+
+  void fetch(`/api/upload/extract/${replayId}`, {
+    method: "POST",
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}))
+
+      console.info("AXIS MOBILE UPLOAD", {
+        traceId,
+        stage: "delayed-extraction-response",
+        replayId,
+        status: response.status,
+        extractionStage:
+          typeof data.stage === "string" ? data.stage : "unknown",
+      })
+    })
+    .catch((error) => {
+      console.warn("AXIS MOBILE UPLOAD", {
+        traceId,
+        stage: "delayed-extraction-queued",
+        replayId,
+        error,
+      })
+    })
+}
+
 function mobileUploadInfo(file: File): ClientUploadInfo {
   const userAgent = navigator.userAgent || ""
   const isIOS = /iPad|iPhone|iPod/.test(userAgent)
@@ -539,8 +571,13 @@ export default function UploadMemoryConsole({
       setProcessingLine(
         result.fallback
           ? result.recovery || "Video uploaded, rebuilding anchors."
-          : "Saved to Axis"
+          : result.extractionStatus === "poster-ready"
+            ? "Saved to Axis"
+            : "Saved. Rebuilding poster frame."
       )
+      if (result.replayId) {
+        triggerDelayedExtraction(result.replayId, result.traceId || uploadInfo.traceId)
+      }
     } catch (error) {
       console.error("UPLOAD MEMORY FAILED", error)
       setStatus("Still processing...")

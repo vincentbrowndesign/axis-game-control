@@ -10,6 +10,8 @@ export type AxisUploadResponse = {
   recovery?: string
   stored?: boolean
   fallback?: boolean
+  posterUrl?: string
+  extractionStatus?: string
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -47,6 +49,8 @@ export function normalizeUploadResponse(
     recovery: asString(record.recovery),
     stored: record.stored === true,
     fallback: record.fallback === true,
+    posterUrl: asString(record.posterUrl),
+    extractionStatus: asString(record.extractionStatus),
   }
 }
 

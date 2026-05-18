@@ -11,6 +11,7 @@ import { makeTimelineEvent } from "@/lib/axis/reinforcement"
 import { extractReplayLandmarks } from "@/lib/axis-ai/extractReplayLandmarks"
 import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
+import { extractPosterFrame } from "@/lib/video/extractPosterFrame"
 
 export const runtime = "nodejs"
 
@@ -123,6 +124,103 @@ function recoverableUploadResponse({
   }
 
   return safeJson(body, 202)
+}
+
+async function createSignedReplayUrl(filePath: string, ttl: number) {
+  return supabaseAdmin.storage
+    .from("axis-replays")
+    .createSignedUrl(filePath, ttl)
+}
+
+async function uploadPosterFrame({
+  traceId,
+  userId,
+  sessionId,
+  buffer,
+  extension,
+  durationSeconds,
+}: {
+  traceId: string
+  userId: string
+  sessionId: string
+  buffer: Buffer
+  extension: string
+  durationSeconds: number
+}) {
+  logUploadStage(traceId, "poster-extraction-start", {
+    extension,
+    durationSeconds,
+  })
+
+  const poster = await extractPosterFrame({
+    buffer,
+    extension,
+    durationSeconds,
+  })
+
+  if (!poster.ok || !poster.buffer) {
+    logUploadFailure(traceId, "poster-extraction", {
+      attemptedAtSeconds: poster.attemptedAtSeconds,
+      detail: poster.error,
+    })
+
+    return {
+      ok: false,
+      status: "queued",
+      attemptedAtSeconds: poster.attemptedAtSeconds,
+      error: poster.error || "poster extraction failed",
+    }
+  }
+
+  const posterPath = `${userId}/posters/${sessionId}.jpg`
+  const uploaded = await supabaseAdmin.storage
+    .from("axis-replays")
+    .upload(posterPath, poster.buffer, {
+      contentType: "image/jpeg",
+      upsert: true,
+    })
+
+  if (uploaded.error) {
+    logUploadFailure(traceId, "poster-storage", {
+      detail: uploaded.error.message,
+    })
+
+    return {
+      ok: false,
+      status: "queued",
+      attemptedAtSeconds: poster.attemptedAtSeconds,
+      error: uploaded.error.message,
+    }
+  }
+
+  const signedPoster = await createSignedReplayUrl(posterPath, 60 * 60 * 24 * 7)
+
+  if (signedPoster.error) {
+    logUploadFailure(traceId, "poster-signed-url", {
+      detail: signedPoster.error.message,
+    })
+
+    return {
+      ok: false,
+      status: "queued",
+      posterPath,
+      attemptedAtSeconds: poster.attemptedAtSeconds,
+      error: signedPoster.error.message,
+    }
+  }
+
+  logUploadStage(traceId, "poster-extraction-complete", {
+    posterPath,
+    attemptedAtSeconds: poster.attemptedAtSeconds,
+  })
+
+  return {
+    ok: true,
+    status: "ready",
+    posterPath,
+    posterUrl: signedPoster.data.signedUrl,
+    attemptedAtSeconds: poster.attemptedAtSeconds,
+  }
 }
 
 function detailFromError(error: unknown) {
@@ -406,9 +504,7 @@ export async function POST(request: Request) {
       ttl: signedUrlTtl,
     })
 
-    const signedUrl = await supabaseAdmin.storage
-      .from("axis-replays")
-      .createSignedUrl(filePath, signedUrlTtl)
+    const signedUrl = await createSignedReplayUrl(filePath, signedUrlTtl)
 
     if (signedUrl.error) {
       return recoverableUploadResponse({
@@ -434,10 +530,22 @@ export async function POST(request: Request) {
     const candidateLandmarks = extractReplayLandmarks({
       durationSeconds: safeDuration,
     })
+    const posterResult = await uploadPosterFrame({
+      traceId,
+      userId: user.id,
+      sessionId,
+      buffer,
+      extension: normalized.extension,
+      durationSeconds: safeDuration,
+    })
+    const extractionStatus = posterResult.ok
+      ? "poster-ready"
+      : "queued-for-retry"
 
     logUploadStage(traceId, "extraction-stage", {
       durationSeconds: safeDuration,
       candidateCount: candidateLandmarks.length,
+      status: extractionStatus,
     })
     logUploadStage(traceId, "keyframe-generation-stage", {
       mode: "client-progressive",
@@ -481,10 +589,24 @@ export async function POST(request: Request) {
           originalType: normalized.mime || null,
           originalSize: file.size,
           signedUrlExpiresIn: signedUrlTtl,
+          posterUrl: posterResult.ok ? posterResult.posterUrl : null,
+          posterPath: posterResult.posterPath || null,
           workflowStage,
           candidateLandmarks,
           captionLandmarks: candidateLandmarks,
-          memoryExtractionStatus: "candidate-landmarks-ready",
+          memoryExtractionStatus: extractionStatus,
+          extractionQueue: {
+            status: posterResult.ok ? "complete" : "queued",
+            attempts: 1,
+            nextStage: posterResult.ok ? null : "poster-frame-retry",
+            reason: posterResult.ok ? null : posterResult.error,
+            attemptedAtSeconds: posterResult.attemptedAtSeconds,
+          },
+          playbackFallback: {
+            status: "ready",
+            source: "signed-storage-url",
+            reason: "uploaded-video-preserved-before-extraction",
+          },
           correctionTimelineEvents: [
             makeTimelineEvent("CLIP_CAPTURED", "Clip captured"),
           ],
@@ -558,6 +680,8 @@ export async function POST(request: Request) {
       stage: "complete",
       traceId,
       stored: true,
+      posterUrl: posterResult.ok ? posterResult.posterUrl : undefined,
+      extractionStatus,
     }
 
     return safeJson(body)
