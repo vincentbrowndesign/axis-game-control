@@ -1,8 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
-import { makeTimelineEvent } from "@/lib/axis/reinforcement"
-import { extractReplayLandmarks } from "@/lib/axis-ai/extractReplayLandmarks"
-import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
 import {
   cleanText,
   normalizeEnvironment,
@@ -23,7 +20,6 @@ type CompleteUploadBody = {
   environment?: string
   mission?: string
   player?: string
-  workflowStage?: string
   client?: Record<string, unknown>
 }
 
@@ -109,7 +105,7 @@ export async function POST(request: Request) {
           traceId,
           stored: true,
           fallback: true,
-          recovery: "Playback ready. Extraction continuing.",
+          recovery: "Playback ready.",
         },
         202
       )
@@ -120,12 +116,6 @@ export async function POST(request: Request) {
     const durationSeconds = Number.isFinite(body.durationSeconds)
       ? Number(body.durationSeconds)
       : 0
-    const workflowStage = mapWorkflowStage(
-      body.workflowStage || body.environment || "practice"
-    )
-    const candidateLandmarks = extractReplayLandmarks({
-      durationSeconds,
-    })
 
     const inserted = await supabaseAdmin
       .from("axis_sessions")
@@ -140,13 +130,13 @@ export async function POST(request: Request) {
         mission: cleanText(body.mission || "Replay memory", "Replay memory"),
         player_name: playerName,
         player_id: playerIdFromName(playerName),
-        workflow_stage: workflowStage,
+        workflow_stage: "practice",
         environment: normalizeEnvironment(body.environment || "practice"),
         duration_seconds: durationSeconds,
         status: "stored",
         tags: [],
         transcript_text: "",
-        ai_summary: "Playback saved. Extraction can continue later.",
+        ai_summary: "Playback saved.",
         embedding_status: "pending",
         semantic_tags: [],
         metadata: {
@@ -154,26 +144,12 @@ export async function POST(request: Request) {
           originalName: body.fileName || null,
           originalType: body.contentType || null,
           originalSize: body.sizeBytes || 0,
-          workflowStage,
-          candidateLandmarks,
-          captionLandmarks: candidateLandmarks,
-          memoryExtractionStatus: "queued-for-retry",
-          extractionQueue: {
-            status: "queued",
-            attempts: 0,
-            nextStage: "poster-frame-retry",
-            reason: "playback-returned-before-extraction",
-            attemptedAtSeconds: [],
-          },
           playbackFallback: {
             status: "ready",
             source: "direct-storage-upload",
-            reason: "browser-uploaded-video-before-extraction",
+            reason: "browser-uploaded-video",
           },
           client: body.client || {},
-          correctionTimelineEvents: [
-            makeTimelineEvent("CLIP_CAPTURED", "Clip captured"),
-          ],
         },
       })
       .select("id, video_url")
@@ -195,7 +171,7 @@ export async function POST(request: Request) {
           traceId,
           stored: true,
           fallback: true,
-          recovery: "Playback ready. Extraction continuing.",
+          recovery: "Playback ready.",
         },
         202
       )
@@ -233,7 +209,6 @@ export async function POST(request: Request) {
       stage: "complete",
       traceId,
       stored: true,
-      extractionStatus: "queued-for-retry",
     })
   } catch (error) {
     console.error("AXIS UPLOAD COMPLETE FAILURE", {

@@ -8,13 +8,8 @@ import {
   type AxisUploadResponse,
 } from "@/lib/uploadResponse"
 
-type Props = {
-  replayMoments: unknown[]
-  recentSessions: unknown[]
-  playerMoments: unknown[]
-}
-
 const waveformBars = [42, 72, 48, 86, 56, 64, 94, 44, 78, 52, 88, 60, 46, 82]
+const showDebug = process.env.NODE_ENV !== "production"
 
 type ClientUploadInfo = {
   traceId: string
@@ -29,9 +24,9 @@ type ClientUploadInfo = {
 }
 
 function uploadStatus(data: AxisUploadResponse) {
-  if (data.ok) return "Playback ready. Extraction continuing."
-  if (data.recovery) return "Playback ready. Extraction continuing."
-  if (data.stored) return "Playback ready. Extraction continuing."
+  if (data.ok) return "Playback ready."
+  if (data.recovery) return "Playback ready."
+  if (data.stored) return "Playback ready."
   if (data.error) return "Still processing..."
 
   return "Still processing..."
@@ -58,38 +53,6 @@ function safeParseUploadResponse(text: string) {
       error: "Upload response unreadable",
     } satisfies AxisUploadResponse
   }
-}
-
-function triggerDelayedExtraction(replayId: string, traceId: string) {
-  console.info("AXIS MOBILE UPLOAD", {
-    traceId,
-    stage: "delayed-extraction-start",
-    replayId,
-  })
-
-  void fetch(`/api/upload/extract/${replayId}`, {
-    method: "POST",
-  })
-    .then(async (response) => {
-      const data = await response.json().catch(() => ({}))
-
-      console.info("AXIS MOBILE UPLOAD", {
-        traceId,
-        stage: "delayed-extraction-response",
-        replayId,
-        status: response.status,
-        extractionStage:
-          typeof data.stage === "string" ? data.stage : "unknown",
-      })
-    })
-    .catch((error) => {
-      console.warn("AXIS MOBILE UPLOAD", {
-        traceId,
-        stage: "delayed-extraction-queued",
-        replayId,
-        error,
-      })
-    })
 }
 
 async function completeUpload({
@@ -180,7 +143,7 @@ function mobileUploadInfo(file: File): ClientUploadInfo {
   }
 }
 
-function readVideoMetadata(file: File, url: string) {
+function readVideoMetadata(url: string) {
   return new Promise<{ duration: number; url: string }>((resolve) => {
     const video = document.createElement("video")
 
@@ -203,8 +166,19 @@ function readVideoMetadata(file: File, url: string) {
   })
 }
 
-export default function UploadMemoryConsole(props: Props) {
-  void props
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const index = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1
+  )
+  const value = bytes / 1024 ** index
+
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
+}
+
+export default function UploadMemoryConsole() {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const previewRef = useRef<HTMLVideoElement | null>(null)
   const localVideoUrlRef = useRef<string | null>(null)
@@ -216,6 +190,15 @@ export default function UploadMemoryConsole(props: Props) {
   const [playbackUrl, setPlaybackUrl] = useState("")
   const [playbackTitle, setPlaybackTitle] = useState("")
   const [durationLabel, setDurationLabel] = useState("0:00")
+  const [fileSizeLabel, setFileSizeLabel] = useState("")
+  const [createdLabel, setCreatedLabel] = useState("")
+  const [debugLines, setDebugLines] = useState<string[]>([])
+
+  function addDebug(line: string) {
+    if (!showDebug) return
+
+    setDebugLines((lines) => [...lines, line].slice(-12))
+  }
 
   useEffect(
     () => () => {
@@ -234,8 +217,14 @@ export default function UploadMemoryConsole(props: Props) {
     setProcessingLine("Reading the footage")
     setUploadProgress(0)
     setDebugTraceId("")
+    setDebugLines([])
+    setFileSizeLabel("")
+    setCreatedLabel("")
     const uploadInfo = mobileUploadInfo(file)
     setDebugTraceId(uploadInfo.traceId)
+    addDebug(`file selected: ${file.name || uploadInfo.uploadName}`)
+    addDebug(`file type: ${file.type || uploadInfo.uploadType}`)
+    addDebug(`file size: ${formatBytes(file.size)}`)
 
     console.info("AXIS MOBILE UPLOAD", {
       traceId: uploadInfo.traceId,
@@ -263,11 +252,12 @@ export default function UploadMemoryConsole(props: Props) {
       localVideoUrlRef.current = localUrl
       setPlaybackUrl(localUrl)
       setPlaybackTitle(file.name || "Basketball footage")
+      setFileSizeLabel(formatBytes(file.size))
       setStatus("Playback ready. Saving video.")
       setProcessingLine("Your footage is safe here first.")
       void previewRef.current?.play().catch(() => undefined)
 
-      const metadata = await readVideoMetadata(file, localUrl)
+      const metadata = await readVideoMetadata(localUrl)
       const safeDuration = Math.max(0, Math.floor(metadata.duration))
       const minutes = Math.floor(safeDuration / 60)
       const seconds = safeDuration % 60
@@ -277,6 +267,7 @@ export default function UploadMemoryConsole(props: Props) {
       setStatus("Uploading video")
       setProcessingLine("Saving directly to playback storage.")
       setUploadProgress(12)
+      addDebug("upload started")
 
       const supabase = createClient()
       const {
@@ -289,6 +280,7 @@ export default function UploadMemoryConsole(props: Props) {
       }
 
       const filePath = `${user.id}/${safeStorageName(uploadInfo.uploadName)}`
+      addDebug(`storage path: ${filePath}`)
       const clientDebug = {
         clientTraceId: uploadInfo.traceId,
         clientName: file.name || uploadInfo.uploadName,
@@ -311,9 +303,11 @@ export default function UploadMemoryConsole(props: Props) {
           })
 
         if (uploaded.error) {
+          addDebug(`storage failure: ${uploaded.error.message}`)
           throw uploaded.error
         }
 
+        addDebug("storage success")
         setUploadProgress(78)
         setProcessingLine("Playback copy saved. Opening it now.")
 
@@ -323,6 +317,7 @@ export default function UploadMemoryConsole(props: Props) {
 
         if (!signed.error && signed.data?.signedUrl) {
           setPlaybackUrl(signed.data.signedUrl)
+          addDebug("playback URL created")
         }
 
         const result = await completeUpload({
@@ -340,14 +335,17 @@ export default function UploadMemoryConsole(props: Props) {
         if (result.videoUrl) {
           setPlaybackUrl(result.videoUrl)
         }
-        setProcessingLine("Playback ready. Extraction continuing.")
-        if (result.replayId) {
-          triggerDelayedExtraction(
-            result.replayId,
-            result.traceId || uploadInfo.traceId
-          )
-        }
+        setCreatedLabel(new Date(result.createdAt || Date.now()).toLocaleString())
+        addDebug(
+          result.replayId
+            ? `database insert success: ${result.replayId}`
+            : "database insert deferred"
+        )
+        setProcessingLine("Playback ready.")
       } catch (error) {
+        addDebug(
+          `storage failure: ${error instanceof Error ? error.message : "unknown"}`
+        )
         console.warn("AXIS DIRECT UPLOAD RETRY", {
           traceId: uploadInfo.traceId,
           error,
@@ -366,9 +364,11 @@ export default function UploadMemoryConsole(props: Props) {
           })
 
         if (retry.error) {
+          addDebug(`storage failure: ${retry.error.message}`)
           throw retry.error
         }
 
+        addDebug("storage success")
         setUploadProgress(82)
         const signed = await supabase.storage
           .from("axis-replays")
@@ -376,6 +376,7 @@ export default function UploadMemoryConsole(props: Props) {
 
         if (!signed.error && signed.data?.signedUrl) {
           setPlaybackUrl(signed.data.signedUrl)
+          addDebug("playback URL created")
         }
 
         const result = await completeUpload({
@@ -396,16 +397,21 @@ export default function UploadMemoryConsole(props: Props) {
         if (result.videoUrl) {
           setPlaybackUrl(result.videoUrl)
         }
-        setProcessingLine("Playback ready. Extraction continuing.")
-        if (result.replayId) {
-          triggerDelayedExtraction(
-            result.replayId,
-            result.traceId || uploadInfo.traceId
-          )
-        }
+        setCreatedLabel(new Date(result.createdAt || Date.now()).toLocaleString())
+        addDebug(
+          result.replayId
+            ? `database insert success: ${result.replayId}`
+            : "database insert deferred"
+        )
+        setProcessingLine("Playback ready.")
       }
     } catch (error) {
       console.error("UPLOAD MEMORY FAILED", error)
+      addDebug(
+        `database insert failure: ${
+          error instanceof Error ? error.message : "unknown"
+        }`
+      )
       setStatus("Still processing...")
       setProcessingLine("Playback stays here. Axis will keep trying.")
     } finally {
@@ -434,7 +440,7 @@ export default function UploadMemoryConsole(props: Props) {
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-white/48">
               Choose basketball video from your phone. Axis saves the footage
-              first and keeps playback available while extraction continues.
+              first and keeps playback available.
             </p>
 
             <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -475,7 +481,7 @@ export default function UploadMemoryConsole(props: Props) {
                 <p className="mt-2 text-xs font-bold text-white/35">
                   {uploadProgress
                     ? `${uploadProgress}% uploaded`
-                    : "Playback appears before extraction finishes"}
+                    : "Playback appears as soon as the video is ready"}
                 </p>
                 {debugTraceId ? (
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/20">
@@ -515,6 +521,13 @@ export default function UploadMemoryConsole(props: Props) {
               <p className="mt-4 text-sm leading-6 text-white/42">
                 {playbackTitle || "The saved video becomes watchable first."}
               </p>
+              <div className="mt-5 grid gap-2 text-sm text-white/38">
+                {fileSizeLabel ? <p>Size: {fileSizeLabel}</p> : null}
+                {createdLabel ? <p>Saved: {createdLabel}</p> : null}
+                {playbackUrl ? (
+                  <p className="break-all">Playback URL: {playbackUrl}</p>
+                ) : null}
+              </div>
               <div className="mt-6 flex h-12 items-end gap-1">
                 {waveformBars.map((height, index) => (
                   <span
@@ -528,6 +541,18 @@ export default function UploadMemoryConsole(props: Props) {
                   />
                 ))}
               </div>
+              {showDebug && debugLines.length ? (
+                <div className="mt-6 border-t border-white/10 pt-4">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-white/24">
+                    Debug
+                  </p>
+                  <div className="mt-3 grid gap-1 text-xs text-white/38">
+                    {debugLines.map((line, index) => (
+                      <p key={`${line}-${index}`}>{line}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
