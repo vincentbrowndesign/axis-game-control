@@ -758,7 +758,7 @@ export default function UploadMemoryConsole({
   return (
     <main
       data-axis-mode={initialMode}
-      className="min-h-screen bg-[#050505] px-4 pb-28 pt-5 text-zinc-100 sm:px-6"
+      className="axis-shell min-h-screen px-4 pb-28 pt-5 text-zinc-100 sm:px-6"
     >
       <div className="mx-auto grid max-w-4xl gap-5">
         <RunHeader
@@ -817,8 +817,8 @@ function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }
   }
 
   return (
-    <section className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3">
-      <div className="flex min-h-8 items-center gap-1.5 overflow-hidden">
+    <section className="axis-panel rounded-lg px-3 py-3">
+      <div className="flex min-h-8 items-center gap-1.5 overflow-hidden rounded-full border border-zinc-900 bg-black px-2">
         {signals.length ? (
           signals.map((signal) => {
             const moment = momentsBySignal.get(signal.id)
@@ -836,7 +836,7 @@ function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }
                 key={signal.id}
                 title={moment?.name || signalEventLabel(signal)}
                 className={`block rounded-full transition ${
-                  moment ? "h-4 w-4 shadow-[0_0_14px_rgba(244,244,245,0.25)]" : "h-2.5 w-2.5"
+                  moment ? "h-4 w-4 shadow-[0_0_16px_rgba(244,244,245,0.32)]" : "h-2.5 w-2.5"
                 } ${tone}`}
               />
             )

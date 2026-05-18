@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050505;
+  --foreground: #f4f4f5;
 }
 
 @theme inline {
@@ -22,7 +22,47 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(253, 186, 116, 0.32);
+  color: #ffffff;
+}
+
+.axis-shell {
+  background:
+    radial-gradient(circle at 22% -10%, rgba(251, 146, 60, 0.12), transparent 32rem),
+    radial-gradient(circle at 82% 8%, rgba(56, 189, 248, 0.1), transparent 30rem),
+    #050505;
+}
+
+.axis-panel {
+  background:
+    linear-gradient(180deg, rgba(24, 24, 27, 0.72), rgba(9, 9, 11, 0.9)),
+    #09090b;
+  border: 1px solid rgba(63, 63, 70, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 24px 90px rgba(0, 0, 0, 0.34);
+}
+
+.axis-glass {
+  background: rgba(9, 9, 11, 0.78);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(39, 39, 42, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 @keyframes axis-breathe {

@@ -94,7 +94,7 @@ export function ControlPad({
       <button
         type="button"
         onClick={onUndo}
-        className="mx-auto h-16 w-full max-w-sm rounded-full border border-zinc-700 bg-zinc-950 text-sm font-black uppercase tracking-[0.22em] text-zinc-300 transition active:scale-[0.99] hover:border-zinc-500 hover:text-white"
+        className="axis-glass mx-auto h-16 w-full max-w-sm rounded-full text-sm font-black uppercase tracking-[0.22em] text-zinc-300 transition active:scale-[0.99] hover:border-zinc-500 hover:text-white"
       >
         Undo
       </button>
@@ -124,15 +124,16 @@ function BehaviorLane({
 
   return (
     <div
-      className={`grid gap-2 rounded-lg border bg-black/40 p-2 transition ${
+      className={`axis-panel grid gap-2 rounded-lg p-2 transition ${
         active ? "border-zinc-600" : "border-zinc-900"
       }`}
     >
       <button
         type="button"
         onClick={() => onPick("plus")}
-        className={`min-h-40 rounded-lg border p-5 text-left transition active:scale-[0.99] sm:min-h-48 ${positiveTone}`}
+        className={`relative min-h-40 overflow-hidden rounded-lg border p-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] transition active:scale-[0.99] sm:min-h-48 ${positiveTone}`}
       >
+        <span className="absolute inset-x-0 top-0 h-px bg-white/35" />
         <span className="block truncate text-[10px] font-black uppercase tracking-[0.2em] opacity-65">
           {name}
         </span>
@@ -144,8 +145,9 @@ function BehaviorLane({
       <button
         type="button"
         onClick={() => onPick("minus")}
-        className={`min-h-24 rounded-lg border p-4 text-left transition active:scale-[0.99] sm:min-h-28 ${negativeTone}`}
+        className={`relative min-h-24 overflow-hidden rounded-lg border p-4 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition active:scale-[0.99] sm:min-h-28 ${negativeTone}`}
       >
+        <span className="absolute inset-x-0 top-0 h-px bg-white/10" />
         <span className="block truncate text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
           {name}
         </span>
@@ -200,7 +202,7 @@ function DisclosurePanel({
   }
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-3 shadow-[inset_0_0_24px_rgba(39,39,42,0.28)]">
+    <div className="axis-panel rounded-lg p-3">
       <div className="flex items-center justify-between gap-3">
         <p className="truncate text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
           {teamName} {pending.result === "plus" ? "+" : "-"}
@@ -220,7 +222,7 @@ function DisclosurePanel({
             key={player.id}
             type="button"
             onClick={() => onSelectPlayer(player.id)}
-            className={`h-11 min-w-14 rounded-full border px-4 font-mono text-sm font-black transition active:scale-[0.98] ${
+            className={`h-11 min-w-14 rounded-full border px-4 font-mono text-sm font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition active:scale-[0.98] ${
               selectedPlayerId === player.id
                 ? "border-zinc-200 bg-zinc-100 text-black"
                 : "border-zinc-800 bg-black text-zinc-300 hover:border-zinc-600"
@@ -233,7 +235,7 @@ function DisclosurePanel({
         <button
           type="button"
           onClick={() => setIsAdding((current) => !current)}
-          className="h-11 min-w-11 rounded-full border border-dashed border-zinc-700 bg-black px-4 font-mono text-sm font-black text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-200"
+          className="h-11 min-w-11 rounded-full border border-dashed border-zinc-700 bg-black px-4 font-mono text-sm font-black text-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-zinc-500 hover:text-zinc-200"
           aria-label="Add player"
           title="Add player"
         >
@@ -242,7 +244,7 @@ function DisclosurePanel({
       </div>
 
       {isAdding ? (
-        <div className="mt-3 grid grid-cols-[0.36fr_1fr_auto] gap-2">
+        <div className="mt-3 grid grid-cols-[0.36fr_1fr_auto] gap-2 rounded-lg border border-zinc-900 bg-black/70 p-2">
           <input
             value={number}
             onChange={(event) => setNumber(event.target.value)}
@@ -274,7 +276,7 @@ function DisclosurePanel({
             key={stat}
             type="button"
             onClick={() => onStat(stat)}
-            className="h-12 min-w-16 rounded-full border border-zinc-800 bg-black px-4 font-black uppercase tracking-[0.14em] text-zinc-200 transition active:scale-[0.98] hover:border-zinc-500 hover:bg-zinc-900"
+            className="h-12 min-w-16 rounded-full border border-zinc-800 bg-black px-4 font-black uppercase tracking-[0.14em] text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition active:scale-[0.98] hover:border-zinc-500 hover:bg-zinc-900"
           >
             {stat}
           </button>

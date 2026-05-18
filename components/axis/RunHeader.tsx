@@ -28,7 +28,7 @@ export function RunHeader({
   onReset: () => void
 }) {
   return (
-    <header className="grid gap-3 border-b border-zinc-800 pb-3">
+    <header className="grid gap-3 border-b border-zinc-800/80 pb-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
           Axis
@@ -45,7 +45,7 @@ export function RunHeader({
         </div>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3 shadow-[inset_0_0_24px_rgba(39,39,42,0.45)]">
+      <div className="axis-panel grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg px-3 py-3">
         <div className="grid min-w-0 gap-2">
           <input
             value={run.home}
@@ -76,7 +76,7 @@ export function RunHeader({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2">
+      <div className="axis-glass flex items-center justify-between gap-3 rounded-full px-3 py-2">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
           Signal state
         </p>

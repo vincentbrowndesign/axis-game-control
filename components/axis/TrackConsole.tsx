@@ -320,9 +320,9 @@ export function TrackConsole() {
   const source = activeInference?.source === "openai" ? "AI" : "LOCAL"
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#050505] px-4 pb-8 pt-4 text-zinc-100 sm:px-6">
+    <main className="axis-shell min-h-screen overflow-hidden px-4 pb-8 pt-4 text-zinc-100 sm:px-6">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <header className="grid gap-3 border-b border-zinc-900 pb-3">
+        <header className="grid gap-3 border-b border-zinc-900/90 pb-3">
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300/60">
@@ -372,7 +372,7 @@ export function TrackConsole() {
               {source}
             </span>
           </div>
-          <div className="flex items-center justify-center gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2">
+          <div className="axis-glass flex items-center justify-center gap-3 rounded-full px-3 py-2">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
               Signal state
             </span>
@@ -386,7 +386,7 @@ export function TrackConsole() {
           </div>
         </header>
 
-        <section className="relative overflow-hidden rounded-lg border border-zinc-800 bg-black shadow-[0_18px_80px_rgba(0,0,0,0.42)]">
+        <section className="axis-panel relative overflow-hidden rounded-lg shadow-[0_18px_80px_rgba(0,0,0,0.42)]">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-zinc-400/40 to-transparent" />
           <div className="grid min-h-[31rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[35rem] sm:p-5">
             <div className="flex items-center justify-between gap-3">
@@ -518,7 +518,7 @@ export function TrackConsole() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-[1.15fr_0.85fr]">
-              <div className="min-w-0 rounded-md border border-zinc-900 bg-zinc-950/60 px-4 py-3">
+              <div className="axis-glass min-w-0 rounded-md px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
                     {activeMoment?.label || temporal.state.label}
@@ -536,7 +536,7 @@ export function TrackConsole() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5 overflow-hidden rounded-md border border-zinc-900 bg-zinc-950/70 px-3 py-3">
+              <div className="axis-glass flex items-center gap-1.5 overflow-hidden rounded-md px-3 py-3">
                 {recentSignals.length ? (
                   recentSignals.map((signal) => (
                     <span
@@ -566,7 +566,7 @@ export function TrackConsole() {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-[1fr_0.85fr]">
-            <div className="relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/45 px-4 py-4">
+            <div className="axis-panel relative overflow-hidden rounded-lg px-4 py-4">
               <div className="absolute left-4 right-4 top-1/2 h-px bg-zinc-800" />
               {moments.length ? (
                 <div className="flex gap-8 overflow-x-auto pb-1">
@@ -607,7 +607,7 @@ export function TrackConsole() {
               )}
             </div>
 
-            <details className="group rounded-lg border border-zinc-800 bg-zinc-950/45 px-4 py-4" open>
+            <details className="axis-panel group rounded-lg px-4 py-4" open>
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
                   Event Detail
