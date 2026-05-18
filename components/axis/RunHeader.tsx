@@ -4,6 +4,8 @@ export function RunHeader({
   run,
   elapsed,
   isRunning,
+  homeScore,
+  awayScore,
   onName,
   onPause,
   onResume,
@@ -12,13 +14,15 @@ export function RunHeader({
   run: Run
   elapsed: string
   isRunning: boolean
+  homeScore: number
+  awayScore: number
   onName: (side: "home" | "away", value: string) => void
   onPause: () => void
   onResume: () => void
   onReset: () => void
 }) {
   return (
-    <header className="grid gap-4 border-b border-zinc-800 pb-5">
+    <header className="grid gap-3 border-b border-zinc-800 pb-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
           Axis
@@ -35,28 +39,34 @@ export function RunHeader({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3 shadow-[inset_0_0_24px_rgba(39,39,42,0.45)]">
         <input
           value={run.home}
           onChange={(event) => onName("home", event.target.value)}
           aria-label="Home"
-          className="min-w-0 bg-transparent text-4xl font-black uppercase leading-none text-orange-300 outline-none sm:text-6xl"
+          className="min-w-0 bg-transparent text-left text-lg font-black uppercase leading-none text-orange-300 outline-none sm:text-2xl"
         />
-        <div className="grid justify-start gap-2 sm:justify-center">
-          <div className="rounded-full border border-zinc-800 bg-black px-5 py-3 font-mono text-3xl font-black text-emerald-300 shadow-[inset_0_0_24px_rgba(39,39,42,0.65)] sm:text-4xl">
-            {elapsed}
+        <div className="grid min-w-24 justify-items-center gap-1">
+          <div className="font-mono text-3xl font-black leading-none tracking-[-0.05em] text-zinc-100 sm:text-4xl">
+            <span className="text-orange-300">{homeScore}</span>
+            <span className="px-1 text-zinc-600">-</span>
+            <span className="text-sky-300">{awayScore}</span>
           </div>
-          <div className="flex items-center justify-center gap-2">
-            <ClockButton label={isRunning ? "Pause" : "Start"} onClick={isRunning ? onPause : onResume} />
-            <ClockButton label="Reset" onClick={onReset} />
+          <div className="rounded-full border border-zinc-800 bg-black px-3 py-1 font-mono text-sm font-black text-emerald-300 sm:text-base">
+            {elapsed}
           </div>
         </div>
         <input
           value={run.away}
           onChange={(event) => onName("away", event.target.value)}
           aria-label="Away"
-          className="min-w-0 bg-transparent text-left text-4xl font-black uppercase leading-none text-sky-300 outline-none sm:text-right sm:text-6xl"
+          className="min-w-0 bg-transparent text-right text-lg font-black uppercase leading-none text-sky-300 outline-none sm:text-2xl"
         />
+      </div>
+
+      <div className="flex items-center justify-center gap-2">
+        <ClockButton label={isRunning ? "Pause" : "Start"} onClick={isRunning ? onPause : onResume} />
+        <ClockButton label="Reset" onClick={onReset} />
       </div>
     </header>
   )

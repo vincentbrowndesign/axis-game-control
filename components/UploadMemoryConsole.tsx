@@ -30,6 +30,21 @@ import {
 type AxisMode = "tap" | "track" | "archive"
 type UploadSource = "camera" | "upload"
 
+type TrackMoment = {
+  id: string
+  label: "HOT" | "COLD" | "SPURT" | "SWING" | string
+  name: string
+  summary: string
+  start: number
+  end: number
+  signalIds: string[]
+}
+
+type TrackIntelligence = {
+  moments: TrackMoment[]
+  source: "local" | "openai"
+}
+
 type ClientUploadInfo = {
   traceId: string
   uploadFile: File | Blob
@@ -210,6 +225,86 @@ function artifactName(run: Run, extension: "png" | "pdf") {
     .concat(`.${extension}`)
 }
 
+function compactTime(value: number) {
+  const totalSeconds = Math.max(0, Math.round(value / 1000))
+
+  return `${totalSeconds}s`
+}
+
+function localTrackIntelligence(run: Run): TrackIntelligence {
+  const moments = run.moments.slice(0, 4).map((moment) => {
+    const signals = run.signals.filter(
+      (signal) => signal.time >= moment.start && signal.time <= moment.end
+    )
+    const makes = signals.filter((signal) => signal.result === "make").length
+    const misses = signals.length - makes
+    const label =
+      makes >= 3 && makes >= misses
+        ? "SPURT"
+        : misses >= 3
+          ? "COLD"
+          : signals.some(
+                (signal, index) => index > 0 && signal.side !== signals[index - 1].side
+              )
+            ? "SWING"
+            : "HOT"
+
+    return {
+      id: moment.id,
+      label,
+      name:
+        label === "SPURT"
+          ? "Spurt"
+          : label === "COLD"
+            ? "Cold Stretch"
+            : label === "SWING"
+              ? "Momentum Swing"
+              : "Hot Window",
+      summary: `${signals.length} signals / ${compactTime(moment.end - moment.start)}`,
+      start: moment.start,
+      end: moment.end,
+      signalIds: signals.map((signal) => signal.id),
+    }
+  })
+
+  return {
+    moments,
+    source: "local",
+  }
+}
+
+function trackPayload(run: Run, playbackId?: string) {
+  return {
+    type: "track",
+    run: {
+      id: run.id,
+      home: run.home,
+      away: run.away,
+      startedAt: run.startedAt,
+      playbackId: playbackId || null,
+    },
+    signals: run.signals.map((signal, index) => {
+      const previous = run.signals[index - 1]
+
+      return {
+        id: signal.id,
+        side: signal.side,
+        result: signal.result,
+        time: signal.time,
+        order: index + 1,
+        interval: previous ? signal.time - previous.time : 0,
+      }
+    }),
+    moments: run.moments.map((moment) => ({
+      id: moment.id,
+      label: moment.label,
+      start: moment.start,
+      end: moment.end,
+      time: moment.time,
+    })),
+  }
+}
+
 export default function UploadMemoryConsole({
   initialMode = "tap",
 }: {
@@ -225,6 +320,7 @@ export default function UploadMemoryConsole({
   const [isUploading, setIsUploading] = useState(false)
   const [playbackId, setPlaybackId] = useState<string | undefined>()
   const [hasLoadedStoredRun, setHasLoadedStoredRun] = useState(false)
+  const [openAiTrack, setOpenAiTrack] = useState<TrackIntelligence | null>(null)
   const isRunning = !run.pausedAt
 
   useEffect(() => {
@@ -267,6 +363,42 @@ export default function UploadMemoryConsole({
   const elapsed = formatRunTime(elapsedMs)
   const axisState = useMemo(() => deriveAxisState(run, elapsedMs), [run, elapsedMs])
   const track = useMemo(() => inferTrack(run), [run])
+  const localTrack = useMemo(() => localTrackIntelligence(run), [run])
+  const visibleTrack = openAiTrack || localTrack
+
+  useEffect(() => {
+    if (run.signals.length < 3) return
+    if (typeof window === "undefined") return
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => {
+      fetch("/api/infer", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(trackPayload(run, playbackId)),
+        signal: controller.signal,
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (!data?.track?.moments || !Array.isArray(data.track.moments)) return
+
+          setOpenAiTrack({
+            moments: data.track.moments.slice(0, 4),
+            source: data.track.source === "openai" ? "openai" : "local",
+          })
+        })
+        .catch(() => {
+          setOpenAiTrack(null)
+        })
+    }, 900)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [playbackId, run])
 
   function updateRun(next: Run) {
     setRun({
@@ -296,6 +428,7 @@ export default function UploadMemoryConsole({
       ...run,
       signals: [...run.signals, signal],
     })
+    setOpenAiTrack(null)
     setStatus("")
   }
 
@@ -304,6 +437,7 @@ export default function UploadMemoryConsole({
       ...run,
       signals: run.signals.slice(0, -1),
     })
+    setOpenAiTrack(null)
     setStatus("")
   }
 
@@ -338,6 +472,7 @@ export default function UploadMemoryConsole({
       home: current.home,
       away: current.away,
     }))
+    setOpenAiTrack(null)
     setStatus("")
   }
 
@@ -530,12 +665,15 @@ export default function UploadMemoryConsole({
           run={run}
           elapsed={elapsed}
           isRunning={isRunning}
+          homeScore={axisState.home.makes}
+          awayScore={axisState.away.makes}
           onName={updateName}
           onPause={pauseClock}
           onResume={resumeClock}
           onReset={resetClock}
         />
         <ControlPad home={run.home} away={run.away} onSignal={tapSignal} onUndo={undoSignal} />
+        <ReplayMemoryRail run={run} track={visibleTrack} />
         <StateBar state={axisState} status={status} />
       </div>
 
@@ -599,5 +737,54 @@ function ArtifactNumber({ label, value }: { label: string; value: number | strin
         {value}
       </p>
     </div>
+  )
+}
+
+function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }) {
+  const signals = run.signals.slice(-18)
+  const momentsBySignal = new Map<string, TrackMoment>()
+
+  for (const moment of track.moments) {
+    for (const signalId of moment.signalIds) momentsBySignal.set(signalId, moment)
+  }
+
+  return (
+    <section className="grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-3">
+      <div className="flex min-h-6 items-center gap-1.5 overflow-hidden">
+        {signals.length ? (
+          signals.map((signal) => {
+            const moment = momentsBySignal.get(signal.id)
+            const tone =
+              signal.side === "home"
+                ? signal.result === "make"
+                  ? "bg-orange-300"
+                  : "border border-orange-400/40 bg-orange-950"
+                : signal.result === "make"
+                  ? "bg-sky-300"
+                  : "border border-sky-400/40 bg-sky-950"
+
+            return (
+              <span
+                key={signal.id}
+                title={moment?.name || signal.result}
+                className={`block rounded-full transition ${
+                  moment ? "h-4 w-4 shadow-[0_0_14px_rgba(244,244,245,0.25)]" : "h-2.5 w-2.5"
+                } ${tone}`}
+              />
+            )
+          })
+        ) : (
+          <span className="h-1 w-full rounded-full bg-zinc-900" />
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
+          {track.moments[0]?.name || "Memory rail"}
+        </p>
+        <p className="truncate text-right text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+          {track.moments[0]?.label || (run.signals.length ? "TRACK" : "READY")}
+        </p>
+      </div>
+    </section>
   )
 }
