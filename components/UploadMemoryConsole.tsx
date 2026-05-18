@@ -400,7 +400,7 @@ export default function UploadMemoryConsole() {
     })
   }
 
-  function mark(type: "INCREMENT" | "DECREMENT") {
+  function mark(type: "MAKE" | "MISS") {
     setSessionState((state) => {
       const next = applySessionEvent({
         state,
@@ -476,12 +476,14 @@ export default function UploadMemoryConsole() {
       type: "image/png",
     })
 
-    if (
-      share &&
-      navigator.canShare?.({
-        files: [file],
-      })
-    ) {
+    const canShareFile = navigator.canShare?.({
+      files: [file],
+    })
+    const prefersNativeSave =
+      /iPad|iPhone|iPod|Android|Mobi|Mobile/i.test(navigator.userAgent || "") ||
+      window.matchMedia("(pointer: coarse)").matches
+
+    if (canShareFile && (share || prefersNativeSave)) {
       await navigator.share({
         files: [file],
         title: `${sessionState.sessionName} Archive`,
@@ -585,56 +587,118 @@ export default function UploadMemoryConsole() {
         clientViewport: uploadInfo.viewport,
       }
 
-      const uploaded = await supabase.storage
-        .from("axis-replays")
-        .upload(filePath, uploadInfo.uploadFile, {
+      try {
+        const uploaded = await supabase.storage
+          .from("axis-replays")
+          .upload(filePath, uploadInfo.uploadFile, {
+            contentType: uploadInfo.uploadType,
+            upsert: false,
+          })
+
+        if (uploaded.error) throw uploaded.error
+
+        setUploadProgress(78)
+        const signed = await supabase.storage
+          .from("axis-replays")
+          .createSignedUrl(filePath, 60 * 60 * 24 * 7)
+
+        if (!signed.error && signed.data?.signedUrl) {
+          setPlaybackUrl(signed.data.signedUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              videoUrl: signed.data.signedUrl,
+            },
+            updatedAt: Date.now(),
+          }))
+        }
+
+        const result = await completeUpload({
+          traceId: uploadInfo.traceId,
+          filePath,
+          fileName: uploadInfo.uploadName,
           contentType: uploadInfo.uploadType,
-          upsert: false,
+          sizeBytes: file.size,
+          durationSeconds: metadata.duration,
+          source,
+          client: clientDebug,
         })
 
-      if (uploaded.error) throw uploaded.error
+        setUploadProgress(100)
+        setStatus(uploadStatus(result))
+        if (result.videoUrl) {
+          setPlaybackUrl(result.videoUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              replayId: result.replayId,
+              videoUrl: result.videoUrl,
+            },
+            updatedAt: Date.now(),
+          }))
+        }
+      } catch {
+        setStatus("Retrying.")
+        setUploadProgress(18)
+        await new Promise((resolve) => window.setTimeout(resolve, 900))
 
-      setUploadProgress(78)
-      const signed = await supabase.storage
-        .from("axis-replays")
-        .createSignedUrl(filePath, 60 * 60 * 24 * 7)
+        const retryPath = `${user.id}/${safeStorageName(uploadInfo.uploadName)}`
+        const retry = await supabase.storage
+          .from("axis-replays")
+          .upload(retryPath, uploadInfo.uploadFile, {
+            contentType: uploadInfo.uploadType,
+            upsert: false,
+          })
 
-      if (!signed.error && signed.data?.signedUrl) {
-        setPlaybackUrl(signed.data.signedUrl)
-        setSessionState((state) => ({
-          ...state,
-          playback: {
-            ...state.playback,
-            videoUrl: signed.data.signedUrl,
+        if (retry.error) throw retry.error
+
+        setUploadProgress(82)
+        const signed = await supabase.storage
+          .from("axis-replays")
+          .createSignedUrl(retryPath, 60 * 60 * 24 * 7)
+
+        if (!signed.error && signed.data?.signedUrl) {
+          setPlaybackUrl(signed.data.signedUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              videoUrl: signed.data.signedUrl,
+            },
+            updatedAt: Date.now(),
+          }))
+        }
+
+        const result = await completeUpload({
+          traceId: uploadInfo.traceId,
+          filePath: retryPath,
+          fileName: uploadInfo.uploadName,
+          contentType: uploadInfo.uploadType,
+          sizeBytes: file.size,
+          durationSeconds: metadata.duration,
+          source,
+          client: {
+            ...clientDebug,
+            retry: true,
           },
-          updatedAt: Date.now(),
-        }))
-      }
+        })
 
-      const result = await completeUpload({
-        traceId: uploadInfo.traceId,
-        filePath,
-        fileName: uploadInfo.uploadName,
-        contentType: uploadInfo.uploadType,
-        sizeBytes: file.size,
-        durationSeconds: metadata.duration,
-        source,
-        client: clientDebug,
-      })
-
-      setUploadProgress(100)
-      setStatus(uploadStatus(result))
-      if (result.videoUrl) {
-        setPlaybackUrl(result.videoUrl)
-        setSessionState((state) => ({
-          ...state,
-          playback: {
-            ...state.playback,
-            replayId: result.replayId,
-            videoUrl: result.videoUrl,
-          },
-          updatedAt: Date.now(),
-        }))
+        setUploadProgress(100)
+        setStatus(uploadStatus(result))
+        if (result.videoUrl) {
+          setPlaybackUrl(result.videoUrl)
+          setSessionState((state) => ({
+            ...state,
+            playback: {
+              ...state.playback,
+              replayId: result.replayId,
+              videoUrl: result.videoUrl,
+            },
+            updatedAt: Date.now(),
+          }))
+        }
       }
     } catch (error) {
       console.error("AXIS EVIDENCE FAILED", error)
@@ -655,9 +719,11 @@ export default function UploadMemoryConsole() {
     streamId: activeIdentity.id,
     metrics,
   })
-  const recentEvents = sessionState.timeline
-    .filter((event) => event.streamId === activeIdentity.id)
-    .slice(0, 6)
+  const identityEvents = sessionState.timeline.filter(
+    (event) => event.streamId === activeIdentity.id
+  )
+  const latestEvent = identityEvents[0]
+  const firstEvent = identityEvents[identityEvents.length - 1]
 
   return (
     <main className="min-h-screen bg-[#0a0907] px-4 py-5 text-[#f5efe3] sm:px-6">
@@ -772,7 +838,7 @@ export default function UploadMemoryConsole() {
                 <div className="mt-8 grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => mark("INCREMENT")}
+                    onClick={() => mark("MAKE")}
                     className="min-h-48 rounded-lg bg-[#d8bd72] p-6 text-left text-black transition active:scale-[0.99] hover:bg-[#f0d98f]"
                   >
                     <span className="block text-sm font-black uppercase tracking-[0.2em]">
@@ -784,7 +850,7 @@ export default function UploadMemoryConsole() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => mark("DECREMENT")}
+                    onClick={() => mark("MISS")}
                     className="min-h-48 rounded-lg border border-[#f5efe3]/10 bg-[#f5efe3]/[0.045] p-6 text-left text-[#f5efe3] transition active:scale-[0.99] hover:bg-[#f5efe3]/[0.07]"
                   >
                     <span className="block text-sm font-black uppercase tracking-[0.2em] text-[#f5efe3]/56">
@@ -920,20 +986,25 @@ export default function UploadMemoryConsole() {
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-[#f5efe3]/30">
                   Chronology
                 </p>
-                <div className="mt-4 grid gap-2">
-                  {recentEvents.length ? (
-                    recentEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        className="grid grid-cols-[64px_1fr] gap-3 font-mono text-sm font-black text-[#f5efe3]/54"
-                      >
-                        <span>{event.elapsedLabel}</span>
-                        <span>{event.type === "INCREMENT" ? "MAKE" : "MISS"}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm font-bold text-[#f5efe3]/34">No attempts.</p>
-                  )}
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f5efe3]/28">
+                      First
+                    </p>
+                    <p className="mt-1 font-mono text-lg font-black text-[#f5efe3]/78">
+                      {firstEvent?.elapsedLabel || "00:00"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f5efe3]/28">
+                      Latest
+                    </p>
+                    <p className="mt-1 font-mono text-lg font-black text-[#f5efe3]/78">
+                      {latestEvent
+                        ? `${latestEvent.type} ${latestEvent.elapsedLabel}`
+                        : "No attempts"}
+                    </p>
+                  </div>
                 </div>
               </div>
             </aside>

@@ -38,7 +38,7 @@ function average(values: number[]) {
 }
 
 function eventLabel(event: TimelineEvent) {
-  return event.type === "INCREMENT" ? "make" : "miss"
+  return event.type === "MAKE" ? "make" : "miss"
 }
 
 function ordered(events: TimelineEvent[], streamId: string) {
@@ -85,7 +85,7 @@ function lateDropoff(events: TimelineEvent[]) {
   const early = earlyEvents(events)
   const late = lateEvents(events)
 
-  return rateFor(early, "INCREMENT") - rateFor(late, "INCREMENT")
+  return rateFor(early, "MAKE") - rateFor(late, "MAKE")
 }
 
 function streak(events: TimelineEvent[], type: TimelineEvent["type"]) {
@@ -130,7 +130,7 @@ function postMissIntervals(events: TimelineEvent[]) {
   const values: number[] = []
 
   for (let index = 1; index < events.length; index += 1) {
-    if (events[index - 1].type === "DECREMENT") {
+    if (events[index - 1].type === "MISS") {
       values.push(events[index].timestampMs - events[index - 1].timestampMs)
     }
   }
@@ -142,10 +142,10 @@ function recoveryMakeRate(events: TimelineEvent[]) {
   const responses: TimelineEvent[] = []
 
   for (let index = 1; index < events.length; index += 1) {
-    if (events[index - 1].type === "DECREMENT") responses.push(events[index])
+    if (events[index - 1].type === "MISS") responses.push(events[index])
   }
 
-  return rateFor(responses, "INCREMENT")
+  return rateFor(responses, "MAKE")
 }
 
 function lineOrPending(value: string, attempts: number) {
@@ -167,11 +167,11 @@ export function buildBehaviorInference({
   const postMiss = postMissIntervals(attempts)
   const postMissAvg = average(postMiss)
   const dropoff = lateDropoff(attempts)
-  const hot = denseWindow(attempts, "INCREMENT", 30000)
-  const empty = denseWindow(attempts, "DECREMENT", 30000)
+  const hot = denseWindow(attempts, "MAKE", 30000)
+  const empty = denseWindow(attempts, "MISS", 30000)
   const fast = denseWindow(attempts, "ANY", 15000)
   const recoveryRate = recoveryMakeRate(attempts)
-  const late = lateEvents(attempts).filter((event) => event.type === "INCREMENT")
+  const late = lateEvents(attempts).filter((event) => event.type === "MAKE")
   const lastEvent = attempts[attempts.length - 1]
   const futureDroughtRisk =
     metrics.longestDroughtSeconds > Math.max(18, metrics.avgIntervalSeconds * 2)
@@ -233,11 +233,11 @@ export function buildBehaviorInference({
       },
       {
         label: "streak",
-        value: `${streak(attempts, "INCREMENT")} make high`,
+        value: `${streak(attempts, "MAKE")} make high`,
       },
       {
         label: "collapse",
-        value: `${streak(attempts, "DECREMENT")} miss high`,
+        value: `${streak(attempts, "MISS")} miss high`,
       },
     ],
     spurts: [

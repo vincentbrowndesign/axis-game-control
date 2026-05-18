@@ -9,12 +9,12 @@ function activitySegments({
   missionId,
   clipDuration,
   frameSamples,
-  burstLabel,
+  spurtLabel,
 }: {
   missionId: string
   clipDuration: number
   frameSamples: FrameSignalSample[]
-  burstLabel: string
+  spurtLabel: string
 }): SegmentedMemory {
   const segments: Segment[] = []
   let activeStart: FrameSignalSample | null = null
@@ -41,7 +41,7 @@ function activitySegments({
         startTime: activeStart.timestamp,
         endTime: lastActive.timestamp,
         confidence: 0.58,
-        label: burstLabel,
+        label: spurtLabel,
       })
     }
 
@@ -60,7 +60,7 @@ function activitySegments({
       startTime: activeStart.timestamp,
       endTime: lastActive.timestamp,
       confidence: 0.58,
-      label: burstLabel,
+      label: spurtLabel,
     })
   }
 
@@ -106,7 +106,7 @@ export function segmentCalibrationMemory({
       missionId,
       clipDuration,
       frameSamples,
-      burstLabel: "DIRECTION BURST",
+      spurtLabel: "DIRECTION SPURT",
     })
   }
 
@@ -115,7 +115,7 @@ export function segmentCalibrationMemory({
       missionId,
       clipDuration,
       frameSamples,
-      burstLabel: "REPEATED MOTION",
+      spurtLabel: "REPEATED MOTION",
     })
   }
 
@@ -124,7 +124,7 @@ export function segmentCalibrationMemory({
       missionId,
       clipDuration,
       frameSamples,
-      burstLabel: "HIGH MOVEMENT WINDOW",
+      spurtLabel: "HIGH MOVEMENT WINDOW",
     })
   }
 
@@ -132,6 +132,6 @@ export function segmentCalibrationMemory({
     missionId,
     clipDuration,
     frameSamples,
-    burstLabel: "ACTIVITY WINDOW",
+    spurtLabel: "ACTIVITY WINDOW",
   })
 }

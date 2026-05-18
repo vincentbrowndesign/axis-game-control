@@ -31,9 +31,9 @@ function rewardFromMarker(marker: ReplayMarker): ReplayReward {
     }
   }
 
-  if (marker.type === "burst") {
+  if (marker.type === "spurt") {
     return {
-      found: "Practice movement ready.",
+      found: "Movement spurt ready.",
       nextAction: "Open archive.",
       focus: marker,
     }

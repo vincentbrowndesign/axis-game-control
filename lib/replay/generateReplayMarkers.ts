@@ -161,7 +161,7 @@ function genericSegmentMarkers(
     "movement_burst",
     "repeated_motion",
   ])
-  const burstCount = segmentCount(
+  const spurtCount = segmentCount(
     segmentedMemory.segments,
     "movement_burst"
   )
@@ -176,36 +176,36 @@ function genericSegmentMarkers(
         id: "movement-continuity",
         label:
           strongestWindow.type === "movement_burst"
-            ? "MOVEMENT BURST"
+            ? "MOVEMENT SPURT"
             : "MOVEMENT CONTINUITY",
         startTime: strongestWindow.startTime,
         endTime: strongestWindow.endTime,
         confidence: strongestWindow.confidence,
         type:
           strongestWindow.type === "movement_burst"
-            ? "burst"
+            ? "spurt"
             : "continuity",
       })
     )
   }
 
-  if (burstCount >= 2) {
-    const firstBurst = segmentedMemory.segments.find(
+  if (spurtCount >= 2) {
+    const firstSpurt = segmentedMemory.segments.find(
       (segment) => segment.type === "movement_burst"
     )
-    const lastBurst = [...segmentedMemory.segments]
+    const lastSpurt = [...segmentedMemory.segments]
       .reverse()
       .find((segment) => segment.type === "movement_burst")
 
-    if (firstBurst && lastBurst) {
+    if (firstSpurt && lastSpurt) {
       markers.push(
         marker({
-          id: "movement-bursts",
-          label: `${burstCount} MOVEMENT BURSTS`,
-          startTime: firstBurst.startTime,
-          endTime: lastBurst.endTime,
+          id: "movement-spurts",
+          label: `${spurtCount} MOVEMENT SPURTS`,
+          startTime: firstSpurt.startTime,
+          endTime: lastSpurt.endTime,
           confidence: 0.58,
-          type: "burst",
+          type: "spurt",
         })
       )
     }

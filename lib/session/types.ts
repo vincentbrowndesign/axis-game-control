@@ -65,7 +65,7 @@ export type SessionSetupInput = {
 
 export type SessionEventInput = {
   streamId: string
-  type: "INCREMENT" | "DECREMENT"
+  type: "MAKE" | "MISS"
   replayTimestamp: number
 }
 

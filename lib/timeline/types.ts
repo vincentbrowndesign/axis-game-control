@@ -1,6 +1,6 @@
 export type TimelineEvent = {
   id: string
-  type: "INCREMENT" | "DECREMENT"
+  type: "MAKE" | "MISS"
   streamId: string
   streamLabel: string
   timestampMs: number

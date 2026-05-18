@@ -17,7 +17,7 @@ const TYPE_WEIGHT: Record<ReplayMarker["type"], number> = {
   continuity: 0.86,
   repetition: 0.82,
   stabilization: 0.72,
-  burst: 0.68,
+  spurt: 0.68,
   reset: 0.62,
 }
 

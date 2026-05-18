@@ -26,8 +26,8 @@ function updateStreams({
       }
     }
 
-    const makes = stream.makes + (event.type === "INCREMENT" ? 1 : 0)
-    const misses = stream.misses + (event.type === "DECREMENT" ? 1 : 0)
+    const makes = stream.makes + (event.type === "MAKE" ? 1 : 0)
+    const misses = stream.misses + (event.type === "MISS" ? 1 : 0)
 
     return {
       ...stream,

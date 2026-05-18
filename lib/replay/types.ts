@@ -2,7 +2,7 @@ export type ReplayMarkerType =
   | "cadence"
   | "rhythm"
   | "reset"
-  | "burst"
+  | "spurt"
   | "repetition"
   | "continuity"
   | "stabilization"
@@ -20,11 +20,11 @@ export type ReplayAnchor = {
   id: string
   sessionId: string
   timelineEventId: string
-  team: "left" | "right"
-  teamName: string
-  points: 1 | 2 | 3
-  gameClock: string
-  period: number
+  identityId: string
+  identityLabel: string
+  action: "MAKE" | "MISS"
+  elapsedMs: number
+  elapsedLabel: string
   replayTimestamp: number
   createdAt: number
   videoUrl?: string
@@ -36,7 +36,7 @@ export type ReplayMoment = {
   eventId: string
   timestampMs: number
   replayTimestamp: number
-  eventType: "INCREMENT" | "DECREMENT"
+  eventType: "MAKE" | "MISS"
   label: string
   videoUrl?: string
   createdAt: number
