@@ -11,6 +11,7 @@ import {
   loadArchivedRecording,
   saveArchivedRecording,
 } from "@/lib/liveArchive"
+import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
 
 type WorkingSession = {
   id: string
@@ -70,6 +71,26 @@ function extensionForType(type: string) {
   return type.includes("mp4") ? "mp4" : "webm"
 }
 
+async function postJson<T>(url: string, body: Record<string, unknown>) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  })
+  const data = (await response.json().catch(() => ({}))) as T & {
+    ok?: boolean
+    error?: string
+  }
+
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || "REQUEST_FAILED")
+  }
+
+  return data
+}
+
 export function LiveMemoryStream() {
   const [status, setStatus] = useState<LiveSessionStatus>("READY")
   const [elapsed, setElapsed] = useState(0)
@@ -113,6 +134,28 @@ export function LiveMemoryStream() {
 
       eventsRef.current = [...eventsRef.current, event]
       return event
+    },
+    []
+  )
+
+  const appendTemporalEvent = useCallback(
+    (type: TemporalEventType, metadata?: Record<string, unknown>) => {
+      const session = workingSessionRef.current
+      if (!session) return
+
+      const sessionTime = elapsedRef.current
+      const eventId = createId("axis-event")
+
+      void postJson("/api/live/event", {
+        id: eventId,
+        sessionId: session.id,
+        type,
+        sessionTime,
+        payload: {
+          replay_window: defaultReplayWindow(),
+          ...(metadata || {}),
+        },
+      }).catch(() => undefined)
     },
     []
   )
@@ -282,12 +325,22 @@ export function LiveMemoryStream() {
         createdAt,
       }
 
+      await postJson("/api/live/session", {
+        id: sessionId,
+        startedAt: createdAt,
+        status: "STARTING",
+      })
+
       emitEvent("session_started")
+      appendTemporalEvent("SESSION_STARTED")
 
       const stream = await openCamera()
       if (!stream) throw new Error("Camera unavailable")
 
       emitEvent("stream_connected", {
+        tracks: stream.getTracks().map((track) => track.kind),
+      })
+      appendTemporalEvent("STREAM_CONNECTED", {
         tracks: stream.getTracks().map((track) => track.kind),
       })
 
@@ -352,6 +405,7 @@ export function LiveMemoryStream() {
     finalizingRef.current = true
     hardStoppedRef.current = true
     emitEvent("archive_started")
+    appendTemporalEvent("ARCHIVE_STARTED")
 
     try {
       const recorder = recorderRef.current
@@ -445,6 +499,23 @@ export function LiveMemoryStream() {
         throw new Error(result.error || "Archive record failed")
       }
 
+      const archiveResult = await postJson<{
+        session?: {
+          id: string
+          playback_url?: string
+        }
+      }>("/api/live/archive", {
+        sessionId: session.id,
+        endedAt,
+        durationSeconds: duration,
+        playbackUrl: result.videoUrl,
+        storagePath,
+      })
+
+      if (!archiveResult.session?.id) {
+        throw new Error("Archive session failed")
+      }
+
       const completedEvent = emitEvent("archive_completed", {
         replayId: result.replayId,
         size: blob.size,
@@ -452,7 +523,7 @@ export function LiveMemoryStream() {
       })
 
       const archived: LiveArchiveSession = {
-        id: result.replayId || session.id,
+        id: session.id,
         startedAt: session.startedAt,
         endedAt,
         duration,
@@ -473,6 +544,9 @@ export function LiveMemoryStream() {
     } catch (error) {
       cleanupCamera()
       emitEvent("archive_failed", {
+        reason: error instanceof Error ? error.message : "Archive failed",
+      })
+      appendTemporalEvent("ARCHIVE_FAILED", {
         reason: error instanceof Error ? error.message : "Archive failed",
       })
       setFailure(error instanceof Error ? error.message : "Archive failed")
@@ -593,7 +667,7 @@ export function LiveMemoryStream() {
             </div>
             {archivedRecording ? (
               <Link
-                href={`/live/record/${archivedRecording.id}`}
+                href={`/session/${archivedRecording.id}`}
                 className="border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
               >
                 Last record
@@ -613,7 +687,7 @@ export function LiveMemoryStream() {
               </p>
               <div className="mt-7 flex justify-center gap-3">
                 <Link
-                  href={`/live/record/${archivedRecording.id}`}
+                  href={`/session/${archivedRecording.id}`}
                   className="border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
                 >
                   Open recording
@@ -686,13 +760,36 @@ export function LiveMemoryStream() {
             ) : null}
 
             {status === "LIVE" ? (
-              <button
-                type="button"
-                onClick={() => void finalizeSession()}
-                className="w-full border border-white/10 bg-black/58 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-zinc-100 active:bg-white/10"
-              >
-                End
-              </button>
+              <div className="grid w-full grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => appendTemporalEvent("MARK")}
+                  className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
+                >
+                  Mark
+                </button>
+                <button
+                  type="button"
+                  onClick={() => appendTemporalEvent("SNAPSHOT")}
+                  className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
+                >
+                  Snap
+                </button>
+                <button
+                  type="button"
+                  onClick={() => appendTemporalEvent("TIMEOUT")}
+                  className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
+                >
+                  Timeout
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void finalizeSession()}
+                  className="border border-white/10 bg-zinc-100 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-black active:bg-zinc-300"
+                >
+                  End
+                </button>
+              </div>
             ) : null}
           </div>
           {hasRecentArchive && status === "READY" ? (
