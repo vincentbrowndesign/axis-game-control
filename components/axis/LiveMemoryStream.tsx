@@ -13,11 +13,12 @@ import {
 } from "@/lib/liveArchive"
 import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
 import {
+  basketballEvents,
   buildContinuitySnapshotPayload,
-  continuityPrimitives,
   generateContinuityPrimitives,
+  reconstructionChapterForEvent,
+  type BasketballEvent,
   type ContinuityAssistSample,
-  type ContinuityPrimitive,
   type ContinuityRegion,
 } from "@/lib/continuityAssistance"
 import { startPassiveContinuityObservers } from "@/lib/passiveContinuityObservers"
@@ -73,7 +74,7 @@ type RoboflowPrediction = {
 type PendingContinuitySelection = {
   sessionTime: number
   snapshotId: string | null
-  suggested: ContinuityPrimitive[]
+  suggested: BasketballEvent[]
   openedAt: number
 }
 
@@ -223,46 +224,48 @@ function createId(prefix = "axis") {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function suggestedContinuityPrimitives(sample: ContinuityAssistSample | null) {
-  if (!sample || Date.now() - sample.recordedAt > 3200) return [] as ContinuityPrimitive[]
+function suggestedBasketballEvents(sample: ContinuityAssistSample | null) {
+  if (!sample || Date.now() - sample.recordedAt > 3200) return [] as BasketballEvent[]
 
-  const suggested = new Set<ContinuityPrimitive>(sample.primitives)
+  const suggested = new Set<BasketballEvent>()
+  const primitives = new Set(sample.primitives)
 
-  if (sample.attentionState === "LOCKING") suggested.add("SET")
-  if (sample.attentionState === "OVERLOADED") suggested.add("OFF")
-  if (sample.pressure > 0.5) suggested.add("CLOSE")
-  if (sample.acceleration > 0.22) suggested.add("FAST")
-  if (sample.motionEnergy < 0.04 && sample.pressure < 0.08) suggested.add("SET")
-  if (sample.primaryRegion && Math.abs(sample.primaryRegion.velocityX) > 1.2) {
-    suggested.add("TURN")
+  if (primitives.has("JUMP") || primitives.has("LAND")) suggested.add("SHOT")
+  if (primitives.has("FAST") || sample.acceleration > 0.22) suggested.add("DRIVE")
+  if (primitives.has("TURN") || primitives.has("LEAN")) suggested.add("PASS")
+  if (primitives.has("CLOSE") || sample.pressure > 0.5) {
+    suggested.add("TURNOVER")
+    suggested.add("STEAL")
   }
-  if (sample.primaryRegion && Math.abs(sample.primaryRegion.velocityY) > 1.2) {
-    suggested.add(sample.primaryRegion.velocityY < 0 ? "JUMP" : "LAND")
+  if (primitives.has("SET") || primitives.has("STOP")) suggested.add("SHOT")
+  if (sample.motionEnergy < 0.04 && sample.pressure < 0.08) suggested.add("REBOUND")
+  if (sample.attentionState === "OVERLOADED") {
+    suggested.add("TURNOVER")
   }
 
   return Array.from(suggested).slice(0, 3)
 }
 
-function ContinuitySelector({
+function BasketballEventSelector({
   pending,
   onCancel,
   onSelect,
 }: {
   pending: PendingContinuitySelection
   onCancel: () => void
-  onSelect: (primitive: ContinuityPrimitive, machineSuggested: boolean) => void
+  onSelect: (event: BasketballEvent, machineSuggested: boolean) => void
 }) {
   const selectorRef = useRef<HTMLDivElement | null>(null)
-  const [activePrimitive, setActivePrimitive] = useState<ContinuityPrimitive | null>(
+  const [activeEvent, setActiveEvent] = useState<BasketballEvent | null>(
     pending.suggested[0] || null
   )
   const [isSliding, setIsSliding] = useState(false)
-  const spokes = continuityPrimitives.map((primitive, index) => {
-    const angle = -Math.PI / 2 + (index / continuityPrimitives.length) * Math.PI * 2
+  const spokes = basketballEvents.map((basketballEvent, index) => {
+    const angle = -Math.PI / 2 + (index / basketballEvents.length) * Math.PI * 2
     const radius = 45
 
     return {
-      primitive,
+      event: basketballEvent,
       x: 50 + Math.cos(angle) * radius,
       y: 50 + Math.sin(angle) * radius,
     }
@@ -278,24 +281,24 @@ function ContinuitySelector({
     const distance = Math.sqrt((clientX - centerX) ** 2 + (clientY - centerY) ** 2)
 
     if (distance < bounds.width * 0.14) {
-      setActivePrimitive(pending.suggested[0] || "SET")
+      setActiveEvent(pending.suggested[0] || "SHOT")
       return
     }
 
     const nearest = spokes.reduce((selected, spoke) => {
       const spokeAngle = Math.atan2(spoke.y - 50, spoke.x - 50)
       const delta = Math.abs(Math.atan2(Math.sin(angle - spokeAngle), Math.cos(angle - spokeAngle)))
-      return delta < selected.delta ? { primitive: spoke.primitive, delta } : selected
+      return delta < selected.delta ? { event: spoke.event, delta } : selected
     }, {
-      primitive: spokes[0].primitive,
+      event: spokes[0].event,
       delta: Number.POSITIVE_INFINITY,
     })
 
-    setActivePrimitive(nearest.primitive)
+    setActiveEvent(nearest.event)
   }
 
-  const selectPrimitive = (primitive: ContinuityPrimitive) => {
-    onSelect(primitive, pending.suggested.includes(primitive))
+  const selectEvent = (event: BasketballEvent) => {
+    onSelect(event, pending.suggested.includes(event))
   }
 
   return (
@@ -311,7 +314,7 @@ function ContinuitySelector({
           updateFromPointer(event.clientX, event.clientY)
         }}
         onPointerUp={() => {
-          if (activePrimitive) selectPrimitive(activePrimitive)
+          if (activeEvent) selectEvent(activeEvent)
         }}
         onPointerCancel={() => setIsSliding(false)}
         className="relative h-56 w-56 touch-none border border-white/10 bg-black/64 backdrop-blur-sm"
@@ -330,16 +333,16 @@ function ContinuitySelector({
           SNAP
         </button>
         {spokes.map((spoke) => {
-          const suggested = pending.suggested.includes(spoke.primitive)
-          const active = activePrimitive === spoke.primitive
+          const suggested = pending.suggested.includes(spoke.event)
+          const active = activeEvent === spoke.event
 
           return (
             <button
-              key={spoke.primitive}
+              key={spoke.event}
               type="button"
               onPointerDown={(event) => event.stopPropagation()}
               onPointerUp={(event) => event.stopPropagation()}
-              onClick={() => selectPrimitive(spoke.primitive)}
+              onClick={() => selectEvent(spoke.event)}
               className={`axis-mono axis-optical-transition absolute h-8 min-w-11 -translate-x-1/2 -translate-y-1/2 border px-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition ${
                 active
                   ? "border-[#f2f1ed] bg-[#f2f1ed] text-black shadow-[0_0_18px_rgba(242,241,237,0.2)]"
@@ -352,7 +355,7 @@ function ContinuitySelector({
                 top: `${spoke.y}%`,
               }}
             >
-              {spoke.primitive}
+              {spoke.event}
             </button>
           )
         })}
@@ -1095,7 +1098,7 @@ export function LiveMemoryStream() {
   const trackFailureTimerRef = useRef<number | null>(null)
   const passiveObserversRef = useRef<ReturnType<typeof startPassiveContinuityObservers> | null>(null)
   const continuityAssistRef = useRef<ContinuityAssistSample | null>(null)
-  const continuitySequenceRef = useRef<ContinuityPrimitive[]>([])
+  const basketballSequenceRef = useRef<BasketballEvent[]>([])
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
@@ -1117,13 +1120,13 @@ export function LiveMemoryStream() {
     setPendingContinuitySelection({
       sessionTime,
       snapshotId,
-      suggested: suggestedContinuityPrimitives(continuityAssistRef.current),
+      suggested: suggestedBasketballEvents(continuityAssistRef.current),
       openedAt: Date.now(),
     })
   }, [])
 
-  const attachContinuityPrimitive = useCallback(
-    (primitive: ContinuityPrimitive, machineSuggested: boolean) => {
+  const attachBasketballEvent = useCallback(
+    (basketballEvent: BasketballEvent, machineSuggested: boolean) => {
       const pending = pendingContinuitySelection
       const session = workingSessionRef.current
       if (!pending || !session) {
@@ -1132,18 +1135,19 @@ export function LiveMemoryStream() {
       }
 
       useAxisChronologyStore.getState().triggerAttentionSignal(
-        "CONTINUITY_PRIMITIVE",
+        "BASKETBALL_EVENT",
         pending.sessionTime,
         {
-          primitive,
+          basketball_event: basketballEvent,
+          reconstruction_chapter: reconstructionChapterForEvent(basketballEvent),
           timestamp: pending.sessionTime,
           source: "human_confirmed",
           machineSuggested,
           snapshot_id: pending.snapshotId,
           sequence: {
-            index: continuitySequenceRef.current.length,
-            previous: continuitySequenceRef.current.slice(-3),
-            next: [...continuitySequenceRef.current.slice(-3), primitive],
+            index: basketballSequenceRef.current.length,
+            previous: basketballSequenceRef.current.slice(-3),
+            next: [...basketballSequenceRef.current.slice(-3), basketballEvent],
           },
           replay_window: {
             before: 0,
@@ -1151,7 +1155,7 @@ export function LiveMemoryStream() {
           },
         }
       )
-      continuitySequenceRef.current = [...continuitySequenceRef.current, primitive].slice(-12)
+      basketballSequenceRef.current = [...basketballSequenceRef.current, basketballEvent].slice(-12)
       setPendingContinuitySelection(null)
     },
     [pendingContinuitySelection]
@@ -1386,7 +1390,7 @@ export function LiveMemoryStream() {
       eventsRef.current = []
       eventSequenceRef.current = 0
       elapsedRef.current = 0
-      continuitySequenceRef.current = []
+      basketballSequenceRef.current = []
       setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()
@@ -1825,11 +1829,11 @@ export function LiveMemoryStream() {
         ) : null}
 
         {status === "LIVE" && pendingContinuitySelection ? (
-          <ContinuitySelector
+          <BasketballEventSelector
             key={pendingContinuitySelection.openedAt}
             pending={pendingContinuitySelection}
             onCancel={() => setPendingContinuitySelection(null)}
-            onSelect={attachContinuityPrimitive}
+            onSelect={attachBasketballEvent}
           />
         ) : null}
 

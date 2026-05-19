@@ -36,6 +36,43 @@ export const continuityPrimitives: ContinuityPrimitive[] = [
   "JUMP",
 ]
 
+export type BasketballEvent =
+  | "MAKE"
+  | "MISS"
+  | "ASSIST"
+  | "TURNOVER"
+  | "REBOUND"
+  | "STEAL"
+  | "BLOCK"
+  | "FOUL"
+  | "SHOT"
+  | "PASS"
+  | "DRIVE"
+
+export type BasketballReconstructionChapter =
+  | "Drive Sequence"
+  | "Shot Attempt"
+  | "Transition Window"
+  | "Recovery Sequence"
+  | "Ball Movement"
+  | "Possession Shift"
+  | "Release Window"
+  | "Movement Reset"
+
+export const basketballEvents: BasketballEvent[] = [
+  "MAKE",
+  "MISS",
+  "ASSIST",
+  "TURNOVER",
+  "REBOUND",
+  "STEAL",
+  "BLOCK",
+  "FOUL",
+  "SHOT",
+  "PASS",
+  "DRIVE",
+]
+
 export type ContinuityRegion = {
   x: number
   y: number
@@ -69,6 +106,21 @@ export type ReplayNegotiationType =
   | "SCRUB"
   | "ANNOTATION"
   | "EXPORT"
+
+export function reconstructionChapterForEvent(
+  event: BasketballEvent
+): BasketballReconstructionChapter {
+  if (event === "DRIVE") return "Drive Sequence"
+  if (event === "SHOT" || event === "MAKE" || event === "MISS") return "Shot Attempt"
+  if (event === "ASSIST" || event === "PASS") return "Ball Movement"
+  if (event === "TURNOVER" || event === "STEAL" || event === "BLOCK") {
+    return "Possession Shift"
+  }
+  if (event === "REBOUND") return "Recovery Sequence"
+  if (event === "FOUL") return "Movement Reset"
+
+  return "Transition Window"
+}
 
 type ReplayNegotiationRecord = {
   id: string

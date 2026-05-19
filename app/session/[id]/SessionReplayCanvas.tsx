@@ -9,9 +9,11 @@ import {
   useAxisChronologyStore,
 } from "@/lib/axisChronologyStore"
 import {
-  continuityPrimitives,
+  basketballEvents,
+  reconstructionChapterForEvent,
   recordReplayNegotiation,
-  type ContinuityPrimitive,
+  type BasketballEvent,
+  type BasketballReconstructionChapter,
 } from "@/lib/continuityAssistance"
 import type {
   TemporalEventRecord,
@@ -482,20 +484,22 @@ function SnapshotStrip() {
     }
   }
 
-  const primitiveForSnapshot = (snapshot: AxisSnapshot): ContinuityPrimitive | null => {
-    const primitiveEvent = events.find((event) => {
-      if (event.type !== "CONTINUITY_PRIMITIVE") return false
+  const chapterForSnapshot = (snapshot: AxisSnapshot): BasketballReconstructionChapter | null => {
+    const basketballEvent = events.find((event) => {
+      if (event.type !== "BASKETBALL_EVENT") return false
 
       return (
         event.payload?.snapshot_id === snapshot.id ||
         Math.abs(Number(event.session_time) - Number(snapshot.session_time)) < 0.01
       )
     })
-    const primitive = primitiveEvent?.payload?.primitive
+    const event = basketballEvent?.payload?.basketball_event
+    const chapter = basketballEvent?.payload?.reconstruction_chapter
 
-    return typeof primitive === "string" &&
-      continuityPrimitives.includes(primitive as ContinuityPrimitive)
-      ? (primitive as ContinuityPrimitive)
+    if (typeof chapter === "string") return chapter as BasketballReconstructionChapter
+
+    return typeof event === "string" && basketballEvents.includes(event as BasketballEvent)
+      ? reconstructionChapterForEvent(event as BasketballEvent)
       : null
   }
 
@@ -504,7 +508,7 @@ function SnapshotStrip() {
       <div className="flex gap-2 overflow-x-auto pb-1">
         {snapshots.map((snapshot) => {
           const source = snapshot.image_url || snapshot.localUrl
-          const primitive = primitiveForSnapshot(snapshot)
+          const chapter = chapterForSnapshot(snapshot)
 
           return (
             <div
@@ -533,9 +537,9 @@ function SnapshotStrip() {
                 <p className="axis-mono text-[10px] font-bold text-zinc-100">
                   {formatClock(snapshot.session_time)}
                 </p>
-                {primitive ? (
-                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#d7c08a]">
-                    {primitive}
+                {chapter ? (
+                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#d7c08a]">
+                    {chapter}
                   </p>
                 ) : null}
                 <input
