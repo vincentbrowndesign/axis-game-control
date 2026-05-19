@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useShallow } from "zustand/react/shallow"
+import {
+  type TimelineAnchor,
+  useAxisChronologyStore,
+} from "@/lib/axisChronologyStore"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -35,29 +40,257 @@ function formatDate(value: string | null | undefined) {
   }).format(date)
 }
 
-function eventPreroll(event: TemporalEventRecord) {
-  const before = event.payload?.replay_window?.before
-  return Number.isFinite(before) ? Number(before) : 0
-}
-
 export function seekToEvent(
   videoElement: HTMLVideoElement | null,
-  event: TemporalEventRecord
+  anchor: TimelineAnchor | null
 ) {
-  if (!videoElement) return
-
-  const target = Math.max(0, Number(event.session_time) - eventPreroll(event))
+  if (!videoElement || !anchor) return
 
   videoElement.pause()
-  videoElement.currentTime = target
+  videoElement.currentTime = anchor.targetTime
+}
+
+function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const { currentTimelineAnchor, completeInternalSeek, setPlaybackState } =
+    useAxisChronologyStore(
+      useShallow((state) => ({
+        currentTimelineAnchor: state.currentTimelineAnchor,
+        completeInternalSeek: state.completeInternalSeek,
+        setPlaybackState: state.setPlaybackState,
+      }))
+    )
+
+  useEffect(() => {
+    if (!currentTimelineAnchor) return
+
+    seekToEvent(videoRef.current, currentTimelineAnchor)
+  }, [currentTimelineAnchor])
+
+  if (!playbackUrl) {
+    return (
+      <div className="grid aspect-video place-items-center border border-white/10 bg-zinc-950 text-center">
+        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-500">
+          RECORD PROCESSING
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-hidden border border-white/10 bg-zinc-950">
+      <video
+        ref={videoRef}
+        src={playbackUrl}
+        controls
+        playsInline
+        preload="metadata"
+        onLoadedMetadata={(event) => {
+          setPlaybackState({
+            readyState: event.currentTarget.readyState,
+          })
+        }}
+        onTimeUpdate={(event) => {
+          setPlaybackState({
+            currentTime: event.currentTarget.currentTime,
+            paused: event.currentTarget.paused,
+            readyState: event.currentTarget.readyState,
+          })
+        }}
+        onPause={(event) => {
+          setPlaybackState({
+            currentTime: event.currentTarget.currentTime,
+            paused: true,
+            readyState: event.currentTarget.readyState,
+          })
+        }}
+        onPlay={(event) => {
+          setPlaybackState({
+            currentTime: event.currentTarget.currentTime,
+            paused: false,
+            readyState: event.currentTarget.readyState,
+          })
+        }}
+        onSeeked={(event) => {
+          setPlaybackState({
+            currentTime: event.currentTarget.currentTime,
+            paused: event.currentTarget.paused,
+            readyState: event.currentTarget.readyState,
+          })
+          completeInternalSeek()
+        }}
+        className="aspect-video w-full bg-black object-contain"
+      />
+    </div>
+  )
+}
+
+function EventRail() {
+  const { events, duration, activeEventId, requestEventJump } =
+    useAxisChronologyStore(
+      useShallow((state) => ({
+        events: state.events,
+        duration: state.duration,
+        activeEventId: state.activeEventId,
+        requestEventJump: state.requestEventJump,
+      }))
+    )
+  const safeDuration = Math.max(duration, 1)
+
+  return (
+    <div className="mt-4 border border-white/10 bg-white/[0.03] px-4 py-4">
+      <div className="relative h-12">
+        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/18" />
+        {events.map((event) => {
+          const position = Math.min(
+            100,
+            Math.max(0, (Number(event.session_time) / safeDuration) * 100)
+          )
+          const active = event.id === activeEventId
+
+          return (
+            <button
+              key={event.id}
+              type="button"
+              onClick={() => requestEventJump(event.id)}
+              aria-label={`Jump to ${event.type} at ${formatClock(event.session_time)}`}
+              className={`absolute top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[0] transition ${
+                active
+                  ? "border-zinc-100 bg-zinc-100 shadow-[0_0_20px_rgba(244,244,245,0.42)]"
+                  : "border-white/20 bg-zinc-300/50 hover:bg-zinc-100"
+              }`}
+              style={{
+                left: `${position}%`,
+              }}
+            />
+          )
+        })}
+      </div>
+      <div className="mt-2 flex items-center justify-between font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
+        <span>00:00</span>
+        <span>{formatClock(duration)}</span>
+      </div>
+    </div>
+  )
+}
+
+function SelectedEvent() {
+  const { events, activeEventId, uiStatus } = useAxisChronologyStore(
+    useShallow((state) => ({
+      events: state.events,
+      activeEventId: state.activeEventId,
+      uiStatus: state.uiStatus,
+    }))
+  )
+  const selectedEvent = useMemo(
+    () => events.find((event) => event.id === activeEventId) || null,
+    [events, activeEventId]
+  )
+
+  if (!selectedEvent) return null
+
+  return (
+    <div className="mt-4 border-l border-zinc-100/70 px-4 py-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+        Selected
+      </p>
+      <p className="mt-1 text-sm font-black uppercase tracking-[0.16em] text-zinc-100">
+        {selectedEvent.type} / {formatClock(selectedEvent.session_time)}
+      </p>
+      <p className="mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
+        {uiStatus}
+      </p>
+    </div>
+  )
+}
+
+function EventFeed({
+  eventsLoaded,
+  snapshotCount,
+}: {
+  eventsLoaded: boolean
+  snapshotCount: number
+}) {
+  const { events, activeEventId, requestEventJump } = useAxisChronologyStore(
+    useShallow((state) => ({
+      events: state.events,
+      activeEventId: state.activeEventId,
+      requestEventJump: state.requestEventJump,
+    }))
+  )
+
+  return (
+    <aside className="min-w-0 border-t border-white/10 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+            Events
+          </p>
+          <p className="mt-1 font-mono text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">
+            {eventsLoaded ? `${events.length} loaded` : "loading"}
+          </p>
+        </div>
+        <p className="font-mono text-xs font-bold text-zinc-600">
+          {snapshotCount} snapshots
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        {events.map((event) => {
+          const active = event.id === activeEventId
+
+          return (
+            <button
+              key={event.id}
+              type="button"
+              onClick={() => requestEventJump(event.id)}
+              className={`grid min-h-12 grid-cols-[4.5rem_1fr_auto] items-center gap-3 border px-3 py-3 text-left transition ${
+                active
+                  ? "border-zinc-100 bg-zinc-100 text-black"
+                  : "border-white/10 bg-white/[0.03] text-zinc-100 active:bg-white/10"
+              }`}
+            >
+              <span className="font-mono text-xs font-black">
+                {formatClock(event.session_time)}
+              </span>
+              <span className="truncate text-xs font-black uppercase tracking-[0.16em]">
+                {event.type}
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-70">
+                Jump
+              </span>
+            </button>
+          )
+        })}
+
+        {eventsLoaded && !events.length ? (
+          <p className="border border-white/10 bg-white/[0.03] px-3 py-4 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
+            NO EVENTS YET
+          </p>
+        ) : null}
+      </div>
+    </aside>
+  )
 }
 
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [events, setEvents] = useState<TemporalEventRecord[]>([])
   const [snapshots, setSnapshots] = useState<TemporalSnapshotRecord[]>([])
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [eventsLoaded, setEventsLoaded] = useState(false)
+  const { hydrateChronology, setUiStatus } = useAxisChronologyStore(
+    useShallow((state) => ({
+      hydrateChronology: state.hydrateChronology,
+      setUiStatus: state.setUiStatus,
+    }))
+  )
+
+  useEffect(() => {
+    hydrateChronology({
+      sessionId: session.id,
+      duration: Number(session.duration_seconds) || 0,
+      events: [],
+    })
+    setUiStatus("loading")
+  }, [hydrateChronology, session.duration_seconds, session.id, setUiStatus])
 
   useEffect(() => {
     let active = true
@@ -70,7 +303,11 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
         const payload = (await response.json().catch(() => ({}))) as SessionPayload
 
         if (!active) return
-        setEvents(payload.events || [])
+        hydrateChronology({
+          sessionId: session.id,
+          duration: Number(session.duration_seconds) || 0,
+          events: payload.events || [],
+        })
         setSnapshots(payload.snapshots || [])
       } finally {
         if (active) setEventsLoaded(true)
@@ -82,18 +319,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     return () => {
       active = false
     }
-  }, [session.id])
-
-  const duration = Math.max(Number(session.duration_seconds) || 0, 1)
-  const selectedEvent = useMemo(
-    () => events.find((event) => event.id === selectedEventId) || null,
-    [events, selectedEventId]
-  )
-
-  const jumpToEvent = (event: TemporalEventRecord) => {
-    setSelectedEventId(event.id)
-    seekToEvent(videoRef.current, event)
-  }
+  }, [hydrateChronology, session.duration_seconds, session.id])
 
   return (
     <main className="min-h-dvh bg-black text-zinc-100">
@@ -148,121 +374,11 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
 
         <div className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <section className="min-w-0">
-            {session.playback_url ? (
-              <div className="overflow-hidden border border-white/10 bg-zinc-950">
-                <video
-                  ref={videoRef}
-                  src={session.playback_url}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="aspect-video w-full bg-black object-contain"
-                />
-              </div>
-            ) : (
-              <div className="grid aspect-video place-items-center border border-white/10 bg-zinc-950 text-center">
-                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-500">
-                  RECORD PROCESSING
-                </p>
-              </div>
-            )}
-
-            <div className="mt-4 border border-white/10 bg-white/[0.03] px-4 py-4">
-              <div className="relative h-12">
-                <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/18" />
-                {events.map((event) => {
-                  const position = Math.min(
-                    100,
-                    Math.max(0, (Number(event.session_time) / duration) * 100)
-                  )
-                  const active = event.id === selectedEventId
-
-                  return (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => jumpToEvent(event)}
-                      aria-label={`Jump to ${event.type} at ${formatClock(event.session_time)}`}
-                      className={`absolute top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[0] transition ${
-                        active
-                          ? "border-zinc-100 bg-zinc-100 shadow-[0_0_20px_rgba(244,244,245,0.42)]"
-                          : "border-white/20 bg-zinc-300/50 hover:bg-zinc-100"
-                      }`}
-                      style={{
-                        left: `${position}%`,
-                      }}
-                    />
-                  )
-                })}
-              </div>
-              <div className="mt-2 flex items-center justify-between font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
-                <span>00:00</span>
-                <span>{formatClock(session.duration_seconds)}</span>
-              </div>
-            </div>
-
-            {selectedEvent ? (
-              <div className="mt-4 border-l border-zinc-100/70 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-                  Selected
-                </p>
-                <p className="mt-1 text-sm font-black uppercase tracking-[0.16em] text-zinc-100">
-                  {selectedEvent.type} · {formatClock(selectedEvent.session_time)}
-                </p>
-              </div>
-            ) : null}
+            <ReplayVideo playbackUrl={session.playback_url} />
+            <EventRail />
+            <SelectedEvent />
           </section>
-
-          <aside className="min-w-0 border-t border-white/10 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-                  Events
-                </p>
-                <p className="mt-1 font-mono text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">
-                  {eventsLoaded ? `${events.length} loaded` : "loading"}
-                </p>
-              </div>
-              <p className="font-mono text-xs font-bold text-zinc-600">
-                {snapshots.length} snapshots
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-2">
-              {events.map((event) => {
-                const active = event.id === selectedEventId
-
-                return (
-                  <button
-                    key={event.id}
-                    type="button"
-                    onClick={() => jumpToEvent(event)}
-                    className={`grid min-h-12 grid-cols-[4.5rem_1fr_auto] items-center gap-3 border px-3 py-3 text-left transition ${
-                      active
-                        ? "border-zinc-100 bg-zinc-100 text-black"
-                        : "border-white/10 bg-white/[0.03] text-zinc-100 active:bg-white/10"
-                    }`}
-                  >
-                    <span className="font-mono text-xs font-black">
-                      {formatClock(event.session_time)}
-                    </span>
-                    <span className="truncate text-xs font-black uppercase tracking-[0.16em]">
-                      {event.type}
-                    </span>
-                    <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-70">
-                      Jump
-                    </span>
-                  </button>
-                )
-              })}
-
-              {eventsLoaded && !events.length ? (
-                <p className="border border-white/10 bg-white/[0.03] px-3 py-4 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
-                  NO EVENTS YET
-                </p>
-              ) : null}
-            </div>
-          </aside>
+          <EventFeed eventsLoaded={eventsLoaded} snapshotCount={snapshots.length} />
         </div>
       </section>
     </main>
