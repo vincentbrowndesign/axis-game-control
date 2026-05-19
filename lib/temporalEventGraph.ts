@@ -56,6 +56,7 @@ export type TemporalSnapshotRecord = {
   session_id: string
   session_time: number
   image_url: string
+  annotation?: string | null
   created_at: string
 }
 

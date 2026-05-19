@@ -57,6 +57,7 @@ export type AxisSnapshot = {
   session_time: number
   localUrl: string | null
   image_url: string | null
+  annotation: string
   status: SnapshotPersistenceStatus
   created_at: string
   retryCount: number
@@ -111,6 +112,7 @@ type AxisChronologyState = {
   ) => AxisSnapshot | null
   processSnapshotQueue: () => Promise<void>
   retryFailedSnapshots: () => void
+  updateSnapshotAnnotation: (snapshotId: string, annotation: string) => void
   executeNativeExport: (sessionPlaybackUrl: string, sessionTitle: string) => Promise<void>
   processPersistenceQueue: () => Promise<void>
   retryFailedEvents: () => void
@@ -158,6 +160,7 @@ type AxisChronologyDatabase = {
           session_id: string
           session_time: number
           image_url: string
+          annotation: string | null
           created_at: string
         }
         Insert: {
@@ -165,9 +168,12 @@ type AxisChronologyDatabase = {
           session_id: string
           session_time: number
           image_url: string
+          annotation?: string | null
           created_at: string
         }
-        Update: never
+        Update: {
+          annotation?: string | null
+        }
         Relationships: []
       }
     }
@@ -180,6 +186,7 @@ type AxisChronologyDatabase = {
 
 let supabaseClient: ReturnType<typeof createClient<AxisChronologyDatabase>> | null = null
 const snapshotBlobBuffer = new Map<string, Blob>()
+const snapshotAnnotationTimers = new Map<string, number>()
 
 function chronologySupabase() {
   if (supabaseClient) return supabaseClient
@@ -278,6 +285,7 @@ function syncedSnapshot(snapshot: TemporalSnapshotRecord): AxisSnapshot {
     session_time: Number(snapshot.session_time) || 0,
     localUrl: snapshot.image_url,
     image_url: snapshot.image_url,
+    annotation: snapshot.annotation || "",
     status: "SYNCED",
     created_at: snapshot.created_at,
     retryCount: 0,
@@ -298,6 +306,23 @@ function mergeSnapshots(snapshots: AxisSnapshot[]) {
   snapshots.forEach((snapshot) => byId.set(snapshot.id, snapshot))
 
   return sortSnapshots([...byId.values()])
+}
+
+function normalizeAnnotation(annotation: string) {
+  return annotation.replace(/\s+/g, " ").trim().slice(0, 120)
+}
+
+async function persistSnapshotAnnotation(snapshotId: string, annotation: string) {
+  const { error } = await chronologySupabase()
+    .from("snapshots")
+    .update({
+      annotation: annotation || null,
+    })
+    .eq("id", snapshotId)
+
+  if (error) {
+    throw error
+  }
 }
 
 function safeExportTitle(value: string) {
@@ -400,6 +425,7 @@ async function persistSnapshot(snapshot: AxisSnapshot, blob: Blob) {
     session_id: snapshot.session_id,
     session_time: snapshot.session_time,
     image_url: imageUrl,
+    annotation: snapshot.annotation || null,
     created_at: snapshot.created_at,
   })
 
@@ -518,6 +544,7 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       session_time: Number(sessionTime) || 0,
       localUrl,
       image_url: null,
+      annotation: "",
       status: "PENDING",
       created_at: new Date().toISOString(),
       retryCount: 0,
@@ -603,11 +630,24 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         }))
 
         try {
-          const imageUrl = await persistSnapshot(snapshot, blob)
+          const latestBeforePersist =
+            get().snapshots.find((candidate) => candidate.id === snapshot.id) || snapshot
+          const imageUrl = await persistSnapshot(latestBeforePersist, blob)
+          const latestAfterPersist =
+            get().snapshots.find((candidate) => candidate.id === snapshot.id) ||
+            latestBeforePersist
+
+          if (latestAfterPersist.annotation) {
+            await persistSnapshotAnnotation(
+              snapshot.id,
+              normalizeAnnotation(latestAfterPersist.annotation)
+            )
+          }
+
           const savedSnapshot: AxisSnapshot = {
-            ...snapshot,
+            ...latestAfterPersist,
             image_url: imageUrl,
-            localUrl: snapshot.localUrl || imageUrl,
+            localUrl: latestAfterPersist.localUrl || imageUrl,
             status: "SYNCED",
           }
 
@@ -700,6 +740,64 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
     queueMicrotask(() => {
       void get().processSnapshotQueue()
     })
+  },
+  updateSnapshotAnnotation: (snapshotId, annotation) => {
+    const nextAnnotation = annotation.slice(0, 120)
+
+    set((state) => ({
+      snapshots: mergeSnapshots(
+        state.snapshots.map((snapshot) =>
+          snapshot.id === snapshotId
+            ? {
+                ...snapshot,
+                annotation: nextAnnotation,
+              }
+            : snapshot
+        )
+      ),
+      pendingSnapshots: mergeSnapshots(
+        state.pendingSnapshots.map((snapshot) =>
+          snapshot.id === snapshotId
+            ? {
+                ...snapshot,
+                annotation: nextAnnotation,
+              }
+            : snapshot
+        )
+      ),
+      failedSnapshots: mergeSnapshots(
+        state.failedSnapshots.map((snapshot) =>
+          snapshot.id === snapshotId
+            ? {
+                ...snapshot,
+                annotation: nextAnnotation,
+              }
+            : snapshot
+        )
+      ),
+    }))
+
+    if (typeof window === "undefined") return
+
+    const snapshot = get().snapshots.find((candidate) => candidate.id === snapshotId)
+    if (!snapshot?.image_url) return
+
+    const existingTimer = snapshotAnnotationTimers.get(snapshotId)
+    if (existingTimer) {
+      window.clearTimeout(existingTimer)
+    }
+
+    const timer = window.setTimeout(() => {
+      const latest = get().snapshots.find((candidate) => candidate.id === snapshotId)
+      snapshotAnnotationTimers.delete(snapshotId)
+      if (!latest?.image_url) return
+
+      void persistSnapshotAnnotation(snapshotId, normalizeAnnotation(latest.annotation)).catch(
+        () => undefined
+      )
+    }, 500)
+
+    snapshotAnnotationTimers.set(snapshotId, timer)
   },
   executeNativeExport: async (sessionPlaybackUrl, sessionTitle) => {
     if (!sessionPlaybackUrl || typeof window === "undefined") {

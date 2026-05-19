@@ -353,12 +353,13 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
 }
 
 function SnapshotStrip() {
-  const { snapshots, requestEventJump, events } =
+  const { snapshots, requestEventJump, events, updateSnapshotAnnotation } =
     useAxisChronologyStore(
       useShallow((state) => ({
         snapshots: state.snapshots,
         requestEventJump: state.requestEventJump,
         events: state.events,
+        updateSnapshotAnnotation: state.updateSnapshotAnnotation,
       }))
     )
 
@@ -382,30 +383,45 @@ function SnapshotStrip() {
           const source = snapshot.image_url || snapshot.localUrl
 
           return (
-            <button
+            <div
               key={snapshot.id}
-              type="button"
-              onClick={() => jumpToSnapshot(snapshot)}
-              className="min-w-28 border border-white/10 bg-black/40 text-left active:bg-white/10"
+              className="min-w-32 border border-white/10 bg-black/40"
             >
-              {source ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={source}
-                  alt={`Snapshot at ${formatClock(snapshot.session_time)}`}
-                  className="aspect-video w-28 object-cover"
-                />
-              ) : (
-                <div className="grid aspect-video w-28 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">
-                  SNAP
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => jumpToSnapshot(snapshot)}
+                className="block text-left active:bg-white/10"
+              >
+                {source ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={source}
+                    alt={`Snapshot at ${formatClock(snapshot.session_time)}`}
+                    className="aspect-video w-32 object-cover"
+                  />
+                ) : (
+                  <div className="grid aspect-video w-32 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">
+                    SNAP
+                  </div>
+                )}
+              </button>
               <div className="px-2 py-2">
                 <p className="font-mono text-[10px] font-black text-zinc-100">
                   {formatClock(snapshot.session_time)}
                 </p>
+                <input
+                  type="text"
+                  value={snapshot.annotation}
+                  onChange={(event) =>
+                    updateSnapshotAnnotation(snapshot.id, event.currentTarget.value)
+                  }
+                  placeholder="note"
+                  maxLength={120}
+                  aria-label={`Snapshot note at ${formatClock(snapshot.session_time)}`}
+                  className="mt-2 w-full border-0 border-b border-white/10 bg-transparent px-0 py-1 font-mono text-[11px] font-bold lowercase text-zinc-200 outline-none placeholder:text-zinc-700 focus:border-white/40"
+                />
               </div>
-            </button>
+            </div>
           )
         })}
       </div>
