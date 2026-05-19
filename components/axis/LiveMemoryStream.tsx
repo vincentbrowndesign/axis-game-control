@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -25,6 +25,19 @@ type WorkingSession = {
   playbackUrl: string | null
   storagePath: string | null
   createdAt: string
+}
+
+type LiveViewMode = "RECON" | "MOTION_ECHO"
+
+type MotionLock = {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  energy: number
+  previousX: number
+  previousY: number
 }
 
 const recorderTypes = [
@@ -69,12 +82,260 @@ function formatClock(totalSeconds: number) {
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
 }
 
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(1, Math.max(0, value))
+}
+
 function createId(prefix = "axis") {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID()
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function LiveMachinePerceptionOverlay({
+  active,
+  enabled,
+  videoRef,
+}: {
+  active: boolean
+  enabled: boolean
+  videoRef: RefObject<HTMLVideoElement | null>
+}) {
+  const [locks, setLocks] = useState<MotionLock[]>([])
+  const previousFrameRef = useRef<Uint8ClampedArray | null>(null)
+  const smoothedLocksRef = useRef<MotionLock[]>([])
+
+  useEffect(() => {
+    if (!enabled || !active || typeof document === "undefined") {
+      previousFrameRef.current = null
+      smoothedLocksRef.current = []
+      return
+    }
+
+    let frameId = 0
+    let lastSampleAt = 0
+    let disposed = false
+    const sampleWidth = 96
+    const sampleHeight = 54
+    const canvas = document.createElement("canvas")
+    canvas.width = sampleWidth
+    canvas.height = sampleHeight
+    const context = canvas.getContext("2d", {
+      willReadFrequently: true,
+    })
+
+    const sample = (timestamp: number) => {
+      if (disposed) return
+      frameId = window.requestAnimationFrame(sample)
+      if (timestamp - lastSampleAt < 120) return
+      lastSampleAt = timestamp
+
+      const video = videoRef.current
+      if (!context || !video || video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+        return
+      }
+
+      context.drawImage(video, 0, 0, sampleWidth, sampleHeight)
+      const frame = context.getImageData(0, 0, sampleWidth, sampleHeight).data
+      const previous = previousFrameRef.current
+      previousFrameRef.current = new Uint8ClampedArray(frame)
+
+      if (!previous) return
+
+      const columns = 6
+      const rows = 4
+      const cellWidth = Math.floor(sampleWidth / columns)
+      const cellHeight = Math.floor(sampleHeight / rows)
+      const regions: MotionLock[] = []
+
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          let delta = 0
+          let count = 0
+
+          for (let y = row * cellHeight; y < (row + 1) * cellHeight; y += 2) {
+            for (let x = column * cellWidth; x < (column + 1) * cellWidth; x += 2) {
+              const index = (y * sampleWidth + x) * 4
+              delta +=
+                Math.abs(frame[index] - previous[index]) +
+                Math.abs(frame[index + 1] - previous[index + 1]) +
+                Math.abs(frame[index + 2] - previous[index + 2])
+              count += 3
+            }
+          }
+
+          const energy = clamp01(delta / Math.max(1, count) / 58)
+          if (energy < 0.09) continue
+
+          const focus = clamp01(energy * 1.45)
+          const looseness = 1 - focus
+
+          regions.push({
+            id: `${row}-${column}`,
+            x: (column / columns) * 100 + 1.8,
+            y: (row / rows) * 100 + 2.2,
+            width: 10.5 + looseness * 8,
+            height: 14 + looseness * 10,
+            energy: focus,
+            previousX: (column / columns) * 100 + 1.8,
+            previousY: (row / rows) * 100 + 2.2,
+          })
+        }
+      }
+
+      const strongest = regions.sort((a, b) => b.energy - a.energy).slice(0, 4)
+
+      if (!strongest.length) {
+        const fading = smoothedLocksRef.current
+          .map((lock) => ({
+            ...lock,
+            previousX: lock.x,
+            previousY: lock.y,
+            x: lock.x + Math.sin(timestamp * 0.0008 + lock.energy * 4) * 0.28,
+            y: lock.y + Math.cos(timestamp * 0.0007 + lock.energy * 3) * 0.22,
+            energy: lock.energy * 0.64,
+            width: lock.width + 0.5,
+            height: lock.height + 0.5,
+          }))
+          .filter((lock) => lock.energy > 0.08)
+
+        smoothedLocksRef.current = fading
+        setLocks(fading)
+        return
+      }
+
+      const nextLocks = strongest.map((region, index) => {
+        const previousLock = smoothedLocksRef.current[index]
+        const driftX = Math.sin(timestamp * 0.001 + index * 1.9) * (0.18 + (1 - region.energy) * 0.45)
+        const driftY = Math.cos(timestamp * 0.0011 + index * 1.4) * (0.14 + (1 - region.energy) * 0.38)
+
+        if (!previousLock) {
+          return {
+            ...region,
+            x: region.x + driftX,
+            y: region.y + driftY,
+          }
+        }
+
+        return {
+          ...region,
+          previousX: previousLock.x,
+          previousY: previousLock.y,
+          x: previousLock.x * 0.66 + region.x * 0.34 + driftX,
+          y: previousLock.y * 0.66 + region.y * 0.34 + driftY,
+          width: previousLock.width * 0.5 + region.width * 0.5,
+          height: previousLock.height * 0.5 + region.height * 0.5,
+          energy: previousLock.energy * 0.42 + region.energy * 0.58,
+        }
+      })
+
+      smoothedLocksRef.current = nextLocks
+      setLocks(nextLocks)
+    }
+
+    frameId = window.requestAnimationFrame(sample)
+
+    return () => {
+      disposed = true
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [active, enabled, videoRef])
+
+  if (!enabled || !active || !locks.length) return null
+
+  const peakEnergy = Math.max(...locks.map((lock) => lock.energy))
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden mix-blend-screen"
+      style={{
+        opacity: 0.5 + peakEnergy * 0.32,
+      }}
+    >
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="axis-optical-drift absolute inset-0 h-full w-full"
+        aria-hidden="true"
+      >
+        <defs>
+          <radialGradient id="axis-live-attention" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(215,192,138,0.2)" />
+            <stop offset="46%" stopColor="rgba(242,241,237,0.04)" />
+            <stop offset="100%" stopColor="rgba(242,241,237,0)" />
+          </radialGradient>
+        </defs>
+        {locks.map((lock, index) => {
+          const next = locks[(index + 1) % locks.length] || lock
+          const centerX = lock.x + lock.width / 2
+          const centerY = lock.y + lock.height / 2
+          const previousCenterX = lock.previousX + lock.width / 2
+          const previousCenterY = lock.previousY + lock.height / 2
+          const echoOpacity = lock.energy * 0.14
+
+          return (
+            <g key={lock.id}>
+              <path
+                d={`M ${previousCenterX} ${previousCenterY} Q ${
+                  (centerX + next.x) / 2
+                } ${centerY - 5 - lock.energy * 8} ${next.x + next.width / 2} ${
+                  next.y + next.height / 2
+                }`}
+                fill="none"
+                stroke="rgba(242,241,237,0.24)"
+                strokeLinecap="round"
+                strokeWidth={0.08 + lock.energy * 0.13}
+                opacity={0.16 + lock.energy * 0.4}
+              />
+              {[1, 2, 3].map((step) => (
+                <rect
+                  key={step}
+                  x={lock.previousX - step * 0.9}
+                  y={lock.previousY + step * 0.44}
+                  width={lock.width + step * 2.2}
+                  height={lock.height + step * 1.7}
+                  fill="none"
+                  stroke="rgba(242,241,237,0.34)"
+                  strokeWidth={0.06}
+                  opacity={Math.max(0, echoOpacity - step * 0.028)}
+                />
+              ))}
+              <rect
+                x={lock.x}
+                y={lock.y}
+                width={lock.width}
+                height={lock.height}
+                fill="none"
+                stroke="rgba(242,241,237,0.5)"
+                strokeWidth={0.08 + lock.energy * 0.06}
+                opacity={0.22 + lock.energy * 0.5}
+              />
+              <rect
+                x={lock.x - 0.65}
+                y={lock.y - 0.65}
+                width={lock.width + 1.3}
+                height={lock.height + 1.3}
+                fill="none"
+                stroke="rgba(185,215,191,0.18)"
+                strokeWidth={0.06}
+                opacity={lock.energy * 0.36}
+              />
+              <circle
+                cx={centerX}
+                cy={centerY}
+                r={3.5 + lock.energy * 8}
+                fill="url(#axis-live-attention)"
+                opacity={lock.energy > 0.48 ? lock.energy * 0.5 : 0}
+              />
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
 }
 
 function getRecorderType() {
@@ -138,6 +399,7 @@ export function LiveMemoryStream() {
   const [status, setStatus] = useState<LiveSessionStatus>("READY")
   const [elapsed, setElapsed] = useState(0)
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
+  const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("RECON")
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -719,6 +981,12 @@ export function LiveMemoryStream() {
           className="absolute inset-0 h-full w-full object-cover"
         />
 
+        <LiveMachinePerceptionOverlay
+          active={status === "LIVE" || status === "READY" || status === "STARTING"}
+          enabled={liveViewMode === "MOTION_ECHO"}
+          videoRef={localVideoRef}
+        />
+
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.76),transparent_31%,transparent_68%,rgba(0,0,0,0.86))]" />
 
         <header className="absolute left-4 right-4 top-4 z-20 border-b border-white/10 bg-black/46 px-4 py-3 backdrop-blur-sm">
@@ -757,6 +1025,27 @@ export function LiveMemoryStream() {
                 Last record
               </Link>
             ) : null}
+          </div>
+          <div className="mt-4 grid w-full max-w-64 grid-cols-2 border border-white/10">
+            {(["RECON", "MOTION_ECHO"] as LiveViewMode[]).map((mode) => {
+              const active = liveViewMode === mode
+              const label = mode === "MOTION_ECHO" ? "MOTION ECHO" : mode
+
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setLiveViewMode(mode)}
+                  className={`axis-mono axis-optical-transition h-8 border-r border-white/10 px-3 text-[9px] font-black uppercase tracking-[0.16em] transition last:border-r-0 ${
+                    active
+                      ? "bg-zinc-100 text-black"
+                      : "bg-black/34 text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
           </div>
         </header>
 
