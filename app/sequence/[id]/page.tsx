@@ -1,7 +1,5 @@
-import { SequenceConsole } from "@/components/axis/SequenceConsole"
+import { redirectToLiveThread } from "@/lib/liveThreadRedirect"
 
-export default async function SequencePage(props: PageProps<"/sequence/[id]">) {
-  const { id } = await props.params
-
-  return <SequenceConsole sequenceId={id} />
+export default function SequencePage() {
+  redirectToLiveThread()
 }

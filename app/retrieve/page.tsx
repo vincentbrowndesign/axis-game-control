@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { redirectToLiveThread } from "@/lib/liveThreadRedirect"
 
 export default function RetrievePage() {
-  redirect("/sessions")
+  redirectToLiveThread()
 }

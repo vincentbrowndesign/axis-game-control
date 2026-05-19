@@ -1,5 +1,5 @@
-import { ReviewConsole } from "@/components/axis/ReviewConsole"
+import { redirectToLiveThread } from "@/lib/liveThreadRedirect"
 
 export default function ReviewPage() {
-  return <ReviewConsole />
+  redirectToLiveThread()
 }

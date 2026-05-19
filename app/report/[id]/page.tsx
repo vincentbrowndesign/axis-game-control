@@ -1,7 +1,5 @@
-import { ReportConsole } from "@/components/axis/ReportConsole"
+import { redirectToLiveThread } from "@/lib/liveThreadRedirect"
 
-export default async function ReportPage(props: PageProps<"/report/[id]">) {
-  const { id } = await props.params
-
-  return <ReportConsole reportId={id} />
+export default function ReportPage() {
+  redirectToLiveThread()
 }

@@ -1,13 +1,5 @@
-import { redirect } from "next/navigation"
+import { redirectToLiveThread } from "@/lib/liveThreadRedirect"
 
-type Props = {
-  params: Promise<{
-    id: string
-  }>
-}
-
-export default async function PlayerPage({ params }: Props) {
-  await params
-
-  redirect("/team/local")
+export default function PlayerPage() {
+  redirectToLiveThread()
 }

@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { redirectToLiveThread } from "@/lib/liveThreadRedirect"
 
-export default async function StorePage() {
-  redirect("/tap")
+export default function StorePage() {
+  redirectToLiveThread()
 }
