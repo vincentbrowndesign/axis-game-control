@@ -36,6 +36,21 @@ export type SignalMotionVector = {
   energy: number
 }
 
+type SignalGhostBox = {
+  x: number
+  y: number
+  width: number
+  height: number
+  energy: number
+}
+
+type SignalTensionZone = {
+  x: number
+  y: number
+  radius: number
+  energy: number
+}
+
 const outputWidth = 720
 const outputHeight = 1280
 const pulseDurationMs = 520
@@ -92,6 +107,45 @@ function createDefaultMotionField(energy: number): SignalMotionVector[] {
     { x: 0.22, y: 0.34, dx: 0.11, dy: -0.02, energy: base * 0.62 },
     { x: 0.5, y: 0.48, dx: 0.16, dy: 0.01, energy: base },
     { x: 0.72, y: 0.62, dx: 0.09, dy: 0.035, energy: base * 0.72 },
+  ]
+}
+
+function ghostBoxesFromMotionField(
+  motionField: SignalMotionVector[] | undefined
+): SignalGhostBox[] {
+  return (motionField || []).map((vector) => ({
+    x: vector.x - 0.045,
+    y: vector.y - 0.06,
+    width: 0.09 + clamp01(vector.energy) * 0.045,
+    height: 0.12 + clamp01(vector.energy) * 0.05,
+    energy: vector.energy,
+  }))
+}
+
+function tensionZonesFromMotionField(
+  motionField: SignalMotionVector[] | undefined
+): SignalTensionZone[] {
+  if (!motionField?.length) return []
+
+  const totalEnergy = motionField.reduce((sum, vector) => sum + clamp01(vector.energy), 0) || 1
+  const center = motionField.reduce(
+    (zone, vector) => {
+      const energy = clamp01(vector.energy)
+      return {
+        x: zone.x + vector.x * energy,
+        y: zone.y + vector.y * energy,
+      }
+    },
+    { x: 0, y: 0 }
+  )
+
+  return [
+    {
+      x: center.x / totalEnergy,
+      y: center.y / totalEnergy,
+      radius: 0.16,
+      energy: clamp01(totalEnergy / motionField.length),
+    },
   ]
 }
 
@@ -280,6 +334,140 @@ function drawMotionField(
   context.restore()
 }
 
+function drawGhostTrackingBoxes(
+  context: CanvasRenderingContext2D,
+  boxes: SignalGhostBox[],
+  width: number,
+  height: number,
+  pulse: number
+) {
+  if (!boxes.length) return
+
+  context.save()
+  context.globalCompositeOperation = "screen"
+
+  boxes.forEach((box) => {
+    const energy = clamp01(box.energy)
+    const x = box.x * width
+    const y = box.y * height
+    const boxWidth = box.width * width
+    const boxHeight = box.height * height
+    const alpha = 0.055 + energy * 0.1 + pulse * 0.035
+
+    context.strokeStyle = `rgba(255,255,255,${alpha})`
+    context.lineWidth = 0.7
+    context.strokeRect(x, y, boxWidth, boxHeight)
+
+    context.strokeStyle = `rgba(255,255,255,${alpha * 1.2})`
+    context.beginPath()
+    context.moveTo(x, y + 10)
+    context.lineTo(x, y)
+    context.lineTo(x + 10, y)
+    context.moveTo(x + boxWidth - 10, y)
+    context.lineTo(x + boxWidth, y)
+    context.lineTo(x + boxWidth, y + 10)
+    context.moveTo(x, y + boxHeight - 10)
+    context.lineTo(x, y + boxHeight)
+    context.lineTo(x + 10, y + boxHeight)
+    context.moveTo(x + boxWidth - 10, y + boxHeight)
+    context.lineTo(x + boxWidth, y + boxHeight)
+    context.lineTo(x + boxWidth, y + boxHeight - 10)
+    context.stroke()
+  })
+
+  context.restore()
+}
+
+function drawTensionZones(
+  context: CanvasRenderingContext2D,
+  zones: SignalTensionZone[],
+  width: number,
+  height: number,
+  pulse: number
+) {
+  if (!zones.length) return
+
+  context.save()
+  context.globalCompositeOperation = "screen"
+
+  zones.forEach((zone) => {
+    const energy = clamp01(zone.energy)
+    const radius = zone.radius * width * (0.92 + pulse * 0.08)
+    const gradient = context.createRadialGradient(
+      zone.x * width,
+      zone.y * height,
+      0,
+      zone.x * width,
+      zone.y * height,
+      radius
+    )
+
+    gradient.addColorStop(0, `rgba(255,255,255,${0.035 + energy * 0.08})`)
+    gradient.addColorStop(0.45, `rgba(255,255,255,${0.012 + energy * 0.025})`)
+    gradient.addColorStop(1, "rgba(255,255,255,0)")
+
+    context.fillStyle = gradient
+    context.beginPath()
+    context.arc(zone.x * width, zone.y * height, radius, 0, Math.PI * 2)
+    context.fill()
+  })
+
+  context.restore()
+}
+
+function drawKineticHalos(
+  context: CanvasRenderingContext2D,
+  motionField: SignalMotionVector[] | undefined,
+  width: number,
+  height: number,
+  pulse: number
+) {
+  if (!motionField?.length || pulse < 0.08) return
+
+  context.save()
+  context.globalCompositeOperation = "screen"
+
+  motionField.forEach((vector) => {
+    const energy = clamp01(vector.energy)
+    if (energy < 0.22) return
+
+    context.strokeStyle = `rgba(255,255,255,${pulse * energy * 0.22})`
+    context.lineWidth = 0.8
+    context.beginPath()
+    context.arc(vector.x * width, vector.y * height, (16 + energy * 36) * pulse, 0, Math.PI * 2)
+    context.stroke()
+  })
+
+  context.restore()
+}
+
+function drawSignalPerceptionLayer(
+  context: CanvasRenderingContext2D,
+  signal: SignalRenderInput,
+  width: number,
+  height: number,
+  pulse: number
+) {
+  const kineticDensity = clamp01(signal.kineticDensity)
+
+  drawTensionZones(
+    context,
+    tensionZonesFromMotionField(signal.motionField),
+    width,
+    height,
+    pulse
+  )
+  drawMotionField(context, signal.motionField, width, height, kineticDensity)
+  drawGhostTrackingBoxes(
+    context,
+    ghostBoxesFromMotionField(signal.motionField),
+    width,
+    height,
+    pulse
+  )
+  drawKineticHalos(context, signal.motionField, width, height, pulse)
+}
+
 function drawPulseIntro(
   context: CanvasRenderingContext2D,
   nodeId: string,
@@ -304,8 +492,10 @@ function drawPulseIntro(
   context.fillText(nodeId, 42, height / 2 - 28)
   context.fillStyle = "rgba(255,255,255,0.86)"
   context.fillText(`CHRONO // ${chrono}`, 42, height / 2 + 56)
+  context.fillStyle = "rgba(255,255,255,0.46)"
+  context.fillText("SIGNAL MODE ACTIVE", 42, height / 2 + 86)
   context.fillStyle = `rgba(255,255,255,${0.12 + acousticPeak * 0.18})`
-  context.fillRect(42, height / 2 + 92, (width - 84) * (0.18 + acousticPeak * 0.72), 1)
+  context.fillRect(42, height / 2 + 118, (width - 84) * (0.18 + acousticPeak * 0.72), 1)
   context.restore()
 }
 
@@ -464,9 +654,18 @@ export async function exportSnapshotSignal({
   await video.play()
 
   while (video.currentTime < anchorTime) {
+    const distanceToAnchor = Math.max(0, anchorTime - video.currentTime)
+    const continuityPulse = Math.max(0, 1 - distanceToAnchor / Math.max(0.25, anchorTime - startTime))
+
     drawVideoCover(context, video, outputWidth, outputHeight)
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
-    drawMotionField(context, signal.motionField, outputWidth, outputHeight, kineticDensity)
+    drawSignalPerceptionLayer(
+      context,
+      signal,
+      outputWidth,
+      outputHeight,
+      continuityPulse * 0.72
+    )
 
     if (trailContext && frameCount % Math.max(4, Math.round(10 - kineticDensity * 5)) === 0) {
       trailContext.drawImage(canvas, 0, 0, outputWidth, outputHeight)
@@ -483,7 +682,7 @@ export async function exportSnapshotSignal({
   await recordTimedFrames(() => {
     drawVideoCover(context, video, outputWidth, outputHeight)
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
-    drawMotionField(context, signal.motionField, outputWidth, outputHeight, kineticDensity)
+    drawSignalPerceptionLayer(context, signal, outputWidth, outputHeight, 1)
     drawSnapshotImageLock(context, snapshotImage, outputWidth, outputHeight, 0.2)
     drawLockOverlay(context, chrono, signal.annotation, outputWidth, outputHeight)
   }, freezeDurationMs)
@@ -491,9 +690,11 @@ export async function exportSnapshotSignal({
   await video.play()
 
   while (video.currentTime < endTime && !video.ended) {
+    const tailProgress = Math.max(0, 1 - (video.currentTime - anchorTime) / Math.max(0.25, endTime - anchorTime))
+
     drawVideoCover(context, video, outputWidth, outputHeight)
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
-    drawMotionField(context, signal.motionField, outputWidth, outputHeight, kineticDensity)
+    drawSignalPerceptionLayer(context, signal, outputWidth, outputHeight, tailProgress * 0.5)
 
     if (trailContext && frameCount % Math.max(4, Math.round(10 - kineticDensity * 5)) === 0) {
       trailContext.drawImage(canvas, 0, 0, outputWidth, outputHeight)
