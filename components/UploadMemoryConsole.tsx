@@ -392,6 +392,7 @@ export default function UploadMemoryConsole({
   const [isUploading, setIsUploading] = useState(false)
   const [isSavingMoment, setIsSavingMoment] = useState(false)
   const [isLiveReady, setIsLiveReady] = useState(false)
+  const [savedMediaId, setSavedMediaId] = useState<string | null>(null)
   const [playbackId, setPlaybackId] = useState<string | undefined>()
   const [hasLoadedStoredRun, setHasLoadedStoredRun] = useState(false)
   const [openAiTrack, setOpenAiTrack] = useState<TrackIntelligence | null>(null)
@@ -743,6 +744,12 @@ export default function UploadMemoryConsole({
   }
 
   function attachStoryMedia(media: RunMedia) {
+    setSavedMediaId(media.id)
+
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => setSavedMediaId(null), 1800)
+    }
+
     setRun((current) => {
       const storyBlock = createStoryBlock(media, current)
 
@@ -954,6 +961,7 @@ export default function UploadMemoryConsole({
           isLiveReady={isLiveReady}
           isUploading={isUploading}
           isSavingMoment={isSavingMoment}
+          savedMediaId={savedMediaId}
           flowLabel={systemValue.label}
           onCamera={() => recordInputRef.current?.click()}
           onUpload={() => uploadInputRef.current?.click()}
@@ -1018,6 +1026,7 @@ function StoryMemoryCapture({
   isLiveReady,
   isUploading,
   isSavingMoment,
+  savedMediaId,
   flowLabel,
   onCamera,
   onUpload,
@@ -1038,6 +1047,7 @@ function StoryMemoryCapture({
   isLiveReady: boolean
   isUploading: boolean
   isSavingMoment: boolean
+  savedMediaId: string | null
   flowLabel: string
   onCamera: () => void
   onUpload: () => void
@@ -1193,7 +1203,13 @@ function StoryMemoryCapture({
         </button>
 
         {latest ? (
-          <div className="absolute bottom-[20rem] left-4 z-20 rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
+          <div
+            className={`absolute bottom-[20rem] left-4 z-20 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur transition duration-500 ${
+              savedMediaId === latest.media.id
+                ? "border-emerald-300/40 bg-emerald-950/50 text-emerald-100 shadow-[0_0_30px_rgba(110,231,183,0.28)]"
+                : "border-white/12 bg-black/45 text-zinc-200"
+            }`}
+          >
             {latest.sticker}
           </div>
         ) : null}
@@ -1232,7 +1248,11 @@ function StoryMemoryCapture({
             {blocks.slice(-4).map((block) => (
               <span
                 key={`${block.id}-stack`}
-                className="h-12 w-8 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-[0_0_18px_rgba(0,0,0,0.35)]"
+                className={`h-12 w-8 shrink-0 overflow-hidden rounded-md border bg-zinc-950 transition duration-500 ${
+                  savedMediaId === block.media.id
+                    ? "scale-110 border-emerald-300/50 shadow-[0_0_28px_rgba(110,231,183,0.28)]"
+                    : "border-white/10 shadow-[0_0_18px_rgba(0,0,0,0.35)]"
+                }`}
                 title={block.sticker}
               >
                 {block.media.contentType.startsWith("video/") ? (

@@ -57,12 +57,24 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
   }, [])
 
   const session = useMemo(() => buildActiveTemporalSession(run, now), [run, now])
+  const selectedStoryBlock = (run.storyBlocks ?? []).find(
+    (block) => block.id === sequenceId
+  )
   const selectedSequence =
     session.sequences.find((sequence) => sequence.id === sequenceId) ||
+    (selectedStoryBlock
+      ? session.sequences.find((sequence) =>
+          sequence.signals.some((signal) =>
+            selectedStoryBlock.signalIds.includes(signal.id)
+          )
+        )
+      : undefined) ||
     session.sequences[0]
   const signals = selectedSequence?.signals.length
     ? selectedSequence.signals
-    : session.signals
+    : selectedStoryBlock?.signalIds.length
+      ? session.signals.filter((signal) => selectedStoryBlock.signalIds.includes(signal.id))
+      : session.signals
 
   if (!selectedSequence) {
     return (
@@ -132,6 +144,41 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
         </header>
 
         <section className="grid gap-4 rounded-lg border border-zinc-800 bg-black p-4">
+          {selectedStoryBlock ? (
+            <div className="relative min-h-[22rem] overflow-hidden rounded-md border border-zinc-900 bg-zinc-950">
+              {selectedStoryBlock.media.contentType.startsWith("video/") ? (
+                <video
+                  src={selectedStoryBlock.media.url}
+                  className="absolute inset-0 h-full w-full object-cover opacity-82"
+                  controls
+                  playsInline
+                />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-0 bg-cover bg-center opacity-82"
+                  style={{
+                    backgroundImage: `url(${selectedStoryBlock.media.url})`,
+                  }}
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-black/20" />
+              <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
+                <div>
+                  <p className="w-fit rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
+                    {selectedStoryBlock.sticker}
+                  </p>
+                  <p className="mt-3 text-4xl font-black uppercase tracking-[-0.06em] text-zinc-100">
+                    Moment
+                  </p>
+                </div>
+                <p className="font-mono text-2xl font-black text-zinc-100">
+                  {selectedStoryBlock.score.home}-{selectedStoryBlock.score.away}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-4">
             <div className="grid content-between gap-4">
               <div>
@@ -139,10 +186,12 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
                   Sequence
                 </p>
                 <h1 className="mt-2 text-4xl font-black uppercase tracking-[-0.05em] text-zinc-100 sm:text-6xl">
-                  {selectedSequence?.title || session.temporalState.momentum}
+                  {selectedStoryBlock?.sticker ||
+                    selectedSequence?.title ||
+                    session.temporalState.momentum}
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm font-bold leading-6 text-zinc-500">
-                  {selectedSequence?.summary || session.temporalState.interpretation}
+                  {selectedSequence?.summary || "This moment lives inside the game flow."}
                 </p>
               </div>
 
