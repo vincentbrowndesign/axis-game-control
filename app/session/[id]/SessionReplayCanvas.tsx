@@ -205,7 +205,7 @@ function ReplayVideo({
   }
 
   return (
-    <div className="overflow-hidden border border-white/10 bg-[#050505]">
+    <div className="overflow-hidden bg-[#050505]">
       <div className="relative overflow-hidden">
         <video
           ref={videoRef}
@@ -310,7 +310,7 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
   }
 
   return (
-    <div className="mt-4 border border-white/10 bg-white/[0.02] px-4 py-4">
+    <div className="mt-4 bg-white/[0.012] px-4 py-4">
       <div
         className="relative h-12"
         onClick={(event) => {
@@ -352,10 +352,10 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
                 }
               }}
               aria-label={`Jump to snapshot at ${formatClock(event.session_time)}`}
-              className={`axis-optical-transition absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 border text-[0] transition ${
+              className={`axis-optical-transition absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-[0] transition ${
                 active
-                  ? "border-[#f2f1ed] bg-[#f2f1ed] shadow-[0_0_16px_rgba(242,241,237,0.22)]"
-                  : "border-white/20 bg-zinc-300/35 hover:bg-[#f2f1ed]"
+                  ? "bg-[#f2f1ed] shadow-[0_0_16px_rgba(242,241,237,0.22)]"
+                  : "bg-zinc-300/35 hover:bg-[#f2f1ed]"
               }`}
               style={{
                 left: `${position}%`,
@@ -381,11 +381,11 @@ function InspectionDepthControl({
   setInspectionDepth: (depth: InspectionDepth) => void
 }) {
   return (
-    <div className="mt-4 flex items-center justify-between border border-white/10 bg-white/[0.015] px-4 py-3">
+    <div className="mt-4 flex items-center justify-between bg-white/[0.01] px-4 py-3">
       <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-600">
         Optical depth
       </p>
-      <div className="grid grid-cols-4 border border-white/10">
+      <div className="grid grid-cols-4">
         {inspectionDepths.map((depth) => {
           const active = depth === inspectionDepth
 
@@ -394,10 +394,10 @@ function InspectionDepthControl({
               key={depth}
               type="button"
               onClick={() => setInspectionDepth(depth)}
-              className={`axis-mono axis-optical-transition h-8 min-w-12 border-r border-white/10 px-3 text-[10px] font-semibold transition last:border-r-0 ${
+              className={`axis-mono axis-optical-transition h-8 min-w-12 px-3 text-[10px] font-semibold transition ${
                 active
                   ? "bg-[#f2f1ed] text-black"
-                  : "bg-black text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300"
+                  : "bg-transparent text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300"
               }`}
             >
               {depth}
@@ -442,7 +442,7 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           })
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
-        className="axis-mono axis-optical-transition border border-white/10 bg-[#f2f1ed] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-black transition disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
+        className="axis-mono axis-optical-transition bg-[#f2f1ed]/92 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-black transition disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
       >
         SAVE TO DEVICE
       </button>
@@ -516,7 +516,7 @@ function SnapshotStrip() {
           return (
             <div
               key={snapshot.id}
-              className="min-w-32 border border-white/10 bg-black/50"
+              className="min-w-32 bg-black/36"
             >
               <button
                 type="button"
@@ -624,7 +624,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   return (
     <main className="axis-display min-h-dvh bg-black text-[#f2f1ed]">
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 py-4 sm:px-6">
-        <header className="border-b border-white/10 py-3">
+        <header className="py-3">
           <div className="flex items-center justify-between gap-6">
             <Link
               href="/live"
@@ -638,7 +638,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 border-b border-white/10 py-5 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4 py-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">
               {compactNodeId(session.id)}

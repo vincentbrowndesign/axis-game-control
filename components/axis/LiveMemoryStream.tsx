@@ -37,6 +37,7 @@ type WorkingSession = {
 }
 
 type LiveViewMode = "RECON" | "MOTION_ECHO"
+type LiveOpticalDepth = 0.5 | 1 | 2 | 2.5
 
 type AttentionState = "IDLE" | "WATCHING" | "TRACKING" | "LOCKING" | "OVERLOADED"
 
@@ -111,6 +112,7 @@ const mobileCaptureConstraints: MediaStreamConstraints = {
 const reconnectDebounceMs = 1400
 const trackFailureGraceMs = 5200
 const recorderTimesliceMs = 2000
+const liveOpticalDepths: LiveOpticalDepth[] = [0.5, 1, 2, 2.5]
 
 function formatClock(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds))
@@ -317,10 +319,10 @@ function BasketballEventSelector({
           if (activeEvent) selectEvent(activeEvent)
         }}
         onPointerCancel={() => setIsSliding(false)}
-        className="relative h-56 w-56 touch-none border border-white/10 bg-black/64 backdrop-blur-sm"
+        className="relative h-56 w-56 touch-none bg-black/20 backdrop-blur-sm"
         aria-label="Continuity selector"
       >
-        <div className="absolute inset-10 border border-white/[0.08]" />
+        <div className="absolute inset-10 bg-white/[0.025]" />
         <button
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
@@ -328,7 +330,7 @@ function BasketballEventSelector({
             event.stopPropagation()
             onCancel()
           }}
-          className="axis-mono absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 border border-white/10 bg-black text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500"
+          className="axis-mono absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 bg-black/28 text-[9px] font-black uppercase tracking-[0.2em] text-white/38 backdrop-blur"
         >
           SNAP
         </button>
@@ -343,12 +345,12 @@ function BasketballEventSelector({
               onPointerDown={(event) => event.stopPropagation()}
               onPointerUp={(event) => event.stopPropagation()}
               onClick={() => selectEvent(spoke.event)}
-              className={`axis-mono axis-optical-transition absolute h-8 min-w-11 -translate-x-1/2 -translate-y-1/2 border px-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition ${
+              className={`axis-mono axis-optical-transition absolute h-8 min-w-11 -translate-x-1/2 -translate-y-1/2 px-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition ${
                 active
-                  ? "border-[#f2f1ed] bg-[#f2f1ed] text-black shadow-[0_0_18px_rgba(242,241,237,0.2)]"
+                  ? "bg-[#f2f1ed]/90 text-black shadow-[0_0_18px_rgba(242,241,237,0.2)]"
                   : suggested
-                    ? "border-[#d7c08a]/35 bg-[#d7c08a]/10 text-[#e6d7ad]"
-                    : "border-white/10 bg-black/65 text-zinc-500"
+                    ? "bg-[#d7c08a]/10 text-[#e6d7ad]"
+                    : "bg-black/24 text-white/36 backdrop-blur"
               }`}
               style={{
                 left: `${spoke.x}%`,
@@ -1080,6 +1082,7 @@ export function LiveMemoryStream() {
   const [elapsed, setElapsed] = useState(0)
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
   const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("MOTION_ECHO")
+  const [liveOpticalDepth, setLiveOpticalDepth] = useState<LiveOpticalDepth>(1)
   const [pendingContinuitySelection, setPendingContinuitySelection] =
     useState<PendingContinuitySelection | null>(null)
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
@@ -1726,7 +1729,10 @@ export function LiveMemoryStream() {
           autoPlay
           muted
           playsInline
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-[150ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
+          style={{
+            transform: `scale(${liveOpticalDepth})`,
+          }}
         />
 
         <LiveMachinePerceptionOverlay
@@ -1736,46 +1742,55 @@ export function LiveMemoryStream() {
           videoRef={localVideoRef}
         />
 
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.76),transparent_31%,transparent_68%,rgba(0,0,0,0.86))]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.44),transparent_27%,transparent_72%,rgba(0,0,0,0.62))]" />
 
-        <div className="axis-mono pointer-events-none absolute bottom-28 left-5 z-20 text-[10px] font-black uppercase tracking-[0.28em] text-white/42 drop-shadow-[0_0_10px_rgba(242,241,237,0.18)]">
+        <div className="axis-mono pointer-events-none absolute bottom-28 left-5 z-20 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_10px_rgba(242,241,237,0.16)]">
           AXIS
         </div>
 
-        <header className="absolute left-4 right-4 top-4 z-20 border-b border-white/10 bg-black/46 px-4 py-3 backdrop-blur-sm">
-          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4">
-            <p className="text-[11px] font-black uppercase tracking-[0.26em] text-zinc-100">
-              AXIS
-            </p>
-            <div className="h-px bg-white/16" />
-            <div className="flex items-center gap-2">
+        <header className="absolute left-5 right-5 top-5 z-20">
+          <div className="flex items-start justify-between gap-5">
+            <div>
+              <p className="axis-mono text-[10px] font-black uppercase tracking-[0.26em] text-white/54">
+                {formatClock(elapsed)}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
               <span
                 className={`h-2 w-2 rounded-full ${
                   status === "LIVE"
-                    ? "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]"
+                    ? "bg-emerald-200 shadow-[0_0_12px_rgba(185,215,191,0.42)]"
                     : "bg-zinc-300/80"
                 }`}
               />
-              <span className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-100">
+              <span className="axis-mono text-[10px] font-black uppercase tracking-[0.24em] text-white/58">
                 LIVE
               </span>
             </div>
           </div>
-          <div className="mt-4 flex items-end justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
-                Session
-              </p>
-              <p className="mt-1 font-mono text-4xl font-black leading-none text-zinc-100">
-                {formatClock(elapsed)}
-              </p>
+          <div className="mt-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-1.5">
+              {liveOpticalDepths.map((depth) => (
+                <button
+                  key={depth}
+                  type="button"
+                  onClick={() => setLiveOpticalDepth(depth)}
+                  className={`axis-mono axis-optical-transition h-7 min-w-8 px-1 text-[10px] font-black tracking-[0.08em] transition ${
+                    liveOpticalDepth === depth
+                      ? "text-white/86 drop-shadow-[0_0_8px_rgba(242,241,237,0.18)]"
+                      : "text-white/28 hover:text-white/56"
+                  }`}
+                >
+                  {depth}
+                </button>
+              ))}
             </div>
             {archivedRecording ? (
               <Link
                 href={`/session/${archivedRecording.id}`}
-                className="border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
+                className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/42 transition hover:text-white/76"
               >
-                Last record
+                Record
               </Link>
             ) : null}
           </div>
@@ -1785,7 +1800,7 @@ export function LiveMemoryStream() {
             onClick={() =>
               setLiveViewMode((mode) => (mode === "MOTION_ECHO" ? "RECON" : "MOTION_ECHO"))
             }
-            className="axis-optical-transition mt-4 inline-flex h-5 w-5 items-center justify-center border border-white/10 transition hover:border-white/20"
+            className="axis-optical-transition mt-4 inline-flex h-5 w-5 items-center justify-center transition"
           >
             <span
               className={`h-1.5 w-1.5 rounded-full ${
@@ -1809,7 +1824,7 @@ export function LiveMemoryStream() {
               <div className="mt-7 flex justify-center gap-3">
                 <Link
                   href={`/session/${archivedRecording.id}`}
-                  className="border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
+                  className="bg-zinc-100/92 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
                 >
                   Open recording
                 </Link>
@@ -1823,7 +1838,7 @@ export function LiveMemoryStream() {
                       setFailure(error instanceof Error ? error.message : "Camera failed")
                     })
                   }}
-                  className="border border-white/10 bg-black/40 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100"
+                  className="bg-white/[0.06] px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 backdrop-blur"
                 >
                   New session
                 </button>
@@ -1843,7 +1858,7 @@ export function LiveMemoryStream() {
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
           {status === "LIVE" && latestSnapshot ? (
-            <div className="mx-auto mb-3 flex max-w-sm items-center gap-3 border border-white/10 bg-black/58 p-2 backdrop-blur-sm">
+            <div className="mx-auto mb-3 flex max-w-sm items-center gap-3 bg-black/24 p-1.5 backdrop-blur-sm">
               {latestSnapshot.image_url || latestSnapshot.localUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -1857,7 +1872,7 @@ export function LiveMemoryStream() {
                 </div>
               )}
               <div className="min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/38">
                   Snapshot
                 </p>
               </div>
@@ -1868,14 +1883,14 @@ export function LiveMemoryStream() {
               <button
                 type="button"
                 onClick={() => void startSession()}
-                className="w-full border border-white/10 bg-zinc-100 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-black active:bg-zinc-300"
+                className="w-full bg-zinc-100/90 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-black backdrop-blur active:bg-zinc-300"
               >
                 Start
               </button>
             ) : null}
 
             {status === "STARTING" || status === "FINALIZING" || status === "RECONNECTING" ? (
-              <div className="w-full border border-white/10 bg-black/54 px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-zinc-300">
+              <div className="w-full bg-black/28 px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-white/50 backdrop-blur">
                 ...
               </div>
             ) : null}
@@ -1885,14 +1900,14 @@ export function LiveMemoryStream() {
                 <button
                   type="button"
                   onClick={() => void captureSnapshot()}
-                  className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
+                  className="bg-black/28 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 backdrop-blur active:bg-white/10"
                 >
                   Snap
                 </button>
                 <button
                   type="button"
                   onClick={() => void finalizeSession()}
-                  className="border border-white/10 bg-zinc-100 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-black active:bg-zinc-300"
+                  className="bg-zinc-100/90 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-black backdrop-blur active:bg-zinc-300"
                 >
                   End
                 </button>
@@ -1900,7 +1915,7 @@ export function LiveMemoryStream() {
             ) : null}
           </div>
           {hasRecentArchive && status === "READY" ? (
-            <p className="mt-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+            <p className="axis-mono mt-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-white/34">
               Last recording stored
             </p>
           ) : null}

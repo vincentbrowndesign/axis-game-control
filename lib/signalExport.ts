@@ -26,6 +26,7 @@ export type SignalRenderInput = {
   annotation?: string
   snapshotImage?: string
   motionField?: SignalMotionVector[]
+  opticalDepth?: 0.5 | 1 | 2 | 2.5
 }
 
 export type SignalMotionVector = {
@@ -222,7 +223,8 @@ function drawVideoCover(
   context: CanvasRenderingContext2D,
   video: HTMLVideoElement,
   width: number,
-  height: number
+  height: number,
+  opticalDepth = 1
 ) {
   const sourceWidth = video.videoWidth || width
   const sourceHeight = video.videoHeight || height
@@ -243,7 +245,17 @@ function drawVideoCover(
     y = (height - drawHeight) / 2
   }
 
-  context.drawImage(video, x, y, drawWidth, drawHeight)
+  const safeDepth = Math.min(2.5, Math.max(0.5, Number(opticalDepth) || 1))
+  const scaledWidth = drawWidth * safeDepth
+  const scaledHeight = drawHeight * safeDepth
+
+  context.drawImage(
+    video,
+    x - (scaledWidth - drawWidth) / 2,
+    y - (scaledHeight - drawHeight) / 2,
+    scaledWidth,
+    scaledHeight
+  )
 }
 
 function drawAxisWatermark(
@@ -603,6 +615,7 @@ export async function exportSnapshotSignal({
   )
   const kineticDensity = clamp01(signal.kineticDensity)
   const acousticPeak = clamp01(signal.acousticPeak)
+  const opticalDepth = Math.min(2.5, Math.max(0.5, Number(signal.opticalDepth) || 1))
   const trailCanvas = document.createElement("canvas")
   trailCanvas.width = outputWidth
   trailCanvas.height = outputHeight
@@ -630,7 +643,7 @@ export async function exportSnapshotSignal({
     const distanceToAnchor = Math.max(0, anchorTime - video.currentTime)
     const continuityPulse = Math.max(0, 1 - distanceToAnchor / Math.max(0.25, anchorTime - startTime))
 
-    drawVideoCover(context, video, outputWidth, outputHeight)
+    drawVideoCover(context, video, outputWidth, outputHeight, opticalDepth)
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
     drawSignalPerceptionLayer(
       context,
@@ -654,7 +667,7 @@ export async function exportSnapshotSignal({
   await seekVideo(video, anchorTime)
 
   await recordTimedFrames(() => {
-    drawVideoCover(context, video, outputWidth, outputHeight)
+    drawVideoCover(context, video, outputWidth, outputHeight, opticalDepth)
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
     drawSignalPerceptionLayer(context, signal, outputWidth, outputHeight, 1)
     drawSnapshotImageLock(context, snapshotImage, outputWidth, outputHeight, 0.2)
@@ -666,7 +679,7 @@ export async function exportSnapshotSignal({
   while (video.currentTime < endTime && !video.ended) {
     const tailProgress = Math.max(0, 1 - (video.currentTime - anchorTime) / Math.max(0.25, endTime - anchorTime))
 
-    drawVideoCover(context, video, outputWidth, outputHeight)
+    drawVideoCover(context, video, outputWidth, outputHeight, opticalDepth)
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
     drawSignalPerceptionLayer(context, signal, outputWidth, outputHeight, tailProgress * 0.5)
     drawAxisWatermark(context, outputWidth, outputHeight, tailProgress * kineticDensity)
