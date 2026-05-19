@@ -11,6 +11,7 @@ import {
   loadArchivedRecording,
   saveArchivedRecording,
 } from "@/lib/liveArchive"
+import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
 import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
 
 type WorkingSession = {
@@ -96,6 +97,9 @@ export function LiveMemoryStream() {
   const [elapsed, setElapsed] = useState(0)
   const [errorMessage, setErrorMessage] = useState("")
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
+  const globalSyncStatus = useAxisChronologyStore((state) => state.globalSyncStatus)
+  const failedEventCount = useAxisChronologyStore((state) => state.failedEvents.length)
+  const retryFailedEvents = useAxisChronologyStore((state) => state.retryFailedEvents)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -144,18 +148,10 @@ export function LiveMemoryStream() {
       if (!session) return
 
       const sessionTime = elapsedRef.current
-      const eventId = createId("axis-event")
-
-      void postJson("/api/live/event", {
-        id: eventId,
-        sessionId: session.id,
-        type,
-        sessionTime,
-        payload: {
+      useAxisChronologyStore.getState().triggerAttentionSignal(type, sessionTime, {
           replay_window: defaultReplayWindow(),
           ...(metadata || {}),
-        },
-      }).catch(() => undefined)
+      })
     },
     []
   )
@@ -329,6 +325,11 @@ export function LiveMemoryStream() {
         id: sessionId,
         startedAt: createdAt,
         status: "STARTING",
+      })
+      useAxisChronologyStore.getState().hydrateChronology({
+        sessionId,
+        duration: 0,
+        events: [],
       })
 
       emitEvent("session_started")
@@ -792,6 +793,22 @@ export function LiveMemoryStream() {
               </div>
             ) : null}
           </div>
+          {status === "LIVE" || status === "RECONNECTING" ? (
+            <div className="mt-3 flex items-center justify-center gap-3">
+              <p className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                {globalSyncStatus}
+              </p>
+              {failedEventCount ? (
+                <button
+                  type="button"
+                  onClick={() => retryFailedEvents()}
+                  className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-200"
+                >
+                  Retry {failedEventCount}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {hasRecentArchive && status === "READY" ? (
             <p className="mt-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
               Last recording stored

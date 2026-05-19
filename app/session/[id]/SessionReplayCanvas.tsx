@@ -218,6 +218,14 @@ function EventFeed({
       requestEventJump: state.requestEventJump,
     }))
   )
+  const { globalSyncStatus, failedEventCount, retryFailedEvents } =
+    useAxisChronologyStore(
+      useShallow((state) => ({
+        globalSyncStatus: state.globalSyncStatus,
+        failedEventCount: state.failedEvents.length,
+        retryFailedEvents: state.retryFailedEvents,
+      }))
+    )
 
   return (
     <aside className="min-w-0 border-t border-white/10 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
@@ -233,6 +241,20 @@ function EventFeed({
         <p className="font-mono text-xs font-bold text-zinc-600">
           {snapshotCount} snapshots
         </p>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3 border border-white/10 bg-white/[0.03] px-3 py-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+          {globalSyncStatus}
+        </p>
+        {failedEventCount ? (
+          <button
+            type="button"
+            onClick={() => retryFailedEvents()}
+            className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
+          >
+            Retry {failedEventCount}
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-4 grid gap-2">
@@ -256,8 +278,8 @@ function EventFeed({
               <span className="truncate text-xs font-black uppercase tracking-[0.16em]">
                 {event.type}
               </span>
-              <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-70">
-                Jump
+              <span className="text-right text-[10px] font-black uppercase tracking-[0.16em] opacity-70">
+                {event.persistenceStatus === "PERSISTED" ? "Jump" : event.persistenceStatus}
               </span>
             </button>
           )
