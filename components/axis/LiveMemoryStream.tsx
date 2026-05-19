@@ -12,6 +12,7 @@ import {
   saveArchivedRecording,
 } from "@/lib/liveArchive"
 import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
+import { startPassiveContinuityObservers } from "@/lib/passiveContinuityObservers"
 import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
 import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
 
@@ -151,6 +152,7 @@ export function LiveMemoryStream() {
   const elapsedTimerRef = useRef<number | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const trackFailureTimerRef = useRef<number | null>(null)
+  const passiveObserversRef = useRef<ReturnType<typeof startPassiveContinuityObservers> | null>(null)
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
@@ -189,6 +191,20 @@ export function LiveMemoryStream() {
       useAxisChronologyStore.getState().triggerAttentionSignal(type, sessionTime, {
           replay_window: defaultReplayWindow(),
           ...(metadata || {}),
+      })
+    },
+    []
+  )
+
+  const appendPassiveTemporalEvent = useCallback(
+    (type: string, metadata?: Record<string, unknown>) => {
+      const session = workingSessionRef.current
+      if (!session || statusRef.current !== "LIVE") return
+
+      useAxisChronologyStore.getState().triggerAttentionSignal(type, elapsedRef.current, {
+        passive: true,
+        tier: "secondary",
+        ...(metadata || {}),
       })
     },
     []
@@ -289,6 +305,8 @@ export function LiveMemoryStream() {
 
   const cleanupCamera = useCallback(() => {
     clearReconnectTimers()
+    passiveObserversRef.current?.stop()
+    passiveObserversRef.current = null
     localStreamRef.current?.getTracks().forEach((track) => track.stop())
     localStreamRef.current = null
 
@@ -445,6 +463,11 @@ export function LiveMemoryStream() {
       setElapsed(0)
       startElapsedTimer()
       setLiveStatus("LIVE")
+      passiveObserversRef.current?.stop()
+      passiveObserversRef.current = startPassiveContinuityObservers({
+        getSessionTime: () => elapsedRef.current,
+        appendEvent: (event) => appendPassiveTemporalEvent(event.type, event.payload),
+      })
     } catch (error) {
       stopElapsedTimer()
       cleanupCamera()
