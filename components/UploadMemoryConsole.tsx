@@ -815,6 +815,16 @@ export default function UploadMemoryConsole({
       className="axis-shell min-h-screen px-4 pb-28 pt-5 text-zinc-100 sm:px-6"
     >
       <div className="mx-auto grid max-w-4xl gap-5">
+        <StoryMemoryCapture
+          run={run}
+          elapsed={elapsed}
+          homeScore={scoreboard.home}
+          awayScore={scoreboard.away}
+          blocks={storyBlocks}
+          isUploading={isUploading}
+          onCamera={() => recordInputRef.current?.click()}
+          onUpload={() => uploadInputRef.current?.click()}
+        />
         <RunHeader
           run={run}
           elapsed={elapsed}
@@ -828,12 +838,6 @@ export default function UploadMemoryConsole({
           onPause={pauseClock}
           onResume={resumeClock}
           onReset={resetClock}
-        />
-        <StoryMemoryCapture
-          blocks={storyBlocks}
-          isUploading={isUploading}
-          onCamera={() => recordInputRef.current?.click()}
-          onUpload={() => uploadInputRef.current?.click()}
         />
         <ControlPad
           home={run.home}
@@ -879,11 +883,19 @@ export default function UploadMemoryConsole({
 }
 
 function StoryMemoryCapture({
+  run,
+  elapsed,
+  homeScore,
+  awayScore,
   blocks,
   isUploading,
   onCamera,
   onUpload,
 }: {
+  run: Run
+  elapsed: string
+  homeScore: number
+  awayScore: number
   blocks: RunStoryBlock[]
   isUploading: boolean
   onCamera: () => void
@@ -894,7 +906,7 @@ function StoryMemoryCapture({
   return (
     <section className="axis-panel overflow-hidden rounded-lg">
       {latest ? (
-        <div className="relative min-h-56 bg-black sm:min-h-72">
+        <div className="relative min-h-[30rem] bg-black sm:min-h-[34rem]">
           {latest.media.contentType.startsWith("video/") ? (
             <video
               src={latest.media.url}
@@ -914,7 +926,23 @@ function StoryMemoryCapture({
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/18 to-black/10" />
-          <div className="absolute left-4 top-4 rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
+          <div className="absolute left-4 right-4 top-4 grid grid-cols-[1fr_auto_1fr] items-start gap-3">
+            <p className="truncate text-left text-[10px] font-black uppercase tracking-[0.18em] text-orange-100/75">
+              {run.home}
+            </p>
+            <div className="grid justify-items-center gap-1 rounded-full border border-white/10 bg-black/45 px-4 py-2 backdrop-blur">
+              <p className="font-mono text-2xl font-black leading-none text-zinc-100">
+                <span className="text-orange-200">{homeScore}</span>
+                <span className="px-1 text-zinc-600">-</span>
+                <span className="text-sky-200">{awayScore}</span>
+              </p>
+              <p className="font-mono text-[10px] font-black text-emerald-300">{elapsed}</p>
+            </div>
+            <p className="truncate text-right text-[10px] font-black uppercase tracking-[0.18em] text-sky-100/75">
+              {run.away}
+            </p>
+          </div>
+          <div className="absolute left-4 top-20 rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
             {latest.sticker}
           </div>
           <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
@@ -931,9 +959,55 @@ function StoryMemoryCapture({
               <StoryButton label="Add" onClick={onUpload} />
             </div>
           </div>
+          {blocks.length > 1 ? (
+            <div className="absolute bottom-20 right-4 flex max-w-[48%] gap-1.5 overflow-hidden">
+              {blocks.slice(-4, -1).map((block) => (
+                <span
+                  key={`${block.id}-stack`}
+                  className="h-12 w-8 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-[0_0_18px_rgba(0,0,0,0.35)]"
+                  title={block.sticker}
+                >
+                  {block.media.contentType.startsWith("video/") ? (
+                    <video
+                      src={block.media.url}
+                      className="h-full w-full object-cover opacity-75"
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="block h-full w-full bg-cover bg-center opacity-75"
+                      style={{
+                        backgroundImage: `url(${block.media.url})`,
+                      }}
+                    />
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : (
-        <div className="grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="relative grid min-h-[28rem] content-end overflow-hidden bg-black p-5">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_24%,rgba(244,244,245,0.1),transparent_34%),linear-gradient(180deg,rgba(24,24,27,0.16),rgba(0,0,0,0.92))]" />
+          <div className="absolute left-4 right-4 top-4 grid grid-cols-[1fr_auto_1fr] items-start gap-3">
+            <p className="truncate text-left text-[10px] font-black uppercase tracking-[0.18em] text-orange-100/60">
+              {run.home}
+            </p>
+            <div className="grid justify-items-center gap-1 rounded-full border border-white/10 bg-black/45 px-4 py-2 backdrop-blur">
+              <p className="font-mono text-2xl font-black leading-none text-zinc-100">
+                <span className="text-orange-200">{homeScore}</span>
+                <span className="px-1 text-zinc-600">-</span>
+                <span className="text-sky-200">{awayScore}</span>
+              </p>
+              <p className="font-mono text-[10px] font-black text-emerald-300">{elapsed}</p>
+            </div>
+            <p className="truncate text-right text-[10px] font-black uppercase tracking-[0.18em] text-sky-100/60">
+              {run.away}
+            </p>
+          </div>
+          <div className="relative z-10 grid gap-5 sm:grid-cols-[1fr_auto] sm:items-end">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
               Story
@@ -945,6 +1019,7 @@ function StoryMemoryCapture({
           <div className="flex gap-2">
             <StoryButton label={isUploading ? "..." : "Camera"} onClick={onCamera} />
             <StoryButton label="Add" onClick={onUpload} />
+          </div>
           </div>
         </div>
       )}

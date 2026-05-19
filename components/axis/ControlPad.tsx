@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { RunPlayer } from "@/lib/run/runState"
 import type { SignalResult, SignalSide, SignalStat } from "@/lib/run/signals"
 
@@ -37,6 +37,14 @@ export function ControlPad({
     Partial<Record<SignalSide, string>>
   >({})
 
+  useEffect(() => {
+    if (!pending || typeof window === "undefined") return
+
+    const timeout = window.setTimeout(() => setPending(null), 5200)
+
+    return () => window.clearTimeout(timeout)
+  }, [pending])
+
   function commit(stat: SignalStat, playerId = pending ? selectedPlayerBySide[pending.side] : undefined) {
     if (!pending) return
 
@@ -56,7 +64,7 @@ export function ControlPad({
 
   return (
     <section className="grid gap-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         <BehaviorLane
           side="home"
           name={home}
@@ -94,7 +102,7 @@ export function ControlPad({
       <button
         type="button"
         onClick={onUndo}
-        className="axis-glass mx-auto h-16 w-full max-w-sm rounded-full text-sm font-black uppercase tracking-[0.22em] text-zinc-300 transition active:scale-[0.99] hover:border-zinc-500 hover:text-white"
+        className="axis-glass mx-auto h-11 w-full max-w-44 rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 transition active:scale-[0.99] hover:border-zinc-500 hover:text-white"
       >
         Undo
       </button>
@@ -113,48 +121,64 @@ function BehaviorLane({
   active: boolean
   onPick: (result: SignalResult) => void
 }) {
+  const [holding, setHolding] = useState<SignalResult | null>(null)
   const positiveTone =
     side === "home"
-      ? "border-orange-400/80 bg-orange-400 text-black hover:bg-orange-300"
-      : "border-sky-400/80 bg-sky-400 text-black hover:bg-sky-300"
+      ? "border-orange-300/35 bg-orange-300/10 text-orange-100 hover:border-orange-200/70"
+      : "border-sky-300/35 bg-sky-300/10 text-sky-100 hover:border-sky-200/70"
   const negativeTone =
     side === "home"
-      ? "border-orange-400/25 bg-orange-950/40 text-orange-200 hover:bg-orange-900/50"
-      : "border-sky-400/25 bg-sky-950/40 text-sky-200 hover:bg-sky-900/50"
+      ? "border-orange-400/20 bg-black/45 text-orange-300/80 hover:border-orange-300/55"
+      : "border-sky-400/20 bg-black/45 text-sky-300/80 hover:border-sky-300/55"
 
   return (
     <div
-      className={`axis-panel grid gap-2 rounded-lg p-2 transition ${
-        active ? "border-zinc-600" : "border-zinc-900"
+      className={`axis-glass relative grid min-h-32 grid-cols-[1fr_auto] gap-2 overflow-hidden rounded-lg p-2 transition duration-300 ${
+        active ? "border-zinc-500/70 opacity-100" : "opacity-72 hover:opacity-100"
       }`}
     >
-      <button
-        type="button"
-        onClick={() => onPick("plus")}
-        className={`relative min-h-40 overflow-hidden rounded-lg border p-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] transition active:scale-[0.99] sm:min-h-48 ${positiveTone}`}
-      >
-        <span className="absolute inset-x-0 top-0 h-px bg-white/35" />
-        <span className="block truncate text-[10px] font-black uppercase tracking-[0.2em] opacity-65">
+      <div
+        className={`absolute inset-y-3 w-1 rounded-full ${
+          side === "home" ? "left-0 bg-orange-300/55" : "right-0 bg-sky-300/55"
+        }`}
+      />
+      <div className="grid content-between p-2">
+        <span className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
           {name}
         </span>
-        <span className="mt-8 block font-mono text-7xl font-black uppercase leading-none tracking-[-0.05em] sm:text-8xl">
-          +
+        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700">
+          {side === "home" ? "Left edge" : "Right edge"}
         </span>
+      </div>
+      <div className="grid gap-2">
+      <button
+        type="button"
+        onPointerDown={() => setHolding("plus")}
+        onPointerLeave={() => setHolding(null)}
+        onPointerUp={() => setHolding(null)}
+        onClick={() => onPick("plus")}
+        className={`relative grid h-16 w-20 place-items-center overflow-hidden rounded-full border font-mono text-4xl font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition duration-200 active:scale-[0.97] sm:h-20 sm:w-24 ${
+          holding === "plus" ? "scale-[1.03]" : ""
+        } ${positiveTone}`}
+        aria-label={`${name} positive event`}
+      >
+        +
       </button>
 
       <button
         type="button"
+        onPointerDown={() => setHolding("minus")}
+        onPointerLeave={() => setHolding(null)}
+        onPointerUp={() => setHolding(null)}
         onClick={() => onPick("minus")}
-        className={`relative min-h-24 overflow-hidden rounded-lg border p-4 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition active:scale-[0.99] sm:min-h-28 ${negativeTone}`}
+        className={`relative grid h-11 w-20 place-items-center overflow-hidden rounded-full border font-mono text-3xl font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-200 active:scale-[0.97] sm:w-24 ${
+          holding === "minus" ? "scale-[1.03]" : ""
+        } ${negativeTone}`}
+        aria-label={`${name} negative event`}
       >
-        <span className="absolute inset-x-0 top-0 h-px bg-white/10" />
-        <span className="block truncate text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
-          {name}
-        </span>
-        <span className="mt-3 block font-mono text-5xl font-black uppercase leading-none tracking-[-0.05em] sm:text-6xl">
-          -
-        </span>
+        -
       </button>
+      </div>
     </div>
   )
 }
@@ -202,7 +226,7 @@ function DisclosurePanel({
   }
 
   return (
-    <div className="axis-panel rounded-lg p-3">
+    <div className="axis-glass rounded-[1.5rem] p-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
       <div className="flex items-center justify-between gap-3">
         <p className="truncate text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
           {teamName} {pending.result === "plus" ? "+" : "-"}
@@ -216,7 +240,7 @@ function DisclosurePanel({
         </button>
       </div>
 
-      <div className="mt-3 flex gap-2 overflow-x-auto border-t border-zinc-900 pt-3">
+      <div className="mt-3 flex gap-2 overflow-x-auto pt-1">
         {players.map((player) => (
           <button
             key={player.id}
@@ -276,7 +300,7 @@ function DisclosurePanel({
             key={stat}
             type="button"
             onClick={() => onStat(stat)}
-            className="h-12 min-w-16 rounded-full border border-zinc-800 bg-black px-4 font-black uppercase tracking-[0.14em] text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition active:scale-[0.98] hover:border-zinc-500 hover:bg-zinc-900"
+            className="h-11 min-w-14 rounded-full border border-zinc-800 bg-black/80 px-4 font-black uppercase tracking-[0.14em] text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition active:scale-[0.98] hover:border-zinc-500 hover:bg-zinc-900"
           >
             {stat}
           </button>
