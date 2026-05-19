@@ -291,8 +291,10 @@ export function TrackConsole() {
     60_000
   )
   const activeMoment = moments[0]
-  const recentSignals = run.signals.slice(-36)
   const detailSignals = run.signals.slice(-12).reverse()
+  const supportingSignals = activeMoment
+    ? run.signals.filter((signal) => activeMoment.signalIds.includes(signal.id)).slice(0, 6)
+    : run.signals.slice(-6)
   const detailClusters = useMemo(() => {
     const clustered = moments
       .slice(0, 4)
@@ -388,7 +390,7 @@ export function TrackConsole() {
 
         <section className="axis-panel relative overflow-hidden rounded-lg shadow-[0_18px_80px_rgba(0,0,0,0.42)]">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-zinc-400/40 to-transparent" />
-          <div className="grid min-h-[31rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[35rem] sm:p-5">
+          <div className="grid min-h-[36rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[40rem] sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
                 Continuity Rail
@@ -439,27 +441,27 @@ export function TrackConsole() {
                 </div>
               ) : null}
 
-              {moments.map((moment, index) => {
-                const left = positionFor(moment.start, timelineMs)
-                const width = momentWidth(moment, timelineMs)
+              {activeMoment ? (() => {
+                const left = positionFor(activeMoment.start, timelineMs)
+                const width = momentWidth(activeMoment, timelineMs)
 
                 return (
                   <span
-                    key={`${moment.id}-strip`}
-                    className="absolute h-7 rounded-full border border-zinc-700/45 bg-zinc-950/80 shadow-[0_0_22px_rgba(244,244,245,0.08)]"
+                    key={`${activeMoment.id}-active-strip`}
+                    className="absolute h-9 rounded-full border border-zinc-500/45 bg-zinc-950/90 shadow-[0_0_28px_rgba(244,244,245,0.12)]"
                     style={{
                       left: `${left}%`,
-                      top: `${26 + index * 18}px`,
+                      top: "24px",
                       width: `${width}%`,
                     }}
-                    title={`${moment.name}: ${moment.summary}`}
+                    title={`${activeMoment.name}: ${activeMoment.summary}`}
                   >
-                    <span className={`absolute -top-5 left-2 text-[9px] font-black uppercase tracking-[0.18em] ${labelTone(moment.label)}`}>
-                      {moment.label}
+                    <span className={`absolute -top-5 left-2 text-[9px] font-black uppercase tracking-[0.18em] ${labelTone(activeMoment.label)}`}>
+                      {activeMoment.label}
                     </span>
                   </span>
                 )
-              })}
+              })() : null}
 
               {run.signals.map((signal) => {
                 const left = positionFor(signal.time, timelineMs)
@@ -517,8 +519,8 @@ export function TrackConsole() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[1.15fr_0.85fr]">
-              <div className="axis-glass min-w-0 rounded-md px-4 py-3">
+            <div className="grid gap-3 sm:grid-cols-[1.05fr_0.95fr]">
+              <div className="axis-glass min-w-0 rounded-md px-4 py-4">
                 <div className="flex items-center gap-2">
                   <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
                     {activeMoment?.label || temporal.state.label}
@@ -536,19 +538,39 @@ export function TrackConsole() {
                 </p>
               </div>
 
-              <div className="axis-glass flex items-center gap-1.5 overflow-hidden rounded-md px-3 py-3">
-                {recentSignals.length ? (
-                  recentSignals.map((signal) => (
-                    <span
-                      key={`${signal.id}-recent`}
-                      className={`block shrink-0 rounded-full ${signalColor(signal)} ${
-                        isPositiveSignal(signal.result) ? "h-3.5 w-3.5" : "h-2 w-2"
-                      }`}
-                      title={`${sideName(run, signal.side)} ${signalEventLabel(signal)}`}
-                    />
-                  ))
+              <div className="axis-glass min-w-0 rounded-md px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
+                  Supporting Sequence
+                </p>
+                {supportingSignals.length ? (
+                  <div className="mt-3 flex min-w-0 items-center gap-2 overflow-hidden">
+                    {supportingSignals.map((signal, index) => (
+                      <div
+                        key={`${signal.id}-sequence`}
+                        className="flex shrink-0 items-center gap-2"
+                      >
+                        {index > 0 ? (
+                          <span className="font-mono text-xs font-black text-zinc-700">
+                            →
+                          </span>
+                        ) : null}
+                        <span
+                          className={`rounded-full border px-3 py-1.5 font-mono text-xs font-black ${
+                            isPositiveSignal(signal.result)
+                              ? signal.side === "home"
+                                ? "border-orange-300/35 bg-orange-950/40 text-orange-200"
+                                : "border-sky-300/35 bg-sky-950/40 text-sky-200"
+                              : "border-zinc-700 bg-black text-zinc-500"
+                          }`}
+                          title={`${sideName(run, signal.side)} ${signalEventLabel(signal)}`}
+                        >
+                          {signalEventLabel(signal)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <span className="h-1 w-full rounded-full bg-zinc-900" />
+                  <div className="mt-3 h-2 rounded-full bg-zinc-900" />
                 )}
               </div>
             </div>
@@ -556,64 +578,13 @@ export function TrackConsole() {
         </section>
 
         <section className="grid gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
-              Flow Overlay
-            </p>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-700">
-              {activeInference?.source === "openai" ? "OpenAI" : "Temporal"}
-            </p>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-[1fr_0.85fr]">
-            <div className="axis-panel relative overflow-hidden rounded-lg px-4 py-4">
-              <div className="absolute left-4 right-4 top-1/2 h-px bg-zinc-800" />
-              {moments.length ? (
-                <div className="flex gap-8 overflow-x-auto pb-1">
-                  {moments.map((moment) => (
-                    <article
-                      key={moment.id}
-                      className="relative min-w-56 bg-transparent py-2"
-                    >
-                      <span
-                        className={`absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-zinc-700 bg-black ${
-                          moment.label === "SPURT"
-                            ? "shadow-[0_0_18px_rgba(253,186,116,0.34)]"
-                            : moment.label === "SWING"
-                              ? "shadow-[0_0_18px_rgba(110,231,183,0.28)]"
-                              : moment.label === "BREAK"
-                                ? "shadow-[0_0_18px_rgba(248,113,113,0.24)]"
-                                : ""
-                        }`}
-                      />
-                      <p className={`ml-7 text-xs font-black uppercase tracking-[0.18em] ${labelTone(moment.label)}`}>
-                        {moment.label} / {seconds(moment.end)}
-                      </p>
-                      <p className="ml-7 mt-5 truncate text-xl font-black uppercase tracking-[-0.04em] text-zinc-100">
-                        {moment.name}
-                      </p>
-                      <p className="ml-7 mt-1 line-clamp-2 text-sm font-bold leading-5 text-zinc-600">
-                        {moment.summary}
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="relative z-10">
-                  <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
-                    Signals will cluster into moments here.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <details className="axis-panel group rounded-lg px-4 py-4" open>
+          <details className="axis-panel group rounded-lg px-4 py-4">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-                  Event Detail
+                  Detail
                 </span>
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition group-open:text-zinc-500">
-                  Expand
+                  Players / time / audio
                 </span>
               </summary>
 
@@ -673,7 +644,6 @@ export function TrackConsole() {
                 )}
               </div>
             </details>
-          </div>
         </section>
       </div>
     </main>
