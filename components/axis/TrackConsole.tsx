@@ -291,6 +291,7 @@ export function TrackConsole() {
     60_000
   )
   const activeMoment = moments[0]
+  const storyBlocks = run.storyBlocks ?? []
   const detailSignals = run.signals.slice(-12).reverse()
   const supportingSignals = activeMoment
     ? run.signals.filter((signal) => activeMoment.signalIds.includes(signal.id)).slice(0, 6)
@@ -465,6 +466,43 @@ export function TrackConsole() {
                   </span>
                 )
               })() : null}
+
+              {storyBlocks.map((block) => {
+                const left = positionFor(block.start, timelineMs)
+                const width = Math.max(4, positionFor(block.end, timelineMs) - left)
+
+                return (
+                  <span
+                    key={`${block.id}-track-media`}
+                    className="absolute bottom-14 h-12 overflow-hidden rounded-md border border-zinc-500/35 bg-zinc-950 shadow-[0_0_22px_rgba(244,244,245,0.12)]"
+                    style={{
+                      left: `${left}%`,
+                      width: `${width}%`,
+                    }}
+                    title={block.sticker}
+                  >
+                    {block.media.contentType.startsWith("video/") ? (
+                      <video
+                        src={block.media.url}
+                        className="h-full w-full object-cover opacity-70"
+                        muted
+                        playsInline
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className="block h-full w-full bg-cover bg-center opacity-70"
+                        style={{
+                          backgroundImage: `url(${block.media.url})`,
+                        }}
+                      />
+                    )}
+                    <span className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-zinc-100">
+                      {block.sticker}
+                    </span>
+                  </span>
+                )
+              })}
 
               {run.signals.map((signal) => {
                 const left = positionFor(signal.time, timelineMs)

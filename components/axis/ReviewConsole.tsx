@@ -358,9 +358,40 @@ export function ReviewConsole() {
         <section className="grid gap-4">
           {reviewMoments.map((moment, index) => {
             const signals = run.signals.filter((signal) => moment.signalIds.includes(signal.id))
+            const storyBlock = (run.storyBlocks ?? []).find(
+              (block) =>
+                block.signalIds.some((signalId) => moment.signalIds.includes(signalId)) ||
+                (block.start <= moment.end && block.end >= moment.start)
+            )
 
             return (
               <article key={moment.id} className="axis-panel overflow-hidden rounded-lg">
+                {storyBlock ? (
+                  <div className="relative min-h-56 bg-black sm:min-h-72">
+                    {storyBlock.media.contentType.startsWith("video/") ? (
+                      <video
+                        src={storyBlock.media.url}
+                        className="absolute inset-0 h-full w-full object-cover opacity-80"
+                        muted
+                        playsInline
+                        loop
+                        autoPlay
+                      />
+                    ) : (
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 bg-cover bg-center opacity-80"
+                        style={{
+                          backgroundImage: `url(${storyBlock.media.url})`,
+                        }}
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+                    <div className="absolute bottom-4 left-5 rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100 backdrop-blur">
+                      {storyBlock.sticker}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid gap-5 p-5 sm:grid-cols-[0.95fr_1.05fr] sm:p-6">
                   <div className="min-w-0">
                     <div className="flex items-center justify-between gap-3">

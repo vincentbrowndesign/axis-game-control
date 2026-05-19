@@ -20,6 +20,7 @@ import {
   type Run,
   type RunInterpretation,
   type RunMedia,
+  type RunStoryBlock,
 } from "@/lib/run/runState"
 import {
   readStoredRun,
@@ -340,6 +341,16 @@ function activeMedia({
   }
 }
 
+function storySticker(label: string) {
+  if (label === "SPURT") return "SPURT"
+  if (label === "COLD") return "FLOW BROKE"
+  if (label === "SWING") return "CONTROL SHIFT"
+  if (label === "HOT") return "HOT"
+  if (label === "BREAK") return "THINGS GOT MESSY"
+
+  return "RESPONSE"
+}
+
 function trackInterpretations(
   moments: TrackMoment[],
   source: TrackIntelligence["source"]
@@ -366,7 +377,7 @@ export default function UploadMemoryConsole({
 }) {
   const recordInputRef = useRef<HTMLInputElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
-  const localVideoUrlRef = useRef<string | null>(null)
+  const localVideoUrlsRef = useRef<Set<string>>(new Set())
   const [run, setRun] = useState<Run>(() => createRun())
   const [now, setNow] = useState(() => Date.now())
   const [status, setStatus] = useState("")
@@ -393,6 +404,7 @@ export default function UploadMemoryConsole({
       moments: run.moments,
       memories: run.memories,
       media: run.media,
+      storyBlocks: run.storyBlocks,
       openAiInterpretations: [],
     }),
     [
@@ -407,6 +419,7 @@ export default function UploadMemoryConsole({
       run.players,
       run.scoreEvents,
       run.signals,
+      run.storyBlocks,
       run.startedAt,
     ]
   )
@@ -443,8 +456,8 @@ export default function UploadMemoryConsole({
 
   useEffect(
     () => () => {
-      if (localVideoUrlRef.current && typeof URL !== "undefined") {
-        URL.revokeObjectURL(localVideoUrlRef.current)
+      if (typeof URL !== "undefined") {
+        for (const url of localVideoUrlsRef.current) URL.revokeObjectURL(url)
       }
     },
     []
@@ -457,6 +470,7 @@ export default function UploadMemoryConsole({
   const scoreboard = useMemo(() => scoreFor(run), [run])
   const localTrack = useMemo(() => localTrackIntelligence(run), [run])
   const visibleTrack = openAiTrack || localTrack
+  const storyBlocks = run.storyBlocks ?? []
   const assistedSuggestions = useMemo(
     () => suggestAssistedEvents(run, now),
     [run, now]
@@ -648,11 +662,45 @@ export default function UploadMemoryConsole({
     return nextPlayer
   }
 
-  function attachMedia(media: RunMedia) {
-    setRun((current) => ({
-      ...current,
+  function createStoryBlock(media: RunMedia, current: Run): RunStoryBlock {
+    const currentElapsed = elapsedRunMs(current)
+    const nearbySignals = current.signals.filter(
+      (signal) => Math.abs(signal.time - currentElapsed) <= 18_000
+    )
+    const label = calculateSystemPlusMinus(current).label
+    const score = scoreFor(current)
+    const audioIntensity = current.audioContext
+      ? Math.max(0, Math.min(1, current.audioContext.escalation + current.audioContext.pacing * 0.08))
+      : 0
+
+    return {
+      id: createRunId(),
       media,
-    }))
+      start: Math.max(0, currentElapsed - 4000),
+      end: currentElapsed + Math.max(2000, media.durationSeconds * 1000),
+      capturedAt: Date.now(),
+      score,
+      continuityLabel: label,
+      sticker: storySticker(label),
+      signalIds: nearbySignals.map((signal) => signal.id),
+      audioIntensity,
+      buffer: {
+        preRollSeconds: 4,
+        tailSeconds: 2,
+      },
+    }
+  }
+
+  function attachStoryMedia(media: RunMedia) {
+    setRun((current) => {
+      const storyBlock = createStoryBlock(media, current)
+
+      return {
+        ...current,
+        media,
+        storyBlocks: [...(current.storyBlocks ?? []), storyBlock].slice(-24),
+      }
+    })
   }
 
   async function chooseFile(file: File | undefined, source: UploadSource) {
@@ -668,12 +716,10 @@ export default function UploadMemoryConsole({
         return
       }
 
-      if (localVideoUrlRef.current) URL.revokeObjectURL(localVideoUrlRef.current)
-
       const localUrl = URL.createObjectURL(file)
-      localVideoUrlRef.current = localUrl
+      localVideoUrlsRef.current.add(localUrl)
       const metadata = await readVideoMetadata(localUrl)
-      attachMedia(
+      attachStoryMedia(
         activeMedia({
           file,
           url: localUrl,
@@ -709,7 +755,7 @@ export default function UploadMemoryConsole({
 
       if (!signed.error && signed.data?.signedUrl) {
         setPlaybackId(signed.data.signedUrl)
-        attachMedia(
+        attachStoryMedia(
           activeMedia({
             file,
             url: signed.data.signedUrl,
@@ -745,7 +791,7 @@ export default function UploadMemoryConsole({
       setStatus(uploadStatus(result))
       if (result.videoUrl) {
         setPlaybackId(result.videoUrl)
-        attachMedia(
+        attachStoryMedia(
           activeMedia({
             file,
             url: result.videoUrl,
@@ -783,6 +829,12 @@ export default function UploadMemoryConsole({
           onResume={resumeClock}
           onReset={resetClock}
         />
+        <StoryMemoryCapture
+          blocks={storyBlocks}
+          isUploading={isUploading}
+          onCamera={() => recordInputRef.current?.click()}
+          onUpload={() => uploadInputRef.current?.click()}
+        />
         <ControlPad
           home={run.home}
           away={run.away}
@@ -801,7 +853,7 @@ export default function UploadMemoryConsole({
             setStatus("Suggested event confirmed.")
           }}
         />
-        <ReplayMemoryRail run={run} track={visibleTrack} />
+        <ReplayMemoryRail run={run} track={visibleTrack} storyBlocks={storyBlocks} />
         <StateBar state={axisState} status={status} />
       </div>
 
@@ -823,6 +875,92 @@ export default function UploadMemoryConsole({
 
       <ControlBar />
     </main>
+  )
+}
+
+function StoryMemoryCapture({
+  blocks,
+  isUploading,
+  onCamera,
+  onUpload,
+}: {
+  blocks: RunStoryBlock[]
+  isUploading: boolean
+  onCamera: () => void
+  onUpload: () => void
+}) {
+  const latest = blocks[blocks.length - 1]
+
+  return (
+    <section className="axis-panel overflow-hidden rounded-lg">
+      {latest ? (
+        <div className="relative min-h-56 bg-black sm:min-h-72">
+          {latest.media.contentType.startsWith("video/") ? (
+            <video
+              src={latest.media.url}
+              className="absolute inset-0 h-full w-full object-cover opacity-82"
+              muted
+              playsInline
+              loop
+              autoPlay
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-cover bg-center opacity-82"
+              style={{
+                backgroundImage: `url(${latest.media.url})`,
+              }}
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/18 to-black/10" />
+          <div className="absolute left-4 top-4 rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
+            {latest.sticker}
+          </div>
+          <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="font-mono text-3xl font-black tracking-[-0.05em] text-zinc-100">
+                {latest.score.home}-{latest.score.away}
+              </p>
+              <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                {latest.media.source === "camera" ? "Captured" : "Added"}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <StoryButton label={isUploading ? "..." : "Camera"} onClick={onCamera} />
+              <StoryButton label="Add" onClick={onUpload} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
+              Story
+            </p>
+            <h2 className="mt-2 text-4xl font-black uppercase leading-none tracking-[-0.06em] text-zinc-100">
+              Catch the moment.
+            </h2>
+          </div>
+          <div className="flex gap-2">
+            <StoryButton label={isUploading ? "..." : "Camera"} onClick={onCamera} />
+            <StoryButton label="Add" onClick={onUpload} />
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function StoryButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-zinc-700/70 bg-black/70 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-200 backdrop-blur transition active:scale-[0.98] hover:border-zinc-300"
+    >
+      {label}
+    </button>
   )
 }
 
@@ -876,7 +1014,15 @@ function AssistedSuggestionStrip({
   )
 }
 
-function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }) {
+function ReplayMemoryRail({
+  run,
+  track,
+  storyBlocks,
+}: {
+  run: Run
+  track: TrackIntelligence
+  storyBlocks: RunStoryBlock[]
+}) {
   const signals = run.signals.slice(-18)
   const momentsBySignal = new Map<string, TrackMoment>()
 
@@ -887,6 +1033,13 @@ function ReplayMemoryRail({ run, track }: { run: Run; track: TrackIntelligence }
   return (
     <section className="axis-panel rounded-lg px-3 py-3">
       <div className="flex min-h-8 items-center gap-1.5 overflow-hidden rounded-full border border-zinc-900 bg-black px-2">
+        {storyBlocks.slice(-4).map((block) => (
+          <span
+            key={`${block.id}-story-rail`}
+            title={block.sticker}
+            className="block h-5 w-8 shrink-0 rounded-full border border-zinc-500/60 bg-zinc-100/80 shadow-[0_0_18px_rgba(244,244,245,0.22)]"
+          />
+        ))}
         {signals.length ? (
           signals.map((signal) => {
             const moment = momentsBySignal.get(signal.id)

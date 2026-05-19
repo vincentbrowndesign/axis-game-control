@@ -6,6 +6,7 @@ import {
   type RunMedia,
   type RunMemory,
   type RunMoment,
+  type RunStoryBlock,
 } from "@/lib/run/runState"
 import { scoreFor } from "@/lib/run/score"
 import type { RunSignal } from "@/lib/run/signals"
@@ -34,6 +35,7 @@ export type ActiveTemporalSession = {
   moments: RunMoment[]
   footage: RunMedia[]
   memories: RunMemory[]
+  storyBlocks: RunStoryBlock[]
   temporalState: ReturnType<typeof runTemporalEngine>["state"]
   openAiInterpretations: RunInterpretation[]
 }
@@ -72,6 +74,7 @@ export function buildActiveTemporalSession(
     moments: run.moments,
     footage: run.media ? [run.media] : [],
     memories: run.memories,
+    storyBlocks: run.storyBlocks ?? [],
     temporalState: temporal.state,
     openAiInterpretations,
   }

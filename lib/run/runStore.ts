@@ -6,6 +6,7 @@ import {
   type RunMedia,
   type RunPlayer,
   type RunScoreEvent,
+  type RunStoryBlock,
 } from "@/lib/run/runState"
 import type { RunSignal } from "@/lib/run/signals"
 import {
@@ -133,37 +134,105 @@ function normalizeRun(value: unknown): Run | null {
         })
         .filter((event) => event.points > 0)
     : []
-  const media: RunMedia | undefined =
-    run.media && typeof run.media === "object"
-      ? {
-          id:
-            typeof run.media.id === "string" && run.media.id
-              ? run.media.id
-              : createRunId(),
-          name:
-            typeof run.media.name === "string" && run.media.name
-              ? run.media.name
-              : "Active footage",
-          url:
-            typeof run.media.url === "string" && run.media.url
-              ? run.media.url
-              : "",
-          durationSeconds:
-            typeof run.media.durationSeconds === "number" &&
-            Number.isFinite(run.media.durationSeconds)
-              ? run.media.durationSeconds
-              : 0,
-          contentType:
-            typeof run.media.contentType === "string" && run.media.contentType
-              ? run.media.contentType
-              : "video/mp4",
-          source: run.media.source === "camera" ? "camera" : "upload",
-          attachedAt:
-            typeof run.media.attachedAt === "number" && Number.isFinite(run.media.attachedAt)
-              ? run.media.attachedAt
-              : Date.now(),
-        }
-      : undefined
+  const normalizeMedia = (value: unknown): RunMedia | undefined => {
+    if (!value || typeof value !== "object") return undefined
+
+    const media = value as Partial<RunMedia>
+
+    return {
+      id: typeof media.id === "string" && media.id ? media.id : createRunId(),
+      name:
+        typeof media.name === "string" && media.name
+          ? media.name
+          : "Story memory",
+      url: typeof media.url === "string" && media.url ? media.url : "",
+      durationSeconds:
+        typeof media.durationSeconds === "number" &&
+        Number.isFinite(media.durationSeconds)
+          ? media.durationSeconds
+          : 0,
+      contentType:
+        typeof media.contentType === "string" && media.contentType
+          ? media.contentType
+          : "video/mp4",
+      source: media.source === "camera" ? "camera" : "upload",
+      attachedAt:
+        typeof media.attachedAt === "number" && Number.isFinite(media.attachedAt)
+          ? media.attachedAt
+          : Date.now(),
+    }
+  }
+  const media = normalizeMedia(run.media)
+  const storyBlocks: RunStoryBlock[] = Array.isArray(run.storyBlocks)
+    ? run.storyBlocks
+        .filter((block) => block && typeof block === "object")
+        .flatMap((block) => {
+          const record = block as Partial<RunStoryBlock>
+          const blockMedia = normalizeMedia(record.media)
+
+          if (!blockMedia?.url) return []
+
+          return [
+            {
+              id: typeof record.id === "string" && record.id ? record.id : createRunId(),
+              media: blockMedia,
+              start:
+                typeof record.start === "number" && Number.isFinite(record.start)
+                  ? record.start
+                  : 0,
+              end:
+                typeof record.end === "number" && Number.isFinite(record.end)
+                  ? record.end
+                  : 0,
+              capturedAt:
+                typeof record.capturedAt === "number" && Number.isFinite(record.capturedAt)
+                  ? record.capturedAt
+                  : Date.now(),
+              score: {
+                home:
+                  typeof record.score?.home === "number" &&
+                  Number.isFinite(record.score.home)
+                    ? record.score.home
+                    : 0,
+                away:
+                  typeof record.score?.away === "number" &&
+                  Number.isFinite(record.score.away)
+                    ? record.score.away
+                    : 0,
+              },
+              continuityLabel:
+                typeof record.continuityLabel === "string" && record.continuityLabel
+                  ? record.continuityLabel
+                  : "FLOW",
+              sticker:
+                typeof record.sticker === "string" && record.sticker
+                  ? record.sticker
+                  : "MOMENT",
+              signalIds: Array.isArray(record.signalIds)
+                ? record.signalIds.filter((id): id is string => typeof id === "string")
+                : [],
+              audioIntensity:
+                typeof record.audioIntensity === "number" &&
+                Number.isFinite(record.audioIntensity)
+                  ? Math.max(0, Math.min(1, record.audioIntensity))
+                  : 0,
+              buffer: {
+                preRollSeconds:
+                  typeof record.buffer?.preRollSeconds === "number" &&
+                  Number.isFinite(record.buffer.preRollSeconds)
+                    ? record.buffer.preRollSeconds
+                    : 4,
+                tailSeconds:
+                  typeof record.buffer?.tailSeconds === "number" &&
+                  Number.isFinite(record.buffer.tailSeconds)
+                    ? record.buffer.tailSeconds
+                    : 2,
+              },
+            },
+          ]
+        })
+        .slice(-24)
+    : []
   const openAiInterpretations: RunInterpretation[] = Array.isArray(
     run.openAiInterpretations
   )
@@ -304,6 +373,7 @@ function normalizeRun(value: unknown): Run | null {
     moments: Array.isArray(run.moments) ? run.moments : [],
     memories: Array.isArray(run.memories) ? run.memories : [],
     media: media?.url ? media : undefined,
+    storyBlocks,
     openAiInterpretations,
     audioContext,
   }

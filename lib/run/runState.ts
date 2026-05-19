@@ -45,6 +45,26 @@ export type RunMedia = {
   attachedAt: number
 }
 
+export type RunStoryBlock = {
+  id: string
+  media: RunMedia
+  start: number
+  end: number
+  capturedAt: number
+  score: {
+    home: number
+    away: number
+  }
+  continuityLabel: string
+  sticker: string
+  signalIds: string[]
+  audioIntensity: number
+  buffer: {
+    preRollSeconds: number
+    tailSeconds: number
+  }
+}
+
 export type RunInterpretation = {
   id: string
   label: "SPURT" | "HOT" | "COLD" | "SWING" | string
@@ -89,6 +109,7 @@ export type Run = {
   moments: RunMoment[]
   memories: RunMemory[]
   media?: RunMedia
+  storyBlocks?: RunStoryBlock[]
   openAiInterpretations?: RunInterpretation[]
   audioContext?: RunAudioContext
 }
