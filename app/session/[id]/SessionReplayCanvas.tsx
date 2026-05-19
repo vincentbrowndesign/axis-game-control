@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useShallow } from "zustand/react/shallow"
 import {
@@ -8,6 +8,7 @@ import {
   type TimelineAnchor,
   useAxisChronologyStore,
 } from "@/lib/axisChronologyStore"
+import { exportSnapshotSignal, type SignalExportStatus } from "@/lib/signalExport"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -352,7 +353,18 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
   )
 }
 
-function SnapshotStrip() {
+function signalStatusLabel(status: SignalExportStatus) {
+  if (status === "DOWNLOADING") return "SOURCE"
+  if (status === "RENDERING") return "RENDER"
+  if (status === "PREPARING_TRANSFER") return "TRANSFER"
+  if (status === "SUCCESS") return "READY"
+  if (status === "FAILED") return "HOLD"
+  return "SIGNAL"
+}
+
+function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
+  const [signalStatus, setSignalStatus] = useState<SignalExportStatus>("IDLE")
+  const [activeSignalSnapshotId, setActiveSignalSnapshotId] = useState<string | null>(null)
   const { snapshots, requestEventJump, events, updateSnapshotAnnotation } =
     useAxisChronologyStore(
       useShallow((state) => ({
@@ -364,6 +376,32 @@ function SnapshotStrip() {
     )
 
   if (!snapshots.length) return null
+
+  const exportSignal = async (snapshot: AxisSnapshot) => {
+    if (!session.playback_url || activeSignalSnapshotId) return
+
+    setActiveSignalSnapshotId(snapshot.id)
+    setSignalStatus("DOWNLOADING")
+
+    try {
+      await exportSnapshotSignal({
+        playbackUrl: session.playback_url,
+        snapshot,
+        nodeId: compactNodeId(session.id),
+        title: `axis-signal-${compactNodeId(session.id)}-${formatPreciseClock(
+          snapshot.session_time
+        )}`,
+        onStatus: setSignalStatus,
+      })
+    } catch {
+      setSignalStatus("FAILED")
+    } finally {
+      window.setTimeout(() => {
+        setActiveSignalSnapshotId(null)
+        setSignalStatus("IDLE")
+      }, 1500)
+    }
+  }
 
   const jumpToSnapshot = (snapshot: AxisSnapshot) => {
     const snapshotEvent = events.find(
@@ -420,6 +458,20 @@ function SnapshotStrip() {
                   aria-label={`Snapshot note at ${formatClock(snapshot.session_time)}`}
                   className="mt-2 w-full border-0 border-b border-white/10 bg-transparent px-0 py-1 font-mono text-[11px] font-bold lowercase text-zinc-200 outline-none placeholder:text-zinc-700 focus:border-white/40"
                 />
+                {session.playback_url ? (
+                  <button
+                    type="button"
+                    disabled={Boolean(activeSignalSnapshotId)}
+                    onClick={() => {
+                      void exportSignal(snapshot)
+                    }}
+                    className="mt-3 w-full border border-white/10 px-2 py-2 text-center font-mono text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500 transition hover:border-white/30 hover:text-zinc-200 disabled:cursor-wait disabled:text-zinc-700"
+                  >
+                    {activeSignalSnapshotId === snapshot.id
+                      ? signalStatusLabel(signalStatus)
+                      : "SIGNAL"}
+                  </button>
+                ) : null}
               </div>
             </div>
           )
@@ -515,7 +567,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           <section className="min-w-0">
             <ReplayVideo playbackUrl={session.playback_url} />
             <EventRail />
-            <SnapshotStrip />
+            <SnapshotStrip session={session} />
           </section>
         </div>
       </section>
