@@ -495,11 +495,8 @@ function drawPulseIntro(
   context.fillText(nodeId, 42, height / 2 - 28)
   context.fillStyle = "rgba(242,241,237,0.86)"
   context.fillText(`CHRONO // ${chrono}`, 42, height / 2 + 56)
-  context.font = `700 16px ${displayFont}`
-  context.fillStyle = "rgba(242,241,237,0.46)"
-  context.fillText("SIGNAL ACTIVE", 42, height / 2 + 86)
   context.fillStyle = `rgba(215,192,138,${0.1 + acousticPeak * 0.16})`
-  context.fillRect(42, height / 2 + 118, (width - 84) * (0.18 + acousticPeak * 0.72), 1)
+  context.fillRect(42, height / 2 + 88, (width - 84) * (0.18 + acousticPeak * 0.72), 1)
   context.restore()
 }
 

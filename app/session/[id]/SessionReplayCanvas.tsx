@@ -26,7 +26,7 @@ type SessionPayload = {
 }
 
 type InspectionDepth = 0.5 | 1 | 2 | 2.5
-type ReplayMode = "RECON" | "SIGNAL"
+type ReplayMode = "RECON" | "MOTION_ECHO"
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
 
@@ -274,7 +274,7 @@ function ReplayVideo({
             transform: `scale(${inspectionDepth})`,
           }}
         />
-        {replayMode === "SIGNAL" ? (
+        {replayMode === "MOTION_ECHO" ? (
           <SignalPerceptionOverlay duration={duration} inspectionDepth={inspectionDepth} />
         ) : null}
       </div>
@@ -299,6 +299,7 @@ function SignalPerceptionOverlay({
   )
   const currentTime = Number(playback.currentTimelineAnchor || playback.currentTime) || 0
   const safeDuration = Math.max(1, Number(duration) || 1)
+  const isMoving = Boolean(playback.isPlaying && !playback.paused && !playback.isSeeking)
   const activeEvent = events.find((event) => event.id === activeEventId)
   const nearestSnapshot = snapshots.reduce<AxisSnapshot | null>((nearest, snapshot) => {
     if (!nearest) return snapshot
@@ -314,22 +315,35 @@ function SignalPerceptionOverlay({
       .length / 6
   )
   const anchorProximity = clamp01(1 - Math.abs(currentTime - anchorTime) / Math.max(0.75, densityWindow))
-  const baseSeed = currentTime * 10 + safeDuration
+  const motionEnergy = isMoving
+    ? clamp01(0.22 + density * 0.36 + anchorProximity * 0.24 + (Math.sin(currentTime * 4.2) + 1) * 0.1)
+    : 0
+
+  if (motionEnergy < 0.08) return null
+
+  const baseSeed = currentTime * (13 + motionEnergy * 9) + safeDuration
   const boxes = [0, 1, 2].map((index) => {
-    const point = signalCoordinates(baseSeed, index)
-    const energy = clamp01(0.32 + density * 0.5 + index * 0.08)
+    const point = signalCoordinates(baseSeed + index * motionEnergy * 3.2, index)
+    const stabilization = clamp01(0.24 + motionEnergy * 0.6 + density * 0.18)
+    const looseness = 1 - stabilization
 
     return {
       ...point,
-      width: 9 + energy * 5,
-      height: 12 + energy * 6,
-      energy,
+      width: 8.5 + looseness * 8,
+      height: 11 + looseness * 9,
+      energy: stabilization,
     }
   })
-  const tension = signalCoordinates(baseSeed, 6)
+  const tension = signalCoordinates(baseSeed + motionEnergy * 9, 6)
+  const echoSteps = [1, 2, 3, 4]
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden mix-blend-screen">
+    <div
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden mix-blend-screen"
+      style={{
+        opacity: 0.56 + motionEnergy * 0.32,
+      }}
+    >
       <svg
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
@@ -338,7 +352,7 @@ function SignalPerceptionOverlay({
       >
         <defs>
           <radialGradient id="axis-tension-zone" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(215,192,138,0.16)" />
+            <stop offset="0%" stopColor="rgba(215,192,138,0.18)" />
             <stop offset="48%" stopColor="rgba(242,241,237,0.04)" />
             <stop offset="100%" stopColor="rgba(242,241,237,0)" />
           </radialGradient>
@@ -346,26 +360,45 @@ function SignalPerceptionOverlay({
         <circle
           cx={tension.x}
           cy={tension.y}
-          r={10 + density * 9 + anchorProximity * 4}
+          r={8 + density * 7 + motionEnergy * 8}
           fill="url(#axis-tension-zone)"
-          opacity={0.36 + density * 0.32}
+          opacity={0.12 + motionEnergy * 0.28}
         />
         {boxes.map((box, index) => {
           const next = boxes[(index + 1) % boxes.length]
+          const previousPoint = signalCoordinates(baseSeed - (index + 1) * (2 + motionEnergy * 5), index)
 
           return (
             <g key={index}>
+              {echoSteps.map((step) => {
+                const echo = signalCoordinates(baseSeed - step * (2.5 + motionEnergy * 4), index)
+                const echoOpacity = Math.max(0, 0.18 - step * 0.032) * motionEnergy
+
+                return (
+                  <rect
+                    key={step}
+                    x={echo.x - step * 0.2}
+                    y={echo.y + step * 0.16}
+                    width={box.width + step * 1.8}
+                    height={box.height + step * 1.4}
+                    fill="none"
+                    stroke="rgba(242,241,237,0.44)"
+                    strokeWidth={0.07}
+                    opacity={echoOpacity}
+                  />
+                )
+              })}
               <path
-                d={`M ${box.x + box.width / 2} ${box.y + box.height / 2} Q ${
+                d={`M ${previousPoint.x + box.width / 2} ${previousPoint.y + box.height / 2} Q ${
                   (box.x + next.x) / 2
-                } ${box.y - 8 - density * 7} ${next.x + next.width / 2} ${
+                } ${box.y - 6 - motionEnergy * 11} ${next.x + next.width / 2} ${
                   next.y + next.height / 2
                 }`}
                 fill="none"
-                stroke="rgba(242,241,237,0.2)"
-                strokeWidth={0.16 + density * 0.14}
+                stroke="rgba(242,241,237,0.25)"
+                strokeWidth={0.08 + motionEnergy * 0.13}
                 strokeLinecap="round"
-                opacity={0.34 + density * 0.38}
+                opacity={0.12 + motionEnergy * 0.46}
               />
               <rect
                 x={box.x}
@@ -373,44 +406,33 @@ function SignalPerceptionOverlay({
                 width={box.width}
                 height={box.height}
                 fill="none"
-                stroke="rgba(242,241,237,0.35)"
-                strokeWidth={0.16}
-                opacity={0.34 + box.energy * 0.42}
+                stroke="rgba(242,241,237,0.52)"
+                strokeWidth={0.09 + box.energy * 0.07}
+                opacity={0.18 + box.energy * 0.44}
               />
               <rect
-                x={box.x - 0.7}
-                y={box.y - 0.7}
-                width={box.width + 1.4}
-                height={box.height + 1.4}
+                x={box.x - 0.5 - motionEnergy}
+                y={box.y - 0.5 - motionEnergy}
+                width={box.width + 1 + motionEnergy * 2}
+                height={box.height + 1 + motionEnergy * 2}
                 fill="none"
-                stroke="rgba(185,215,191,0.18)"
-                strokeWidth={0.08}
-                opacity={anchorProximity}
+                stroke="rgba(185,215,191,0.22)"
+                strokeWidth={0.07}
+                opacity={motionEnergy * (0.18 + anchorProximity * 0.4)}
               />
               <circle
                 cx={box.x + box.width / 2}
                 cy={box.y + box.height / 2}
-                r={(2.4 + box.energy * 4) * anchorProximity}
+                r={2 + box.energy * 4.4 + anchorProximity * 2}
                 fill="none"
-                stroke="rgba(185,215,191,0.32)"
-                strokeWidth={0.12}
-                opacity={anchorProximity}
+                stroke="rgba(215,192,138,0.3)"
+                strokeWidth={0.08}
+                opacity={motionEnergy > 0.48 ? motionEnergy * 0.44 : 0}
               />
             </g>
           )
         })}
       </svg>
-      <div className="absolute left-4 top-4 flex items-center gap-3">
-        <span className="h-1.5 w-1.5 bg-[#b9d7bf]/70" />
-        <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.24em] text-[#f2f1ed]/55">
-          SIGNAL ACTIVE
-        </p>
-      </div>
-      <div className="absolute bottom-5 left-4 border-l border-[#d7c08a]/30 pl-3">
-        <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#f2f1ed]/70">
-          CHRONO // {formatPreciseClock(currentTime)}
-        </p>
-      </div>
     </div>
   )
 }
@@ -549,21 +571,22 @@ function ReplayModeToggle({
         Perception
       </p>
       <div className="grid grid-cols-2 border border-white/10">
-        {(["RECON", "SIGNAL"] as ReplayMode[]).map((mode) => {
+        {(["RECON", "MOTION_ECHO"] as ReplayMode[]).map((mode) => {
           const active = replayMode === mode
+          const label = mode === "MOTION_ECHO" ? "MOTION ECHO" : mode
 
           return (
             <button
               key={mode}
               type="button"
               onClick={() => setReplayMode(mode)}
-              className={`axis-mono axis-optical-transition h-8 min-w-20 border-r border-white/10 px-3 text-[10px] font-semibold transition last:border-r-0 ${
+              className={`axis-mono axis-optical-transition h-8 min-w-24 border-r border-white/10 px-3 text-[10px] font-semibold transition last:border-r-0 ${
                 active
                   ? "bg-[#f2f1ed] text-black"
                   : "bg-black text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300"
               }`}
             >
-              {mode}
+              {label}
             </button>
           )
         })}
