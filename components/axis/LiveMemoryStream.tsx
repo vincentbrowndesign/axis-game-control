@@ -96,14 +96,8 @@ async function postJson<T>(url: string, body: Record<string, unknown>) {
 export function LiveMemoryStream() {
   const [status, setStatus] = useState<LiveSessionStatus>("READY")
   const [elapsed, setElapsed] = useState(0)
-  const [errorMessage, setErrorMessage] = useState("")
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
-  const syncTelemetry = useAxisChronologyStore((state) => state.syncTelemetry)
-  const failedEventCount = useAxisChronologyStore((state) => state.failedEvents.length)
-  const retryFailedEvents = useAxisChronologyStore((state) => state.retryFailedEvents)
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
-  const failedSnapshotCount = useAxisChronologyStore((state) => state.failedSnapshots.length)
-  const retryFailedSnapshots = useAxisChronologyStore((state) => state.retryFailedSnapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -214,7 +208,6 @@ export function LiveMemoryStream() {
       emitEvent("session_failed", {
         reason: message,
       })
-      setErrorMessage(message)
       setLiveStatus("FAILED")
     },
     [clearReconnectTimers, emitEvent, setLiveStatus]
@@ -332,7 +325,6 @@ export function LiveMemoryStream() {
     }
 
     try {
-      setErrorMessage("")
       setLiveStatus("STARTING")
       hardStoppedRef.current = false
       chunksRef.current = []
@@ -679,15 +671,11 @@ export function LiveMemoryStream() {
                 className={`h-2 w-2 rounded-full ${
                   status === "LIVE"
                     ? "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]"
-                    : status === "RECONNECTING"
-                      ? "bg-amber-200 shadow-[0_0_14px_rgba(253,230,138,0.62)]"
-                      : status === "FAILED"
-                        ? "bg-red-300"
-                        : "bg-zinc-300/80"
+                    : "bg-zinc-300/80"
                 }`}
               />
               <span className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-100">
-                {status}
+                LIVE
               </span>
             </div>
           </div>
@@ -730,7 +718,6 @@ export function LiveMemoryStream() {
                 <button
                   type="button"
                   onClick={() => {
-                    setErrorMessage("")
                     setElapsed(0)
                     elapsedRef.current = 0
                     setLiveStatus("READY")
@@ -743,35 +730,6 @@ export function LiveMemoryStream() {
                   New session
                 </button>
               </div>
-            </div>
-          </div>
-        ) : null}
-
-        {status === "FAILED" ? (
-          <div className="absolute inset-0 z-30 grid place-items-center bg-black/78 px-6 text-center backdrop-blur-sm">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-red-200">
-                FAILED
-              </p>
-              <p className="mt-4 max-w-sm text-sm font-bold uppercase tracking-[0.12em] text-zinc-300">
-                {errorMessage || "Session failed"}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  workingSessionRef.current = null
-                  eventsRef.current = []
-                  chunksRef.current = []
-                  setLiveStatus("READY")
-                  setErrorMessage("")
-                  openCamera().catch((error) => {
-                    setFailure(error instanceof Error ? error.message : "Camera failed")
-                  })
-                }}
-                className="mt-7 border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
-              >
-                Retry
-              </button>
             </div>
           </div>
         ) : null}
@@ -795,9 +753,6 @@ export function LiveMemoryStream() {
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">
                   Snapshot
                 </p>
-                <p className="mt-1 truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200">
-                  {latestSnapshot.status}
-                </p>
               </div>
             </div>
           ) : null}
@@ -814,32 +769,18 @@ export function LiveMemoryStream() {
 
             {status === "STARTING" || status === "FINALIZING" || status === "RECONNECTING" ? (
               <div className="w-full border border-white/10 bg-black/54 px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-zinc-300">
-                {status}
+                ...
               </div>
             ) : null}
 
             {status === "LIVE" ? (
-              <div className="grid w-full grid-cols-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() => appendTemporalEvent("MARK")}
-                  className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
-                >
-                  Mark
-                </button>
+              <div className="grid w-full grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => void captureSnapshot()}
                   className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
                 >
                   Snap
-                </button>
-                <button
-                  type="button"
-                  onClick={() => appendTemporalEvent("TIMEOUT")}
-                  className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
-                >
-                  Timeout
                 </button>
                 <button
                   type="button"
@@ -851,31 +792,6 @@ export function LiveMemoryStream() {
               </div>
             ) : null}
           </div>
-          {status === "LIVE" || status === "RECONNECTING" ? (
-            <div className="mt-3 flex items-center justify-center gap-3">
-              <p className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
-                {syncTelemetry}
-              </p>
-              {failedEventCount ? (
-                <button
-                  type="button"
-                  onClick={() => retryFailedEvents()}
-                  className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-200"
-                >
-                  Retry {failedEventCount}
-                </button>
-              ) : null}
-              {failedSnapshotCount ? (
-                <button
-                  type="button"
-                  onClick={() => retryFailedSnapshots()}
-                  className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-200"
-                >
-                  Retry snaps {failedSnapshotCount}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
           {hasRecentArchive && status === "READY" ? (
             <p className="mt-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
               Last recording stored

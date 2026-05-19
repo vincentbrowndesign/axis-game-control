@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import Link from "next/link"
 import { useShallow } from "zustand/react/shallow"
 import {
@@ -163,18 +163,19 @@ function EventRail() {
         requestEventJump: state.requestEventJump,
       }))
     )
+  const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
   const safeDuration = Math.max(duration, 1)
   const jumpToNearestAtPosition = (clientX: number, rail: HTMLDivElement) => {
-    if (!events.length) return
+    if (!visibleEvents.length) return
 
     const bounds = rail.getBoundingClientRect()
     const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
     const targetTime = ratio * safeDuration
-    const nearestEvent = events.reduce((nearest, event) => {
+    const nearestEvent = visibleEvents.reduce((nearest, event) => {
       const nearestDistance = Math.abs(Number(nearest.session_time) - targetTime)
       const eventDistance = Math.abs(Number(event.session_time) - targetTime)
       return eventDistance < nearestDistance ? event : nearest
-    }, events[0])
+    }, visibleEvents[0])
 
     requestEventJump(nearestEvent.id)
   }
@@ -188,7 +189,7 @@ function EventRail() {
         }}
       >
         <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/18" />
-        {events.map((event) => {
+        {visibleEvents.map((event) => {
           const position = Math.min(
             100,
             Math.max(0, (Number(event.session_time) / safeDuration) * 100)
@@ -203,11 +204,11 @@ function EventRail() {
                 clickEvent.stopPropagation()
                 requestEventJump(event.id)
               }}
-              aria-label={`Jump to ${event.type} at ${formatClock(event.session_time)}`}
-              className={`absolute top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[0] transition ${
+              aria-label={`Jump to snapshot at ${formatClock(event.session_time)}`}
+              className={`absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[0] transition ${
                 active
-                  ? "border-zinc-100 bg-zinc-100 shadow-[0_0_20px_rgba(244,244,245,0.42)]"
-                  : "border-white/20 bg-zinc-300/50 hover:bg-zinc-100"
+                  ? "border-zinc-100 bg-zinc-100 shadow-[0_0_18px_rgba(244,244,245,0.36)]"
+                  : "border-white/20 bg-zinc-300/45 hover:bg-zinc-100"
               }`}
               style={{
                 left: `${position}%`,
@@ -224,131 +225,8 @@ function EventRail() {
   )
 }
 
-function SelectedEvent() {
-  const { events, activeEventId, uiStatus } = useAxisChronologyStore(
-    useShallow((state) => ({
-      events: state.events,
-      activeEventId: state.activeEventId,
-      uiStatus: state.uiStatus,
-    }))
-  )
-  const selectedEvent = useMemo(
-    () => events.find((event) => event.id === activeEventId) || null,
-    [events, activeEventId]
-  )
-
-  if (!selectedEvent) return null
-
-  return (
-    <div className="mt-4 border-l border-zinc-100/70 px-4 py-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-        Selected
-      </p>
-      <p className="mt-1 text-sm font-black uppercase tracking-[0.16em] text-zinc-100">
-        {selectedEvent.type} / {formatClock(selectedEvent.session_time)}
-      </p>
-      <p className="mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
-        {uiStatus}
-      </p>
-    </div>
-  )
-}
-
-function EventFeed({
-  eventsLoaded,
-}: {
-  eventsLoaded: boolean
-}) {
-  const { events, activeEventId, requestEventJump } = useAxisChronologyStore(
-    useShallow((state) => ({
-      events: state.events,
-      activeEventId: state.activeEventId,
-      requestEventJump: state.requestEventJump,
-    }))
-  )
-  const { syncTelemetry, failedEventCount, retryFailedEvents } =
-    useAxisChronologyStore(
-      useShallow((state) => ({
-        syncTelemetry: state.syncTelemetry,
-        failedEventCount: state.failedEvents.length,
-        retryFailedEvents: state.retryFailedEvents,
-      }))
-    )
-  const snapshotCount = useAxisChronologyStore((state) => state.snapshots.length)
-
-  return (
-    <aside className="min-w-0 border-t border-white/10 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-            Events
-          </p>
-          <p className="mt-1 font-mono text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">
-            {eventsLoaded ? `${events.length} loaded` : "loading"}
-          </p>
-        </div>
-        <p className="font-mono text-xs font-bold text-zinc-600">
-          {snapshotCount} snapshots
-        </p>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-3 border border-white/10 bg-white/[0.03] px-3 py-2">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-          {syncTelemetry}
-        </p>
-        {failedEventCount ? (
-          <button
-            type="button"
-            onClick={() => retryFailedEvents()}
-            className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
-          >
-            Retry {failedEventCount}
-          </button>
-        ) : null}
-      </div>
-
-      <div className="mt-4 grid gap-2">
-        {events.map((event) => {
-          const active = event.id === activeEventId
-
-          return (
-            <button
-              key={event.id}
-              type="button"
-              onClick={() => requestEventJump(event.id)}
-              className={`grid min-h-12 grid-cols-[4.5rem_1fr_auto] items-center gap-3 border px-3 py-3 text-left transition ${
-                active
-                  ? "border-zinc-100 bg-zinc-100 text-black"
-                  : "border-white/10 bg-white/[0.03] text-zinc-100 active:bg-white/10"
-              }`}
-            >
-              <span className="font-mono text-xs font-black">
-                {formatClock(event.session_time)}
-              </span>
-              <span className="truncate text-xs font-black uppercase tracking-[0.16em]">
-                {event.type}
-              </span>
-              <span className="text-right text-[10px] font-black uppercase tracking-[0.16em] opacity-70">
-                {event.persistenceStatus === "PERSISTED" ? "Jump" : event.persistenceStatus}
-              </span>
-            </button>
-          )
-        })}
-
-        {eventsLoaded && !events.length ? (
-          <p className="border border-white/10 bg-white/[0.03] px-3 py-4 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
-            NO EVENTS YET
-          </p>
-        ) : null}
-      </div>
-    </aside>
-  )
-}
-
 function exportLabel(status: string) {
-  if (status === "DOWNLOADING") return "DOWNLOADING"
-  if (status === "PREPARING_TRANSFER") return "PREPARING TRANSFER"
   if (status === "SUCCESS") return "FILE READY"
-  if (status === "FAILED") return "TRANSFER FAILED"
   return "SAVE TO DEVICE"
 }
 
@@ -376,13 +254,11 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
         }}
         className="border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
       >
-        {exportLabel(exportStatus)}
+        SAVE TO DEVICE
       </button>
-      {exportStatus !== "IDLE" ? (
+      {exportStatus !== "IDLE" && exportStatus !== "FAILED" ? (
         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
-          {exportStatus === "DOWNLOADING"
-            ? `SYS_TRANSFER_ACTIVE ${exportProgress}%`
-            : exportLabel(exportStatus)}
+          {exportStatus === "SUCCESS" ? exportLabel(exportStatus) : `${exportProgress}%`}
         </p>
       ) : null}
     </div>
@@ -390,12 +266,10 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
 }
 
 function SnapshotStrip() {
-  const { snapshots, failedSnapshotCount, retryFailedSnapshots, requestEventJump, events } =
+  const { snapshots, requestEventJump, events } =
     useAxisChronologyStore(
       useShallow((state) => ({
         snapshots: state.snapshots,
-        failedSnapshotCount: state.failedSnapshots.length,
-        retryFailedSnapshots: state.retryFailedSnapshots,
         requestEventJump: state.requestEventJump,
         events: state.events,
       }))
@@ -415,22 +289,8 @@ function SnapshotStrip() {
   }
 
   return (
-    <section className="mt-4 border border-white/10 bg-white/[0.025] p-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-          Snapshots
-        </p>
-        {failedSnapshotCount ? (
-          <button
-            type="button"
-            onClick={() => retryFailedSnapshots()}
-            className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
-          >
-            Retry {failedSnapshotCount}
-          </button>
-        ) : null}
-      </div>
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+    <section className="mt-4">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {snapshots.map((snapshot) => {
           const source = snapshot.image_url || snapshot.localUrl
 
@@ -457,9 +317,6 @@ function SnapshotStrip() {
                 <p className="font-mono text-[10px] font-black text-zinc-100">
                   {formatClock(snapshot.session_time)}
                 </p>
-                <p className="mt-1 text-[8px] font-black uppercase tracking-[0.14em] text-zinc-600">
-                  {snapshot.status}
-                </p>
               </div>
             </button>
           )
@@ -470,7 +327,6 @@ function SnapshotStrip() {
 }
 
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
-  const [eventsLoaded, setEventsLoaded] = useState(false)
   const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
@@ -506,7 +362,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
         })
         hydrateSnapshots(payload.snapshots || [])
       } finally {
-        if (active) setEventsLoaded(true)
+        return
       }
     }
 
@@ -563,20 +419,18 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               Status
             </p>
             <p className="mt-1 text-xs font-black uppercase tracking-[0.14em] text-zinc-200">
-              {session.status}
+              {session.status === "ARCHIVED" ? "ARCHIVED" : "HOLD"}
             </p>
           </div>
           <DeviceExportControl session={session} />
         </div>
 
-        <div className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid flex-1 gap-5 py-5">
           <section className="min-w-0">
             <ReplayVideo playbackUrl={session.playback_url} />
             <EventRail />
             <SnapshotStrip />
-            <SelectedEvent />
           </section>
-          <EventFeed eventsLoaded={eventsLoaded} />
         </div>
       </section>
     </main>
