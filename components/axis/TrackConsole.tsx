@@ -319,8 +319,6 @@ export function TrackConsole() {
         ]
       : []
   }, [detailSignals, moments, run.signals])
-  const source = activeInference?.source === "openai" ? "AI" : "LOCAL"
-
   return (
     <main className="axis-shell min-h-screen overflow-hidden px-4 pb-8 pt-4 text-zinc-100 sm:px-6">
       <div className="mx-auto grid max-w-6xl gap-4">
@@ -371,10 +369,6 @@ export function TrackConsole() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700">
-                {source}
-              </span>
-              <span className="h-1 w-1 rounded-full bg-zinc-800" />
               <Link
                 href="/review"
                 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 transition hover:text-zinc-300"
@@ -385,7 +379,7 @@ export function TrackConsole() {
           </div>
           <div className="axis-glass flex items-center justify-center gap-3 rounded-full px-3 py-2">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
-              Signal state
+              Flow
             </span>
             <span className={`text-xs font-black uppercase tracking-[0.18em] ${labelTone(temporal.system.label)}`}>
               {temporal.system.label}
@@ -397,12 +391,12 @@ export function TrackConsole() {
           </div>
         </header>
 
-        <section className="axis-panel relative overflow-hidden rounded-lg shadow-[0_18px_80px_rgba(0,0,0,0.42)]">
+        <section className="axis-panel relative overflow-hidden rounded-lg shadow-[0_18px_80px_rgba(0,0,0,0.36)]">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-zinc-400/40 to-transparent" />
           <div className="grid min-h-[36rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[40rem] sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
-                Continuity Rail
+                Flow
               </p>
               <div className="flex items-center gap-2">
                 {run.audioContext ? (
@@ -411,7 +405,7 @@ export function TrackConsole() {
                   </span>
                 ) : null}
                 <p className="font-mono text-[10px] font-black text-zinc-600">
-                  {run.signals.length} EVENTS
+                  {run.signals.length}
                 </p>
               </div>
             </div>
@@ -512,10 +506,10 @@ export function TrackConsole() {
                 <div className="grid h-full min-h-80 place-items-center px-5 text-center">
                   <div>
                     <p className="text-3xl font-black uppercase tracking-[-0.04em] text-zinc-300">
-                      Awaiting Signals
+                      Waiting
                     </p>
                     <p className="mt-2 text-sm font-bold text-zinc-600">
-                      Tap + or - to build the flow.
+                      Tap + or -.
                     </p>
                   </div>
                 </div>
@@ -557,7 +551,7 @@ export function TrackConsole() {
 
               <div className="axis-glass min-w-0 rounded-md px-4 py-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
-                  Supporting Sequence
+                  Sequence
                 </p>
                 {supportingSignals.length ? (
                   <div className="mt-3 flex min-w-0 items-center gap-2 overflow-hidden">
@@ -598,10 +592,10 @@ export function TrackConsole() {
           <details className="axis-panel group rounded-lg px-4 py-4">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-                  Detail
+                  More
                 </span>
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition group-open:text-zinc-500">
-                  Players / time / audio
+                  Players / time
                 </span>
               </summary>
 
@@ -656,7 +650,7 @@ export function TrackConsole() {
                   ))
                 ) : (
                   <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
-                    Event detail appears as the rail fills.
+                    The flow will open up here.
                   </p>
                 )}
               </div>

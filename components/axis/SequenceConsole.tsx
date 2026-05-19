@@ -123,7 +123,7 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
           </div>
           <div className="flex items-center justify-center gap-3 rounded-full border border-zinc-900 bg-black px-3 py-2">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
-              Signal state
+              Flow
             </span>
             <span className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">
               {session.temporalState.label}
@@ -136,7 +136,7 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
             <div className="grid content-between gap-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-                  Active Sequence
+                  Sequence
                 </p>
                 <h1 className="mt-2 text-4xl font-black uppercase tracking-[-0.05em] text-zinc-100 sm:text-6xl">
                   {selectedSequence?.title || session.temporalState.momentum}
@@ -148,8 +148,8 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
 
               <div className="grid grid-cols-3 gap-2 border-t border-zinc-900 pt-3">
                 <EvidenceNumber label="Signals" value={signals.length} />
-                <EvidenceNumber label="Moments" value={session.sequences.length} />
-                <EvidenceNumber label="Memory" value={session.memories.length} />
+                <EvidenceNumber label="Runs" value={session.sequences.length} />
+                <EvidenceNumber label="Saved" value={session.memories.length} />
               </div>
             </div>
           </div>
@@ -176,7 +176,7 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
 
         <section className="grid gap-3">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-            Sequence Memory
+            Runs
           </p>
           <div className="flex gap-3 overflow-x-auto">
             {session.sequences.length ? (
@@ -199,7 +199,7 @@ export function SequenceConsole({ sequenceId }: { sequenceId: string }) {
             ) : (
               <div className="min-w-full rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
                 <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
-                  Signals will form sequence memory here.
+                  The next run will show here.
                 </p>
               </div>
             )}

@@ -298,7 +298,7 @@ export function ReviewConsole() {
             Nothing to review yet
           </h1>
           <p className="mt-3 text-sm font-bold leading-6 text-zinc-600">
-            Capture a few events in Tap and Axis will remember the stretch.
+            Tap a few events. The stretch will show up here.
           </p>
           <Link
             href="/tap"
@@ -348,10 +348,10 @@ export function ReviewConsole() {
 
         <section className="axis-panel rounded-lg p-5 sm:p-7">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
-            Review Memory
+            Review
           </p>
           <h1 className="mt-3 max-w-3xl text-5xl font-black uppercase leading-[0.9] tracking-[-0.06em] text-zinc-100 sm:text-7xl">
-            The game remembering itself.
+            What changed.
           </h1>
         </section>
 
@@ -422,7 +422,7 @@ export function ReviewConsole() {
 
                 <details className="border-t border-zinc-900 px-5 py-4 sm:px-6">
                   <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
-                    Teaching notes
+                    Watch
                   </summary>
                   <div className="mt-4 grid gap-2">
                     <p className="text-sm font-bold leading-6 text-zinc-500">
@@ -430,7 +430,7 @@ export function ReviewConsole() {
                     </p>
                     {run.audioContext ? (
                       <p className="text-sm font-bold leading-6 text-zinc-600">
-                        Audio context was folded in quietly: pacing, silence, and crowd lift can affect which moments rise.
+                        The quiet, the lift, and the pace helped shape this moment.
                       </p>
                     ) : null}
                   </div>

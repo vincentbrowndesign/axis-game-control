@@ -406,7 +406,7 @@ export function ReportConsole({ reportId }: { reportId: string }) {
               Game Memory
             </p>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700">
-              {observation.source === "openai" ? "OpenAI" : "Temporal"}
+              {observation.source === "openai" ? "Polished" : "Live"}
             </p>
           </div>
 
