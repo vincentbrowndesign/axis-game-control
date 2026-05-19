@@ -228,16 +228,16 @@ function suggestedContinuityPrimitives(sample: ContinuityAssistSample | null) {
 
   const suggested = new Set<ContinuityPrimitive>(sample.primitives)
 
-  if (sample.attentionState === "LOCKING") suggested.add("LOCK")
-  if (sample.attentionState === "OVERLOADED") suggested.add("LOST")
-  if (sample.pressure > 0.5) suggested.add("PRESS")
+  if (sample.attentionState === "LOCKING") suggested.add("SET")
+  if (sample.attentionState === "OVERLOADED") suggested.add("OFF")
+  if (sample.pressure > 0.5) suggested.add("CLOSE")
   if (sample.acceleration > 0.22) suggested.add("FAST")
-  if (sample.motionEnergy < 0.04 && sample.pressure < 0.08) suggested.add("HOLD")
+  if (sample.motionEnergy < 0.04 && sample.pressure < 0.08) suggested.add("SET")
   if (sample.primaryRegion && Math.abs(sample.primaryRegion.velocityX) > 1.2) {
-    suggested.add("SHIFT")
+    suggested.add("TURN")
   }
   if (sample.primaryRegion && Math.abs(sample.primaryRegion.velocityY) > 1.2) {
-    suggested.add("GO")
+    suggested.add(sample.primaryRegion.velocityY < 0 ? "JUMP" : "LAND")
   }
 
   return Array.from(suggested).slice(0, 3)
@@ -278,7 +278,7 @@ function ContinuitySelector({
     const distance = Math.sqrt((clientX - centerX) ** 2 + (clientY - centerY) ** 2)
 
     if (distance < bounds.width * 0.14) {
-      setActivePrimitive(pending.suggested[0] || "LOCK")
+      setActivePrimitive(pending.suggested[0] || "SET")
       return
     }
 
@@ -1095,6 +1095,7 @@ export function LiveMemoryStream() {
   const trackFailureTimerRef = useRef<number | null>(null)
   const passiveObserversRef = useRef<ReturnType<typeof startPassiveContinuityObservers> | null>(null)
   const continuityAssistRef = useRef<ContinuityAssistSample | null>(null)
+  const continuitySequenceRef = useRef<ContinuityPrimitive[]>([])
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
@@ -1139,12 +1140,18 @@ export function LiveMemoryStream() {
           source: "human_confirmed",
           machineSuggested,
           snapshot_id: pending.snapshotId,
+          sequence: {
+            index: continuitySequenceRef.current.length,
+            previous: continuitySequenceRef.current.slice(-3),
+            next: [...continuitySequenceRef.current.slice(-3), primitive],
+          },
           replay_window: {
             before: 0,
             after: 0,
           },
         }
       )
+      continuitySequenceRef.current = [...continuitySequenceRef.current, primitive].slice(-12)
       setPendingContinuitySelection(null)
     },
     [pendingContinuitySelection]
@@ -1379,6 +1386,7 @@ export function LiveMemoryStream() {
       eventsRef.current = []
       eventSequenceRef.current = 0
       elapsedRef.current = 0
+      continuitySequenceRef.current = []
       setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()

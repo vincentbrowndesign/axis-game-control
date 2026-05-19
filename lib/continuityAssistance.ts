@@ -8,34 +8,32 @@ export type ContinuityAttentionState =
   | "OVERLOADED"
 
 export type ContinuityPrimitive =
-  | "GO"
+  | "MOVE"
   | "STOP"
-  | "SHIFT"
   | "TURN"
-  | "OPEN"
-  | "CLOSE"
-  | "LOCK"
-  | "LOST"
   | "FAST"
   | "SLOW"
-  | "DRIFT"
-  | "PRESS"
-  | "HOLD"
+  | "OPEN"
+  | "CLOSE"
+  | "SET"
+  | "OFF"
+  | "LEAN"
+  | "LAND"
+  | "JUMP"
 
 export const continuityPrimitives: ContinuityPrimitive[] = [
-  "GO",
+  "MOVE",
   "STOP",
-  "SHIFT",
   "TURN",
-  "OPEN",
-  "CLOSE",
-  "LOCK",
-  "LOST",
   "FAST",
   "SLOW",
-  "DRIFT",
-  "PRESS",
-  "HOLD",
+  "OPEN",
+  "CLOSE",
+  "SET",
+  "OFF",
+  "LEAN",
+  "LAND",
+  "JUMP",
 ]
 
 export type ContinuityRegion = {
@@ -122,18 +120,19 @@ export function generateContinuityPrimitives({
     ? Math.sqrt(primaryRegion.velocityX ** 2 + primaryRegion.velocityY ** 2)
     : 0
 
-  if (motionEnergy < 0.035 && pressure < 0.06) primitives.add("HOLD")
+  if (motionEnergy < 0.035 && pressure < 0.06) primitives.add("SET")
   if (!primaryRegion && previousRegion && previousRegion.energy > 0.22 && motionEnergy < 0.045) {
     primitives.add("STOP")
-    primitives.add("OPEN")
+    primitives.add("LAND")
   }
-  if (acceleration > 0.16) primitives.add("SHIFT")
+  if (motionEnergy > 0.06) primitives.add("MOVE")
+  if (acceleration > 0.16) primitives.add("TURN")
   if (acceleration > 0.28 || pressure > 0.48) primitives.add("FAST")
   if (attentionState === "LOCKING" && kineticDensity > 0.42) {
-    primitives.add("LOCK")
+    primitives.add("SET")
   }
-  if (attentionState === "OVERLOADED") primitives.add("LOST")
-  if (pressure > 0.36) primitives.add("PRESS")
+  if (attentionState === "OVERLOADED") primitives.add("OFF")
+  if (pressure > 0.36) primitives.add("CLOSE")
   if (previousRegion && primaryRegion) {
     const previousAngle = Math.atan2(previousRegion.velocityY, previousRegion.velocityX)
     const nextAngle = Math.atan2(primaryRegion.velocityY, primaryRegion.velocityX)
@@ -143,10 +142,11 @@ export function generateContinuityPrimitives({
     )
 
     if (velocity > 0.7 && angleDelta > 1.1) primitives.add("TURN")
-    if (centerDelta > 5.5) primitives.add("DRIFT")
+    if (centerDelta > 5.5) primitives.add("LEAN")
+    if (primaryRegion.velocityY < -0.9 && velocity > 0.7) primitives.add("JUMP")
     if (previousRegion.energy > 0.28 && primaryRegion.energy < 0.12) {
       primitives.add("STOP")
-      primitives.add("OPEN")
+      primitives.add("LAND")
     }
   }
   if (pressure < 0.18 && motionEnergy > 0.06 && acceleration < 0.08) primitives.add("SLOW")
@@ -177,7 +177,7 @@ export function buildContinuitySnapshotPayload(
 
   const pressure = clamp(sample.pressure, 0, 1)
   const density = clamp(sample.kineticDensity, 0, 1)
-  const hasStop = sample.primitives.includes("STOP") || sample.primitives.includes("HOLD")
+  const hasStop = sample.primitives.includes("STOP") || sample.primitives.includes("SET")
   const active = sample.attentionState === "TRACKING" || sample.attentionState === "LOCKING"
   const overloaded = sample.attentionState === "OVERLOADED"
   const before = hasStop
