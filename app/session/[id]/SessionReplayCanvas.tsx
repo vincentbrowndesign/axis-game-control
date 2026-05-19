@@ -51,6 +51,48 @@ export function seekToEvent(
   videoElement.currentTime = anchor.targetTime
 }
 
+function waitForSeeked(videoElement: HTMLVideoElement) {
+  return new Promise<void>((resolve) => {
+    const handleSeeked = () => {
+      window.clearTimeout(timeout)
+      resolve()
+    }
+    const timeout = window.setTimeout(() => {
+      videoElement.removeEventListener("seeked", handleSeeked)
+      resolve()
+    }, 2500)
+
+    videoElement.addEventListener("seeked", handleSeeked, {
+      once: true,
+    })
+  })
+}
+
+async function syncSeekToAnchor(
+  targetTime: number,
+  videoElement: HTMLVideoElement | null,
+  eventId?: string | null
+) {
+  if (!videoElement) return
+
+  const store = useAxisChronologyStore.getState()
+  if (store.playback.isSeeking) return
+
+  const duration = Number.isFinite(videoElement.duration) ? videoElement.duration : 0
+  const clampedTarget = Math.min(Math.max(0, Number(targetTime) || 0), Math.max(duration, 0))
+
+  store.beginSeekTransaction(clampedTarget, eventId)
+  videoElement.pause()
+
+  if (Math.abs(videoElement.currentTime - clampedTarget) > 0.04) {
+    videoElement.currentTime = clampedTarget
+    await waitForSeeked(videoElement)
+  }
+
+  videoElement.pause()
+  useAxisChronologyStore.getState().completeSeekTransaction(videoElement.currentTime)
+}
+
 function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const { currentTimelineAnchor, isInternalSeeking, completeInternalSeek, syncMediaPlayback } =
@@ -66,7 +108,11 @@ function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
   useEffect(() => {
     if (!currentTimelineAnchor || !isInternalSeeking) return
 
-    seekToEvent(videoRef.current, currentTimelineAnchor)
+    void syncSeekToAnchor(
+      currentTimelineAnchor.targetTime,
+      videoRef.current,
+      currentTimelineAnchor.eventId
+    )
   }, [currentTimelineAnchor, isInternalSeeking])
 
   useEffect(() => {
@@ -74,7 +120,11 @@ function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
       const state = useAxisChronologyStore.getState()
       if (!state.currentTimelineAnchor) return
 
-      seekToEvent(videoRef.current, state.currentTimelineAnchor)
+      void syncSeekToAnchor(
+        state.currentTimelineAnchor.targetTime,
+        videoRef.current,
+        state.currentTimelineAnchor.eventId
+      )
     }
     const handleVisibility = () => {
       if (document.visibilityState === "visible") restoreFromChronology()
@@ -119,29 +169,42 @@ function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
           })
         }}
         onTimeUpdate={(event) => {
+          if (useAxisChronologyStore.getState().playback.isSeeking) return
+
           syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
             paused: event.currentTarget.paused,
+            isPlaying: !event.currentTarget.paused,
             readyState: event.currentTarget.readyState,
           })
         }}
         onPause={(event) => {
           syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
+            isPlaying: false,
             paused: true,
             readyState: event.currentTarget.readyState,
           })
         }}
         onPlay={(event) => {
+          if (useAxisChronologyStore.getState().playback.isSeeking) {
+            event.currentTarget.pause()
+            return
+          }
+
           syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
+            isPlaying: true,
             paused: false,
             readyState: event.currentTarget.readyState,
           })
         }}
         onSeeked={(event) => {
+          if (useAxisChronologyStore.getState().playback.isSeeking) return
+
           syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
+            isPlaying: !event.currentTarget.paused,
             paused: event.currentTarget.paused,
             readyState: event.currentTarget.readyState,
           })
