@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import MuxPlayer from "@mux/mux-player-react"
 
 type LiveStatus =
-  | "CONNECTING"
+  | "READY"
+  | "STARTING"
   | "LIVE"
   | "RECONNECTING"
-  | "CAMERA BLOCKED"
-  | "MUX PLAYBACK ID MISSING"
+  | "FINALIZING"
+  | "ARCHIVED"
+  | "OFFLINE"
 
 type MomentAnchor = {
   id: string
@@ -18,6 +20,7 @@ type MomentAnchor = {
 
 const anchorStorageKey = "axis-live-thread-anchors"
 const clockStorageKey = "axis-live-thread-started-at"
+const reconnectDebounceMs = 1800
 
 const recorderTypes = [
   "video/webm;codecs=vp8,opus",
@@ -46,7 +49,7 @@ function formatClock(totalSeconds: number) {
 export function LiveMemoryStream() {
   const fallbackPlaybackId = process.env.NEXT_PUBLIC_MUX_PLAYBACK_ID || ""
   const [playbackId, setPlaybackId] = useState(fallbackPlaybackId)
-  const [status, setStatus] = useState<LiveStatus>("CONNECTING")
+  const [status, setStatus] = useState<LiveStatus>("READY")
   const [muxPlaying, setMuxPlaying] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [anchors, setAnchors] = useState<MomentAnchor[]>([])
@@ -54,20 +57,15 @@ export function LiveMemoryStream() {
   const [threadHydrated, setThreadHydrated] = useState(false)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
+  const localStreamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const sessionIdRef = useRef("")
   const chunkQueueRef = useRef<Promise<void>>(Promise.resolve())
   const startedRef = useRef(false)
+  const finalizingRef = useRef(false)
+  const reconnectTimerRef = useRef<number | null>(null)
   const elapsedRef = useRef(0)
   const clockStartedAtRef = useRef(0)
-
-  const flowState = useMemo(() => {
-    if (status === "CONNECTING") return "SETTLING"
-    if (status === "RECONNECTING") return "DRIFT"
-    if (status !== "LIVE") return "STILL"
-    if (anchors.some((anchor) => elapsed - anchor.elapsed <= 12)) return "PINNED"
-    return "RUNNING"
-  }, [anchors, elapsed, status])
 
   const railEnd = useMemo(() => Math.max(60, elapsed), [elapsed])
 
@@ -141,7 +139,7 @@ export function LiveMemoryStream() {
     const nextAnchor: MomentAnchor = {
       id: `anchor-${Date.now().toString(36)}`,
       elapsed: elapsedRef.current,
-      label: flowState,
+      label: status,
     }
 
     setAnchors((current) => [...current.slice(-10), nextAnchor])
@@ -178,8 +176,74 @@ export function LiveMemoryStream() {
   const liveDotClass = useMemo(() => {
     if (status === "LIVE") return "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]"
     if (status === "RECONNECTING") return "bg-amber-200/80 shadow-[0_0_22px_rgba(252,211,77,0.42)]"
+    if (status === "ARCHIVED") return "bg-zinc-100 shadow-[0_0_14px_rgba(244,244,245,0.42)]"
     return "bg-zinc-200/70 shadow-[0_0_16px_rgba(244,244,245,0.28)]"
   }, [status])
+
+  const absorbInterruption = () => {
+    if (finalizingRef.current) return
+
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+    }
+
+    reconnectTimerRef.current = window.setTimeout(() => {
+      if (!finalizingRef.current) setStatus("RECONNECTING")
+    }, reconnectDebounceMs)
+  }
+
+  const stabilizeTransport = () => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+
+    if (!finalizingRef.current) setStatus("LIVE")
+  }
+
+  const finalizeThread = () => {
+    if (finalizingRef.current) return
+
+    finalizingRef.current = true
+    setStatus("FINALIZING")
+
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+
+    const recorder = recorderRef.current
+    if (recorder && recorder.state !== "inactive") {
+      recorder.requestData()
+      recorder.stop()
+    }
+
+    localStreamRef.current?.getTracks().forEach((track) => track.stop())
+    localStreamRef.current = null
+
+    const sessionId = sessionIdRef.current
+    sessionIdRef.current = ""
+
+    const complete = () => {
+      window.sessionStorage.removeItem(clockStorageKey)
+      setStatus("ARCHIVED")
+    }
+
+    if (!sessionId) {
+      window.setTimeout(complete, 320)
+      return
+    }
+
+    fetch("/api/live/stop", {
+      method: "POST",
+      headers: {
+        "x-axis-live-session": sessionId,
+      },
+      keepalive: true,
+    })
+      .catch(() => undefined)
+      .finally(() => window.setTimeout(complete, 320))
+  }
 
   useEffect(() => {
     if (
@@ -191,12 +255,11 @@ export function LiveMemoryStream() {
     }
 
     let cancelled = false
-    let localStream: MediaStream | null = null
 
     async function postChunk(chunk: Blob) {
       const sessionId = sessionIdRef.current
 
-      if (cancelled || !sessionId || !chunk.size) return
+      if (cancelled || finalizingRef.current || !sessionId || !chunk.size) return
 
       const response = await fetch("/api/live/chunk", {
         method: "POST",
@@ -210,23 +273,23 @@ export function LiveMemoryStream() {
       if (cancelled) return
 
       if (!response.ok) {
-        setStatus("RECONNECTING")
+        absorbInterruption()
         return
       }
 
-      setStatus("LIVE")
+      stabilizeTransport()
     }
 
     async function startLiveCamera() {
       startedRef.current = true
-      setStatus("CONNECTING")
+      setStatus("STARTING")
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        setStatus("CAMERA BLOCKED")
+        setStatus("OFFLINE")
         return
       }
 
-      localStream = await navigator.mediaDevices.getUserMedia({
+      const localStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: {
           facingMode: {
@@ -240,11 +303,18 @@ export function LiveMemoryStream() {
           },
         },
       })
+      localStreamRef.current = localStream
 
       if (cancelled) {
         localStream.getTracks().forEach((track) => track.stop())
         return
       }
+
+      localStream.getTracks().forEach((track) => {
+        track.addEventListener("ended", absorbInterruption)
+        track.addEventListener("mute", absorbInterruption)
+        track.addEventListener("unmute", stabilizeTransport)
+      })
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStream
@@ -256,8 +326,7 @@ export function LiveMemoryStream() {
       })
 
       if (!startResponse.ok) {
-        if (!fallbackPlaybackId) setStatus("MUX PLAYBACK ID MISSING")
-        else setStatus("RECONNECTING")
+        setStatus("OFFLINE")
         return
       }
 
@@ -267,7 +336,7 @@ export function LiveMemoryStream() {
       }
 
       if (!startData.sessionId) {
-        setStatus("RECONNECTING")
+        absorbInterruption()
         return
       }
 
@@ -277,7 +346,7 @@ export function LiveMemoryStream() {
       const recorderType = getRecorderType()
 
       if (typeof MediaRecorder === "undefined") {
-        setStatus("RECONNECTING")
+        absorbInterruption()
         return
       }
 
@@ -296,32 +365,71 @@ export function LiveMemoryStream() {
       )
 
       recorder.ondataavailable = (event) => {
-        if (!event.data.size) return
+        if (!event.data.size || finalizingRef.current) return
 
         chunkQueueRef.current = chunkQueueRef.current
           .then(() => postChunk(event.data))
           .catch(() => {
-            setStatus("RECONNECTING")
+            absorbInterruption()
           })
       }
-      recorder.onerror = () => setStatus("RECONNECTING")
-      recorder.onstart = () => setStatus("LIVE")
+      recorder.onerror = absorbInterruption
+      recorder.onpause = absorbInterruption
+      recorder.onresume = stabilizeTransport
+      recorder.onstart = stabilizeTransport
+      recorder.onstop = () => {
+        if (finalizingRef.current) return
+        absorbInterruption()
+      }
       recorderRef.current = recorder
       recorder.start(1200)
     }
 
     startLiveCamera().catch(() => {
-      setStatus(localStream ? "RECONNECTING" : "CAMERA BLOCKED")
+      if (localStreamRef.current) absorbInterruption()
+      else setStatus("OFFLINE")
     })
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") absorbInterruption()
+      else stabilizeTransport()
+    }
+    const handlePageHide = () => {
+      if (!finalizingRef.current) absorbInterruption()
+    }
+    const handleBeforeUnload = () => {
+      if (sessionIdRef.current) {
+        fetch("/api/live/stop", {
+          method: "POST",
+          headers: {
+            "x-axis-live-session": sessionIdRef.current,
+          },
+          keepalive: true,
+        }).catch(() => undefined)
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    window.addEventListener("pagehide", handlePageHide)
+    window.addEventListener("beforeunload", handleBeforeUnload)
 
     return () => {
       cancelled = true
+      document.removeEventListener("visibilitychange", handleVisibility)
+      window.removeEventListener("pagehide", handlePageHide)
+      window.removeEventListener("beforeunload", handleBeforeUnload)
 
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
         recorderRef.current.stop()
       }
 
-      localStream?.getTracks().forEach((track) => track.stop())
+      localStreamRef.current?.getTracks().forEach((track) => {
+        track.removeEventListener("ended", absorbInterruption)
+        track.removeEventListener("mute", absorbInterruption)
+        track.removeEventListener("unmute", stabilizeTransport)
+        track.stop()
+      })
+      localStreamRef.current = null
 
       const sessionId = sessionIdRef.current
       if (sessionId) {
@@ -353,16 +461,24 @@ export function LiveMemoryStream() {
 
         {playbackId ? (
           <MuxPlayer
-            playbackId={playbackId}
-            streamType="live"
-            autoPlay
-            muted
-            playsInline
-            preferPlayback="mse"
-            onPlaying={() => setMuxPlaying(true)}
-            onError={() => setMuxPlaying(false)}
-            className={`absolute inset-0 h-full w-full transition-opacity duration-700 ${
-              muxPlaying ? "opacity-100" : "opacity-0"
+          playbackId={playbackId}
+          streamType="live"
+          autoPlay
+          muted
+          playsInline
+          preferPlayback="mse"
+          onPlaying={() => {
+            setMuxPlaying(true)
+            stabilizeTransport()
+          }}
+          onError={() => {
+            setMuxPlaying(false)
+            absorbInterruption()
+          }}
+          onStalled={absorbInterruption}
+          onWaiting={absorbInterruption}
+          className={`absolute inset-0 h-full w-full transition-opacity duration-700 ${
+            muxPlaying ? "opacity-100" : "opacity-0"
             }`}
             style={{
               ["--media-object-fit" as string]: "cover",
@@ -379,52 +495,27 @@ export function LiveMemoryStream() {
           }`}
         />
 
-        {!playbackId && status === "MUX PLAYBACK ID MISSING" ? (
+        {!playbackId && status === "OFFLINE" ? (
           <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center">
             <div>
               <p className="text-3xl font-black uppercase tracking-[-0.04em] text-zinc-100 sm:text-5xl">
-                MUX PLAYBACK ID MISSING
-              </p>
-              <p className="mt-3 text-sm font-bold leading-6 text-zinc-500">
-                Set NEXT_PUBLIC_MUX_PLAYBACK_ID or configure Mux live ingest.
+                OFFLINE
               </p>
             </div>
           </div>
         ) : null}
 
-        <header className="absolute left-4 right-4 top-4 z-20 rounded-[1.15rem] border border-white/10 bg-black/42 px-4 py-3 backdrop-blur-md">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
-                Home
-              </p>
-              <p className="mt-1 text-3xl font-black leading-none tracking-[-0.06em] text-zinc-100">
-                0
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${liveDotClass}`} />
-                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200">
-                  Live
-                </span>
-              </div>
-              <p className="mt-2 text-[11px] font-black uppercase tracking-[0.2em] text-zinc-500">
-                1 / {formatClock(elapsed)}
-              </p>
-              <p className="mt-1 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-200">
-                {flowState}
-              </p>
-            </div>
-
-            <div className="min-w-0 text-right">
-              <p className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
-                Away
-              </p>
-              <p className="mt-1 text-3xl font-black leading-none tracking-[-0.06em] text-zinc-100">
-                0
-              </p>
+        <header className="absolute left-4 right-4 top-4 z-20 border-b border-white/10 bg-black/42 px-4 py-3 backdrop-blur-md">
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4">
+            <p className="text-[11px] font-black uppercase tracking-[0.26em] text-zinc-100">
+              AXIS
+            </p>
+            <div className="h-px bg-gradient-to-r from-white/24 via-white/10 to-white/24" />
+            <div className="flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${liveDotClass}`} />
+              <span className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-100">
+                {status}
+              </span>
             </div>
           </div>
         </header>
@@ -435,9 +526,26 @@ export function LiveMemoryStream() {
               <button
                 type="button"
                 onClick={pinMoment}
-                className="rounded-full border border-white/10 bg-zinc-100/90 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95"
+                disabled={status === "FINALIZING" || status === "ARCHIVED"}
+                className="border border-white/10 bg-zinc-100/90 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
               >
-                Save Moment
+                Mark
+              </button>
+              <button
+                type="button"
+                onClick={pinMoment}
+                disabled={status === "FINALIZING" || status === "ARCHIVED"}
+                className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
+              >
+                Snapshot
+              </button>
+              <button
+                type="button"
+                onClick={finalizeThread}
+                disabled={status === "FINALIZING" || status === "ARCHIVED"}
+                className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
+              >
+                End
               </button>
             </div>
 
