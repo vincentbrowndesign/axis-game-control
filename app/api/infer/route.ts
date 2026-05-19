@@ -39,6 +39,18 @@ type ReportObservation = {
   source: "local" | "openai"
 }
 
+type ReviewMoment = {
+  id: string
+  title: string
+  why: string
+  sequence: string
+  result: string
+  start: number
+  end: number
+  signalIds: string[]
+  source: "local" | "openai"
+}
+
 type InferResponse = {
   basketballLikely: boolean
   confidence: number
@@ -270,6 +282,68 @@ function cleanReport(value: unknown, fallback: ReportObservation): ReportObserva
   }
 }
 
+function asReviewMoment(value: unknown): ReviewMoment | null {
+  if (!value || typeof value !== "object") return null
+
+  const moment = value as Partial<ReviewMoment>
+
+  if (typeof moment.id !== "string") return null
+
+  return {
+    id: moment.id,
+    title:
+      typeof moment.title === "string" && moment.title.trim()
+        ? moment.title.trim().slice(0, 42)
+        : "Turning Point",
+    why:
+      typeof moment.why === "string" && moment.why.trim()
+        ? moment.why.trim().slice(0, 100)
+        : "This stretch changed the game.",
+    sequence:
+      typeof moment.sequence === "string" && moment.sequence.trim()
+        ? moment.sequence.trim().slice(0, 120)
+        : "Sequence building",
+    result:
+      typeof moment.result === "string" && moment.result.trim()
+        ? moment.result.trim().slice(0, 100)
+        : "The game felt different after this.",
+    start: typeof moment.start === "number" ? moment.start : 0,
+    end: typeof moment.end === "number" ? moment.end : 0,
+    signalIds: Array.isArray(moment.signalIds)
+      ? moment.signalIds.filter((id): id is string => typeof id === "string").slice(0, 12)
+      : [],
+    source: moment.source === "openai" ? "openai" : "local",
+  }
+}
+
+function localReview(body: Record<string, unknown>): ReviewMoment[] {
+  const moments = Array.isArray(body.moments)
+    ? body.moments.flatMap((value) => {
+        const moment = asReviewMoment(value)
+
+        return moment ? [moment] : []
+      })
+    : []
+
+  return moments.slice(0, 5)
+}
+
+function cleanReviewMoment(value: unknown, fallback: ReviewMoment): ReviewMoment {
+  const moment = asReviewMoment({
+    ...fallback,
+    ...(value && typeof value === "object" ? value : {}),
+  })
+
+  return {
+    ...(moment || fallback),
+    id: fallback.id,
+    start: fallback.start,
+    end: fallback.end,
+    signalIds: fallback.signalIds,
+    source: moment?.source === "openai" ? "openai" : fallback.source,
+  }
+}
+
 async function inferTrack(body: Record<string, unknown>) {
   const signals = Array.isArray(body.signals)
     ? body.signals.flatMap((value) => {
@@ -466,6 +540,76 @@ async function inferReport(body: Record<string, unknown>) {
   }
 }
 
+async function inferReview(body: Record<string, unknown>) {
+  const fallback = localReview(body)
+
+  if (!process.env.OPENAI_API_KEY || !fallback.length) {
+    return {
+      moments: fallback,
+      source: "local",
+    }
+  }
+
+  try {
+    const { default: OpenAI } = await import("openai")
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+    const response = await client.chat.completions.create({
+      model: process.env.OPENAI_REVIEW_MODEL || process.env.OPENAI_TRACK_MODEL || "gpt-4o-mini",
+      temperature: 0.35,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You write short basketball review memory notes. Return only JSON. Sound like a smart basketball mind reviewing film. No analytics jargon. No robotic systems language. Each moment needs title, why, sequence, result. Keep it short and teachable.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "Humanize these continuity moments into coachable basketball review notes.",
+            outputShape:
+              '{ "moments": [{ "id": string, "title": string, "why": string, "sequence": string, "result": string }] }',
+            run: body.run,
+            sequences: body.sequences,
+            fallback,
+          }),
+        },
+      ],
+    })
+    const text = response.choices[0]?.message?.content || "{}"
+    const parsed = JSON.parse(text) as { moments?: unknown[] }
+    const moments = Array.isArray(parsed.moments)
+      ? fallback.map((moment, index) =>
+          cleanReviewMoment(
+            parsed.moments?.[index] && typeof parsed.moments[index] === "object"
+              ? {
+                  ...parsed.moments[index],
+                  source: "openai",
+                }
+              : {
+                  source: "openai",
+                },
+            moment
+          )
+        )
+      : fallback
+
+    return {
+      moments,
+      source: "openai",
+    }
+  } catch (error) {
+    console.error(error)
+
+    return {
+      moments: fallback,
+      source: "local",
+    }
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -483,6 +627,14 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         report,
+      })
+    }
+
+    if (body?.type === "review") {
+      const review = await inferReview(body)
+
+      return NextResponse.json({
+        review,
       })
     }
 

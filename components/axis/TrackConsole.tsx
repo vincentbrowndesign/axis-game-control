@@ -370,9 +370,18 @@ export function TrackConsole() {
                 {sideName(run, temporal.state.side)}
               </span>
             </div>
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700">
-              {source}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700">
+                {source}
+              </span>
+              <span className="h-1 w-1 rounded-full bg-zinc-800" />
+              <Link
+                href="/review"
+                className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 transition hover:text-zinc-300"
+              >
+                Review
+              </Link>
+            </div>
           </div>
           <div className="axis-glass flex items-center justify-center gap-3 rounded-full px-3 py-2">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
