@@ -104,7 +104,7 @@ function LiveMachinePerceptionOverlay({
   enabled: boolean
   videoRef: RefObject<HTMLVideoElement | null>
 }) {
-  const [locks, setLocks] = useState<MotionLock[]>([])
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const previousFrameRef = useRef<Uint8ClampedArray | null>(null)
   const smoothedLocksRef = useRef<MotionLock[]>([])
 
@@ -115,31 +115,156 @@ function LiveMachinePerceptionOverlay({
       return
     }
 
+    const overlayCanvas = canvasRef.current
+    if (!overlayCanvas) return
+
     let frameId = 0
     let lastSampleAt = 0
     let disposed = false
     const sampleWidth = 96
     const sampleHeight = 54
-    const canvas = document.createElement("canvas")
-    canvas.width = sampleWidth
-    canvas.height = sampleHeight
-    const context = canvas.getContext("2d", {
+    const sampleCanvas = document.createElement("canvas")
+    sampleCanvas.width = sampleWidth
+    sampleCanvas.height = sampleHeight
+    const sampleContext = sampleCanvas.getContext("2d", {
       willReadFrequently: true,
     })
+
+    const syncCanvasSize = () => {
+      const bounds = overlayCanvas.getBoundingClientRect()
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+      const width = Math.max(1, Math.floor(bounds.width * pixelRatio))
+      const height = Math.max(1, Math.floor(bounds.height * pixelRatio))
+
+      if (overlayCanvas.width !== width || overlayCanvas.height !== height) {
+        overlayCanvas.width = width
+        overlayCanvas.height = height
+      }
+
+      const outputContext = overlayCanvas.getContext("2d")
+      if (!outputContext) return null
+
+      outputContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+
+      return {
+        context: outputContext,
+        width: bounds.width,
+        height: bounds.height,
+      }
+    }
+
+    const drawLocks = (timestamp: number) => {
+      const output = syncCanvasSize()
+      if (!output) return
+
+      const { context, width, height } = output
+      const locks = smoothedLocksRef.current
+      context.clearRect(0, 0, width, height)
+      if (!locks.length) return
+
+      const peakEnergy = Math.max(...locks.map((lock) => lock.energy))
+      context.save()
+      context.globalCompositeOperation = "screen"
+      context.globalAlpha = 0.48 + peakEnergy * 0.24
+
+      locks.forEach((lock, index) => {
+        const next = locks[(index + 1) % locks.length] || lock
+        const x = (lock.x / 100) * width
+        const y = (lock.y / 100) * height
+        const previousX = (lock.previousX / 100) * width
+        const previousY = (lock.previousY / 100) * height
+        const boxWidth = (lock.width / 100) * width
+        const boxHeight = (lock.height / 100) * height
+        const centerX = x + boxWidth / 2
+        const centerY = y + boxHeight / 2
+        const previousCenterX = previousX + boxWidth / 2
+        const previousCenterY = previousY + boxHeight / 2
+        const nextCenterX = ((next.x + next.width / 2) / 100) * width
+        const nextCenterY = ((next.y + next.height / 2) / 100) * height
+
+        context.strokeStyle = `rgba(242,241,237,${0.12 + lock.energy * 0.3})`
+        context.lineWidth = 0.8 + lock.energy * 0.8
+        context.beginPath()
+        context.moveTo(previousCenterX, previousCenterY)
+        context.quadraticCurveTo(
+          (centerX + nextCenterX) / 2,
+          centerY - 12 - lock.energy * 20,
+          nextCenterX,
+          nextCenterY
+        )
+        context.stroke()
+
+        ;[1, 2, 3].forEach((step) => {
+          context.strokeStyle = `rgba(242,241,237,${Math.max(
+            0,
+            lock.energy * 0.12 - step * 0.025
+          )})`
+          context.lineWidth = 0.55
+          context.strokeRect(
+            previousX - step * 7,
+            previousY + step * 3,
+            boxWidth + step * 12,
+            boxHeight + step * 9
+          )
+        })
+
+        context.strokeStyle = `rgba(242,241,237,${0.2 + lock.energy * 0.44})`
+        context.lineWidth = 0.7 + lock.energy * 0.45
+        context.strokeRect(x, y, boxWidth, boxHeight)
+
+        context.strokeStyle = `rgba(185,215,191,${lock.energy * 0.2})`
+        context.lineWidth = 0.55
+        context.strokeRect(x - 4, y - 4, boxWidth + 8, boxHeight + 8)
+
+        if (lock.energy > 0.48) {
+          const gradient = context.createRadialGradient(
+            centerX,
+            centerY,
+            0,
+            centerX,
+            centerY,
+            18 + lock.energy * 36
+          )
+          gradient.addColorStop(0, `rgba(215,192,138,${lock.energy * 0.18})`)
+          gradient.addColorStop(0.45, "rgba(242,241,237,0.035)")
+          gradient.addColorStop(1, "rgba(242,241,237,0)")
+          context.fillStyle = gradient
+          context.beginPath()
+          context.arc(centerX, centerY, 18 + lock.energy * 36, 0, Math.PI * 2)
+          context.fill()
+        }
+      })
+
+      const drift = Math.sin(timestamp * 0.0012) * 0.35
+      context.globalAlpha = peakEnergy * 0.14
+      context.strokeStyle = "rgba(242,241,237,0.24)"
+      context.lineWidth = 1
+      context.beginPath()
+      context.moveTo(0, height * (0.5 + drift * 0.02))
+      context.lineTo(width, height * (0.5 - drift * 0.02))
+      context.stroke()
+      context.restore()
+    }
 
     const sample = (timestamp: number) => {
       if (disposed) return
       frameId = window.requestAnimationFrame(sample)
+      drawLocks(timestamp)
       if (timestamp - lastSampleAt < 120) return
       lastSampleAt = timestamp
 
       const video = videoRef.current
-      if (!context || !video || video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+      if (!sampleContext || !video || video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
         return
       }
 
-      context.drawImage(video, 0, 0, sampleWidth, sampleHeight)
-      const frame = context.getImageData(0, 0, sampleWidth, sampleHeight).data
+      try {
+        sampleContext.drawImage(video, 0, 0, sampleWidth, sampleHeight)
+      } catch {
+        return
+      }
+
+      const frame = sampleContext.getImageData(0, 0, sampleWidth, sampleHeight).data
       const previous = previousFrameRef.current
       previousFrameRef.current = new Uint8ClampedArray(frame)
 
@@ -203,7 +328,6 @@ function LiveMachinePerceptionOverlay({
           .filter((lock) => lock.energy > 0.08)
 
         smoothedLocksRef.current = fading
-        setLocks(fading)
         return
       }
 
@@ -233,7 +357,6 @@ function LiveMachinePerceptionOverlay({
       })
 
       smoothedLocksRef.current = nextLocks
-      setLocks(nextLocks)
     }
 
     frameId = window.requestAnimationFrame(sample)
@@ -241,100 +364,21 @@ function LiveMachinePerceptionOverlay({
     return () => {
       disposed = true
       window.cancelAnimationFrame(frameId)
+      const outputContext = overlayCanvas.getContext("2d")
+      if (outputContext) {
+        outputContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
+      }
     }
   }, [active, enabled, videoRef])
 
-  if (!enabled || !active || !locks.length) return null
-
-  const peakEnergy = Math.max(...locks.map((lock) => lock.energy))
-
   return (
-    <div
-      className="pointer-events-none absolute inset-0 z-10 overflow-hidden mix-blend-screen"
-      style={{
-        opacity: 0.5 + peakEnergy * 0.32,
-      }}
-    >
-      <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        className="axis-optical-drift absolute inset-0 h-full w-full"
-        aria-hidden="true"
-      >
-        <defs>
-          <radialGradient id="axis-live-attention" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(215,192,138,0.2)" />
-            <stop offset="46%" stopColor="rgba(242,241,237,0.04)" />
-            <stop offset="100%" stopColor="rgba(242,241,237,0)" />
-          </radialGradient>
-        </defs>
-        {locks.map((lock, index) => {
-          const next = locks[(index + 1) % locks.length] || lock
-          const centerX = lock.x + lock.width / 2
-          const centerY = lock.y + lock.height / 2
-          const previousCenterX = lock.previousX + lock.width / 2
-          const previousCenterY = lock.previousY + lock.height / 2
-          const echoOpacity = lock.energy * 0.14
-
-          return (
-            <g key={lock.id}>
-              <path
-                d={`M ${previousCenterX} ${previousCenterY} Q ${
-                  (centerX + next.x) / 2
-                } ${centerY - 5 - lock.energy * 8} ${next.x + next.width / 2} ${
-                  next.y + next.height / 2
-                }`}
-                fill="none"
-                stroke="rgba(242,241,237,0.24)"
-                strokeLinecap="round"
-                strokeWidth={0.08 + lock.energy * 0.13}
-                opacity={0.16 + lock.energy * 0.4}
-              />
-              {[1, 2, 3].map((step) => (
-                <rect
-                  key={step}
-                  x={lock.previousX - step * 0.9}
-                  y={lock.previousY + step * 0.44}
-                  width={lock.width + step * 2.2}
-                  height={lock.height + step * 1.7}
-                  fill="none"
-                  stroke="rgba(242,241,237,0.34)"
-                  strokeWidth={0.06}
-                  opacity={Math.max(0, echoOpacity - step * 0.028)}
-                />
-              ))}
-              <rect
-                x={lock.x}
-                y={lock.y}
-                width={lock.width}
-                height={lock.height}
-                fill="none"
-                stroke="rgba(242,241,237,0.5)"
-                strokeWidth={0.08 + lock.energy * 0.06}
-                opacity={0.22 + lock.energy * 0.5}
-              />
-              <rect
-                x={lock.x - 0.65}
-                y={lock.y - 0.65}
-                width={lock.width + 1.3}
-                height={lock.height + 1.3}
-                fill="none"
-                stroke="rgba(185,215,191,0.18)"
-                strokeWidth={0.06}
-                opacity={lock.energy * 0.36}
-              />
-              <circle
-                cx={centerX}
-                cy={centerY}
-                r={3.5 + lock.energy * 8}
-                fill="url(#axis-live-attention)"
-                opacity={lock.energy > 0.48 ? lock.energy * 0.5 : 0}
-              />
-            </g>
-          )
-        })}
-      </svg>
-    </div>
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-0 z-10 h-full w-full mix-blend-screen axis-optical-drift ${
+        enabled && active ? "opacity-100" : "opacity-0"
+      }`}
+    />
   )
 }
 
