@@ -8,7 +8,11 @@ import {
   type TimelineAnchor,
   useAxisChronologyStore,
 } from "@/lib/axisChronologyStore"
-import { exportSnapshotSignal, type SignalExportStatus } from "@/lib/signalExport"
+import {
+  buildSnapshotSignalInput,
+  exportSnapshotSignal,
+  type SignalExportStatus,
+} from "@/lib/signalExport"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -362,6 +366,20 @@ function signalStatusLabel(status: SignalExportStatus) {
   return "SIGNAL"
 }
 
+function densityNearSnapshot(
+  events: TemporalEventRecord[],
+  snapshot: AxisSnapshot,
+  duration: number
+) {
+  const anchor = Number(snapshot.session_time) || 0
+  const windowSize = Math.max(3, Math.min(8, Math.max(1, duration) * 0.08))
+  const nearbyCount = events.filter(
+    (event) => Math.abs(Number(event.session_time) - anchor) <= windowSize
+  ).length
+
+  return Math.min(1, nearbyCount / 6)
+}
+
 function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
   const [signalStatus, setSignalStatus] = useState<SignalExportStatus>("IDLE")
   const [activeSignalSnapshotId, setActiveSignalSnapshotId] = useState<string | null>(null)
@@ -384,11 +402,18 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
     setSignalStatus("DOWNLOADING")
 
     try {
+      const nodeId = compactNodeId(session.id)
       await exportSnapshotSignal({
         playbackUrl: session.playback_url,
-        snapshot,
-        nodeId: compactNodeId(session.id),
-        title: `axis-signal-${compactNodeId(session.id)}-${formatPreciseClock(
+        signal: buildSnapshotSignalInput({
+          sessionId: session.id,
+          snapshot,
+          nodeId,
+          duration: Number(session.duration_seconds) || 0,
+          kineticDensity: densityNearSnapshot(events, snapshot, Number(session.duration_seconds) || 0),
+          acousticPeak: 0,
+        }),
+        title: `axis-signal-${nodeId}-${formatPreciseClock(
           snapshot.session_time
         )}`,
         onStatus: setSignalStatus,

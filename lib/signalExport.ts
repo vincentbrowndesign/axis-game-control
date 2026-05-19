@@ -10,10 +10,30 @@ export type SignalExportStatus =
 
 type SignalExportOptions = {
   playbackUrl: string
-  snapshot: AxisSnapshot
-  nodeId: string
+  signal: SignalRenderInput
   title: string
   onStatus?: (status: SignalExportStatus) => void
+}
+
+export type SignalRenderInput = {
+  sessionId: string
+  nodeId: string
+  chronologyAnchor: number
+  replayEnvelopeStart: number
+  replayEnvelopeEnd: number
+  kineticDensity: number
+  acousticPeak: number
+  annotation?: string
+  snapshotImage?: string
+  motionField?: SignalMotionVector[]
+}
+
+export type SignalMotionVector = {
+  x: number
+  y: number
+  dx: number
+  dy: number
+  energy: number
 }
 
 const outputWidth = 720
@@ -22,6 +42,58 @@ const pulseDurationMs = 520
 const freezeDurationMs = 1250
 const prerollSeconds = 1.6
 const postrollSeconds = 1.9
+
+export function buildSnapshotSignalInput({
+  sessionId,
+  snapshot,
+  nodeId,
+  duration,
+  kineticDensity = 0,
+  acousticPeak = 0,
+}: {
+  sessionId: string
+  snapshot: AxisSnapshot
+  nodeId: string
+  duration: number
+  kineticDensity?: number
+  acousticPeak?: number
+}): SignalRenderInput {
+  const anchorTime = Math.max(0, Number(snapshot.session_time) || 0)
+  const safeDuration = Math.max(anchorTime, Number(duration) || 0)
+  const snapshotImage = snapshot.image_url || snapshot.localUrl || undefined
+
+  return {
+    sessionId,
+    nodeId,
+    chronologyAnchor: anchorTime,
+    replayEnvelopeStart: Math.max(0, anchorTime - prerollSeconds),
+    replayEnvelopeEnd: Math.min(
+      safeDuration || anchorTime + postrollSeconds,
+      anchorTime + postrollSeconds
+    ),
+    kineticDensity: clamp01(kineticDensity),
+    acousticPeak: clamp01(acousticPeak),
+    annotation: snapshot.annotation?.trim() || undefined,
+    snapshotImage,
+    motionField: createDefaultMotionField(clamp01(kineticDensity)),
+  }
+}
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(1, Math.max(0, value))
+}
+
+function createDefaultMotionField(energy: number): SignalMotionVector[] {
+  const normalizedEnergy = clamp01(energy)
+  const base = 0.18 + normalizedEnergy * 0.52
+
+  return [
+    { x: 0.22, y: 0.34, dx: 0.11, dy: -0.02, energy: base * 0.62 },
+    { x: 0.5, y: 0.48, dx: 0.16, dy: 0.01, energy: base },
+    { x: 0.72, y: 0.62, dx: 0.09, dy: 0.035, energy: base * 0.72 },
+  ]
+}
 
 function formatChrono(totalSeconds: number) {
   const safeSeconds = Math.max(0, Number(totalSeconds) || 0)
@@ -88,6 +160,18 @@ async function seekVideo(video: HTMLVideoElement, time: number) {
   await waitForEvent(video, "seeked")
 }
 
+async function loadImage(source: string | undefined) {
+  if (!source) return null
+
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    const image = new Image()
+    image.crossOrigin = "anonymous"
+    image.onload = () => resolve(image)
+    image.onerror = () => resolve(null)
+    image.src = source
+  })
+}
+
 function drawVideoCover(
   context: CanvasRenderingContext2D,
   video: HTMLVideoElement,
@@ -119,6 +203,7 @@ function drawVideoCover(
 function drawLockOverlay(
   context: CanvasRenderingContext2D,
   chrono: string,
+  annotation: string | undefined,
   width: number,
   height: number,
   opacity = 1
@@ -130,6 +215,68 @@ function drawLockOverlay(
   context.letterSpacing = "2px"
   context.fillStyle = `rgba(255, 255, 255, ${0.9 * opacity})`
   context.fillText(`CHRONO // ${chrono}`, 42, height - 82)
+  if (annotation) {
+    context.font = "700 18px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+    context.fillStyle = `rgba(255, 255, 255, ${0.62 * opacity})`
+    context.fillText(annotation.slice(0, 42).toUpperCase(), 42, height - 48)
+  }
+  context.restore()
+}
+
+function drawSnapshotImageLock(
+  context: CanvasRenderingContext2D,
+  snapshotImage: HTMLImageElement | null,
+  width: number,
+  height: number,
+  opacity: number
+) {
+  if (!snapshotImage) return
+
+  context.save()
+  context.globalAlpha = opacity
+  context.globalCompositeOperation = "screen"
+
+  const imageRatio = snapshotImage.naturalWidth / snapshotImage.naturalHeight
+  const targetWidth = width * 0.3
+  const targetHeight = targetWidth / imageRatio
+  const x = width - targetWidth - 42
+  const y = height - targetHeight - 56
+
+  context.drawImage(snapshotImage, x, y, targetWidth, targetHeight)
+  context.strokeStyle = "rgba(255,255,255,0.22)"
+  context.lineWidth = 1
+  context.strokeRect(x, y, targetWidth, targetHeight)
+  context.restore()
+}
+
+function drawMotionField(
+  context: CanvasRenderingContext2D,
+  motionField: SignalMotionVector[] | undefined,
+  width: number,
+  height: number,
+  kineticDensity: number
+) {
+  if (!motionField?.length) return
+
+  context.save()
+  context.globalCompositeOperation = "screen"
+  context.lineCap = "round"
+
+  motionField.forEach((vector) => {
+    const energy = clamp01(vector.energy) * (0.28 + kineticDensity * 0.62)
+    const startX = vector.x * width
+    const startY = vector.y * height
+    const endX = startX + vector.dx * width
+    const endY = startY + vector.dy * height
+
+    context.strokeStyle = `rgba(255,255,255,${0.08 + energy * 0.2})`
+    context.lineWidth = 0.7 + energy * 1.4
+    context.beginPath()
+    context.moveTo(startX, startY)
+    context.lineTo(endX, endY)
+    context.stroke()
+  })
+
   context.restore()
 }
 
@@ -139,14 +286,15 @@ function drawPulseIntro(
   chrono: string,
   width: number,
   height: number,
-  progress: number
+  progress: number,
+  acousticPeak: number
 ) {
   context.save()
   context.fillStyle = "#050505"
   context.fillRect(0, 0, width, height)
 
   const pulse = Math.sin(progress * Math.PI)
-  context.fillStyle = `rgba(255,255,255,${0.08 + pulse * 0.1})`
+  context.fillStyle = `rgba(255,255,255,${0.08 + pulse * (0.1 + acousticPeak * 0.08)})`
   context.fillRect(42, height / 2 - 1, width - 84, 2)
   context.fillStyle = `rgba(255,255,255,${0.9})`
   context.font = "900 34px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
@@ -156,6 +304,8 @@ function drawPulseIntro(
   context.fillText(nodeId, 42, height / 2 - 28)
   context.fillStyle = "rgba(255,255,255,0.86)"
   context.fillText(`CHRONO // ${chrono}`, 42, height / 2 + 56)
+  context.fillStyle = `rgba(255,255,255,${0.12 + acousticPeak * 0.18})`
+  context.fillRect(42, height / 2 + 92, (width - 84) * (0.18 + acousticPeak * 0.72), 1)
   context.restore()
 }
 
@@ -163,14 +313,15 @@ function drawTrailFrame(
   context: CanvasRenderingContext2D,
   trailCanvas: HTMLCanvasElement | null,
   width: number,
-  height: number
+  height: number,
+  kineticDensity: number
 ) {
   if (!trailCanvas) return
 
   context.save()
-  context.globalAlpha = 0.075
+  context.globalAlpha = 0.035 + kineticDensity * 0.075
   context.globalCompositeOperation = "screen"
-  context.drawImage(trailCanvas, -2, 0, width + 4, height)
+  context.drawImage(trailCanvas, -1 - kineticDensity * 3, 0, width + 2 + kineticDensity * 6, height)
   context.restore()
 }
 
@@ -228,8 +379,7 @@ async function shareOrDownload(blob: Blob, title: string, mimeType: string) {
 
 export async function exportSnapshotSignal({
   playbackUrl,
-  snapshot,
-  nodeId,
+  signal,
   title,
   onStatus,
 }: SignalExportOptions) {
@@ -267,6 +417,7 @@ export async function exportSnapshotSignal({
   video.preload = "auto"
 
   await waitForEvent(video, "loadedmetadata", 5000)
+  const snapshotImage = await loadImage(signal.snapshotImage)
 
   const stream = canvas.captureStream(30)
   const chunks: Blob[] = []
@@ -274,16 +425,21 @@ export async function exportSnapshotSignal({
     mimeType,
     videoBitsPerSecond: 4_500_000,
   })
-  const chrono = formatChrono(snapshot.session_time)
+  const chrono = formatChrono(signal.chronologyAnchor)
   const anchorTime = Math.min(
-    Math.max(0, Number(snapshot.session_time) || 0),
-    Number.isFinite(video.duration) ? video.duration : Number(snapshot.session_time) || 0
+    Math.max(0, Number(signal.chronologyAnchor) || 0),
+    Number.isFinite(video.duration) ? video.duration : Number(signal.chronologyAnchor) || 0
   )
-  const startTime = Math.max(0, anchorTime - prerollSeconds)
+  const startTime = Math.min(
+    anchorTime,
+    Math.max(0, Number(signal.replayEnvelopeStart) || anchorTime - prerollSeconds)
+  )
   const endTime = Math.min(
     Number.isFinite(video.duration) ? video.duration : anchorTime + postrollSeconds,
-    anchorTime + postrollSeconds
+    Math.max(anchorTime, Number(signal.replayEnvelopeEnd) || anchorTime + postrollSeconds)
   )
+  const kineticDensity = clamp01(signal.kineticDensity)
+  const acousticPeak = clamp01(signal.acousticPeak)
   const trailCanvas = document.createElement("canvas")
   trailCanvas.width = outputWidth
   trailCanvas.height = outputHeight
@@ -301,7 +457,7 @@ export async function exportSnapshotSignal({
   recorder.start(250)
 
   await recordTimedFrames((_, progress) => {
-    drawPulseIntro(context, nodeId, chrono, outputWidth, outputHeight, progress)
+    drawPulseIntro(context, signal.nodeId, chrono, outputWidth, outputHeight, progress, acousticPeak)
   }, pulseDurationMs)
 
   await seekVideo(video, startTime)
@@ -309,9 +465,10 @@ export async function exportSnapshotSignal({
 
   while (video.currentTime < anchorTime) {
     drawVideoCover(context, video, outputWidth, outputHeight)
-    drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight)
+    drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
+    drawMotionField(context, signal.motionField, outputWidth, outputHeight, kineticDensity)
 
-    if (trailContext && frameCount % 8 === 0) {
+    if (trailContext && frameCount % Math.max(4, Math.round(10 - kineticDensity * 5)) === 0) {
       trailContext.drawImage(canvas, 0, 0, outputWidth, outputHeight)
       lastTrailCanvas = trailCanvas
     }
@@ -325,17 +482,20 @@ export async function exportSnapshotSignal({
 
   await recordTimedFrames(() => {
     drawVideoCover(context, video, outputWidth, outputHeight)
-    drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight)
-    drawLockOverlay(context, chrono, outputWidth, outputHeight)
+    drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
+    drawMotionField(context, signal.motionField, outputWidth, outputHeight, kineticDensity)
+    drawSnapshotImageLock(context, snapshotImage, outputWidth, outputHeight, 0.2)
+    drawLockOverlay(context, chrono, signal.annotation, outputWidth, outputHeight)
   }, freezeDurationMs)
 
   await video.play()
 
   while (video.currentTime < endTime && !video.ended) {
     drawVideoCover(context, video, outputWidth, outputHeight)
-    drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight)
+    drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
+    drawMotionField(context, signal.motionField, outputWidth, outputHeight, kineticDensity)
 
-    if (trailContext && frameCount % 8 === 0) {
+    if (trailContext && frameCount % Math.max(4, Math.round(10 - kineticDensity * 5)) === 0) {
       trailContext.drawImage(canvas, 0, 0, outputWidth, outputHeight)
       lastTrailCanvas = trailCanvas
     }
