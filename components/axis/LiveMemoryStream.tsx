@@ -34,8 +34,31 @@ const recorderTypes = [
   "video/webm",
 ]
 
+const mobileCaptureConstraints: MediaStreamConstraints = {
+  video: {
+    facingMode: "environment",
+    width: {
+      ideal: 1280,
+    },
+    height: {
+      ideal: 720,
+    },
+    frameRate: {
+      ideal: 30,
+      max: 30,
+    },
+    aspectRatio: 1.777777778,
+  },
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
+}
+
 const reconnectDebounceMs = 1400
 const trackFailureGraceMs = 5200
+const recorderTimesliceMs = 2000
 
 function formatClock(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds))
@@ -71,6 +94,23 @@ function safeFileName(value: string) {
 
 function extensionForType(type: string) {
   return type.includes("mp4") ? "mp4" : "webm"
+}
+
+function trackSummary(track: MediaStreamTrack) {
+  return {
+    kind: track.kind,
+    label: track.label,
+    enabled: track.enabled,
+    muted: track.muted,
+    readyState: track.readyState,
+    settings: track.getSettings(),
+  }
+}
+
+function hasLiveVideoTrack(stream: MediaStream | null) {
+  return Boolean(
+    stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled)
+  )
 }
 
 async function postJson<T>(url: string, body: Record<string, unknown>) {
@@ -267,31 +307,25 @@ export function LiveMemoryStream() {
     openingCameraRef.current = true
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: {
-          facingMode: {
-            ideal: "environment",
-          },
-          width: {
-            ideal: 1280,
-          },
-          height: {
-            ideal: 720,
-          },
-        },
-      })
+      const stream = await navigator.mediaDevices.getUserMedia(mobileCaptureConstraints)
 
       localStreamRef.current = stream
 
       stream.getTracks().forEach((track) => {
-        track.addEventListener("mute", () => beginReconnect("track_muted"))
-        track.addEventListener("unmute", () => resolveReconnect("track_unmuted"))
+        track.addEventListener("mute", () => beginReconnect(`${track.kind}_muted`))
+        track.addEventListener("unmute", () => resolveReconnect(`${track.kind}_unmuted`))
         track.addEventListener("ended", () => {
           if (hardStoppedRef.current || finalizingRef.current) return
-          beginReconnect("track_ended")
+
+          beginReconnect(`${track.kind}_ended`)
+          if (track.kind !== "video") return
+
           trackFailureTimerRef.current = window.setTimeout(() => {
-            if (!hardStoppedRef.current && !finalizingRef.current) {
+            if (
+              !hardStoppedRef.current &&
+              !finalizingRef.current &&
+              !hasLiveVideoTrack(localStreamRef.current)
+            ) {
               setFailure("Camera stopped")
             }
           }, trackFailureGraceMs)
@@ -364,10 +398,14 @@ export function LiveMemoryStream() {
       if (!stream) throw new Error("Camera unavailable")
 
       emitEvent("stream_connected", {
-        tracks: stream.getTracks().map((track) => track.kind),
+        tracks: stream.getTracks().map(trackSummary),
+        audioContinuity: stream.getAudioTracks().length > 0,
+        videoContinuity: stream.getVideoTracks().length > 0,
       })
       appendTemporalEvent("STREAM_CONNECTED", {
-        tracks: stream.getTracks().map((track) => track.kind),
+        tracks: stream.getTracks().map(trackSummary),
+        audioContinuity: stream.getAudioTracks().length > 0,
+        videoContinuity: stream.getVideoTracks().length > 0,
       })
 
       if (typeof MediaRecorder === "undefined") {
@@ -403,7 +441,7 @@ export function LiveMemoryStream() {
 
       startedAtMsRef.current = Date.now()
       recorderRef.current = recorder
-      recorder.start(1000)
+      recorder.start(recorderTimesliceMs)
       setElapsed(0)
       startElapsedTimer()
       setLiveStatus("LIVE")
