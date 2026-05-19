@@ -27,6 +27,8 @@ export type TemporalEventTier = "PRIMARY" | "SECONDARY" | "TERTIARY"
 
 export type TemporalTeam = "HOME" | "AWAY" | null
 
+export type GameClockState = "STOPPED" | "RUNNING" | "PAUSED" | "FINALIZED"
+
 export type TemporalEventSource =
   | "operator"
   | "system"
@@ -90,11 +92,14 @@ export type TemporalEvent = {
   type: TemporalEventType
   tier: TemporalEventTier
   order: number
+  archiveTime: number
   createdAt: string
   sessionTime: number
   gameClock: string
   period: number
   team: TemporalTeam
+  points?: 1 | 2 | 3
+  clockState?: GameClockState
   confidence: number
   source: TemporalEventSource
   metadata: Record<string, unknown>
@@ -106,11 +111,14 @@ export type TemporalEventInput = {
   type: TemporalEventType
   tier?: TemporalEventTier
   order: number
+  archiveTime?: number
   createdAt: string
   sessionTime: number
   gameClock: string
   period: number
   team?: TemporalTeam
+  points?: 1 | 2 | 3
+  clockState?: GameClockState
   confidence?: number
   source?: TemporalEventSource
   metadata?: Record<string, unknown>
@@ -162,6 +170,8 @@ export type TemporalEventIndex = {
   byPeriod: Record<string, string[]>
   byGameClock: Record<string, string[]>
   bySessionSecond: Record<string, string[]>
+  byArchiveOrder: Record<string, string[]>
+  byScoreAnchor: Record<string, string[]>
   byScoreDifferential: Record<string, string[]>
   byRailPosition: Record<string, string[]>
 }
@@ -181,13 +191,29 @@ export type ReplayMemory = {
   rail: MemoryRail
 }
 
+export type ReplayManifest = {
+  version: 1
+  sessionId: string
+  duration: number
+  media: {
+    playbackId: string | null
+    liveSessionId: string | null
+    url: string | null
+  }
+  timeline: TemporalEvent[]
+  indexes: TemporalEventIndex
+  rail: MemoryRail
+}
+
 export type ArchiveMemory = {
   session: TemporalSession
+  manifestVersion: 1
   videoAsset: {
     url: string | null
     playbackId: string | null
     liveSessionId: string | null
   }
+  replayManifest: ReplayManifest
   replayObject: ReplayMemory
   scoreHistory: TemporalEvent[]
   clockHistory: TemporalEvent[]
@@ -210,6 +236,8 @@ const emptyIndex = (): TemporalEventIndex => ({
   byPeriod: {},
   byGameClock: {},
   bySessionSecond: {},
+  byArchiveOrder: {},
+  byScoreAnchor: {},
   byScoreDifferential: {},
   byRailPosition: {},
 })
@@ -220,7 +248,7 @@ function normalizeClock(clock: string) {
 
 function eventWeight(event: TemporalEvent) {
   if (event.type === "score") {
-    const points = Number(event.metadata.points || 1)
+    const points = Number(event.points || event.metadata.points || 1)
     return Math.max(1, Math.min(3, points))
   }
 
@@ -249,7 +277,7 @@ function eventRailLayer(event: TemporalEvent): MemoryRailLayer {
 
 function eventRailLabel(event: TemporalEvent) {
   if (event.type === "score") {
-    return `${event.team || "TEAM"} +${event.metadata.points || 0}`
+    return `${event.team || "TEAM"} +${event.points || event.metadata.points || 0}`
   }
 
   if (event.type === "session_end") return "ARCHIVED"
@@ -280,6 +308,7 @@ function addToIndex(index: Record<string, string[]>, key: string, eventId: strin
 
 function compareEvents(a: TemporalEvent, b: TemporalEvent) {
   if (a.sessionTime !== b.sessionTime) return a.sessionTime - b.sessionTime
+  if (a.archiveTime !== b.archiveTime) return a.archiveTime - b.archiveTime
   if (a.createdAt !== b.createdAt) return a.createdAt.localeCompare(b.createdAt)
   if (a.order !== b.order) return a.order - b.order
   return a.id.localeCompare(b.id)
@@ -345,11 +374,14 @@ export function createTemporalEvent({
   type,
   tier = "PRIMARY",
   order,
+  archiveTime,
   createdAt,
   sessionTime,
   gameClock,
   period,
   team = null,
+  points,
+  clockState,
   confidence = 1,
   source = "operator",
   metadata = {},
@@ -364,11 +396,14 @@ export function createTemporalEvent({
     type,
     tier,
     order,
+    archiveTime: archiveTime ?? order,
     createdAt,
     sessionTime: safeSessionTime,
     gameClock: normalizeClock(gameClock),
     period: Math.max(1, period || 1),
     team,
+    points,
+    clockState,
     confidence: Math.max(0, Math.min(1, confidence)),
     source,
     metadata,
@@ -404,6 +439,7 @@ export function isTemporalEvent(value: unknown): value is TemporalEvent {
     typeof event.gameClock === "string" &&
     typeof event.period === "number" &&
     typeof event.order === "number" &&
+    typeof event.archiveTime === "number" &&
     typeof event.metadata === "object"
   )
 }
@@ -423,6 +459,7 @@ export function buildEventIndex({
     addToIndex(index.byPeriod, String(event.period), event.id)
     addToIndex(index.byGameClock, event.gameClock, event.id)
     addToIndex(index.bySessionSecond, String(Math.floor(event.sessionTime)), event.id)
+    addToIndex(index.byArchiveOrder, String(event.archiveTime), event.id)
     addToIndex(index.byScoreDifferential, scoreDifferentialForEvent(event), event.id)
     addToIndex(
       index.byRailPosition,
@@ -431,6 +468,10 @@ export function buildEventIndex({
     )
 
     if (event.team) addToIndex(index.byTeam, event.team, event.id)
+    if (event.type === "score" && event.team && event.points) {
+      addToIndex(index.byScoreAnchor, `${event.team}+${event.points}`, event.id)
+      addToIndex(index.byScoreAnchor, `Q${event.period}:${event.team}+${event.points}`, event.id)
+    }
   }
 
   return index
@@ -584,14 +625,26 @@ export function buildArchiveMemory({
   liveSessionId: string | null
 }): ArchiveMemory {
   const replayObject = buildReplayMemory({ session, events })
+  const videoAsset = {
+    url: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
+    playbackId,
+    liveSessionId,
+  }
+  const replayManifest: ReplayManifest = {
+    version: 1,
+    sessionId: session.id,
+    duration: session.duration,
+    media: videoAsset,
+    timeline: replayObject.chronological,
+    indexes: replayObject.index,
+    rail: replayObject.rail,
+  }
 
   return {
     session,
-    videoAsset: {
-      url: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
-      playbackId,
-      liveSessionId,
-    },
+    manifestVersion: 1,
+    videoAsset,
+    replayManifest,
     replayObject,
     scoreHistory: replayObject.chronological.filter((event) => event.type === "score"),
     clockHistory: replayObject.chronological.filter((event) => event.type === "clock"),

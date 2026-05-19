@@ -3,11 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import MuxPlayer from "@mux/mux-player-react"
 import {
-  buildTemporalReplayEngine,
-  type TemporalReplayEngine,
-  type TemporalReplayEvent,
-} from "@/lib/replay/temporalReplayEngine"
-import {
   appendTemporalEvent,
   buildArchiveMemory,
   buildLiveMemory,
@@ -16,6 +11,7 @@ import {
   isTemporalEvent,
   transitionTemporalSession,
   type ArchiveMemory,
+  type GameClockState,
   type OperationalSessionState,
   type TemporalEvent,
   type TemporalEventType,
@@ -116,25 +112,6 @@ function archiveSession(session: ArchiveMemory) {
   window.localStorage.setItem(archiveStorageKey, JSON.stringify([session, ...archive].slice(0, 12)))
 }
 
-function toReplayEvent(event: TemporalEvent): TemporalReplayEvent {
-  return {
-    id: event.id,
-    type: event.type,
-    createdAt: event.createdAt,
-    sessionTime: event.sessionTime,
-    gameClock: event.gameClock,
-    period: event.period,
-    metadata: {
-      ...event.metadata,
-      team: event.team,
-      tier: event.tier,
-      source: event.source,
-      confidence: event.confidence,
-      clipWindow: event.clipWindow,
-    },
-  }
-}
-
 export function LiveMemoryStream() {
   const fallbackPlaybackId = process.env.NEXT_PUBLIC_MUX_PLAYBACK_ID || ""
   const [playbackId, setPlaybackId] = useState(fallbackPlaybackId)
@@ -145,7 +122,7 @@ export function LiveMemoryStream() {
   const [awayScore, setAwayScore] = useState(0)
   const [period] = useState(1)
   const [gameClockSeconds, setGameClockSeconds] = useState(12 * 60)
-  const [clockRunning, setClockRunning] = useState(false)
+  const [clockState, setClockState] = useState<GameClockState>("STOPPED")
   const [events, setEvents] = useState<TemporalEvent[]>([])
   const [lastEventId, setLastEventId] = useState("")
   const [threadHydrated, setThreadHydrated] = useState(false)
@@ -163,6 +140,7 @@ export function LiveMemoryStream() {
   const elapsedRef = useRef(0)
   const clockStartedAtRef = useRef(0)
   const gameClockSecondsRef = useRef(12 * 60)
+  const clockStateRef = useRef<GameClockState>("STOPPED")
   const eventSequenceRef = useRef(0)
   const sessionRef = useRef<TemporalSession | null>(null)
   const statusRef = useRef<OperationalSessionState>("READY")
@@ -192,14 +170,7 @@ export function LiveMemoryStream() {
     () => events.filter((event) => event.type === "score"),
     [events]
   )
-  const replayEngine: TemporalReplayEngine = useMemo(
-    () =>
-      buildTemporalReplayEngine({
-        events: events.map(toReplayEvent),
-        duration: elapsed,
-      }),
-    [elapsed, events]
-  )
+  const clockRunning = clockState === "RUNNING"
   const memoryDensity = useMemo(
     () =>
       liveMemory.rail.densityRegions.map((region) => ({
@@ -267,7 +238,7 @@ export function LiveMemoryStream() {
       team = null,
       source = "operator",
       metadata = {},
-      gameClock = formatGameClock(gameClockSeconds),
+      gameClock = formatGameClock(gameClockSecondsRef.current),
       tier = "PRIMARY",
     }: {
       type: TemporalEventType
@@ -287,10 +258,15 @@ export function LiveMemoryStream() {
         gameClock,
         period,
         team,
+        points: type === "score" ? Number(metadata.points) as 1 | 2 | 3 : undefined,
+        clockState:
+          type === "clock" && typeof metadata.clockState === "string"
+            ? (metadata.clockState as GameClockState)
+            : undefined,
         source,
         metadata,
       }),
-    [gameClockSeconds, getSession, nextOrder, period]
+    [getSession, nextOrder, period]
   )
 
   const setSystemStatus = useCallback(
@@ -390,15 +366,21 @@ export function LiveMemoryStream() {
     )
   }
 
-  const addClockEvent = (action: "START" | "PAUSE" | "RESET", clockOverride?: string) => {
+  const addClockEvent = (
+    clockState: GameClockState,
+    clockOverride?: string,
+    previousClockState = clockStateRef.current
+  ) => {
     appendEvent(
       createEvent({
         type: "clock",
         source: "clock",
-        gameClock: clockOverride || formatGameClock(gameClockSeconds),
+        gameClock: clockOverride || formatGameClock(gameClockSecondsRef.current),
         metadata: {
-          action,
-          gameClock: clockOverride || formatGameClock(gameClockSeconds),
+          action: clockState,
+          clockState,
+          previousClockState,
+          gameClock: clockOverride || formatGameClock(gameClockSecondsRef.current),
           period,
         },
       })
@@ -406,20 +388,26 @@ export function LiveMemoryStream() {
   }
 
   const startGameClock = () => {
-    setClockRunning(true)
-    addClockEvent("START")
+    const previousClockState = clockStateRef.current
+    clockStateRef.current = "RUNNING"
+    setClockState("RUNNING")
+    addClockEvent("RUNNING", undefined, previousClockState)
   }
 
   const pauseGameClock = () => {
-    setClockRunning(false)
-    addClockEvent("PAUSE")
+    const previousClockState = clockStateRef.current
+    clockStateRef.current = "PAUSED"
+    setClockState("PAUSED")
+    addClockEvent("PAUSED", undefined, previousClockState)
   }
 
   const resetGameClock = () => {
-    setClockRunning(false)
+    const previousClockState = clockStateRef.current
+    clockStateRef.current = "STOPPED"
+    setClockState("STOPPED")
     gameClockSecondsRef.current = 12 * 60
     setGameClockSeconds(12 * 60)
-    addClockEvent("RESET", "12:00")
+    addClockEvent("STOPPED", "12:00", previousClockState)
   }
 
   const replayEvent = (event: TemporalEvent) => {
@@ -482,6 +470,23 @@ export function LiveMemoryStream() {
     if (finalizingRef.current) return
 
     finalizingRef.current = true
+    const previousClockState = clockStateRef.current
+    clockStateRef.current = "FINALIZED"
+    setClockState("FINALIZED")
+    appendEvent(
+      createEvent({
+        type: "clock",
+        source: "clock",
+        gameClock: formatGameClock(gameClockSecondsRef.current),
+        metadata: {
+          action: "FINALIZED",
+          clockState: "FINALIZED",
+          previousClockState,
+          gameClock: formatGameClock(gameClockSecondsRef.current),
+          period,
+        },
+      })
+    )
     setSystemStatus("FINALIZING", "CLOSED")
 
     if (reconnectTimerRef.current) {
@@ -538,11 +543,6 @@ export function LiveMemoryStream() {
         events: eventTimeline,
         playbackId: playbackId || null,
         liveSessionId: liveSessionId || null,
-      })
-
-      buildTemporalReplayEngine({
-        events: eventTimeline.map(toReplayEvent),
-        duration: elapsedRef.current,
       })
 
       archiveSession(archiveMemory)
@@ -1043,7 +1043,7 @@ export function LiveMemoryStream() {
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
           <div className="mx-auto max-w-4xl">
-            <div className="mb-3 grid grid-cols-3 overflow-hidden border border-white/10 bg-black/58 backdrop-blur-md">
+            <div className="mb-3 grid grid-cols-3 overflow-hidden border border-white/10 bg-black/52 backdrop-blur-sm">
               {[1, 2, 3].map((points) => (
                 <button
                   key={`home-${points}`}
@@ -1073,7 +1073,7 @@ export function LiveMemoryStream() {
                 type="button"
                 onClick={() => addMemoryEvent("marker")}
                 disabled={disabledStates.includes(status)}
-                className="border border-white/10 bg-zinc-100/90 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
+                className="border border-white/10 bg-zinc-100/90 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-black transition active:bg-zinc-300 disabled:opacity-40"
               >
                 Mark
               </button>
@@ -1081,7 +1081,7 @@ export function LiveMemoryStream() {
                 type="button"
                 onClick={() => addMemoryEvent("snapshot")}
                 disabled={disabledStates.includes(status)}
-                className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
+                className="border-y border-r border-white/10 bg-black/52 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 transition active:bg-white/10 disabled:opacity-40"
               >
                 Snapshot
               </button>
@@ -1089,14 +1089,14 @@ export function LiveMemoryStream() {
                 type="button"
                 onClick={finalizeThread}
                 disabled={disabledStates.includes(status)}
-                className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
+                className="border-y border-r border-white/10 bg-black/52 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 transition active:bg-white/10 disabled:opacity-40"
               >
                 End
               </button>
             </div>
 
             <div
-              className={`relative h-12 overflow-hidden border border-white/10 bg-black/48 px-4 backdrop-blur-md transition-opacity duration-700 ${
+              className={`relative h-12 overflow-hidden border border-white/10 bg-black/42 px-4 backdrop-blur-sm transition-opacity duration-700 ${
                 status === "LIVE" ? "opacity-100" : "opacity-75"
               }`}
             >
@@ -1175,7 +1175,6 @@ export function LiveMemoryStream() {
               <span>{formatClock(elapsed)}</span>
               <span>
                 {scoringEvents.length} score / {markers.length} mark / {snapshots.length} snapshot
-                {replayEngine.clusters.length ? ` / ${replayEngine.clusters.length} cluster` : ""}
               </span>
             </div>
           </div>
