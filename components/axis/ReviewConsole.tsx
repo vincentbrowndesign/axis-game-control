@@ -346,7 +346,7 @@ export function ReviewConsole() {
           </div>
         </header>
 
-        <section className="axis-panel rounded-lg p-5 sm:p-7">
+        <section className="rounded-[1.5rem] border border-zinc-900 bg-black/75 p-5 sm:p-7">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
             Review
           </p>
@@ -365,7 +365,7 @@ export function ReviewConsole() {
             )
 
             return (
-              <article key={moment.id} className="axis-panel overflow-hidden rounded-lg">
+              <article key={moment.id} className="overflow-hidden rounded-[1.5rem] border border-zinc-900 bg-black/80">
                 {storyBlock ? (
                   <div className="relative min-h-56 bg-black sm:min-h-72">
                     {storyBlock.media.contentType.startsWith("video/") ? (
@@ -405,16 +405,28 @@ export function ReviewConsole() {
                     <h2 className="mt-4 text-4xl font-black uppercase leading-[0.9] tracking-[-0.05em] text-zinc-100 sm:text-5xl">
                       {moment.title}
                     </h2>
-                    <p className="mt-4 text-xl font-black leading-7 text-zinc-400">
-                      {moment.why}
-                    </p>
-                    <p className="mt-5 text-base font-black leading-6 text-zinc-200">
-                      {moment.result}
-                    </p>
+                    <div className="mt-6 grid gap-5">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-700">
+                          Why it mattered
+                        </p>
+                        <p className="mt-2 text-xl font-black leading-7 text-zinc-400">
+                          {moment.why}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-700">
+                          Result
+                        </p>
+                        <p className="mt-2 text-base font-black leading-6 text-zinc-200">
+                          {moment.result}
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid min-w-0 gap-4">
-                    <div className="rounded-lg border border-zinc-900 bg-black p-4">
+                    <div className="rounded-[1.25rem] border border-zinc-900 bg-black p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-700">
                         Sequence
                       </p>
@@ -423,7 +435,7 @@ export function ReviewConsole() {
                       </p>
                     </div>
 
-                    <div className="relative min-h-24 overflow-hidden rounded-lg border border-zinc-900 bg-[#070707] px-4">
+                    <div className="relative min-h-24 overflow-hidden rounded-[1.25rem] border border-zinc-900 bg-[#070707] px-4">
                       <div className="absolute inset-x-4 top-1/2 h-px bg-zinc-800" />
                       <div className="relative flex min-h-24 items-center gap-3 overflow-x-auto">
                         {signals.map((signal) => (

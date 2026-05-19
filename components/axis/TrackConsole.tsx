@@ -66,6 +66,17 @@ function labelTone(label: string) {
   return "text-zinc-300"
 }
 
+function liveWord(label: string) {
+  if (label === "BREAK") return "FLOW BROKE"
+  if (label === "RECOVERY") return "RESPONSE"
+  if (label === "SPURT") return "RUNNING"
+  if (label === "COLD") return "MESSY"
+  if (label === "SWING") return "SWING"
+  if (label === "HOT") return "HOT"
+
+  return "SETTLED"
+}
+
 function positionFor(time: number, totalMs: number) {
   if (totalMs <= 0) return 0
 
@@ -323,30 +334,24 @@ export function TrackConsole() {
   return (
     <main className="axis-shell min-h-screen overflow-hidden px-4 pb-8 pt-4 text-zinc-100 sm:px-6">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <header className="grid gap-3 border-b border-zinc-900/90 pb-3">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+        <header className="grid gap-3 pb-2">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300/60">
-                Source
-              </p>
               <p className="truncate text-xl font-black uppercase leading-none text-orange-200 sm:text-3xl">
                 {run.home}
               </p>
             </div>
 
             <div className="grid justify-items-center gap-1">
-              <div className="rounded-full border border-zinc-800 bg-black px-4 py-2 font-mono text-xl font-black text-zinc-100 sm:text-2xl">
+              <div className="rounded-full border border-zinc-800 bg-black/70 px-4 py-2 font-mono text-xl font-black text-zinc-100 sm:text-2xl">
                 {homeScore}-{awayScore}
               </div>
-              <div className="rounded-full border border-zinc-900 bg-zinc-950 px-3 py-1 font-mono text-[11px] font-black text-emerald-300">
+              <div className="font-mono text-[11px] font-black text-emerald-300">
                 {elapsed}
               </div>
             </div>
 
             <div className="min-w-0 text-right">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-300/60">
-                Source
-              </p>
               <p className="truncate text-xl font-black uppercase leading-none text-sky-200 sm:text-3xl">
                 {run.away}
               </p>
@@ -362,7 +367,7 @@ export function TrackConsole() {
             </Link>
             <div className="flex min-w-0 items-center gap-2">
               <span className={`text-xs font-black uppercase tracking-[0.2em] ${labelTone(temporal.state.label)}`}>
-                {temporal.state.label}
+                {liveWord(temporal.state.label)}
               </span>
               <span className="h-1 w-1 rounded-full bg-zinc-700" />
               <span className="truncate text-xs font-bold text-zinc-600">
@@ -378,26 +383,14 @@ export function TrackConsole() {
               </Link>
             </div>
           </div>
-          <div className="axis-glass flex items-center justify-center gap-3 rounded-full px-3 py-2">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
-              Flow
-            </span>
-            <span className={`text-xs font-black uppercase tracking-[0.18em] ${labelTone(temporal.system.label)}`}>
-              {temporal.system.label}
-            </span>
-            <span className="font-mono text-xs font-black text-zinc-500">
-              {Math.round(temporal.system.netValue) > 0 ? "+" : ""}
-              {Math.round(temporal.system.netValue)}
-            </span>
-          </div>
         </header>
 
-        <section className="axis-panel relative overflow-hidden rounded-lg shadow-[0_18px_80px_rgba(0,0,0,0.36)]">
+        <section className="relative overflow-hidden rounded-[1.5rem] border border-zinc-900 bg-black shadow-[0_18px_80px_rgba(0,0,0,0.36)]">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-zinc-400/40 to-transparent" />
-          <div className="grid min-h-[36rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[40rem] sm:p-5">
+          <div className="grid min-h-[34rem] grid-rows-[auto_1fr_auto] gap-4 p-4 sm:min-h-[38rem] sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-600">
-                Flow
+                Track
               </p>
               <div className="flex items-center gap-2">
                 {run.audioContext ? (
@@ -405,9 +398,6 @@ export function TrackConsole() {
                     Audio
                   </span>
                 ) : null}
-                <p className="font-mono text-[10px] font-black text-zinc-600">
-                  {run.signals.length}
-                </p>
               </div>
             </div>
 
@@ -461,7 +451,7 @@ export function TrackConsole() {
                     title={`${activeMoment.name}: ${activeMoment.summary}`}
                   >
                     <span className={`absolute -top-5 left-2 text-[9px] font-black uppercase tracking-[0.18em] ${labelTone(activeMoment.label)}`}>
-                      {activeMoment.label}
+                      {liveWord(activeMoment.label)}
                     </span>
                   </span>
                 )
@@ -560,56 +550,44 @@ export function TrackConsole() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[1.05fr_0.95fr]">
-              <div className="axis-glass min-w-0 rounded-md px-4 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
-                      {activeMoment?.label || temporal.state.label}
-                    </span>
-                    <span className="h-1 w-1 rounded-full bg-zinc-700" />
-                    <span className="font-mono text-[10px] font-black text-zinc-600">
-                      {activeMoment ? seconds(activeMoment.end) : elapsed}
-                    </span>
-                  </div>
-                  <Link
-                    href={`/report/${activeMoment?.id || "live"}`}
-                    className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600 transition hover:text-zinc-300"
-                  >
-                    Report
-                  </Link>
+            <div className="grid gap-3">
+              <div className="flex items-center justify-between gap-4 rounded-full border border-zinc-900 bg-zinc-950/70 px-4 py-3">
+                <div className="min-w-0">
+                  <p className={`truncate text-lg font-black uppercase tracking-[-0.03em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
+                    {liveWord(activeMoment?.label || temporal.state.label)}
+                  </p>
+                  <p className="truncate text-xs font-bold text-zinc-600">
+                    {sideName(run, temporal.state.side)}
+                  </p>
                 </div>
-                <p className={`mt-2 truncate text-3xl font-black uppercase tracking-[-0.04em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
-                  {activeMoment?.name || temporal.state.momentum}
-                </p>
-                <p className="mt-1 truncate text-sm font-bold text-zinc-600">
-                  {activeMoment?.summary || temporal.state.interpretation}
-                </p>
+                <Link
+                  href={`/report/${activeMoment?.id || "live"}`}
+                  className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600 transition hover:text-zinc-300"
+                >
+                  Report
+                </Link>
               </div>
 
-              <div className="axis-glass min-w-0 rounded-md px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
-                  Sequence
-                </p>
+              <div className="min-w-0 rounded-full border border-zinc-900 bg-black/70 px-3 py-2">
                 {supportingSignals.length ? (
-                  <div className="mt-3 flex min-w-0 items-center gap-2 overflow-hidden">
+                  <div className="flex min-w-0 items-center gap-2 overflow-hidden">
                     {supportingSignals.map((signal, index) => (
                       <div
                         key={`${signal.id}-sequence`}
                         className="flex shrink-0 items-center gap-2"
                       >
                         {index > 0 ? (
-                          <span className="font-mono text-xs font-black text-zinc-700">
+                          <span className="font-mono text-xs font-black text-zinc-800">
                             {"->"}
                           </span>
                         ) : null}
                         <span
-                          className={`rounded-full border px-3 py-1.5 font-mono text-xs font-black ${
+                          className={`rounded-full border px-3 py-1.5 font-mono text-[11px] font-black ${
                             isPositiveSignal(signal.result)
                               ? signal.side === "home"
                                 ? "border-orange-300/35 bg-orange-950/40 text-orange-200"
                                 : "border-sky-300/35 bg-sky-950/40 text-sky-200"
-                              : "border-zinc-700 bg-black text-zinc-500"
+                              : "border-zinc-800 bg-black text-zinc-600"
                           }`}
                           title={`${sideName(run, signal.side)} ${signalEventLabel(signal)}`}
                         >
@@ -619,7 +597,7 @@ export function TrackConsole() {
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-3 h-2 rounded-full bg-zinc-900" />
+                  <div className="h-2 rounded-full bg-zinc-900" />
                 )}
               </div>
             </div>
@@ -627,12 +605,12 @@ export function TrackConsole() {
         </section>
 
         <section className="grid gap-3">
-          <details className="axis-panel group rounded-lg px-4 py-4">
+          <details className="rounded-[1.25rem] border border-zinc-900 bg-black/70 px-4 py-4">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-                  More
+                  Detail
                 </span>
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition group-open:text-zinc-500">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700">
                   Players / time
                 </span>
               </summary>
@@ -646,7 +624,7 @@ export function TrackConsole() {
                     >
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <p className={`truncate text-[10px] font-black uppercase tracking-[0.18em] ${labelTone(cluster.label)}`}>
-                          {cluster.label}
+                          {liveWord(cluster.label)}
                         </p>
                         <p className="truncate text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700">
                           {cluster.title}
