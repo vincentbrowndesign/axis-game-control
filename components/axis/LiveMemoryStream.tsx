@@ -14,8 +14,10 @@ import {
 import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
 import {
   buildContinuitySnapshotPayload,
+  continuityPrimitives,
   generateContinuityPrimitives,
   type ContinuityAssistSample,
+  type ContinuityPrimitive,
   type ContinuityRegion,
 } from "@/lib/continuityAssistance"
 import { startPassiveContinuityObservers } from "@/lib/passiveContinuityObservers"
@@ -66,6 +68,13 @@ type RoboflowPrediction = {
   width?: number
   height?: number
   confidence?: number
+}
+
+type PendingContinuitySelection = {
+  sessionTime: number
+  snapshotId: string | null
+  suggested: ContinuityPrimitive[]
+  openedAt: number
 }
 
 const recorderTypes = [
@@ -212,6 +221,144 @@ function createId(prefix = "axis") {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function suggestedContinuityPrimitives(sample: ContinuityAssistSample | null) {
+  if (!sample || Date.now() - sample.recordedAt > 3200) return [] as ContinuityPrimitive[]
+
+  const suggested = new Set<ContinuityPrimitive>(sample.primitives)
+
+  if (sample.attentionState === "LOCKING") suggested.add("LOCK")
+  if (sample.attentionState === "OVERLOADED") suggested.add("LOST")
+  if (sample.pressure > 0.5) suggested.add("PRESS")
+  if (sample.acceleration > 0.22) suggested.add("FAST")
+  if (sample.motionEnergy < 0.04 && sample.pressure < 0.08) suggested.add("HOLD")
+  if (sample.primaryRegion && Math.abs(sample.primaryRegion.velocityX) > 1.2) {
+    suggested.add("SHIFT")
+  }
+  if (sample.primaryRegion && Math.abs(sample.primaryRegion.velocityY) > 1.2) {
+    suggested.add("GO")
+  }
+
+  return Array.from(suggested).slice(0, 3)
+}
+
+function ContinuitySelector({
+  pending,
+  onCancel,
+  onSelect,
+}: {
+  pending: PendingContinuitySelection
+  onCancel: () => void
+  onSelect: (primitive: ContinuityPrimitive, machineSuggested: boolean) => void
+}) {
+  const selectorRef = useRef<HTMLDivElement | null>(null)
+  const [activePrimitive, setActivePrimitive] = useState<ContinuityPrimitive | null>(
+    pending.suggested[0] || null
+  )
+  const [isSliding, setIsSliding] = useState(false)
+  const spokes = continuityPrimitives.map((primitive, index) => {
+    const angle = -Math.PI / 2 + (index / continuityPrimitives.length) * Math.PI * 2
+    const radius = 45
+
+    return {
+      primitive,
+      x: 50 + Math.cos(angle) * radius,
+      y: 50 + Math.sin(angle) * radius,
+    }
+  })
+
+  const updateFromPointer = (clientX: number, clientY: number) => {
+    const bounds = selectorRef.current?.getBoundingClientRect()
+    if (!bounds) return
+
+    const centerX = bounds.left + bounds.width / 2
+    const centerY = bounds.top + bounds.height / 2
+    const angle = Math.atan2(clientY - centerY, clientX - centerX)
+    const distance = Math.sqrt((clientX - centerX) ** 2 + (clientY - centerY) ** 2)
+
+    if (distance < bounds.width * 0.14) {
+      setActivePrimitive(pending.suggested[0] || "LOCK")
+      return
+    }
+
+    const nearest = spokes.reduce((selected, spoke) => {
+      const spokeAngle = Math.atan2(spoke.y - 50, spoke.x - 50)
+      const delta = Math.abs(Math.atan2(Math.sin(angle - spokeAngle), Math.cos(angle - spokeAngle)))
+      return delta < selected.delta ? { primitive: spoke.primitive, delta } : selected
+    }, {
+      primitive: spokes[0].primitive,
+      delta: Number.POSITIVE_INFINITY,
+    })
+
+    setActivePrimitive(nearest.primitive)
+  }
+
+  const selectPrimitive = (primitive: ContinuityPrimitive) => {
+    onSelect(primitive, pending.suggested.includes(primitive))
+  }
+
+  return (
+    <div className="absolute inset-x-0 bottom-28 z-30 flex justify-center px-4">
+      <div
+        ref={selectorRef}
+        onPointerDown={(event) => {
+          setIsSliding(true)
+          updateFromPointer(event.clientX, event.clientY)
+        }}
+        onPointerMove={(event) => {
+          if (!isSliding) return
+          updateFromPointer(event.clientX, event.clientY)
+        }}
+        onPointerUp={() => {
+          if (activePrimitive) selectPrimitive(activePrimitive)
+        }}
+        onPointerCancel={() => setIsSliding(false)}
+        className="relative h-56 w-56 touch-none border border-white/10 bg-black/64 backdrop-blur-sm"
+        aria-label="Continuity selector"
+      >
+        <div className="absolute inset-10 border border-white/[0.08]" />
+        <button
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            onCancel()
+          }}
+          className="axis-mono absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 border border-white/10 bg-black text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500"
+        >
+          SNAP
+        </button>
+        {spokes.map((spoke) => {
+          const suggested = pending.suggested.includes(spoke.primitive)
+          const active = activePrimitive === spoke.primitive
+
+          return (
+            <button
+              key={spoke.primitive}
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+              onClick={() => selectPrimitive(spoke.primitive)}
+              className={`axis-mono axis-optical-transition absolute h-8 min-w-11 -translate-x-1/2 -translate-y-1/2 border px-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition ${
+                active
+                  ? "border-[#f2f1ed] bg-[#f2f1ed] text-black shadow-[0_0_18px_rgba(242,241,237,0.2)]"
+                  : suggested
+                    ? "border-[#d7c08a]/35 bg-[#d7c08a]/10 text-[#e6d7ad]"
+                    : "border-white/10 bg-black/65 text-zinc-500"
+              }`}
+              style={{
+                left: `${spoke.x}%`,
+                top: `${spoke.y}%`,
+              }}
+            >
+              {spoke.primitive}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function LiveMachinePerceptionOverlay({
@@ -930,6 +1077,8 @@ export function LiveMemoryStream() {
   const [elapsed, setElapsed] = useState(0)
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
   const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("MOTION_ECHO")
+  const [pendingContinuitySelection, setPendingContinuitySelection] =
+    useState<PendingContinuitySelection | null>(null)
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -962,6 +1111,44 @@ export function LiveMemoryStream() {
   const handleContinuitySample = useCallback((sample: ContinuityAssistSample) => {
     continuityAssistRef.current = sample
   }, [])
+
+  const openContinuitySelector = useCallback((sessionTime: number, snapshotId: string | null) => {
+    setPendingContinuitySelection({
+      sessionTime,
+      snapshotId,
+      suggested: suggestedContinuityPrimitives(continuityAssistRef.current),
+      openedAt: Date.now(),
+    })
+  }, [])
+
+  const attachContinuityPrimitive = useCallback(
+    (primitive: ContinuityPrimitive, machineSuggested: boolean) => {
+      const pending = pendingContinuitySelection
+      const session = workingSessionRef.current
+      if (!pending || !session) {
+        setPendingContinuitySelection(null)
+        return
+      }
+
+      useAxisChronologyStore.getState().triggerAttentionSignal(
+        "CONTINUITY_PRIMITIVE",
+        pending.sessionTime,
+        {
+          primitive,
+          timestamp: pending.sessionTime,
+          source: "human_confirmed",
+          machineSuggested,
+          snapshot_id: pending.snapshotId,
+          replay_window: {
+            before: 0,
+            after: 0,
+          },
+        }
+      )
+      setPendingContinuitySelection(null)
+    },
+    [pendingContinuitySelection]
+  )
 
   const emitEvent = useCallback(
     (type: LiveIngestEventType, metadata?: Record<string, unknown>) => {
@@ -1023,6 +1210,7 @@ export function LiveMemoryStream() {
 
     if (!videoElement) {
       appendTemporalEvent("SNAPSHOT")
+      openContinuitySelector(sessionTime, null)
       return
     }
 
@@ -1030,6 +1218,7 @@ export function LiveMemoryStream() {
 
     if (!blob) {
       appendTemporalEvent("SNAPSHOT")
+      openContinuitySelector(sessionTime, null)
       return
     }
 
@@ -1040,10 +1229,11 @@ export function LiveMemoryStream() {
 
     const payload = buildContinuitySnapshotPayload(sessionTime, continuityAssistRef.current)
 
-    useAxisChronologyStore.getState().triggerSnapshotCapture(sessionTime, blob, localUrl, {
+    const snapshot = useAxisChronologyStore.getState().triggerSnapshotCapture(sessionTime, blob, localUrl, {
       ...payload,
     })
-  }, [appendTemporalEvent])
+    openContinuitySelector(sessionTime, snapshot?.id || null)
+  }, [appendTemporalEvent, openContinuitySelector])
 
   const clearReconnectTimers = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -1189,6 +1379,7 @@ export function LiveMemoryStream() {
       eventsRef.current = []
       eventSequenceRef.current = 0
       elapsedRef.current = 0
+      setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()
       const sessionId = createId("axis-live")
@@ -1293,6 +1484,7 @@ export function LiveMemoryStream() {
     }
 
     setLiveStatus("FINALIZING")
+    setPendingContinuitySelection(null)
     stopElapsedTimer()
     clearReconnectTimers()
     finalizingRef.current = true
@@ -1622,6 +1814,15 @@ export function LiveMemoryStream() {
               </div>
             </div>
           </div>
+        ) : null}
+
+        {status === "LIVE" && pendingContinuitySelection ? (
+          <ContinuitySelector
+            key={pendingContinuitySelection.openedAt}
+            pending={pendingContinuitySelection}
+            onCancel={() => setPendingContinuitySelection(null)}
+            onSelect={attachContinuityPrimitive}
+          />
         ) : null}
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">

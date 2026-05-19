@@ -8,7 +8,11 @@ import {
   type TimelineAnchor,
   useAxisChronologyStore,
 } from "@/lib/axisChronologyStore"
-import { recordReplayNegotiation } from "@/lib/continuityAssistance"
+import {
+  continuityPrimitives,
+  recordReplayNegotiation,
+  type ContinuityPrimitive,
+} from "@/lib/continuityAssistance"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -478,11 +482,29 @@ function SnapshotStrip() {
     }
   }
 
+  const primitiveForSnapshot = (snapshot: AxisSnapshot): ContinuityPrimitive | null => {
+    const primitiveEvent = events.find((event) => {
+      if (event.type !== "CONTINUITY_PRIMITIVE") return false
+
+      return (
+        event.payload?.snapshot_id === snapshot.id ||
+        Math.abs(Number(event.session_time) - Number(snapshot.session_time)) < 0.01
+      )
+    })
+    const primitive = primitiveEvent?.payload?.primitive
+
+    return typeof primitive === "string" &&
+      continuityPrimitives.includes(primitive as ContinuityPrimitive)
+      ? (primitive as ContinuityPrimitive)
+      : null
+  }
+
   return (
     <section className="mt-4">
       <div className="flex gap-2 overflow-x-auto pb-1">
         {snapshots.map((snapshot) => {
           const source = snapshot.image_url || snapshot.localUrl
+          const primitive = primitiveForSnapshot(snapshot)
 
           return (
             <div
@@ -511,6 +533,11 @@ function SnapshotStrip() {
                 <p className="axis-mono text-[10px] font-bold text-zinc-100">
                   {formatClock(snapshot.session_time)}
                 </p>
+                {primitive ? (
+                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#d7c08a]">
+                    {primitive}
+                  </p>
+                ) : null}
                 <input
                   type="text"
                   value={snapshot.annotation}
