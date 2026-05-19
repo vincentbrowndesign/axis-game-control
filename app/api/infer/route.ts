@@ -32,6 +32,13 @@ type TrackMoment = {
   signalIds: string[]
 }
 
+type ReportObservation = {
+  title: string
+  why: string
+  result: string
+  source: "local" | "openai"
+}
+
 type InferResponse = {
   basketballLikely: boolean
   confidence: number
@@ -46,6 +53,22 @@ type InferResponse = {
     label: string
     answer: boolean | null
   }[]
+}
+
+function scoreFromBody(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return {
+      home: 0,
+      away: 0,
+    }
+  }
+
+  const score = value as { home?: unknown; away?: unknown }
+
+  return {
+    home: typeof score.home === "number" && Number.isFinite(score.home) ? score.home : 0,
+    away: typeof score.away === "number" && Number.isFinite(score.away) ? score.away : 0,
+  }
 }
 
 function asSignal(value: unknown): TrackSignal | null {
@@ -186,6 +209,67 @@ function cleanMoment(value: unknown, fallback: TrackMoment): TrackMoment {
   }
 }
 
+function localReport(
+  body: Record<string, unknown>,
+  signals: TrackSignal[]
+): ReportObservation {
+  const run = body.run && typeof body.run === "object" ? (body.run as Record<string, unknown>) : {}
+  const home = typeof run.home === "string" ? run.home : "Home"
+  const score = scoreFromBody(run.score)
+  const positives = signals.filter((signal) => isPositiveSignal(signal.result)).length
+  const negatives = signals.length - positives
+  const turnovers = signals.filter((signal) => signal.stat === "TO").length
+  const misses = signals.filter((signal) => signal.stat === "MISS").length
+  const points = signals.filter((signal) => signal.stat === "PTS").length
+  const title =
+    positives >= 3 && positives > negatives
+      ? `${home} Run`
+      : turnovers + misses >= 2
+        ? "Rhythm Break"
+        : negatives > positives
+          ? "Cold Stretch"
+          : "Turning Point"
+  const why =
+    positives >= 3 && points
+      ? "Everything started flowing here."
+      : turnovers >= 2
+        ? "They lost rhythm here."
+        : misses >= 2
+          ? "The game slowed down."
+          : negatives > positives
+            ? "The flow broke."
+            : "This stretch changed the game."
+
+  return {
+    title,
+    why,
+    result: `Score settled at ${score.home}-${score.away}.`,
+    source: "local",
+  }
+}
+
+function cleanReport(value: unknown, fallback: ReportObservation): ReportObservation {
+  if (!value || typeof value !== "object") return fallback
+
+  const report = value as Partial<ReportObservation>
+
+  return {
+    title:
+      typeof report.title === "string" && report.title.trim()
+        ? report.title.trim().slice(0, 36)
+        : fallback.title,
+    why:
+      typeof report.why === "string" && report.why.trim()
+        ? report.why.trim().slice(0, 90)
+        : fallback.why,
+    result:
+      typeof report.result === "string" && report.result.trim()
+        ? report.result.trim().slice(0, 90)
+        : fallback.result,
+    source: report.source === "openai" ? "openai" : fallback.source,
+  }
+}
+
 async function inferTrack(body: Record<string, unknown>) {
   const signals = Array.isArray(body.signals)
     ? body.signals.flatMap((value) => {
@@ -308,6 +392,80 @@ async function inferTrack(body: Record<string, unknown>) {
   }
 }
 
+async function inferReport(body: Record<string, unknown>) {
+  const signals = Array.isArray(body.signals)
+    ? body.signals.flatMap((value) => {
+        const signal = asSignal(value)
+
+        return signal ? [signal] : []
+      })
+    : []
+  const fallback = localReport(body, signals)
+  const run = runFromTrackBody(body, signals)
+  const temporal = runTemporalEngine(run)
+
+  if (!process.env.OPENAI_API_KEY || signals.length < 2) {
+    return fallback
+  }
+
+  try {
+    const { default: OpenAI } = await import("openai")
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+    const response = await client.chat.completions.create({
+      model: process.env.OPENAI_REPORT_MODEL || process.env.OPENAI_TRACK_MODEL || "gpt-4o-mini",
+      temperature: 0.35,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You write short basketball review notes. Return only JSON. Use human, coachable language. No robotic systems language. No analytics jargon. Output: title, why, result. Keep each field short.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "Explain why this stretch mattered in basketball language.",
+            outputShape: '{ "title": string, "why": string, "result": string }',
+            run: body.run,
+            report: body.report,
+            signals,
+            fallback: body.fallback,
+            temporal: {
+              state: temporal.state,
+              system: {
+                label: temporal.system.label,
+                pressure: temporal.system.pressure,
+                netValue: temporal.system.netValue,
+              },
+              analysis: {
+                continuity: temporal.analysis.continuity,
+                interruption: temporal.analysis.interruption,
+                signalDensity: temporal.analysis.signalDensity,
+                unanswered: temporal.analysis.unanswered,
+                clusteredMisses: temporal.analysis.clusteredMisses,
+                currentDroughtMs: temporal.analysis.currentDroughtMs,
+              },
+            },
+          }),
+        },
+      ],
+    })
+    const text = response.choices[0]?.message?.content || "{}"
+    const parsed = JSON.parse(text)
+
+    return {
+      ...cleanReport(parsed, fallback),
+      source: "openai",
+    } satisfies ReportObservation
+  } catch (error) {
+    console.error(error)
+
+    return fallback
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -317,6 +475,14 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         track,
+      })
+    }
+
+    if (body?.type === "report") {
+      const report = await inferReport(body)
+
+      return NextResponse.json({
+        report,
       })
     }
 

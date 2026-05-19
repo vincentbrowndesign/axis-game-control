@@ -521,14 +521,22 @@ export function TrackConsole() {
 
             <div className="grid gap-3 sm:grid-cols-[1.05fr_0.95fr]">
               <div className="axis-glass min-w-0 rounded-md px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
-                    {activeMoment?.label || temporal.state.label}
-                  </span>
-                  <span className="h-1 w-1 rounded-full bg-zinc-700" />
-                  <span className="font-mono text-[10px] font-black text-zinc-600">
-                    {activeMoment ? seconds(activeMoment.end) : elapsed}
-                  </span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
+                      {activeMoment?.label || temporal.state.label}
+                    </span>
+                    <span className="h-1 w-1 rounded-full bg-zinc-700" />
+                    <span className="font-mono text-[10px] font-black text-zinc-600">
+                      {activeMoment ? seconds(activeMoment.end) : elapsed}
+                    </span>
+                  </div>
+                  <Link
+                    href={`/report/${activeMoment?.id || "live"}`}
+                    className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600 transition hover:text-zinc-300"
+                  >
+                    Report
+                  </Link>
                 </div>
                 <p className={`mt-2 truncate text-3xl font-black uppercase tracking-[-0.04em] ${labelTone(activeMoment?.label || temporal.state.label)}`}>
                   {activeMoment?.name || temporal.state.momentum}
@@ -551,7 +559,7 @@ export function TrackConsole() {
                       >
                         {index > 0 ? (
                           <span className="font-mono text-xs font-black text-zinc-700">
-                            →
+                            {"->"}
                           </span>
                         ) : null}
                         <span
