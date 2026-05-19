@@ -5,6 +5,10 @@ import { ControlBar } from "@/components/axis/ControlBar"
 import { ControlPad } from "@/components/axis/ControlPad"
 import { RunHeader } from "@/components/axis/RunHeader"
 import { StateBar } from "@/components/axis/StateBar"
+import {
+  suggestAssistedEvents,
+  type AssistedEventSuggestion,
+} from "@/lib/automation/assistedSuggestions"
 import { buildMemories, buildMoments } from "@/lib/engine/memory"
 import { deriveAxisState } from "@/lib/engine/state"
 import { calculateSystemPlusMinus } from "@/lib/engine/systemPlusMinus"
@@ -453,6 +457,10 @@ export default function UploadMemoryConsole({
   const scoreboard = useMemo(() => scoreFor(run), [run])
   const localTrack = useMemo(() => localTrackIntelligence(run), [run])
   const visibleTrack = openAiTrack || localTrack
+  const assistedSuggestions = useMemo(
+    () => suggestAssistedEvents(run, now),
+    [run, now]
+  )
 
   useEffect(() => {
     if (trackRun.signals.length < 3) return
@@ -783,6 +791,16 @@ export default function UploadMemoryConsole({
           onAddPlayer={addPlayer}
           onUndo={undoSignal}
         />
+        <AssistedSuggestionStrip
+          run={run}
+          suggestions={assistedSuggestions}
+          onConfirm={(suggestion) => {
+            tapSignal(suggestion.side, suggestion.result, {
+              stat: suggestion.stat,
+            })
+            setStatus("Suggested event confirmed.")
+          }}
+        />
         <ReplayMemoryRail run={run} track={visibleTrack} />
         <StateBar state={axisState} status={status} />
       </div>
@@ -805,6 +823,56 @@ export default function UploadMemoryConsole({
 
       <ControlBar />
     </main>
+  )
+}
+
+function AssistedSuggestionStrip({
+  run,
+  suggestions,
+  onConfirm,
+}: {
+  run: Run
+  suggestions: AssistedEventSuggestion[]
+  onConfirm: (suggestion: AssistedEventSuggestion) => void
+}) {
+  if (!suggestions.length) return null
+
+  return (
+    <section className="axis-glass rounded-full px-3 py-2">
+      <div className="flex items-center gap-2 overflow-x-auto">
+        <span className="shrink-0 rounded-full border border-zinc-800 bg-black px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">
+          Assist
+        </span>
+        {suggestions.map((suggestion) => {
+          const tone =
+            suggestion.side === "home"
+              ? suggestion.result === "plus"
+                ? "border-orange-300/45 bg-orange-950/50 text-orange-100 shadow-[0_0_18px_rgba(251,146,60,0.12)]"
+                : "border-orange-500/25 bg-black text-orange-300"
+              : suggestion.result === "plus"
+                ? "border-sky-300/45 bg-sky-950/50 text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.12)]"
+                : "border-sky-500/25 bg-black text-sky-300"
+          const team = suggestion.side === "home" ? run.home : run.away
+
+          return (
+            <button
+              key={suggestion.id}
+              type="button"
+              onClick={() => onConfirm(suggestion)}
+              className={`shrink-0 rounded-full border px-3 py-2 text-left transition active:scale-[0.98] hover:border-zinc-400 ${tone}`}
+              title={`${team}: ${suggestion.reason}`}
+            >
+              <span className="block text-[10px] font-black uppercase tracking-[0.16em]">
+                {suggestion.label}
+              </span>
+              <span className="mt-0.5 block max-w-48 truncate text-[10px] font-bold text-zinc-500">
+                {team} / {Math.round(suggestion.confidence * 100)}%
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
