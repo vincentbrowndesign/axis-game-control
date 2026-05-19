@@ -8,6 +8,7 @@ import {
   type TimelineAnchor,
   useAxisChronologyStore,
 } from "@/lib/axisChronologyStore"
+import { recordReplayNegotiation } from "@/lib/continuityAssistance"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -119,6 +120,14 @@ async function syncSeekToAnchor(
 
   videoElement.pause()
   useAxisChronologyStore.getState().completeSeekTransaction(videoElement.currentTime)
+  const latestStore = useAxisChronologyStore.getState()
+  if (latestStore.sessionId) {
+    recordReplayNegotiation({
+      sessionId: latestStore.sessionId,
+      sessionTime: clampedTarget,
+      type: "FREEZE_FRAME",
+    })
+  }
 }
 
 function ReplayVideo({
@@ -256,13 +265,14 @@ function ReplayVideo({
 }
 
 function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
-  const { events, duration, activeEventId, requestEventJump } =
+  const { events, duration, activeEventId, requestEventJump, sessionId } =
     useAxisChronologyStore(
       useShallow((state) => ({
         events: state.events,
         duration: state.duration,
         activeEventId: state.activeEventId,
         requestEventJump: state.requestEventJump,
+        sessionId: state.sessionId,
       }))
     )
   const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
@@ -281,6 +291,13 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
     }, visibleEvents[0])
 
     requestEventJump(nearestEvent.id)
+    if (sessionId) {
+      recordReplayNegotiation({
+        sessionId,
+        sessionTime: Number(nearestEvent.session_time) || 0,
+        type: "RAIL_JUMP",
+      })
+    }
   }
 
   return (
@@ -317,6 +334,13 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
               onClick={(clickEvent) => {
                 clickEvent.stopPropagation()
                 requestEventJump(event.id)
+                if (sessionId) {
+                  recordReplayNegotiation({
+                    sessionId,
+                    sessionTime: Number(event.session_time) || 0,
+                    type: "EVENT_JUMP",
+                  })
+                }
               }}
               aria-label={`Jump to snapshot at ${formatClock(event.session_time)}`}
               className={`axis-optical-transition absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 border text-[0] transition ${
@@ -382,11 +406,12 @@ function exportLabel(status: string) {
 }
 
 function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
-  const { exportStatus, exportProgress, executeNativeExport } = useAxisChronologyStore(
+  const { exportStatus, exportProgress, executeNativeExport, playback } = useAxisChronologyStore(
     useShallow((state) => ({
       exportStatus: state.exportStatus,
       exportProgress: state.exportProgress,
       executeNativeExport: state.executeNativeExport,
+      playback: state.playback,
     }))
   )
   const isWorking = exportStatus === "DOWNLOADING" || exportStatus === "PREPARING_TRANSFER"
@@ -401,6 +426,11 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
         disabled={!canExport}
         onClick={() => {
           if (!session.playback_url) return
+          recordReplayNegotiation({
+            sessionId: session.id,
+            sessionTime: Number(playback.currentTimelineAnchor) || 0,
+            type: "EXPORT",
+          })
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
         className="axis-mono axis-optical-transition border border-white/10 bg-[#f2f1ed] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-black transition disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
@@ -417,13 +447,14 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
 }
 
 function SnapshotStrip() {
-  const { snapshots, requestEventJump, events, updateSnapshotAnnotation } =
+  const { snapshots, requestEventJump, events, updateSnapshotAnnotation, sessionId } =
     useAxisChronologyStore(
       useShallow((state) => ({
         snapshots: state.snapshots,
         requestEventJump: state.requestEventJump,
         events: state.events,
         updateSnapshotAnnotation: state.updateSnapshotAnnotation,
+        sessionId: state.sessionId,
       }))
     )
 
@@ -438,6 +469,13 @@ function SnapshotStrip() {
     )
 
     if (snapshotEvent) requestEventJump(snapshotEvent.id)
+    if (sessionId) {
+      recordReplayNegotiation({
+        sessionId,
+        sessionTime: Number(snapshot.session_time) || 0,
+        type: "SNAPSHOT_JUMP",
+      })
+    }
   }
 
   return (
@@ -479,6 +517,14 @@ function SnapshotStrip() {
                   onChange={(event) =>
                     updateSnapshotAnnotation(snapshot.id, event.currentTarget.value)
                   }
+                  onBlur={() => {
+                    if (!sessionId || !snapshot.annotation.trim()) return
+                    recordReplayNegotiation({
+                      sessionId,
+                      sessionTime: Number(snapshot.session_time) || 0,
+                      type: "ANNOTATION",
+                    })
+                  }}
                   placeholder="note"
                   maxLength={120}
                   aria-label={`Snapshot note at ${formatClock(snapshot.session_time)}`}

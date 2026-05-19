@@ -225,13 +225,24 @@ function eventPreroll(event: TemporalEventRecord) {
   return Number.isFinite(before) ? Number(before) : 0
 }
 
+function eventAttentionAnchor(event: TemporalEventRecord) {
+  const assist = event.payload?.continuity_assist
+  const attentionAnchor =
+    assist && typeof assist === "object" && "attention_anchor" in assist
+      ? Number((assist as { attention_anchor?: unknown }).attention_anchor)
+      : Number.NaN
+
+  return Number.isFinite(attentionAnchor) ? attentionAnchor : Number(event.session_time) || 0
+}
+
 function eventAnchor(event: TemporalEventRecord): TimelineAnchor {
   const sessionTime = Number(event.session_time) || 0
+  const attentionAnchor = eventAttentionAnchor(event)
 
   return {
     eventId: event.id,
     sessionTime,
-    targetTime: Math.max(0, sessionTime - eventPreroll(event)),
+    targetTime: Math.max(0, attentionAnchor - eventPreroll(event)),
     requestedAt: Date.now(),
   }
 }

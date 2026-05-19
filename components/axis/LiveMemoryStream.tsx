@@ -12,6 +12,12 @@ import {
   saveArchivedRecording,
 } from "@/lib/liveArchive"
 import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
+import {
+  buildContinuitySnapshotPayload,
+  generateContinuityPrimitives,
+  type ContinuityAssistSample,
+  type ContinuityRegion,
+} from "@/lib/continuityAssistance"
 import { startPassiveContinuityObservers } from "@/lib/passiveContinuityObservers"
 import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
 import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
@@ -211,10 +217,12 @@ function createId(prefix = "axis") {
 function LiveMachinePerceptionOverlay({
   active,
   enabled,
+  onContinuitySample,
   videoRef,
 }: {
   active: boolean
   enabled: boolean
+  onContinuitySample?: (sample: ContinuityAssistSample) => void
   videoRef: RefObject<HTMLVideoElement | null>
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -227,6 +235,8 @@ function LiveMachinePerceptionOverlay({
   const attentionStateRef = useRef<AttentionState>("IDLE")
   const pressureRef = useRef(0)
   const lastEnergyRef = useRef(0)
+  const lastContinuitySampleAtRef = useRef(0)
+  const lastPrimaryRegionRef = useRef<ContinuityRegion | null>(null)
 
   useEffect(() => {
     if (!enabled || !active || typeof document === "undefined") {
@@ -238,6 +248,8 @@ function LiveMachinePerceptionOverlay({
       attentionStateRef.current = "IDLE"
       pressureRef.current = 0
       lastEnergyRef.current = 0
+      lastContinuitySampleAtRef.current = 0
+      lastPrimaryRegionRef.current = null
       return
     }
 
@@ -261,6 +273,71 @@ function LiveMachinePerceptionOverlay({
     inferenceCanvas.width = 416
     inferenceCanvas.height = 234
     const inferenceContext = inferenceCanvas.getContext("2d")
+    const emitContinuitySample = ({
+      timestamp,
+      locks,
+      rawEnergy,
+      acceleration,
+      density,
+    }: {
+      timestamp: number
+      locks: MotionLock[]
+      rawEnergy: number
+      acceleration: number
+      density: number
+    }) => {
+      if (!onContinuitySample || timestamp - lastContinuitySampleAtRef.current < 240) {
+        return
+      }
+
+      lastContinuitySampleAtRef.current = timestamp
+
+      const attentionState = attentionStateRef.current
+      const pressure = pressureRef.current
+      const primaryLock = locks.reduce<MotionLock | null>(
+        (primary, lock) => (!primary || lock.energy > primary.energy ? lock : primary),
+        null
+      )
+      const primaryRegion: ContinuityRegion | null = primaryLock
+        ? {
+            x: primaryLock.x,
+            y: primaryLock.y,
+            width: primaryLock.width,
+            height: primaryLock.height,
+            energy: primaryLock.energy,
+            velocityX: primaryLock.velocityX,
+            velocityY: primaryLock.velocityY,
+          }
+        : null
+      const primitives = generateContinuityPrimitives({
+        attentionState,
+        pressure,
+        kineticDensity: density,
+        motionEnergy: rawEnergy,
+        acceleration,
+        primaryRegion,
+        previousRegion: lastPrimaryRegionRef.current,
+      })
+
+      lastPrimaryRegionRef.current = primaryRegion
+
+      onContinuitySample({
+        recordedAt: Date.now(),
+        attentionState,
+        pressure,
+        kineticDensity: density,
+        motionEnergy: rawEnergy,
+        acceleration,
+        movementOrigin: primaryRegion
+          ? {
+              x: primaryRegion.x + primaryRegion.width / 2,
+              y: primaryRegion.y + primaryRegion.height / 2,
+            }
+          : null,
+        primaryRegion,
+        primitives,
+      })
+    }
 
     const syncCanvasSize = () => {
       const bounds = overlayCanvas.getBoundingClientRect()
@@ -656,6 +733,13 @@ function LiveMachinePerceptionOverlay({
         ]
           .filter((lock) => lock.life > 0.03)
           .slice(0, 48)
+        emitContinuitySample({
+          timestamp,
+          locks: fading,
+          rawEnergy,
+          acceleration,
+          density,
+        })
         return
       }
 
@@ -739,6 +823,13 @@ function LiveMachinePerceptionOverlay({
         })
 
       smoothedLocksRef.current = nextLocks
+      emitContinuitySample({
+        timestamp,
+        locks: nextLocks,
+        rawEnergy,
+        acceleration,
+        density,
+      })
       residueLocksRef.current = [
         ...nextLocks.map((lock) => ({
           ...lock,
@@ -764,7 +855,7 @@ function LiveMachinePerceptionOverlay({
         outputContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
       }
     }
-  }, [active, enabled, videoRef])
+  }, [active, enabled, onContinuitySample, videoRef])
 
   return (
     <canvas
@@ -854,6 +945,7 @@ export function LiveMemoryStream() {
   const reconnectTimerRef = useRef<number | null>(null)
   const trackFailureTimerRef = useRef<number | null>(null)
   const passiveObserversRef = useRef<ReturnType<typeof startPassiveContinuityObservers> | null>(null)
+  const continuityAssistRef = useRef<ContinuityAssistSample | null>(null)
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
@@ -865,6 +957,10 @@ export function LiveMemoryStream() {
     if (workingSessionRef.current && nextStatus !== "ARCHIVED") {
       workingSessionRef.current.status = nextStatus as WorkingSession["status"]
     }
+  }, [])
+
+  const handleContinuitySample = useCallback((sample: ContinuityAssistSample) => {
+    continuityAssistRef.current = sample
   }, [])
 
   const emitEvent = useCallback(
@@ -889,9 +985,16 @@ export function LiveMemoryStream() {
       if (!session) return
 
       const sessionTime = elapsedRef.current
+      const payload =
+        type === "SNAPSHOT"
+          ? buildContinuitySnapshotPayload(sessionTime, continuityAssistRef.current)
+          : {
+              replay_window: defaultReplayWindow(),
+            }
+
       useAxisChronologyStore.getState().triggerAttentionSignal(type, sessionTime, {
-          replay_window: defaultReplayWindow(),
-          ...(metadata || {}),
+        ...payload,
+        ...(metadata || {}),
       })
     },
     []
@@ -935,8 +1038,10 @@ export function LiveMemoryStream() {
         ? URL.createObjectURL(blob)
         : ""
 
+    const payload = buildContinuitySnapshotPayload(sessionTime, continuityAssistRef.current)
+
     useAxisChronologyStore.getState().triggerSnapshotCapture(sessionTime, blob, localUrl, {
-      replay_window: defaultReplayWindow(),
+      ...payload,
     })
   }, [appendTemporalEvent])
 
@@ -1423,6 +1528,7 @@ export function LiveMemoryStream() {
         <LiveMachinePerceptionOverlay
           active={status === "LIVE" || status === "READY" || status === "STARTING"}
           enabled={liveViewMode === "MOTION_ECHO"}
+          onContinuitySample={handleContinuitySample}
           videoRef={localVideoRef}
         />
 
