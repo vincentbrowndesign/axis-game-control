@@ -85,16 +85,6 @@ function eventNodeClass(event: TemporalEvent) {
   return "h-2.5 w-2.5 border-white/25 bg-zinc-100/90 shadow-[0_0_14px_rgba(244,244,245,0.32)]"
 }
 
-function readableEventLabel(event: TemporalEvent) {
-  if (event.type === "score") {
-    return `${event.team || "TEAM"} +${event.metadata.points || 0}`
-  }
-
-  if (event.type === "clock") return String(event.metadata.action || "CLOCK")
-  if (event.type === "system_state") return String(event.metadata.state || "STATE")
-  return String(event.metadata.label || event.type).toUpperCase()
-}
-
 function sessionIdFromClock(clock: number) {
   return `axis-session-${Math.max(0, Math.floor(clock)).toString(36)}`
 }
@@ -212,21 +202,21 @@ export function LiveMemoryStream() {
   )
   const memoryDensity = useMemo(
     () =>
-      liveMemory.densityMap.map((region) => ({
+      liveMemory.rail.densityRegions.map((region) => ({
         id: region.id,
         left: Math.max(0, Math.min(100, (region.start / railEnd) * 100)),
         width: Math.max(2, Math.min(100, ((region.end - region.start) / railEnd) * 100)),
         value: region.weight,
       })),
-    [liveMemory.densityMap, railEnd]
+    [liveMemory.rail.densityRegions, railEnd]
+  )
+  const eventById = useMemo(
+    () => new Map(events.map((event) => [event.id, event])),
+    [events]
   )
   const railEvents = useMemo(
-    () =>
-      events.map((event) => ({
-        ...event,
-        position: Math.min(98, Math.max(2, (event.sessionTime / railEnd) * 100)),
-      })),
-    [events, railEnd]
+    () => liveMemory.rail.nodes,
+    [liveMemory.rail.nodes]
   )
   const liveDotClass = useMemo(() => {
     if (status === "LIVE") {
@@ -1130,22 +1120,56 @@ export function LiveMemoryStream() {
                 }}
               />
 
-              {railEvents.map((event) => (
-                <button
-                  key={event.id}
-                  type="button"
-                  onClick={() => replayEvent(event)}
-                  aria-label={`${readableEventLabel(event)} at ${formatClock(event.sessionTime)}`}
-                  className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border transition ${
-                    lastEventId === event.id ? "scale-125 opacity-100" : "opacity-80"
-                  } ${eventNodeClass(event)}`}
-                  style={{
-                    left: `${event.position}%`,
-                  }}
-                >
-                  <span className="absolute inset-1 rounded-full bg-black/80" />
-                </button>
-              ))}
+              {railEvents
+                .filter((node) => node.layer === "SECONDARY")
+                .map((node) => (
+                  <span
+                    key={node.id}
+                    className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-amber-100/25 shadow-[0_0_12px_rgba(253,230,138,0.18)]"
+                    style={{
+                      left: `${node.position}%`,
+                      opacity: Math.min(0.48, 0.12 + node.weight * 0.12),
+                    }}
+                  />
+                ))}
+
+              {railEvents
+                .filter((node) => node.layer === "TERTIARY")
+                .map((node) => (
+                  <span
+                    key={node.id}
+                    className="absolute top-[calc(50%-10px)] h-2 w-8 -translate-x-1/2 rounded-full bg-sky-200/20 blur-[2px]"
+                    style={{
+                      left: `${node.position}%`,
+                      opacity: Math.min(0.52, 0.16 + node.weight * 0.08),
+                    }}
+                  />
+                ))}
+
+              {railEvents
+                .filter((node) => node.layer === "PRIMARY")
+                .map((node) => {
+                  const event = eventById.get(node.eventId)
+
+                  if (!event) return null
+
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      onClick={() => replayEvent(event)}
+                      aria-label={`${node.label} at ${formatClock(node.sessionTime)}`}
+                      className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border transition ${
+                        lastEventId === node.eventId ? "scale-125 opacity-100" : "opacity-80"
+                      } ${eventNodeClass(event)}`}
+                      style={{
+                        left: `${node.position}%`,
+                      }}
+                    >
+                      <span className="absolute inset-1 rounded-full bg-black/80" />
+                    </button>
+                  )
+                })}
             </div>
             <div className="mt-2 flex justify-between text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
               <span>{formatClock(elapsed)}</span>

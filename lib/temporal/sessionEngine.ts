@@ -128,6 +128,34 @@ export type TemporalDensityRegion = {
   eventIds: string[]
 }
 
+export type MemoryRailMode = "LIVE" | "REPLAY"
+
+export type MemoryRailLayer = "PRIMARY" | "SECONDARY" | "TERTIARY"
+
+export type MemoryRailNode = {
+  id: string
+  eventId: string
+  type: TemporalEventType
+  tier: TemporalEventTier
+  layer: MemoryRailLayer
+  position: number
+  weight: number
+  label: string
+  sessionTime: number
+  replayWindow: ClipWindow
+  visibleInLive: boolean
+}
+
+export type MemoryRail = {
+  mode: MemoryRailMode
+  duration: number
+  nodes: MemoryRailNode[]
+  primary: MemoryRailNode[]
+  secondary: MemoryRailNode[]
+  tertiary: MemoryRailNode[]
+  densityRegions: TemporalDensityRegion[]
+}
+
 export type TemporalEventIndex = {
   byType: Record<string, string[]>
   byTeam: Record<string, string[]>
@@ -142,6 +170,7 @@ export type LiveMemory = {
   session: TemporalSession
   rawEvents: TemporalEvent[]
   densityMap: TemporalDensityRegion[]
+  rail: MemoryRail
 }
 
 export type ReplayMemory = {
@@ -149,13 +178,7 @@ export type ReplayMemory = {
   chronological: TemporalEvent[]
   index: TemporalEventIndex
   densityMap: TemporalDensityRegion[]
-  rail: Array<{
-    id: string
-    eventId: string
-    position: number
-    weight: number
-    type: TemporalEventType
-  }>
+  rail: MemoryRail
 }
 
 export type ArchiveMemory = {
@@ -172,7 +195,7 @@ export type ArchiveMemory = {
   snapshots: TemporalEvent[]
   markers: TemporalEvent[]
   systemStates: TemporalEvent[]
-  replayRail: ReplayMemory["rail"]
+  replayRail: MemoryRail
   densityMap: TemporalDensityRegion[]
 }
 
@@ -207,6 +230,48 @@ function eventWeight(event: TemporalEvent) {
   if (event.type === "reconnect") return 1.2
   if (event.type === "clock") return 0.65
   return 1
+}
+
+function eventRailLayer(event: TemporalEvent): MemoryRailLayer {
+  if (event.tier === "TERTIARY") return "TERTIARY"
+  if (
+    event.type === "score" ||
+    event.type === "period" ||
+    event.type === "snapshot" ||
+    event.type === "marker" ||
+    event.type === "session_end"
+  ) {
+    return "PRIMARY"
+  }
+
+  return "SECONDARY"
+}
+
+function eventRailLabel(event: TemporalEvent) {
+  if (event.type === "score") {
+    return `${event.team || "TEAM"} +${event.metadata.points || 0}`
+  }
+
+  if (event.type === "session_end") return "ARCHIVED"
+  if (event.type === "system_state") return String(event.metadata.state || "STATE")
+  if (event.type === "clock") return String(event.metadata.action || "CLOCK")
+  return String(event.metadata.label || event.type).toUpperCase()
+}
+
+function eventVisibleInLive(event: TemporalEvent) {
+  const layer = eventRailLayer(event)
+
+  if (layer === "TERTIARY") return false
+  if (layer === "PRIMARY") return true
+
+  return (
+    event.type === "reconnect" ||
+    event.type === "stabilization" ||
+    event.type === "orientation_change" ||
+    event.type === "audio_spike" ||
+    event.type === "motion_spike" ||
+    event.type === "system_state"
+  )
 }
 
 function addToIndex(index: Record<string, string[]>, key: string, eventId: string) {
@@ -427,19 +492,18 @@ export function buildReplayMemory({
 }): ReplayMemory {
   const chronological = orderTemporalEvents(events)
   const duration = Math.max(session.duration, chronological.at(-1)?.sessionTime || 0, 1)
+  const rail = buildMemoryRail({
+    events: chronological,
+    duration,
+    mode: "REPLAY",
+  })
 
   return {
     session,
     chronological,
     index: buildEventIndex({ events: chronological, duration }),
-    densityMap: buildDensityMap({ events: chronological, duration }),
-    rail: chronological.map((event) => ({
-      id: `rail-${event.id}`,
-      eventId: event.id,
-      position: Math.max(0, Math.min(100, (event.sessionTime / duration) * 100)),
-      weight: eventWeight(event),
-      type: event.type,
-    })),
+    densityMap: rail.densityRegions,
+    rail,
   }
 }
 
@@ -450,10 +514,61 @@ export function buildLiveMemory({
   session: TemporalSession
   events: TemporalEvent[]
 }): LiveMemory {
+  const chronological = orderTemporalEvents(events)
+  const duration = Math.max(session.duration, chronological.at(-1)?.sessionTime || 0, 1)
+  const rail = buildMemoryRail({
+    events: chronological,
+    duration,
+    mode: "LIVE",
+  })
+
   return {
     session,
-    rawEvents: orderTemporalEvents(events),
-    densityMap: buildDensityMap({ events, duration: session.duration }),
+    rawEvents: chronological,
+    densityMap: rail.densityRegions,
+    rail,
+  }
+}
+
+export function buildMemoryRail({
+  events,
+  duration,
+  mode,
+}: {
+  events: TemporalEvent[]
+  duration: number
+  mode: MemoryRailMode
+}): MemoryRail {
+  const chronological = orderTemporalEvents(events)
+  const safeDuration = Math.max(duration, chronological.at(-1)?.sessionTime || 0, 1)
+  const nodes = chronological
+    .map((event) => {
+      const layer = eventRailLayer(event)
+
+      return {
+        id: `rail-${event.id}`,
+        eventId: event.id,
+        type: event.type,
+        tier: event.tier,
+        layer,
+        position: Math.max(0, Math.min(100, (event.sessionTime / safeDuration) * 100)),
+        weight: eventWeight(event),
+        label: eventRailLabel(event),
+        sessionTime: event.sessionTime,
+        replayWindow: event.clipWindow,
+        visibleInLive: eventVisibleInLive(event),
+      }
+    })
+    .filter((node) => mode === "REPLAY" || node.visibleInLive)
+
+  return {
+    mode,
+    duration: safeDuration,
+    nodes,
+    primary: nodes.filter((node) => node.layer === "PRIMARY"),
+    secondary: nodes.filter((node) => node.layer === "SECONDARY"),
+    tertiary: nodes.filter((node) => node.layer === "TERTIARY"),
+    densityRegions: buildDensityMap({ events: chronological, duration: safeDuration }),
   }
 }
 
