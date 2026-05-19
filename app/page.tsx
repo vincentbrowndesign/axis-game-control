@@ -1,5 +1,5 @@
-import { MemoryThreadHome } from "@/components/axis/MemoryThreadHome"
+import { redirect } from "next/navigation"
 
 export default function HomePage() {
-  return <MemoryThreadHome />
+  redirect("/live")
 }
