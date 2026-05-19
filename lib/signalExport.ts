@@ -57,6 +57,9 @@ const pulseDurationMs = 520
 const freezeDurationMs = 1250
 const prerollSeconds = 1.6
 const postrollSeconds = 1.9
+const displayFont = '"Space Grotesk", "Space Grotesk Fallback", ui-sans-serif, system-ui, sans-serif'
+const monoFont =
+  '"IBM Plex Mono", "IBM Plex Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
 
 export function buildSnapshotSignalInput({
   sessionId,
@@ -265,13 +268,13 @@ function drawLockOverlay(
   context.save()
   context.fillStyle = `rgba(0, 0, 0, ${0.34 * opacity})`
   context.fillRect(0, height - 150, width, 150)
-  context.font = "700 22px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+  context.font = `700 22px ${monoFont}`
   context.letterSpacing = "2px"
-  context.fillStyle = `rgba(255, 255, 255, ${0.9 * opacity})`
+  context.fillStyle = `rgba(242, 241, 237, ${0.9 * opacity})`
   context.fillText(`CHRONO // ${chrono}`, 42, height - 82)
   if (annotation) {
-    context.font = "700 18px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-    context.fillStyle = `rgba(255, 255, 255, ${0.62 * opacity})`
+    context.font = `700 18px ${displayFont}`
+    context.fillStyle = `rgba(242, 241, 237, ${0.62 * opacity})`
     context.fillText(annotation.slice(0, 42).toUpperCase(), 42, height - 48)
   }
   context.restore()
@@ -297,7 +300,7 @@ function drawSnapshotImageLock(
   const y = height - targetHeight - 56
 
   context.drawImage(snapshotImage, x, y, targetWidth, targetHeight)
-  context.strokeStyle = "rgba(255,255,255,0.22)"
+  context.strokeStyle = "rgba(242,241,237,0.2)"
   context.lineWidth = 1
   context.strokeRect(x, y, targetWidth, targetHeight)
   context.restore()
@@ -323,7 +326,7 @@ function drawMotionField(
     const endX = startX + vector.dx * width
     const endY = startY + vector.dy * height
 
-    context.strokeStyle = `rgba(255,255,255,${0.08 + energy * 0.2})`
+    context.strokeStyle = `rgba(242,241,237,${0.08 + energy * 0.2})`
     context.lineWidth = 0.7 + energy * 1.4
     context.beginPath()
     context.moveTo(startX, startY)
@@ -354,11 +357,11 @@ function drawGhostTrackingBoxes(
     const boxHeight = box.height * height
     const alpha = 0.055 + energy * 0.1 + pulse * 0.035
 
-    context.strokeStyle = `rgba(255,255,255,${alpha})`
+    context.strokeStyle = `rgba(242,241,237,${alpha})`
     context.lineWidth = 0.7
     context.strokeRect(x, y, boxWidth, boxHeight)
 
-    context.strokeStyle = `rgba(255,255,255,${alpha * 1.2})`
+    context.strokeStyle = `rgba(242,241,237,${alpha * 1.2})`
     context.beginPath()
     context.moveTo(x, y + 10)
     context.lineTo(x, y)
@@ -402,9 +405,9 @@ function drawTensionZones(
       radius
     )
 
-    gradient.addColorStop(0, `rgba(255,255,255,${0.035 + energy * 0.08})`)
-    gradient.addColorStop(0.45, `rgba(255,255,255,${0.012 + energy * 0.025})`)
-    gradient.addColorStop(1, "rgba(255,255,255,0)")
+    gradient.addColorStop(0, `rgba(215,192,138,${0.024 + energy * 0.055})`)
+    gradient.addColorStop(0.45, `rgba(242,241,237,${0.01 + energy * 0.018})`)
+    gradient.addColorStop(1, "rgba(242,241,237,0)")
 
     context.fillStyle = gradient
     context.beginPath()
@@ -431,7 +434,7 @@ function drawKineticHalos(
     const energy = clamp01(vector.energy)
     if (energy < 0.22) return
 
-    context.strokeStyle = `rgba(255,255,255,${pulse * energy * 0.22})`
+    context.strokeStyle = `rgba(185,215,191,${pulse * energy * 0.2})`
     context.lineWidth = 0.8
     context.beginPath()
     context.arc(vector.x * width, vector.y * height, (16 + energy * 36) * pulse, 0, Math.PI * 2)
@@ -482,19 +485,20 @@ function drawPulseIntro(
   context.fillRect(0, 0, width, height)
 
   const pulse = Math.sin(progress * Math.PI)
-  context.fillStyle = `rgba(255,255,255,${0.08 + pulse * (0.1 + acousticPeak * 0.08)})`
+  context.fillStyle = `rgba(242,241,237,${0.08 + pulse * (0.1 + acousticPeak * 0.08)})`
   context.fillRect(42, height / 2 - 1, width - 84, 2)
-  context.fillStyle = `rgba(255,255,255,${0.9})`
-  context.font = "900 34px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+  context.fillStyle = `rgba(242,241,237,${0.9})`
+  context.font = `900 34px ${displayFont}`
   context.fillText("AXIS", 42, height / 2 - 72)
-  context.font = "800 18px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-  context.fillStyle = "rgba(255,255,255,0.64)"
+  context.font = `700 18px ${monoFont}`
+  context.fillStyle = "rgba(242,241,237,0.64)"
   context.fillText(nodeId, 42, height / 2 - 28)
-  context.fillStyle = "rgba(255,255,255,0.86)"
+  context.fillStyle = "rgba(242,241,237,0.86)"
   context.fillText(`CHRONO // ${chrono}`, 42, height / 2 + 56)
-  context.fillStyle = "rgba(255,255,255,0.46)"
+  context.font = `700 16px ${displayFont}`
+  context.fillStyle = "rgba(242,241,237,0.46)"
   context.fillText("SIGNAL MODE ACTIVE", 42, height / 2 + 86)
-  context.fillStyle = `rgba(255,255,255,${0.12 + acousticPeak * 0.18})`
+  context.fillStyle = `rgba(215,192,138,${0.1 + acousticPeak * 0.16})`
   context.fillRect(42, height / 2 + 118, (width - 84) * (0.18 + acousticPeak * 0.72), 1)
   context.restore()
 }

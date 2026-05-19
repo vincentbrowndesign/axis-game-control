@@ -2,14 +2,18 @@
 
 :root {
   --background: #050505;
-  --foreground: #f4f4f5;
+  --foreground: #f2f1ed;
+  --axis-silver: #b9b8b2;
+  --axis-muted: #77766f;
+  --axis-amber: #d7c08a;
+  --axis-green: #b9d7bf;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Space Grotesk", "Space Grotesk Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "IBM Plex Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,7 +26,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-space-grotesk), "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -37,32 +41,25 @@ button {
 }
 
 ::selection {
-  background: rgba(253, 186, 116, 0.32);
+  background: rgba(215, 192, 138, 0.28);
   color: #ffffff;
 }
 
 .axis-shell {
-  background:
-    radial-gradient(circle at 22% -10%, rgba(251, 146, 60, 0.12), transparent 32rem),
-    radial-gradient(circle at 82% 8%, rgba(56, 189, 248, 0.1), transparent 30rem),
-    #050505;
+  background: #050505;
 }
 
 .axis-panel {
-  background:
-    linear-gradient(180deg, rgba(24, 24, 27, 0.58), rgba(9, 9, 11, 0.86)),
-    #09090b;
-  border: 1px solid rgba(63, 63, 70, 0.5);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 26px 88px rgba(0, 0, 0, 0.28);
+  background: #080808;
+  border: 1px solid rgba(242, 241, 237, 0.1);
+  box-shadow: inset 0 1px 0 rgba(242, 241, 237, 0.035);
 }
 
 .axis-glass {
-  background: rgba(9, 9, 11, 0.68);
-  backdrop-filter: blur(18px);
-  border: 1px solid rgba(39, 39, 42, 0.58);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  background: rgba(8, 8, 8, 0.88);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(242, 241, 237, 0.1);
+  box-shadow: inset 0 1px 0 rgba(242, 241, 237, 0.025);
 }
 
 @keyframes axis-breathe {
@@ -96,10 +93,7 @@ button {
 
 .axis-atmosphere::before {
   animation: axis-breathe 9s ease-in-out infinite;
-  background:
-    radial-gradient(circle at 22% 18%, rgba(190, 242, 100, 0.11), transparent 28%),
-    radial-gradient(circle at 84% 72%, rgba(103, 232, 249, 0.08), transparent 30%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent 42%);
+  background: linear-gradient(180deg, rgba(242, 241, 237, 0.035), transparent 42%);
   content: "";
   inset: -18%;
   pointer-events: none;
@@ -108,7 +102,7 @@ button {
 
 .axis-atmosphere::after {
   animation: axis-pulse-line 6s ease-in-out infinite;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  background: linear-gradient(90deg, transparent, rgba(242, 241, 237, 0.18), transparent);
   content: "";
   height: 1px;
   left: 0;
@@ -116,6 +110,19 @@ button {
   position: absolute;
   right: 0;
   top: 14%;
+}
+
+.axis-display {
+  font-family: var(--font-space-grotesk), "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+}
+
+.axis-mono {
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.axis-optical-transition {
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0.18, 1);
 }
 
 .axis-atmosphere > * {

@@ -25,6 +25,10 @@ type SessionPayload = {
   snapshots?: TemporalSnapshotRecord[]
 }
 
+type InspectionDepth = 0.5 | 1 | 2 | 2.5
+
+const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
+
 function formatClock(totalSeconds: number | null | undefined) {
   const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0))
   const minutes = Math.floor(safeSeconds / 60)
@@ -122,7 +126,13 @@ async function syncSeekToAnchor(
   useAxisChronologyStore.getState().completeSeekTransaction(videoElement.currentTime)
 }
 
-function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
+function ReplayVideo({
+  playbackUrl,
+  inspectionDepth,
+}: {
+  playbackUrl: string | null
+  inspectionDepth: InspectionDepth
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const { currentTimelineAnchor, isInternalSeeking, completeInternalSeek, syncMediaPlayback } =
     useAxisChronologyStore(
@@ -176,8 +186,8 @@ function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
 
   if (!playbackUrl) {
     return (
-      <div className="grid aspect-video place-items-center border border-white/10 bg-zinc-950 text-center">
-        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-500">
+      <div className="grid aspect-video place-items-center border border-white/10 bg-[#070707] text-center">
+        <p className="axis-mono text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
           RECORD PROCESSING
         </p>
       </div>
@@ -185,7 +195,7 @@ function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
   }
 
   return (
-    <div className="overflow-hidden border border-white/10 bg-zinc-950">
+    <div className="overflow-hidden border border-white/10 bg-[#050505]">
       <video
         ref={videoRef}
         src={playbackUrl}
@@ -239,13 +249,16 @@ function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
           })
           completeInternalSeek()
         }}
-        className="aspect-video w-full bg-black object-contain"
+        className="aspect-video w-full bg-black object-contain transition-transform duration-[120ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
+        style={{
+          transform: `scale(${inspectionDepth})`,
+        }}
       />
     </div>
   )
 }
 
-function EventRail() {
+function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
   const { events, duration, activeEventId, requestEventJump } =
     useAxisChronologyStore(
       useShallow((state) => ({
@@ -257,6 +270,7 @@ function EventRail() {
     )
   const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
   const safeDuration = Math.max(duration, 1)
+  const granularity = inspectionDepth === 0.5 ? 4 : inspectionDepth === 1 ? 8 : inspectionDepth === 2 ? 16 : 24
   const jumpToNearestAtPosition = (clientX: number, rail: HTMLDivElement) => {
     if (!visibleEvents.length) return
 
@@ -273,13 +287,24 @@ function EventRail() {
   }
 
   return (
-    <div className="mt-4 border border-white/10 bg-white/[0.03] px-4 py-4">
+    <div className="mt-4 border border-white/10 bg-white/[0.02] px-4 py-4">
       <div
         className="relative h-12"
         onClick={(event) => {
           jumpToNearestAtPosition(event.clientX, event.currentTarget)
         }}
       >
+        {Array.from({
+          length: granularity + 1,
+        }).map((_, index) => (
+          <span
+            key={index}
+            className="absolute top-1/2 h-3 -translate-y-1/2 border-l border-white/[0.045]"
+            style={{
+              left: `${(index / granularity) * 100}%`,
+            }}
+          />
+        ))}
         <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/18" />
         {visibleEvents.map((event) => {
           const position = Math.min(
@@ -297,10 +322,10 @@ function EventRail() {
                 requestEventJump(event.id)
               }}
               aria-label={`Jump to snapshot at ${formatClock(event.session_time)}`}
-              className={`absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[0] transition ${
+              className={`axis-optical-transition absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 border text-[0] transition ${
                 active
-                  ? "border-zinc-100 bg-zinc-100 shadow-[0_0_18px_rgba(244,244,245,0.36)]"
-                  : "border-white/20 bg-zinc-300/45 hover:bg-zinc-100"
+                  ? "border-[#f2f1ed] bg-[#f2f1ed] shadow-[0_0_16px_rgba(242,241,237,0.22)]"
+                  : "border-white/20 bg-zinc-300/35 hover:bg-[#f2f1ed]"
               }`}
               style={{
                 left: `${position}%`,
@@ -309,9 +334,46 @@ function EventRail() {
           )
         })}
       </div>
-      <div className="mt-2 flex items-center justify-between font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
+      <div className="axis-mono mt-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
         <span>00:00</span>
+        <span className="text-zinc-700">{inspectionDepth}X</span>
         <span>{formatClock(duration)}</span>
+      </div>
+    </div>
+  )
+}
+
+function InspectionDepthControl({
+  inspectionDepth,
+  setInspectionDepth,
+}: {
+  inspectionDepth: InspectionDepth
+  setInspectionDepth: (depth: InspectionDepth) => void
+}) {
+  return (
+    <div className="mt-4 flex items-center justify-between border border-white/10 bg-white/[0.015] px-4 py-3">
+      <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-600">
+        Optical depth
+      </p>
+      <div className="grid grid-cols-4 border border-white/10">
+        {inspectionDepths.map((depth) => {
+          const active = depth === inspectionDepth
+
+          return (
+            <button
+              key={depth}
+              type="button"
+              onClick={() => setInspectionDepth(depth)}
+              className={`axis-mono axis-optical-transition h-8 min-w-12 border-r border-white/10 px-3 text-[10px] font-semibold transition last:border-r-0 ${
+                active
+                  ? "bg-[#f2f1ed] text-black"
+                  : "bg-black text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300"
+              }`}
+            >
+              {depth}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -344,12 +406,12 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           if (!session.playback_url) return
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
-        className="border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
+        className="axis-mono axis-optical-transition border border-white/10 bg-[#f2f1ed] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-black transition disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
       >
         SAVE TO DEVICE
       </button>
       {exportStatus !== "IDLE" && exportStatus !== "FAILED" ? (
-        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
+        <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
           {exportStatus === "SUCCESS" ? exportLabel(exportStatus) : `${exportProgress}%`}
         </p>
       ) : null}
@@ -448,19 +510,19 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
           return (
             <div
               key={snapshot.id}
-              className="min-w-32 border border-white/10 bg-black/40"
+              className="min-w-32 border border-white/10 bg-black/50"
             >
               <button
                 type="button"
                 onClick={() => jumpToSnapshot(snapshot)}
-                className="block text-left active:bg-white/10"
+                className="axis-optical-transition block text-left transition active:bg-white/10"
               >
                 {source ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={source}
                     alt={`Snapshot at ${formatClock(snapshot.session_time)}`}
-                    className="aspect-video w-32 object-cover"
+                    className="aspect-video w-32 object-cover grayscale-[18%]"
                   />
                 ) : (
                   <div className="grid aspect-video w-32 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">
@@ -469,7 +531,7 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
                 )}
               </button>
               <div className="px-2 py-2">
-                <p className="font-mono text-[10px] font-black text-zinc-100">
+                <p className="axis-mono text-[10px] font-bold text-zinc-100">
                   {formatClock(snapshot.session_time)}
                 </p>
                 <input
@@ -481,7 +543,7 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
                   placeholder="note"
                   maxLength={120}
                   aria-label={`Snapshot note at ${formatClock(snapshot.session_time)}`}
-                  className="mt-2 w-full border-0 border-b border-white/10 bg-transparent px-0 py-1 font-mono text-[11px] font-bold lowercase text-zinc-200 outline-none placeholder:text-zinc-700 focus:border-white/40"
+                  className="axis-mono axis-optical-transition mt-2 w-full border-0 border-b border-white/10 bg-transparent px-0 py-1 text-[11px] font-semibold lowercase text-zinc-200 outline-none transition placeholder:text-zinc-700 focus:border-[#d7c08a]/60"
                 />
                 {session.playback_url ? (
                   <button
@@ -490,7 +552,7 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
                     onClick={() => {
                       void exportSignal(snapshot)
                     }}
-                    className="mt-3 w-full border border-white/10 px-2 py-2 text-center font-mono text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500 transition hover:border-white/30 hover:text-zinc-200 disabled:cursor-wait disabled:text-zinc-700"
+                    className="axis-mono axis-optical-transition mt-3 w-full border border-white/10 px-2 py-2 text-center text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-500 transition hover:border-[#d7c08a]/40 hover:text-zinc-200 disabled:cursor-wait disabled:text-zinc-700"
                   >
                     {activeSignalSnapshotId === snapshot.id
                       ? signalStatusLabel(signalStatus)
@@ -507,6 +569,7 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
 }
 
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
+  const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
@@ -554,34 +617,34 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
 
   return (
-    <main className="min-h-dvh bg-black text-zinc-100">
+    <main className="axis-display min-h-dvh bg-black text-[#f2f1ed]">
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 py-4 sm:px-6">
-        <header className="border-b border-white/10 py-3 font-mono">
+        <header className="border-b border-white/10 py-3">
           <div className="flex items-center justify-between gap-6">
             <Link
               href="/live"
-              className="text-[11px] font-black uppercase tracking-[0.32em] text-zinc-100"
+              className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#f2f1ed]"
             >
               AXIS
             </Link>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
+            <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
               {session.status === "ARCHIVED" ? "ARCHIVED" : "LOCKED"}
             </p>
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 border-b border-white/10 py-5 font-mono md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4 border-b border-white/10 py-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-zinc-300">
+            <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">
               {compactNodeId(session.id)}
             </p>
-            <p className="mt-2 text-5xl font-black leading-none text-zinc-100 sm:text-6xl">
+            <p className="mt-2 text-5xl font-bold leading-none tracking-normal text-[#f2f1ed] sm:text-6xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
-            <p className="mt-3 text-[10px] font-black uppercase tracking-[0.28em] text-zinc-600">
+            <p className="axis-mono mt-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-zinc-600">
               LOCKED
             </p>
-            <p className="mt-6 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
+            <p className="axis-mono mt-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
               {formatEnvironmentalTimestamp(session.created_at)}
             </p>
           </div>
@@ -590,8 +653,12 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
 
         <div className="grid flex-1 gap-5 py-5">
           <section className="min-w-0">
-            <ReplayVideo playbackUrl={session.playback_url} />
-            <EventRail />
+            <ReplayVideo playbackUrl={session.playback_url} inspectionDepth={inspectionDepth} />
+            <InspectionDepthControl
+              inspectionDepth={inspectionDepth}
+              setInspectionDepth={setInspectionDepth}
+            />
+            <EventRail inspectionDepth={inspectionDepth} />
             <SnapshotStrip session={session} />
           </section>
         </div>
