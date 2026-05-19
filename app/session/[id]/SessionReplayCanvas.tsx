@@ -28,17 +28,41 @@ function formatClock(totalSeconds: number | null | undefined) {
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "Not recorded"
+function formatPreciseClock(totalSeconds: number | null | undefined) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0)
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = Math.floor(safeSeconds % 60)
+  const centiseconds = Math.floor((safeSeconds % 1) * 100)
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}.${centiseconds.toString().padStart(2, "0")}`
+}
+
+function formatEnvironmentalTimestamp(value: string | null | undefined) {
+  if (!value) return "TIME_UNSET"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
 
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date)
+  const month = date
+    .toLocaleString("en-US", {
+      month: "short",
+    })
+    .toUpperCase()
+  const day = date.getDate().toString().padStart(2, "0")
+  const hour = date.getHours()
+  const displayHour = hour % 12 || 12
+  const minutes = date.getMinutes().toString().padStart(2, "0")
+  const meridiem = hour >= 12 ? "PM" : "AM"
+
+  return `${month}_${day}_${displayHour}:${minutes}_${meridiem}`
+}
+
+function compactNodeId(sessionId: string) {
+  const compact = sessionId.replace(/[^a-z0-9]/gi, "").toUpperCase()
+  const suffix = compact.slice(-4) || "0000"
+
+  return `AXS-${suffix}`
 }
 
 export function seekToEvent(
@@ -439,50 +463,33 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   return (
     <main className="min-h-dvh bg-black text-zinc-100">
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 py-4 sm:px-6">
-        <header className="grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-white/10 py-3">
-          <Link
-            href="/live"
-            className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-100"
-          >
-            AXIS
-          </Link>
-          <div className="h-px bg-white/14" />
-          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-400">
-            RECORD
-          </p>
+        <header className="border-b border-white/10 py-3 font-mono">
+          <div className="flex items-center justify-between gap-6">
+            <Link
+              href="/live"
+              className="text-[11px] font-black uppercase tracking-[0.32em] text-zinc-100"
+            >
+              AXIS
+            </Link>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
+              {session.status === "ARCHIVED" ? "ARCHIVED" : "LOCKED"}
+            </p>
+          </div>
         </header>
 
-        <div className="grid gap-3 border-b border-white/10 py-4 md:grid-cols-[1fr_auto_auto_auto_auto] md:items-end">
+        <div className="flex flex-col gap-4 border-b border-white/10 py-5 font-mono md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-              Session
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-zinc-300">
+              {compactNodeId(session.id)}
             </p>
-            <p className="mt-1 max-w-full truncate font-mono text-xs font-bold uppercase tracking-[0.12em] text-zinc-300">
-              {session.id}
+            <p className="mt-2 text-5xl font-black leading-none text-zinc-100 sm:text-6xl">
+              {formatPreciseClock(session.duration_seconds)}
             </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-              Duration
+            <p className="mt-3 text-[10px] font-black uppercase tracking-[0.28em] text-zinc-600">
+              LOCKED
             </p>
-            <p className="mt-1 font-mono text-2xl font-black leading-none text-zinc-100">
-              {formatClock(session.duration_seconds)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-              Created
-            </p>
-            <p className="mt-1 text-xs font-black uppercase tracking-[0.14em] text-zinc-200">
-              {formatDate(session.created_at)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-              Status
-            </p>
-            <p className="mt-1 text-xs font-black uppercase tracking-[0.14em] text-zinc-200">
-              {session.status === "ARCHIVED" ? "ARCHIVED" : "HOLD"}
+            <p className="mt-6 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
+              {formatEnvironmentalTimestamp(session.created_at)}
             </p>
           </div>
           <DeviceExportControl session={session} />
