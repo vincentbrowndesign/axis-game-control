@@ -1,27 +1,27 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import {
+  type LiveArchiveSession,
+  type LiveIngestEvent,
+  type LiveIngestEventType,
+  type LiveSessionStatus,
+  loadArchivedRecording,
+  saveArchivedRecording,
+} from "@/lib/liveArchive"
 
-type LiveStatus =
-  | "READY"
-  | "STARTING"
-  | "LIVE"
-  | "FINALIZING"
-  | "ARCHIVED"
-  | "FAILED"
-
-type ArchivedRecording = {
+type WorkingSession = {
   id: string
+  status: Exclude<LiveSessionStatus, "ARCHIVED">
   startedAt: string
-  endedAt: string
+  endedAt: string | null
   duration: number
-  videoUrl: string
-  storagePath: string
-  status: "ARCHIVED"
+  playbackUrl: string | null
+  storagePath: string | null
+  createdAt: string
 }
-
-const archiveStorageKey = "axis-live-v1-archive"
 
 const recorderTypes = [
   "video/mp4;codecs=h264,mp4a.40.2",
@@ -31,12 +31,23 @@ const recorderTypes = [
   "video/webm",
 ]
 
+const reconnectDebounceMs = 1400
+const trackFailureGraceMs = 5200
+
 function formatClock(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds))
   const minutes = Math.floor(safeSeconds / 60)
   const seconds = safeSeconds % 60
 
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+}
+
+function createId(prefix = "axis") {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID()
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 function getRecorderType() {
@@ -59,52 +70,63 @@ function extensionForType(type: string) {
   return type.includes("mp4") ? "mp4" : "webm"
 }
 
-function loadArchivedRecording() {
-  if (typeof window === "undefined") return null
-
-  try {
-    const stored = window.localStorage.getItem(archiveStorageKey)
-    if (!stored) return null
-
-    const parsed = JSON.parse(stored) as Partial<ArchivedRecording>
-
-    if (
-      typeof parsed.id !== "string" ||
-      typeof parsed.videoUrl !== "string" ||
-      typeof parsed.storagePath !== "string" ||
-      typeof parsed.duration !== "number" ||
-      parsed.status !== "ARCHIVED"
-    ) {
-      return null
-    }
-
-    return parsed as ArchivedRecording
-  } catch {
-    window.localStorage.removeItem(archiveStorageKey)
-    return null
-  }
-}
-
 export function LiveMemoryStream() {
-  const [status, setStatus] = useState<LiveStatus>("READY")
+  const [status, setStatus] = useState<LiveSessionStatus>("READY")
   const [elapsed, setElapsed] = useState(0)
   const [errorMessage, setErrorMessage] = useState("")
-  const [archivedRecording, setArchivedRecording] = useState<ArchivedRecording | null>(null)
+  const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
+
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const sessionIdRef = useRef("")
-  const startedAtRef = useRef("")
+  const workingSessionRef = useRef<WorkingSession | null>(null)
+  const eventsRef = useRef<LiveIngestEvent[]>([])
+  const eventSequenceRef = useRef(0)
   const startedAtMsRef = useRef(0)
+  const elapsedRef = useRef(0)
   const elapsedTimerRef = useRef<number | null>(null)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const trackFailureTimerRef = useRef<number | null>(null)
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
+  const statusRef = useRef<LiveSessionStatus>("READY")
 
-  const setFailure = useCallback((message: string) => {
-    setErrorMessage(message)
-    setStatus("FAILED")
+  const setLiveStatus = useCallback((nextStatus: LiveSessionStatus) => {
+    statusRef.current = nextStatus
+    setStatus(nextStatus)
+    if (workingSessionRef.current && nextStatus !== "ARCHIVED") {
+      workingSessionRef.current.status = nextStatus as WorkingSession["status"]
+    }
+  }, [])
+
+  const emitEvent = useCallback(
+    (type: LiveIngestEventType, metadata?: Record<string, unknown>) => {
+      const event: LiveIngestEvent = {
+        id: `${workingSessionRef.current?.id ?? "pending"}-${eventSequenceRef.current++}`,
+        type,
+        createdAt: new Date().toISOString(),
+        sessionTime: elapsedRef.current,
+        metadata,
+      }
+
+      eventsRef.current = [...eventsRef.current, event]
+      return event
+    },
+    []
+  )
+
+  const clearReconnectTimers = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+
+    if (trackFailureTimerRef.current) {
+      window.clearTimeout(trackFailureTimerRef.current)
+      trackFailureTimerRef.current = null
+    }
   }, [])
 
   const stopElapsedTimer = useCallback(() => {
@@ -114,14 +136,61 @@ export function LiveMemoryStream() {
     }
   }, [])
 
+  const setFailure = useCallback(
+    (message: string) => {
+      clearReconnectTimers()
+      emitEvent("session_failed", {
+        reason: message,
+      })
+      setErrorMessage(message)
+      setLiveStatus("FAILED")
+    },
+    [clearReconnectTimers, emitEvent, setLiveStatus]
+  )
+
+  const beginReconnect = useCallback(
+    (reason: string) => {
+      if (hardStoppedRef.current || finalizingRef.current) return
+      if (statusRef.current !== "LIVE") return
+      if (reconnectTimerRef.current) return
+
+      emitEvent("reconnect_begin", {
+        reason,
+      })
+
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null
+        if (statusRef.current === "LIVE") setLiveStatus("RECONNECTING")
+      }, reconnectDebounceMs)
+    },
+    [emitEvent, setLiveStatus]
+  )
+
+  const resolveReconnect = useCallback(
+    (reason: string) => {
+      const wasReconciling = Boolean(reconnectTimerRef.current) || statusRef.current === "RECONNECTING"
+      clearReconnectTimers()
+
+      if (wasReconciling) {
+        emitEvent("reconnect_success", {
+          reason,
+        })
+      }
+
+      if (statusRef.current === "RECONNECTING") setLiveStatus("LIVE")
+    },
+    [clearReconnectTimers, emitEvent, setLiveStatus]
+  )
+
   const cleanupCamera = useCallback(() => {
+    clearReconnectTimers()
     localStreamRef.current?.getTracks().forEach((track) => track.stop())
     localStreamRef.current = null
 
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = null
     }
-  }, [])
+  }, [clearReconnectTimers])
 
   const openCamera = useCallback(async () => {
     if (localStreamRef.current || openingCameraRef.current) return localStreamRef.current
@@ -151,8 +220,16 @@ export function LiveMemoryStream() {
       localStreamRef.current = stream
 
       stream.getTracks().forEach((track) => {
+        track.addEventListener("mute", () => beginReconnect("track_muted"))
+        track.addEventListener("unmute", () => resolveReconnect("track_unmuted"))
         track.addEventListener("ended", () => {
-          if (!hardStoppedRef.current) setFailure("Camera stopped")
+          if (hardStoppedRef.current || finalizingRef.current) return
+          beginReconnect("track_ended")
+          trackFailureTimerRef.current = window.setTimeout(() => {
+            if (!hardStoppedRef.current && !finalizingRef.current) {
+              setFailure("Camera stopped")
+            }
+          }, trackFailureGraceMs)
         })
       })
 
@@ -165,27 +242,54 @@ export function LiveMemoryStream() {
     } finally {
       openingCameraRef.current = false
     }
-  }, [setFailure])
+  }, [beginReconnect, resolveReconnect, setFailure])
 
   const startElapsedTimer = useCallback(() => {
     stopElapsedTimer()
     elapsedTimerRef.current = window.setInterval(() => {
       if (!startedAtMsRef.current) return
-      setElapsed((Date.now() - startedAtMsRef.current) / 1000)
+      const nextElapsed = (Date.now() - startedAtMsRef.current) / 1000
+      elapsedRef.current = nextElapsed
+      setElapsed(nextElapsed)
     }, 500)
   }, [stopElapsedTimer])
 
   const startSession = async () => {
-    if (status === "STARTING" || status === "LIVE" || status === "FINALIZING") return
+    if (statusRef.current === "STARTING" || statusRef.current === "LIVE" || statusRef.current === "FINALIZING") {
+      return
+    }
 
     try {
       setErrorMessage("")
-      setStatus("STARTING")
+      setLiveStatus("STARTING")
       hardStoppedRef.current = false
       chunksRef.current = []
+      eventsRef.current = []
+      eventSequenceRef.current = 0
+      elapsedRef.current = 0
+
+      const createdAt = new Date().toISOString()
+      const sessionId = createId("axis-live")
+
+      workingSessionRef.current = {
+        id: sessionId,
+        status: "STARTING",
+        startedAt: createdAt,
+        endedAt: null,
+        duration: 0,
+        playbackUrl: null,
+        storagePath: null,
+        createdAt,
+      }
+
+      emitEvent("session_started")
 
       const stream = await openCamera()
       if (!stream) throw new Error("Camera unavailable")
+
+      emitEvent("stream_connected", {
+        tracks: stream.getTracks().map((track) => track.kind),
+      })
 
       if (typeof MediaRecorder === "undefined") {
         throw new Error("Recording unavailable")
@@ -207,21 +311,23 @@ export function LiveMemoryStream() {
       )
 
       recorder.ondataavailable = (event) => {
-        if (event.data.size) chunksRef.current.push(event.data)
+        if (!event.data.size) return
+
+        chunksRef.current.push(event.data)
+        emitEvent("chunk_recorded", {
+          index: chunksRef.current.length - 1,
+          size: event.data.size,
+          type: event.data.type,
+        })
       }
       recorder.onerror = () => setFailure("Recording failed")
 
-      sessionIdRef.current =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `axis-${Date.now()}`
       startedAtMsRef.current = Date.now()
-      startedAtRef.current = new Date(startedAtMsRef.current).toISOString()
       recorderRef.current = recorder
       recorder.start(1000)
       setElapsed(0)
       startElapsedTimer()
-      setStatus("LIVE")
+      setLiveStatus("LIVE")
     } catch (error) {
       stopElapsedTimer()
       cleanupCamera()
@@ -230,12 +336,22 @@ export function LiveMemoryStream() {
   }
 
   const finalizeSession = async () => {
-    if (status !== "LIVE" || !recorderRef.current) return
+    const session = workingSessionRef.current
 
-    setStatus("FINALIZING")
+    if (
+      !session ||
+      (statusRef.current !== "LIVE" && statusRef.current !== "RECONNECTING") ||
+      !recorderRef.current
+    ) {
+      return
+    }
+
+    setLiveStatus("FINALIZING")
     stopElapsedTimer()
+    clearReconnectTimers()
     finalizingRef.current = true
     hardStoppedRef.current = true
+    emitEvent("archive_started")
 
     try {
       const recorder = recorderRef.current
@@ -250,12 +366,13 @@ export function LiveMemoryStream() {
         recorder.stop()
         await stopped
       }
+
       cleanupCamera()
 
       const endedAt = new Date().toISOString()
       const duration = startedAtMsRef.current
         ? (Date.now() - startedAtMsRef.current) / 1000
-        : elapsed
+        : elapsedRef.current
       const type = recorder.mimeType || chunksRef.current[0]?.type || "video/webm"
       const blob = new Blob(chunksRef.current, {
         type,
@@ -276,7 +393,7 @@ export function LiveMemoryStream() {
       }
 
       const extension = extensionForType(type)
-      const fileName = safeFileName(`axis-live-${sessionIdRef.current}.${extension}`)
+      const fileName = safeFileName(`axis-live-${session.id}.${extension}`)
       const storagePath = `${user.id}/live/${fileName}`
       const file =
         typeof File !== "undefined"
@@ -302,7 +419,7 @@ export function LiveMemoryStream() {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          traceId: sessionIdRef.current,
+          traceId: session.id,
           filePath: storagePath,
           fileName,
           contentType: type,
@@ -328,22 +445,36 @@ export function LiveMemoryStream() {
         throw new Error(result.error || "Archive record failed")
       }
 
-      const archived: ArchivedRecording = {
-        id: result.replayId || sessionIdRef.current,
-        startedAt: startedAtRef.current,
+      const completedEvent = emitEvent("archive_completed", {
+        replayId: result.replayId,
+        size: blob.size,
+        storagePath,
+      })
+
+      const archived: LiveArchiveSession = {
+        id: result.replayId || session.id,
+        startedAt: session.startedAt,
         endedAt,
         duration,
+        playbackUrl: result.videoUrl,
         videoUrl: result.videoUrl,
         storagePath,
         status: "ARCHIVED",
+        createdAt: session.createdAt,
+        events: [...eventsRef.current.filter((event) => event.id !== completedEvent.id), completedEvent],
       }
 
-      window.localStorage.setItem(archiveStorageKey, JSON.stringify(archived))
+      saveArchivedRecording(archived)
       setArchivedRecording(archived)
+      elapsedRef.current = duration
       setElapsed(duration)
-      setStatus("ARCHIVED")
+      workingSessionRef.current = null
+      setLiveStatus("ARCHIVED")
     } catch (error) {
       cleanupCamera()
+      emitEvent("archive_failed", {
+        reason: error instanceof Error ? error.message : "Archive failed",
+      })
       setFailure(error instanceof Error ? error.message : "Archive failed")
     } finally {
       finalizingRef.current = false
@@ -363,14 +494,23 @@ export function LiveMemoryStream() {
     })
 
     const handleVisibility = () => {
-      if (document.visibilityState === "visible" && !localStreamRef.current) {
+      if (document.visibilityState === "hidden") {
+        if (recorderRef.current?.state === "recording") {
+          recorderRef.current.requestData()
+        }
+        beginReconnect("page_hidden")
+        return
+      }
+
+      resolveReconnect("page_visible")
+      if (!localStreamRef.current && statusRef.current !== "FINALIZING" && statusRef.current !== "ARCHIVED") {
         openCamera().catch((error) => {
           setFailure(error instanceof Error ? error.message : "Camera failed")
         })
       }
     }
 
-    const handlePageHide = () => {
+    const requestRecorderData = () => {
       if (finalizingRef.current) return
       if (recorderRef.current?.state === "recording") {
         recorderRef.current.requestData()
@@ -378,19 +518,33 @@ export function LiveMemoryStream() {
     }
 
     document.addEventListener("visibilitychange", handleVisibility)
-    window.addEventListener("pagehide", handlePageHide)
+    window.addEventListener("pagehide", requestRecorderData)
+    window.addEventListener("beforeunload", requestRecorderData)
 
     return () => {
       window.clearTimeout(hydrationTimer)
       document.removeEventListener("visibilitychange", handleVisibility)
-      window.removeEventListener("pagehide", handlePageHide)
+      window.removeEventListener("pagehide", requestRecorderData)
+      window.removeEventListener("beforeunload", requestRecorderData)
+      hardStoppedRef.current = true
       stopElapsedTimer()
+      clearReconnectTimers()
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
         recorderRef.current.stop()
       }
       cleanupCamera()
     }
-  }, [cleanupCamera, openCamera, setFailure, stopElapsedTimer])
+  }, [
+    beginReconnect,
+    cleanupCamera,
+    clearReconnectTimers,
+    openCamera,
+    resolveReconnect,
+    setFailure,
+    stopElapsedTimer,
+  ])
+
+  const hasRecentArchive = Boolean(archivedRecording)
 
   return (
     <main className="h-dvh overflow-hidden bg-black text-zinc-100">
@@ -403,9 +557,9 @@ export function LiveMemoryStream() {
           className="absolute inset-0 h-full w-full object-cover"
         />
 
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.72),transparent_32%,transparent_68%,rgba(0,0,0,0.82))]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.76),transparent_31%,transparent_68%,rgba(0,0,0,0.86))]" />
 
-        <header className="absolute left-4 right-4 top-4 z-20 border-b border-white/10 bg-black/42 px-4 py-3 backdrop-blur-sm">
+        <header className="absolute left-4 right-4 top-4 z-20 border-b border-white/10 bg-black/46 px-4 py-3 backdrop-blur-sm">
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4">
             <p className="text-[11px] font-black uppercase tracking-[0.26em] text-zinc-100">
               AXIS
@@ -416,9 +570,11 @@ export function LiveMemoryStream() {
                 className={`h-2 w-2 rounded-full ${
                   status === "LIVE"
                     ? "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]"
-                    : status === "FAILED"
-                      ? "bg-red-300"
-                      : "bg-zinc-300/80"
+                    : status === "RECONNECTING"
+                      ? "bg-amber-200 shadow-[0_0_14px_rgba(253,230,138,0.62)]"
+                      : status === "FAILED"
+                        ? "bg-red-300"
+                        : "bg-zinc-300/80"
                 }`}
               />
               <span className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-100">
@@ -436,20 +592,18 @@ export function LiveMemoryStream() {
               </p>
             </div>
             {archivedRecording ? (
-              <a
-                href={archivedRecording.videoUrl}
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                href={`/live/record/${archivedRecording.id}`}
                 className="border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
               >
-                View record
-              </a>
+                Last record
+              </Link>
             ) : null}
           </div>
         </header>
 
         {status === "ARCHIVED" && archivedRecording ? (
-          <div className="absolute inset-0 z-30 grid place-items-center bg-black/76 px-6 text-center backdrop-blur-sm">
+          <div className="absolute inset-0 z-30 grid place-items-center bg-black/78 px-6 text-center backdrop-blur-sm">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
                 ARCHIVED
@@ -458,27 +612,34 @@ export function LiveMemoryStream() {
                 {formatClock(archivedRecording.duration)}
               </p>
               <div className="mt-7 flex justify-center gap-3">
-                <a
-                  href={archivedRecording.videoUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  href={`/live/record/${archivedRecording.id}`}
                   className="border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
                 >
-                  Open file
-                </a>
-                <a
-                  href={`/session/${archivedRecording.id}`}
+                  Open recording
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage("")
+                    setElapsed(0)
+                    elapsedRef.current = 0
+                    setLiveStatus("READY")
+                    openCamera().catch((error) => {
+                      setFailure(error instanceof Error ? error.message : "Camera failed")
+                    })
+                  }}
                   className="border border-white/10 bg-black/40 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100"
                 >
-                  View record
-                </a>
+                  New session
+                </button>
               </div>
             </div>
           </div>
         ) : null}
 
         {status === "FAILED" ? (
-          <div className="absolute inset-0 z-30 grid place-items-center bg-black/76 px-6 text-center backdrop-blur-sm">
+          <div className="absolute inset-0 z-30 grid place-items-center bg-black/78 px-6 text-center backdrop-blur-sm">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.28em] text-red-200">
                 FAILED
@@ -489,7 +650,10 @@ export function LiveMemoryStream() {
               <button
                 type="button"
                 onClick={() => {
-                  setStatus("READY")
+                  workingSessionRef.current = null
+                  eventsRef.current = []
+                  chunksRef.current = []
+                  setLiveStatus("READY")
                   setErrorMessage("")
                   openCamera().catch((error) => {
                     setFailure(error instanceof Error ? error.message : "Camera failed")
@@ -515,8 +679,8 @@ export function LiveMemoryStream() {
               </button>
             ) : null}
 
-            {status === "STARTING" || status === "FINALIZING" ? (
-              <div className="w-full border border-white/10 bg-black/50 px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-zinc-300">
+            {status === "STARTING" || status === "FINALIZING" || status === "RECONNECTING" ? (
+              <div className="w-full border border-white/10 bg-black/54 px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-zinc-300">
                 {status}
               </div>
             ) : null}
@@ -531,6 +695,11 @@ export function LiveMemoryStream() {
               </button>
             ) : null}
           </div>
+          {hasRecentArchive && status === "READY" ? (
+            <p className="mt-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+              Last recording stored
+            </p>
+          ) : null}
         </footer>
       </section>
     </main>
