@@ -3,8 +3,10 @@ import { create } from "zustand"
 import type {
   TemporalEventPayload,
   TemporalEventRecord,
+  TemporalSnapshotRecord,
   TemporalEventType,
 } from "@/lib/temporalEventGraph"
+import { defaultReplayWindow } from "@/lib/temporalEventGraph"
 
 export type ChronologyUiStatus = "idle" | "loading" | "ready" | "seeking" | "error"
 export type GlobalSyncStatus = "SYNCED" | "SYNCING" | "FAILED" | "RETRYING"
@@ -15,6 +17,12 @@ export type AxisSyncTelemetry =
   | "RETRYING_CONNECT"
   | `SYNC_FAILED ${number}`
 export type EventPersistenceStatus = "PENDING" | "PERSISTED" | "FAILED" | "RETRYING"
+export type SnapshotPersistenceStatus =
+  | "PENDING"
+  | "SYNCING"
+  | "SYNCED"
+  | "FAILED"
+  | "RETRYING"
 
 export type ChronologyPlaybackState = {
   currentTime: number
@@ -31,6 +39,17 @@ export type TimelineAnchor = {
 
 export type AxisChronologyEvent = TemporalEventRecord & {
   persistenceStatus: EventPersistenceStatus
+  retryCount: number
+}
+
+export type AxisSnapshot = {
+  id: string
+  session_id: string
+  session_time: number
+  localUrl: string | null
+  image_url: string | null
+  status: SnapshotPersistenceStatus
+  created_at: string
   retryCount: number
 }
 
@@ -54,6 +73,10 @@ type AxisChronologyState = {
   pendingEvents: AxisChronologyEvent[]
   persistedEvents: AxisChronologyEvent[]
   failedEvents: AxisChronologyEvent[]
+  snapshots: AxisSnapshot[]
+  pendingSnapshots: AxisSnapshot[]
+  failedSnapshots: AxisSnapshot[]
+  isProcessingSnapshotQueue: boolean
   playback: ChronologyPlaybackState
   nextSequenceOrder: number
   hydrateChronology: (input: HydrateChronologyInput) => void
@@ -66,6 +89,15 @@ type AxisChronologyState = {
     sessionTime: number,
     payload?: TemporalEventPayload
   ) => AxisChronologyEvent | null
+  hydrateSnapshots: (snapshots: TemporalSnapshotRecord[]) => void
+  triggerSnapshotCapture: (
+    sessionTime: number,
+    blob: Blob,
+    localUrl: string,
+    payload?: TemporalEventPayload
+  ) => AxisSnapshot | null
+  processSnapshotQueue: () => Promise<void>
+  retryFailedSnapshots: () => void
   processPersistenceQueue: () => Promise<void>
   retryFailedEvents: () => void
   completeInternalSeek: () => void
@@ -106,6 +138,24 @@ type AxisChronologyDatabase = {
         Update: never
         Relationships: []
       }
+      snapshots: {
+        Row: {
+          id: string
+          session_id: string
+          session_time: number
+          image_url: string
+          created_at: string
+        }
+        Insert: {
+          id: string
+          session_id: string
+          session_time: number
+          image_url: string
+          created_at: string
+        }
+        Update: never
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -115,6 +165,7 @@ type AxisChronologyDatabase = {
 }
 
 let supabaseClient: ReturnType<typeof createClient<AxisChronologyDatabase>> | null = null
+const snapshotBlobBuffer = new Map<string, Blob>()
 
 function chronologySupabase() {
   if (supabaseClient) return supabaseClient
@@ -133,6 +184,15 @@ function chronologySupabase() {
 function createId(prefix = "axis-event") {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID()
+  }
+
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (value) =>
+      (
+        Number(value) ^
+        (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (Number(value) / 4)))
+      ).toString(16)
+    )
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -197,6 +257,35 @@ function mergeEvents(events: AxisChronologyEvent[]) {
   return sortEvents([...byId.values()])
 }
 
+function syncedSnapshot(snapshot: TemporalSnapshotRecord): AxisSnapshot {
+  return {
+    id: snapshot.id,
+    session_id: snapshot.session_id,
+    session_time: Number(snapshot.session_time) || 0,
+    localUrl: snapshot.image_url,
+    image_url: snapshot.image_url,
+    status: "SYNCED",
+    created_at: snapshot.created_at,
+    retryCount: 0,
+  }
+}
+
+function sortSnapshots(snapshots: AxisSnapshot[]) {
+  return [...snapshots].sort((a, b) => {
+    const timeDelta = Number(a.session_time) - Number(b.session_time)
+    if (timeDelta !== 0) return timeDelta
+
+    return a.created_at.localeCompare(b.created_at)
+  })
+}
+
+function mergeSnapshots(snapshots: AxisSnapshot[]) {
+  const byId = new Map<string, AxisSnapshot>()
+  snapshots.forEach((snapshot) => byId.set(snapshot.id, snapshot))
+
+  return sortSnapshots([...byId.values()])
+}
+
 async function persistEvent(event: AxisChronologyEvent) {
   const { error } = await chronologySupabase().from("events").insert({
     id: event.id,
@@ -213,6 +302,41 @@ async function persistEvent(event: AxisChronologyEvent) {
   }
 }
 
+async function persistSnapshot(snapshot: AxisSnapshot, blob: Blob) {
+  const path = `${snapshot.session_id}/${snapshot.id}.jpg`
+  const client = chronologySupabase()
+  const uploaded = await client.storage.from("session-snapshots").upload(path, blob, {
+    cacheControl: "3600",
+    contentType: "image/jpeg",
+    upsert: false,
+  })
+
+  if (uploaded.error && !uploaded.error.message.toLowerCase().includes("already exists")) {
+    throw uploaded.error
+  }
+
+  const { data } = client.storage.from("session-snapshots").getPublicUrl(path)
+  const imageUrl = data.publicUrl
+
+  if (!imageUrl) {
+    throw new Error("SNAPSHOT_PUBLIC_URL_MISSING")
+  }
+
+  const { error } = await client.from("snapshots").insert({
+    id: snapshot.id,
+    session_id: snapshot.session_id,
+    session_time: snapshot.session_time,
+    image_url: imageUrl,
+    created_at: snapshot.created_at,
+  })
+
+  if (error && error.code !== "23505") {
+    throw error
+  }
+
+  return imageUrl
+}
+
 export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => ({
   sessionId: null,
   activeEventId: null,
@@ -227,6 +351,10 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
   pendingEvents: [],
   persistedEvents: [],
   failedEvents: [],
+  snapshots: [],
+  pendingSnapshots: [],
+  failedSnapshots: [],
+  isProcessingSnapshotQueue: false,
   playback: {
     currentTime: 0,
     paused: true,
@@ -265,6 +393,9 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       pendingEvents: localPending,
       persistedEvents: persisted,
       failedEvents: localFailed,
+      snapshots: isNewSession ? [] : current.snapshots,
+      pendingSnapshots: isNewSession ? [] : current.pendingSnapshots,
+      failedSnapshots: isNewSession ? [] : current.failedSnapshots,
       nextSequenceOrder,
       activeEventId: isNewSession ? null : current.activeEventId,
       currentTimelineAnchor: isNewSession ? null : current.currentTimelineAnchor,
@@ -279,6 +410,214 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
             readyState: 0,
           }
         : current.playback,
+    })
+  },
+  hydrateSnapshots: (snapshots) => {
+    const current = get()
+    const sessionId = current.sessionId
+    const persisted = snapshots.map(syncedSnapshot)
+    const localPending = sessionId
+      ? current.pendingSnapshots.filter((snapshot) => snapshot.session_id === sessionId)
+      : []
+    const localFailed = sessionId
+      ? current.failedSnapshots.filter((snapshot) => snapshot.session_id === sessionId)
+      : []
+
+    set({
+      snapshots: mergeSnapshots([...persisted, ...localPending, ...localFailed]),
+    })
+  },
+  triggerSnapshotCapture: (sessionTime, blob, localUrl, payload = {}) => {
+    const sessionId = get().sessionId
+    if (!sessionId) return null
+
+    const snapshot: AxisSnapshot = {
+      id: createId("axis-snapshot"),
+      session_id: sessionId,
+      session_time: Number(sessionTime) || 0,
+      localUrl,
+      image_url: null,
+      status: "PENDING",
+      created_at: new Date().toISOString(),
+      retryCount: 0,
+    }
+
+    snapshotBlobBuffer.set(snapshot.id, blob)
+
+    set((state) => ({
+      snapshots: mergeSnapshots([...state.snapshots, snapshot]),
+      pendingSnapshots: mergeSnapshots([...state.pendingSnapshots, snapshot]),
+      syncTelemetry: syncTelemetry(
+        state.globalSyncStatus === "FAILED" ? "FAILED" : "SYNCING",
+        state.pendingEvents.length + state.pendingSnapshots.length + 1,
+        state.failedEvents.length + state.failedSnapshots.length
+      ),
+    }))
+
+    get().triggerAttentionSignal("SNAPSHOT", snapshot.session_time, {
+      replay_window: defaultReplayWindow(),
+      snapshot_id: snapshot.id,
+      ...(payload || {}),
+    })
+
+    queueMicrotask(() => {
+      void get().processSnapshotQueue()
+    })
+
+    return snapshot
+  },
+  processSnapshotQueue: async () => {
+    if (get().isProcessingSnapshotQueue) return
+
+    set((state) => ({
+      isProcessingSnapshotQueue: true,
+      syncTelemetry: syncTelemetry(
+        state.globalSyncStatus === "RETRYING" ? "RETRYING" : "SYNCING",
+        state.pendingEvents.length + state.pendingSnapshots.length,
+        state.failedEvents.length + state.failedSnapshots.length
+      ),
+    }))
+
+    try {
+      while (get().pendingSnapshots.length > 0) {
+        const snapshot = get().pendingSnapshots[0]
+        const blob = snapshotBlobBuffer.get(snapshot.id)
+
+        if (!blob) {
+          const failedSnapshot: AxisSnapshot = {
+            ...snapshot,
+            status: "FAILED",
+          }
+
+          set((state) => ({
+            pendingSnapshots: state.pendingSnapshots.filter(
+              (candidate) => candidate.id !== snapshot.id
+            ),
+            failedSnapshots: mergeSnapshots([...state.failedSnapshots, failedSnapshot]),
+            snapshots: mergeSnapshots(
+              state.snapshots.map((candidate) =>
+                candidate.id === snapshot.id ? failedSnapshot : candidate
+              )
+            ),
+            syncTelemetry: syncTelemetry(
+              "FAILED",
+              state.pendingEvents.length + Math.max(0, state.pendingSnapshots.length - 1),
+              state.failedEvents.length + state.failedSnapshots.length + 1
+            ),
+          }))
+          continue
+        }
+
+        const syncingSnapshot: AxisSnapshot = {
+          ...snapshot,
+          status: "SYNCING",
+        }
+
+        set((state) => ({
+          snapshots: mergeSnapshots(
+            state.snapshots.map((candidate) =>
+              candidate.id === snapshot.id ? syncingSnapshot : candidate
+            )
+          ),
+        }))
+
+        try {
+          const imageUrl = await persistSnapshot(snapshot, blob)
+          const savedSnapshot: AxisSnapshot = {
+            ...snapshot,
+            image_url: imageUrl,
+            localUrl: snapshot.localUrl || imageUrl,
+            status: "SYNCED",
+          }
+
+          set((state) => ({
+            pendingSnapshots: state.pendingSnapshots.filter(
+              (candidate) => candidate.id !== snapshot.id
+            ),
+            failedSnapshots: state.failedSnapshots.filter(
+              (candidate) => candidate.id !== snapshot.id
+            ),
+            snapshots: mergeSnapshots(
+              state.snapshots.map((candidate) =>
+                candidate.id === snapshot.id ? savedSnapshot : candidate
+              )
+            ),
+            syncTelemetry: syncTelemetry(
+              state.globalSyncStatus,
+              state.pendingEvents.length + Math.max(0, state.pendingSnapshots.length - 1),
+              state.failedEvents.length + state.failedSnapshots.length
+            ),
+          }))
+        } catch {
+          const failedSnapshot: AxisSnapshot = {
+            ...snapshot,
+            status: "FAILED",
+          }
+
+          set((state) => ({
+            pendingSnapshots: state.pendingSnapshots.filter(
+              (candidate) => candidate.id !== snapshot.id
+            ),
+            failedSnapshots: mergeSnapshots([...state.failedSnapshots, failedSnapshot]),
+            snapshots: mergeSnapshots(
+              state.snapshots.map((candidate) =>
+                candidate.id === snapshot.id ? failedSnapshot : candidate
+              )
+            ),
+            globalSyncStatus: "FAILED",
+            syncTelemetry: syncTelemetry(
+              "FAILED",
+              state.pendingEvents.length + Math.max(0, state.pendingSnapshots.length - 1),
+              state.failedEvents.length + state.failedSnapshots.length + 1
+            ),
+          }))
+        }
+      }
+    } finally {
+      const state = get()
+      const pendingCount = state.pendingEvents.length + state.pendingSnapshots.length
+      const failedCount = state.failedEvents.length + state.failedSnapshots.length
+
+      set({
+        isProcessingSnapshotQueue: false,
+        globalSyncStatus: failedCount ? "FAILED" : pendingCount ? "SYNCING" : "SYNCED",
+        syncTelemetry: syncTelemetry(
+          failedCount ? "FAILED" : pendingCount ? "SYNCING" : "SYNCED",
+          pendingCount,
+          failedCount
+        ),
+      })
+    }
+  },
+  retryFailedSnapshots: () => {
+    const failedSnapshots = get().failedSnapshots
+    if (!failedSnapshots.length) return
+
+    const retryingSnapshots = failedSnapshots.map((snapshot) => ({
+      ...snapshot,
+      status: "RETRYING" as const,
+      retryCount: snapshot.retryCount + 1,
+    }))
+
+    set((state) => ({
+      failedSnapshots: [],
+      pendingSnapshots: mergeSnapshots([...state.pendingSnapshots, ...retryingSnapshots]),
+      snapshots: mergeSnapshots(
+        state.snapshots.map((snapshot) => {
+          const retrying = retryingSnapshots.find((candidate) => candidate.id === snapshot.id)
+          return retrying || snapshot
+        })
+      ),
+      globalSyncStatus: "RETRYING",
+      syncTelemetry: syncTelemetry(
+        "RETRYING",
+        state.pendingEvents.length + state.pendingSnapshots.length + retryingSnapshots.length,
+        state.failedEvents.length
+      ),
+    }))
+
+    queueMicrotask(() => {
+      void get().processSnapshotQueue()
     })
   },
   setUiStatus: (status) => {
@@ -375,7 +714,11 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       isInternalSeeking: true,
       uiStatus: "seeking",
       globalSyncStatus: "SYNCING",
-      syncTelemetry: syncTelemetry("SYNCING", state.pendingEvents.length + 1, state.failedEvents.length),
+      syncTelemetry: syncTelemetry(
+        "SYNCING",
+        state.pendingEvents.length + state.pendingSnapshots.length + 1,
+        state.failedEvents.length + state.failedSnapshots.length
+      ),
       events: mergeEvents([...state.events, event]),
       pendingEvents: mergeEvents([...state.pendingEvents, event]),
       nextSequenceOrder: state.nextSequenceOrder + 1,
@@ -428,8 +771,8 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
             ),
             syncTelemetry: syncTelemetry(
               state.globalSyncStatus,
-              Math.max(0, state.pendingEvents.length - 1),
-              state.failedEvents.length
+              Math.max(0, state.pendingEvents.length - 1) + state.pendingSnapshots.length,
+              state.failedEvents.length + state.failedSnapshots.length
             ),
           }))
         } catch {
@@ -449,22 +792,24 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
             globalSyncStatus: "FAILED",
             syncTelemetry: syncTelemetry(
               "FAILED",
-              Math.max(0, state.pendingEvents.length - 1),
-              state.failedEvents.length + 1
+              Math.max(0, state.pendingEvents.length - 1) + state.pendingSnapshots.length,
+              state.failedEvents.length + state.failedSnapshots.length + 1
             ),
           }))
         }
       }
     } finally {
       const state = get()
+      const pendingCount = state.pendingEvents.length + state.pendingSnapshots.length
+      const failedCount = state.failedEvents.length + state.failedSnapshots.length
 
       set({
         isProcessingQueue: false,
-        globalSyncStatus: state.failedEvents.length ? "FAILED" : "SYNCED",
+        globalSyncStatus: failedCount ? "FAILED" : pendingCount ? "SYNCING" : "SYNCED",
         syncTelemetry: syncTelemetry(
-          state.failedEvents.length ? "FAILED" : "SYNCED",
-          state.pendingEvents.length,
-          state.failedEvents.length
+          failedCount ? "FAILED" : pendingCount ? "SYNCING" : "SYNCED",
+          pendingCount,
+          failedCount
         ),
       })
     }
@@ -489,7 +834,11 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         })
       ),
       globalSyncStatus: "RETRYING",
-      syncTelemetry: syncTelemetry("RETRYING", state.pendingEvents.length + retryingEvents.length, 0),
+      syncTelemetry: syncTelemetry(
+        "RETRYING",
+        state.pendingEvents.length + state.pendingSnapshots.length + retryingEvents.length,
+        state.failedSnapshots.length
+      ),
     }))
 
     queueMicrotask(() => {

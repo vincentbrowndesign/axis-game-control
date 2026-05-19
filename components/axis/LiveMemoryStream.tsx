@@ -12,6 +12,7 @@ import {
   saveArchivedRecording,
 } from "@/lib/liveArchive"
 import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
+import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
 import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
 
 type WorkingSession = {
@@ -100,6 +101,9 @@ export function LiveMemoryStream() {
   const syncTelemetry = useAxisChronologyStore((state) => state.syncTelemetry)
   const failedEventCount = useAxisChronologyStore((state) => state.failedEvents.length)
   const retryFailedEvents = useAxisChronologyStore((state) => state.retryFailedEvents)
+  const snapshots = useAxisChronologyStore((state) => state.snapshots)
+  const failedSnapshotCount = useAxisChronologyStore((state) => state.failedSnapshots.length)
+  const retryFailedSnapshots = useAxisChronologyStore((state) => state.retryFailedSnapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -155,6 +159,35 @@ export function LiveMemoryStream() {
     },
     []
   )
+
+  const captureSnapshot = useCallback(async () => {
+    const session = workingSessionRef.current
+    if (!session) return
+
+    const sessionTime = elapsedRef.current
+    const videoElement = localVideoRef.current
+
+    if (!videoElement) {
+      appendTemporalEvent("SNAPSHOT")
+      return
+    }
+
+    const blob = await captureVideoFrameBlob(videoElement)
+
+    if (!blob) {
+      appendTemporalEvent("SNAPSHOT")
+      return
+    }
+
+    const localUrl =
+      typeof URL !== "undefined" && "createObjectURL" in URL
+        ? URL.createObjectURL(blob)
+        : ""
+
+    useAxisChronologyStore.getState().triggerSnapshotCapture(sessionTime, blob, localUrl, {
+      replay_window: defaultReplayWindow(),
+    })
+  }, [appendTemporalEvent])
 
   const clearReconnectTimers = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -620,6 +653,7 @@ export function LiveMemoryStream() {
   ])
 
   const hasRecentArchive = Boolean(archivedRecording)
+  const latestSnapshot = snapshots[snapshots.length - 1] || null
 
   return (
     <main className="h-dvh overflow-hidden bg-black text-zinc-100">
@@ -743,6 +777,30 @@ export function LiveMemoryStream() {
         ) : null}
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
+          {status === "LIVE" && latestSnapshot ? (
+            <div className="mx-auto mb-3 flex max-w-sm items-center gap-3 border border-white/10 bg-black/58 p-2 backdrop-blur-sm">
+              {latestSnapshot.image_url || latestSnapshot.localUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={latestSnapshot.image_url || latestSnapshot.localUrl || ""}
+                  alt="Latest snapshot"
+                  className="h-12 w-16 object-cover"
+                />
+              ) : (
+                <div className="grid h-12 w-16 place-items-center bg-zinc-950 text-[8px] font-black uppercase tracking-[0.14em] text-zinc-600">
+                  SNAP
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                  Snapshot
+                </p>
+                <p className="mt-1 truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200">
+                  {latestSnapshot.status}
+                </p>
+              </div>
+            </div>
+          ) : null}
           <div className="mx-auto flex max-w-sm justify-center">
             {status === "READY" ? (
               <button
@@ -771,7 +829,7 @@ export function LiveMemoryStream() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => appendTemporalEvent("SNAPSHOT")}
+                  onClick={() => void captureSnapshot()}
                   className="border border-white/10 bg-black/58 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 active:bg-white/10"
                 >
                   Snap
@@ -805,6 +863,15 @@ export function LiveMemoryStream() {
                   className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-200"
                 >
                   Retry {failedEventCount}
+                </button>
+              ) : null}
+              {failedSnapshotCount ? (
+                <button
+                  type="button"
+                  onClick={() => retryFailedSnapshots()}
+                  className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-200"
+                >
+                  Retry snaps {failedSnapshotCount}
                 </button>
               ) : null}
             </div>

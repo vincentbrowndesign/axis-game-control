@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useShallow } from "zustand/react/shallow"
 import {
+  type AxisSnapshot,
   type TimelineAnchor,
   useAxisChronologyStore,
 } from "@/lib/axisChronologyStore"
@@ -255,10 +256,8 @@ function SelectedEvent() {
 
 function EventFeed({
   eventsLoaded,
-  snapshotCount,
 }: {
   eventsLoaded: boolean
-  snapshotCount: number
 }) {
   const { events, activeEventId, requestEventJump } = useAxisChronologyStore(
     useShallow((state) => ({
@@ -275,6 +274,7 @@ function EventFeed({
         retryFailedEvents: state.retryFailedEvents,
       }))
     )
+  const snapshotCount = useAxisChronologyStore((state) => state.snapshots.length)
 
   return (
     <aside className="min-w-0 border-t border-white/10 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
@@ -344,12 +344,92 @@ function EventFeed({
   )
 }
 
+function SnapshotStrip() {
+  const { snapshots, failedSnapshotCount, retryFailedSnapshots, requestEventJump, events } =
+    useAxisChronologyStore(
+      useShallow((state) => ({
+        snapshots: state.snapshots,
+        failedSnapshotCount: state.failedSnapshots.length,
+        retryFailedSnapshots: state.retryFailedSnapshots,
+        requestEventJump: state.requestEventJump,
+        events: state.events,
+      }))
+    )
+
+  if (!snapshots.length) return null
+
+  const jumpToSnapshot = (snapshot: AxisSnapshot) => {
+    const snapshotEvent = events.find(
+      (event) =>
+        event.type === "SNAPSHOT" &&
+        (event.payload?.snapshot_id === snapshot.id ||
+          Math.abs(Number(event.session_time) - Number(snapshot.session_time)) < 0.01)
+    )
+
+    if (snapshotEvent) requestEventJump(snapshotEvent.id)
+  }
+
+  return (
+    <section className="mt-4 border border-white/10 bg-white/[0.025] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+          Snapshots
+        </p>
+        {failedSnapshotCount ? (
+          <button
+            type="button"
+            onClick={() => retryFailedSnapshots()}
+            className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
+          >
+            Retry {failedSnapshotCount}
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {snapshots.map((snapshot) => {
+          const source = snapshot.image_url || snapshot.localUrl
+
+          return (
+            <button
+              key={snapshot.id}
+              type="button"
+              onClick={() => jumpToSnapshot(snapshot)}
+              className="min-w-28 border border-white/10 bg-black/40 text-left active:bg-white/10"
+            >
+              {source ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={source}
+                  alt={`Snapshot at ${formatClock(snapshot.session_time)}`}
+                  className="aspect-video w-28 object-cover"
+                />
+              ) : (
+                <div className="grid aspect-video w-28 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">
+                  SNAP
+                </div>
+              )}
+              <div className="px-2 py-2">
+                <p className="font-mono text-[10px] font-black text-zinc-100">
+                  {formatClock(snapshot.session_time)}
+                </p>
+                <p className="mt-1 text-[8px] font-black uppercase tracking-[0.14em] text-zinc-600">
+                  {snapshot.status}
+                </p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
-  const [snapshots, setSnapshots] = useState<TemporalSnapshotRecord[]>([])
   const [eventsLoaded, setEventsLoaded] = useState(false)
-  const { hydrateChronology, setUiStatus } = useAxisChronologyStore(
+  const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
+      hydrateSnapshots: state.hydrateSnapshots,
       setUiStatus: state.setUiStatus,
     }))
   )
@@ -379,7 +459,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           duration: Number(session.duration_seconds) || 0,
           events: payload.events || [],
         })
-        setSnapshots(payload.snapshots || [])
+        hydrateSnapshots(payload.snapshots || [])
       } finally {
         if (active) setEventsLoaded(true)
       }
@@ -390,7 +470,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     return () => {
       active = false
     }
-  }, [hydrateChronology, session.duration_seconds, session.id])
+  }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
 
   return (
     <main className="min-h-dvh bg-black text-zinc-100">
@@ -447,9 +527,10 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           <section className="min-w-0">
             <ReplayVideo playbackUrl={session.playback_url} />
             <EventRail />
+            <SnapshotStrip />
             <SelectedEvent />
           </section>
-          <EventFeed eventsLoaded={eventsLoaded} snapshotCount={snapshots.length} />
+          <EventFeed eventsLoaded={eventsLoaded} />
         </div>
       </section>
     </main>
