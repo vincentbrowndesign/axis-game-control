@@ -1,9 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { ControlBar } from "@/components/axis/ControlBar"
 import { ControlPad } from "@/components/axis/ControlPad"
-import { RunHeader } from "@/components/axis/RunHeader"
 import { StateBar } from "@/components/axis/StateBar"
 import {
   suggestAssistedEvents,
@@ -377,11 +383,15 @@ export default function UploadMemoryConsole({
 }) {
   const recordInputRef = useRef<HTMLInputElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null)
+  const liveStreamRef = useRef<MediaStream | null>(null)
   const localVideoUrlsRef = useRef<Set<string>>(new Set())
   const [run, setRun] = useState<Run>(() => createRun())
   const [now, setNow] = useState(() => Date.now())
   const [status, setStatus] = useState("")
   const [isUploading, setIsUploading] = useState(false)
+  const [isSavingMoment, setIsSavingMoment] = useState(false)
+  const [isLiveReady, setIsLiveReady] = useState(false)
   const [playbackId, setPlaybackId] = useState<string | undefined>()
   const [hasLoadedStoredRun, setHasLoadedStoredRun] = useState(false)
   const [openAiTrack, setOpenAiTrack] = useState<TrackIntelligence | null>(null)
@@ -459,9 +469,57 @@ export default function UploadMemoryConsole({
       if (typeof URL !== "undefined") {
         for (const url of localVideoUrlsRef.current) URL.revokeObjectURL(url)
       }
+      liveStreamRef.current?.getTracks().forEach((track) => track.stop())
     },
     []
   )
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return
+    if (!navigator.mediaDevices?.getUserMedia) return
+    if (liveStreamRef.current) return
+
+    let cancelled = false
+
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: true,
+        video: {
+          facingMode: {
+            ideal: "environment",
+          },
+          width: {
+            ideal: 1280,
+          },
+          height: {
+            ideal: 720,
+          },
+        },
+      })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+
+        liveStreamRef.current = stream
+
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = stream
+          liveVideoRef.current.muted = true
+          void liveVideoRef.current.play().catch(() => {})
+        }
+
+        setIsLiveReady(true)
+      })
+      .catch(() => {
+        setIsLiveReady(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const elapsedMs = elapsedRunMs(run, now)
   const elapsed = formatRunTime(elapsedMs)
@@ -615,13 +673,6 @@ export default function UploadMemoryConsole({
     }))
     setOpenAiTrack(null)
     setStatus("")
-  }
-
-  function updateName(side: SignalSide, value: string) {
-    setRun((current) => ({
-      ...current,
-      [side]: value || (side === "home" ? "Home" : "Away"),
-    }))
   }
 
   function addScore(side: SignalSide, points: number) {
@@ -809,6 +860,83 @@ export default function UploadMemoryConsole({
     }
   }
 
+  async function saveLiveMoment() {
+    if (isSavingMoment) return
+
+    const stream = liveStreamRef.current
+
+    if (
+      typeof window === "undefined" ||
+      !stream ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      recordInputRef.current?.click()
+      return
+    }
+
+    setIsSavingMoment(true)
+    setStatus("Saved.")
+
+    try {
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+          ? "video/webm;codecs=vp8,opus"
+          : "video/webm",
+      })
+      const chunks: BlobPart[] = []
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+          if (recorder.state !== "inactive") recorder.stop()
+        }, 2400)
+
+        recorder.ondataavailable = (event) => {
+          if (event.data.size) chunks.push(event.data)
+        }
+        recorder.onerror = () => {
+          window.clearTimeout(timeout)
+          reject(new Error("Moment unavailable"))
+        }
+        recorder.onstop = () => {
+          window.clearTimeout(timeout)
+          resolve(
+            new Blob(chunks, {
+              type: recorder.mimeType || "video/webm",
+            })
+          )
+        }
+        recorder.start()
+      })
+
+      if (!blob.size) {
+        recordInputRef.current?.click()
+        return
+      }
+
+      const file =
+        typeof File !== "undefined"
+          ? new File([blob], `axis-moment-${Date.now()}.webm`, {
+              type: blob.type || "video/webm",
+              lastModified: Date.now(),
+            })
+          : undefined
+
+      if (!file) {
+        recordInputRef.current?.click()
+        return
+      }
+
+      await chooseFile(file, "camera")
+      setStatus("Saved.")
+    } catch {
+      recordInputRef.current?.click()
+    } finally {
+      window.setTimeout(() => {
+        setIsSavingMoment(false)
+        setStatus("")
+      }, 1100)
+    }
+  }
+
   return (
     <main
       data-axis-mode={initialMode}
@@ -818,47 +946,44 @@ export default function UploadMemoryConsole({
         <StoryMemoryCapture
           run={run}
           elapsed={elapsed}
-          homeScore={scoreboard.home}
-          awayScore={scoreboard.away}
-          blocks={storyBlocks}
-          isUploading={isUploading}
-          onCamera={() => recordInputRef.current?.click()}
-          onUpload={() => uploadInputRef.current?.click()}
-        />
-        <RunHeader
-          run={run}
-          elapsed={elapsed}
           isRunning={isRunning}
           homeScore={scoreboard.home}
           awayScore={scoreboard.away}
-          systemLabel={systemValue.label}
-          systemValue={Math.round(systemValue.netValue)}
-          onName={updateName}
+          blocks={storyBlocks}
+          liveVideoRef={liveVideoRef}
+          isLiveReady={isLiveReady}
+          isUploading={isUploading}
+          isSavingMoment={isSavingMoment}
+          flowLabel={systemValue.label}
+          onCamera={() => recordInputRef.current?.click()}
+          onUpload={() => uploadInputRef.current?.click()}
+          onSaveMoment={() => void saveLiveMoment()}
           onScore={addScore}
           onPause={pauseClock}
           onResume={resumeClock}
           onReset={resetClock}
-        />
-        <ControlPad
-          home={run.home}
-          away={run.away}
-          players={run.players}
-          onSignal={tapSignal}
-          onAddPlayer={addPlayer}
-          onUndo={undoSignal}
-        />
-        <AssistedSuggestionStrip
-          run={run}
-          suggestions={assistedSuggestions}
-          onConfirm={(suggestion) => {
-            tapSignal(suggestion.side, suggestion.result, {
-              stat: suggestion.stat,
-            })
-            setStatus("Suggested event confirmed.")
-          }}
-        />
-        <ReplayMemoryRail run={run} track={visibleTrack} storyBlocks={storyBlocks} />
-        <StateBar state={axisState} status={status} />
+        >
+          <ControlPad
+            home={run.home}
+            away={run.away}
+            players={run.players}
+            onSignal={tapSignal}
+            onAddPlayer={addPlayer}
+            onUndo={undoSignal}
+          />
+          <AssistedSuggestionStrip
+            run={run}
+            suggestions={assistedSuggestions}
+            onConfirm={(suggestion) => {
+              tapSignal(suggestion.side, suggestion.result, {
+                stat: suggestion.stat,
+              })
+              setStatus("Suggested event confirmed.")
+            }}
+          />
+          <ReplayMemoryRail run={run} track={visibleTrack} storyBlocks={storyBlocks} />
+          <StateBar state={axisState} status={status} />
+        </StoryMemoryCapture>
       </div>
 
       <input
@@ -885,32 +1010,71 @@ export default function UploadMemoryConsole({
 function StoryMemoryCapture({
   run,
   elapsed,
+  isRunning,
   homeScore,
   awayScore,
   blocks,
+  liveVideoRef,
+  isLiveReady,
   isUploading,
+  isSavingMoment,
+  flowLabel,
   onCamera,
   onUpload,
+  onSaveMoment,
+  onScore,
+  onPause,
+  onResume,
+  onReset,
+  children,
 }: {
   run: Run
   elapsed: string
+  isRunning: boolean
   homeScore: number
   awayScore: number
   blocks: RunStoryBlock[]
+  liveVideoRef: RefObject<HTMLVideoElement | null>
+  isLiveReady: boolean
   isUploading: boolean
+  isSavingMoment: boolean
+  flowLabel: string
   onCamera: () => void
   onUpload: () => void
+  onSaveMoment: () => void
+  onScore: (side: SignalSide, points: number) => void
+  onPause: () => void
+  onResume: () => void
+  onReset: () => void
+  children: ReactNode
 }) {
   const latest = blocks[blocks.length - 1]
+  const liveState = isLiveReady ? "LIVE" : "CAMERA"
+  const captureState = isSavingMoment
+    ? "SAVING"
+    : isUploading
+      ? "ATTACHING"
+      : isRunning
+        ? "RUNNING"
+        : "PAUSED"
 
   return (
-    <section className="axis-panel overflow-hidden rounded-lg">
-      {latest ? (
-        <div className="relative min-h-[30rem] bg-black sm:min-h-[34rem]">
-          {latest.media.contentType.startsWith("video/") ? (
+    <section className="overflow-hidden rounded-[1.75rem] border border-zinc-900 bg-black shadow-[0_24px_90px_rgba(0,0,0,0.45)]">
+      <div className="relative min-h-[calc(100svh-6.5rem)] bg-black sm:min-h-[44rem]">
+        <video
+          ref={liveVideoRef}
+          className={`absolute inset-0 h-full w-full object-cover transition duration-700 ${
+            isLiveReady ? "opacity-85" : "opacity-0"
+          }`}
+          muted
+          playsInline
+          autoPlay
+        />
+        {!isLiveReady && latest ? (
+          latest.media.contentType.startsWith("video/") ? (
             <video
               src={latest.media.url}
-              className="absolute inset-0 h-full w-full object-cover opacity-82"
+              className="absolute inset-0 h-full w-full object-cover opacity-78"
               muted
               playsInline
               loop
@@ -924,105 +1088,174 @@ function StoryMemoryCapture({
                 backgroundImage: `url(${latest.media.url})`,
               }}
             />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/18 to-black/10" />
-          <div className="absolute left-4 right-4 top-4 grid grid-cols-[1fr_auto_1fr] items-start gap-3">
-            <p className="truncate text-left text-[10px] font-black uppercase tracking-[0.18em] text-orange-100/75">
-              {run.home}
-            </p>
-            <div className="grid justify-items-center gap-1 rounded-full border border-white/10 bg-black/45 px-4 py-2 backdrop-blur">
+          )
+        ) : null}
+        {!isLiveReady && !latest ? (
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_24%,rgba(244,244,245,0.1),transparent_34%),linear-gradient(180deg,rgba(24,24,27,0.16),rgba(0,0,0,0.92))]" />
+        ) : null}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/12 to-black/35" />
+
+        <div className="absolute left-3 right-3 top-3 z-20 rounded-[1.25rem] border border-white/10 bg-black/42 px-3 py-2 backdrop-blur-md sm:left-4 sm:right-4 sm:top-4">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-left text-[10px] font-black uppercase tracking-[0.18em] text-orange-100/75">
+                {run.home}
+              </p>
+              <button
+                type="button"
+                onClick={() => onScore("home", 1)}
+                className="mt-1 rounded-full border border-orange-300/20 bg-orange-300/10 px-2.5 py-1 font-mono text-[10px] font-black text-orange-100 transition active:scale-[0.97]"
+                aria-label={`${run.home} plus one`}
+              >
+                +1
+              </button>
+            </div>
+            <div className="grid justify-items-center gap-1">
               <p className="font-mono text-2xl font-black leading-none text-zinc-100">
                 <span className="text-orange-200">{homeScore}</span>
                 <span className="px-1 text-zinc-600">-</span>
                 <span className="text-sky-200">{awayScore}</span>
               </p>
-              <p className="font-mono text-[10px] font-black text-emerald-300">{elapsed}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-mono text-[10px] font-black text-emerald-300">
+                  {elapsed}
+                </p>
+                <span className="h-1 w-1 rounded-full bg-zinc-700" />
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                  {captureState}
+                </p>
+              </div>
             </div>
-            <p className="truncate text-right text-[10px] font-black uppercase tracking-[0.18em] text-sky-100/75">
-              {run.away}
-            </p>
+            <div className="grid min-w-0 justify-items-end">
+              <p className="truncate text-right text-[10px] font-black uppercase tracking-[0.18em] text-sky-100/75">
+                {run.away}
+              </p>
+              <button
+                type="button"
+                onClick={() => onScore("away", 1)}
+                className="mt-1 rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 font-mono text-[10px] font-black text-sky-100 transition active:scale-[0.97]"
+                aria-label={`${run.away} plus one`}
+              >
+                +1
+              </button>
+            </div>
           </div>
-          <div className="absolute left-4 top-20 rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  isLiveReady
+                    ? "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.75)]"
+                    : "bg-zinc-600"
+                }`}
+              />
+              <span className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                {liveState}
+              </span>
+              <span className="truncate rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                {flowLabel || latest?.sticker || "SETTLED"}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={isRunning ? onPause : onResume}
+                className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-zinc-400 transition active:scale-[0.97] hover:text-zinc-100"
+              >
+                {isRunning ? "Pause" : "Start"}
+              </button>
+              <button
+                type="button"
+                onClick={onReset}
+                className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500 transition active:scale-[0.97] hover:text-zinc-100"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onScore("home", 1)}
+          className="absolute bottom-40 left-0 top-32 z-10 w-10 rounded-r-full border-y border-r border-orange-300/10 bg-orange-300/[0.03] text-[9px] font-black uppercase tracking-[0.16em] text-orange-100/35 backdrop-blur-sm transition hover:bg-orange-300/10 hover:text-orange-100/80 active:bg-orange-300/15 sm:w-14"
+          aria-label={`${run.home} edge score`}
+        >
+          +1
+        </button>
+        <button
+          type="button"
+          onClick={() => onScore("away", 1)}
+          className="absolute bottom-40 right-0 top-32 z-10 w-10 rounded-l-full border-y border-l border-sky-300/10 bg-sky-300/[0.03] text-[9px] font-black uppercase tracking-[0.16em] text-sky-100/35 backdrop-blur-sm transition hover:bg-sky-300/10 hover:text-sky-100/80 active:bg-sky-300/15 sm:w-14"
+          aria-label={`${run.away} edge score`}
+        >
+          +1
+        </button>
+
+        {latest ? (
+          <div className="absolute bottom-[20rem] left-4 z-20 rounded-full border border-white/12 bg-black/45 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
             {latest.sticker}
           </div>
-          <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
-            <div>
-              <p className="font-mono text-3xl font-black tracking-[-0.05em] text-zinc-100">
-                {latest.score.home}-{latest.score.away}
+        ) : null}
+
+        <div className="absolute inset-x-3 bottom-4 z-20 grid gap-3 sm:inset-x-4">
+          <div className="flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-4xl font-black uppercase leading-none tracking-[-0.06em] text-zinc-100 sm:text-5xl">
+                {isLiveReady ? "Watch." : "Open camera."}
               </p>
-              <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-                {latest.media.source === "camera" ? "Captured" : "Added"}
+              <p className="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                Catch moments.
               </p>
             </div>
-            <div className="flex gap-2">
-              <StoryButton label={isUploading ? "..." : "Camera"} onClick={onCamera} />
-              <StoryButton label="Add" onClick={onUpload} />
+            <div className="grid shrink-0 justify-items-end gap-2">
+              <button
+                type="button"
+                onClick={onSaveMoment}
+                className="rounded-full border border-white/15 bg-zinc-100 px-5 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-black shadow-[0_18px_50px_rgba(0,0,0,0.36)] transition active:scale-[0.98]"
+              >
+                {isSavingMoment ? "Saved" : "Save Moment"}
+              </button>
+              <div className="flex gap-2">
+                <StoryButton label={isUploading ? "..." : "Camera"} onClick={onCamera} />
+                <StoryButton label="Add" onClick={onUpload} />
+              </div>
             </div>
           </div>
-          {blocks.length > 1 ? (
-            <div className="absolute bottom-20 right-4 flex max-w-[48%] gap-1.5 overflow-hidden">
-              {blocks.slice(-4, -1).map((block) => (
-                <span
-                  key={`${block.id}-stack`}
-                  className="h-12 w-8 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-[0_0_18px_rgba(0,0,0,0.35)]"
-                  title={block.sticker}
-                >
-                  {block.media.contentType.startsWith("video/") ? (
-                    <video
-                      src={block.media.url}
-                      className="h-full w-full object-cover opacity-75"
-                      muted
-                      playsInline
-                    />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className="block h-full w-full bg-cover bg-center opacity-75"
-                      style={{
-                        backgroundImage: `url(${block.media.url})`,
-                      }}
-                    />
-                  )}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="relative grid min-h-[28rem] content-end overflow-hidden bg-black p-5">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_24%,rgba(244,244,245,0.1),transparent_34%),linear-gradient(180deg,rgba(24,24,27,0.16),rgba(0,0,0,0.92))]" />
-          <div className="absolute left-4 right-4 top-4 grid grid-cols-[1fr_auto_1fr] items-start gap-3">
-            <p className="truncate text-left text-[10px] font-black uppercase tracking-[0.18em] text-orange-100/60">
-              {run.home}
-            </p>
-            <div className="grid justify-items-center gap-1 rounded-full border border-white/10 bg-black/45 px-4 py-2 backdrop-blur">
-              <p className="font-mono text-2xl font-black leading-none text-zinc-100">
-                <span className="text-orange-200">{homeScore}</span>
-                <span className="px-1 text-zinc-600">-</span>
-                <span className="text-sky-200">{awayScore}</span>
-              </p>
-              <p className="font-mono text-[10px] font-black text-emerald-300">{elapsed}</p>
-            </div>
-            <p className="truncate text-right text-[10px] font-black uppercase tracking-[0.18em] text-sky-100/60">
-              {run.away}
-            </p>
-          </div>
-          <div className="relative z-10 grid gap-5 sm:grid-cols-[1fr_auto] sm:items-end">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-              Story
-            </p>
-            <h2 className="mt-2 text-4xl font-black uppercase leading-none tracking-[-0.06em] text-zinc-100">
-              Catch the moment.
-            </h2>
-          </div>
-          <div className="flex gap-2">
-            <StoryButton label={isUploading ? "..." : "Camera"} onClick={onCamera} />
-            <StoryButton label="Add" onClick={onUpload} />
-          </div>
+          <div className="grid gap-2 rounded-[1.5rem] border border-white/10 bg-black/46 p-2 shadow-[0_18px_70px_rgba(0,0,0,0.4)] backdrop-blur-md">
+            {children}
           </div>
         </div>
-      )}
+
+        {blocks.length ? (
+          <div className="absolute bottom-[18.5rem] right-4 z-20 flex max-w-[46%] gap-1.5 overflow-hidden">
+            {blocks.slice(-4).map((block) => (
+              <span
+                key={`${block.id}-stack`}
+                className="h-12 w-8 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-[0_0_18px_rgba(0,0,0,0.35)]"
+                title={block.sticker}
+              >
+                {block.media.contentType.startsWith("video/") ? (
+                  <video
+                    src={block.media.url}
+                    className="h-full w-full object-cover opacity-75"
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="block h-full w-full bg-cover bg-center opacity-75"
+                    style={{
+                      backgroundImage: `url(${block.media.url})`,
+                    }}
+                  />
+                )}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </section>
   )
 }
