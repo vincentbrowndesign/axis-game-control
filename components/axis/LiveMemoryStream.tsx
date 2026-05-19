@@ -298,6 +298,10 @@ function LiveMachinePerceptionOverlay({
       if (!locks.length && !residues.length && pressure < 0.02) return
 
       const peakEnergy = locks.length ? Math.max(...locks.map((lock) => lock.energy)) : 0
+      const primaryLock = locks.reduce<MotionLock | null>(
+        (primary, lock) => (!primary || lock.energy > primary.energy ? lock : primary),
+        null
+      )
       const overloaded = attentionState === "OVERLOADED"
       const locking = attentionState === "LOCKING"
       const watching = attentionState === "WATCHING"
@@ -348,34 +352,44 @@ function LiveMachinePerceptionOverlay({
             : 0.44 + peakEnergy * 0.2 + pressure * 0.28
       }
 
-      residues.forEach((residue, index) => {
-        const x = (residue.x / 100) * width
-        const y = (residue.y / 100) * height
-        const boxWidth = (residue.width / 100) * width
-        const boxHeight = (residue.height / 100) * height
-        const centerX = x + boxWidth / 2
-        const centerY = y + boxHeight / 2
-        const dragX = residue.velocityX * width * 0.018
-        const dragY = residue.velocityY * height * 0.018
-        const alpha = residue.life * (0.065 + pressure * 0.2 + residue.energy * 0.07)
+      residues
+        .filter((residue, index) => residue.id === primaryLock?.id || index < 18)
+        .forEach((residue, index) => {
+          const x = (residue.x / 100) * width
+          const y = (residue.y / 100) * height
+          const boxWidth = (residue.width / 100) * width
+          const boxHeight = (residue.height / 100) * height
+          const centerX = x + boxWidth / 2
+          const centerY = y + boxHeight / 2
+          const dragX = residue.velocityX * width * 0.018
+          const dragY = residue.velocityY * height * 0.018
+          const primaryResidue = residue.id === primaryLock?.id
+          const alpha =
+            residue.life *
+            (primaryResidue
+              ? 0.085 + pressure * 0.24 + residue.energy * 0.1
+              : 0.018 + pressure * 0.045)
 
-        context.strokeStyle = `rgba(242,241,237,${alpha})`
-        context.lineWidth = 0.5 + residue.energy * 0.55 + pressure * 0.45
-        context.strokeRect(
-          x - dragX * (1 + index * 0.02),
-          y - dragY * (1 + index * 0.02),
-          boxWidth + residue.life * (18 + pressure * 18),
-          boxHeight + residue.life * (12 + pressure * 14)
-        )
+          context.strokeStyle = `rgba(242,241,237,${alpha})`
+          context.lineWidth = primaryResidue
+            ? 0.55 + residue.energy * 0.62 + pressure * 0.5
+            : 0.35
+          context.strokeRect(
+            x - dragX * (1 + index * 0.02),
+            y - dragY * (1 + index * 0.02),
+            boxWidth + residue.life * (18 + pressure * 18),
+            boxHeight + residue.life * (12 + pressure * 14)
+          )
 
-        context.strokeStyle = `rgba(215,192,138,${alpha * 0.42})`
-        context.beginPath()
-        context.moveTo(centerX - dragX * 2.6, centerY - dragY * 2.6)
-        context.lineTo(centerX + dragX * 0.4, centerY + dragY * 0.4)
-        context.stroke()
-      })
+          context.strokeStyle = `rgba(215,192,138,${alpha * 0.42})`
+          context.beginPath()
+          context.moveTo(centerX - dragX * 2.6, centerY - dragY * 2.6)
+          context.lineTo(centerX + dragX * 0.4, centerY + dragY * 0.4)
+          context.stroke()
+        })
 
       locks.forEach((lock, index) => {
+        const primary = lock.id === primaryLock?.id
         const next = locks[(index + 1) % locks.length] || lock
         const x = (lock.x / 100) * width
         const y = (lock.y / 100) * height
@@ -398,6 +412,20 @@ function LiveMachinePerceptionOverlay({
             ? Math.sin(timestamp * 0.011 + index * 4.7) * (3 + pressure * 8)
             : Math.sin(timestamp * 0.0014 + index * 1.6) * (watching ? 1.8 : 0.55)
         const sharpness = locking ? 1.25 : attentionState === "TRACKING" ? 1 : watching ? 0.62 : 0.36
+
+        if (!primary) {
+          const falloff = overloaded ? 0.22 : 0.11
+
+          context.strokeStyle = `rgba(242,241,237,${falloff * lock.energy})`
+          context.lineWidth = 0.45
+          context.strokeRect(
+            x + jitter * 0.08,
+            y - jitter * 0.06,
+            boxWidth * 0.92,
+            boxHeight * 0.92
+          )
+          return
+        }
 
         context.strokeStyle = `rgba(242,241,237,${0.12 + lock.energy * 0.28 + pressure * 0.23})`
         context.lineWidth = 0.7 + lock.energy * 0.6 + sharpness * 0.42
@@ -627,7 +655,7 @@ function LiveMachinePerceptionOverlay({
           })),
         ]
           .filter((lock) => lock.life > 0.03)
-        .slice(0, 48)
+          .slice(0, 48)
         return
       }
 
@@ -665,47 +693,50 @@ function LiveMachinePerceptionOverlay({
               ? 1.1
               : 0.58
 
-      const nextLocks = sourceLocks.slice(0, 5).map((region, index) => {
-        const previousLock = smoothedLocksRef.current[index]
-        const overloadScatter =
-          attentionState === "OVERLOADED"
-            ? Math.sin(timestamp * 0.012 + index * 3.3) * (1.4 + pressure * 3.4)
-            : 0
-        const driftX =
-          Math.sin(timestamp * 0.001 + index * 1.9) * (0.12 + looseness * 0.62) +
-          overloadScatter
-        const driftY =
-          Math.cos(timestamp * 0.0011 + index * 1.4) * (0.1 + looseness * 0.54) -
-          overloadScatter * 0.55
+      const nextLocks = sourceLocks
+        .sort((a, b) => b.energy - a.energy)
+        .slice(0, 3)
+        .map((region, index) => {
+          const previousLock = smoothedLocksRef.current[index]
+          const overloadScatter =
+            attentionState === "OVERLOADED"
+              ? Math.sin(timestamp * 0.012 + index * 3.3) * (1.4 + pressure * 3.4)
+              : 0
+          const driftX =
+            Math.sin(timestamp * 0.001 + index * 1.9) * (0.12 + looseness * 0.62) +
+            overloadScatter
+          const driftY =
+            Math.cos(timestamp * 0.0011 + index * 1.4) * (0.1 + looseness * 0.54) -
+            overloadScatter * 0.55
 
-        if (!previousLock) {
+          if (!previousLock) {
+            return {
+              ...region,
+              x: region.x + driftX,
+              y: region.y + driftY,
+              velocityX: 0,
+              velocityY: 0,
+            }
+          }
+
+          const nextX = previousLock.x * (1 - inertia) + region.x * inertia + driftX
+          const nextY = previousLock.y * (1 - inertia) + region.y * inertia + driftY
+          const velocityX = nextX - previousLock.x
+          const velocityY = nextY - previousLock.y
+
           return {
             ...region,
-            x: region.x + driftX,
-            y: region.y + driftY,
-            velocityX: 0,
-            velocityY: 0,
+            previousX: previousLock.x,
+            previousY: previousLock.y,
+            x: nextX,
+            y: nextY,
+            width: previousLock.width * (1 - inertia) + region.width * inertia,
+            height: previousLock.height * (1 - inertia) + region.height * inertia,
+            energy: clamp01(previousLock.energy * 0.48 + region.energy * 0.52 + pressure * 0.16),
+            velocityX,
+            velocityY,
           }
-        }
-
-        const nextX = previousLock.x * (1 - inertia) + region.x * inertia + driftX
-        const nextY = previousLock.y * (1 - inertia) + region.y * inertia + driftY
-        const velocityX = nextX - previousLock.x
-        const velocityY = nextY - previousLock.y
-
-        return {
-          ...region,
-          previousX: previousLock.x,
-          previousY: previousLock.y,
-          x: nextX,
-          y: nextY,
-          width: previousLock.width * (1 - inertia) + region.width * inertia,
-          height: previousLock.height * (1 - inertia) + region.height * inertia,
-          energy: clamp01(previousLock.energy * 0.48 + region.energy * 0.52 + pressure * 0.16),
-          velocityX,
-          velocityY,
-        }
-      })
+        })
 
       smoothedLocksRef.current = nextLocks
       residueLocksRef.current = [
@@ -807,7 +838,7 @@ export function LiveMemoryStream() {
   const [status, setStatus] = useState<LiveSessionStatus>("READY")
   const [elapsed, setElapsed] = useState(0)
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
-  const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("RECON")
+  const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("MOTION_ECHO")
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -1434,27 +1465,22 @@ export function LiveMemoryStream() {
               </Link>
             ) : null}
           </div>
-          <div className="mt-4 grid w-full max-w-64 grid-cols-2 border border-white/10">
-            {(["RECON", "MOTION_ECHO"] as LiveViewMode[]).map((mode) => {
-              const active = liveViewMode === mode
-              const label = mode === "MOTION_ECHO" ? "MOTION ECHO" : mode
-
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setLiveViewMode(mode)}
-                  className={`axis-mono axis-optical-transition h-8 border-r border-white/10 px-3 text-[9px] font-black uppercase tracking-[0.16em] transition last:border-r-0 ${
-                    active
-                      ? "bg-zinc-100 text-black"
-                      : "bg-black/34 text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setLiveViewMode((mode) => (mode === "MOTION_ECHO" ? "RECON" : "MOTION_ECHO"))
+            }
+            className="axis-mono axis-optical-transition mt-4 inline-flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500 transition hover:text-zinc-200"
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                liveViewMode === "MOTION_ECHO"
+                  ? "bg-zinc-100 shadow-[0_0_12px_rgba(244,244,245,0.42)]"
+                  : "bg-zinc-700"
+              }`}
+            />
+            {liveViewMode === "MOTION_ECHO" ? "MOTION ECHO" : "RECON"}
+          </button>
         </header>
 
         {status === "ARCHIVED" && archivedRecording ? (
