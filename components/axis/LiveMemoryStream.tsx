@@ -2,77 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import MuxPlayer from "@mux/mux-player-react"
-
-type LiveStatus =
-  | "READY"
-  | "STARTING"
-  | "LIVE"
-  | "RECONNECTING"
-  | "FINALIZING"
-  | "ARCHIVED"
-  | "SESSION STORED"
-  | "OFFLINE"
-
-type MemoryEventType = "MARK" | "SNAPSHOT" | "SYSTEM" | "score" | "clock"
-
-type EventBase = {
-  id: string
-  elapsed: number
-  label: string
-  createdAt: string
-}
-
-type BaseMemoryEvent = EventBase & {
-  type: "MARK" | "SNAPSHOT" | "SYSTEM"
-}
-
-type ScoreEvent = EventBase & {
-  type: "score"
-  team: "HOME" | "AWAY"
-  points: 1 | 2 | 3
-  gameClock: string
-  period: number
-  sessionTime: number
-}
-
-type ClockEvent = EventBase & {
-  type: "clock"
-  action: "START" | "PAUSE" | "RESET"
-  gameClock: string
-  period: number
-  sessionTime: number
-}
-
-type MemoryEvent =
-  | BaseMemoryEvent
-  | ScoreEvent
-  | ClockEvent
-
-type LiveThreadSession = {
-  id: string
-  createdAt: string
-  endedAt: string
-  duration: number
-  videoAssetUrl: string | null
-  replayAsset: {
-    playbackId: string | null
-    liveSessionId: string | null
-  }
-  markers: MemoryEvent[]
-  snapshots: MemoryEvent[]
-  scoringEvents: ScoreEvent[]
-  scoreHistory: ScoreEvent[]
-  clockHistory: ClockEvent[]
-  eventTimeline: MemoryEvent[]
-  systemStates: Array<{
-    state: LiveStatus
-    elapsed: number
-    at: string
-  }>
-  inference: {
-    pending: true
-  }
-}
+import {
+  buildTemporalReplayEngine,
+  type TemporalReplayEngine,
+  type TemporalReplayEvent,
+} from "@/lib/replay/temporalReplayEngine"
+import {
+  appendTemporalEvent,
+  buildArchiveMemory,
+  buildLiveMemory,
+  createTemporalEvent,
+  createTemporalSession,
+  isTemporalEvent,
+  transitionTemporalSession,
+  type ArchiveMemory,
+  type OperationalSessionState,
+  type TemporalEvent,
+  type TemporalEventType,
+  type TemporalSession,
+  type TransportState,
+} from "@/lib/temporal/sessionEngine"
 
 const eventStorageKey = "axis-live-thread-events"
 const sessionStorageKey = "axis-live-thread-started-at"
@@ -86,6 +35,8 @@ const recorderTypes = [
   "video/mp4;codecs=h264,mp4a.40.2",
   "video/mp4",
 ]
+
+const disabledStates: OperationalSessionState[] = ["FINALIZING", "ARCHIVED", "FAILED"]
 
 function getRecorderType() {
   if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
@@ -107,17 +58,9 @@ function formatGameClock(totalSeconds: number) {
   return formatClock(Math.max(0, totalSeconds))
 }
 
-function eventWeight(type: MemoryEventType) {
-  if (type === "score") return 2
-  if (type === "SNAPSHOT") return 3
-  if (type === "SYSTEM") return 1.5
-  if (type === "clock") return 0.75
-  return 1
-}
-
-function eventNodeClass(event: MemoryEvent) {
+function eventNodeClass(event: TemporalEvent) {
   if (event.type === "score") {
-    const points = "points" in event ? event.points : 1
+    const points = Number(event.metadata.points || 1)
     if (points === 3) {
       return "h-6 w-6 border-emerald-100/60 bg-emerald-100 shadow-[0_0_24px_rgba(167,243,208,0.52)]"
     }
@@ -131,62 +74,81 @@ function eventNodeClass(event: MemoryEvent) {
     return "h-2 w-2 border-zinc-100/25 bg-zinc-100/60 shadow-[0_0_10px_rgba(244,244,245,0.24)]"
   }
 
-  const type = event.type
-
-  if (type === "SNAPSHOT") {
+  if (event.type === "snapshot") {
     return "h-5 w-5 border-white/50 bg-zinc-100 shadow-[0_0_22px_rgba(244,244,245,0.48)]"
   }
 
-  if (type === "SYSTEM") {
+  if (event.type === "system_state" || event.type === "reconnect") {
     return "h-3 w-3 border-amber-100/35 bg-amber-100/80 shadow-[0_0_16px_rgba(253,230,138,0.28)]"
   }
 
   return "h-2.5 w-2.5 border-white/25 bg-zinc-100/90 shadow-[0_0_14px_rgba(244,244,245,0.32)]"
 }
 
+function readableEventLabel(event: TemporalEvent) {
+  if (event.type === "score") {
+    return `${event.team || "TEAM"} +${event.metadata.points || 0}`
+  }
+
+  if (event.type === "clock") return String(event.metadata.action || "CLOCK")
+  if (event.type === "system_state") return String(event.metadata.state || "STATE")
+  return String(event.metadata.label || event.type).toUpperCase()
+}
+
+function sessionIdFromClock(clock: number) {
+  return `axis-session-${Math.max(0, Math.floor(clock)).toString(36)}`
+}
+
 function loadStoredEvents(nowElapsed: number) {
   try {
     const storedEvents = window.localStorage.getItem(eventStorageKey)
-    const parsedEvents = storedEvents
-      ? (JSON.parse(storedEvents) as MemoryEvent[])
-      : []
+    const parsedEvents = storedEvents ? (JSON.parse(storedEvents) as unknown[]) : []
 
     if (!Array.isArray(parsedEvents)) return []
 
-    return parsedEvents
-      .filter(
-        (event) =>
-          typeof event.id === "string" &&
-          typeof event.elapsed === "number" &&
-            event.elapsed >= 0 &&
-            event.elapsed <= nowElapsed + 10 &&
-            typeof event.label === "string" &&
-            ["MARK", "SNAPSHOT", "SYSTEM", "score", "clock"].includes(event.type)
-      )
-      .slice(-48)
+    return parsedEvents.filter(
+      (event): event is TemporalEvent =>
+        isTemporalEvent(event) &&
+        event.sessionTime >= 0 &&
+        event.sessionTime <= nowElapsed + 10
+    )
   } catch {
     window.localStorage.removeItem(eventStorageKey)
     return []
   }
 }
 
-function archiveSession(session: LiveThreadSession) {
+function archiveSession(session: ArchiveMemory) {
   const storedArchive = window.localStorage.getItem(archiveStorageKey)
-  const parsedArchive = storedArchive
-    ? (JSON.parse(storedArchive) as LiveThreadSession[])
-    : []
+  const parsedArchive = storedArchive ? (JSON.parse(storedArchive) as ArchiveMemory[]) : []
   const archive = Array.isArray(parsedArchive) ? parsedArchive : []
 
-  window.localStorage.setItem(
-    archiveStorageKey,
-    JSON.stringify([session, ...archive].slice(0, 12))
-  )
+  window.localStorage.setItem(archiveStorageKey, JSON.stringify([session, ...archive].slice(0, 12)))
+}
+
+function toReplayEvent(event: TemporalEvent): TemporalReplayEvent {
+  return {
+    id: event.id,
+    type: event.type,
+    createdAt: event.createdAt,
+    sessionTime: event.sessionTime,
+    gameClock: event.gameClock,
+    period: event.period,
+    metadata: {
+      ...event.metadata,
+      team: event.team,
+      tier: event.tier,
+      source: event.source,
+      confidence: event.confidence,
+      clipWindow: event.clipWindow,
+    },
+  }
 }
 
 export function LiveMemoryStream() {
   const fallbackPlaybackId = process.env.NEXT_PUBLIC_MUX_PLAYBACK_ID || ""
   const [playbackId, setPlaybackId] = useState(fallbackPlaybackId)
-  const [status, setStatus] = useState<LiveStatus>("READY")
+  const [status, setStatus] = useState<OperationalSessionState>("READY")
   const [muxPlaying, setMuxPlaying] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [homeScore, setHomeScore] = useState(0)
@@ -194,10 +156,10 @@ export function LiveMemoryStream() {
   const [period] = useState(1)
   const [gameClockSeconds, setGameClockSeconds] = useState(12 * 60)
   const [clockRunning, setClockRunning] = useState(false)
-  const [events, setEvents] = useState<MemoryEvent[]>([])
+  const [events, setEvents] = useState<TemporalEvent[]>([])
   const [lastEventId, setLastEventId] = useState("")
   const [threadHydrated, setThreadHydrated] = useState(false)
-  const [archivedSession, setArchivedSession] = useState<LiveThreadSession | null>(null)
+  const [archivedSession, setArchivedSession] = useState<ArchiveMemory | null>(null)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -207,53 +169,62 @@ export function LiveMemoryStream() {
   const startedRef = useRef(false)
   const finalizingRef = useRef(false)
   const reconnectTimerRef = useRef<number | null>(null)
+  const recoveryTimerRef = useRef<number | null>(null)
   const elapsedRef = useRef(0)
   const clockStartedAtRef = useRef(0)
+  const gameClockSecondsRef = useRef(12 * 60)
   const eventSequenceRef = useRef(0)
-  const systemStatesRef = useRef<LiveThreadSession["systemStates"]>([])
+  const sessionRef = useRef<TemporalSession | null>(null)
+  const statusRef = useRef<OperationalSessionState>("READY")
+  const eventsRef = useRef<TemporalEvent[]>([])
 
   const railEnd = useMemo(() => Math.max(60, elapsed), [elapsed])
-  const markers = useMemo(
-    () => events.filter((event) => event.type === "MARK"),
-    [events]
-  )
+  const liveMemory = useMemo(() => {
+    const session = createTemporalSession({
+      id: "axis-session-pending",
+      createdAt: "1970-01-01T00:00:00.000Z",
+    })
+
+    return buildLiveMemory({
+      session: {
+        ...session,
+        duration: elapsed,
+      },
+      events,
+    })
+  }, [elapsed, events])
+  const markers = useMemo(() => events.filter((event) => event.type === "marker"), [events])
   const snapshots = useMemo(
-    () => events.filter((event) => event.type === "SNAPSHOT"),
+    () => events.filter((event) => event.type === "snapshot"),
     [events]
   )
   const scoringEvents = useMemo(
-    () => events.filter((event): event is ScoreEvent => event.type === "score"),
+    () => events.filter((event) => event.type === "score"),
     [events]
   )
-  const clockEvents = useMemo(
-    () => events.filter((event): event is ClockEvent => event.type === "clock"),
-    [events]
+  const replayEngine: TemporalReplayEngine = useMemo(
+    () =>
+      buildTemporalReplayEngine({
+        events: events.map(toReplayEvent),
+        duration: elapsed,
+      }),
+    [elapsed, events]
   )
-  const memoryDensity = useMemo(() => {
-    const buckets = Array.from({ length: 18 }, (_, index) => ({
-      id: `density-${index}`,
-      left: (index / 18) * 100,
-      width: 100 / 18,
-      value: 0,
-    }))
-
-    for (const event of events) {
-      const index = Math.min(
-        buckets.length - 1,
-        Math.max(0, Math.floor((event.elapsed / railEnd) * buckets.length))
-      )
-      const scoreWeight =
-        event.type === "score" && "points" in event ? event.points : eventWeight(event.type)
-      buckets[index].value += scoreWeight
-    }
-
-    return buckets
-  }, [events, railEnd])
+  const memoryDensity = useMemo(
+    () =>
+      liveMemory.densityMap.map((region) => ({
+        id: region.id,
+        left: Math.max(0, Math.min(100, (region.start / railEnd) * 100)),
+        width: Math.max(2, Math.min(100, ((region.end - region.start) / railEnd) * 100)),
+        value: region.weight,
+      })),
+    [liveMemory.densityMap, railEnd]
+  )
   const railEvents = useMemo(
     () =>
       events.map((event) => ({
         ...event,
-        position: Math.min(98, Math.max(2, (event.elapsed / railEnd) * 100)),
+        position: Math.min(98, Math.max(2, (event.sessionTime / railEnd) * 100)),
       })),
     [events, railEnd]
   )
@@ -261,92 +232,187 @@ export function LiveMemoryStream() {
     if (status === "LIVE") {
       return "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]"
     }
-    if (status === "RECONNECTING") {
+    if (status === "RECONNECTING" || status === "RECOVERING") {
       return "bg-amber-200/80 shadow-[0_0_22px_rgba(252,211,77,0.42)]"
     }
-    if (status === "ARCHIVED" || status === "SESSION STORED") {
+    if (status === "ARCHIVED") {
       return "bg-zinc-100 shadow-[0_0_14px_rgba(244,244,245,0.42)]"
+    }
+    if (status === "FAILED") {
+      return "bg-red-300/80 shadow-[0_0_18px_rgba(252,165,165,0.5)]"
     }
     return "bg-zinc-200/70 shadow-[0_0_16px_rgba(244,244,245,0.28)]"
   }, [status])
 
-  const setSystemStatus = useCallback((nextStatus: LiveStatus) => {
-    setStatus(nextStatus)
-    systemStatesRef.current = [
-      ...systemStatesRef.current,
-      {
-        state: nextStatus,
-        elapsed: elapsedRef.current,
-        at: new Date().toISOString(),
-      },
-    ].slice(-80)
+  const getSession = useCallback(() => {
+    if (sessionRef.current) return sessionRef.current
+
+    const createdAt = new Date().toISOString()
+    const session = createTemporalSession({
+      id: sessionIdFromClock(clockStartedAtRef.current || Date.parse(createdAt)),
+      createdAt,
+    })
+
+    sessionRef.current = session
+    return session
   }, [])
 
-  const createEventId = (prefix: string) => {
-    eventSequenceRef.current += 1
-    return `${prefix}-${Math.floor(elapsedRef.current * 1000).toString(36)}-${eventSequenceRef.current}`
-  }
-
-  const addMemoryEvent = (type: "MARK" | "SNAPSHOT" | "SYSTEM") => {
-    if (status === "FINALIZING" || status === "ARCHIVED" || status === "SESSION STORED") {
-      return
-    }
-
-    const event: MemoryEvent = {
-      id: createEventId(`memory-${type.toLowerCase()}`),
-      type,
-      elapsed: elapsedRef.current,
-      label: type,
-      createdAt: new Date().toISOString(),
-    }
-
-    setEvents((current) => [...current.slice(-47), event])
+  const appendEvent = useCallback((event: TemporalEvent) => {
+    setEvents((current) => {
+      const nextEvents = appendTemporalEvent(current, event)
+      eventsRef.current = nextEvents
+      return nextEvents
+    })
     setLastEventId(event.id)
+  }, [])
+
+  const nextOrder = useCallback(() => {
+    eventSequenceRef.current += 1
+    return eventSequenceRef.current
+  }, [])
+
+  const createEvent = useCallback(
+    ({
+      type,
+      team = null,
+      source = "operator",
+      metadata = {},
+      gameClock = formatGameClock(gameClockSeconds),
+      tier = "PRIMARY",
+    }: {
+      type: TemporalEventType
+      team?: "HOME" | "AWAY" | null
+      source?: "operator" | "system" | "transport" | "clock" | "future_inference"
+      metadata?: Record<string, unknown>
+      gameClock?: string
+      tier?: "PRIMARY" | "SECONDARY" | "TERTIARY"
+    }) =>
+      createTemporalEvent({
+        sessionId: getSession().id,
+        type,
+        tier,
+        order: nextOrder(),
+        createdAt: new Date().toISOString(),
+        sessionTime: elapsedRef.current,
+        gameClock,
+        period,
+        team,
+        source,
+        metadata,
+      }),
+    [gameClockSeconds, getSession, nextOrder, period]
+  )
+
+  const setSystemStatus = useCallback(
+    (
+      nextStatus: OperationalSessionState,
+      transportState?: TransportState,
+      metadata: Record<string, unknown> = {}
+    ) => {
+      const previousStatus = statusRef.current
+      const at = new Date().toISOString()
+      const session = getSession()
+
+      sessionRef.current = transitionTemporalSession({
+        session,
+        status: nextStatus,
+        at,
+        duration: elapsedRef.current,
+        transportState,
+        archiveState:
+          nextStatus === "FINALIZING"
+            ? "FINALIZING"
+            : nextStatus === "ARCHIVED"
+              ? "STORED"
+              : nextStatus === "FAILED"
+                ? "FAILED"
+                : undefined,
+      })
+      statusRef.current = nextStatus
+      setStatus(nextStatus)
+
+      if (previousStatus === nextStatus) return
+
+      appendEvent(
+        createTemporalEvent({
+          sessionId: session.id,
+          type: nextStatus === "RECONNECTING" ? "reconnect" : "system_state",
+          tier: "SECONDARY",
+          order: nextOrder(),
+          createdAt: at,
+          sessionTime: elapsedRef.current,
+          gameClock: formatGameClock(gameClockSecondsRef.current),
+          period,
+          team: null,
+          source: "system",
+          metadata: {
+            ...metadata,
+            state: nextStatus,
+            previousState: previousStatus,
+          },
+        })
+      )
+    },
+    [appendEvent, getSession, nextOrder, period]
+  )
+
+  const addMemoryEvent = (type: "marker" | "snapshot") => {
+    if (disabledStates.includes(status)) return
+
+    appendEvent(
+      createEvent({
+        type,
+        metadata: {
+          label: type === "marker" ? "MARK" : "SNAPSHOT",
+        },
+      })
+    )
   }
 
   const addScoreEvent = (team: "HOME" | "AWAY", points: 1 | 2 | 3) => {
-    if (status === "FINALIZING" || status === "ARCHIVED" || status === "SESSION STORED") {
-      return
-    }
+    if (disabledStates.includes(status)) return
 
-    const nextScoreEvent: ScoreEvent = {
-      id: createEventId(`score-${team.toLowerCase()}-${points}`),
-      type: "score",
-      team,
-      points,
-      gameClock: formatGameClock(gameClockSeconds),
-      period,
-      createdAt: new Date().toISOString(),
-      sessionTime: elapsedRef.current,
-      elapsed: elapsedRef.current,
-      label: `${team} +${points}`,
-    }
+    const nextHomeScore = team === "HOME" ? homeScore + points : homeScore
+    const nextAwayScore = team === "AWAY" ? awayScore + points : awayScore
 
     if (team === "HOME") {
-      setHomeScore((score) => score + points)
+      setHomeScore(nextHomeScore)
     } else {
-      setAwayScore((score) => score + points)
+      setAwayScore(nextAwayScore)
     }
 
-    setEvents((current) => [...current.slice(-47), nextScoreEvent])
-    setLastEventId(nextScoreEvent.id)
+    appendEvent(
+      createEvent({
+        type: "score",
+        team,
+        metadata: {
+          team,
+          points,
+          scoreAfter: {
+            home: nextHomeScore,
+            away: nextAwayScore,
+          },
+          scoreDifferential: nextHomeScore - nextAwayScore,
+          gameClock: formatGameClock(gameClockSecondsRef.current),
+          period,
+        },
+      })
+    )
   }
 
-  const addClockEvent = (action: ClockEvent["action"]) => {
-    const nextClockEvent: ClockEvent = {
-      id: createEventId(`clock-${action.toLowerCase()}`),
-      type: "clock",
-      action,
-      gameClock: formatGameClock(gameClockSeconds),
-      period,
-      createdAt: new Date().toISOString(),
-      sessionTime: elapsedRef.current,
-      elapsed: elapsedRef.current,
-      label: action,
-    }
-
-    setEvents((current) => [...current.slice(-47), nextClockEvent])
-    setLastEventId(nextClockEvent.id)
+  const addClockEvent = (action: "START" | "PAUSE" | "RESET", clockOverride?: string) => {
+    appendEvent(
+      createEvent({
+        type: "clock",
+        source: "clock",
+        gameClock: clockOverride || formatGameClock(gameClockSeconds),
+        metadata: {
+          action,
+          gameClock: clockOverride || formatGameClock(gameClockSeconds),
+          period,
+        },
+      })
+    )
   }
 
   const startGameClock = () => {
@@ -361,11 +427,12 @@ export function LiveMemoryStream() {
 
   const resetGameClock = () => {
     setClockRunning(false)
+    gameClockSecondsRef.current = 12 * 60
     setGameClockSeconds(12 * 60)
-    addClockEvent("RESET")
+    addClockEvent("RESET", "12:00")
   }
 
-  const replayEvent = (event: MemoryEvent) => {
+  const replayEvent = (event: TemporalEvent) => {
     const player = surfaceRef.current?.querySelector("mux-player") as
       | (HTMLElement & {
           currentTime?: number
@@ -375,7 +442,7 @@ export function LiveMemoryStream() {
 
     if (!player || typeof player.currentTime !== "number") return
 
-    const secondsBack = Math.max(0, elapsedRef.current - event.elapsed)
+    const secondsBack = Math.max(0, elapsedRef.current - event.sessionTime)
     player.currentTime = Math.max(0, player.currentTime - secondsBack)
     setLastEventId(event.id)
     const playResult = player.play?.()
@@ -393,7 +460,7 @@ export function LiveMemoryStream() {
     }
 
     reconnectTimerRef.current = window.setTimeout(() => {
-      if (!finalizingRef.current) setSystemStatus("RECONNECTING")
+      if (!finalizingRef.current) setSystemStatus("RECONNECTING", "INTERRUPTED")
     }, reconnectDebounceMs)
   }, [setSystemStatus])
 
@@ -403,19 +470,38 @@ export function LiveMemoryStream() {
       reconnectTimerRef.current = null
     }
 
-    if (!finalizingRef.current) setSystemStatus("LIVE")
+    if (recoveryTimerRef.current) {
+      window.clearTimeout(recoveryTimerRef.current)
+      recoveryTimerRef.current = null
+    }
+
+    if (finalizingRef.current) return
+
+    if (statusRef.current === "RECONNECTING") {
+      setSystemStatus("RECOVERING", "RECOVERING")
+      recoveryTimerRef.current = window.setTimeout(() => {
+        if (!finalizingRef.current) setSystemStatus("LIVE", "PUBLISHING")
+      }, 650)
+      return
+    }
+
+    setSystemStatus("LIVE", "PUBLISHING")
   }, [setSystemStatus])
 
   const finalizeThread = () => {
     if (finalizingRef.current) return
 
     finalizingRef.current = true
-    setSystemStatus("FINALIZING")
-    addMemoryEvent("SYSTEM")
+    setSystemStatus("FINALIZING", "CLOSED")
 
     if (reconnectTimerRef.current) {
       window.clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = null
+    }
+
+    if (recoveryTimerRef.current) {
+      window.clearTimeout(recoveryTimerRef.current)
+      recoveryTimerRef.current = null
     }
 
     const recorder = recorderRef.current
@@ -432,43 +518,50 @@ export function LiveMemoryStream() {
 
     const complete = () => {
       const endedAt = new Date().toISOString()
-      const eventTimeline = [...events, {
-        id: createEventId("memory-system"),
-        type: "SYSTEM" as const,
-        elapsed: elapsedRef.current,
-        label: "ARCHIVED",
+      const sessionEnd = createTemporalEvent({
+        sessionId: getSession().id,
+        type: "session_end",
+        tier: "PRIMARY",
+        order: nextOrder(),
         createdAt: endedAt,
-      }]
-      const session: LiveThreadSession = {
-        id: createEventId("session"),
-        createdAt: new Date(clockStartedAtRef.current).toISOString(),
-        endedAt,
+        sessionTime: elapsedRef.current,
+        gameClock: formatGameClock(gameClockSecondsRef.current),
+        period,
+        team: null,
+        source: "system",
+        metadata: {
+          state: "ARCHIVED",
+        },
+      })
+      const eventTimeline = appendTemporalEvent(eventsRef.current, sessionEnd)
+      const archivedTemporalSession = transitionTemporalSession({
+        session: getSession(),
+        status: "ARCHIVED",
+        at: endedAt,
         duration: elapsedRef.current,
-        videoAssetUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
-        replayAsset: {
-          playbackId: playbackId || null,
-          liveSessionId: liveSessionId || null,
-        },
-        markers: eventTimeline.filter((event) => event.type === "MARK"),
-        snapshots: eventTimeline.filter((event) => event.type === "SNAPSHOT"),
-        scoringEvents: eventTimeline.filter(
-          (event): event is ScoreEvent => event.type === "score"
-        ),
-        scoreHistory: scoringEvents,
-        clockHistory: clockEvents,
-        eventTimeline,
-        systemStates: systemStatesRef.current,
-        inference: {
-          pending: true,
-        },
-      }
+        transportState: "CLOSED",
+        archiveState: "STORED",
+      })
+      sessionRef.current = archivedTemporalSession
+      const archiveMemory = buildArchiveMemory({
+        session: archivedTemporalSession,
+        events: eventTimeline,
+        playbackId: playbackId || null,
+        liveSessionId: liveSessionId || null,
+      })
 
-      archiveSession(session)
-      setArchivedSession(session)
+      buildTemporalReplayEngine({
+        events: eventTimeline.map(toReplayEvent),
+        duration: elapsedRef.current,
+      })
+
+      archiveSession(archiveMemory)
+      setEvents(eventTimeline)
+      setArchivedSession(archiveMemory)
       window.localStorage.removeItem(eventStorageKey)
       window.sessionStorage.removeItem(sessionStorageKey)
-      setSystemStatus("ARCHIVED")
-      window.setTimeout(() => setSystemStatus("SESSION STORED"), 700)
+      statusRef.current = "ARCHIVED"
+      setStatus("ARCHIVED")
     }
 
     if (!liveSessionId) {
@@ -493,11 +586,16 @@ export function LiveMemoryStream() {
     const storedClockValue = storedClock ? Number(storedClock) : 0
     const safeClock =
       storedClockValue > 0 && storedClockValue <= now ? storedClockValue : now
+    const createdAt = new Date(safeClock).toISOString()
 
     clockStartedAtRef.current = safeClock
+    sessionRef.current = createTemporalSession({
+      id: sessionIdFromClock(safeClock),
+      createdAt,
+    })
     window.sessionStorage.setItem(sessionStorageKey, String(safeClock))
 
-    let storedEvents: MemoryEvent[] = []
+    let storedEvents: TemporalEvent[] = []
 
     try {
       storedEvents = loadStoredEvents((now - safeClock) / 1000)
@@ -505,14 +603,33 @@ export function LiveMemoryStream() {
       window.localStorage.removeItem(eventStorageKey)
     }
 
+    eventSequenceRef.current = storedEvents.reduce(
+      (highest, event) => Math.max(highest, event.order),
+      0
+    )
+    eventsRef.current = storedEvents
+
     const hydrationTimer = window.setTimeout(() => {
-      setEvents(storedEvents)
+      setEvents((current) => {
+        const nextEvents = storedEvents.reduce(
+          (timeline, event) => appendTemporalEvent(timeline, event),
+          current
+        )
+        eventsRef.current = nextEvents
+        return nextEvents
+      })
       setThreadHydrated(true)
     }, 0)
 
     const timer = window.setInterval(() => {
       const nextElapsed = (Date.now() - clockStartedAtRef.current) / 1000
       elapsedRef.current = nextElapsed
+      if (sessionRef.current) {
+        sessionRef.current = {
+          ...sessionRef.current,
+          duration: nextElapsed,
+        }
+      }
       setElapsed(nextElapsed)
     }, 1000)
 
@@ -523,9 +640,13 @@ export function LiveMemoryStream() {
   }, [])
 
   useEffect(() => {
+    eventsRef.current = events
+  }, [events])
+
+  useEffect(() => {
     if (!threadHydrated) return
 
-    window.localStorage.setItem(eventStorageKey, JSON.stringify(events.slice(-48)))
+    window.localStorage.setItem(eventStorageKey, JSON.stringify(events))
   }, [events, threadHydrated])
 
   useEffect(() => {
@@ -537,16 +658,23 @@ export function LiveMemoryStream() {
   }, [lastEventId])
 
   useEffect(() => {
+    gameClockSecondsRef.current = gameClockSeconds
+  }, [gameClockSeconds])
+
+  useEffect(() => {
     if (!clockRunning) return
 
     const timer = window.setInterval(() => {
       setGameClockSeconds((seconds) => {
         if (seconds <= 1) {
           window.clearInterval(timer)
+          gameClockSecondsRef.current = 0
           return 0
         }
 
-        return seconds - 1
+        const nextSeconds = seconds - 1
+        gameClockSecondsRef.current = nextSeconds
+        return nextSeconds
       })
     }, 1000)
 
@@ -592,10 +720,28 @@ export function LiveMemoryStream() {
 
     async function startLiveCamera() {
       startedRef.current = true
-      setSystemStatus("STARTING")
+      setSystemStatus("STARTING", "ACQUIRING")
+
+      appendEvent(
+        createTemporalEvent({
+          sessionId: getSession().id,
+          type: "session_start",
+          tier: "PRIMARY",
+          order: nextOrder(),
+          createdAt: new Date().toISOString(),
+          sessionTime: elapsedRef.current,
+          gameClock: formatGameClock(gameClockSecondsRef.current),
+          period,
+          team: null,
+          source: "system",
+          metadata: {
+            state: "STARTING",
+          },
+        })
+      )
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        setSystemStatus("OFFLINE")
+        setSystemStatus("FAILED", "FAILED")
         return
       }
 
@@ -636,7 +782,7 @@ export function LiveMemoryStream() {
       })
 
       if (!startResponse.ok) {
-        setSystemStatus("OFFLINE")
+        setSystemStatus("FAILED", "FAILED")
         return
       }
 
@@ -697,7 +843,7 @@ export function LiveMemoryStream() {
 
     startLiveCamera().catch(() => {
       if (localStreamRef.current) absorbInterruption()
-      else setSystemStatus("OFFLINE")
+      else setSystemStatus("FAILED", "FAILED")
     })
 
     const handleVisibility = () => {
@@ -729,6 +875,9 @@ export function LiveMemoryStream() {
       window.removeEventListener("pagehide", handlePageHide)
       window.removeEventListener("beforeunload", handleBeforeUnload)
 
+      if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current)
+      if (recoveryTimerRef.current) window.clearTimeout(recoveryTimerRef.current)
+
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
         recorderRef.current.stop()
       }
@@ -754,7 +903,16 @@ export function LiveMemoryStream() {
 
       liveSessionIdRef.current = ""
     }
-  }, [absorbInterruption, fallbackPlaybackId, stabilizeTransport, setSystemStatus])
+  }, [
+    absorbInterruption,
+    appendEvent,
+    fallbackPlaybackId,
+    getSession,
+    nextOrder,
+    period,
+    setSystemStatus,
+    stabilizeTransport,
+  ])
 
   return (
     <main className="h-dvh overflow-hidden bg-black text-zinc-100">
@@ -799,28 +957,28 @@ export function LiveMemoryStream() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.64),transparent_24%,transparent_68%,rgba(0,0,0,0.82))]" />
         <div
           className={`absolute inset-0 transition-opacity duration-1000 ${
-            status === "RECONNECTING"
+            status === "RECONNECTING" || status === "RECOVERING"
               ? "bg-[radial-gradient(circle_at_50%_55%,rgba(251,191,36,0.08),transparent_38%)] opacity-100"
               : "opacity-0"
           }`}
         />
 
-        {!playbackId && status === "OFFLINE" ? (
+        {!playbackId && status === "FAILED" ? (
           <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center">
             <p className="text-3xl font-black uppercase tracking-[-0.04em] text-zinc-100 sm:text-5xl">
-              OFFLINE
+              FAILED
             </p>
           </div>
         ) : null}
 
-        {(status === "ARCHIVED" || status === "SESSION STORED") && archivedSession ? (
+        {status === "ARCHIVED" && archivedSession ? (
           <div className="absolute inset-0 z-30 grid place-items-center bg-black/72 px-6 text-center backdrop-blur-sm">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
-                {status}
+                ARCHIVED
               </p>
               <p className="mt-5 text-5xl font-black uppercase tracking-[-0.06em] text-zinc-100 sm:text-7xl">
-                {formatClock(archivedSession.duration)}
+                {formatClock(archivedSession.session.duration)}
               </p>
               <div className="mt-6 flex justify-center gap-5 text-[11px] font-black uppercase tracking-[0.2em] text-zinc-400">
                 <span>{archivedSession.markers.length} markers</span>
@@ -901,11 +1059,7 @@ export function LiveMemoryStream() {
                   key={`home-${points}`}
                   type="button"
                   onClick={() => addScoreEvent("HOME", points as 1 | 2 | 3)}
-                  disabled={
-                    status === "FINALIZING" ||
-                    status === "ARCHIVED" ||
-                    status === "SESSION STORED"
-                  }
+                  disabled={disabledStates.includes(status)}
                   className="border-r border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-100 transition active:bg-white/10 disabled:opacity-40 last:border-r-0"
                 >
                   Home +{points}
@@ -916,11 +1070,7 @@ export function LiveMemoryStream() {
                   key={`away-${points}`}
                   type="button"
                   onClick={() => addScoreEvent("AWAY", points as 1 | 2 | 3)}
-                  disabled={
-                    status === "FINALIZING" ||
-                    status === "ARCHIVED" ||
-                    status === "SESSION STORED"
-                  }
+                  disabled={disabledStates.includes(status)}
                   className="border-r border-t border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-100 transition active:bg-white/10 disabled:opacity-40 last:border-r-0"
                 >
                   Away +{points}
@@ -931,24 +1081,16 @@ export function LiveMemoryStream() {
             <div className="mb-4 flex justify-center">
               <button
                 type="button"
-                onClick={() => addMemoryEvent("MARK")}
-                disabled={
-                  status === "FINALIZING" ||
-                  status === "ARCHIVED" ||
-                  status === "SESSION STORED"
-                }
+                onClick={() => addMemoryEvent("marker")}
+                disabled={disabledStates.includes(status)}
                 className="border border-white/10 bg-zinc-100/90 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
               >
                 Mark
               </button>
               <button
                 type="button"
-                onClick={() => addMemoryEvent("SNAPSHOT")}
-                disabled={
-                  status === "FINALIZING" ||
-                  status === "ARCHIVED" ||
-                  status === "SESSION STORED"
-                }
+                onClick={() => addMemoryEvent("snapshot")}
+                disabled={disabledStates.includes(status)}
                 className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
               >
                 Snapshot
@@ -956,11 +1098,7 @@ export function LiveMemoryStream() {
               <button
                 type="button"
                 onClick={finalizeThread}
-                disabled={
-                  status === "FINALIZING" ||
-                  status === "ARCHIVED" ||
-                  status === "SESSION STORED"
-                }
+                disabled={disabledStates.includes(status)}
                 className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
               >
                 End
@@ -997,7 +1135,7 @@ export function LiveMemoryStream() {
                   key={event.id}
                   type="button"
                   onClick={() => replayEvent(event)}
-                  aria-label={`${event.type} at ${formatClock(event.elapsed)}`}
+                  aria-label={`${readableEventLabel(event)} at ${formatClock(event.sessionTime)}`}
                   className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border transition ${
                     lastEventId === event.id ? "scale-125 opacity-100" : "opacity-80"
                   } ${eventNodeClass(event)}`}
@@ -1013,6 +1151,7 @@ export function LiveMemoryStream() {
               <span>{formatClock(elapsed)}</span>
               <span>
                 {scoringEvents.length} score / {markers.length} mark / {snapshots.length} snapshot
+                {replayEngine.clusters.length ? ` / ${replayEngine.clusters.length} cluster` : ""}
               </span>
             </div>
           </div>
