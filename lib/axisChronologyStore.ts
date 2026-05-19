@@ -17,6 +17,12 @@ export type AxisSyncTelemetry =
   | "RETRYING_CONNECT"
   | `SYNC_FAILED ${number}`
 export type EventPersistenceStatus = "PENDING" | "PERSISTED" | "FAILED" | "RETRYING"
+export type ExportStatus =
+  | "IDLE"
+  | "DOWNLOADING"
+  | "PREPARING_TRANSFER"
+  | "SUCCESS"
+  | "FAILED"
 export type SnapshotPersistenceStatus =
   | "PENDING"
   | "SYNCING"
@@ -68,6 +74,8 @@ type AxisChronologyState = {
   uiStatus: ChronologyUiStatus
   globalSyncStatus: GlobalSyncStatus
   syncTelemetry: AxisSyncTelemetry
+  exportStatus: ExportStatus
+  exportProgress: number
   duration: number
   events: AxisChronologyEvent[]
   pendingEvents: AxisChronologyEvent[]
@@ -98,6 +106,7 @@ type AxisChronologyState = {
   ) => AxisSnapshot | null
   processSnapshotQueue: () => Promise<void>
   retryFailedSnapshots: () => void
+  executeNativeExport: (sessionPlaybackUrl: string, sessionTitle: string) => Promise<void>
   processPersistenceQueue: () => Promise<void>
   retryFailedEvents: () => void
   completeInternalSeek: () => void
@@ -286,6 +295,65 @@ function mergeSnapshots(snapshots: AxisSnapshot[]) {
   return sortSnapshots([...byId.values()])
 }
 
+function safeExportTitle(value: string) {
+  const cleaned = value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90)
+
+  return cleaned || "axis-recording"
+}
+
+function fileExtensionForContentType(contentType: string) {
+  if (contentType.includes("webm")) return "webm"
+  if (contentType.includes("quicktime")) return "mov"
+  return "mp4"
+}
+
+async function fetchPlaybackBlob(
+  url: string,
+  onProgress: (progress: number) => void
+): Promise<Blob> {
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    throw new Error("EXPORT_FETCH_FAILED")
+  }
+
+  const contentLength = Number(response.headers.get("content-length")) || 0
+
+  if (!response.body || !contentLength) {
+    const blob = await response.blob()
+    onProgress(100)
+    return blob
+  }
+
+  const reader = response.body.getReader()
+  const chunks: ArrayBuffer[] = []
+  let received = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!value) continue
+
+    chunks.push(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength))
+    received += value.length
+    onProgress(Math.min(99, Math.round((received / contentLength) * 100)))
+  }
+
+  return new Blob(chunks, {
+    type: response.headers.get("content-type") || "video/mp4",
+  })
+}
+
+function scheduleObjectUrlCleanup(url: string) {
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 10000)
+}
+
 async function persistEvent(event: AxisChronologyEvent) {
   const { error } = await chronologySupabase().from("events").insert({
     id: event.id,
@@ -346,6 +414,8 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
   uiStatus: "idle",
   globalSyncStatus: "SYNCED",
   syncTelemetry: "SYSTEM_SYNCED",
+  exportStatus: "IDLE",
+  exportProgress: 0,
   duration: 0,
   events: [],
   pendingEvents: [],
@@ -619,6 +689,83 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
     queueMicrotask(() => {
       void get().processSnapshotQueue()
     })
+  },
+  executeNativeExport: async (sessionPlaybackUrl, sessionTitle) => {
+    if (!sessionPlaybackUrl || typeof window === "undefined") {
+      set({
+        exportStatus: "FAILED",
+        exportProgress: 0,
+      })
+      return
+    }
+
+    set({
+      exportStatus: "DOWNLOADING",
+      exportProgress: 0,
+    })
+
+    try {
+      const blob = await fetchPlaybackBlob(sessionPlaybackUrl, (progress) => {
+        set({
+          exportProgress: progress,
+        })
+      })
+
+      if (!blob.size) {
+        throw new Error("EXPORT_FILE_EMPTY")
+      }
+
+      set({
+        exportStatus: "PREPARING_TRANSFER",
+        exportProgress: 100,
+      })
+
+      const contentType = blob.type || "video/mp4"
+      const fileName = `${safeExportTitle(sessionTitle)}.${fileExtensionForContentType(contentType)}`
+      const file =
+        typeof File !== "undefined"
+          ? new File([blob], fileName, {
+              type: contentType,
+              lastModified: Date.now(),
+            })
+          : null
+
+      if (file && navigator.share) {
+        const sharePayload = {
+          files: [file],
+          title: sessionTitle || "Axis recording",
+        }
+
+        if (!navigator.canShare || navigator.canShare(sharePayload)) {
+          await navigator.share(sharePayload)
+          set({
+            exportStatus: "SUCCESS",
+            exportProgress: 100,
+          })
+          return
+        }
+      }
+
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = objectUrl
+      anchor.download = fileName
+      anchor.rel = "noopener"
+      anchor.style.display = "none"
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      scheduleObjectUrlCleanup(objectUrl)
+
+      set({
+        exportStatus: "SUCCESS",
+        exportProgress: 100,
+      })
+    } catch {
+      set({
+        exportStatus: "FAILED",
+      })
+    }
   },
   setUiStatus: (status) => {
     set({

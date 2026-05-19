@@ -344,6 +344,51 @@ function EventFeed({
   )
 }
 
+function exportLabel(status: string) {
+  if (status === "DOWNLOADING") return "DOWNLOADING"
+  if (status === "PREPARING_TRANSFER") return "PREPARING TRANSFER"
+  if (status === "SUCCESS") return "FILE READY"
+  if (status === "FAILED") return "TRANSFER FAILED"
+  return "SAVE TO DEVICE"
+}
+
+function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
+  const { exportStatus, exportProgress, executeNativeExport } = useAxisChronologyStore(
+    useShallow((state) => ({
+      exportStatus: state.exportStatus,
+      exportProgress: state.exportProgress,
+      executeNativeExport: state.executeNativeExport,
+    }))
+  )
+  const isWorking = exportStatus === "DOWNLOADING" || exportStatus === "PREPARING_TRANSFER"
+  const canExport = Boolean(session.playback_url) && !isWorking
+
+  if (!session.playback_url) return null
+
+  return (
+    <div className="flex flex-col items-start gap-2 md:items-end">
+      <button
+        type="button"
+        disabled={!canExport}
+        onClick={() => {
+          if (!session.playback_url) return
+          void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
+        }}
+        className="border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
+      >
+        {exportLabel(exportStatus)}
+      </button>
+      {exportStatus !== "IDLE" ? (
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-600">
+          {exportStatus === "DOWNLOADING"
+            ? `SYS_TRANSFER_ACTIVE ${exportProgress}%`
+            : exportLabel(exportStatus)}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function SnapshotStrip() {
   const { snapshots, failedSnapshotCount, retryFailedSnapshots, requestEventJump, events } =
     useAxisChronologyStore(
@@ -488,7 +533,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           </p>
         </header>
 
-        <div className="grid gap-3 border-b border-white/10 py-4 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
+        <div className="grid gap-3 border-b border-white/10 py-4 md:grid-cols-[1fr_auto_auto_auto_auto] md:items-end">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
               Session
@@ -521,6 +566,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               {session.status}
             </p>
           </div>
+          <DeviceExportControl session={session} />
         </div>
 
         <div className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
