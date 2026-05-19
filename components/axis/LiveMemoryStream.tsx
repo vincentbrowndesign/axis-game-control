@@ -29,6 +29,8 @@ type WorkingSession = {
 
 type LiveViewMode = "RECON" | "MOTION_ECHO"
 
+type AttentionState = "IDLE" | "WATCHING" | "TRACKING" | "LOCKING" | "OVERLOADED"
+
 type MotionLock = {
   id: string
   x: number
@@ -38,6 +40,12 @@ type MotionLock = {
   energy: number
   previousX: number
   previousY: number
+  velocityX: number
+  velocityY: number
+}
+
+type ResidueLock = MotionLock & {
+  life: number
 }
 
 type RoboflowConfig = {
@@ -144,6 +152,8 @@ function normalizeRoboflowPrediction(
     energy,
     previousX: x,
     previousY: y,
+    velocityX: 0,
+    velocityY: 0,
   }
 }
 
@@ -210,16 +220,24 @@ function LiveMachinePerceptionOverlay({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const previousFrameRef = useRef<Uint8ClampedArray | null>(null)
   const smoothedLocksRef = useRef<MotionLock[]>([])
+  const residueLocksRef = useRef<ResidueLock[]>([])
   const roboflowLocksRef = useRef<MotionLock[]>([])
   const roboflowSeenAtRef = useRef(0)
   const roboflowRequestRef = useRef(false)
+  const attentionStateRef = useRef<AttentionState>("IDLE")
+  const pressureRef = useRef(0)
+  const lastEnergyRef = useRef(0)
 
   useEffect(() => {
     if (!enabled || !active || typeof document === "undefined") {
       previousFrameRef.current = null
       smoothedLocksRef.current = []
+      residueLocksRef.current = []
       roboflowLocksRef.current = []
       roboflowSeenAtRef.current = 0
+      attentionStateRef.current = "IDLE"
+      pressureRef.current = 0
+      lastEnergyRef.current = 0
       return
     }
 
@@ -273,13 +291,49 @@ function LiveMachinePerceptionOverlay({
 
       const { context, width, height } = output
       const locks = smoothedLocksRef.current
+      const residues = residueLocksRef.current
+      const attentionState = attentionStateRef.current
+      const pressure = pressureRef.current
       context.clearRect(0, 0, width, height)
-      if (!locks.length) return
+      if (!locks.length && !residues.length && pressure < 0.02) return
 
-      const peakEnergy = Math.max(...locks.map((lock) => lock.energy))
+      const peakEnergy = locks.length ? Math.max(...locks.map((lock) => lock.energy)) : 0
+      const overloaded = attentionState === "OVERLOADED"
+      const locking = attentionState === "LOCKING"
+      const watching = attentionState === "WATCHING"
       context.save()
       context.globalCompositeOperation = "screen"
-      context.globalAlpha = 0.48 + peakEnergy * 0.24
+      context.globalAlpha =
+        attentionState === "IDLE"
+          ? 0.18 + pressure * 0.18
+          : 0.38 + peakEnergy * 0.18 + pressure * 0.22
+
+      residues.forEach((residue, index) => {
+        const x = (residue.x / 100) * width
+        const y = (residue.y / 100) * height
+        const boxWidth = (residue.width / 100) * width
+        const boxHeight = (residue.height / 100) * height
+        const centerX = x + boxWidth / 2
+        const centerY = y + boxHeight / 2
+        const dragX = residue.velocityX * width * 0.018
+        const dragY = residue.velocityY * height * 0.018
+        const alpha = residue.life * (0.04 + pressure * 0.14 + residue.energy * 0.05)
+
+        context.strokeStyle = `rgba(242,241,237,${alpha})`
+        context.lineWidth = 0.45 + residue.energy * 0.45
+        context.strokeRect(
+          x - dragX * (1 + index * 0.02),
+          y - dragY * (1 + index * 0.02),
+          boxWidth + residue.life * 14,
+          boxHeight + residue.life * 10
+        )
+
+        context.strokeStyle = `rgba(215,192,138,${alpha * 0.42})`
+        context.beginPath()
+        context.moveTo(centerX - dragX * 2.6, centerY - dragY * 2.6)
+        context.lineTo(centerX + dragX * 0.4, centerY + dragY * 0.4)
+        context.stroke()
+      })
 
       locks.forEach((lock, index) => {
         const next = locks[(index + 1) % locks.length] || lock
@@ -295,66 +349,80 @@ function LiveMachinePerceptionOverlay({
         const previousCenterY = previousY + boxHeight / 2
         const nextCenterX = ((next.x + next.width / 2) / 100) * width
         const nextCenterY = ((next.y + next.height / 2) / 100) * height
+        const velocity = Math.min(
+          1,
+          Math.sqrt(lock.velocityX * lock.velocityX + lock.velocityY * lock.velocityY) / 12
+        )
+        const jitter =
+          overloaded
+            ? Math.sin(timestamp * 0.011 + index * 4.7) * (3 + pressure * 8)
+            : Math.sin(timestamp * 0.0014 + index * 1.6) * (watching ? 1.8 : 0.55)
+        const sharpness = locking ? 1.25 : attentionState === "TRACKING" ? 1 : watching ? 0.62 : 0.36
 
-        context.strokeStyle = `rgba(242,241,237,${0.12 + lock.energy * 0.3})`
-        context.lineWidth = 0.8 + lock.energy * 0.8
+        context.strokeStyle = `rgba(242,241,237,${0.08 + lock.energy * 0.22 + pressure * 0.18})`
+        context.lineWidth = 0.55 + lock.energy * 0.52 + sharpness * 0.34
         context.beginPath()
         context.moveTo(previousCenterX, previousCenterY)
         context.quadraticCurveTo(
           (centerX + nextCenterX) / 2,
-          centerY - 12 - lock.energy * 20,
+          centerY - 9 - pressure * 30 + jitter,
           nextCenterX,
           nextCenterY
         )
         context.stroke()
 
-        ;[1, 2, 3].forEach((step) => {
+        ;[1, 2, 3, 4].forEach((step) => {
           context.strokeStyle = `rgba(242,241,237,${Math.max(
             0,
-            lock.energy * 0.12 - step * 0.025
+            lock.energy * (0.07 + pressure * 0.13) - step * (overloaded ? 0.018 : 0.027)
           )})`
-          context.lineWidth = 0.55
+          context.lineWidth = overloaded ? 0.42 : 0.5
           context.strokeRect(
-            previousX - step * 7,
-            previousY + step * 3,
-            boxWidth + step * 12,
-            boxHeight + step * 9
+            previousX - step * (5 + velocity * 8) + jitter * 0.3,
+            previousY + step * (2 + velocity * 4) - jitter * 0.2,
+            boxWidth + step * (7 + pressure * 16),
+            boxHeight + step * (6 + pressure * 12)
           )
         })
 
-        context.strokeStyle = `rgba(242,241,237,${0.2 + lock.energy * 0.44})`
-        context.lineWidth = 0.7 + lock.energy * 0.45
-        context.strokeRect(x, y, boxWidth, boxHeight)
+        context.strokeStyle = `rgba(242,241,237,${0.14 + lock.energy * 0.34 + pressure * 0.2})`
+        context.lineWidth = 0.55 + lock.energy * 0.3 + sharpness * 0.34
+        context.strokeRect(x + jitter * 0.15, y - jitter * 0.12, boxWidth, boxHeight)
 
-        context.strokeStyle = `rgba(185,215,191,${lock.energy * 0.2})`
+        context.strokeStyle = `rgba(185,215,191,${lock.energy * (0.08 + pressure * 0.22)})`
         context.lineWidth = 0.55
-        context.strokeRect(x - 4, y - 4, boxWidth + 8, boxHeight + 8)
+        context.strokeRect(
+          x - 3 - sharpness * 2,
+          y - 3 - sharpness * 2,
+          boxWidth + 6 + sharpness * 4,
+          boxHeight + 6 + sharpness * 4
+        )
 
-        if (lock.energy > 0.48) {
+        if (lock.energy > 0.42 || pressure > 0.46) {
           const gradient = context.createRadialGradient(
             centerX,
             centerY,
             0,
             centerX,
             centerY,
-            18 + lock.energy * 36
+            18 + lock.energy * 34 + pressure * 36
           )
-          gradient.addColorStop(0, `rgba(215,192,138,${lock.energy * 0.18})`)
+          gradient.addColorStop(0, `rgba(215,192,138,${lock.energy * 0.1 + pressure * 0.15})`)
           gradient.addColorStop(0.45, "rgba(242,241,237,0.035)")
           gradient.addColorStop(1, "rgba(242,241,237,0)")
           context.fillStyle = gradient
           context.beginPath()
-          context.arc(centerX, centerY, 18 + lock.energy * 36, 0, Math.PI * 2)
+          context.arc(centerX, centerY, 18 + lock.energy * 34 + pressure * 36, 0, Math.PI * 2)
           context.fill()
         }
       })
 
       const drift = Math.sin(timestamp * 0.0012) * 0.35
-      context.globalAlpha = peakEnergy * 0.14
+      context.globalAlpha = pressure * (overloaded ? 0.2 : 0.12)
       context.strokeStyle = "rgba(242,241,237,0.24)"
-      context.lineWidth = 1
+      context.lineWidth = locking ? 1.25 : 0.8
       context.beginPath()
-      context.moveTo(0, height * (0.5 + drift * 0.02))
+      context.moveTo(0, height * (0.5 + drift * 0.02 + (overloaded ? Math.sin(timestamp * 0.01) * 0.008 : 0)))
       context.lineTo(width, height * (0.5 - drift * 0.02))
       context.stroke()
       context.restore()
@@ -452,6 +520,8 @@ function LiveMachinePerceptionOverlay({
             energy: focus,
             previousX: (column / columns) * 100 + 1.8,
             previousY: (row / rows) * 100 + 2.2,
+            velocityX: 0,
+            velocityY: 0,
           })
         }
       }
@@ -459,22 +529,65 @@ function LiveMachinePerceptionOverlay({
       const strongest = regions.sort((a, b) => b.energy - a.energy).slice(0, 4)
       const inferenceLocks =
         timestamp - roboflowSeenAtRef.current < 1400 ? roboflowLocksRef.current : []
+      const strongestEnergy = strongest.length
+        ? strongest.reduce((total, lock) => total + lock.energy, 0) / strongest.length
+        : 0
+      const inferenceEnergy = inferenceLocks.length
+        ? inferenceLocks.reduce((total, lock) => total + lock.energy, 0) / inferenceLocks.length
+        : 0
+      const rawEnergy = Math.max(strongestEnergy, inferenceEnergy)
+      const acceleration = Math.abs(rawEnergy - lastEnergyRef.current)
+      lastEnergyRef.current = rawEnergy
+      const density = clamp01((strongest.length + inferenceLocks.length * 0.8) / 5)
+      const pressureTarget = clamp01(rawEnergy * 0.58 + acceleration * 0.62 + density * 0.24)
+      pressureRef.current = clamp01(pressureRef.current * 0.82 + pressureTarget * 0.18)
+      const overload = acceleration > 0.42 || (density > 0.88 && pressureRef.current > 0.62)
+
+      if (overload) {
+        attentionStateRef.current = "OVERLOADED"
+      } else if (pressureRef.current > 0.7) {
+        attentionStateRef.current = "LOCKING"
+      } else if (pressureRef.current > 0.34) {
+        attentionStateRef.current = "TRACKING"
+      } else if (pressureRef.current > 0.1 || rawEnergy > 0.12) {
+        attentionStateRef.current = "WATCHING"
+      } else {
+        attentionStateRef.current = "IDLE"
+      }
 
       if (!strongest.length && !inferenceLocks.length) {
+        pressureRef.current = pressureRef.current * 0.9
+        attentionStateRef.current =
+          pressureRef.current > 0.26 ? "WATCHING" : pressureRef.current > 0.06 ? "IDLE" : "IDLE"
         const fading = smoothedLocksRef.current
           .map((lock) => ({
             ...lock,
             previousX: lock.x,
             previousY: lock.y,
-            x: lock.x + Math.sin(timestamp * 0.0008 + lock.energy * 4) * 0.28,
-            y: lock.y + Math.cos(timestamp * 0.0007 + lock.energy * 3) * 0.22,
-            energy: lock.energy * 0.64,
-            width: lock.width + 0.5,
-            height: lock.height + 0.5,
+            x: lock.x + Math.sin(timestamp * 0.0008 + lock.energy * 4) * 0.2,
+            y: lock.y + Math.cos(timestamp * 0.0007 + lock.energy * 3) * 0.18,
+            energy: lock.energy * 0.76,
+            width: lock.width + 0.32,
+            height: lock.height + 0.32,
+            velocityX: lock.velocityX * 0.62,
+            velocityY: lock.velocityY * 0.62,
           }))
           .filter((lock) => lock.energy > 0.08)
 
         smoothedLocksRef.current = fading
+        residueLocksRef.current = [
+          ...fading.map((lock) => ({
+            ...lock,
+            life: clamp01(lock.energy * 0.65),
+          })),
+          ...residueLocksRef.current.map((lock) => ({
+            ...lock,
+            life: lock.life * 0.84,
+            energy: lock.energy * 0.92,
+          })),
+        ]
+          .filter((lock) => lock.life > 0.03)
+          .slice(0, 42)
         return
       }
 
@@ -491,32 +604,83 @@ function LiveMachinePerceptionOverlay({
           })
         : strongest
 
+      const attentionState = attentionStateRef.current
+      const pressure = pressureRef.current
+      const inertia =
+        attentionState === "LOCKING"
+          ? 0.52
+          : attentionState === "TRACKING"
+            ? 0.34
+            : attentionState === "WATCHING"
+              ? 0.22
+              : attentionState === "OVERLOADED"
+                ? 0.18
+                : 0.12
+      const looseness =
+        attentionState === "LOCKING"
+          ? 0.12
+          : attentionState === "TRACKING"
+            ? 0.26
+            : attentionState === "OVERLOADED"
+              ? 1.1
+              : 0.58
+
       const nextLocks = sourceLocks.slice(0, 5).map((region, index) => {
         const previousLock = smoothedLocksRef.current[index]
-        const driftX = Math.sin(timestamp * 0.001 + index * 1.9) * (0.18 + (1 - region.energy) * 0.45)
-        const driftY = Math.cos(timestamp * 0.0011 + index * 1.4) * (0.14 + (1 - region.energy) * 0.38)
+        const overloadScatter =
+          attentionState === "OVERLOADED"
+            ? Math.sin(timestamp * 0.012 + index * 3.3) * (1.4 + pressure * 3.4)
+            : 0
+        const driftX =
+          Math.sin(timestamp * 0.001 + index * 1.9) * (0.12 + looseness * 0.62) +
+          overloadScatter
+        const driftY =
+          Math.cos(timestamp * 0.0011 + index * 1.4) * (0.1 + looseness * 0.54) -
+          overloadScatter * 0.55
 
         if (!previousLock) {
           return {
             ...region,
             x: region.x + driftX,
             y: region.y + driftY,
+            velocityX: 0,
+            velocityY: 0,
           }
         }
+
+        const nextX = previousLock.x * (1 - inertia) + region.x * inertia + driftX
+        const nextY = previousLock.y * (1 - inertia) + region.y * inertia + driftY
+        const velocityX = nextX - previousLock.x
+        const velocityY = nextY - previousLock.y
 
         return {
           ...region,
           previousX: previousLock.x,
           previousY: previousLock.y,
-          x: previousLock.x * 0.66 + region.x * 0.34 + driftX,
-          y: previousLock.y * 0.66 + region.y * 0.34 + driftY,
-          width: previousLock.width * 0.5 + region.width * 0.5,
-          height: previousLock.height * 0.5 + region.height * 0.5,
-          energy: previousLock.energy * 0.42 + region.energy * 0.58,
+          x: nextX,
+          y: nextY,
+          width: previousLock.width * (1 - inertia) + region.width * inertia,
+          height: previousLock.height * (1 - inertia) + region.height * inertia,
+          energy: clamp01(previousLock.energy * 0.48 + region.energy * 0.52 + pressure * 0.16),
+          velocityX,
+          velocityY,
         }
       })
 
       smoothedLocksRef.current = nextLocks
+      residueLocksRef.current = [
+        ...nextLocks.map((lock) => ({
+          ...lock,
+          life: clamp01(0.18 + lock.energy * 0.7 + pressure * 0.35),
+        })),
+        ...residueLocksRef.current.map((lock) => ({
+          ...lock,
+          life: lock.life * (attentionState === "LOCKING" ? 0.91 : 0.85),
+          energy: lock.energy * 0.94,
+        })),
+      ]
+        .filter((lock) => lock.life > 0.035)
+        .slice(0, attentionState === "OVERLOADED" ? 56 : 42)
     }
 
     frameId = window.requestAnimationFrame(sample)
