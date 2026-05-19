@@ -8,11 +8,6 @@ import {
   type TimelineAnchor,
   useAxisChronologyStore,
 } from "@/lib/axisChronologyStore"
-import {
-  buildSnapshotSignalInput,
-  exportSnapshotSignal,
-  type SignalExportStatus,
-} from "@/lib/signalExport"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -421,32 +416,7 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
   )
 }
 
-function signalStatusLabel(status: SignalExportStatus) {
-  if (status === "DOWNLOADING") return "SOURCE"
-  if (status === "RENDERING") return "RENDER"
-  if (status === "PREPARING_TRANSFER") return "TRANSFER"
-  if (status === "SUCCESS") return "READY"
-  if (status === "FAILED") return "HOLD"
-  return "SIGNAL"
-}
-
-function densityNearSnapshot(
-  events: TemporalEventRecord[],
-  snapshot: AxisSnapshot,
-  duration: number
-) {
-  const anchor = Number(snapshot.session_time) || 0
-  const windowSize = Math.max(3, Math.min(8, Math.max(1, duration) * 0.08))
-  const nearbyCount = events.filter(
-    (event) => Math.abs(Number(event.session_time) - anchor) <= windowSize
-  ).length
-
-  return Math.min(1, nearbyCount / 6)
-}
-
-function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
-  const [signalStatus, setSignalStatus] = useState<SignalExportStatus>("IDLE")
-  const [activeSignalSnapshotId, setActiveSignalSnapshotId] = useState<string | null>(null)
+function SnapshotStrip() {
   const { snapshots, requestEventJump, events, updateSnapshotAnnotation } =
     useAxisChronologyStore(
       useShallow((state) => ({
@@ -458,39 +428,6 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
     )
 
   if (!snapshots.length) return null
-
-  const exportSignal = async (snapshot: AxisSnapshot) => {
-    if (!session.playback_url || activeSignalSnapshotId) return
-
-    setActiveSignalSnapshotId(snapshot.id)
-    setSignalStatus("DOWNLOADING")
-
-    try {
-      const nodeId = compactNodeId(session.id)
-      await exportSnapshotSignal({
-        playbackUrl: session.playback_url,
-        signal: buildSnapshotSignalInput({
-          sessionId: session.id,
-          snapshot,
-          nodeId,
-          duration: Number(session.duration_seconds) || 0,
-          kineticDensity: densityNearSnapshot(events, snapshot, Number(session.duration_seconds) || 0),
-          acousticPeak: 0,
-        }),
-        title: `axis-signal-${nodeId}-${formatPreciseClock(
-          snapshot.session_time
-        )}`,
-        onStatus: setSignalStatus,
-      })
-    } catch {
-      setSignalStatus("FAILED")
-    } finally {
-      window.setTimeout(() => {
-        setActiveSignalSnapshotId(null)
-        setSignalStatus("IDLE")
-      }, 1500)
-    }
-  }
 
   const jumpToSnapshot = (snapshot: AxisSnapshot) => {
     const snapshotEvent = events.find(
@@ -547,20 +484,6 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
                   aria-label={`Snapshot note at ${formatClock(snapshot.session_time)}`}
                   className="axis-mono axis-optical-transition mt-2 w-full border-0 border-b border-white/10 bg-transparent px-0 py-1 text-[11px] font-semibold lowercase text-zinc-200 outline-none transition placeholder:text-zinc-700 focus:border-[#d7c08a]/60"
                 />
-                {session.playback_url ? (
-                  <button
-                    type="button"
-                    disabled={Boolean(activeSignalSnapshotId)}
-                    onClick={() => {
-                      void exportSignal(snapshot)
-                    }}
-                    className="axis-mono axis-optical-transition mt-3 w-full border border-white/10 px-2 py-2 text-center text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-500 transition hover:border-[#d7c08a]/40 hover:text-zinc-200 disabled:cursor-wait disabled:text-zinc-700"
-                  >
-                    {activeSignalSnapshotId === snapshot.id
-                      ? signalStatusLabel(signalStatus)
-                      : "SIGNAL"}
-                  </button>
-                ) : null}
               </div>
             </div>
           )
@@ -664,7 +587,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               setInspectionDepth={setInspectionDepth}
             />
             <EventRail inspectionDepth={inspectionDepth} />
-            <SnapshotStrip session={session} />
+            <SnapshotStrip />
           </section>
         </div>
       </section>

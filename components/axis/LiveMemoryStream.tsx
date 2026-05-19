@@ -40,6 +40,20 @@ type MotionLock = {
   previousY: number
 }
 
+type RoboflowConfig = {
+  apiKey: string
+  model: string
+  version: string
+}
+
+type RoboflowPrediction = {
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  confidence?: number
+}
+
 const recorderTypes = [
   "video/mp4;codecs=h264,mp4a.40.2",
   "video/mp4",
@@ -87,6 +101,95 @@ function clamp01(value: number) {
   return Math.min(1, Math.max(0, value))
 }
 
+function getRoboflowConfig(): RoboflowConfig | null {
+  const apiKey = process.env.NEXT_PUBLIC_ROBOFLOW_API_KEY
+  const model = process.env.NEXT_PUBLIC_ROBOFLOW_MODEL
+  const version = process.env.NEXT_PUBLIC_ROBOFLOW_VERSION
+
+  if (!apiKey || !model || !version) return null
+
+  return {
+    apiKey,
+    model,
+    version,
+  }
+}
+
+function normalizeRoboflowPrediction(
+  prediction: RoboflowPrediction,
+  canvasWidth: number,
+  canvasHeight: number,
+  index: number
+): MotionLock | null {
+  const width = Number(prediction.width) || 0
+  const height = Number(prediction.height) || 0
+  const centerX = Number(prediction.x) || 0
+  const centerY = Number(prediction.y) || 0
+
+  if (width <= 0 || height <= 0 || canvasWidth <= 0 || canvasHeight <= 0) return null
+
+  const x = clamp01((centerX - width / 2) / canvasWidth) * 100
+  const y = clamp01((centerY - height / 2) / canvasHeight) * 100
+  const normalizedWidth = clamp01(width / canvasWidth) * 100
+  const normalizedHeight = clamp01(height / canvasHeight) * 100
+  const confidence = clamp01(Number(prediction.confidence) || 0.42)
+  const energy = clamp01(0.2 + confidence * 0.72)
+
+  return {
+    id: `rf-${index}`,
+    x,
+    y,
+    width: Math.max(5, normalizedWidth),
+    height: Math.max(7, normalizedHeight),
+    energy,
+    previousX: x,
+    previousY: y,
+  }
+}
+
+async function inferRoboflowLocks({
+  config,
+  canvas,
+}: {
+  config: RoboflowConfig
+  canvas: HTMLCanvasElement
+}) {
+  const encoded = canvas.toDataURL("image/jpeg", 0.52).split(",")[1]
+  if (!encoded) return []
+
+  const response = await fetch(
+    `https://detect.roboflow.com/${encodeURIComponent(config.model)}/${encodeURIComponent(
+      config.version
+    )}?api_key=${encodeURIComponent(config.apiKey)}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: encoded,
+    }
+  )
+
+  if (!response.ok) return []
+
+  const payload = (await response.json().catch(() => null)) as {
+    predictions?: RoboflowPrediction[]
+  } | null
+
+  return (payload?.predictions || [])
+    .slice(0, 6)
+    .flatMap((prediction, index) => {
+      const lock = normalizeRoboflowPrediction(
+        prediction,
+        canvas.width,
+        canvas.height,
+        index
+      )
+
+      return lock ? [lock] : []
+    })
+}
+
 function createId(prefix = "axis") {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID()
@@ -107,19 +210,26 @@ function LiveMachinePerceptionOverlay({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const previousFrameRef = useRef<Uint8ClampedArray | null>(null)
   const smoothedLocksRef = useRef<MotionLock[]>([])
+  const roboflowLocksRef = useRef<MotionLock[]>([])
+  const roboflowSeenAtRef = useRef(0)
+  const roboflowRequestRef = useRef(false)
 
   useEffect(() => {
     if (!enabled || !active || typeof document === "undefined") {
       previousFrameRef.current = null
       smoothedLocksRef.current = []
+      roboflowLocksRef.current = []
+      roboflowSeenAtRef.current = 0
       return
     }
 
     const overlayCanvas = canvasRef.current
     if (!overlayCanvas) return
 
+    const roboflowConfig = getRoboflowConfig()
     let frameId = 0
     let lastSampleAt = 0
+    let lastRoboflowAt = 0
     let disposed = false
     const sampleWidth = 96
     const sampleHeight = 54
@@ -129,6 +239,10 @@ function LiveMachinePerceptionOverlay({
     const sampleContext = sampleCanvas.getContext("2d", {
       willReadFrequently: true,
     })
+    const inferenceCanvas = document.createElement("canvas")
+    inferenceCanvas.width = 416
+    inferenceCanvas.height = 234
+    const inferenceContext = inferenceCanvas.getContext("2d")
 
     const syncCanvasSize = () => {
       const bounds = overlayCanvas.getBoundingClientRect()
@@ -246,6 +360,35 @@ function LiveMachinePerceptionOverlay({
       context.restore()
     }
 
+    const requestRoboflowLocks = (video: HTMLVideoElement, timestamp: number) => {
+      if (!roboflowConfig || !inferenceContext || roboflowRequestRef.current) return
+      if (timestamp - lastRoboflowAt < 720) return
+
+      lastRoboflowAt = timestamp
+      roboflowRequestRef.current = true
+
+      try {
+        inferenceContext.drawImage(video, 0, 0, inferenceCanvas.width, inferenceCanvas.height)
+      } catch {
+        roboflowRequestRef.current = false
+        return
+      }
+
+      inferRoboflowLocks({
+        config: roboflowConfig,
+        canvas: inferenceCanvas,
+      })
+        .then((locks) => {
+          if (disposed) return
+          roboflowLocksRef.current = locks
+          roboflowSeenAtRef.current = locks.length ? timestamp : 0
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          roboflowRequestRef.current = false
+        })
+    }
+
     const sample = (timestamp: number) => {
       if (disposed) return
       frameId = window.requestAnimationFrame(sample)
@@ -257,6 +400,8 @@ function LiveMachinePerceptionOverlay({
       if (!sampleContext || !video || video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
         return
       }
+
+      requestRoboflowLocks(video, timestamp)
 
       try {
         sampleContext.drawImage(video, 0, 0, sampleWidth, sampleHeight)
@@ -312,8 +457,10 @@ function LiveMachinePerceptionOverlay({
       }
 
       const strongest = regions.sort((a, b) => b.energy - a.energy).slice(0, 4)
+      const inferenceLocks =
+        timestamp - roboflowSeenAtRef.current < 1400 ? roboflowLocksRef.current : []
 
-      if (!strongest.length) {
+      if (!strongest.length && !inferenceLocks.length) {
         const fading = smoothedLocksRef.current
           .map((lock) => ({
             ...lock,
@@ -331,7 +478,20 @@ function LiveMachinePerceptionOverlay({
         return
       }
 
-      const nextLocks = strongest.map((region, index) => {
+      const sourceLocks = inferenceLocks.length
+        ? inferenceLocks.map((lock, index) => {
+            const nearbyEnergy = strongest[index]?.energy || strongest[0]?.energy || 0
+
+            return {
+              ...lock,
+              energy: clamp01(lock.energy * 0.74 + nearbyEnergy * 0.42),
+              width: lock.width * (0.92 + nearbyEnergy * 0.18),
+              height: lock.height * (0.92 + nearbyEnergy * 0.18),
+            }
+          })
+        : strongest
+
+      const nextLocks = sourceLocks.slice(0, 5).map((region, index) => {
         const previousLock = smoothedLocksRef.current[index]
         const driftX = Math.sin(timestamp * 0.001 + index * 1.9) * (0.18 + (1 - region.energy) * 0.45)
         const driftY = Math.cos(timestamp * 0.0011 + index * 1.4) * (0.14 + (1 - region.energy) * 0.38)
