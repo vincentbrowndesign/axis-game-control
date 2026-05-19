@@ -46,6 +46,7 @@ export type TemporalEventRecord = {
   session_id: string
   type: TemporalEventType | string
   session_time: number
+  sequence_order: number
   created_at: string
   payload: TemporalEventPayload
 }

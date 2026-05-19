@@ -8,6 +8,12 @@ import type {
 
 export type ChronologyUiStatus = "idle" | "loading" | "ready" | "seeking" | "error"
 export type GlobalSyncStatus = "SYNCED" | "SYNCING" | "FAILED" | "RETRYING"
+export type AxisSyncTelemetry =
+  | "SYSTEM_SYNCED"
+  | `SYNCING_QUEUE ${number}`
+  | `OFFLINE_BUFFERING ${number}`
+  | "RETRYING_CONNECT"
+  | `SYNC_FAILED ${number}`
 export type EventPersistenceStatus = "PENDING" | "PERSISTED" | "FAILED" | "RETRYING"
 
 export type ChronologyPlaybackState = {
@@ -42,15 +48,18 @@ type AxisChronologyState = {
   isProcessingQueue: boolean
   uiStatus: ChronologyUiStatus
   globalSyncStatus: GlobalSyncStatus
+  syncTelemetry: AxisSyncTelemetry
   duration: number
   events: AxisChronologyEvent[]
   pendingEvents: AxisChronologyEvent[]
   persistedEvents: AxisChronologyEvent[]
   failedEvents: AxisChronologyEvent[]
   playback: ChronologyPlaybackState
+  nextSequenceOrder: number
   hydrateChronology: (input: HydrateChronologyInput) => void
   setUiStatus: (status: ChronologyUiStatus) => void
   setPlaybackState: (playback: Partial<ChronologyPlaybackState>) => void
+  syncMediaPlayback: (playback: Partial<ChronologyPlaybackState>) => void
   requestEventJump: (eventId: string) => TimelineAnchor | null
   triggerAttentionSignal: (
     type: TemporalEventType | string,
@@ -81,6 +90,7 @@ type AxisChronologyDatabase = {
           session_id: string
           type: string
           session_time: number
+          sequence_order: number
           created_at: string
           payload: JsonValue
         }
@@ -89,6 +99,7 @@ type AxisChronologyDatabase = {
           session_id: string
           type: string
           session_time: number
+          sequence_order: number
           created_at: string
           payload: JsonValue
         }
@@ -147,15 +158,33 @@ function eventAnchor(event: TemporalEventRecord): TimelineAnchor {
 function persistedEvent(event: TemporalEventRecord): AxisChronologyEvent {
   return {
     ...event,
+    sequence_order: Number(event.sequence_order) || 0,
     persistenceStatus: "PERSISTED",
     retryCount: 0,
   }
+}
+
+function syncTelemetry(
+  status: GlobalSyncStatus,
+  pendingCount: number,
+  failedCount: number
+): AxisSyncTelemetry {
+  if (status === "RETRYING") return "RETRYING_CONNECT"
+  if (failedCount) return `SYNC_FAILED ${failedCount}`
+  if (pendingCount && typeof navigator !== "undefined" && !navigator.onLine) {
+    return `OFFLINE_BUFFERING ${pendingCount}`
+  }
+  if (pendingCount) return `SYNCING_QUEUE ${pendingCount}`
+  return "SYSTEM_SYNCED"
 }
 
 function sortEvents(events: AxisChronologyEvent[]) {
   return [...events].sort((a, b) => {
     const timeDelta = Number(a.session_time) - Number(b.session_time)
     if (timeDelta !== 0) return timeDelta
+
+    const orderDelta = Number(a.sequence_order) - Number(b.sequence_order)
+    if (orderDelta !== 0) return orderDelta
 
     return a.created_at.localeCompare(b.created_at)
   })
@@ -174,6 +203,7 @@ async function persistEvent(event: AxisChronologyEvent) {
     session_id: event.session_id,
     type: event.type,
     session_time: event.session_time,
+    sequence_order: event.sequence_order,
     created_at: event.created_at,
     payload: event.payload as JsonValue,
   })
@@ -191,6 +221,7 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
   isProcessingQueue: false,
   uiStatus: "idle",
   globalSyncStatus: "SYNCED",
+  syncTelemetry: "SYSTEM_SYNCED",
   duration: 0,
   events: [],
   pendingEvents: [],
@@ -201,6 +232,7 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
     paused: true,
     readyState: 0,
   },
+  nextSequenceOrder: 0,
   hydrateChronology: ({ sessionId, duration, events }) => {
     const current = get()
     const isNewSession = current.sessionId !== sessionId
@@ -212,6 +244,12 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       ? []
       : current.failedEvents.filter((event) => event.session_id === sessionId)
     const visibleEvents = mergeEvents([...persisted, ...localPending, ...localFailed])
+    const nextSequenceOrder =
+      visibleEvents.reduce(
+        (maxSequenceOrder, event) =>
+          Math.max(maxSequenceOrder, Number(event.sequence_order) || 0),
+        -1
+      ) + 1
     const globalSyncStatus = localFailed.length
       ? "FAILED"
       : localPending.length
@@ -227,10 +265,12 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       pendingEvents: localPending,
       persistedEvents: persisted,
       failedEvents: localFailed,
+      nextSequenceOrder,
       activeEventId: isNewSession ? null : current.activeEventId,
       currentTimelineAnchor: isNewSession ? null : current.currentTimelineAnchor,
       isInternalSeeking: isNewSession ? false : current.isInternalSeeking,
       globalSyncStatus,
+      syncTelemetry: syncTelemetry(globalSyncStatus, localPending.length, localFailed.length),
       uiStatus: "ready",
       playback: isNewSession
         ? {
@@ -253,6 +293,44 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         ...playback,
       },
     }))
+  },
+  syncMediaPlayback: (playback) => {
+    set((state) => {
+      const nextPlayback = {
+        ...state.playback,
+        ...playback,
+      }
+      if (state.isInternalSeeking) {
+        return {
+          playback: nextPlayback,
+        }
+      }
+
+      const currentTime = Number(nextPlayback.currentTime) || 0
+      const nearestEvent = state.events.reduce<AxisChronologyEvent | null>(
+        (nearest, event) => {
+          const distance = Math.abs(Number(event.session_time) - currentTime)
+          if (distance > 1.25) return nearest
+          if (!nearest) return event
+
+          return distance < Math.abs(Number(nearest.session_time) - currentTime)
+            ? event
+            : nearest
+        },
+        null
+      )
+
+      return {
+        playback: nextPlayback,
+        activeEventId: nearestEvent?.id ?? state.activeEventId,
+        currentTimelineAnchor: nearestEvent
+          ? {
+              ...eventAnchor(nearestEvent),
+              targetTime: currentTime,
+            }
+          : state.currentTimelineAnchor,
+      }
+    })
   },
   requestEventJump: (eventId) => {
     const event = get().events.find((candidate) => candidate.id === eventId)
@@ -283,6 +361,7 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       session_id: sessionId,
       type,
       session_time: Number(sessionTime) || 0,
+      sequence_order: get().nextSequenceOrder,
       created_at: new Date().toISOString(),
       payload,
       persistenceStatus: "PENDING",
@@ -296,8 +375,10 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       isInternalSeeking: true,
       uiStatus: "seeking",
       globalSyncStatus: "SYNCING",
+      syncTelemetry: syncTelemetry("SYNCING", state.pendingEvents.length + 1, state.failedEvents.length),
       events: mergeEvents([...state.events, event]),
       pendingEvents: mergeEvents([...state.pendingEvents, event]),
+      nextSequenceOrder: state.nextSequenceOrder + 1,
       playback: {
         ...state.playback,
         currentTime: anchor.targetTime,
@@ -317,6 +398,11 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
     set({
       isProcessingQueue: true,
       globalSyncStatus: get().globalSyncStatus === "RETRYING" ? "RETRYING" : "SYNCING",
+      syncTelemetry: syncTelemetry(
+        get().globalSyncStatus === "RETRYING" ? "RETRYING" : "SYNCING",
+        get().pendingEvents.length,
+        get().failedEvents.length
+      ),
     })
 
     try {
@@ -340,6 +426,11 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
                 candidate.id === event.id ? savedEvent : candidate
               )
             ),
+            syncTelemetry: syncTelemetry(
+              state.globalSyncStatus,
+              Math.max(0, state.pendingEvents.length - 1),
+              state.failedEvents.length
+            ),
           }))
         } catch {
           const failedEvent: AxisChronologyEvent = {
@@ -356,6 +447,11 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
               )
             ),
             globalSyncStatus: "FAILED",
+            syncTelemetry: syncTelemetry(
+              "FAILED",
+              Math.max(0, state.pendingEvents.length - 1),
+              state.failedEvents.length + 1
+            ),
           }))
         }
       }
@@ -365,6 +461,11 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       set({
         isProcessingQueue: false,
         globalSyncStatus: state.failedEvents.length ? "FAILED" : "SYNCED",
+        syncTelemetry: syncTelemetry(
+          state.failedEvents.length ? "FAILED" : "SYNCED",
+          state.pendingEvents.length,
+          state.failedEvents.length
+        ),
       })
     }
   },
@@ -388,6 +489,7 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         })
       ),
       globalSyncStatus: "RETRYING",
+      syncTelemetry: syncTelemetry("RETRYING", state.pendingEvents.length + retryingEvents.length, 0),
     }))
 
     queueMicrotask(() => {

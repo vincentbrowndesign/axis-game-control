@@ -97,7 +97,7 @@ export function LiveMemoryStream() {
   const [elapsed, setElapsed] = useState(0)
   const [errorMessage, setErrorMessage] = useState("")
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
-  const globalSyncStatus = useAxisChronologyStore((state) => state.globalSyncStatus)
+  const syncTelemetry = useAxisChronologyStore((state) => state.syncTelemetry)
   const failedEventCount = useAxisChronologyStore((state) => state.failedEvents.length)
   const retryFailedEvents = useAxisChronologyStore((state) => state.retryFailedEvents)
 
@@ -796,7 +796,7 @@ export function LiveMemoryStream() {
           {status === "LIVE" || status === "RECONNECTING" ? (
             <div className="mt-3 flex items-center justify-center gap-3">
               <p className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
-                {globalSyncStatus}
+                {syncTelemetry}
               </p>
               {failedEventCount ? (
                 <button

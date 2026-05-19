@@ -68,6 +68,9 @@ export async function GET(_request: Request, context: Context) {
     .order("session_time", {
       ascending: true,
     })
+    .order("sequence_order", {
+      ascending: true,
+    })
     .order("created_at", {
       ascending: true,
     })

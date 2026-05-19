@@ -68,6 +68,7 @@ export async function POST(request: Request) {
       session_id: sessionId,
       type: "ARCHIVE_COMPLETE",
       session_time: Number(body.durationSeconds),
+      sequence_order: 0,
       payload: {
         playback_url: body.playbackUrl,
         storage_path: body.storagePath,

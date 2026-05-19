@@ -52,20 +52,47 @@ export function seekToEvent(
 
 function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const { currentTimelineAnchor, completeInternalSeek, setPlaybackState } =
+  const { currentTimelineAnchor, isInternalSeeking, completeInternalSeek, syncMediaPlayback } =
     useAxisChronologyStore(
       useShallow((state) => ({
         currentTimelineAnchor: state.currentTimelineAnchor,
+        isInternalSeeking: state.isInternalSeeking,
         completeInternalSeek: state.completeInternalSeek,
-        setPlaybackState: state.setPlaybackState,
+        syncMediaPlayback: state.syncMediaPlayback,
       }))
     )
 
   useEffect(() => {
-    if (!currentTimelineAnchor) return
+    if (!currentTimelineAnchor || !isInternalSeeking) return
 
     seekToEvent(videoRef.current, currentTimelineAnchor)
-  }, [currentTimelineAnchor])
+  }, [currentTimelineAnchor, isInternalSeeking])
+
+  useEffect(() => {
+    const restoreFromChronology = () => {
+      const state = useAxisChronologyStore.getState()
+      if (!state.currentTimelineAnchor) return
+
+      seekToEvent(videoRef.current, state.currentTimelineAnchor)
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") restoreFromChronology()
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    window.addEventListener("pageshow", restoreFromChronology)
+    window.addEventListener("focus", restoreFromChronology)
+    window.addEventListener("pagehide", restoreFromChronology)
+    window.addEventListener("blur", restoreFromChronology)
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
+      window.removeEventListener("pageshow", restoreFromChronology)
+      window.removeEventListener("focus", restoreFromChronology)
+      window.removeEventListener("pagehide", restoreFromChronology)
+      window.removeEventListener("blur", restoreFromChronology)
+    }
+  }, [])
 
   if (!playbackUrl) {
     return (
@@ -86,33 +113,33 @@ function ReplayVideo({ playbackUrl }: { playbackUrl: string | null }) {
         playsInline
         preload="metadata"
         onLoadedMetadata={(event) => {
-          setPlaybackState({
+          syncMediaPlayback({
             readyState: event.currentTarget.readyState,
           })
         }}
         onTimeUpdate={(event) => {
-          setPlaybackState({
+          syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
             paused: event.currentTarget.paused,
             readyState: event.currentTarget.readyState,
           })
         }}
         onPause={(event) => {
-          setPlaybackState({
+          syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
             paused: true,
             readyState: event.currentTarget.readyState,
           })
         }}
         onPlay={(event) => {
-          setPlaybackState({
+          syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
             paused: false,
             readyState: event.currentTarget.readyState,
           })
         }}
         onSeeked={(event) => {
-          setPlaybackState({
+          syncMediaPlayback({
             currentTime: event.currentTarget.currentTime,
             paused: event.currentTarget.paused,
             readyState: event.currentTarget.readyState,
@@ -136,10 +163,29 @@ function EventRail() {
       }))
     )
   const safeDuration = Math.max(duration, 1)
+  const jumpToNearestAtPosition = (clientX: number, rail: HTMLDivElement) => {
+    if (!events.length) return
+
+    const bounds = rail.getBoundingClientRect()
+    const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
+    const targetTime = ratio * safeDuration
+    const nearestEvent = events.reduce((nearest, event) => {
+      const nearestDistance = Math.abs(Number(nearest.session_time) - targetTime)
+      const eventDistance = Math.abs(Number(event.session_time) - targetTime)
+      return eventDistance < nearestDistance ? event : nearest
+    }, events[0])
+
+    requestEventJump(nearestEvent.id)
+  }
 
   return (
     <div className="mt-4 border border-white/10 bg-white/[0.03] px-4 py-4">
-      <div className="relative h-12">
+      <div
+        className="relative h-12"
+        onClick={(event) => {
+          jumpToNearestAtPosition(event.clientX, event.currentTarget)
+        }}
+      >
         <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/18" />
         {events.map((event) => {
           const position = Math.min(
@@ -152,7 +198,10 @@ function EventRail() {
             <button
               key={event.id}
               type="button"
-              onClick={() => requestEventJump(event.id)}
+              onClick={(clickEvent) => {
+                clickEvent.stopPropagation()
+                requestEventJump(event.id)
+              }}
               aria-label={`Jump to ${event.type} at ${formatClock(event.session_time)}`}
               className={`absolute top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[0] transition ${
                 active
@@ -218,10 +267,10 @@ function EventFeed({
       requestEventJump: state.requestEventJump,
     }))
   )
-  const { globalSyncStatus, failedEventCount, retryFailedEvents } =
+  const { syncTelemetry, failedEventCount, retryFailedEvents } =
     useAxisChronologyStore(
       useShallow((state) => ({
-        globalSyncStatus: state.globalSyncStatus,
+        syncTelemetry: state.syncTelemetry,
         failedEventCount: state.failedEvents.length,
         retryFailedEvents: state.retryFailedEvents,
       }))
@@ -244,7 +293,7 @@ function EventFeed({
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 border border-white/10 bg-white/[0.03] px-3 py-2">
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-          {globalSyncStatus}
+          {syncTelemetry}
         </p>
         {failedEventCount ? (
           <button

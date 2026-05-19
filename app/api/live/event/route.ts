@@ -10,6 +10,7 @@ type CreateEventBody = {
   sessionId?: string
   type?: string
   sessionTime?: number
+  sequenceOrder?: number
   payload?: Record<string, unknown>
 }
 
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
 
     const eventId = body.id && isUuid(body.id) ? body.id : crypto.randomUUID()
     const sessionTime = Number.isFinite(body.sessionTime) ? Number(body.sessionTime) : 0
+    const sequenceOrder = Number.isFinite(body.sequenceOrder) ? Number(body.sequenceOrder) : 0
     const payload: Record<string, unknown> = {
       replay_window: defaultReplayWindow(),
       ...(body.payload || {}),
@@ -62,6 +64,7 @@ export async function POST(request: Request) {
         session_id: sessionId,
         type,
         session_time: sessionTime,
+        sequence_order: sequenceOrder,
         payload,
       })
       .select("*")
