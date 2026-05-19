@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import MuxPlayer from "@mux/mux-player-react"
 
 type LiveStatus =
@@ -10,16 +10,73 @@ type LiveStatus =
   | "RECONNECTING"
   | "FINALIZING"
   | "ARCHIVED"
+  | "SESSION STORED"
   | "OFFLINE"
 
-type MomentAnchor = {
+type MemoryEventType = "MARK" | "SNAPSHOT" | "SYSTEM" | "score" | "clock"
+
+type EventBase = {
   id: string
   elapsed: number
   label: string
+  createdAt: string
 }
 
-const anchorStorageKey = "axis-live-thread-anchors"
-const clockStorageKey = "axis-live-thread-started-at"
+type BaseMemoryEvent = EventBase & {
+  type: "MARK" | "SNAPSHOT" | "SYSTEM"
+}
+
+type ScoreEvent = EventBase & {
+  type: "score"
+  team: "HOME" | "AWAY"
+  points: 1 | 2 | 3
+  gameClock: string
+  period: number
+  sessionTime: number
+}
+
+type ClockEvent = EventBase & {
+  type: "clock"
+  action: "START" | "PAUSE" | "RESET"
+  gameClock: string
+  period: number
+  sessionTime: number
+}
+
+type MemoryEvent =
+  | BaseMemoryEvent
+  | ScoreEvent
+  | ClockEvent
+
+type LiveThreadSession = {
+  id: string
+  createdAt: string
+  endedAt: string
+  duration: number
+  videoAssetUrl: string | null
+  replayAsset: {
+    playbackId: string | null
+    liveSessionId: string | null
+  }
+  markers: MemoryEvent[]
+  snapshots: MemoryEvent[]
+  scoringEvents: ScoreEvent[]
+  scoreHistory: ScoreEvent[]
+  clockHistory: ClockEvent[]
+  eventTimeline: MemoryEvent[]
+  systemStates: Array<{
+    state: LiveStatus
+    elapsed: number
+    at: string
+  }>
+  inference: {
+    pending: true
+  }
+}
+
+const eventStorageKey = "axis-live-thread-events"
+const sessionStorageKey = "axis-live-thread-started-at"
+const archiveStorageKey = "axis-live-thread-archive"
 const reconnectDebounceMs = 1800
 
 const recorderTypes = [
@@ -46,66 +103,410 @@ function formatClock(totalSeconds: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`
 }
 
+function formatGameClock(totalSeconds: number) {
+  return formatClock(Math.max(0, totalSeconds))
+}
+
+function eventWeight(type: MemoryEventType) {
+  if (type === "score") return 2
+  if (type === "SNAPSHOT") return 3
+  if (type === "SYSTEM") return 1.5
+  if (type === "clock") return 0.75
+  return 1
+}
+
+function eventNodeClass(event: MemoryEvent) {
+  if (event.type === "score") {
+    const points = "points" in event ? event.points : 1
+    if (points === 3) {
+      return "h-6 w-6 border-emerald-100/60 bg-emerald-100 shadow-[0_0_24px_rgba(167,243,208,0.52)]"
+    }
+    if (points === 2) {
+      return "h-5 w-5 border-emerald-100/45 bg-emerald-100/90 shadow-[0_0_20px_rgba(167,243,208,0.4)]"
+    }
+    return "h-3.5 w-3.5 border-emerald-100/35 bg-emerald-100/80 shadow-[0_0_16px_rgba(167,243,208,0.3)]"
+  }
+
+  if (event.type === "clock") {
+    return "h-2 w-2 border-zinc-100/25 bg-zinc-100/60 shadow-[0_0_10px_rgba(244,244,245,0.24)]"
+  }
+
+  const type = event.type
+
+  if (type === "SNAPSHOT") {
+    return "h-5 w-5 border-white/50 bg-zinc-100 shadow-[0_0_22px_rgba(244,244,245,0.48)]"
+  }
+
+  if (type === "SYSTEM") {
+    return "h-3 w-3 border-amber-100/35 bg-amber-100/80 shadow-[0_0_16px_rgba(253,230,138,0.28)]"
+  }
+
+  return "h-2.5 w-2.5 border-white/25 bg-zinc-100/90 shadow-[0_0_14px_rgba(244,244,245,0.32)]"
+}
+
+function loadStoredEvents(nowElapsed: number) {
+  try {
+    const storedEvents = window.localStorage.getItem(eventStorageKey)
+    const parsedEvents = storedEvents
+      ? (JSON.parse(storedEvents) as MemoryEvent[])
+      : []
+
+    if (!Array.isArray(parsedEvents)) return []
+
+    return parsedEvents
+      .filter(
+        (event) =>
+          typeof event.id === "string" &&
+          typeof event.elapsed === "number" &&
+            event.elapsed >= 0 &&
+            event.elapsed <= nowElapsed + 10 &&
+            typeof event.label === "string" &&
+            ["MARK", "SNAPSHOT", "SYSTEM", "score", "clock"].includes(event.type)
+      )
+      .slice(-48)
+  } catch {
+    window.localStorage.removeItem(eventStorageKey)
+    return []
+  }
+}
+
+function archiveSession(session: LiveThreadSession) {
+  const storedArchive = window.localStorage.getItem(archiveStorageKey)
+  const parsedArchive = storedArchive
+    ? (JSON.parse(storedArchive) as LiveThreadSession[])
+    : []
+  const archive = Array.isArray(parsedArchive) ? parsedArchive : []
+
+  window.localStorage.setItem(
+    archiveStorageKey,
+    JSON.stringify([session, ...archive].slice(0, 12))
+  )
+}
+
 export function LiveMemoryStream() {
   const fallbackPlaybackId = process.env.NEXT_PUBLIC_MUX_PLAYBACK_ID || ""
   const [playbackId, setPlaybackId] = useState(fallbackPlaybackId)
   const [status, setStatus] = useState<LiveStatus>("READY")
   const [muxPlaying, setMuxPlaying] = useState(false)
   const [elapsed, setElapsed] = useState(0)
-  const [anchors, setAnchors] = useState<MomentAnchor[]>([])
-  const [lastPinnedId, setLastPinnedId] = useState("")
+  const [homeScore, setHomeScore] = useState(0)
+  const [awayScore, setAwayScore] = useState(0)
+  const [period] = useState(1)
+  const [gameClockSeconds, setGameClockSeconds] = useState(12 * 60)
+  const [clockRunning, setClockRunning] = useState(false)
+  const [events, setEvents] = useState<MemoryEvent[]>([])
+  const [lastEventId, setLastEventId] = useState("")
   const [threadHydrated, setThreadHydrated] = useState(false)
+  const [archivedSession, setArchivedSession] = useState<LiveThreadSession | null>(null)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
-  const sessionIdRef = useRef("")
+  const liveSessionIdRef = useRef("")
   const chunkQueueRef = useRef<Promise<void>>(Promise.resolve())
   const startedRef = useRef(false)
   const finalizingRef = useRef(false)
   const reconnectTimerRef = useRef<number | null>(null)
   const elapsedRef = useRef(0)
   const clockStartedAtRef = useRef(0)
+  const eventSequenceRef = useRef(0)
+  const systemStatesRef = useRef<LiveThreadSession["systemStates"]>([])
 
   const railEnd = useMemo(() => Math.max(60, elapsed), [elapsed])
+  const markers = useMemo(
+    () => events.filter((event) => event.type === "MARK"),
+    [events]
+  )
+  const snapshots = useMemo(
+    () => events.filter((event) => event.type === "SNAPSHOT"),
+    [events]
+  )
+  const scoringEvents = useMemo(
+    () => events.filter((event): event is ScoreEvent => event.type === "score"),
+    [events]
+  )
+  const clockEvents = useMemo(
+    () => events.filter((event): event is ClockEvent => event.type === "clock"),
+    [events]
+  )
+  const memoryDensity = useMemo(() => {
+    const buckets = Array.from({ length: 18 }, (_, index) => ({
+      id: `density-${index}`,
+      left: (index / 18) * 100,
+      width: 100 / 18,
+      value: 0,
+    }))
+
+    for (const event of events) {
+      const index = Math.min(
+        buckets.length - 1,
+        Math.max(0, Math.floor((event.elapsed / railEnd) * buckets.length))
+      )
+      const scoreWeight =
+        event.type === "score" && "points" in event ? event.points : eventWeight(event.type)
+      buckets[index].value += scoreWeight
+    }
+
+    return buckets
+  }, [events, railEnd])
+  const railEvents = useMemo(
+    () =>
+      events.map((event) => ({
+        ...event,
+        position: Math.min(98, Math.max(2, (event.elapsed / railEnd) * 100)),
+      })),
+    [events, railEnd]
+  )
+  const liveDotClass = useMemo(() => {
+    if (status === "LIVE") {
+      return "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]"
+    }
+    if (status === "RECONNECTING") {
+      return "bg-amber-200/80 shadow-[0_0_22px_rgba(252,211,77,0.42)]"
+    }
+    if (status === "ARCHIVED" || status === "SESSION STORED") {
+      return "bg-zinc-100 shadow-[0_0_14px_rgba(244,244,245,0.42)]"
+    }
+    return "bg-zinc-200/70 shadow-[0_0_16px_rgba(244,244,245,0.28)]"
+  }, [status])
+
+  const setSystemStatus = useCallback((nextStatus: LiveStatus) => {
+    setStatus(nextStatus)
+    systemStatesRef.current = [
+      ...systemStatesRef.current,
+      {
+        state: nextStatus,
+        elapsed: elapsedRef.current,
+        at: new Date().toISOString(),
+      },
+    ].slice(-80)
+  }, [])
+
+  const createEventId = (prefix: string) => {
+    eventSequenceRef.current += 1
+    return `${prefix}-${Math.floor(elapsedRef.current * 1000).toString(36)}-${eventSequenceRef.current}`
+  }
+
+  const addMemoryEvent = (type: "MARK" | "SNAPSHOT" | "SYSTEM") => {
+    if (status === "FINALIZING" || status === "ARCHIVED" || status === "SESSION STORED") {
+      return
+    }
+
+    const event: MemoryEvent = {
+      id: createEventId(`memory-${type.toLowerCase()}`),
+      type,
+      elapsed: elapsedRef.current,
+      label: type,
+      createdAt: new Date().toISOString(),
+    }
+
+    setEvents((current) => [...current.slice(-47), event])
+    setLastEventId(event.id)
+  }
+
+  const addScoreEvent = (team: "HOME" | "AWAY", points: 1 | 2 | 3) => {
+    if (status === "FINALIZING" || status === "ARCHIVED" || status === "SESSION STORED") {
+      return
+    }
+
+    const nextScoreEvent: ScoreEvent = {
+      id: createEventId(`score-${team.toLowerCase()}-${points}`),
+      type: "score",
+      team,
+      points,
+      gameClock: formatGameClock(gameClockSeconds),
+      period,
+      createdAt: new Date().toISOString(),
+      sessionTime: elapsedRef.current,
+      elapsed: elapsedRef.current,
+      label: `${team} +${points}`,
+    }
+
+    if (team === "HOME") {
+      setHomeScore((score) => score + points)
+    } else {
+      setAwayScore((score) => score + points)
+    }
+
+    setEvents((current) => [...current.slice(-47), nextScoreEvent])
+    setLastEventId(nextScoreEvent.id)
+  }
+
+  const addClockEvent = (action: ClockEvent["action"]) => {
+    const nextClockEvent: ClockEvent = {
+      id: createEventId(`clock-${action.toLowerCase()}`),
+      type: "clock",
+      action,
+      gameClock: formatGameClock(gameClockSeconds),
+      period,
+      createdAt: new Date().toISOString(),
+      sessionTime: elapsedRef.current,
+      elapsed: elapsedRef.current,
+      label: action,
+    }
+
+    setEvents((current) => [...current.slice(-47), nextClockEvent])
+    setLastEventId(nextClockEvent.id)
+  }
+
+  const startGameClock = () => {
+    setClockRunning(true)
+    addClockEvent("START")
+  }
+
+  const pauseGameClock = () => {
+    setClockRunning(false)
+    addClockEvent("PAUSE")
+  }
+
+  const resetGameClock = () => {
+    setClockRunning(false)
+    setGameClockSeconds(12 * 60)
+    addClockEvent("RESET")
+  }
+
+  const replayEvent = (event: MemoryEvent) => {
+    const player = surfaceRef.current?.querySelector("mux-player") as
+      | (HTMLElement & {
+          currentTime?: number
+          play?: () => Promise<void> | void
+        })
+      | null
+
+    if (!player || typeof player.currentTime !== "number") return
+
+    const secondsBack = Math.max(0, elapsedRef.current - event.elapsed)
+    player.currentTime = Math.max(0, player.currentTime - secondsBack)
+    setLastEventId(event.id)
+    const playResult = player.play?.()
+
+    if (playResult instanceof Promise) {
+      playResult.catch(() => undefined)
+    }
+  }
+
+  const absorbInterruption = useCallback(() => {
+    if (finalizingRef.current) return
+
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+    }
+
+    reconnectTimerRef.current = window.setTimeout(() => {
+      if (!finalizingRef.current) setSystemStatus("RECONNECTING")
+    }, reconnectDebounceMs)
+  }, [setSystemStatus])
+
+  const stabilizeTransport = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+
+    if (!finalizingRef.current) setSystemStatus("LIVE")
+  }, [setSystemStatus])
+
+  const finalizeThread = () => {
+    if (finalizingRef.current) return
+
+    finalizingRef.current = true
+    setSystemStatus("FINALIZING")
+    addMemoryEvent("SYSTEM")
+
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+
+    const recorder = recorderRef.current
+    if (recorder && recorder.state !== "inactive") {
+      recorder.requestData()
+      recorder.stop()
+    }
+
+    localStreamRef.current?.getTracks().forEach((track) => track.stop())
+    localStreamRef.current = null
+
+    const liveSessionId = liveSessionIdRef.current
+    liveSessionIdRef.current = ""
+
+    const complete = () => {
+      const endedAt = new Date().toISOString()
+      const eventTimeline = [...events, {
+        id: createEventId("memory-system"),
+        type: "SYSTEM" as const,
+        elapsed: elapsedRef.current,
+        label: "ARCHIVED",
+        createdAt: endedAt,
+      }]
+      const session: LiveThreadSession = {
+        id: createEventId("session"),
+        createdAt: new Date(clockStartedAtRef.current).toISOString(),
+        endedAt,
+        duration: elapsedRef.current,
+        videoAssetUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
+        replayAsset: {
+          playbackId: playbackId || null,
+          liveSessionId: liveSessionId || null,
+        },
+        markers: eventTimeline.filter((event) => event.type === "MARK"),
+        snapshots: eventTimeline.filter((event) => event.type === "SNAPSHOT"),
+        scoringEvents: eventTimeline.filter(
+          (event): event is ScoreEvent => event.type === "score"
+        ),
+        scoreHistory: scoringEvents,
+        clockHistory: clockEvents,
+        eventTimeline,
+        systemStates: systemStatesRef.current,
+        inference: {
+          pending: true,
+        },
+      }
+
+      archiveSession(session)
+      setArchivedSession(session)
+      window.localStorage.removeItem(eventStorageKey)
+      window.sessionStorage.removeItem(sessionStorageKey)
+      setSystemStatus("ARCHIVED")
+      window.setTimeout(() => setSystemStatus("SESSION STORED"), 700)
+    }
+
+    if (!liveSessionId) {
+      window.setTimeout(complete, 420)
+      return
+    }
+
+    fetch("/api/live/stop", {
+      method: "POST",
+      headers: {
+        "x-axis-live-session": liveSessionId,
+      },
+      keepalive: true,
+    })
+      .catch(() => undefined)
+      .finally(() => window.setTimeout(complete, 420))
+  }
 
   useEffect(() => {
     const now = Date.now()
-    const storedClock = window.sessionStorage.getItem(clockStorageKey)
+    const storedClock = window.sessionStorage.getItem(sessionStorageKey)
     const storedClockValue = storedClock ? Number(storedClock) : 0
     const safeClock =
       storedClockValue > 0 && storedClockValue <= now ? storedClockValue : now
 
     clockStartedAtRef.current = safeClock
-    window.sessionStorage.setItem(clockStorageKey, String(safeClock))
+    window.sessionStorage.setItem(sessionStorageKey, String(safeClock))
 
-    let storedThreadAnchors: MomentAnchor[] = []
+    let storedEvents: MemoryEvent[] = []
 
     try {
-      const storedAnchors = window.localStorage.getItem(anchorStorageKey)
-      const parsedAnchors = storedAnchors
-        ? (JSON.parse(storedAnchors) as MomentAnchor[])
-        : []
-      const nextElapsed = (now - safeClock) / 1000
-
-      if (Array.isArray(parsedAnchors)) {
-        storedThreadAnchors = parsedAnchors
-          .filter(
-            (anchor) =>
-              typeof anchor.id === "string" &&
-              typeof anchor.elapsed === "number" &&
-              anchor.elapsed >= 0 &&
-              anchor.elapsed <= nextElapsed + 10 &&
-              typeof anchor.label === "string"
-          )
-          .slice(-12)
-      }
+      storedEvents = loadStoredEvents((now - safeClock) / 1000)
     } catch {
-      window.localStorage.removeItem(anchorStorageKey)
+      window.localStorage.removeItem(eventStorageKey)
     }
 
     const hydrationTimer = window.setTimeout(() => {
-      setAnchors(storedThreadAnchors)
+      setEvents(storedEvents)
       setThreadHydrated(true)
     }, 0)
 
@@ -124,126 +525,33 @@ export function LiveMemoryStream() {
   useEffect(() => {
     if (!threadHydrated) return
 
-    window.localStorage.setItem(anchorStorageKey, JSON.stringify(anchors.slice(-12)))
-  }, [anchors, threadHydrated])
+    window.localStorage.setItem(eventStorageKey, JSON.stringify(events.slice(-48)))
+  }, [events, threadHydrated])
 
   useEffect(() => {
-    if (!lastPinnedId) return
+    if (!lastEventId) return
 
-    const timeout = window.setTimeout(() => setLastPinnedId(""), 1600)
+    const timeout = window.setTimeout(() => setLastEventId(""), 1600)
 
     return () => window.clearTimeout(timeout)
-  }, [lastPinnedId])
+  }, [lastEventId])
 
-  const pinMoment = () => {
-    const nextAnchor: MomentAnchor = {
-      id: `anchor-${Date.now().toString(36)}`,
-      elapsed: elapsedRef.current,
-      label: status,
-    }
+  useEffect(() => {
+    if (!clockRunning) return
 
-    setAnchors((current) => [...current.slice(-10), nextAnchor])
-    setLastPinnedId(nextAnchor.id)
-  }
+    const timer = window.setInterval(() => {
+      setGameClockSeconds((seconds) => {
+        if (seconds <= 1) {
+          window.clearInterval(timer)
+          return 0
+        }
 
-  const replayAnchor = (anchor: MomentAnchor) => {
-    const player = surfaceRef.current?.querySelector("mux-player") as
-      | (HTMLElement & {
-          currentTime?: number
-          play?: () => Promise<void> | void
-        })
-      | null
+        return seconds - 1
+      })
+    }, 1000)
 
-    if (!player || typeof player.currentTime !== "number") return
-
-    const secondsBack = Math.max(0, elapsedRef.current - anchor.elapsed)
-    player.currentTime = Math.max(0, player.currentTime - secondsBack)
-    setLastPinnedId(anchor.id)
-    const playResult = player.play?.()
-
-    if (playResult instanceof Promise) {
-      playResult.catch(() => undefined)
-    }
-  }
-
-  const railAnchors = useMemo(() => {
-    return anchors.map((anchor) => ({
-      ...anchor,
-      position: Math.min(98, Math.max(2, (anchor.elapsed / railEnd) * 100)),
-    }))
-  }, [anchors, railEnd])
-
-  const liveDotClass = useMemo(() => {
-    if (status === "LIVE") return "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]"
-    if (status === "RECONNECTING") return "bg-amber-200/80 shadow-[0_0_22px_rgba(252,211,77,0.42)]"
-    if (status === "ARCHIVED") return "bg-zinc-100 shadow-[0_0_14px_rgba(244,244,245,0.42)]"
-    return "bg-zinc-200/70 shadow-[0_0_16px_rgba(244,244,245,0.28)]"
-  }, [status])
-
-  const absorbInterruption = () => {
-    if (finalizingRef.current) return
-
-    if (reconnectTimerRef.current) {
-      window.clearTimeout(reconnectTimerRef.current)
-    }
-
-    reconnectTimerRef.current = window.setTimeout(() => {
-      if (!finalizingRef.current) setStatus("RECONNECTING")
-    }, reconnectDebounceMs)
-  }
-
-  const stabilizeTransport = () => {
-    if (reconnectTimerRef.current) {
-      window.clearTimeout(reconnectTimerRef.current)
-      reconnectTimerRef.current = null
-    }
-
-    if (!finalizingRef.current) setStatus("LIVE")
-  }
-
-  const finalizeThread = () => {
-    if (finalizingRef.current) return
-
-    finalizingRef.current = true
-    setStatus("FINALIZING")
-
-    if (reconnectTimerRef.current) {
-      window.clearTimeout(reconnectTimerRef.current)
-      reconnectTimerRef.current = null
-    }
-
-    const recorder = recorderRef.current
-    if (recorder && recorder.state !== "inactive") {
-      recorder.requestData()
-      recorder.stop()
-    }
-
-    localStreamRef.current?.getTracks().forEach((track) => track.stop())
-    localStreamRef.current = null
-
-    const sessionId = sessionIdRef.current
-    sessionIdRef.current = ""
-
-    const complete = () => {
-      window.sessionStorage.removeItem(clockStorageKey)
-      setStatus("ARCHIVED")
-    }
-
-    if (!sessionId) {
-      window.setTimeout(complete, 320)
-      return
-    }
-
-    fetch("/api/live/stop", {
-      method: "POST",
-      headers: {
-        "x-axis-live-session": sessionId,
-      },
-      keepalive: true,
-    })
-      .catch(() => undefined)
-      .finally(() => window.setTimeout(complete, 320))
-  }
+    return () => window.clearInterval(timer)
+  }, [clockRunning])
 
   useEffect(() => {
     if (
@@ -257,15 +565,17 @@ export function LiveMemoryStream() {
     let cancelled = false
 
     async function postChunk(chunk: Blob) {
-      const sessionId = sessionIdRef.current
+      const liveSessionId = liveSessionIdRef.current
 
-      if (cancelled || finalizingRef.current || !sessionId || !chunk.size) return
+      if (cancelled || finalizingRef.current || !liveSessionId || !chunk.size) {
+        return
+      }
 
       const response = await fetch("/api/live/chunk", {
         method: "POST",
         headers: {
           "content-type": chunk.type || "application/octet-stream",
-          "x-axis-live-session": sessionId,
+          "x-axis-live-session": liveSessionId,
         },
         body: chunk,
       })
@@ -282,10 +592,10 @@ export function LiveMemoryStream() {
 
     async function startLiveCamera() {
       startedRef.current = true
-      setStatus("STARTING")
+      setSystemStatus("STARTING")
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        setStatus("OFFLINE")
+        setSystemStatus("OFFLINE")
         return
       }
 
@@ -326,7 +636,7 @@ export function LiveMemoryStream() {
       })
 
       if (!startResponse.ok) {
-        setStatus("OFFLINE")
+        setSystemStatus("OFFLINE")
         return
       }
 
@@ -340,7 +650,7 @@ export function LiveMemoryStream() {
         return
       }
 
-      sessionIdRef.current = startData.sessionId
+      liveSessionIdRef.current = startData.sessionId
       setPlaybackId(startData.playbackId || fallbackPlaybackId)
 
       const recorderType = getRecorderType()
@@ -387,7 +697,7 @@ export function LiveMemoryStream() {
 
     startLiveCamera().catch(() => {
       if (localStreamRef.current) absorbInterruption()
-      else setStatus("OFFLINE")
+      else setSystemStatus("OFFLINE")
     })
 
     const handleVisibility = () => {
@@ -398,11 +708,11 @@ export function LiveMemoryStream() {
       if (!finalizingRef.current) absorbInterruption()
     }
     const handleBeforeUnload = () => {
-      if (sessionIdRef.current) {
+      if (liveSessionIdRef.current) {
         fetch("/api/live/stop", {
           method: "POST",
           headers: {
-            "x-axis-live-session": sessionIdRef.current,
+            "x-axis-live-session": liveSessionIdRef.current,
           },
           keepalive: true,
         }).catch(() => undefined)
@@ -431,20 +741,20 @@ export function LiveMemoryStream() {
       })
       localStreamRef.current = null
 
-      const sessionId = sessionIdRef.current
-      if (sessionId) {
+      const liveSessionId = liveSessionIdRef.current
+      if (liveSessionId) {
         fetch("/api/live/stop", {
           method: "POST",
           headers: {
-            "x-axis-live-session": sessionId,
+            "x-axis-live-session": liveSessionId,
           },
           keepalive: true,
         }).catch(() => undefined)
       }
 
-      sessionIdRef.current = ""
+      liveSessionIdRef.current = ""
     }
-  }, [fallbackPlaybackId])
+  }, [absorbInterruption, fallbackPlaybackId, stabilizeTransport, setSystemStatus])
 
   return (
     <main className="h-dvh overflow-hidden bg-black text-zinc-100">
@@ -461,24 +771,24 @@ export function LiveMemoryStream() {
 
         {playbackId ? (
           <MuxPlayer
-          playbackId={playbackId}
-          streamType="live"
-          autoPlay
-          muted
-          playsInline
-          preferPlayback="mse"
-          onPlaying={() => {
-            setMuxPlaying(true)
-            stabilizeTransport()
-          }}
-          onError={() => {
-            setMuxPlaying(false)
-            absorbInterruption()
-          }}
-          onStalled={absorbInterruption}
-          onWaiting={absorbInterruption}
-          className={`absolute inset-0 h-full w-full transition-opacity duration-700 ${
-            muxPlaying ? "opacity-100" : "opacity-0"
+            playbackId={playbackId}
+            streamType="live"
+            autoPlay
+            muted
+            playsInline
+            preferPlayback="mse"
+            onPlaying={() => {
+              setMuxPlaying(true)
+              stabilizeTransport()
+            }}
+            onError={() => {
+              setMuxPlaying(false)
+              absorbInterruption()
+            }}
+            onStalled={absorbInterruption}
+            onWaiting={absorbInterruption}
+            className={`absolute inset-0 h-full w-full transition-opacity duration-700 ${
+              muxPlaying ? "opacity-100" : "opacity-0"
             }`}
             style={{
               ["--media-object-fit" as string]: "cover",
@@ -497,10 +807,25 @@ export function LiveMemoryStream() {
 
         {!playbackId && status === "OFFLINE" ? (
           <div className="absolute inset-0 z-10 grid place-items-center px-6 text-center">
+            <p className="text-3xl font-black uppercase tracking-[-0.04em] text-zinc-100 sm:text-5xl">
+              OFFLINE
+            </p>
+          </div>
+        ) : null}
+
+        {(status === "ARCHIVED" || status === "SESSION STORED") && archivedSession ? (
+          <div className="absolute inset-0 z-30 grid place-items-center bg-black/72 px-6 text-center backdrop-blur-sm">
             <div>
-              <p className="text-3xl font-black uppercase tracking-[-0.04em] text-zinc-100 sm:text-5xl">
-                OFFLINE
+              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
+                {status}
               </p>
+              <p className="mt-5 text-5xl font-black uppercase tracking-[-0.06em] text-zinc-100 sm:text-7xl">
+                {formatClock(archivedSession.duration)}
+              </p>
+              <div className="mt-6 flex justify-center gap-5 text-[11px] font-black uppercase tracking-[0.2em] text-zinc-400">
+                <span>{archivedSession.markers.length} markers</span>
+                <span>{archivedSession.snapshots.length} snapshots</span>
+              </div>
             </div>
           </div>
         ) : null}
@@ -518,23 +843,112 @@ export function LiveMemoryStream() {
               </span>
             </div>
           </div>
+          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-end gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
+                Home
+              </p>
+              <p className="mt-1 text-4xl font-black leading-none tracking-[-0.06em] text-zinc-100">
+                {homeScore}
+              </p>
+            </div>
+            <div className="pb-1 text-center">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                Q{period} / {formatGameClock(gameClockSeconds)}
+              </p>
+              <div className="mt-2 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={startGameClock}
+                  disabled={clockRunning}
+                  className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-200 disabled:opacity-35"
+                >
+                  Start
+                </button>
+                <button
+                  type="button"
+                  onClick={pauseGameClock}
+                  disabled={!clockRunning}
+                  className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-200 disabled:opacity-35"
+                >
+                  Pause
+                </button>
+                <button
+                  type="button"
+                  onClick={resetGameClock}
+                  className="border border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-200"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
+                Away
+              </p>
+              <p className="mt-1 text-4xl font-black leading-none tracking-[-0.06em] text-zinc-100">
+                {awayScore}
+              </p>
+            </div>
+          </div>
         </header>
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
           <div className="mx-auto max-w-4xl">
+            <div className="mb-3 grid grid-cols-3 overflow-hidden border border-white/10 bg-black/58 backdrop-blur-md">
+              {[1, 2, 3].map((points) => (
+                <button
+                  key={`home-${points}`}
+                  type="button"
+                  onClick={() => addScoreEvent("HOME", points as 1 | 2 | 3)}
+                  disabled={
+                    status === "FINALIZING" ||
+                    status === "ARCHIVED" ||
+                    status === "SESSION STORED"
+                  }
+                  className="border-r border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-100 transition active:bg-white/10 disabled:opacity-40 last:border-r-0"
+                >
+                  Home +{points}
+                </button>
+              ))}
+              {[1, 2, 3].map((points) => (
+                <button
+                  key={`away-${points}`}
+                  type="button"
+                  onClick={() => addScoreEvent("AWAY", points as 1 | 2 | 3)}
+                  disabled={
+                    status === "FINALIZING" ||
+                    status === "ARCHIVED" ||
+                    status === "SESSION STORED"
+                  }
+                  className="border-r border-t border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-100 transition active:bg-white/10 disabled:opacity-40 last:border-r-0"
+                >
+                  Away +{points}
+                </button>
+              ))}
+            </div>
+
             <div className="mb-4 flex justify-center">
               <button
                 type="button"
-                onClick={pinMoment}
-                disabled={status === "FINALIZING" || status === "ARCHIVED"}
+                onClick={() => addMemoryEvent("MARK")}
+                disabled={
+                  status === "FINALIZING" ||
+                  status === "ARCHIVED" ||
+                  status === "SESSION STORED"
+                }
                 className="border border-white/10 bg-zinc-100/90 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-black shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
               >
                 Mark
               </button>
               <button
                 type="button"
-                onClick={pinMoment}
-                disabled={status === "FINALIZING" || status === "ARCHIVED"}
+                onClick={() => addMemoryEvent("SNAPSHOT")}
+                disabled={
+                  status === "FINALIZING" ||
+                  status === "ARCHIVED" ||
+                  status === "SESSION STORED"
+                }
                 className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
               >
                 Snapshot
@@ -542,7 +956,11 @@ export function LiveMemoryStream() {
               <button
                 type="button"
                 onClick={finalizeThread}
-                disabled={status === "FINALIZING" || status === "ARCHIVED"}
+                disabled={
+                  status === "FINALIZING" ||
+                  status === "ARCHIVED" ||
+                  status === "SESSION STORED"
+                }
                 className="border-y border-r border-white/10 bg-black/58 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,0.35)] transition active:scale-95 disabled:opacity-40"
               >
                 End
@@ -550,12 +968,23 @@ export function LiveMemoryStream() {
             </div>
 
             <div
-              className={`relative h-12 overflow-hidden rounded-full border border-white/10 bg-black/48 px-4 backdrop-blur-md transition-opacity duration-700 ${
+              className={`relative h-12 overflow-hidden border border-white/10 bg-black/48 px-4 backdrop-blur-md transition-opacity duration-700 ${
                 status === "LIVE" ? "opacity-100" : "opacity-75"
               }`}
             >
               <div className="absolute left-5 right-5 top-1/2 h-px -translate-y-1/2 bg-white/16" />
-              <div className="absolute left-5 right-5 top-1/2 h-5 -translate-y-1/2 rounded-full bg-gradient-to-r from-transparent via-white/12 to-transparent opacity-70 blur-md motion-safe:animate-pulse" />
+              {memoryDensity.map((bucket) => (
+                <span
+                  key={bucket.id}
+                  className="absolute top-1/2 -translate-y-1/2 rounded-full bg-zinc-100/20 blur-[1px] transition-all duration-500"
+                  style={{
+                    left: `${bucket.left}%`,
+                    width: `${bucket.width}%`,
+                    height: `${Math.min(18, 2 + bucket.value * 4)}px`,
+                    opacity: bucket.value ? Math.min(0.62, 0.18 + bucket.value * 0.12) : 0,
+                  }}
+                />
+              ))}
               <div
                 className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-emerald-200 shadow-[0_0_18px_rgba(167,243,208,0.72)] transition-all duration-500"
                 style={{
@@ -563,22 +992,28 @@ export function LiveMemoryStream() {
                 }}
               />
 
-              {railAnchors.map((anchor) => (
+              {railEvents.map((event) => (
                 <button
-                  key={anchor.id}
+                  key={event.id}
                   type="button"
-                  onClick={() => replayAnchor(anchor)}
-                  aria-label={`Replay ${anchor.label} at ${formatClock(anchor.elapsed)}`}
-                  className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-zinc-100 shadow-[0_0_18px_rgba(244,244,245,0.38)] transition ${
-                    anchor.id === lastPinnedId ? "scale-125 opacity-100" : "opacity-80"
-                  }`}
+                  onClick={() => replayEvent(event)}
+                  aria-label={`${event.type} at ${formatClock(event.elapsed)}`}
+                  className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border transition ${
+                    lastEventId === event.id ? "scale-125 opacity-100" : "opacity-80"
+                  } ${eventNodeClass(event)}`}
                   style={{
-                    left: `${anchor.position}%`,
+                    left: `${event.position}%`,
                   }}
                 >
-                  <span className="absolute inset-1 rounded-full bg-black/85" />
+                  <span className="absolute inset-1 rounded-full bg-black/80" />
                 </button>
               ))}
+            </div>
+            <div className="mt-2 flex justify-between text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
+              <span>{formatClock(elapsed)}</span>
+              <span>
+                {scoringEvents.length} score / {markers.length} mark / {snapshots.length} snapshot
+              </span>
             </div>
           </div>
         </footer>
