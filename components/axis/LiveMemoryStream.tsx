@@ -1738,6 +1738,10 @@ export function LiveMemoryStream() {
 
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.76),transparent_31%,transparent_68%,rgba(0,0,0,0.86))]" />
 
+        <div className="axis-mono pointer-events-none absolute bottom-28 left-5 z-20 text-[10px] font-black uppercase tracking-[0.28em] text-white/42 drop-shadow-[0_0_10px_rgba(242,241,237,0.18)]">
+          AXIS
+        </div>
+
         <header className="absolute left-4 right-4 top-4 z-20 border-b border-white/10 bg-black/46 px-4 py-3 backdrop-blur-sm">
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4">
             <p className="text-[11px] font-black uppercase tracking-[0.26em] text-zinc-100">
@@ -1777,10 +1781,11 @@ export function LiveMemoryStream() {
           </div>
           <button
             type="button"
+            aria-label="Toggle perception layer"
             onClick={() =>
               setLiveViewMode((mode) => (mode === "MOTION_ECHO" ? "RECON" : "MOTION_ECHO"))
             }
-            className="axis-mono axis-optical-transition mt-4 inline-flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500 transition hover:text-zinc-200"
+            className="axis-optical-transition mt-4 inline-flex h-5 w-5 items-center justify-center border border-white/10 transition hover:border-white/20"
           >
             <span
               className={`h-1.5 w-1.5 rounded-full ${
@@ -1789,7 +1794,6 @@ export function LiveMemoryStream() {
                   : "bg-zinc-700"
               }`}
             />
-            {liveViewMode === "MOTION_ECHO" ? "MOTION ECHO" : "RECON"}
           </button>
         </header>
 

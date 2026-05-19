@@ -152,17 +152,6 @@ function tensionZonesFromMotionField(
   ]
 }
 
-function formatChrono(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Number(totalSeconds) || 0)
-  const minutes = Math.floor(safeSeconds / 60)
-  const seconds = Math.floor(safeSeconds % 60)
-  const centiseconds = Math.floor((safeSeconds % 1) * 100)
-
-  return `${minutes.toString().padStart(2, "0")}:${seconds
-    .toString()
-    .padStart(2, "0")}.${centiseconds.toString().padStart(2, "0")}`
-}
-
 function safeExportTitle(value: string) {
   const cleaned = value
     .toLowerCase()
@@ -257,26 +246,19 @@ function drawVideoCover(
   context.drawImage(video, x, y, drawWidth, drawHeight)
 }
 
-function drawLockOverlay(
+function drawAxisWatermark(
   context: CanvasRenderingContext2D,
-  chrono: string,
-  annotation: string | undefined,
   width: number,
   height: number,
-  opacity = 1
+  intensity = 0
 ) {
   context.save()
-  context.fillStyle = `rgba(0, 0, 0, ${0.34 * opacity})`
-  context.fillRect(0, height - 150, width, 150)
-  context.font = `700 22px ${monoFont}`
+  context.font = `800 18px ${monoFont}`
   context.letterSpacing = "2px"
-  context.fillStyle = `rgba(242, 241, 237, ${0.9 * opacity})`
-  context.fillText(`CHRONO // ${chrono}`, 42, height - 82)
-  if (annotation) {
-    context.font = `700 18px ${displayFont}`
-    context.fillStyle = `rgba(242, 241, 237, ${0.62 * opacity})`
-    context.fillText(annotation.slice(0, 42).toUpperCase(), 42, height - 48)
-  }
+  context.shadowColor = "rgba(242,241,237,0.18)"
+  context.shadowBlur = 8 + intensity * 8
+  context.fillStyle = `rgba(242,241,237,${0.28 + intensity * 0.08})`
+  context.fillText("AXIS", 42, height - 42)
   context.restore()
 }
 
@@ -473,8 +455,6 @@ function drawSignalPerceptionLayer(
 
 function drawPulseIntro(
   context: CanvasRenderingContext2D,
-  nodeId: string,
-  chrono: string,
   width: number,
   height: number,
   progress: number,
@@ -485,18 +465,11 @@ function drawPulseIntro(
   context.fillRect(0, 0, width, height)
 
   const pulse = Math.sin(progress * Math.PI)
-  context.fillStyle = `rgba(242,241,237,${0.08 + pulse * (0.1 + acousticPeak * 0.08)})`
-  context.fillRect(42, height / 2 - 1, width - 84, 2)
   context.fillStyle = `rgba(242,241,237,${0.9})`
   context.font = `900 34px ${displayFont}`
-  context.fillText("AXIS", 42, height / 2 - 72)
-  context.font = `700 18px ${monoFont}`
-  context.fillStyle = "rgba(242,241,237,0.64)"
-  context.fillText(nodeId, 42, height / 2 - 28)
-  context.fillStyle = "rgba(242,241,237,0.86)"
-  context.fillText(`CHRONO // ${chrono}`, 42, height / 2 + 56)
-  context.fillStyle = `rgba(215,192,138,${0.1 + acousticPeak * 0.16})`
-  context.fillRect(42, height / 2 + 88, (width - 84) * (0.18 + acousticPeak * 0.72), 1)
+  context.shadowColor = `rgba(242,241,237,${0.12 + pulse * (0.1 + acousticPeak * 0.08)})`
+  context.shadowBlur = 10 + pulse * 10
+  context.fillText("AXIS", 42, height / 2)
   context.restore()
 }
 
@@ -616,7 +589,6 @@ export async function exportSnapshotSignal({
     mimeType,
     videoBitsPerSecond: 4_500_000,
   })
-  const chrono = formatChrono(signal.chronologyAnchor)
   const anchorTime = Math.min(
     Math.max(0, Number(signal.chronologyAnchor) || 0),
     Number.isFinite(video.duration) ? video.duration : Number(signal.chronologyAnchor) || 0
@@ -648,7 +620,7 @@ export async function exportSnapshotSignal({
   recorder.start(250)
 
   await recordTimedFrames((_, progress) => {
-    drawPulseIntro(context, signal.nodeId, chrono, outputWidth, outputHeight, progress, acousticPeak)
+    drawPulseIntro(context, outputWidth, outputHeight, progress, acousticPeak)
   }, pulseDurationMs)
 
   await seekVideo(video, startTime)
@@ -667,6 +639,7 @@ export async function exportSnapshotSignal({
       outputHeight,
       continuityPulse * 0.72
     )
+    drawAxisWatermark(context, outputWidth, outputHeight, continuityPulse * kineticDensity)
 
     if (trailContext && frameCount % Math.max(4, Math.round(10 - kineticDensity * 5)) === 0) {
       trailContext.drawImage(canvas, 0, 0, outputWidth, outputHeight)
@@ -685,7 +658,7 @@ export async function exportSnapshotSignal({
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
     drawSignalPerceptionLayer(context, signal, outputWidth, outputHeight, 1)
     drawSnapshotImageLock(context, snapshotImage, outputWidth, outputHeight, 0.2)
-    drawLockOverlay(context, chrono, signal.annotation, outputWidth, outputHeight)
+    drawAxisWatermark(context, outputWidth, outputHeight, kineticDensity)
   }, freezeDurationMs)
 
   await video.play()
@@ -696,6 +669,7 @@ export async function exportSnapshotSignal({
     drawVideoCover(context, video, outputWidth, outputHeight)
     drawTrailFrame(context, lastTrailCanvas, outputWidth, outputHeight, kineticDensity)
     drawSignalPerceptionLayer(context, signal, outputWidth, outputHeight, tailProgress * 0.5)
+    drawAxisWatermark(context, outputWidth, outputHeight, tailProgress * kineticDensity)
 
     if (trailContext && frameCount % Math.max(4, Math.round(10 - kineticDensity * 5)) === 0) {
       trailContext.drawImage(canvas, 0, 0, outputWidth, outputHeight)

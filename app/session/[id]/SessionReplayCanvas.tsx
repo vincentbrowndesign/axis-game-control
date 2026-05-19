@@ -265,6 +265,9 @@ function ReplayVideo({
             transform: `scale(${inspectionDepth})`,
           }}
         />
+        <div className="axis-mono pointer-events-none absolute bottom-4 left-4 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
+          AXIS
+        </div>
       </div>
     </div>
   )
