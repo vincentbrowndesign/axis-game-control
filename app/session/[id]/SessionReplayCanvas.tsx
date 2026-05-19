@@ -26,6 +26,7 @@ type SessionPayload = {
 }
 
 type InspectionDepth = 0.5 | 1 | 2 | 2.5
+type ReplayMode = "RECON" | "SIGNAL"
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
 
@@ -72,6 +73,20 @@ function compactNodeId(sessionId: string) {
   const suffix = compact.slice(-4) || "0000"
 
   return `AXS-${suffix}`
+}
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(1, Math.max(0, value))
+}
+
+function signalCoordinates(seed: number, index: number) {
+  const phase = seed * 0.09 + index * 1.7
+
+  return {
+    x: 18 + ((Math.sin(phase) + 1) / 2) * 58,
+    y: 18 + ((Math.cos(phase * 0.82) + 1) / 2) * 56,
+  }
 }
 
 export function seekToEvent(
@@ -129,9 +144,13 @@ async function syncSeekToAnchor(
 function ReplayVideo({
   playbackUrl,
   inspectionDepth,
+  replayMode,
+  duration,
 }: {
   playbackUrl: string | null
   inspectionDepth: InspectionDepth
+  replayMode: ReplayMode
+  duration: number
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const { currentTimelineAnchor, isInternalSeeking, completeInternalSeek, syncMediaPlayback } =
@@ -196,64 +215,202 @@ function ReplayVideo({
 
   return (
     <div className="overflow-hidden border border-white/10 bg-[#050505]">
-      <video
-        ref={videoRef}
-        src={playbackUrl}
-        controls
-        playsInline
-        preload="metadata"
-        onLoadedMetadata={(event) => {
-          syncMediaPlayback({
-            readyState: event.currentTarget.readyState,
-          })
-        }}
-        onTimeUpdate={(event) => {
-          if (useAxisChronologyStore.getState().playback.isSeeking) return
+      <div className="relative overflow-hidden">
+        <video
+          ref={videoRef}
+          src={playbackUrl}
+          controls
+          playsInline
+          preload="metadata"
+          onLoadedMetadata={(event) => {
+            syncMediaPlayback({
+              readyState: event.currentTarget.readyState,
+            })
+          }}
+          onTimeUpdate={(event) => {
+            if (useAxisChronologyStore.getState().playback.isSeeking) return
 
-          syncMediaPlayback({
-            currentTime: event.currentTarget.currentTime,
-            paused: event.currentTarget.paused,
-            isPlaying: !event.currentTarget.paused,
-            readyState: event.currentTarget.readyState,
-          })
-        }}
-        onPause={(event) => {
-          syncMediaPlayback({
-            currentTime: event.currentTarget.currentTime,
-            isPlaying: false,
-            paused: true,
-            readyState: event.currentTarget.readyState,
-          })
-        }}
-        onPlay={(event) => {
-          if (useAxisChronologyStore.getState().playback.isSeeking) {
-            event.currentTarget.pause()
-            return
-          }
+            syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              paused: event.currentTarget.paused,
+              isPlaying: !event.currentTarget.paused,
+              readyState: event.currentTarget.readyState,
+            })
+          }}
+          onPause={(event) => {
+            syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              isPlaying: false,
+              paused: true,
+              readyState: event.currentTarget.readyState,
+            })
+          }}
+          onPlay={(event) => {
+            if (useAxisChronologyStore.getState().playback.isSeeking) {
+              event.currentTarget.pause()
+              return
+            }
 
-          syncMediaPlayback({
-            currentTime: event.currentTarget.currentTime,
-            isPlaying: true,
-            paused: false,
-            readyState: event.currentTarget.readyState,
-          })
-        }}
-        onSeeked={(event) => {
-          if (useAxisChronologyStore.getState().playback.isSeeking) return
+            syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              isPlaying: true,
+              paused: false,
+              readyState: event.currentTarget.readyState,
+            })
+          }}
+          onSeeked={(event) => {
+            if (useAxisChronologyStore.getState().playback.isSeeking) return
 
-          syncMediaPlayback({
-            currentTime: event.currentTarget.currentTime,
-            isPlaying: !event.currentTarget.paused,
-            paused: event.currentTarget.paused,
-            readyState: event.currentTarget.readyState,
-          })
-          completeInternalSeek()
-        }}
-        className="aspect-video w-full bg-black object-contain transition-transform duration-[120ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
-        style={{
-          transform: `scale(${inspectionDepth})`,
-        }}
-      />
+            syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              isPlaying: !event.currentTarget.paused,
+              paused: event.currentTarget.paused,
+              readyState: event.currentTarget.readyState,
+            })
+            completeInternalSeek()
+          }}
+          className="aspect-video w-full bg-black object-contain transition-transform duration-[120ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
+          style={{
+            transform: `scale(${inspectionDepth})`,
+          }}
+        />
+        {replayMode === "SIGNAL" ? (
+          <SignalPerceptionOverlay duration={duration} inspectionDepth={inspectionDepth} />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function SignalPerceptionOverlay({
+  duration,
+  inspectionDepth,
+}: {
+  duration: number
+  inspectionDepth: InspectionDepth
+}) {
+  const { snapshots, events, playback, activeEventId } = useAxisChronologyStore(
+    useShallow((state) => ({
+      snapshots: state.snapshots,
+      events: state.events,
+      playback: state.playback,
+      activeEventId: state.activeEventId,
+    }))
+  )
+  const currentTime = Number(playback.currentTimelineAnchor || playback.currentTime) || 0
+  const safeDuration = Math.max(1, Number(duration) || 1)
+  const activeEvent = events.find((event) => event.id === activeEventId)
+  const nearestSnapshot = snapshots.reduce<AxisSnapshot | null>((nearest, snapshot) => {
+    if (!nearest) return snapshot
+    return Math.abs(snapshot.session_time - currentTime) <
+      Math.abs(nearest.session_time - currentTime)
+      ? snapshot
+      : nearest
+  }, null)
+  const anchorTime = Number(activeEvent?.session_time ?? nearestSnapshot?.session_time ?? currentTime)
+  const densityWindow = 5 / inspectionDepth
+  const density = clamp01(
+    events.filter((event) => Math.abs(Number(event.session_time) - currentTime) <= densityWindow)
+      .length / 6
+  )
+  const anchorProximity = clamp01(1 - Math.abs(currentTime - anchorTime) / Math.max(0.75, densityWindow))
+  const baseSeed = currentTime * 10 + safeDuration
+  const boxes = [0, 1, 2].map((index) => {
+    const point = signalCoordinates(baseSeed, index)
+    const energy = clamp01(0.32 + density * 0.5 + index * 0.08)
+
+    return {
+      ...point,
+      width: 9 + energy * 5,
+      height: 12 + energy * 6,
+      energy,
+    }
+  })
+  const tension = signalCoordinates(baseSeed, 6)
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden mix-blend-screen">
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="axis-optical-drift absolute inset-0 h-full w-full"
+        aria-hidden="true"
+      >
+        <defs>
+          <radialGradient id="axis-tension-zone" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(215,192,138,0.16)" />
+            <stop offset="48%" stopColor="rgba(242,241,237,0.04)" />
+            <stop offset="100%" stopColor="rgba(242,241,237,0)" />
+          </radialGradient>
+        </defs>
+        <circle
+          cx={tension.x}
+          cy={tension.y}
+          r={10 + density * 9 + anchorProximity * 4}
+          fill="url(#axis-tension-zone)"
+          opacity={0.36 + density * 0.32}
+        />
+        {boxes.map((box, index) => {
+          const next = boxes[(index + 1) % boxes.length]
+
+          return (
+            <g key={index}>
+              <path
+                d={`M ${box.x + box.width / 2} ${box.y + box.height / 2} Q ${
+                  (box.x + next.x) / 2
+                } ${box.y - 8 - density * 7} ${next.x + next.width / 2} ${
+                  next.y + next.height / 2
+                }`}
+                fill="none"
+                stroke="rgba(242,241,237,0.2)"
+                strokeWidth={0.16 + density * 0.14}
+                strokeLinecap="round"
+                opacity={0.34 + density * 0.38}
+              />
+              <rect
+                x={box.x}
+                y={box.y}
+                width={box.width}
+                height={box.height}
+                fill="none"
+                stroke="rgba(242,241,237,0.35)"
+                strokeWidth={0.16}
+                opacity={0.34 + box.energy * 0.42}
+              />
+              <rect
+                x={box.x - 0.7}
+                y={box.y - 0.7}
+                width={box.width + 1.4}
+                height={box.height + 1.4}
+                fill="none"
+                stroke="rgba(185,215,191,0.18)"
+                strokeWidth={0.08}
+                opacity={anchorProximity}
+              />
+              <circle
+                cx={box.x + box.width / 2}
+                cy={box.y + box.height / 2}
+                r={(2.4 + box.energy * 4) * anchorProximity}
+                fill="none"
+                stroke="rgba(185,215,191,0.32)"
+                strokeWidth={0.12}
+                opacity={anchorProximity}
+              />
+            </g>
+          )
+        })}
+      </svg>
+      <div className="absolute left-4 top-4 flex items-center gap-3">
+        <span className="h-1.5 w-1.5 bg-[#b9d7bf]/70" />
+        <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.24em] text-[#f2f1ed]/55">
+          SIGNAL ACTIVE
+        </p>
+      </div>
+      <div className="absolute bottom-5 left-4 border-l border-[#d7c08a]/30 pl-3">
+        <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#f2f1ed]/70">
+          CHRONO // {formatPreciseClock(currentTime)}
+        </p>
+      </div>
     </div>
   )
 }
@@ -371,6 +528,42 @@ function InspectionDepthControl({
               }`}
             >
               {depth}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ReplayModeToggle({
+  replayMode,
+  setReplayMode,
+}: {
+  replayMode: ReplayMode
+  setReplayMode: (mode: ReplayMode) => void
+}) {
+  return (
+    <div className="mb-4 flex items-center justify-between border border-white/10 bg-white/[0.015] px-4 py-3">
+      <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-600">
+        Perception
+      </p>
+      <div className="grid grid-cols-2 border border-white/10">
+        {(["RECON", "SIGNAL"] as ReplayMode[]).map((mode) => {
+          const active = replayMode === mode
+
+          return (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setReplayMode(mode)}
+              className={`axis-mono axis-optical-transition h-8 min-w-20 border-r border-white/10 px-3 text-[10px] font-semibold transition last:border-r-0 ${
+                active
+                  ? "bg-[#f2f1ed] text-black"
+                  : "bg-black text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300"
+              }`}
+            >
+              {mode}
             </button>
           )
         })}
@@ -570,6 +763,7 @@ function SnapshotStrip({ session }: { session: TemporalSessionRecord }) {
 
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
+  const [replayMode, setReplayMode] = useState<ReplayMode>("RECON")
   const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
@@ -653,7 +847,13 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
 
         <div className="grid flex-1 gap-5 py-5">
           <section className="min-w-0">
-            <ReplayVideo playbackUrl={session.playback_url} inspectionDepth={inspectionDepth} />
+            <ReplayModeToggle replayMode={replayMode} setReplayMode={setReplayMode} />
+            <ReplayVideo
+              playbackUrl={session.playback_url}
+              inspectionDepth={inspectionDepth}
+              replayMode={replayMode}
+              duration={Number(session.duration_seconds) || 0}
+            />
             <InspectionDepthControl
               inspectionDepth={inspectionDepth}
               setInspectionDepth={setInspectionDepth}

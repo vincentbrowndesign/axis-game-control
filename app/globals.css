@@ -86,6 +86,19 @@ button {
   }
 }
 
+@keyframes axis-optical-drift {
+  0%,
+  100% {
+    opacity: 0.36;
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    opacity: 0.56;
+    transform: translate3d(0.4px, -0.6px, 0);
+  }
+}
+
 .axis-atmosphere {
   position: relative;
   overflow: hidden;
@@ -123,6 +136,10 @@ button {
 .axis-optical-transition {
   transition-duration: 120ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0.18, 1);
+}
+
+.axis-optical-drift {
+  animation: axis-optical-drift 6s cubic-bezier(0.2, 0, 0.18, 1) infinite;
 }
 
 .axis-atmosphere > * {
