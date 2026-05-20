@@ -7,10 +7,14 @@ type SessionPageProps = {
   params: Promise<{
     id: string
   }>
+  searchParams: Promise<{
+    jump?: string
+  }>
 }
 
-export default async function SessionPage({ params }: SessionPageProps) {
+export default async function SessionPage({ params, searchParams }: SessionPageProps) {
   const { id } = await params
+  const { jump } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -59,5 +63,5 @@ export default async function SessionPage({ params }: SessionPageProps) {
     )
   }
 
-  return <SessionReplayCanvas session={session} />
+  return <SessionReplayCanvas session={session} initialEventId={jump || null} />
 }

@@ -2328,19 +2328,27 @@ function DevelopmentalMemoryStrip({
   )
 }
 
-export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
+export function SessionReplayCanvas({
+  session,
+  initialEventId = null,
+}: {
+  session: TemporalSessionRecord
+  initialEventId?: string | null
+}) {
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
   const [ritualPhase, setRitualPhase] = useState<RitualPhase>("apprentice")
-  const { hydrateChronology, hydrateSnapshots, setUiStatus, events, activeEventId } = useAxisChronologyStore(
+  const { hydrateChronology, hydrateSnapshots, setUiStatus, requestEventJump, events, activeEventId } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
       hydrateSnapshots: state.hydrateSnapshots,
       setUiStatus: state.setUiStatus,
+      requestEventJump: state.requestEventJump,
       events: state.events,
       activeEventId: state.activeEventId,
     }))
   )
+  const initialJumpAppliedRef = useRef<string | null>(null)
   const densityAnchors = buildDevelopmentalAnchors({
     events,
     trainingMemories,
@@ -2495,6 +2503,14 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
       active = false
     }
   }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
+
+  useEffect(() => {
+    if (!initialEventId || initialJumpAppliedRef.current === initialEventId) return
+    if (!events.some((event) => event.id === initialEventId)) return
+
+    initialJumpAppliedRef.current = initialEventId
+    requestEventJump(initialEventId)
+  }, [events, initialEventId, requestEventJump])
 
   return (
     <main
