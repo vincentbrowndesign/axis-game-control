@@ -336,12 +336,10 @@ function ReplayVideo({
 
   return (
     <div className="overflow-hidden bg-[#050505]">
-      <div className="relative overflow-hidden bg-[#020202] shadow-[0_30px_120px_rgba(0,0,0,0.72)]">
+      <div className="relative overflow-hidden bg-[#020202] shadow-[0_40px_140px_rgba(0,0,0,0.8)]">
         <div className="pointer-events-none absolute -inset-10 z-0 opacity-70">
-          <div className="absolute inset-x-12 top-8 h-px bg-gradient-to-r from-transparent via-[#f2f1ed]/12 to-transparent" />
-          <div className="absolute bottom-10 left-10 right-10 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/12 to-transparent" />
-          <div className="absolute left-6 top-1/4 h-2/3 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
-          <div className="absolute right-8 top-1/3 h-1/2 w-px bg-gradient-to-b from-transparent via-white/8 to-transparent" />
+          <div className="absolute inset-x-20 top-8 h-px bg-gradient-to-r from-transparent via-[#f2f1ed]/8 to-transparent" />
+          <div className="absolute bottom-10 left-20 right-20 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/8 to-transparent" />
         </div>
         <video
           ref={videoRef}
@@ -403,26 +401,14 @@ function ReplayVideo({
             transform: `scale(${inspectionDepth})`,
           }}
         />
-        <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.08),transparent_33%),linear-gradient(180deg,rgba(0,0,0,0.1),rgba(0,0,0,0.48))]" />
-        <div className="pointer-events-none absolute left-4 top-4 z-30 flex flex-col gap-2">
-          <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/34">
-            MACHINE OBSERVING
-          </p>
-          <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-[#d7c08a]/46">
-            TIME MADE OBSERVABLE
-          </p>
-        </div>
-        <div className="axis-mono pointer-events-none absolute right-4 top-4 z-30 text-right text-[9px] font-semibold uppercase tracking-[0.16em] text-white/28">
-          REPLAY NEGOTIATION ACTIVE
-        </div>
+        <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.055),transparent_36%),linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.44))]" />
         <div className="axis-mono pointer-events-none absolute bottom-4 left-4 z-30 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
           AXIS
         </div>
         {memoryPulse ? (
           <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-[#f2f1ed]/[0.035]">
-            <div className="axis-mono bg-black/28 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/78 backdrop-blur">
-              <p>REMEMBER THIS</p>
-              <p className="mt-2 text-[8px] text-[#d7c08a]/66">TRAINING MEMORY STORED</p>
+            <div className="axis-mono bg-black/22 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/70 backdrop-blur">
+              MEMORY STORED
             </div>
           </div>
         ) : null}
@@ -478,13 +464,9 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
   }
 
   return (
-    <div className="mt-4 bg-white/[0.012] px-4 py-4">
-      <div className="axis-mono mb-2 flex items-center justify-between text-[8px] font-semibold uppercase tracking-[0.18em] text-zinc-700">
-        <span>memory trace</span>
-        <span>reflection path</span>
-      </div>
+    <div className="mt-8 px-1 py-3">
       <div
-        className="relative h-12"
+        className="relative h-10"
         onClick={(event) => {
           jumpToNearestAtPosition(event.clientX, event.currentTarget)
         }}
@@ -494,14 +476,13 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
         }).map((_, index) => (
           <span
             key={index}
-            className="absolute top-1/2 h-3 -translate-y-1/2 border-l border-white/[0.045]"
+            className="absolute top-1/2 h-2 -translate-y-1/2 border-l border-white/[0.035]"
             style={{
               left: `${(index / granularity) * 100}%`,
             }}
           />
         ))}
-        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/18" />
-        <div className="absolute left-0 right-0 top-[calc(50%+7px)] h-px -translate-y-1/2 bg-[#d7c08a]/8" />
+        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/12" />
         {visibleEvents.map((event) => {
           const position = Math.min(
             100,
@@ -527,8 +508,8 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
               aria-label={`Jump to snapshot at ${formatClock(event.session_time)}`}
               className={`axis-optical-transition absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-[0] transition ${
                 active
-                  ? "bg-[#f2f1ed] shadow-[0_0_16px_rgba(242,241,237,0.22)]"
-                  : "bg-zinc-300/35 hover:bg-[#f2f1ed]"
+                  ? "bg-[#f2f1ed] shadow-[0_0_14px_rgba(242,241,237,0.18)]"
+                  : "bg-zinc-300/28 hover:bg-[#f2f1ed]"
               }`}
               style={{
                 left: `${position}%`,
@@ -537,7 +518,7 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
           )
         })}
       </div>
-      <div className="axis-mono mt-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+      <div className="axis-mono mt-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
         <span>00:00</span>
         <span className="text-zinc-700">{inspectionDepth}X</span>
         <span>{formatClock(duration)}</span>
@@ -554,11 +535,8 @@ function InspectionDepthControl({
   setInspectionDepth: (depth: InspectionDepth) => void
 }) {
   return (
-    <div className="mt-4 flex items-center justify-between bg-white/[0.01] px-4 py-3">
-      <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-600">
-        Optical depth
-      </p>
-      <div className="grid grid-cols-4">
+    <div className="mt-3 flex justify-center">
+      <div className="grid grid-cols-4 bg-white/[0.01]">
         {inspectionDepths.map((depth) => {
           const active = depth === inspectionDepth
 
@@ -569,7 +547,7 @@ function InspectionDepthControl({
               onClick={() => setInspectionDepth(depth)}
               className={`axis-mono axis-optical-transition h-8 min-w-12 px-3 text-[10px] font-semibold transition ${
                 active
-                  ? "bg-[#f2f1ed] text-black"
+                  ? "bg-[#f2f1ed]/88 text-black"
                   : "bg-transparent text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300"
               }`}
             >
@@ -642,7 +620,7 @@ function DevelopmentalInputBar({
     }))
   )
   const [query, setQuery] = useState("")
-  const [response, setResponse] = useState("Ask the room what to revisit.")
+  const [response, setResponse] = useState("")
 
   const submitQuery = () => {
     const normalized = query.trim().toLowerCase()
@@ -709,7 +687,7 @@ function DevelopmentalInputBar({
   }
 
   return (
-    <section className="mt-4 bg-white/[0.012] px-4 py-4">
+    <section className="mx-auto mt-10 w-full max-w-4xl px-2 pb-2">
       <form
         className="flex flex-col gap-3 md:flex-row md:items-center"
         onSubmit={(event) => {
@@ -717,25 +695,25 @@ function DevelopmentalInputBar({
           submitQuery()
         }}
       >
-        <label className="axis-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-600 md:w-44">
-          developmental route
-        </label>
+        <label className="sr-only">Ask memory</label>
         <input
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
           placeholder="show me where rhythm shifted"
-          className="axis-mono min-h-11 flex-1 border-0 border-b border-white/10 bg-transparent px-0 py-2 text-[13px] text-[#f2f1ed] outline-none placeholder:text-zinc-700 focus:border-[#d7c08a]/40"
+          className="axis-mono min-h-12 flex-1 border-0 border-b border-white/10 bg-transparent px-1 py-2 text-center text-[14px] text-[#f2f1ed] outline-none placeholder:text-zinc-700 focus:border-[#d7c08a]/34 md:text-left"
         />
         <button
           type="submit"
-          className="axis-mono axis-optical-transition bg-white/[0.04] px-4 py-3 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 transition hover:bg-[#f2f1ed] hover:text-black"
+          className="axis-mono axis-optical-transition self-center bg-white/[0.025] px-4 py-3 text-[9px] font-black uppercase tracking-[0.16em] text-white/42 transition hover:bg-[#f2f1ed]/86 hover:text-black md:self-auto"
         >
-          observe
+          ask
         </button>
       </form>
-      <p className="axis-mono mt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/46">
-        {response}
-      </p>
+      {response ? (
+        <p className="axis-mono mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/38 md:text-left">
+          {response}
+        </p>
+      ) : null}
     </section>
   )
 }
@@ -797,26 +775,17 @@ function DevelopmentalMemoryStrip({
   }
 
   return (
-    <section className="mt-7">
-      <div className="mb-3 flex items-end justify-between gap-4">
-        <div>
-          <p className="axis-mono text-[9px] font-black uppercase tracking-[0.24em] text-[#d7c08a]/58">
-            Developmental mirror
-          </p>
-          <p className="mt-1 text-sm font-semibold text-zinc-500">
-            Fragments where repetition becomes visible.
-          </p>
-        </div>
+    <section className="mt-14">
+      <div className="mb-3 flex justify-end">
         <Link
           href="/training-set"
-          className="axis-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/38 transition hover:text-white/76"
+          className="axis-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/28 transition hover:text-white/66"
         >
           Training set
         </Link>
       </div>
-      <div className="relative overflow-hidden bg-white/[0.012] px-3 py-3">
-        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/[0.055]" />
-        <div className="pointer-events-none absolute left-0 right-0 top-[calc(50%+11px)] h-px bg-[#d7c08a]/[0.055]" />
+      <div className="relative overflow-hidden px-1 py-2">
+        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/[0.035]" />
         <div className="relative flex gap-2 overflow-x-auto pb-1">
           {trainingMemories.map((memory, index) => {
             const progressionContext = memoryProgressionContext(memory)
@@ -826,7 +795,7 @@ function DevelopmentalMemoryStrip({
                 key={memory.id}
                 type="button"
                 onClick={() => jumpToMoment(Number(memory.replay_time))}
-                className="axis-optical-transition group relative min-w-48 overflow-hidden bg-black/42 text-left transition hover:bg-white/[0.04]"
+                className="axis-optical-transition group relative min-w-44 overflow-hidden bg-black/32 text-left transition hover:bg-white/[0.03]"
               >
                 <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
                 <div className="pointer-events-none absolute left-3 top-3 z-20 axis-mono text-[8px] font-black uppercase tracking-[0.14em] text-white/46">
@@ -836,22 +805,19 @@ function DevelopmentalMemoryStrip({
                 <img
                   src={memory.frame_url}
                   alt={`${memory.label} memory at ${formatClock(memory.replay_time)}`}
-                  className="aspect-video w-48 object-cover grayscale-[10%] transition duration-150 group-hover:brightness-110"
+                  className="aspect-video w-44 object-cover grayscale-[16%] opacity-82 transition duration-150 group-hover:brightness-110 group-hover:opacity-100"
                 />
                 <div className="relative z-20 space-y-2 px-3 py-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="axis-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#f2f1ed]">
+                    <p className="axis-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#f2f1ed]/82">
                       {memory.label}
                     </p>
                     <p className="axis-mono text-[9px] font-black text-[#d7c08a]/72">
                       {formatClock(memory.replay_time)}
                     </p>
                   </div>
-                  <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
-                    {progressionContext}
-                  </p>
                   <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
-                    CHRONOLOGY ATTACHED
+                    {progressionContext}
                   </p>
                 </div>
               </button>
@@ -864,7 +830,7 @@ function DevelopmentalMemoryStrip({
           return (
             <div
               key={snapshot.id}
-              className="min-w-36 bg-black/30"
+              className="min-w-32 bg-black/24"
             >
               <button
                 type="button"
@@ -876,26 +842,23 @@ function DevelopmentalMemoryStrip({
                   <img
                     src={source}
                     alt={`Snapshot at ${formatClock(snapshot.session_time)}`}
-                    className="aspect-video w-36 object-cover grayscale-[22%]"
+                    className="aspect-video w-32 object-cover grayscale-[32%] opacity-72"
                   />
                 ) : (
-                  <div className="grid aspect-video w-36 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">
+                  <div className="grid aspect-video w-32 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-700">
                     SNAP
                   </div>
                 )}
               </button>
               <div className="px-2 py-2">
-                <p className="axis-mono text-[10px] font-bold text-zinc-100">
+                <p className="axis-mono text-[10px] font-bold text-zinc-400">
                   {formatClock(snapshot.session_time)}
                 </p>
                 {chapter ? (
-                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#d7c08a]">
+                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#d7c08a]/54">
                     {chapter}
                   </p>
                 ) : null}
-                <p className="axis-mono mt-1 text-[8px] font-semibold uppercase tracking-[0.12em] text-zinc-700">
-                  replay state
-                </p>
                 <input
                   type="text"
                   value={snapshot.annotation}
@@ -928,7 +891,6 @@ function DevelopmentalMemoryStrip({
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
-  const [observationCount, setObservationCount] = useState(0)
   const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
@@ -964,7 +926,6 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
         })
         hydrateSnapshots(payload.snapshots || [])
         setTrainingMemories(payload.trainingMemories || [])
-        setObservationCount((payload.events || []).length)
       } finally {
         return
       }
@@ -977,19 +938,13 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     }
   }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
 
-  const storedCount = trainingMemories.length
-  const snapshotCount = useAxisChronologyStore.getState().snapshots.length
-
   return (
     <main className="axis-display min-h-dvh overflow-hidden bg-[#030303] text-[#f2f1ed]">
       <section className="pointer-events-none fixed inset-0 opacity-70">
-        <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_50%_0%,rgba(215,192,138,0.10),transparent_55%)]" />
-        <div className="absolute inset-y-0 left-1/2 w-px bg-white/[0.025]" />
-        <div className="absolute inset-y-0 left-[18%] w-px bg-white/[0.018]" />
-        <div className="absolute inset-y-0 right-[18%] w-px bg-white/[0.018]" />
+        <div className="absolute inset-x-0 top-0 h-80 bg-[radial-gradient(circle_at_50%_0%,rgba(215,192,138,0.07),transparent_58%)]" />
         <div className="absolute bottom-0 left-0 right-0 h-80 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.84))]" />
       </section>
-      <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 py-4 sm:px-6">
+      <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 py-6 sm:px-8">
         <header className="py-3">
           <div className="flex items-center justify-between gap-6">
             <Link
@@ -1004,24 +959,14 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 border-t border-white/[0.055] py-5 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4 py-12 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="axis-mono mb-4 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d7c08a]/50">
-              replay is externalized self-observation
-            </p>
             <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">
               {compactNodeId(session.id)}
             </p>
             <p className="mt-2 text-6xl font-bold leading-none tracking-normal text-[#f2f1ed] sm:text-7xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
-            <div className="axis-mono mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
-              <span>LOCKED</span>
-              <span>DEVELOPMENT LOOP ACTIVE</span>
-              <span>{storedCount} MACHINE MEMORIES</span>
-              <span>{observationCount} OBSERVATIONS</span>
-              <span>{snapshotCount} REFLECTIONS</span>
-            </div>
             <p className="axis-mono mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
               {formatEnvironmentalTimestamp(session.created_at)}
             </p>
