@@ -40,9 +40,43 @@ type SessionPayload = {
 type InspectionDepth = 0.5 | 1 | 2 | 2.5
 type RitualPhase = "apprentice" | "practitioner" | "mastery"
 type RitualIntent = "Observe" | "Watch" | "Link" | "Mark" | "Again"
+type ReplayGestureMode = "idle" | "press" | "hold" | "drag" | "voice" | "close"
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
 const ritualStorageKey = "axis:replay-room-ritual-count:v1"
+
+type AxisSpeechRecognitionResult = {
+  readonly isFinal: boolean
+  readonly [index: number]: {
+    readonly transcript: string
+  }
+}
+
+type AxisSpeechRecognitionEvent = {
+  readonly resultIndex: number
+  readonly results: {
+    readonly length: number
+    readonly [index: number]: AxisSpeechRecognitionResult
+  }
+}
+
+type AxisSpeechRecognition = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onresult: ((event: AxisSpeechRecognitionEvent) => void) | null
+  onerror: (() => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+}
+
+type AxisSpeechRecognitionConstructor = new () => AxisSpeechRecognition
+
+type AxisSpeechWindow = Window & {
+  SpeechRecognition?: AxisSpeechRecognitionConstructor
+  webkitSpeechRecognition?: AxisSpeechRecognitionConstructor
+}
 
 type TrainingMemoryRecord = {
   id: string
@@ -128,6 +162,17 @@ function trainingLabelFromEvent(event: TemporalEventRecord | undefined) {
 function pulseHaptic(pattern: number | number[] = 8) {
   if (typeof navigator === "undefined" || !("vibrate" in navigator)) return
   navigator.vibrate(pattern)
+}
+
+function cleanGesturePhrase(value: string) {
+  return value.replace(/\s+/g, " ").trim().slice(0, 220)
+}
+
+function pointerDistance(
+  first: { x: number; y: number },
+  second: { x: number; y: number }
+) {
+  return Math.hypot(first.x - second.x, first.y - second.y)
 }
 
 function memoryDensityAt(time: number, anchors: Array<{ time: number; weight?: number }>, duration: number) {
@@ -304,6 +349,7 @@ function ReplayVideo({
   ritualPhase,
   onRitualPractice,
   onTrainingMemoryStored,
+  onSetInspectionDepth,
 }: {
   playbackUrl: string | null
   inspectionDepth: InspectionDepth
@@ -311,18 +357,36 @@ function ReplayVideo({
   ritualPhase: RitualPhase
   onRitualPractice: () => void
   onTrainingMemoryStored: (memory: TrainingMemoryRecord) => void
+  onSetInspectionDepth: (depth: InspectionDepth) => void
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const seekVersionRef = useRef(0)
   const tapTimerRef = useRef<number | null>(null)
   const holdTimerRef = useRef<number | null>(null)
+  const voiceHoldTimerRef = useRef<number | null>(null)
   const radialTimerRef = useRef<number | null>(null)
+  const dragSeekFrameRef = useRef<number | null>(null)
   const playbackClockFrameRef = useRef<number | null>(null)
   const resumeAfterSeekRef = useRef(false)
   const holdTriggeredRef = useRef(false)
+  const dragStartRef = useRef<{
+    x: number
+    y: number
+    time: number
+    wasPlaying: boolean
+  } | null>(null)
+  const dragTargetRef = useRef<number | null>(null)
+  const activePointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const twoFingerCloseRef = useRef<{
+    initialDistance: number
+    committed: boolean
+  } | null>(null)
+  const recognitionRef = useRef<AxisSpeechRecognition | null>(null)
+  const voicePhraseRef = useRef("")
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
   const [memoryPulse, setMemoryPulse] = useState(false)
   const [holdActive, setHoldActive] = useState(false)
+  const [gestureMode, setGestureMode] = useState<ReplayGestureMode>("idle")
   const [radialIntent, setRadialIntent] = useState<{
     x: number
     y: number
@@ -493,6 +557,108 @@ function ReplayVideo({
     }
   }, [holdActive, syncMediaPlayback])
 
+  const saveGesturePhrase = async (phrase: string, occurredAtSeconds: number) => {
+    const clean = cleanGesturePhrase(phrase)
+    if (!clean) return
+
+    try {
+      await fetch("/api/practice/voice", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: session.id,
+          phrase: clean,
+          workflowStage: "REVIEW",
+          occurredAtSeconds,
+        }),
+      })
+      pulseHaptic([14, 28, 10])
+    } catch {
+      return
+    }
+  }
+
+  const stopVoiceHold = () => {
+    if (voiceHoldTimerRef.current) {
+      window.clearTimeout(voiceHoldTimerRef.current)
+      voiceHoldTimerRef.current = null
+    }
+
+    const recognition = recognitionRef.current
+    recognitionRef.current = null
+
+    if (recognition) {
+      recognition.onend = null
+      recognition.onerror = null
+      recognition.onresult = null
+      recognition.stop()
+    }
+
+    const phrase = voicePhraseRef.current
+    voicePhraseRef.current = ""
+    if (phrase) {
+      void saveGesturePhrase(phrase, Number(videoRef.current?.currentTime) || Number(playback.currentTimelineAnchor) || 0)
+    }
+  }
+
+  const startVoiceHold = () => {
+    if (recognitionRef.current || typeof window === "undefined") return
+
+    const speechWindow = window as AxisSpeechWindow
+    const SpeechRecognition =
+      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
+
+    if (!SpeechRecognition) return
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.onresult = (event) => {
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index]
+        const phrase = cleanGesturePhrase(result?.[0]?.transcript || "")
+
+        if (phrase) voicePhraseRef.current = phrase
+      }
+    }
+    recognition.onerror = () => {
+      recognitionRef.current = null
+      setGestureMode((mode) => (mode === "voice" ? "hold" : mode))
+    }
+    recognition.onend = () => {
+      recognitionRef.current = null
+      setGestureMode((mode) => (mode === "voice" ? "idle" : mode))
+    }
+
+    try {
+      recognition.start()
+      recognitionRef.current = recognition
+      setGestureMode("voice")
+      pulseHaptic([8, 22, 8])
+    } catch {
+      recognitionRef.current = null
+    }
+  }
+
+  const scheduleDragSeek = useCallback((targetTime: number, shouldResume: boolean) => {
+    dragTargetRef.current = targetTime
+
+    if (dragSeekFrameRef.current) return
+
+    dragSeekFrameRef.current = window.requestAnimationFrame(() => {
+      dragSeekFrameRef.current = null
+      const nextTarget = dragTargetRef.current
+      dragTargetRef.current = null
+
+      if (typeof nextTarget === "number") {
+        void seekReplayToAnchor(nextTarget, null, shouldResume)
+      }
+    })
+  }, [seekReplayToAnchor])
+
   const toggleReplayAwareness = () => {
     const video = videoRef.current
     if (!video) return
@@ -574,16 +740,24 @@ function ReplayVideo({
 
   const startHoldObservation = () => {
     if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+    if (voiceHoldTimerRef.current) window.clearTimeout(voiceHoldTimerRef.current)
     holdTriggeredRef.current = false
     holdTimerRef.current = window.setTimeout(() => {
       const video = videoRef.current
       holdTriggeredRef.current = true
       resumeAfterSeekRef.current = false
+      setGestureMode("hold")
       setHoldActive(true)
       video?.pause()
       pulseHaptic(10)
       onRitualPractice()
     }, 520)
+    voiceHoldTimerRef.current = window.setTimeout(() => {
+      holdTriggeredRef.current = true
+      setHoldActive(true)
+      startVoiceHold()
+      onRitualPractice()
+    }, 960)
   }
 
   const endHoldObservation = () => {
@@ -591,7 +765,110 @@ function ReplayVideo({
       window.clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
     }
+    stopVoiceHold()
     setHoldActive(false)
+    setGestureMode((mode) => (mode === "hold" || mode === "voice" ? "idle" : mode))
+  }
+
+  const handleGestureStart = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+    activePointersRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    })
+    setGestureMode("press")
+
+    if (activePointersRef.current.size === 1) {
+      dragStartRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        time: videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0,
+        wasPlaying: Boolean(videoRef.current && !videoRef.current.paused),
+      }
+      startHoldObservation()
+      return
+    }
+
+    if (activePointersRef.current.size === 2) {
+      if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+      if (voiceHoldTimerRef.current) window.clearTimeout(voiceHoldTimerRef.current)
+      holdTriggeredRef.current = true
+      const pointers = [...activePointersRef.current.values()]
+      twoFingerCloseRef.current = {
+        initialDistance: pointerDistance(pointers[0], pointers[1]),
+        committed: false,
+      }
+      setGestureMode("close")
+    }
+  }
+
+  const handleGestureMove = (event: PointerEvent<HTMLDivElement>) => {
+    const pointer = activePointersRef.current.get(event.pointerId)
+    if (!pointer) return
+
+    activePointersRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    })
+
+    if (activePointersRef.current.size === 2 && twoFingerCloseRef.current) {
+      const pointers = [...activePointersRef.current.values()]
+      const distance = pointerDistance(pointers[0], pointers[1])
+      const closeDelta = twoFingerCloseRef.current.initialDistance - distance
+
+      if (!twoFingerCloseRef.current.committed && closeDelta > 54) {
+        twoFingerCloseRef.current.committed = true
+        setRadialIntent(null)
+        onSetInspectionDepth(1)
+        setGestureMode("close")
+        pulseHaptic([9, 18, 9])
+        onRitualPractice()
+      }
+      return
+    }
+
+    const dragStart = dragStartRef.current
+    const video = videoRef.current
+    if (!dragStart || !video) return
+
+    const deltaX = event.clientX - dragStart.x
+    const deltaY = event.clientY - dragStart.y
+    const dragDistance = Math.hypot(deltaX, deltaY)
+
+    if (dragDistance < 18 || Math.abs(deltaX) < Math.abs(deltaY) * 1.12) return
+
+    if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+    if (voiceHoldTimerRef.current) window.clearTimeout(voiceHoldTimerRef.current)
+    holdTriggeredRef.current = true
+    setHoldActive(false)
+    setGestureMode("drag")
+
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const duration = Number.isFinite(video.duration) ? video.duration : Number(session.duration_seconds) || 0
+    const secondsDelta = (deltaX / Math.max(bounds.width, 1)) * Math.max(duration, 1) * 0.42
+    const targetTime = Math.min(Math.max(0, dragStart.time + secondsDelta), Math.max(duration, 0))
+
+    scheduleDragSeek(targetTime, dragStart.wasPlaying)
+    pulseHaptic(4)
+  }
+
+  const handleGestureEnd = (event: PointerEvent<HTMLDivElement>) => {
+    activePointersRef.current.delete(event.pointerId)
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    if (activePointersRef.current.size === 0) {
+      endHoldObservation()
+      dragStartRef.current = null
+      twoFingerCloseRef.current = null
+      window.setTimeout(() => {
+        setGestureMode("idle")
+      }, 120)
+    }
   }
 
   useEffect(() => {
@@ -665,7 +942,10 @@ function ReplayVideo({
     return () => {
       if (tapTimerRef.current) window.clearTimeout(tapTimerRef.current)
       if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+      if (voiceHoldTimerRef.current) window.clearTimeout(voiceHoldTimerRef.current)
       if (radialTimerRef.current) window.clearTimeout(radialTimerRef.current)
+      if (dragSeekFrameRef.current) window.cancelAnimationFrame(dragSeekFrameRef.current)
+      recognitionRef.current?.stop()
     }
   }, [])
 
@@ -682,10 +962,12 @@ function ReplayVideo({
           memoryPulse ? "shadow-[0_50px_170px_rgba(0,0,0,0.86),0_0_150px_rgba(215,192,138,0.16)]" : ""
         }`}
         onClick={handleReplayTap}
-        onPointerDown={startHoldObservation}
-        onPointerLeave={endHoldObservation}
-        onPointerCancel={endHoldObservation}
-        onPointerUp={endHoldObservation}
+        onContextMenu={(event) => event.preventDefault()}
+        onPointerDown={handleGestureStart}
+        onPointerMove={handleGestureMove}
+        onPointerLeave={handleGestureEnd}
+        onPointerCancel={handleGestureEnd}
+        onPointerUp={handleGestureEnd}
       >
         <div className="pointer-events-none absolute -inset-10 z-0 opacity-80">
           <div className="absolute inset-x-20 top-8 h-px bg-gradient-to-r from-transparent via-[#f2f1ed]/8 to-transparent" />
@@ -777,7 +1059,16 @@ function ReplayVideo({
         />
         <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.05),transparent_34%),radial-gradient(circle_at_48%_100%,rgba(215,192,138,0.09),transparent_48%),linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.46))]" />
         {holdActive ? (
-          <div className="pointer-events-none absolute inset-0 z-30 bg-[#0c0704]/34" />
+          <div
+            className={`pointer-events-none absolute inset-0 z-30 transition duration-200 ${
+              gestureMode === "voice"
+                ? "bg-[#0c0704]/38 shadow-[inset_0_0_120px_rgba(215,192,138,0.08)]"
+                : "bg-[#0c0704]/28"
+            }`}
+          />
+        ) : null}
+        {gestureMode === "drag" || gestureMode === "close" ? (
+          <div className="pointer-events-none absolute inset-x-10 top-1/2 z-30 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#f2f1ed]/24 to-transparent shadow-[0_0_26px_rgba(242,241,237,0.18)]" />
         ) : null}
         <div className="axis-mono pointer-events-none absolute bottom-4 left-4 z-30 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
           AXIS
@@ -798,25 +1089,6 @@ function ReplayVideo({
             </div>
           </div>
         ) : null}
-        <div className="absolute bottom-4 right-4 z-30 flex max-w-[min(20rem,calc(100%-2rem))] flex-col items-end gap-2">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              void saveCurrentFrameToTrainingSet()
-            }}
-            disabled={trainingStatus === "saving"}
-            className={`axis-mono axis-optical-transition bg-black/28 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 backdrop-blur transition hover:text-white/82 disabled:text-white/28 ${
-              ritualPhase === "mastery"
-                ? "opacity-0 hover:opacity-50"
-                : ritualPhase === "practitioner"
-                  ? "opacity-34 hover:opacity-80"
-                  : "opacity-76"
-            }`}
-          >
-            {trainingStatus === "stored" ? "MARKED" : "MARK"}
-          </button>
-        </div>
       </div>
     </div>
   )
@@ -1566,6 +1838,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
                   )
                 })
               }
+              onSetInspectionDepth={setInspectionDepth}
             />
             <InspectionDepthControl
               inspectionDepth={inspectionDepth}
