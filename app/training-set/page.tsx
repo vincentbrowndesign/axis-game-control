@@ -46,16 +46,16 @@ export default async function TrainingSetPage() {
             AXIS
           </Link>
           <p className="axis-mono axis-sync-muted text-[10px] font-semibold uppercase tracking-[0.22em]">
-            HELD REPS
+            Saved clips
           </p>
         </header>
 
         <section className="py-8">
           <p className="axis-mono axis-sync-muted text-[10px] font-semibold uppercase tracking-[0.24em]">
-            HELD MEMORY
+            Replay clips
           </p>
           <h1 className="axis-sync-text mt-3 max-w-3xl text-4xl font-bold leading-none tracking-normal sm:text-6xl">
-            Saved reps that keep their heat.
+            Clips coaches marked for review.
           </h1>
         </section>
 
@@ -64,7 +64,7 @@ export default async function TrainingSetPage() {
         ) : (
           <div className="axis-sync-surface grid min-h-64 place-items-center text-center">
             <p className="axis-mono axis-sync-muted text-[10px] font-black uppercase tracking-[0.22em]">
-              NO HELD REPS YET
+              No saved clips yet
             </p>
           </div>
         )}

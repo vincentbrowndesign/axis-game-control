@@ -13,7 +13,6 @@ import {
 } from "@/lib/liveArchive"
 import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
 import {
-  basketballEvents,
   buildContinuitySnapshotPayload,
   generateContinuityPrimitives,
   reconstructionChapterForEvent,
@@ -115,6 +114,14 @@ const trackFailureGraceMs = 5200
 const recorderTimesliceMs = 2000
 const liveOpticalDepths: LiveOpticalDepth[] = [0.5, 1, 2, 2.5]
 const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
+const quickBasketballEvents: BasketballEvent[] = [
+  "SHOT",
+  "REBOUND",
+  "TURNOVER",
+  "ASSIST",
+  "FOUL",
+  "BLOCK",
+]
 
 type TrainingLabel = (typeof trainingLabels)[number]
 
@@ -262,12 +269,14 @@ function BasketballEventSelector({
   onSelect: (event: BasketballEvent, machineSuggested: boolean) => void
 }) {
   const selectorRef = useRef<HTMLDivElement | null>(null)
+  const visibleEvents = quickBasketballEvents
+  const visibleSuggested = pending.suggested.filter((event) => visibleEvents.includes(event))
   const [activeEvent, setActiveEvent] = useState<BasketballEvent | null>(
-    pending.suggested[0] || null
+    visibleSuggested[0] || "SHOT"
   )
   const [isSliding, setIsSliding] = useState(false)
-  const spokes = basketballEvents.map((basketballEvent, index) => {
-    const angle = -Math.PI / 2 + (index / basketballEvents.length) * Math.PI * 2
+  const spokes = visibleEvents.map((basketballEvent, index) => {
+    const angle = -Math.PI / 2 + (index / visibleEvents.length) * Math.PI * 2
     const radius = 45
 
     return {
@@ -287,7 +296,7 @@ function BasketballEventSelector({
     const distance = Math.sqrt((clientX - centerX) ** 2 + (clientY - centerY) ** 2)
 
     if (distance < bounds.width * 0.14) {
-      setActiveEvent(pending.suggested[0] || "SHOT")
+      setActiveEvent(visibleSuggested[0] || "SHOT")
       return
     }
 
@@ -304,7 +313,7 @@ function BasketballEventSelector({
   }
 
   const selectEvent = (event: BasketballEvent) => {
-    onSelect(event, pending.suggested.includes(event))
+    onSelect(event, visibleSuggested.includes(event))
   }
 
   return (
@@ -323,8 +332,8 @@ function BasketballEventSelector({
           if (activeEvent) selectEvent(activeEvent)
         }}
         onPointerCancel={() => setIsSliding(false)}
-        className="relative h-56 w-56 touch-none bg-black/20 backdrop-blur-sm"
-        aria-label="Continuity selector"
+        className="axis-familiar-bar relative h-56 w-56 touch-none border"
+        aria-label="Tag play"
       >
         <div className="absolute inset-10 bg-white/[0.025]" />
         <button
@@ -334,12 +343,12 @@ function BasketballEventSelector({
             event.stopPropagation()
             onCancel()
           }}
-          className="axis-mono absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 bg-black/28 text-[9px] font-black uppercase tracking-[0.2em] text-white/38 backdrop-blur"
+          className="axis-mono axis-familiar-control absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-[0.2em]"
         >
-          SNAP
+          TAG
         </button>
         {spokes.map((spoke) => {
-          const suggested = pending.suggested.includes(spoke.event)
+          const suggested = visibleSuggested.includes(spoke.event)
           const active = activeEvent === spoke.event
 
           return (
@@ -353,8 +362,8 @@ function BasketballEventSelector({
                 active
                   ? "bg-[#f2f1ed]/90 text-black shadow-[0_0_18px_rgba(242,241,237,0.2)]"
                   : suggested
-                    ? "bg-[#d7c08a]/10 text-[#e6d7ad]"
-                    : "bg-black/24 text-white/36 backdrop-blur"
+                    ? "axis-familiar-tag"
+                    : "axis-familiar-control"
               }`}
               style={{
                 left: `${spoke.x}%`,
@@ -1795,10 +1804,22 @@ export function LiveMemoryStream() {
 
   const hasRecentArchive = Boolean(archivedRecording)
   const latestSnapshot = snapshots[snapshots.length - 1] || null
+  const statusLabel =
+    status === "LIVE"
+      ? "LIVE"
+      : status === "READY"
+        ? "READY"
+        : status === "STARTING"
+          ? "STARTING"
+          : status === "FINALIZING"
+            ? "SAVING"
+            : status === "ARCHIVED"
+              ? "SAVED"
+              : "RECONNECTING"
 
   return (
-    <main className="h-dvh overflow-hidden bg-black text-zinc-100">
-      <section className="relative h-dvh overflow-hidden bg-black">
+    <main className="axis-display axis-sync-room axis-familiar-room h-dvh overflow-hidden">
+      <section className="relative h-dvh overflow-hidden">
         <video
           ref={localVideoRef}
           autoPlay
@@ -1819,8 +1840,8 @@ export function LiveMemoryStream() {
 
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.44),transparent_27%,transparent_72%,rgba(0,0,0,0.62))]" />
 
-        <div className="axis-mono pointer-events-none absolute bottom-28 left-5 z-20 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_10px_rgba(242,241,237,0.16)]">
-          AXIS
+        <div className="axis-mono pointer-events-none absolute bottom-28 left-5 z-20 text-[10px] font-black uppercase tracking-[0.28em] text-white/46 drop-shadow-[0_0_10px_rgba(242,241,237,0.16)]">
+          LIVE
         </div>
 
         <header className="absolute left-5 right-5 top-5 z-20">
@@ -1839,7 +1860,7 @@ export function LiveMemoryStream() {
                 }`}
               />
               <span className="axis-mono text-[10px] font-black uppercase tracking-[0.24em] text-white/58">
-                LIVE
+                {statusLabel}
               </span>
             </div>
           </div>
@@ -1865,13 +1886,13 @@ export function LiveMemoryStream() {
                 href={`/session/${archivedRecording.id}`}
                 className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/42 transition hover:text-white/76"
               >
-                Record
+                Replay
               </Link>
             ) : null}
           </div>
           <button
             type="button"
-            aria-label="Toggle perception layer"
+            aria-label="Toggle tracking overlay"
             onClick={() =>
               setLiveViewMode((mode) => (mode === "MOTION_ECHO" ? "RECON" : "MOTION_ECHO"))
             }
@@ -1899,9 +1920,9 @@ export function LiveMemoryStream() {
               <div className="mt-7 flex justify-center gap-3">
                 <Link
                   href={`/session/${archivedRecording.id}`}
-                  className="bg-zinc-100/92 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
+                  className="axis-familiar-primary px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
                 >
-                  Open recording
+                  Open replay
                 </Link>
                 <button
                   type="button"
@@ -1913,22 +1934,22 @@ export function LiveMemoryStream() {
                       setFailure(error instanceof Error ? error.message : "Camera failed")
                     })
                   }}
-                  className="bg-white/[0.06] px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 backdrop-blur"
+                  className="axis-familiar-control px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
                 >
-                  New session
+                  New recording
                 </button>
               </div>
               {latestSnapshot ? (
                 <div className="mt-5 flex flex-col items-center gap-2">
                   {showLiveTrainingLabels ? (
-                    <div className="grid grid-cols-3 gap-1 bg-black/24 p-1">
+                    <div className="axis-familiar-bar grid grid-cols-3 gap-1 border p-1">
                       {trainingLabels.map((label) => (
                         <button
                           key={label}
                           type="button"
                           onClick={() => void saveLiveReviewToTrainingSet(label)}
                           disabled={trainingStatus === "saving"}
-                          className="axis-mono bg-white/[0.045] px-3 py-2 text-[8px] font-black uppercase tracking-[0.12em] text-white/58 disabled:text-white/24"
+                          className="axis-mono axis-familiar-tag px-3 py-2 text-[8px] font-black uppercase tracking-[0.12em] disabled:text-white/24"
                         >
                           {label}
                         </button>
@@ -1941,7 +1962,7 @@ export function LiveMemoryStream() {
                     disabled={trainingStatus === "saving"}
                     className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/48 transition hover:text-white/78 disabled:text-white/24"
                   >
-                    {trainingStatus === "stored" ? "TRAINING MEMORY STORED" : "SAVE TO TRAINING SET"}
+                    {trainingStatus === "stored" ? "CLIP SAVED" : "SAVE CLIP"}
                   </button>
                 </div>
               ) : null}
@@ -1960,7 +1981,7 @@ export function LiveMemoryStream() {
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
           {status === "LIVE" && latestSnapshot ? (
-            <div className="mx-auto mb-3 flex max-w-sm items-center gap-3 bg-black/24 p-1.5 backdrop-blur-sm">
+            <div className="axis-familiar-bar mx-auto mb-3 flex max-w-sm items-center gap-3 border p-1.5">
               {latestSnapshot.image_url || latestSnapshot.localUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -1975,7 +1996,7 @@ export function LiveMemoryStream() {
               )}
               <div className="min-w-0">
                 <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/38">
-                  {trainingStatus === "stored" ? "MEMORY SAVED" : "Snapshot"}
+                  {trainingStatus === "stored" ? "CLIP SAVED" : "Latest snap"}
                 </p>
                 {showLiveTrainingLabels ? (
                   <div className="mt-2 grid grid-cols-3 gap-1">
@@ -1985,7 +2006,7 @@ export function LiveMemoryStream() {
                         type="button"
                         onClick={() => void saveLiveReviewToTrainingSet(label)}
                         disabled={trainingStatus === "saving"}
-                        className="axis-mono bg-white/[0.04] px-2 py-1.5 text-[7px] font-black uppercase tracking-[0.1em] text-white/54 disabled:text-white/24"
+                        className="axis-mono axis-familiar-tag px-2 py-1.5 text-[7px] font-black uppercase tracking-[0.1em] disabled:text-white/24"
                       >
                         {label}
                       </button>
@@ -1998,7 +2019,7 @@ export function LiveMemoryStream() {
                   disabled={trainingStatus === "saving"}
                   className="axis-mono mt-1 text-[8px] font-black uppercase tracking-[0.16em] text-white/48 transition hover:text-white/82 disabled:text-white/24"
                 >
-                  SAVE TO TRAINING SET
+                  SAVE CLIP
                 </button>
               </div>
             </div>
@@ -2008,15 +2029,15 @@ export function LiveMemoryStream() {
               <button
                 type="button"
                 onClick={() => void startSession()}
-                className="w-full bg-zinc-100/90 px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] text-black backdrop-blur active:bg-zinc-300"
+                className="axis-familiar-primary w-full px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] active:bg-zinc-300"
               >
-                Start
+                Start recording
               </button>
             ) : null}
 
             {status === "STARTING" || status === "FINALIZING" || status === "RECONNECTING" ? (
-              <div className="w-full bg-black/28 px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-white/50 backdrop-blur">
-                ...
+              <div className="axis-familiar-bar w-full border px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-white/56">
+                {statusLabel}
               </div>
             ) : null}
 
@@ -2025,23 +2046,23 @@ export function LiveMemoryStream() {
                 <button
                   type="button"
                   onClick={() => void captureSnapshot()}
-                  className="bg-black/28 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-100 backdrop-blur active:bg-white/10"
+                  className="axis-familiar-control px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-white/10"
                 >
                   Snap
                 </button>
                 <button
                   type="button"
                   onClick={() => void finalizeSession()}
-                  className="bg-zinc-100/90 px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-black backdrop-blur active:bg-zinc-300"
+                  className="axis-familiar-primary px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-zinc-300"
                 >
-                  End
+                  End recording
                 </button>
               </div>
             ) : null}
           </div>
           {hasRecentArchive && status === "READY" ? (
             <p className="axis-mono mt-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-white/34">
-              Last recording stored
+              Last replay saved
             </p>
           ) : null}
         </footer>

@@ -33,11 +33,11 @@ function compactSessionId(sessionId: string) {
 function formatHeldState(value: string) {
   const normalized = value.toLowerCase()
 
-  if (normalized.includes("complete") || normalized.includes("uploaded")) return "held"
+  if (normalized.includes("complete") || normalized.includes("uploaded")) return "saved"
   if (normalized.includes("pending") || normalized.includes("queued")) return "warming"
   if (normalized.includes("error") || normalized.includes("failed")) return "unresolved"
 
-  return "held"
+  return "saved"
 }
 
 export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
@@ -118,7 +118,7 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
                 onClick={() => void sendToRoboflow(memory.id)}
                 className="axis-mono axis-optical-transition axis-sync-action px-3 py-3 text-[9px] font-black uppercase tracking-[0.12em] transition disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-600"
               >
-                HOLD FRAME
+                Save frame
               </button>
               <button
                 type="button"
@@ -126,7 +126,7 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
                 onClick={() => void deleteMemory(memory.id)}
                 className="axis-mono axis-optical-transition axis-sync-surface px-3 py-3 text-[9px] font-black uppercase tracking-[0.12em] transition hover:text-zinc-100 disabled:cursor-wait disabled:text-zinc-700"
               >
-                RELEASE
+                Remove
               </button>
             </div>
           </div>

@@ -1832,6 +1832,7 @@ function InspectionDepthControl({
             <button
               key={depth}
               type="button"
+              aria-label={`Replay zoom ${depth}x`}
               onClick={() => setInspectionDepth(depth)}
               className={`axis-mono axis-optical-transition h-8 min-w-12 px-3 text-[10px] font-semibold transition ${
                 active
@@ -1839,7 +1840,7 @@ function InspectionDepthControl({
                   : "axis-type-dormant bg-transparent hover:bg-[#d7c08a]/[0.035]"
               }`}
             >
-              {depth}
+              {depth}x
             </button>
           )
         })}
@@ -1975,9 +1976,9 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
         aria-label="Keep recording"
-        className="axis-mono axis-optical-transition axis-climate-surface axis-density-surface axis-chronology-residue axis-witness-surface axis-witness-field axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
+        className="axis-mono axis-optical-transition axis-climate-surface axis-density-surface axis-chronology-residue axis-witness-surface axis-witness-field axis-familiar-control px-4 py-3 text-[10px] font-bold uppercase tracking-[0.14em] transition disabled:cursor-wait"
       >
-        keep
+        Download
       </button>
     </div>
   )
@@ -2124,7 +2125,7 @@ function DevelopmentalInputBar({
         }`}
       >
         <div className="pointer-events-none absolute inset-x-8 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#d7c08a]/14 to-transparent" />
-        <label className="sr-only">Place attention in chronology</label>
+        <label className="sr-only">Add replay note</label>
         <input
           value={attention}
           onChange={(event) => {
@@ -2150,9 +2151,9 @@ function DevelopmentalInputBar({
               event.currentTarget.blur()
             }
           }}
-          aria-label="Place attention in chronology"
-          placeholder=""
-          className="axis-mono axis-climate-text axis-type-field relative z-10 min-h-12 w-full border-0 bg-transparent px-5 py-2 text-[14px] outline-none"
+          aria-label="Add replay note"
+          placeholder="Add replay note or player"
+          className="axis-mono axis-climate-text axis-type-field relative z-10 min-h-12 w-full border-0 bg-transparent px-5 py-2 text-[14px] outline-none placeholder:uppercase placeholder:tracking-[0.14em]"
         />
       </div>
     </section>
@@ -2222,7 +2223,7 @@ function DevelopmentalMemoryStrip({
           href="/training-set"
           className="axis-mono axis-type-dormant text-[9px] font-black lowercase tracking-[0.14em] transition hover:opacity-70"
         >
-          held
+          saved clips
         </Link>
       </div>
       <div className="relative overflow-hidden px-1 py-2">
@@ -2240,7 +2241,7 @@ function DevelopmentalMemoryStrip({
               >
                 <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
                 <div className="axis-mono axis-type-residue pointer-events-none absolute left-3 top-3 z-20 text-[8px] font-black lowercase tracking-[0.12em]">
-                  held {String(index + 1).padStart(2, "0")}
+                  clip {String(index + 1).padStart(2, "0")}
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -2508,15 +2509,18 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
             <Link
               href="/live"
               aria-label="Return live"
-              className="axis-mono axis-type-dormant text-[10px] font-semibold lowercase tracking-[0.14em] transition hover:opacity-70"
+              className="axis-mono axis-type-dormant text-[10px] font-semibold uppercase tracking-[0.14em] transition hover:opacity-70"
             >
-              live
+              Live
             </Link>
           </div>
         </header>
 
         <div className="flex flex-col gap-4 py-12 md:flex-row md:items-end md:justify-between">
           <div>
+            <p className="axis-mono axis-type-residue text-[10px] font-semibold uppercase tracking-[0.18em]">
+              Replay
+            </p>
             <p className="axis-type-presence mt-2 text-5xl font-bold leading-none tracking-normal sm:text-6xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
