@@ -426,6 +426,7 @@ function ReplayVideo({
   const [memoryPulse, setMemoryPulse] = useState(false)
   const [holdActive, setHoldActive] = useState(false)
   const [gestureMode, setGestureMode] = useState<ReplayGestureMode>("idle")
+  const [replaySettled, setReplaySettled] = useState(false)
   const [radialIntent, setRadialIntent] = useState<{
     x: number
     y: number
@@ -539,6 +540,7 @@ function ReplayVideo({
   ) => {
     const video = videoRef.current
     if (!video) return
+    setReplaySettled(false)
 
     const seekVersion = seekVersionRef.current + 1
     seekVersionRef.current = seekVersion
@@ -713,6 +715,7 @@ function ReplayVideo({
     }
 
     if (video.paused) {
+      setReplaySettled(false)
       void video.play().catch(() => undefined)
     } else {
       video.pause()
@@ -757,6 +760,7 @@ function ReplayVideo({
 
     const state = useAxisChronologyStore.getState()
     if (state.activeEventId) {
+      setReplaySettled(false)
       state.requestEventJump(state.activeEventId)
       pulseHaptic(7)
     }
@@ -948,16 +952,10 @@ function ReplayVideo({
 
     document.addEventListener("visibilitychange", handleVisibility)
     window.addEventListener("pageshow", restoreFromChronology)
-    window.addEventListener("focus", restoreFromChronology)
-    window.addEventListener("pagehide", restoreFromChronology)
-    window.addEventListener("blur", restoreFromChronology)
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility)
       window.removeEventListener("pageshow", restoreFromChronology)
-      window.removeEventListener("focus", restoreFromChronology)
-      window.removeEventListener("pagehide", restoreFromChronology)
-      window.removeEventListener("blur", restoreFromChronology)
     }
   }, [seekReplayToAnchor])
 
@@ -1009,7 +1007,11 @@ function ReplayVideo({
     <div className="overflow-hidden bg-[#090706]">
       <div
         className={`relative overflow-hidden bg-[#050403] shadow-[0_42px_150px_rgba(0,0,0,0.82),0_0_120px_rgba(92,58,34,0.11)] transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
-          memoryPulse ? "shadow-[0_50px_170px_rgba(0,0,0,0.86),0_0_150px_rgba(215,192,138,0.16)]" : ""
+          memoryPulse
+            ? "shadow-[0_50px_170px_rgba(0,0,0,0.86),0_0_150px_rgba(215,192,138,0.16)]"
+            : replaySettled
+              ? "shadow-[0_48px_160px_rgba(0,0,0,0.88),0_0_170px_rgba(215,192,138,0.12)]"
+              : ""
         }`}
         onClick={handleReplayTap}
         onContextMenu={(event) => event.preventDefault()}
@@ -1074,6 +1076,7 @@ function ReplayVideo({
             })
           }}
           onPlay={(event) => {
+            setReplaySettled(false)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -1094,6 +1097,7 @@ function ReplayVideo({
             })
           }}
           onSeeked={(event) => {
+            setReplaySettled(false)
             useAxisChronologyStore.getState().completeSeekTransaction(event.currentTarget.currentTime)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
@@ -1115,6 +1119,17 @@ function ReplayVideo({
               readyState: event.currentTarget.readyState,
             })
           }}
+          onEnded={(event) => {
+            setReplaySettled(true)
+            syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              currentTimelineAnchor: event.currentTarget.currentTime,
+              isPlaying: false,
+              isSeeking: false,
+              paused: true,
+              readyState: event.currentTarget.readyState,
+            })
+          }}
           className={`relative z-10 aspect-video w-full bg-black object-contain transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
             memoryPulse ? "brightness-[1.12] contrast-[1.08]" : "brightness-[0.96]"
           }`}
@@ -1126,9 +1141,14 @@ function ReplayVideo({
         <div
           className="pointer-events-none absolute inset-0 z-20 transition duration-300"
           style={{
-            background: `radial-gradient(circle at 50% 62%, rgba(215,192,138,${densityWarmth(currentDensity)}), transparent 44%)`,
+            background: `radial-gradient(circle at 50% 62%, rgba(215,192,138,${
+              densityWarmth(currentDensity) + (replaySettled ? 0.07 : 0)
+            }), transparent 44%)`,
           }}
         />
+        {replaySettled ? (
+          <div className="pointer-events-none absolute inset-0 z-30 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.08),transparent_58%),linear-gradient(180deg,transparent,rgba(9,7,6,0.26))] opacity-80" />
+        ) : null}
         {holdActive ? (
           <div
             className={`pointer-events-none absolute inset-0 z-30 transition duration-200 ${
