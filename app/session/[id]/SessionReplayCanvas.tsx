@@ -41,6 +41,12 @@ type InspectionDepth = 0.5 | 1 | 2 | 2.5
 type RitualPhase = "apprentice" | "practitioner" | "mastery"
 type RitualIntent = "Observe" | "Watch" | "Link" | "Mark" | "Again"
 type ReplayGestureMode = "idle" | "press" | "hold" | "drag" | "voice" | "close"
+type DevelopmentalAnchor = {
+  id: string
+  time: number
+  weight: number
+  source: "event" | "memory"
+}
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
 const ritualStorageKey = "axis:replay-room-ritual-count:v1"
@@ -192,6 +198,37 @@ function hapticForDensity(density: number) {
   if (density >= 2.4) return [18, 26, 14]
   if (density >= 1.35) return [12, 18, 8]
   return 7
+}
+
+function densityWarmth(density: number) {
+  return Math.min(0.24, 0.04 + density * 0.035)
+}
+
+function buildDevelopmentalAnchors({
+  events,
+  trainingMemories,
+  activeEventId,
+}: {
+  events: TemporalEventRecord[]
+  trainingMemories: TrainingMemoryRecord[]
+  activeEventId?: string | null
+}): DevelopmentalAnchor[] {
+  const eventAnchors = events
+    .filter((event) => event.type === "SNAPSHOT")
+    .map((event) => ({
+      id: event.id,
+      time: Number(event.session_time) || 0,
+      weight: event.id === activeEventId ? 2.15 : 1.08,
+      source: "event" as const,
+    }))
+  const memoryAnchors = trainingMemories.map((memory) => ({
+    id: memory.id,
+    time: Number(memory.replay_time) || 0,
+    weight: 1.65,
+    source: "memory" as const,
+  }))
+
+  return [...eventAnchors, ...memoryAnchors].sort((a, b) => a.time - b.time)
 }
 
 function phaseForRitualCount(count: number): RitualPhase {
@@ -347,6 +384,7 @@ function ReplayVideo({
   inspectionDepth,
   session,
   ritualPhase,
+  densityAnchors,
   onRitualPractice,
   onTrainingMemoryStored,
   onSetInspectionDepth,
@@ -355,6 +393,7 @@ function ReplayVideo({
   inspectionDepth: InspectionDepth
   session: TemporalSessionRecord
   ritualPhase: RitualPhase
+  densityAnchors: DevelopmentalAnchor[]
   onRitualPractice: () => void
   onTrainingMemoryStored: (memory: TrainingMemoryRecord) => void
   onSetInspectionDepth: (depth: InspectionDepth) => void
@@ -411,6 +450,11 @@ function ReplayVideo({
         playback: state.playback,
       }))
     )
+  const currentDensity = memoryDensityAt(
+    Number(playback.currentTimelineAnchor) || 0,
+    densityAnchors,
+    Number(session.duration_seconds) || 0
+  )
 
   const saveCurrentFrameToTrainingSet = async () => {
     const video = videoRef.current
@@ -847,11 +891,17 @@ function ReplayVideo({
 
     const bounds = event.currentTarget.getBoundingClientRect()
     const duration = Number.isFinite(video.duration) ? video.duration : Number(session.duration_seconds) || 0
-    const secondsDelta = (deltaX / Math.max(bounds.width, 1)) * Math.max(duration, 1) * 0.42
-    const targetTime = Math.min(Math.max(0, dragStart.time + secondsDelta), Math.max(duration, 0))
+    const rawSecondsDelta = (deltaX / Math.max(bounds.width, 1)) * Math.max(duration, 1) * 0.42
+    const roughTarget = Math.min(Math.max(0, dragStart.time + rawSecondsDelta), Math.max(duration, 0))
+    const density = memoryDensityAt(roughTarget, densityAnchors, duration)
+    const resistance = 1 + Math.min(0.72, density * 0.14)
+    const targetTime = Math.min(
+      Math.max(0, dragStart.time + rawSecondsDelta / resistance),
+      Math.max(duration, 0)
+    )
 
     scheduleDragSeek(targetTime, dragStart.wasPlaying)
-    pulseHaptic(4)
+    pulseHaptic(density > 1.3 ? hapticForDensity(density) : 4)
   }
 
   const handleGestureEnd = (event: PointerEvent<HTMLDivElement>) => {
@@ -973,6 +1023,21 @@ function ReplayVideo({
           <div className="absolute inset-x-20 top-8 h-px bg-gradient-to-r from-transparent via-[#f2f1ed]/8 to-transparent" />
           <div className="absolute bottom-10 left-20 right-20 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/12 to-transparent" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_62%,rgba(93,62,42,0.16),transparent_54%),radial-gradient(circle_at_82%_14%,rgba(78,64,112,0.08),transparent_42%)]" />
+          {densityAnchors.slice(0, 14).map((anchor) => {
+            const left = Math.min(92, Math.max(8, (anchor.time / Math.max(Number(session.duration_seconds) || 1, 1)) * 84 + 8))
+            const intensity = densityWarmth(memoryDensityAt(anchor.time, densityAnchors, Number(session.duration_seconds) || 0))
+
+            return (
+              <span
+                key={`${anchor.source}-residue-${anchor.id}`}
+                className="absolute top-1/2 h-56 w-24 -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.22),transparent_68%)] blur-xl"
+                style={{
+                  left: `${left}%`,
+                  opacity: intensity,
+                }}
+              />
+            )
+          })}
         </div>
         <video
           ref={videoRef}
@@ -1058,6 +1123,12 @@ function ReplayVideo({
           }}
         />
         <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.05),transparent_34%),radial-gradient(circle_at_48%_100%,rgba(215,192,138,0.09),transparent_48%),linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.46))]" />
+        <div
+          className="pointer-events-none absolute inset-0 z-20 transition duration-300"
+          style={{
+            background: `radial-gradient(circle at 50% 62%, rgba(215,192,138,${densityWarmth(currentDensity)}), transparent 44%)`,
+          }}
+        />
         {holdActive ? (
           <div
             className={`pointer-events-none absolute inset-0 z-30 transition duration-200 ${
@@ -1094,7 +1165,11 @@ function ReplayVideo({
   )
 }
 
-function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
+function EventRail({
+  trainingMemories,
+}: {
+  trainingMemories: TrainingMemoryRecord[]
+}) {
   const { events, duration, activeEventId, requestEventJump, sessionId, playback } =
     useAxisChronologyStore(
       useShallow((state) => ({
@@ -1106,13 +1181,19 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
         playback: state.playback,
       }))
     )
-  const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
   const safeDuration = Math.max(duration, 1)
-  const granularity = inspectionDepth === 0.5 ? 4 : inspectionDepth === 1 ? 8 : inspectionDepth === 2 ? 16 : 24
-  const densityAnchors = visibleEvents.map((event) => ({
-    time: Number(event.session_time) || 0,
-    weight: event.id === activeEventId ? 1.45 : 1,
-  }))
+  const densityAnchors = buildDevelopmentalAnchors({
+    events,
+    trainingMemories,
+    activeEventId,
+  })
+  const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
+  const densityRegions = densityAnchors
+    .map((anchor) => ({
+      ...anchor,
+      density: memoryDensityAt(anchor.time, densityAnchors, safeDuration),
+    }))
+    .filter((anchor) => anchor.density >= 1)
   const [dragging, setDragging] = useState(false)
   const lastDenseEventRef = useRef<string | null>(null)
   const suppressClickRef = useRef(false)
@@ -1121,25 +1202,33 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
     Math.max(0, (Number(playback.currentTimelineAnchor) / safeDuration) * 100)
   )
   const jumpToNearestAtPosition = (clientX: number, rail: HTMLDivElement) => {
-    if (!visibleEvents.length) return
+    if (!densityAnchors.length) return
 
     const bounds = rail.getBoundingClientRect()
     const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
     const targetTime = ratio * safeDuration
-    const nearestEvent = visibleEvents.reduce((nearest, event) => {
-      const nearestDistance = Math.abs(Number(nearest.session_time) - targetTime)
-      const eventDistance = Math.abs(Number(event.session_time) - targetTime)
-      return eventDistance < nearestDistance ? event : nearest
-    }, visibleEvents[0])
+    const nearestAnchor = densityAnchors.reduce((nearest, anchor) => {
+      const nearestDistance = Math.abs(nearest.time - targetTime)
+      const anchorDistance = Math.abs(anchor.time - targetTime)
+      return anchorDistance < nearestDistance ? anchor : nearest
+    }, densityAnchors[0])
+    const nearestEvent =
+      nearestAnchor.source === "event"
+        ? events.find((event) => event.id === nearestAnchor.id)
+        : visibleEvents.reduce((nearest, event) => {
+            const nearestDistance = Math.abs(Number(nearest.session_time) - nearestAnchor.time)
+            const eventDistance = Math.abs(Number(event.session_time) - nearestAnchor.time)
+            return eventDistance < nearestDistance ? event : nearest
+          }, visibleEvents[0])
 
-    if (lastDenseEventRef.current !== nearestEvent.id) {
+    if (nearestEvent && lastDenseEventRef.current !== nearestAnchor.id) {
       requestEventJump(nearestEvent.id)
-      lastDenseEventRef.current = nearestEvent.id
+      lastDenseEventRef.current = nearestAnchor.id
       pulseHaptic(hapticForDensity(memoryDensityAt(targetTime, densityAnchors, safeDuration)))
       if (sessionId) {
         recordReplayNegotiation({
           sessionId,
-          sessionTime: Number(nearestEvent.session_time) || 0,
+          sessionTime: nearestAnchor.time,
           type: "RAIL_JUMP",
         })
       }
@@ -1147,10 +1236,10 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
   }
 
   return (
-    <div className="mt-8 px-1 py-3">
+    <div className="mt-8 px-1 py-4">
       <div
-        className={`relative h-10 touch-none transition-opacity duration-150 ${
-          dragging ? "opacity-100" : "opacity-78"
+        className={`relative h-16 touch-none overflow-hidden transition-opacity duration-150 ${
+          dragging ? "opacity-100" : "opacity-82"
         }`}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId)
@@ -1180,38 +1269,29 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
           jumpToNearestAtPosition(event.clientX, event.currentTarget)
         }}
       >
-        <div className="absolute left-0 right-0 top-1/2 h-5 -translate-y-1/2 overflow-hidden">
-          {densityAnchors.map((anchor) => {
+        <div className="absolute inset-x-0 top-1/2 h-14 -translate-y-1/2 overflow-hidden">
+          {densityRegions.map((anchor) => {
             const position = Math.min(100, Math.max(0, (anchor.time / safeDuration) * 100))
-            const density = memoryDensityAt(anchor.time, densityAnchors, safeDuration)
-            const width = Math.min(18, 5 + density * 4)
+            const width = Math.min(24, 7 + anchor.density * 4.5)
+            const height = Math.min(56, 18 + anchor.density * 12)
 
             return (
               <span
-                key={`pressure-${anchor.time}`}
-                className="absolute top-1/2 h-5 -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.16),transparent_68%)]"
+                key={`pressure-${anchor.source}-${anchor.id}`}
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.2),rgba(242,241,237,0.045)_44%,transparent_72%)] blur-[1px]"
                 style={{
                   left: `${position}%`,
                   width: `${width}%`,
+                  height,
+                  opacity: Math.min(0.72, 0.16 + anchor.density * 0.12),
                 }}
               />
             )
           })}
         </div>
-        {Array.from({
-          length: granularity + 1,
-        }).map((_, index) => (
-          <span
-            key={index}
-            className="absolute top-1/2 h-2 -translate-y-1/2 border-l border-white/[0.035]"
-            style={{
-              left: `${(index / granularity) * 100}%`,
-            }}
-          />
-        ))}
-        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-white/[0.035] via-[#f2f1ed]/16 to-white/[0.035]" />
+        <div className="absolute left-0 right-0 top-1/2 h-8 -translate-y-1/2 bg-[linear-gradient(90deg,transparent,rgba(242,241,237,0.055),transparent)] opacity-80" />
         <span
-          className="pointer-events-none absolute top-1/2 h-7 w-px -translate-y-1/2 bg-[#f2f1ed]/42 shadow-[0_0_18px_rgba(242,241,237,0.2)]"
+          className="pointer-events-none absolute top-1/2 h-9 w-px -translate-y-1/2 bg-[#f2f1ed]/38 shadow-[0_0_22px_rgba(242,241,237,0.24)]"
           style={{
             left: `${playheadPosition}%`,
           }}
@@ -1242,20 +1322,16 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
               aria-label={`Back to ${formatClock(event.session_time)}`}
               className={`axis-optical-transition absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-[0] transition ${
                 active
-                  ? "bg-[#f2f1ed] shadow-[0_0_18px_rgba(215,192,138,0.24)]"
-                  : "bg-[#d7c08a]/26 hover:bg-[#f2f1ed]"
+                  ? "bg-[#f2f1ed]/72 shadow-[0_0_22px_rgba(215,192,138,0.28)]"
+                  : "bg-[#d7c08a]/16 hover:bg-[#f2f1ed]/62"
               }`}
               style={{
                 left: `${position}%`,
+                borderRadius: "999px",
               }}
             />
           )
         })}
-      </div>
-      <div className="axis-mono mt-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
-        <span>00:00</span>
-        <span className="text-zinc-700">{inspectionDepth}X</span>
-        <span>{formatClock(duration)}</span>
       </div>
     </div>
   )
@@ -1444,12 +1520,13 @@ function DevelopmentalInputBar({
 }: {
   trainingMemories: TrainingMemoryRecord[]
 }) {
-  const { events, snapshots, requestEventJump, sessionId } = useAxisChronologyStore(
+  const { events, snapshots, requestEventJump, sessionId, playback } = useAxisChronologyStore(
     useShallow((state) => ({
       events: state.events,
       snapshots: state.snapshots,
       requestEventJump: state.requestEventJump,
       sessionId: state.sessionId,
+      playback: state.playback,
     }))
   )
   const [query, setQuery] = useState("")
@@ -1484,6 +1561,15 @@ function DevelopmentalInputBar({
       rhythmMatches.length,
       trainingMemories.length ? 1 : 0
     )
+    const currentTime = Number(playback.currentTimelineAnchor) || 0
+    const nearestEvent = events.reduce<typeof events[number] | null>((nearest, event) => {
+      if (!nearest) return event
+
+      return Math.abs(Number(event.session_time) - currentTime) <
+        Math.abs(Number(nearest.session_time) - currentTime)
+        ? event
+        : nearest
+    }, null)
 
     const targetEvent =
       basketballMatches[0] ||
@@ -1493,7 +1579,8 @@ function DevelopmentalInputBar({
               event.type === "SNAPSHOT" &&
               Math.abs(Number(event.session_time) - Number(rhythmMatches[0].session_time)) <= 0.5
           )
-        : null)
+        : null) ||
+      nearestEvent
 
     if (targetEvent) {
       requestEventJump(targetEvent.id)
@@ -1506,16 +1593,20 @@ function DevelopmentalInputBar({
       }
     }
 
-    if (normalized.includes("compare")) {
-      setResponse(`${Math.max(trainingMemories.length, snapshots.length)} linked.`)
+    const feltCount = Math.max(1, relatedCount)
+
+    if (!relatedCount && targetEvent) {
+      setResponse("nearby rhythm")
+    } else if (normalized.includes("compare")) {
+      setResponse(`${Math.max(1, trainingMemories.length, snapshots.length)} linked.`)
     } else if (normalized.includes("pressure")) {
-      setResponse(`${relatedCount} to watch again.`)
+      setResponse(`${feltCount} to watch again.`)
     } else if (normalized.includes("recover")) {
-      setResponse(`${relatedCount} found.`)
+      setResponse(`${feltCount} found.`)
     } else if (normalized.includes("rhythm") || normalized.includes("continuity")) {
-      setResponse(`${relatedCount} to watch again.`)
+      setResponse(`${feltCount} to watch again.`)
     } else {
-      setResponse(`${relatedCount} to watch again.`)
+      setResponse(`${feltCount} to watch again.`)
     }
   }
 
@@ -1725,13 +1816,20 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
   const [ritualPhase, setRitualPhase] = useState<RitualPhase>("apprentice")
-  const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
+  const { hydrateChronology, hydrateSnapshots, setUiStatus, events, activeEventId } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
       hydrateSnapshots: state.hydrateSnapshots,
       setUiStatus: state.setUiStatus,
+      events: state.events,
+      activeEventId: state.activeEventId,
     }))
   )
+  const densityAnchors = buildDevelopmentalAnchors({
+    events,
+    trainingMemories,
+    activeEventId,
+  })
 
   useEffect(() => {
     hydrateChronology({
@@ -1829,6 +1927,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               inspectionDepth={inspectionDepth}
               session={session}
               ritualPhase={ritualPhase}
+              densityAnchors={densityAnchors}
               onRitualPractice={markRitual}
               onTrainingMemoryStored={(memory) =>
                 setTrainingMemories((current) => {
@@ -1844,7 +1943,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               inspectionDepth={inspectionDepth}
               setInspectionDepth={setInspectionDepth}
             />
-            <EventRail inspectionDepth={inspectionDepth} />
+            <EventRail trainingMemories={trainingMemories} />
             <DevelopmentalInputBar trainingMemories={trainingMemories} />
             <DevelopmentalMemoryStrip trainingMemories={trainingMemories} />
           </section>
