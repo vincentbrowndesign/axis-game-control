@@ -204,6 +204,10 @@ function densityWarmth(density: number) {
   return Math.min(0.24, 0.04 + density * 0.035)
 }
 
+function clampThermalHeat(value: number) {
+  return Math.min(1, Math.max(0.12, value))
+}
+
 function buildDevelopmentalAnchors({
   events,
   trainingMemories,
@@ -427,6 +431,7 @@ function ReplayVideo({
   const [holdActive, setHoldActive] = useState(false)
   const [gestureMode, setGestureMode] = useState<ReplayGestureMode>("idle")
   const [replaySettled, setReplaySettled] = useState(false)
+  const [thermalHeat, setThermalHeat] = useState(0.24)
   const [radialIntent, setRadialIntent] = useState<{
     x: number
     y: number
@@ -456,6 +461,13 @@ function ReplayVideo({
     densityAnchors,
     Number(session.duration_seconds) || 0
   )
+  const roomTemperature = clampThermalHeat(
+    thermalHeat + Math.min(0.28, currentDensity * 0.045) + (replaySettled ? 0.2 : 0)
+  )
+
+  const warmRoom = useCallback((amount = 0.12) => {
+    setThermalHeat((heat) => clampThermalHeat(heat + amount))
+  }, [])
 
   const saveCurrentFrameToTrainingSet = async () => {
     const video = videoRef.current
@@ -523,6 +535,7 @@ function ReplayVideo({
 
       if (payload.memory) onTrainingMemoryStored(payload.memory)
       setMemoryPulse(true)
+      warmRoom(0.28)
       pulseHaptic([20, 34, 12])
       onRitualPractice()
       setTrainingStatus("stored")
@@ -541,6 +554,7 @@ function ReplayVideo({
     const video = videoRef.current
     if (!video) return
     setReplaySettled(false)
+    warmRoom(0.08)
 
     const seekVersion = seekVersionRef.current + 1
     seekVersionRef.current = seekVersion
@@ -601,7 +615,7 @@ function ReplayVideo({
         type: "FREEZE_FRAME",
       })
     }
-  }, [holdActive, syncMediaPlayback])
+  }, [holdActive, syncMediaPlayback, warmRoom])
 
   const saveGesturePhrase = async (phrase: string, occurredAtSeconds: number) => {
     const clean = cleanGesturePhrase(phrase)
@@ -620,6 +634,7 @@ function ReplayVideo({
           occurredAtSeconds,
         }),
       })
+      warmRoom(0.18)
       pulseHaptic([14, 28, 10])
     } catch {
       return
@@ -716,6 +731,7 @@ function ReplayVideo({
 
     if (video.paused) {
       setReplaySettled(false)
+      warmRoom(0.08)
       void video.play().catch(() => undefined)
     } else {
       video.pause()
@@ -730,6 +746,7 @@ function ReplayVideo({
       y: event.clientY - bounds.top,
     })
     pulseHaptic(8)
+    warmRoom(0.1)
     onRitualPractice()
     radialTimerRef.current = window.setTimeout(() => {
       radialTimerRef.current = null
@@ -795,6 +812,7 @@ function ReplayVideo({
       holdTriggeredRef.current = true
       resumeAfterSeekRef.current = false
       setGestureMode("hold")
+      warmRoom(0.12)
       setHoldActive(true)
       video?.pause()
       pulseHaptic(10)
@@ -871,6 +889,7 @@ function ReplayVideo({
         setRadialIntent(null)
         onSetInspectionDepth(1)
         setGestureMode("close")
+        warmRoom(0.08)
         pulseHaptic([9, 18, 9])
         onRitualPractice()
       }
@@ -892,6 +911,7 @@ function ReplayVideo({
     holdTriggeredRef.current = true
     setHoldActive(false)
     setGestureMode("drag")
+    warmRoom(0.06)
 
     const bounds = event.currentTarget.getBoundingClientRect()
     const duration = Number.isFinite(video.duration) ? video.duration : Number(session.duration_seconds) || 0
@@ -987,6 +1007,14 @@ function ReplayVideo({
   }, [syncMediaPlayback])
 
   useEffect(() => {
+    const cooling = window.setInterval(() => {
+      setThermalHeat((heat) => clampThermalHeat(heat - (replaySettled ? 0.008 : 0.014)))
+    }, 1400)
+
+    return () => window.clearInterval(cooling)
+  }, [replaySettled])
+
+  useEffect(() => {
     return () => {
       if (tapTimerRef.current) window.clearTimeout(tapTimerRef.current)
       if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
@@ -1015,6 +1043,7 @@ function ReplayVideo({
         }`}
         onClick={handleReplayTap}
         onContextMenu={(event) => event.preventDefault()}
+        onPointerEnter={() => warmRoom(0.05)}
         onPointerDown={handleGestureStart}
         onPointerMove={handleGestureMove}
         onPointerLeave={handleGestureEnd}
@@ -1040,6 +1069,12 @@ function ReplayVideo({
               />
             )
           })}
+          <div
+            className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.16),transparent_64%)]"
+            style={{
+              opacity: roomTemperature * 0.42,
+            }}
+          />
         </div>
         <video
           ref={videoRef}
@@ -1121,6 +1156,7 @@ function ReplayVideo({
           }}
           onEnded={(event) => {
             setReplaySettled(true)
+            warmRoom(0.34)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -1139,15 +1175,20 @@ function ReplayVideo({
         />
         <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.05),transparent_34%),radial-gradient(circle_at_48%_100%,rgba(215,192,138,0.09),transparent_48%),linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.46))]" />
         <div
-          className="pointer-events-none absolute inset-0 z-20 transition duration-300"
+          className="pointer-events-none absolute inset-0 z-20 transition duration-[900ms]"
           style={{
             background: `radial-gradient(circle at 50% 62%, rgba(215,192,138,${
-              densityWarmth(currentDensity) + (replaySettled ? 0.07 : 0)
+              densityWarmth(currentDensity) + roomTemperature * 0.09
             }), transparent 44%)`,
           }}
         />
         {replaySettled ? (
-          <div className="pointer-events-none absolute inset-0 z-30 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.08),transparent_58%),linear-gradient(180deg,transparent,rgba(9,7,6,0.26))] opacity-80" />
+          <div
+            className="pointer-events-none absolute inset-0 z-30 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.11),transparent_58%),linear-gradient(180deg,transparent,rgba(9,7,6,0.26))] transition duration-[1400ms]"
+            style={{
+              opacity: 0.42 + roomTemperature * 0.42,
+            }}
+          />
         ) : null}
         {holdActive ? (
           <div
@@ -1882,6 +1923,15 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     trainingMemories,
     activeEventId,
   })
+  const climateDensity = densityAnchors.reduce(
+    (warmth, anchor) =>
+      Math.max(
+        warmth,
+        memoryDensityAt(anchor.time, densityAnchors, Number(session.duration_seconds) || 1)
+      ),
+    0
+  )
+  const climateWarmth = densityWarmth(climateDensity)
 
   useEffect(() => {
     hydrateChronology({
@@ -1938,6 +1988,12 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     <main className="axis-display min-h-dvh overflow-hidden bg-[#090706] text-[#f2f1ed]">
       <section className="pointer-events-none fixed inset-0 opacity-85">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_6%,rgba(215,192,138,0.095),transparent_46%),radial-gradient(circle_at_12%_92%,rgba(84,63,94,0.11),transparent_42%),radial-gradient(circle_at_88%_78%,rgba(83,47,27,0.13),transparent_44%)]" />
+        <div
+          className="absolute inset-0 bg-[radial-gradient(ellipse_at_52%_42%,rgba(215,192,138,0.18),transparent_58%),radial-gradient(ellipse_at_32%_82%,rgba(83,47,27,0.15),transparent_48%)]"
+          style={{
+            opacity: 0.22 + climateWarmth,
+          }}
+        />
         <div className="absolute inset-x-0 top-0 h-80 bg-[linear-gradient(180deg,rgba(16,10,6,0.72),transparent)]" />
         <div className="absolute bottom-0 left-0 right-0 h-96 bg-[linear-gradient(180deg,transparent,rgba(5,3,2,0.9))]" />
       </section>
