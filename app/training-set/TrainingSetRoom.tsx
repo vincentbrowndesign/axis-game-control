@@ -95,7 +95,7 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
           <img
             src={memory.frame_url}
             alt={`${memory.label} at ${formatClock(memory.replay_time)}`}
-            className="aspect-video w-full object-cover grayscale-[10%]"
+            className="aspect-video w-full object-cover opacity-95"
           />
           <div className="space-y-4 p-4">
             <div className="flex items-start justify-between gap-4">

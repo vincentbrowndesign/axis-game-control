@@ -44,7 +44,7 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
   }, [id])
 
   return (
-    <AxisPage max="max-w-6xl">
+    <AxisPage max="max-w-6xl" className="axis-replay-operating-room">
         <AxisHeader>
           <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
             Find clips

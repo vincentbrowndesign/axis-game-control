@@ -112,7 +112,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
   const q = params.q || ""
 
   return (
-    <AxisPage max="max-w-6xl" className="px-4 py-6 sm:px-8">
+    <AxisPage max="max-w-6xl" className="axis-replay-operating-room px-4 py-6 sm:px-8">
       <div className="grid gap-8">
         <header className="grid gap-5 pb-5">
           <AxisHeader title="Live">
@@ -131,7 +131,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
               Find the play.
             </h1>
           </div>
-          <form className="axis-familiar-bar grid gap-3 border p-3 sm:grid-cols-[1fr_auto]">
+          <form className="axis-replay-command-surface grid gap-3 p-3 sm:grid-cols-[1fr_auto]">
             <input
               name="q"
               defaultValue={q}
@@ -193,10 +193,10 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
 
         <section className="grid gap-3">
           <div className="flex items-center justify-between gap-4">
-            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/42">
+            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/62">
               {retrieval.clips.length} clips ready
             </p>
-            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/30">
+            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/48">
               Opens exact replay
             </p>
           </div>

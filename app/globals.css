@@ -73,6 +73,10 @@
   --axis-world-broadcast: 0.62;
   --axis-world-continuity: 0.58;
   --axis-world-restraint: 0.66;
+  --axis-replay-clarity: 0.74;
+  --axis-replay-light: 0.68;
+  --axis-replay-trust: 0.7;
+  --axis-replay-toolbar-safe: env(safe-area-inset-top, 0px);
 }
 
 @theme inline {
@@ -477,6 +481,48 @@ button {
   color: rgba(242, 241, 237, calc(0.78 + var(--axis-climate-warmth) * 0.16));
 }
 
+.axis-replay-operating-room {
+  --axis-climate-warmth: calc(0.26 + var(--axis-replay-light) * 0.08);
+  --axis-climate-depth: calc(0.58 + var(--axis-replay-trust) * 0.1);
+  --axis-world-confidence: calc(0.72 + var(--axis-replay-trust) * 0.08);
+  background:
+    radial-gradient(
+      ellipse at 50% 0%,
+      rgba(242, 241, 237, calc(0.07 + var(--axis-replay-light) * 0.08)),
+      transparent 38%
+    ),
+    radial-gradient(
+      ellipse at 50% 72%,
+      rgba(215, 192, 138, calc(0.03 + var(--axis-replay-clarity) * 0.045)),
+      transparent 60%
+    ),
+    linear-gradient(180deg, #15130f 0%, #070706 34%, #000000 100%);
+  color: rgba(250, 249, 244, 0.92);
+}
+
+.axis-replay-operating-room .axis-climate-field {
+  background:
+    radial-gradient(
+      ellipse at 50% 12%,
+      rgba(242, 241, 237, calc(0.11 + var(--axis-replay-light) * 0.08)),
+      transparent 44%
+    ),
+    radial-gradient(
+      ellipse at 52% 64%,
+      rgba(215, 192, 138, calc(0.055 + var(--axis-replay-trust) * 0.055)),
+      transparent 62%
+    ),
+    linear-gradient(180deg, #171510 0%, #070706 48%, #000000 100%);
+}
+
+.axis-replay-operating-room .axis-climate-field::before {
+  opacity: 0.42;
+}
+
+.axis-replay-operating-room .axis-climate-field::after {
+  opacity: 0.18;
+}
+
 .axis-climate-root :where(p, a, button, input, span) {
   text-shadow: 0 0 18px rgba(215, 192, 138, calc(var(--axis-type-residue) * 0.16));
   transition:
@@ -574,6 +620,45 @@ button {
   box-shadow:
     0 44px 160px rgba(0, 0, 0, calc(0.7 + var(--axis-climate-depth) * 0.18)),
     0 0 150px rgba(92, 58, 34, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-gravity) * 0.1 + var(--axis-chronology-persistence) * 0.08 + var(--axis-sensory-afterglow) * 0.08));
+}
+
+.axis-replay-operating-room .axis-replay-surface,
+.axis-replay-frame {
+  background:
+    linear-gradient(180deg, rgba(242, 241, 237, 0.055), rgba(0, 0, 0, 0.14)),
+    #050505;
+  box-shadow:
+    inset 0 0 0 1px rgba(242, 241, 237, 0.14),
+    0 28px 90px rgba(0, 0, 0, 0.44),
+    0 0 80px rgba(215, 192, 138, calc(0.025 + var(--axis-replay-light) * 0.04));
+}
+
+.axis-replay-operating-room video {
+  filter: brightness(calc(1.06 + var(--axis-replay-clarity) * 0.08)) contrast(1.04) saturate(1.02);
+}
+
+.axis-replay-topbar {
+  padding-top: calc(0.75rem + var(--axis-replay-toolbar-safe));
+}
+
+.axis-replay-command-surface {
+  background: rgba(250, 249, 244, calc(0.1 + var(--axis-replay-light) * 0.06));
+  border: 1px solid rgba(250, 249, 244, calc(0.12 + var(--axis-replay-trust) * 0.06));
+  color: rgba(250, 249, 244, 0.88);
+  backdrop-filter: blur(14px);
+}
+
+.axis-replay-timeline {
+  background: rgba(250, 249, 244, 0.12);
+  border: 1px solid rgba(250, 249, 244, 0.14);
+  box-shadow: inset 0 1px 0 rgba(250, 249, 244, 0.06);
+}
+
+.axis-replay-memory-card {
+  background:
+    linear-gradient(180deg, rgba(250, 249, 244, 0.1), rgba(0, 0, 0, 0.18)),
+    rgba(8, 8, 7, 0.78);
+  border: 1px solid rgba(250, 249, 244, 0.12);
 }
 
 .axis-climate-surface {

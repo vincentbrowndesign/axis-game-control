@@ -38,7 +38,7 @@ export default async function TrainingSetPage() {
     })
 
   return (
-    <AxisPage>
+    <AxisPage className="axis-replay-operating-room">
         <AxisHeader>
           <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
             Find clips
