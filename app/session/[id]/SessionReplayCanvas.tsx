@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react"
 import Link from "next/link"
 import { useShallow } from "zustand/react/shallow"
 import {
@@ -31,8 +31,11 @@ type SessionPayload = {
 }
 
 type InspectionDepth = 0.5 | 1 | 2 | 2.5
+type RitualPhase = "apprentice" | "practitioner" | "mastery"
+type RitualIntent = "Observe" | "Watch" | "Link" | "Mark" | "Again"
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
+const ritualStorageKey = "axis:replay-room-ritual-count:v1"
 
 type TrainingMemoryRecord = {
   id: string
@@ -102,7 +105,7 @@ function memoryProgressionContext(memory: TrainingMemoryRecord) {
   if (typeof metadata.basketballEvent === "string") return metadata.basketballEvent
   if (typeof metadata.eventType === "string") return metadata.eventType
 
-  return "OBSERVATION"
+  return "SAVED"
 }
 
 function trainingLabelFromEvent(event: TemporalEventRecord | undefined) {
@@ -113,6 +116,52 @@ function trainingLabelFromEvent(event: TemporalEventRecord | undefined) {
   if (basketballEvent === "SHOT") return "release"
 
   return "other"
+}
+
+function pulseHaptic(pattern: number | number[] = 8) {
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return
+  navigator.vibrate(pattern)
+}
+
+function memoryDensityAt(time: number, anchors: Array<{ time: number; weight?: number }>, duration: number) {
+  const safeDuration = Math.max(duration, 1)
+  const influenceWindow = Math.max(4, safeDuration * 0.08)
+
+  return anchors.reduce((density, anchor) => {
+    const distance = Math.abs(anchor.time - time)
+    if (distance > influenceWindow) return density
+
+    const proximity = 1 - distance / influenceWindow
+    return density + proximity * (anchor.weight || 1)
+  }, 0)
+}
+
+function hapticForDensity(density: number) {
+  if (density >= 2.4) return [18, 26, 14]
+  if (density >= 1.35) return [12, 18, 8]
+  return 7
+}
+
+function phaseForRitualCount(count: number): RitualPhase {
+  if (count >= 36) return "mastery"
+  if (count >= 14) return "practitioner"
+  return "apprentice"
+}
+
+function readRitualPhase() {
+  if (typeof window === "undefined") return "apprentice" as RitualPhase
+
+  const count = Number(window.localStorage.getItem(ritualStorageKey)) || 0
+  return phaseForRitualCount(count)
+}
+
+function markRitualPractice() {
+  if (typeof window === "undefined") return "apprentice" as RitualPhase
+
+  const count = (Number(window.localStorage.getItem(ritualStorageKey)) || 0) + 1
+  window.localStorage.setItem(ritualStorageKey, String(count))
+
+  return phaseForRitualCount(count)
 }
 
 export function seekToEvent(
@@ -140,6 +189,105 @@ function waitForSeeked(videoElement: HTMLVideoElement) {
       once: true,
     })
   })
+}
+
+function RadialIntentField({
+  x,
+  y,
+  phase,
+  onCommit,
+}: {
+  x: number
+  y: number
+  phase: RitualPhase
+  onCommit: (intent: RitualIntent) => void
+}) {
+  const fieldRef = useRef<HTMLDivElement | null>(null)
+  const intents: Array<{
+    label: RitualIntent
+    angle: number
+  }> = [
+    {
+      label: "Observe",
+      angle: -Math.PI / 2,
+    },
+    {
+      label: "Watch",
+      angle: -Math.PI / 5,
+    },
+    {
+      label: "Link",
+      angle: Math.PI / 5,
+    },
+    {
+      label: "Mark",
+      angle: Math.PI / 2,
+    },
+    {
+      label: "Again",
+      angle: Math.PI,
+    },
+  ]
+  const radius = phase === "mastery" ? 58 : phase === "practitioner" ? 68 : 78
+  const opacity = phase === "mastery" ? "opacity-36" : phase === "practitioner" ? "opacity-58" : "opacity-78"
+
+  const commitFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const bounds = fieldRef.current?.getBoundingClientRect()
+    if (!bounds) return
+
+    const centerX = bounds.left + bounds.width / 2
+    const centerY = bounds.top + bounds.height / 2
+    const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX)
+    const nearest = intents.reduce(
+      (selected, intent) => {
+        const delta = Math.abs(Math.atan2(Math.sin(angle - intent.angle), Math.cos(angle - intent.angle)))
+        return delta < selected.delta
+          ? {
+              delta,
+              intent: intent.label,
+            }
+          : selected
+      },
+      {
+        delta: Number.POSITIVE_INFINITY,
+        intent: "Mark" as RitualIntent,
+      }
+    )
+
+    onCommit(nearest.intent)
+  }
+
+  return (
+    <div
+      ref={fieldRef}
+      className={`pointer-events-auto absolute z-50 h-52 w-52 -translate-x-1/2 -translate-y-1/2 touch-none ${opacity}`}
+      style={{
+        left: x,
+        top: y,
+      }}
+      onPointerUp={commitFromPointer}
+      onPointerCancel={() => onCommit("Observe")}
+    >
+      <div className="absolute inset-1/2 h-px w-px bg-[#f2f1ed]/40 shadow-[0_0_28px_rgba(242,241,237,0.24)]" />
+      {intents.map((intent) => {
+        const left = 50 + (Math.cos(intent.angle) * radius) / 2
+        const top = 50 + (Math.sin(intent.angle) * radius) / 2
+
+        return (
+          <span
+            key={intent.label}
+            className="axis-mono pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-[0.16em] text-[#f2f1ed]/70"
+            style={{
+              left: `${left}%`,
+              top: `${top}%`,
+            }}
+          >
+            {intent.label}
+          </span>
+        )
+      })}
+    </div>
+  )
 }
 
 async function syncSeekToAnchor(
@@ -179,16 +327,27 @@ function ReplayVideo({
   playbackUrl,
   inspectionDepth,
   session,
+  ritualPhase,
+  onRitualPractice,
   onTrainingMemoryStored,
 }: {
   playbackUrl: string | null
   inspectionDepth: InspectionDepth
   session: TemporalSessionRecord
+  ritualPhase: RitualPhase
+  onRitualPractice: () => void
   onTrainingMemoryStored: (memory: TrainingMemoryRecord) => void
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const tapTimerRef = useRef<number | null>(null)
+  const holdTimerRef = useRef<number | null>(null)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
   const [memoryPulse, setMemoryPulse] = useState(false)
+  const [holdActive, setHoldActive] = useState(false)
+  const [radialIntent, setRadialIntent] = useState<{
+    x: number
+    y: number
+  } | null>(null)
   const {
     currentTimelineAnchor,
     isInternalSeeking,
@@ -276,12 +435,97 @@ function ReplayVideo({
 
       if (payload.memory) onTrainingMemoryStored(payload.memory)
       setMemoryPulse(true)
+      pulseHaptic([20, 34, 12])
+      onRitualPractice()
       setTrainingStatus("stored")
       window.setTimeout(() => setMemoryPulse(false), 620)
       window.setTimeout(() => setTrainingStatus("idle"), 1900)
     } catch {
       setTrainingStatus("idle")
     }
+  }
+
+  const toggleReplayAwareness = () => {
+    const video = videoRef.current
+    if (!video || useAxisChronologyStore.getState().playback.isSeeking) return
+
+    if (video.paused) {
+      void video.play().catch(() => undefined)
+    } else {
+      video.pause()
+    }
+  }
+
+  const openRadialIntent = (event: MouseEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    setRadialIntent({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    })
+    pulseHaptic(8)
+    onRitualPractice()
+    window.setTimeout(() => setRadialIntent(null), 1400)
+  }
+
+  const commitRitualIntent = (intent: RitualIntent) => {
+    setRadialIntent(null)
+    onRitualPractice()
+
+    if (intent === "Mark" || intent === "Link") {
+      void saveCurrentFrameToTrainingSet()
+      return
+    }
+
+    if (intent === "Watch") {
+      toggleReplayAwareness()
+      return
+    }
+
+    if (intent === "Observe") {
+      videoRef.current?.pause()
+      pulseHaptic(9)
+      return
+    }
+
+    const state = useAxisChronologyStore.getState()
+    if (state.activeEventId) {
+      state.requestEventJump(state.activeEventId)
+      pulseHaptic(7)
+    }
+  }
+
+  const handleReplayTap = (event: MouseEvent<HTMLDivElement>) => {
+    if (tapTimerRef.current) {
+      window.clearTimeout(tapTimerRef.current)
+      tapTimerRef.current = null
+      openRadialIntent(event)
+      return
+    }
+
+    tapTimerRef.current = window.setTimeout(() => {
+      tapTimerRef.current = null
+      toggleReplayAwareness()
+      onRitualPractice()
+    }, 220)
+  }
+
+  const startHoldObservation = () => {
+    if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+    holdTimerRef.current = window.setTimeout(() => {
+      const video = videoRef.current
+      setHoldActive(true)
+      video?.pause()
+      pulseHaptic(10)
+      onRitualPractice()
+    }, 520)
+  }
+
+  const endHoldObservation = () => {
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+    setHoldActive(false)
   }
 
   useEffect(() => {
@@ -324,22 +568,39 @@ function ReplayVideo({
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (tapTimerRef.current) window.clearTimeout(tapTimerRef.current)
+      if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+    }
+  }, [])
+
   if (!playbackUrl) {
     return (
       <div className="grid aspect-video place-items-center border border-white/10 bg-[#070707] text-center">
         <p className="axis-mono text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-          RECORD PROCESSING
+          LOADING
         </p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-hidden bg-[#050505]">
-      <div className="relative overflow-hidden bg-[#020202] shadow-[0_40px_140px_rgba(0,0,0,0.8)]">
-        <div className="pointer-events-none absolute -inset-10 z-0 opacity-70">
+    <div className="overflow-hidden bg-[#090706]">
+      <div
+        className={`relative overflow-hidden bg-[#050403] shadow-[0_42px_150px_rgba(0,0,0,0.82),0_0_120px_rgba(92,58,34,0.11)] transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
+          memoryPulse ? "shadow-[0_50px_170px_rgba(0,0,0,0.86),0_0_150px_rgba(215,192,138,0.16)]" : ""
+        }`}
+        onClick={handleReplayTap}
+        onPointerDown={startHoldObservation}
+        onPointerLeave={endHoldObservation}
+        onPointerCancel={endHoldObservation}
+        onPointerUp={endHoldObservation}
+      >
+        <div className="pointer-events-none absolute -inset-10 z-0 opacity-80">
           <div className="absolute inset-x-20 top-8 h-px bg-gradient-to-r from-transparent via-[#f2f1ed]/8 to-transparent" />
-          <div className="absolute bottom-10 left-20 right-20 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/8 to-transparent" />
+          <div className="absolute bottom-10 left-20 right-20 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/12 to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_62%,rgba(93,62,42,0.16),transparent_54%),radial-gradient(circle_at_82%_14%,rgba(78,64,112,0.08),transparent_42%)]" />
         </div>
         <video
           ref={videoRef}
@@ -401,25 +662,46 @@ function ReplayVideo({
             transform: `scale(${inspectionDepth})`,
           }}
         />
-        <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.055),transparent_36%),linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.44))]" />
+        <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.05),transparent_34%),radial-gradient(circle_at_48%_100%,rgba(215,192,138,0.09),transparent_48%),linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.46))]" />
+        {holdActive ? (
+          <div className="pointer-events-none absolute inset-0 z-30 bg-[#0c0704]/34" />
+        ) : null}
         <div className="axis-mono pointer-events-none absolute bottom-4 left-4 z-30 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
           AXIS
         </div>
+        {radialIntent ? (
+          <RadialIntentField
+            x={radialIntent.x}
+            y={radialIntent.y}
+            phase={ritualPhase}
+            onCommit={commitRitualIntent}
+          />
+        ) : null}
         {memoryPulse ? (
-          <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-[#f2f1ed]/[0.035]">
-            <div className="axis-mono bg-black/22 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/70 backdrop-blur">
-              MEMORY STORED
+          <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-[#d7c08a]/[0.045]">
+            <div className="absolute inset-x-16 top-1/2 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/30 to-transparent" />
+            <div className="axis-mono bg-[#090706]/38 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/72 backdrop-blur">
+              SAVED
             </div>
           </div>
         ) : null}
         <div className="absolute bottom-4 right-4 z-30 flex max-w-[min(20rem,calc(100%-2rem))] flex-col items-end gap-2">
           <button
             type="button"
-            onClick={() => void saveCurrentFrameToTrainingSet()}
+            onClick={(event) => {
+              event.stopPropagation()
+              void saveCurrentFrameToTrainingSet()
+            }}
             disabled={trainingStatus === "saving"}
-            className="axis-mono axis-optical-transition bg-black/28 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 backdrop-blur transition hover:text-white/82 disabled:text-white/28"
+            className={`axis-mono axis-optical-transition bg-black/28 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 backdrop-blur transition hover:text-white/82 disabled:text-white/28 ${
+              ritualPhase === "mastery"
+                ? "opacity-0 hover:opacity-50"
+                : ritualPhase === "practitioner"
+                  ? "opacity-34 hover:opacity-80"
+                  : "opacity-76"
+            }`}
           >
-            {trainingStatus === "stored" ? "TRAINING MEMORY STORED" : "SAVE TO TRAINING SET"}
+            {trainingStatus === "stored" ? "MARKED" : "MARK"}
           </button>
         </div>
       </div>
@@ -441,6 +723,12 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
   const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
   const safeDuration = Math.max(duration, 1)
   const granularity = inspectionDepth === 0.5 ? 4 : inspectionDepth === 1 ? 8 : inspectionDepth === 2 ? 16 : 24
+  const densityAnchors = visibleEvents.map((event) => ({
+    time: Number(event.session_time) || 0,
+    weight: event.id === activeEventId ? 1.45 : 1,
+  }))
+  const [dragging, setDragging] = useState(false)
+  const lastDenseEventRef = useRef<string | null>(null)
   const jumpToNearestAtPosition = (clientX: number, rail: HTMLDivElement) => {
     if (!visibleEvents.length) return
 
@@ -454,6 +742,10 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
     }, visibleEvents[0])
 
     requestEventJump(nearestEvent.id)
+    if (lastDenseEventRef.current !== nearestEvent.id) {
+      lastDenseEventRef.current = nearestEvent.id
+      pulseHaptic(hapticForDensity(memoryDensityAt(targetTime, densityAnchors, safeDuration)))
+    }
     if (sessionId) {
       recordReplayNegotiation({
         sessionId,
@@ -466,11 +758,47 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
   return (
     <div className="mt-8 px-1 py-3">
       <div
-        className="relative h-10"
+        className={`relative h-10 touch-none transition-opacity duration-150 ${
+          dragging ? "opacity-100" : "opacity-78"
+        }`}
+        onPointerDown={(event) => {
+          setDragging(true)
+          jumpToNearestAtPosition(event.clientX, event.currentTarget)
+        }}
+        onPointerMove={(event) => {
+          if (!dragging) return
+          jumpToNearestAtPosition(event.clientX, event.currentTarget)
+        }}
+        onPointerUp={() => {
+          setDragging(false)
+          lastDenseEventRef.current = null
+        }}
+        onPointerCancel={() => {
+          setDragging(false)
+          lastDenseEventRef.current = null
+        }}
         onClick={(event) => {
           jumpToNearestAtPosition(event.clientX, event.currentTarget)
         }}
       >
+        <div className="absolute left-0 right-0 top-1/2 h-5 -translate-y-1/2 overflow-hidden">
+          {densityAnchors.map((anchor) => {
+            const position = Math.min(100, Math.max(0, (anchor.time / safeDuration) * 100))
+            const density = memoryDensityAt(anchor.time, densityAnchors, safeDuration)
+            const width = Math.min(18, 5 + density * 4)
+
+            return (
+              <span
+                key={`pressure-${anchor.time}`}
+                className="absolute top-1/2 h-5 -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.16),transparent_68%)]"
+                style={{
+                  left: `${position}%`,
+                  width: `${width}%`,
+                }}
+              />
+            )
+          })}
+        </div>
         {Array.from({
           length: granularity + 1,
         }).map((_, index) => (
@@ -482,7 +810,7 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
             }}
           />
         ))}
-        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/12" />
+        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-white/[0.035] via-[#f2f1ed]/16 to-white/[0.035]" />
         {visibleEvents.map((event) => {
           const position = Math.min(
             100,
@@ -497,6 +825,7 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
               onClick={(clickEvent) => {
                 clickEvent.stopPropagation()
                 requestEventJump(event.id)
+                pulseHaptic(hapticForDensity(memoryDensityAt(Number(event.session_time) || 0, densityAnchors, safeDuration)))
                 if (sessionId) {
                   recordReplayNegotiation({
                     sessionId,
@@ -505,11 +834,11 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
                   })
                 }
               }}
-              aria-label={`Jump to snapshot at ${formatClock(event.session_time)}`}
+              aria-label={`Back to ${formatClock(event.session_time)}`}
               className={`axis-optical-transition absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-[0] transition ${
                 active
-                  ? "bg-[#f2f1ed] shadow-[0_0_14px_rgba(242,241,237,0.18)]"
-                  : "bg-zinc-300/28 hover:bg-[#f2f1ed]"
+                  ? "bg-[#f2f1ed] shadow-[0_0_18px_rgba(215,192,138,0.24)]"
+                  : "bg-[#d7c08a]/26 hover:bg-[#f2f1ed]"
               }`}
               style={{
                 left: `${position}%`,
@@ -560,8 +889,107 @@ function InspectionDepthControl({
   )
 }
 
+function ChronologyEdge({
+  trainingMemories,
+}: {
+  trainingMemories: TrainingMemoryRecord[]
+}) {
+  const { events, duration, requestEventJump } = useAxisChronologyStore(
+    useShallow((state) => ({
+      events: state.events,
+      duration: state.duration,
+      requestEventJump: state.requestEventJump,
+    }))
+  )
+  const safeDuration = Math.max(Number(duration) || 0, 1)
+  const anchors = events
+    .filter((event) => event.type === "SNAPSHOT")
+    .slice(0, 18)
+    .map((event) => ({
+      id: event.id,
+      time: Number(event.session_time) || 0,
+      weight: 0.45,
+      type: "event" as const,
+    }))
+  const memories = trainingMemories.slice(0, 12).map((memory) => ({
+    id: memory.id,
+    time: Number(memory.replay_time) || 0,
+    weight: 0.82,
+    type: "memory" as const,
+  }))
+  const nodes = [...anchors, ...memories].sort((a, b) => a.time - b.time)
+  const pressureZones = nodes
+    .map((node) => ({
+      ...node,
+      density: memoryDensityAt(node.time, nodes, safeDuration),
+    }))
+    .filter((node) => node.density >= 1.1)
+
+  return (
+    <div className="pointer-events-none fixed inset-y-0 right-0 z-10 hidden w-12 md:block">
+      <div className="absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#2f1d13]/18 to-transparent" />
+      <div className="absolute inset-y-16 right-6 w-px bg-gradient-to-b from-transparent via-[#d7c08a]/10 to-transparent" />
+      {pressureZones.map((zone) => {
+        const top = Math.min(92, Math.max(8, (zone.time / safeDuration) * 84 + 8))
+        const height = Math.min(96, 24 + zone.density * 18)
+
+        return (
+          <span
+            key={`zone-${zone.type}-${zone.id}`}
+            className="absolute right-0 w-12 -translate-y-1/2 bg-[radial-gradient(ellipse_at_right,rgba(215,192,138,0.13),transparent_70%)]"
+            style={{
+              top: `${top}%`,
+              height,
+              opacity: Math.min(0.8, 0.2 + zone.density * 0.12),
+            }}
+          />
+        )
+      })}
+      {nodes.map((node) => {
+        const top = Math.min(92, Math.max(8, (node.time / safeDuration) * 84 + 8))
+        const height = node.type === "memory" ? 22 : 10
+        const density = memoryDensityAt(node.time, nodes, safeDuration)
+
+        return (
+          <button
+            key={`${node.type}-${node.id}`}
+            type="button"
+            aria-label={`Back to ${formatClock(node.time)}`}
+            onClick={() => {
+              if (node.type === "event") {
+                requestEventJump(node.id)
+              } else {
+                const nearest = anchors.reduce<typeof anchors[number] | null>((selected, anchor) => {
+                  if (!selected) return anchor
+
+                  return Math.abs(anchor.time - node.time) < Math.abs(selected.time - node.time)
+                    ? anchor
+                    : selected
+                }, null)
+
+                if (nearest) requestEventJump(nearest.id)
+              }
+              pulseHaptic(hapticForDensity(density))
+            }}
+            className="pointer-events-auto absolute right-5 w-1 -translate-y-1/2 bg-[#f2f1ed]/25 transition hover:bg-[#f2f1ed]/70"
+            style={{
+              top: `${top}%`,
+              height: height + Math.min(12, density * 3),
+              opacity: node.weight,
+              boxShadow:
+                node.type === "memory"
+                  ? "0 0 22px rgba(215,192,138,0.2)"
+                  : "0 0 10px rgba(242,241,237,0.08)",
+            }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 function exportLabel(status: string) {
-  if (status === "SUCCESS") return "FILE READY"
+  if (status === "SUCCESS") return "SAVED"
   return "SAVE TO DEVICE"
 }
 
@@ -674,43 +1102,43 @@ function DevelopmentalInputBar({
     }
 
     if (normalized.includes("compare")) {
-      setResponse(`${Math.max(trainingMemories.length, snapshots.length)} comparable memory fragments linked.`)
+      setResponse(`${Math.max(trainingMemories.length, snapshots.length)} linked.`)
     } else if (normalized.includes("pressure")) {
-      setResponse(`${relatedCount} pressure-adjacent replay moments surfaced.`)
+      setResponse(`${relatedCount} to watch again.`)
     } else if (normalized.includes("recover")) {
-      setResponse(`${relatedCount} recovery sequences found.`)
+      setResponse(`${relatedCount} found.`)
     } else if (normalized.includes("rhythm") || normalized.includes("continuity")) {
-      setResponse(`${relatedCount} continuity moments ready for review.`)
+      setResponse(`${relatedCount} to watch again.`)
     } else {
-      setResponse(`${relatedCount} related replay sequences found.`)
+      setResponse(`${relatedCount} to watch again.`)
     }
   }
 
   return (
-    <section className="mx-auto mt-10 w-full max-w-4xl px-2 pb-2">
+    <section className="mx-auto mt-12 w-full max-w-4xl px-2 pb-2">
       <form
-        className="flex flex-col gap-3 md:flex-row md:items-center"
+        className="flex flex-col gap-3 rounded-none bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.045),transparent_72%)] py-2 md:flex-row md:items-center"
         onSubmit={(event) => {
           event.preventDefault()
           submitQuery()
         }}
       >
-        <label className="sr-only">Ask memory</label>
+        <label className="sr-only">Ask</label>
         <input
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder="show me where rhythm shifted"
-          className="axis-mono min-h-12 flex-1 border-0 border-b border-white/10 bg-transparent px-1 py-2 text-center text-[14px] text-[#f2f1ed] outline-none placeholder:text-zinc-700 focus:border-[#d7c08a]/34 md:text-left"
+          placeholder="watch that again"
+          className="axis-mono min-h-12 flex-1 border-0 border-b border-[#d7c08a]/10 bg-transparent px-1 py-2 text-center text-[14px] text-[#f2f1ed] outline-none placeholder:text-[#8c7b66]/42 focus:border-[#d7c08a]/34 md:text-left"
         />
         <button
           type="submit"
-          className="axis-mono axis-optical-transition self-center bg-white/[0.025] px-4 py-3 text-[9px] font-black uppercase tracking-[0.16em] text-white/42 transition hover:bg-[#f2f1ed]/86 hover:text-black md:self-auto"
+          className="axis-mono axis-optical-transition self-center bg-[#d7c08a]/[0.035] px-4 py-3 text-[9px] font-black uppercase tracking-[0.16em] text-[#f2f1ed]/44 transition hover:bg-[#f2f1ed]/86 hover:text-black md:self-auto"
         >
-          ask
+          observe
         </button>
       </form>
       {response ? (
-        <p className="axis-mono mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/38 md:text-left">
+        <p className="axis-mono mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/34 md:text-left">
           {response}
         </p>
       ) : null}
@@ -781,11 +1209,11 @@ function DevelopmentalMemoryStrip({
           href="/training-set"
           className="axis-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/28 transition hover:text-white/66"
         >
-          Training set
+          Saved
         </Link>
       </div>
       <div className="relative overflow-hidden px-1 py-2">
-        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/[0.035]" />
+        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/10 to-transparent" />
         <div className="relative flex gap-2 overflow-x-auto pb-1">
           {trainingMemories.map((memory, index) => {
             const progressionContext = memoryProgressionContext(memory)
@@ -795,16 +1223,16 @@ function DevelopmentalMemoryStrip({
                 key={memory.id}
                 type="button"
                 onClick={() => jumpToMoment(Number(memory.replay_time))}
-                className="axis-optical-transition group relative min-w-44 overflow-hidden bg-black/32 text-left transition hover:bg-white/[0.03]"
+                className="axis-optical-transition group relative min-w-44 overflow-hidden bg-[#090706]/38 text-left transition hover:bg-[#d7c08a]/[0.035]"
               >
                 <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
                 <div className="pointer-events-none absolute left-3 top-3 z-20 axis-mono text-[8px] font-black uppercase tracking-[0.14em] text-white/46">
-                  MEMORY {String(index + 1).padStart(2, "0")}
+                  SAVED {String(index + 1).padStart(2, "0")}
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={memory.frame_url}
-                  alt={`${memory.label} memory at ${formatClock(memory.replay_time)}`}
+                  alt={`${memory.label} saved at ${formatClock(memory.replay_time)}`}
                   className="aspect-video w-44 object-cover grayscale-[16%] opacity-82 transition duration-150 group-hover:brightness-110 group-hover:opacity-100"
                 />
                 <div className="relative z-20 space-y-2 px-3 py-3">
@@ -816,7 +1244,7 @@ function DevelopmentalMemoryStrip({
                       {formatClock(memory.replay_time)}
                     </p>
                   </div>
-                  <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
+                  <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#8c7b66]/54">
                     {progressionContext}
                   </p>
                 </div>
@@ -830,7 +1258,7 @@ function DevelopmentalMemoryStrip({
           return (
             <div
               key={snapshot.id}
-              className="min-w-32 bg-black/24"
+              className="min-w-32 bg-[#090706]/30"
             >
               <button
                 type="button"
@@ -841,7 +1269,7 @@ function DevelopmentalMemoryStrip({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={source}
-                    alt={`Snapshot at ${formatClock(snapshot.session_time)}`}
+                    alt={`Marked at ${formatClock(snapshot.session_time)}`}
                     className="aspect-video w-32 object-cover grayscale-[32%] opacity-72"
                   />
                 ) : (
@@ -855,7 +1283,7 @@ function DevelopmentalMemoryStrip({
                   {formatClock(snapshot.session_time)}
                 </p>
                 {chapter ? (
-                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#d7c08a]/54">
+                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#d7c08a]/50">
                     {chapter}
                   </p>
                 ) : null}
@@ -876,7 +1304,7 @@ function DevelopmentalMemoryStrip({
                   placeholder="note"
                   maxLength={120}
                   aria-label={`Snapshot note at ${formatClock(snapshot.session_time)}`}
-                  className="axis-mono axis-optical-transition mt-2 w-full border-0 border-b border-white/10 bg-transparent px-0 py-1 text-[11px] font-semibold lowercase text-zinc-200 outline-none transition placeholder:text-zinc-700 focus:border-[#d7c08a]/60"
+                  className="axis-mono axis-optical-transition mt-2 w-full border-0 border-b border-[#d7c08a]/10 bg-transparent px-0 py-1 text-[11px] font-semibold lowercase text-zinc-200 outline-none transition placeholder:text-[#8c7b66]/44 focus:border-[#d7c08a]/60"
                 />
               </div>
             </div>
@@ -891,6 +1319,7 @@ function DevelopmentalMemoryStrip({
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
+  const [ritualPhase, setRitualPhase] = useState<RitualPhase>("apprentice")
   const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
@@ -907,6 +1336,18 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     })
     setUiStatus("loading")
   }, [hydrateChronology, session.duration_seconds, session.id, setUiStatus])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setRitualPhase(readRitualPhase())
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
+  const markRitual = () => {
+    setRitualPhase(markRitualPractice())
+  }
 
   useEffect(() => {
     let active = true
@@ -939,11 +1380,13 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
 
   return (
-    <main className="axis-display min-h-dvh overflow-hidden bg-[#030303] text-[#f2f1ed]">
-      <section className="pointer-events-none fixed inset-0 opacity-70">
-        <div className="absolute inset-x-0 top-0 h-80 bg-[radial-gradient(circle_at_50%_0%,rgba(215,192,138,0.07),transparent_58%)]" />
-        <div className="absolute bottom-0 left-0 right-0 h-80 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.84))]" />
+    <main className="axis-display min-h-dvh overflow-hidden bg-[#090706] text-[#f2f1ed]">
+      <section className="pointer-events-none fixed inset-0 opacity-85">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_6%,rgba(215,192,138,0.095),transparent_46%),radial-gradient(circle_at_12%_92%,rgba(84,63,94,0.11),transparent_42%),radial-gradient(circle_at_88%_78%,rgba(83,47,27,0.13),transparent_44%)]" />
+        <div className="absolute inset-x-0 top-0 h-80 bg-[linear-gradient(180deg,rgba(16,10,6,0.72),transparent)]" />
+        <div className="absolute bottom-0 left-0 right-0 h-96 bg-[linear-gradient(180deg,transparent,rgba(5,3,2,0.9))]" />
       </section>
+      <ChronologyEdge trainingMemories={trainingMemories} />
       <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 py-6 sm:px-8">
         <header className="py-3">
           <div className="flex items-center justify-between gap-6">
@@ -954,20 +1397,20 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               AXIS
             </Link>
             <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
-              {session.status === "ARCHIVED" ? "ARCHIVED" : "LOCKED"}
+              {session.status === "ARCHIVED" ? "SAVED" : "WAIT"}
             </p>
           </div>
         </header>
 
         <div className="flex flex-col gap-4 py-12 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">
+            <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-[#f2f1ed]/70">
               {compactNodeId(session.id)}
             </p>
             <p className="mt-2 text-6xl font-bold leading-none tracking-normal text-[#f2f1ed] sm:text-7xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
-            <p className="axis-mono mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+            <p className="axis-mono mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8c7b66]/64">
               {formatEnvironmentalTimestamp(session.created_at)}
             </p>
           </div>
@@ -980,6 +1423,8 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               playbackUrl={session.playback_url}
               inspectionDepth={inspectionDepth}
               session={session}
+              ritualPhase={ritualPhase}
+              onRitualPractice={markRitual}
               onTrainingMemoryStored={(memory) =>
                 setTrainingMemories((current) => {
                   if (current.some((item) => item.id === memory.id)) return current
