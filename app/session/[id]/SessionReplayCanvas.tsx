@@ -138,13 +138,6 @@ function formatEnvironmentalTimestamp(value: string | null | undefined) {
   return `${month}_${day}_${displayHour}:${minutes}_${meridiem}`
 }
 
-function compactNodeId(sessionId: string) {
-  const compact = sessionId.replace(/[^a-z0-9]/gi, "").toUpperCase()
-  const suffix = compact.slice(-4) || "0000"
-
-  return `AXS-${suffix}`
-}
-
 function memoryProgressionContext(memory: TrainingMemoryRecord) {
   const metadata = memory.metadata || {}
 
@@ -152,7 +145,7 @@ function memoryProgressionContext(memory: TrainingMemoryRecord) {
   if (typeof metadata.basketballEvent === "string") return metadata.basketballEvent
   if (typeof metadata.eventType === "string") return metadata.eventType
 
-  return "SAVED"
+  return "held"
 }
 
 function trainingLabelFromEvent(event: TemporalEventRecord | undefined) {
@@ -1202,9 +1195,6 @@ function ReplayVideo({
         {gestureMode === "drag" || gestureMode === "close" ? (
           <div className="pointer-events-none absolute inset-x-10 top-1/2 z-30 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#f2f1ed]/24 to-transparent shadow-[0_0_26px_rgba(242,241,237,0.18)]" />
         ) : null}
-        <div className="axis-mono pointer-events-none absolute bottom-4 left-4 z-30 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
-          AXIS
-        </div>
         {radialIntent ? (
           <RadialIntentField
             x={radialIntent.x}
@@ -1216,9 +1206,6 @@ function ReplayVideo({
         {memoryPulse ? (
           <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-[#d7c08a]/[0.045]">
             <div className="absolute inset-x-16 top-1/2 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/30 to-transparent" />
-            <div className="axis-mono bg-[#090706]/38 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/72 backdrop-blur">
-              SAVED
-            </div>
           </div>
         ) : null}
       </div>
@@ -1530,16 +1517,10 @@ function ChronologyEdge({
   )
 }
 
-function exportLabel(status: string) {
-  if (status === "SUCCESS") return "SAVED"
-  return "SAVE TO DEVICE"
-}
-
 function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
-  const { exportStatus, exportProgress, executeNativeExport, playback } = useAxisChronologyStore(
+  const { exportStatus, executeNativeExport, playback } = useAxisChronologyStore(
     useShallow((state) => ({
       exportStatus: state.exportStatus,
-      exportProgress: state.exportProgress,
       executeNativeExport: state.executeNativeExport,
       playback: state.playback,
     }))
@@ -1563,15 +1544,11 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           })
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
-        className="axis-mono axis-optical-transition bg-[#f2f1ed]/92 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-black transition disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
+        aria-label="Keep recording"
+        className="axis-mono axis-optical-transition bg-[#f2f1ed]/72 px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] text-black/78 transition hover:bg-[#f2f1ed]/88 disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-500"
       >
-        SAVE TO DEVICE
+        keep
       </button>
-      {exportStatus !== "IDLE" && exportStatus !== "FAILED" ? (
-        <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
-          {exportStatus === "SUCCESS" ? exportLabel(exportStatus) : `${exportProgress}%`}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -1581,7 +1558,7 @@ function DevelopmentalInputBar({
 }: {
   trainingMemories: TrainingMemoryRecord[]
 }) {
-  const { events, snapshots, requestEventJump, sessionId, playback, duration } =
+  const { events, snapshots, requestEventJump, sessionId, playback } =
     useAxisChronologyStore(
       useShallow((state) => ({
         events: state.events,
@@ -1589,11 +1566,9 @@ function DevelopmentalInputBar({
         requestEventJump: state.requestEventJump,
         sessionId: state.sessionId,
         playback: state.playback,
-        duration: state.duration,
       }))
-    )
+  )
   const [attention, setAttention] = useState("")
-  const [orientation, setOrientation] = useState("")
   const [orientationPulse, setOrientationPulse] = useState(false)
 
   const placeAttention = () => {
@@ -1688,18 +1663,6 @@ function DevelopmentalInputBar({
       }
     }
 
-    const orientedTime = Number(targetEvent?.session_time) || nearestDensity?.time || currentTime
-    const density = memoryDensityAt(orientedTime, densityAnchors, Number(duration) || 1)
-    const movement =
-      normalized.includes("pressure") || density > 1.6
-        ? "pressure warming"
-        : normalized.includes("recover")
-          ? "recovery nearby"
-          : normalized.includes("rhythm") || normalized.includes("continuity")
-            ? "rhythm close"
-            : "chronology moving"
-
-    setOrientation(movement)
     setOrientationPulse(true)
     window.setTimeout(() => setOrientationPulse(false), 720)
   }
@@ -1719,18 +1682,10 @@ function DevelopmentalInputBar({
           onKeyDown={(event) => {
             if (event.key === "Enter") placeAttention()
           }}
-          onFocus={() => {
-            if (!orientation) setOrientation("room listening")
-          }}
-          placeholder="place attention"
+          placeholder="attention"
           className="axis-mono relative z-10 min-h-12 w-full border-0 bg-transparent px-1 py-2 text-center text-[14px] text-[#f2f1ed]/84 outline-none placeholder:text-[#8c7b66]/38"
         />
       </div>
-      {orientation ? (
-        <p className="axis-mono mt-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/32">
-          {orientation}
-        </p>
-      ) : null}
     </section>
   )
 }
@@ -1796,9 +1751,9 @@ function DevelopmentalMemoryStrip({
       <div className="mb-3 flex justify-end">
         <Link
           href="/training-set"
-          className="axis-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/28 transition hover:text-white/66"
+          className="axis-mono text-[9px] font-black lowercase tracking-[0.14em] text-white/24 transition hover:text-white/54"
         >
-          Saved
+          held
         </Link>
       </div>
       <div className="relative overflow-hidden px-1 py-2">
@@ -1815,8 +1770,8 @@ function DevelopmentalMemoryStrip({
                 className="axis-optical-transition group relative min-w-44 overflow-hidden bg-[#090706]/38 text-left transition hover:bg-[#d7c08a]/[0.035]"
               >
                 <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
-                <div className="pointer-events-none absolute left-3 top-3 z-20 axis-mono text-[8px] font-black uppercase tracking-[0.14em] text-white/46">
-                  SAVED {String(index + 1).padStart(2, "0")}
+                <div className="pointer-events-none absolute left-3 top-3 z-20 axis-mono text-[8px] font-black lowercase tracking-[0.12em] text-white/38">
+                  held {String(index + 1).padStart(2, "0")}
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -1862,9 +1817,7 @@ function DevelopmentalMemoryStrip({
                     className="aspect-video w-32 object-cover grayscale-[32%] opacity-72"
                   />
                 ) : (
-                  <div className="grid aspect-video w-32 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-700">
-                    SNAP
-                  </div>
+                  <div className="aspect-video w-32 bg-[#070504]" />
                 )}
               </button>
               <div className="px-2 py-2">
@@ -2003,21 +1956,16 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           <div className="flex items-center justify-between gap-6">
             <Link
               href="/live"
-              className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#f2f1ed]"
+              aria-label="Return live"
+              className="axis-mono text-[10px] font-semibold lowercase tracking-[0.14em] text-[#f2f1ed]/36 transition hover:text-[#f2f1ed]/70"
             >
-              AXIS
+              live
             </Link>
-            <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
-              {session.status === "ARCHIVED" ? "SAVED" : "WAIT"}
-            </p>
           </div>
         </header>
 
         <div className="flex flex-col gap-4 py-12 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-[#f2f1ed]/70">
-              {compactNodeId(session.id)}
-            </p>
             <p className="mt-2 text-6xl font-bold leading-none tracking-normal text-[#f2f1ed] sm:text-7xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
