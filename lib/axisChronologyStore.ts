@@ -319,6 +319,20 @@ function mergeSnapshots(snapshots: AxisSnapshot[]) {
   return sortSnapshots([...byId.values()])
 }
 
+function playbackChanged(
+  current: ChronologyPlaybackState,
+  next: ChronologyPlaybackState
+) {
+  return (
+    Math.abs(current.currentTime - next.currentTime) >= 0.08 ||
+    Math.abs(current.currentTimelineAnchor - next.currentTimelineAnchor) >= 0.08 ||
+    current.isPlaying !== next.isPlaying ||
+    current.isSeeking !== next.isSeeking ||
+    current.paused !== next.paused ||
+    current.readyState !== next.readyState
+  )
+}
+
 function normalizeAnnotation(annotation: string) {
   return annotation.replace(/\s+/g, " ").trim().slice(0, 120)
 }
@@ -894,10 +908,15 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
   },
   setPlaybackState: (playback) => {
     set((state) => ({
-      playback: {
+      playback: playbackChanged(state.playback, {
         ...state.playback,
         ...playback,
-      },
+      })
+        ? {
+            ...state.playback,
+            ...playback,
+          }
+        : state.playback,
     }))
   },
   beginSeekTransaction: (targetTime, eventId = null) => {
@@ -919,9 +938,9 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         ...state.playback,
         currentTime: safeTargetTime,
         currentTimelineAnchor: safeTargetTime,
-        isPlaying: false,
+        isPlaying: state.playback.isPlaying,
         isSeeking: true,
-        paused: true,
+        paused: state.playback.paused,
       },
     }))
   },
@@ -935,9 +954,8 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         ...state.playback,
         currentTime: safeCurrentTime,
         currentTimelineAnchor: safeCurrentTime,
-        isPlaying: false,
+        isPlaying: state.playback.isPlaying,
         isSeeking: false,
-        paused: true,
       },
     }))
   },
@@ -948,15 +966,19 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         ...playback,
       }
       if (state.isInternalSeeking || state.playback.isSeeking || nextPlayback.isSeeking) {
-        return {
-          playback: nextPlayback,
-        }
+        return playbackChanged(state.playback, nextPlayback)
+          ? {
+              playback: nextPlayback,
+            }
+          : state
       }
 
       if (nextPlayback.paused || !nextPlayback.isPlaying) {
-        return {
-          playback: nextPlayback,
-        }
+        return playbackChanged(state.playback, nextPlayback)
+          ? {
+              playback: nextPlayback,
+            }
+          : state
       }
 
       const currentTime = Number(nextPlayback.currentTime) || 0
@@ -973,12 +995,15 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         null
       )
 
+      const syncedPlayback = {
+        ...nextPlayback,
+        currentTimelineAnchor: currentTime,
+      }
+      if (!playbackChanged(state.playback, syncedPlayback)) return state
+
       return {
         activeEventId: nearestEvent?.id ?? state.activeEventId,
-        playback: {
-          ...nextPlayback,
-          currentTimelineAnchor: currentTime,
-        },
+        playback: syncedPlayback,
         currentTimelineAnchor: nearestEvent
           ? {
               ...eventAnchor(nearestEvent),
@@ -989,8 +1014,6 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
     })
   },
   requestEventJump: (eventId) => {
-    if (get().playback.isSeeking) return null
-
     const event = get().events.find((candidate) => candidate.id === eventId)
     if (!event) return null
 
@@ -1005,9 +1028,7 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
         ...get().playback,
         currentTime: anchor.targetTime,
         currentTimelineAnchor: anchor.targetTime,
-        isPlaying: false,
-        isSeeking: false,
-        paused: true,
+        isSeeking: true,
       },
     })
 
@@ -1047,7 +1068,8 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       playback: {
         ...state.playback,
         currentTime: anchor.targetTime,
-        paused: true,
+        currentTimelineAnchor: anchor.targetTime,
+        isSeeking: true,
       },
     }))
 
@@ -1173,9 +1195,7 @@ export const useAxisChronologyStore = create<AxisChronologyState>((set, get) => 
       uiStatus: "ready",
       playback: {
         ...state.playback,
-        isPlaying: false,
         isSeeking: false,
-        paused: true,
       },
     }))
   },

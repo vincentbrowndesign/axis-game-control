@@ -1,6 +1,13 @@
 "use client"
 
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+} from "react"
 import Link from "next/link"
 import { useShallow } from "zustand/react/shallow"
 import {
@@ -290,39 +297,6 @@ function RadialIntentField({
   )
 }
 
-async function syncSeekToAnchor(
-  targetTime: number,
-  videoElement: HTMLVideoElement | null,
-  eventId?: string | null
-) {
-  if (!videoElement) return
-
-  const store = useAxisChronologyStore.getState()
-  if (store.playback.isSeeking) return
-
-  const duration = Number.isFinite(videoElement.duration) ? videoElement.duration : 0
-  const clampedTarget = Math.min(Math.max(0, Number(targetTime) || 0), Math.max(duration, 0))
-
-  store.beginSeekTransaction(clampedTarget, eventId)
-  videoElement.pause()
-
-  if (Math.abs(videoElement.currentTime - clampedTarget) > 0.04) {
-    videoElement.currentTime = clampedTarget
-    await waitForSeeked(videoElement)
-  }
-
-  videoElement.pause()
-  useAxisChronologyStore.getState().completeSeekTransaction(videoElement.currentTime)
-  const latestStore = useAxisChronologyStore.getState()
-  if (latestStore.sessionId) {
-    recordReplayNegotiation({
-      sessionId: latestStore.sessionId,
-      sessionTime: clampedTarget,
-      type: "FREEZE_FRAME",
-    })
-  }
-}
-
 function ReplayVideo({
   playbackUrl,
   inspectionDepth,
@@ -339,8 +313,13 @@ function ReplayVideo({
   onTrainingMemoryStored: (memory: TrainingMemoryRecord) => void
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const seekVersionRef = useRef(0)
   const tapTimerRef = useRef<number | null>(null)
   const holdTimerRef = useRef<number | null>(null)
+  const radialTimerRef = useRef<number | null>(null)
+  const playbackClockFrameRef = useRef<number | null>(null)
+  const resumeAfterSeekRef = useRef(false)
+  const holdTriggeredRef = useRef(false)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
   const [memoryPulse, setMemoryPulse] = useState(false)
   const [holdActive, setHoldActive] = useState(false)
@@ -445,9 +424,83 @@ function ReplayVideo({
     }
   }
 
+  const seekReplayToAnchor = useCallback(async (
+    targetTime: number,
+    eventId?: string | null,
+    shouldResume = false
+  ) => {
+    const video = videoRef.current
+    if (!video) return
+
+    const seekVersion = seekVersionRef.current + 1
+    seekVersionRef.current = seekVersion
+    const duration = Number.isFinite(video.duration) ? video.duration : 0
+    const clampedTarget = Math.min(Math.max(0, Number(targetTime) || 0), Math.max(duration, 0))
+    const resumeAfterSeek = shouldResume || resumeAfterSeekRef.current || (!video.paused && !video.ended)
+    resumeAfterSeekRef.current = resumeAfterSeek
+
+    useAxisChronologyStore.getState().beginSeekTransaction(clampedTarget, eventId)
+
+    if (!video.paused) video.pause()
+
+    syncMediaPlayback({
+      currentTime: clampedTarget,
+      currentTimelineAnchor: clampedTarget,
+      isPlaying: false,
+      isSeeking: true,
+      paused: true,
+      readyState: video.readyState,
+    })
+
+    if (Math.abs(video.currentTime - clampedTarget) > 0.04) {
+      video.currentTime = clampedTarget
+      await waitForSeeked(video)
+    }
+
+    if (seekVersionRef.current !== seekVersion) return
+
+    const settledTime = video.currentTime
+    useAxisChronologyStore.getState().completeSeekTransaction(settledTime)
+    syncMediaPlayback({
+      currentTime: settledTime,
+      currentTimelineAnchor: settledTime,
+      isPlaying: false,
+      isSeeking: false,
+      paused: true,
+      readyState: video.readyState,
+    })
+
+    if (resumeAfterSeek && !holdActive) {
+      await video.play().catch(() => undefined)
+      syncMediaPlayback({
+        currentTime: video.currentTime,
+        currentTimelineAnchor: video.currentTime,
+        isPlaying: !video.paused,
+        isSeeking: false,
+        paused: video.paused,
+        readyState: video.readyState,
+      })
+    }
+
+    resumeAfterSeekRef.current = false
+    const latestStore = useAxisChronologyStore.getState()
+    if (latestStore.sessionId) {
+      recordReplayNegotiation({
+        sessionId: latestStore.sessionId,
+        sessionTime: clampedTarget,
+        type: "FREEZE_FRAME",
+      })
+    }
+  }, [holdActive, syncMediaPlayback])
+
   const toggleReplayAwareness = () => {
     const video = videoRef.current
-    if (!video || useAxisChronologyStore.getState().playback.isSeeking) return
+    if (!video) return
+
+    if (useAxisChronologyStore.getState().playback.isSeeking) {
+      resumeAfterSeekRef.current = true
+      return
+    }
 
     if (video.paused) {
       void video.play().catch(() => undefined)
@@ -458,13 +511,17 @@ function ReplayVideo({
 
   const openRadialIntent = (event: MouseEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
+    if (radialTimerRef.current) window.clearTimeout(radialTimerRef.current)
     setRadialIntent({
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     })
     pulseHaptic(8)
     onRitualPractice()
-    window.setTimeout(() => setRadialIntent(null), 1400)
+    radialTimerRef.current = window.setTimeout(() => {
+      radialTimerRef.current = null
+      setRadialIntent(null)
+    }, 1400)
   }
 
   const commitRitualIntent = (intent: RitualIntent) => {
@@ -482,6 +539,7 @@ function ReplayVideo({
     }
 
     if (intent === "Observe") {
+      resumeAfterSeekRef.current = false
       videoRef.current?.pause()
       pulseHaptic(9)
       return
@@ -495,6 +553,11 @@ function ReplayVideo({
   }
 
   const handleReplayTap = (event: MouseEvent<HTMLDivElement>) => {
+    if (holdTriggeredRef.current) {
+      holdTriggeredRef.current = false
+      return
+    }
+
     if (tapTimerRef.current) {
       window.clearTimeout(tapTimerRef.current)
       tapTimerRef.current = null
@@ -511,8 +574,11 @@ function ReplayVideo({
 
   const startHoldObservation = () => {
     if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+    holdTriggeredRef.current = false
     holdTimerRef.current = window.setTimeout(() => {
       const video = videoRef.current
+      holdTriggeredRef.current = true
+      resumeAfterSeekRef.current = false
       setHoldActive(true)
       video?.pause()
       pulseHaptic(10)
@@ -531,22 +597,22 @@ function ReplayVideo({
   useEffect(() => {
     if (!currentTimelineAnchor || !isInternalSeeking) return
 
-    void syncSeekToAnchor(
+    void seekReplayToAnchor(
       currentTimelineAnchor.targetTime,
-      videoRef.current,
-      currentTimelineAnchor.eventId
+      currentTimelineAnchor.eventId,
+      resumeAfterSeekRef.current || (!videoRef.current?.paused && !videoRef.current?.ended)
     )
-  }, [currentTimelineAnchor, isInternalSeeking])
+  }, [currentTimelineAnchor, isInternalSeeking, seekReplayToAnchor])
 
   useEffect(() => {
     const restoreFromChronology = () => {
       const state = useAxisChronologyStore.getState()
       if (!state.currentTimelineAnchor) return
 
-      void syncSeekToAnchor(
+      void seekReplayToAnchor(
         state.currentTimelineAnchor.targetTime,
-        videoRef.current,
-        state.currentTimelineAnchor.eventId
+        state.currentTimelineAnchor.eventId,
+        !videoRef.current?.paused
       )
     }
     const handleVisibility = () => {
@@ -566,22 +632,46 @@ function ReplayVideo({
       window.removeEventListener("pagehide", restoreFromChronology)
       window.removeEventListener("blur", restoreFromChronology)
     }
-  }, [])
+  }, [seekReplayToAnchor])
+
+  useEffect(() => {
+    const tick = () => {
+      const video = videoRef.current
+      const store = useAxisChronologyStore.getState()
+
+      if (video && !video.paused && !store.playback.isSeeking) {
+        syncMediaPlayback({
+          currentTime: video.currentTime,
+          currentTimelineAnchor: video.currentTime,
+          paused: false,
+          isPlaying: true,
+          readyState: video.readyState,
+        })
+      }
+
+      playbackClockFrameRef.current = window.requestAnimationFrame(tick)
+    }
+
+    playbackClockFrameRef.current = window.requestAnimationFrame(tick)
+
+    return () => {
+      if (playbackClockFrameRef.current) {
+        window.cancelAnimationFrame(playbackClockFrameRef.current)
+      }
+    }
+  }, [syncMediaPlayback])
 
   useEffect(() => {
     return () => {
       if (tapTimerRef.current) window.clearTimeout(tapTimerRef.current)
       if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+      if (radialTimerRef.current) window.clearTimeout(radialTimerRef.current)
     }
   }, [])
 
   if (!playbackUrl) {
     return (
-      <div className="grid aspect-video place-items-center border border-white/10 bg-[#070707] text-center">
-        <p className="axis-mono text-[11px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-          LOADING
-        </p>
-      </div>
+      <div className="aspect-video bg-[#050403]" />
     )
   }
 
@@ -605,11 +695,14 @@ function ReplayVideo({
         <video
           ref={videoRef}
           src={playbackUrl}
-          controls
           playsInline
-          preload="metadata"
+          preload="auto"
           onLoadedMetadata={(event) => {
             syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              currentTimelineAnchor: event.currentTarget.currentTime,
+              paused: event.currentTarget.paused,
+              isPlaying: !event.currentTarget.paused,
               readyState: event.currentTarget.readyState,
             })
           }}
@@ -626,34 +719,54 @@ function ReplayVideo({
           onPause={(event) => {
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
+              currentTimelineAnchor: event.currentTarget.currentTime,
               isPlaying: false,
               paused: true,
+              isSeeking: false,
               readyState: event.currentTarget.readyState,
             })
           }}
           onPlay={(event) => {
-            if (useAxisChronologyStore.getState().playback.isSeeking) {
-              event.currentTarget.pause()
-              return
-            }
-
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
+              currentTimelineAnchor: event.currentTarget.currentTime,
               isPlaying: true,
               paused: false,
+              isSeeking: false,
+              readyState: event.currentTarget.readyState,
+            })
+          }}
+          onSeeking={(event) => {
+            syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              currentTimelineAnchor: event.currentTarget.currentTime,
+              isPlaying: false,
+              isSeeking: true,
+              paused: true,
               readyState: event.currentTarget.readyState,
             })
           }}
           onSeeked={(event) => {
-            if (useAxisChronologyStore.getState().playback.isSeeking) return
-
+            useAxisChronologyStore.getState().completeSeekTransaction(event.currentTarget.currentTime)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
+              currentTimelineAnchor: event.currentTarget.currentTime,
               isPlaying: !event.currentTarget.paused,
+              isSeeking: false,
               paused: event.currentTarget.paused,
               readyState: event.currentTarget.readyState,
             })
             completeInternalSeek()
+          }}
+          onCanPlay={(event) => {
+            syncMediaPlayback({
+              currentTime: event.currentTarget.currentTime,
+              currentTimelineAnchor: event.currentTarget.currentTime,
+              isPlaying: !event.currentTarget.paused,
+              isSeeking: false,
+              paused: event.currentTarget.paused,
+              readyState: event.currentTarget.readyState,
+            })
           }}
           className={`relative z-10 aspect-video w-full bg-black object-contain transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
             memoryPulse ? "brightness-[1.12] contrast-[1.08]" : "brightness-[0.96]"
@@ -710,7 +823,7 @@ function ReplayVideo({
 }
 
 function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
-  const { events, duration, activeEventId, requestEventJump, sessionId } =
+  const { events, duration, activeEventId, requestEventJump, sessionId, playback } =
     useAxisChronologyStore(
       useShallow((state) => ({
         events: state.events,
@@ -718,6 +831,7 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
         activeEventId: state.activeEventId,
         requestEventJump: state.requestEventJump,
         sessionId: state.sessionId,
+        playback: state.playback,
       }))
     )
   const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
@@ -729,6 +843,11 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
   }))
   const [dragging, setDragging] = useState(false)
   const lastDenseEventRef = useRef<string | null>(null)
+  const suppressClickRef = useRef(false)
+  const playheadPosition = Math.min(
+    100,
+    Math.max(0, (Number(playback.currentTimelineAnchor) / safeDuration) * 100)
+  )
   const jumpToNearestAtPosition = (clientX: number, rail: HTMLDivElement) => {
     if (!visibleEvents.length) return
 
@@ -741,17 +860,17 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
       return eventDistance < nearestDistance ? event : nearest
     }, visibleEvents[0])
 
-    requestEventJump(nearestEvent.id)
     if (lastDenseEventRef.current !== nearestEvent.id) {
+      requestEventJump(nearestEvent.id)
       lastDenseEventRef.current = nearestEvent.id
       pulseHaptic(hapticForDensity(memoryDensityAt(targetTime, densityAnchors, safeDuration)))
-    }
-    if (sessionId) {
-      recordReplayNegotiation({
-        sessionId,
-        sessionTime: Number(nearestEvent.session_time) || 0,
-        type: "RAIL_JUMP",
-      })
+      if (sessionId) {
+        recordReplayNegotiation({
+          sessionId,
+          sessionTime: Number(nearestEvent.session_time) || 0,
+          type: "RAIL_JUMP",
+        })
+      }
     }
   }
 
@@ -762,6 +881,8 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
           dragging ? "opacity-100" : "opacity-78"
         }`}
         onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId)
+          suppressClickRef.current = true
           setDragging(true)
           jumpToNearestAtPosition(event.clientX, event.currentTarget)
         }}
@@ -769,15 +890,21 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
           if (!dragging) return
           jumpToNearestAtPosition(event.clientX, event.currentTarget)
         }}
-        onPointerUp={() => {
+        onPointerUp={(event) => {
+          event.currentTarget.releasePointerCapture(event.pointerId)
           setDragging(false)
           lastDenseEventRef.current = null
+          window.setTimeout(() => {
+            suppressClickRef.current = false
+          }, 0)
         }}
         onPointerCancel={() => {
           setDragging(false)
           lastDenseEventRef.current = null
+          suppressClickRef.current = false
         }}
         onClick={(event) => {
+          if (suppressClickRef.current) return
           jumpToNearestAtPosition(event.clientX, event.currentTarget)
         }}
       >
@@ -811,6 +938,12 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
           />
         ))}
         <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-white/[0.035] via-[#f2f1ed]/16 to-white/[0.035]" />
+        <span
+          className="pointer-events-none absolute top-1/2 h-7 w-px -translate-y-1/2 bg-[#f2f1ed]/42 shadow-[0_0_18px_rgba(242,241,237,0.2)]"
+          style={{
+            left: `${playheadPosition}%`,
+          }}
+        />
         {visibleEvents.map((event) => {
           const position = Math.min(
             100,
