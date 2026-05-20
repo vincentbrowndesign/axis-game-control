@@ -15,6 +15,8 @@ import {
   type BasketballEvent,
   type BasketballReconstructionChapter,
 } from "@/lib/continuityAssistance"
+import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
+import { saveTrainingSetMemory, summarizeNearbyEvents } from "@/lib/trainingSetMemory"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -139,20 +141,89 @@ async function syncSeekToAnchor(
 function ReplayVideo({
   playbackUrl,
   inspectionDepth,
+  session,
 }: {
   playbackUrl: string | null
   inspectionDepth: InspectionDepth
+  session: TemporalSessionRecord
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const { currentTimelineAnchor, isInternalSeeking, completeInternalSeek, syncMediaPlayback } =
+  const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
+  const {
+    currentTimelineAnchor,
+    isInternalSeeking,
+    completeInternalSeek,
+    syncMediaPlayback,
+    events,
+    activeEventId,
+    playback,
+  } =
     useAxisChronologyStore(
       useShallow((state) => ({
         currentTimelineAnchor: state.currentTimelineAnchor,
         isInternalSeeking: state.isInternalSeeking,
         completeInternalSeek: state.completeInternalSeek,
         syncMediaPlayback: state.syncMediaPlayback,
+        events: state.events,
+        activeEventId: state.activeEventId,
+        playback: state.playback,
       }))
     )
+
+  const saveCurrentFrameToTrainingSet = async () => {
+    const video = videoRef.current
+    if (!video || !session.id || trainingStatus === "saving") return
+
+    const frame = await captureVideoFrameBlob(video)
+    if (!frame) return
+
+    const sessionTime = Number(video.currentTime) || Number(playback.currentTimelineAnchor) || 0
+    const activeEvent = activeEventId
+      ? events.find((event) => event.id === activeEventId)
+      : events.find((event) => Math.abs(Number(event.session_time) - sessionTime) <= 0.5)
+    const basketballEvent =
+      typeof activeEvent?.payload?.basketball_event === "string"
+        ? activeEvent.payload.basketball_event
+        : null
+    const reconstructionChapter =
+      typeof activeEvent?.payload?.reconstruction_chapter === "string"
+        ? activeEvent.payload.reconstruction_chapter
+        : null
+    const motionState =
+      activeEvent?.payload?.continuity_assist &&
+      typeof activeEvent.payload.continuity_assist === "object"
+        ? (activeEvent.payload.continuity_assist as Record<string, unknown>)
+        : null
+
+    try {
+      setTrainingStatus("saving")
+      await saveTrainingSetMemory({
+        frame,
+        sessionId: session.id,
+        sessionTime,
+        replayPosition: sessionTime,
+        chronologyPosition: Number(playback.currentTimelineAnchor) || sessionTime,
+        opticalDepth: inspectionDepth,
+        clipReference: {
+          playbackUrl: session.playback_url,
+          storagePath: session.storage_path,
+        },
+        eventContext: {
+          activeEventId,
+          eventType: activeEvent?.type ? String(activeEvent.type) : null,
+          basketballEvent,
+          reconstructionChapter,
+          nearbyEvents: summarizeNearbyEvents(events, sessionTime),
+        },
+        motionState,
+        source: "replay",
+      })
+      setTrainingStatus("stored")
+      window.setTimeout(() => setTrainingStatus("idle"), 1800)
+    } catch {
+      setTrainingStatus("idle")
+    }
+  }
 
   useEffect(() => {
     if (!currentTimelineAnchor || !isInternalSeeking) return
@@ -268,6 +339,14 @@ function ReplayVideo({
         <div className="axis-mono pointer-events-none absolute bottom-4 left-4 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
           AXIS
         </div>
+        <button
+          type="button"
+          onClick={() => void saveCurrentFrameToTrainingSet()}
+          disabled={trainingStatus === "saving"}
+          className="axis-mono axis-optical-transition absolute bottom-4 right-4 bg-black/28 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 backdrop-blur transition hover:text-white/82 disabled:text-white/28"
+        >
+          {trainingStatus === "stored" ? "MEMORY SAVED" : "SAVE TO TRAINING SET"}
+        </button>
       </div>
     </div>
   )
@@ -661,6 +740,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
             <ReplayVideo
               playbackUrl={session.playback_url}
               inspectionDepth={inspectionDepth}
+              session={session}
             />
             <InspectionDepthControl
               inspectionDepth={inspectionDepth}

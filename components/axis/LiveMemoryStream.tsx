@@ -24,6 +24,7 @@ import {
 import { startPassiveContinuityObservers } from "@/lib/passiveContinuityObservers"
 import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
 import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
+import { blobFromUrl, saveTrainingSetMemory } from "@/lib/trainingSetMemory"
 
 type WorkingSession = {
   id: string
@@ -1083,6 +1084,7 @@ export function LiveMemoryStream() {
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
   const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("MOTION_ECHO")
   const [liveOpticalDepth, setLiveOpticalDepth] = useState<LiveOpticalDepth>(1)
+  const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
   const [pendingContinuitySelection, setPendingContinuitySelection] =
     useState<PendingContinuitySelection | null>(null)
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
@@ -1248,6 +1250,63 @@ export function LiveMemoryStream() {
     })
     openContinuitySelector(sessionTime, snapshot?.id || null)
   }, [appendTemporalEvent, openContinuitySelector])
+
+  const saveLiveReviewToTrainingSet = useCallback(async () => {
+    const session = workingSessionRef.current
+    const latestSnapshot = useAxisChronologyStore.getState().snapshots.at(-1) || null
+    const sessionId = session?.id || archivedRecording?.id
+    const sessionTime = latestSnapshot?.session_time ?? elapsedRef.current
+
+    if (!sessionId || trainingStatus === "saving") return
+
+    try {
+      setTrainingStatus("saving")
+      const videoFrame = localVideoRef.current
+        ? await captureVideoFrameBlob(localVideoRef.current)
+        : null
+      const snapshotFrame =
+        !videoFrame && (latestSnapshot?.image_url || latestSnapshot?.localUrl)
+          ? await blobFromUrl(latestSnapshot.image_url || latestSnapshot.localUrl || "")
+          : null
+      const frame = videoFrame || snapshotFrame
+
+      if (!frame) {
+        setTrainingStatus("idle")
+        return
+      }
+
+      await saveTrainingSetMemory({
+        frame,
+        sessionId,
+        sessionTime,
+        replayPosition: sessionTime,
+        chronologyPosition: sessionTime,
+        opticalDepth: liveOpticalDepth,
+        clipReference: {
+          playbackUrl: session?.playbackUrl || archivedRecording?.playbackUrl || null,
+          storagePath: session?.storagePath || archivedRecording?.storagePath || null,
+        },
+        eventContext: {
+          activeEventId: latestSnapshot?.id || null,
+          eventType: latestSnapshot ? "SNAPSHOT" : null,
+          nearbyEvents: [],
+        },
+        motionState: continuityAssistRef.current
+          ? {
+              attention_state: continuityAssistRef.current.attentionState,
+              pressure: continuityAssistRef.current.pressure,
+              kinetic_density: continuityAssistRef.current.kineticDensity,
+              motion_energy: continuityAssistRef.current.motionEnergy,
+            }
+          : null,
+        source: "live_review",
+      })
+      setTrainingStatus("stored")
+      window.setTimeout(() => setTrainingStatus("idle"), 1800)
+    } catch {
+      setTrainingStatus("idle")
+    }
+  }, [archivedRecording, liveOpticalDepth, trainingStatus])
 
   const clearReconnectTimers = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -1843,6 +1902,16 @@ export function LiveMemoryStream() {
                   New session
                 </button>
               </div>
+              {latestSnapshot ? (
+                <button
+                  type="button"
+                  onClick={() => void saveLiveReviewToTrainingSet()}
+                  disabled={trainingStatus === "saving"}
+                  className="axis-mono mt-5 text-[9px] font-black uppercase tracking-[0.18em] text-white/48 transition hover:text-white/78 disabled:text-white/24"
+                >
+                  {trainingStatus === "stored" ? "MEMORY SAVED" : "SAVE TO TRAINING SET"}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -1873,8 +1942,16 @@ export function LiveMemoryStream() {
               )}
               <div className="min-w-0">
                 <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/38">
-                  Snapshot
+                  {trainingStatus === "stored" ? "MEMORY SAVED" : "Snapshot"}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => void saveLiveReviewToTrainingSet()}
+                  disabled={trainingStatus === "saving"}
+                  className="axis-mono mt-1 text-[8px] font-black uppercase tracking-[0.16em] text-white/48 transition hover:text-white/82 disabled:text-white/24"
+                >
+                  SAVE TO TRAINING SET
+                </button>
               </div>
             </div>
           ) : null}
