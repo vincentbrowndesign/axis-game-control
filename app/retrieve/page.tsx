@@ -9,6 +9,13 @@ import {
   replayRetrievalPresets,
   type ReplayRetrievalClip,
 } from "@/lib/retrieval/liveReplayRetrieval"
+import {
+  AxisClipCard,
+  AxisEmptyState,
+  AxisHeader,
+  AxisLinkButton,
+  AxisPage,
+} from "@/components/axis/AxisPrimitives"
 
 type RetrievePageProps = {
   searchParams: Promise<{
@@ -35,30 +42,20 @@ function clipHref(clip: ReplayRetrievalClip) {
 
 function RetrievalClipCard({ clip }: { clip: ReplayRetrievalClip }) {
   return (
-    <Link
+    <AxisClipCard
       href={clipHref(clip)}
-      className="axis-familiar-bar axis-world-panel axis-optical-transition block p-4 transition hover:bg-white/[0.055]"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="axis-mono truncate text-[10px] font-black uppercase tracking-[0.18em] text-white/52">
-            {clip.team} / {clip.eventType}
-          </p>
-          <h2 className="mt-2 truncate text-lg font-black uppercase tracking-normal text-white/88">
-            {clip.label}
-          </h2>
-        </div>
-        <div className="axis-broadcast-chip axis-world-badge axis-mono shrink-0 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em]">
-          {clip.score}
-        </div>
-      </div>
-      <div className="axis-mono mt-5 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.14em] text-white/42">
-        <span>{formatClock(clip.sessionTime)}</span>
-        <span>
-          {formatClock(clip.clipStart)}-{formatClock(clip.clipEnd)}
-        </span>
-      </div>
-    </Link>
+      kicker={`${clip.team} / ${clip.eventType}`}
+      title={clip.label}
+      badge={clip.score}
+      meta={
+        <>
+          <span>{formatClock(clip.sessionTime)}</span>
+          <span>
+            {formatClock(clip.clipStart)}-{formatClock(clip.clipEnd)}
+          </span>
+        </>
+      }
+    />
   )
 }
 
@@ -71,19 +68,16 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
 
   if (!user) {
     return (
-      <main className="axis-display axis-sync-room axis-world-state grid min-h-dvh place-items-center px-6 text-center">
+      <AxisPage center max="max-w-xl">
         <div>
           <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             SIGN IN TO FIND REPLAYS
           </p>
-          <Link
-            href="/auth"
-            className="axis-mono axis-familiar-primary mt-7 inline-flex px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
-          >
+          <AxisLinkButton href="/auth" tone="primary" className="mt-7 inline-flex">
             Sign in
-          </Link>
+          </AxisLinkButton>
         </div>
-      </main>
+      </AxisPage>
     )
   }
 
@@ -118,31 +112,17 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
   const q = params.q || ""
 
   return (
-    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state min-h-dvh px-4 py-6 text-white sm:px-8">
-      <section className="mx-auto grid max-w-6xl gap-8">
-        <header className="axis-world-header grid gap-5 pb-5">
-          <div className="flex items-center justify-between gap-4">
-            <Link
-              href="/live"
-              className="axis-mono axis-world-link text-[10px] font-black uppercase tracking-[0.18em] transition"
-            >
-              Live
-            </Link>
-            <nav className="axis-world-nav">
-              <Link
-                href="/retrieve"
-                className="axis-mono axis-retrieval-link px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition"
-              >
-                Replay recall
-              </Link>
-              <Link
-                href="/training-set"
-                className="axis-mono axis-world-link text-[10px] font-black uppercase tracking-[0.18em] transition"
-              >
-                Saved clips
-              </Link>
-            </nav>
-          </div>
+    <AxisPage max="max-w-6xl" className="px-4 py-6 sm:px-8">
+      <div className="grid gap-8">
+        <header className="grid gap-5 pb-5">
+          <AxisHeader title="Live">
+            <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
+              Replay recall
+            </AxisLinkButton>
+            <AxisLinkButton href="/training-set" tone="ghost" className="px-0 py-0">
+              Saved clips
+            </AxisLinkButton>
+          </AxisHeader>
           <div>
             <p className="axis-mono axis-world-kicker text-[10px] font-black uppercase tracking-[0.24em]">
               Replay recall
@@ -227,17 +207,14 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
               ))}
             </div>
           ) : (
-            <div className="axis-familiar-bar axis-world-panel p-6">
-              <p className="text-2xl font-black uppercase tracking-normal text-white/80">
-                No tagged clips yet.
-              </p>
-              <p className="mt-3 max-w-xl text-sm font-bold text-white/42">
+            <AxisEmptyState title="No tagged clips yet.">
+              <p>
                 Start a live recording, tag a few plays, then come back here for instant recall.
               </p>
-            </div>
+            </AxisEmptyState>
           )}
         </section>
-      </section>
-    </main>
+      </div>
+    </AxisPage>
   )
 }

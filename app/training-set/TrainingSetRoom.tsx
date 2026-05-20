@@ -2,6 +2,11 @@
 
 import Link from "next/link"
 import { useState } from "react"
+import {
+  AxisActionGrid,
+  AxisButton,
+  AxisSurface,
+} from "@/components/axis/AxisPrimitives"
 
 type TrainingMemory = {
   id: string
@@ -85,7 +90,7 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {records.map((memory) => (
-        <article key={memory.id} className="axis-sync-surface axis-world-panel">
+        <AxisSurface key={memory.id} as="article">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={memory.frame_url}
@@ -112,32 +117,33 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
               <span>{new Date(memory.created_at).toLocaleDateString()}</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <AxisActionGrid className="grid-cols-2">
               <Link
                 href={`/retrieve?q=${encodeURIComponent(memory.label)}`}
                 className="axis-mono axis-optical-transition axis-retrieval-link px-3 py-3 text-center text-[9px] font-black uppercase tracking-[0.12em] transition"
               >
                 Find similar
               </Link>
-              <button
+              <AxisButton
                 type="button"
                 disabled={busyId === memory.id}
                 onClick={() => void sendToRoboflow(memory.id)}
-                className="axis-mono axis-optical-transition axis-sync-action px-3 py-3 text-[9px] font-black uppercase tracking-[0.12em] transition disabled:cursor-wait disabled:bg-white/10 disabled:text-zinc-600"
+                className="px-3 py-3 text-[9px] tracking-[0.12em] disabled:bg-white/10 disabled:text-zinc-600"
               >
                 Save frame
-              </button>
-            </div>
-            <button
+              </AxisButton>
+            </AxisActionGrid>
+            <AxisButton
               type="button"
+              tone="ghost"
               disabled={busyId === memory.id}
               onClick={() => void deleteMemory(memory.id)}
-              className="axis-mono axis-optical-transition axis-sync-surface w-full px-3 py-3 text-[9px] font-black uppercase tracking-[0.12em] transition hover:text-zinc-100 disabled:cursor-wait disabled:text-zinc-700"
+              className="w-full px-3 py-3 text-[9px] tracking-[0.12em] hover:text-zinc-100 disabled:text-zinc-700"
             >
               Remove
-            </button>
+            </AxisButton>
           </div>
-        </article>
+        </AxisSurface>
       ))}
     </div>
   )

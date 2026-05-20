@@ -1,6 +1,5 @@
-"use client"
-
 import { ReactNode } from "react"
+import { AxisSurface } from "@/components/axis/AxisPrimitives"
 
 type Props = {
   children: ReactNode
@@ -11,19 +10,5 @@ export default function AxisCard({
   children,
   className = "",
 }: Props) {
-  return (
-    <section
-      className={`
-        rounded-[34px]
-        border
-        border-white/10
-        bg-white/[0.03]
-        p-6
-        backdrop-blur-sm
-        ${className}
-      `}
-    >
-      {children}
-    </section>
-  )
+  return <AxisSurface className={`p-6 ${className}`}>{children}</AxisSurface>
 }

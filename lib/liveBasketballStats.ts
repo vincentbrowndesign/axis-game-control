@@ -1,4 +1,8 @@
 import type { BasketballEvent, ContinuityAssistSample } from "@/lib/continuityAssistance"
+import {
+  trainingSignalFromTap,
+  type AxisGameEvent,
+} from "@/lib/axisEventModel"
 
 export type LiveStatTeam = "home" | "away"
 
@@ -16,42 +20,7 @@ export type LiveBoxScoreLine = {
 
 export type LiveBoxScore = Record<LiveStatTeam, LiveBoxScoreLine>
 
-export type LiveBasketballStatEvent = {
-  id: string
-  sessionId: string
-  type: BasketballEvent
-  team: LiveStatTeam
-  player: string | null
-  timestamp: number
-  points: number
-  score: {
-    home: number
-    away: number
-  }
-  replayAnchor: {
-    sessionTime: number
-    clipStart: number
-    clipEnd: number
-    snapshotId: string | null
-  }
-  playByPlay: string
-  training: {
-    source: "tap"
-    confidence: number
-    sequenceIndex: number
-    previousEvents: BasketballEvent[]
-    replayPosition: number
-    scoreState: {
-      home: number
-      away: number
-    }
-    continuity: {
-      pressure: number | null
-      density: number | null
-      attentionState: string | null
-    }
-  }
-}
+export type LiveBasketballStatEvent = AxisGameEvent
 
 const emptyLine: LiveBoxScoreLine = {
   points: 0,
@@ -197,19 +166,13 @@ export function createLiveBasketballStatEvent({
       snapshotId,
     },
     playByPlay,
-    training: {
-      source: "tap",
-      confidence: 1,
+    training: trainingSignalFromTap({
       sequenceIndex,
       previousEvents,
       replayPosition: sessionTime,
       scoreState: scoreAfter,
-      continuity: {
-        pressure: continuity?.pressure ?? null,
-        density: continuity?.kineticDensity ?? null,
-        attentionState: continuity?.attentionState ?? null,
-      },
-    },
+      continuity,
+    }),
   }
 }
 

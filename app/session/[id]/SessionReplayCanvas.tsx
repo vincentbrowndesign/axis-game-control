@@ -12,6 +12,10 @@ import {
   type PointerEvent,
 } from "react"
 import Link from "next/link"
+import {
+  AxisHeader,
+  AxisLinkButton,
+} from "@/components/axis/AxisPrimitives"
 import { useShallow } from "zustand/react/shallow"
 import {
   type AxisSnapshot,
@@ -2520,31 +2524,14 @@ export function SessionReplayCanvas({
       <section className="axis-climate-field pointer-events-none fixed inset-0" />
       <ChronologyEdge trainingMemories={trainingMemories} />
       <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 py-6 sm:px-8">
-        <header className="axis-world-header py-3">
-          <div className="flex items-center justify-between gap-6">
-            <Link
-              href="/live"
-              aria-label="Return live"
-              className="axis-mono axis-world-link text-[10px] font-semibold uppercase tracking-[0.14em] transition"
-            >
-              Live
-            </Link>
-            <nav className="axis-world-nav">
-              <Link
-                href="/retrieve"
-                className="axis-mono axis-retrieval-link px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] transition"
-              >
-                Find clips
-              </Link>
-              <Link
-                href="/training-set"
-                className="axis-mono axis-world-link text-[10px] font-semibold uppercase tracking-[0.14em] transition"
-              >
-                Saved clips
-              </Link>
-            </nav>
-          </div>
-        </header>
+        <AxisHeader title="Live">
+          <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
+            Find clips
+          </AxisLinkButton>
+          <AxisLinkButton href="/training-set" tone="ghost" className="px-0 py-0">
+            Saved clips
+          </AxisLinkButton>
+        </AxisHeader>
 
         <div className="flex flex-col gap-4 py-12 md:flex-row md:items-end md:justify-between">
           <div>

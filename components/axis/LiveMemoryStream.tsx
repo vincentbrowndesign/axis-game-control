@@ -34,6 +34,7 @@ import {
   type LiveBoxScore,
   type LiveStatTeam,
 } from "@/lib/liveBasketballStats"
+import { AxisScorebug } from "@/components/axis/AxisPrimitives"
 
 type WorkingSession = {
   id: string
@@ -1912,32 +1913,12 @@ export function LiveMemoryStream() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.44),transparent_27%,transparent_72%,rgba(0,0,0,0.62))]" />
 
         <header className="absolute left-5 right-5 top-5 z-20">
-          <div className="axis-broadcast-scorebug mx-auto grid max-w-xl grid-cols-[1fr_auto_1fr] items-stretch overflow-hidden rounded-md">
-            <div className="grid min-w-0 grid-cols-[auto_1fr] items-center">
-              <span className="axis-broadcast-chip axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
-                HOME
-              </span>
-              <span className="axis-mono grid place-items-center px-4 text-2xl font-black tabular-nums text-white sm:text-3xl">
-                {activeScore.home}
-              </span>
-            </div>
-            <div className="grid min-w-24 place-items-center border-x border-white/12 px-3 py-2 text-center">
-              <span className="axis-mono text-[14px] font-black tabular-nums text-white">
-                {formatClock(elapsed)}
-              </span>
-              <span className="axis-mono mt-1 text-[8px] font-black uppercase tracking-[0.16em] text-white/48">
-                {statusLabel}
-              </span>
-            </div>
-            <div className="grid min-w-0 grid-cols-[1fr_auto] items-center">
-              <span className="axis-mono grid place-items-center px-4 text-2xl font-black tabular-nums text-white sm:text-3xl">
-                {activeScore.away}
-              </span>
-              <span className="axis-broadcast-chip axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
-                AWAY
-              </span>
-            </div>
-          </div>
+          <AxisScorebug
+            home={activeScore.home}
+            away={activeScore.away}
+            clock={formatClock(elapsed)}
+            status={statusLabel}
+          />
           <div className="mx-auto mt-2 flex max-w-xl items-center justify-between gap-3">
             <p className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/44">
               POS {possessionLabel}

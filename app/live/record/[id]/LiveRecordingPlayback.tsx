@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { type LiveArchiveSession, loadArchivedRecording } from "@/lib/liveArchive"
+import {
+  AxisHeader,
+  AxisLinkButton,
+  AxisPage,
+  AxisReplayFrame,
+} from "@/components/axis/AxisPrimitives"
 
 function formatClock(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds))
@@ -38,25 +44,12 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
   }, [id])
 
   return (
-    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state min-h-dvh">
-      <section className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 py-4 sm:px-6">
-        <header className="axis-world-header grid grid-cols-[auto_1fr_auto] items-center gap-4 py-3">
-          <Link
-            href="/live"
-            className="axis-mono axis-world-link text-[11px] font-black uppercase tracking-[0.24em] transition"
-          >
-            AXIS
-          </Link>
-          <div className="h-px bg-[#d7c08a]/14" />
-          <nav className="axis-world-nav justify-end">
-            <Link
-              href="/retrieve"
-              className="axis-mono axis-retrieval-link px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition"
-            >
-              Find clips
-            </Link>
-          </nav>
-        </header>
+    <AxisPage max="max-w-6xl">
+        <AxisHeader>
+          <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
+            Find clips
+          </AxisLinkButton>
+        </AxisHeader>
 
         {!hydrated ? (
           <div className="grid flex-1 place-items-center text-center">
@@ -84,14 +77,14 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
 
         {session ? (
           <div className="flex flex-1 flex-col justify-center gap-5 py-6">
-            <div className="axis-sync-surface axis-world-panel overflow-hidden">
+            <AxisReplayFrame>
               <video
                 src={session.playbackUrl}
                 controls
                 playsInline
                 className="axis-replay-surface aspect-video w-full object-contain"
               />
-            </div>
+            </AxisReplayFrame>
 
             <div className="grid gap-4 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
               <div>
@@ -121,7 +114,6 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
             </div>
           </div>
         ) : null}
-      </section>
-    </main>
+    </AxisPage>
   )
 }

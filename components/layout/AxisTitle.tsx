@@ -14,17 +14,17 @@ export default function AxisTitle({
   return (
     <div>
       {eyebrow && (
-        <p className="text-[11px] uppercase tracking-[0.42em] text-zinc-600">
+        <p className="axis-mono axis-world-kicker text-[11px] font-black uppercase tracking-[0.24em]">
           {eyebrow}
         </p>
       )}
 
-      <h1 className="mt-5 text-[72px] font-black leading-[0.85] tracking-[-0.08em] text-white">
+      <h1 className="axis-world-title mt-5 text-5xl font-black uppercase leading-[0.92] tracking-normal sm:text-7xl">
         {title}
       </h1>
 
       {subtitle && (
-        <p className="mt-8 max-w-[680px] text-[30px] leading-[1.35] text-zinc-400">
+        <p className="mt-6 max-w-[680px] text-lg font-bold leading-[1.35] text-white/48 sm:text-2xl">
           {subtitle}
         </p>
       )}
