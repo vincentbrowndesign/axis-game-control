@@ -45,6 +45,16 @@
   --axis-interaction-pull: 0.1;
   --axis-interaction-thermal: 0.16;
   --axis-interaction-evaporation: 0.52;
+  --axis-sensory-thermal: 0.16;
+  --axis-sensory-haptic: 0.12;
+  --axis-sensory-replay-echo: 0.14;
+  --axis-sensory-pressure: 0.14;
+  --axis-sensory-bloom: 0.12;
+  --axis-sensory-resonance: 0.1;
+  --axis-sensory-confirmation: 0.08;
+  --axis-sensory-afterglow: 0.16;
+  --axis-sensory-continuity: 0.18;
+  --axis-sensory-reflection: 0.12;
 }
 
 @theme inline {
@@ -272,6 +282,34 @@ button {
   }
 }
 
+@keyframes axis-sensory-bloom {
+  0%,
+  100% {
+    opacity: calc(0.08 + var(--axis-sensory-afterglow) * 0.18);
+    transform: scale(0.992);
+    filter: blur(calc(1.2px + var(--axis-sensory-resonance) * 1px));
+  }
+
+  42% {
+    opacity: calc(0.18 + var(--axis-sensory-bloom) * 0.34 + var(--axis-sensory-confirmation) * 0.18);
+    transform: scale(calc(1 + var(--axis-sensory-pressure) * 0.016));
+    filter: blur(calc(0.4px + var(--axis-sensory-resonance) * 0.4px));
+  }
+}
+
+@keyframes axis-sensory-resonance {
+  0%,
+  100% {
+    opacity: calc(0.06 + var(--axis-sensory-replay-echo) * 0.18);
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    opacity: calc(0.12 + var(--axis-sensory-continuity) * 0.22);
+    transform: translate3d(calc(var(--axis-sensory-pressure) * -0.6px), calc(var(--axis-sensory-haptic) * 0.4px), 0);
+  }
+}
+
 .axis-atmosphere {
   position: relative;
   overflow: hidden;
@@ -369,7 +407,7 @@ button {
   background:
     radial-gradient(
       ellipse at 52% 42%,
-      rgba(215, 192, 138, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-force) * 0.08 + var(--axis-chronology-continuity) * 0.08 + var(--axis-interaction-thermal) * 0.05)),
+      rgba(215, 192, 138, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-force) * 0.08 + var(--axis-chronology-continuity) * 0.08 + var(--axis-interaction-thermal) * 0.05 + var(--axis-sensory-thermal) * 0.05)),
       transparent 62%
     ),
     radial-gradient(
@@ -379,7 +417,7 @@ button {
     ),
     radial-gradient(
       ellipse at 58% 72%,
-      rgba(166, 120, 72, calc(var(--axis-chronology-nextness) * 0.08 + var(--axis-interaction-pressure) * 0.04)),
+      rgba(166, 120, 72, calc(var(--axis-chronology-nextness) * 0.08 + var(--axis-interaction-pressure) * 0.04 + var(--axis-sensory-pressure) * 0.04)),
       transparent 58%
     ),
     linear-gradient(180deg, rgba(20, 10, 4, calc(0.12 + var(--axis-climate-depth) * 0.16)), transparent 42%);
@@ -392,7 +430,7 @@ button {
     axis-chronology-afterglow 21s ease-in-out infinite;
   background-image:
     radial-gradient(circle at 20% 30%, rgba(242, 241, 237, calc(var(--axis-climate-grain) * 0.1 + var(--axis-density-emergence) * 0.06 + var(--axis-chronology-drift) * 0.06)) 0.6px, transparent 0.9px),
-    radial-gradient(circle at 70% 62%, rgba(215, 192, 138, calc(var(--axis-climate-residue) * 0.08 + var(--axis-density-pooling) * 0.08 + var(--axis-chronology-persistence) * 0.08 + var(--axis-interaction-condensation) * 0.05)) 0.7px, transparent 1px);
+    radial-gradient(circle at 70% 62%, rgba(215, 192, 138, calc(var(--axis-climate-residue) * 0.08 + var(--axis-density-pooling) * 0.08 + var(--axis-chronology-persistence) * 0.08 + var(--axis-interaction-condensation) * 0.05 + var(--axis-sensory-reflection) * 0.05)) 0.7px, transparent 1px);
   background-size:
     calc(42px - var(--axis-density-force) * 8px) calc(42px - var(--axis-density-force) * 8px),
     calc(62px - var(--axis-density-gravity) * 10px) calc(62px - var(--axis-density-gravity) * 10px);
@@ -404,7 +442,7 @@ button {
   background:
     radial-gradient(
       ellipse at 50% 64%,
-      rgba(215, 192, 138, calc(0.028 + var(--axis-climate-warmth) * 0.06 + var(--axis-density-force) * 0.06 + var(--axis-chronology-afterglow) * 0.08 + var(--axis-interaction-thermal) * 0.05)),
+      rgba(215, 192, 138, calc(0.028 + var(--axis-climate-warmth) * 0.06 + var(--axis-density-force) * 0.06 + var(--axis-chronology-afterglow) * 0.08 + var(--axis-interaction-thermal) * 0.05 + var(--axis-sensory-thermal) * 0.08)),
       transparent 64%
     ),
     radial-gradient(
@@ -414,13 +452,13 @@ button {
     ),
     radial-gradient(
       ellipse at 60% 68%,
-      rgba(166, 120, 72, calc(var(--axis-chronology-momentum) * 0.08 + var(--axis-interaction-witness) * 0.04)),
+      rgba(166, 120, 72, calc(var(--axis-chronology-momentum) * 0.08 + var(--axis-interaction-witness) * 0.04 + var(--axis-sensory-replay-echo) * 0.05)),
       transparent 62%
     ),
     linear-gradient(180deg, #000000, var(--axis-climate-charcoal) 52%, #000000);
   box-shadow:
     0 44px 160px rgba(0, 0, 0, calc(0.7 + var(--axis-climate-depth) * 0.18)),
-    0 0 150px rgba(92, 58, 34, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-gravity) * 0.1 + var(--axis-chronology-persistence) * 0.08));
+    0 0 150px rgba(92, 58, 34, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-gravity) * 0.1 + var(--axis-chronology-persistence) * 0.08 + var(--axis-sensory-afterglow) * 0.08));
 }
 
 .axis-climate-surface {
@@ -553,4 +591,57 @@ button {
 
 .axis-witness-field input {
   caret-color: rgba(215, 192, 138, calc(0.28 + var(--axis-interaction-witness) * 0.36));
+}
+
+.axis-sensory-field {
+  position: relative;
+}
+
+.axis-sensory-field::before,
+.axis-sensory-field::after {
+  content: "";
+  inset: -8%;
+  pointer-events: none;
+  position: absolute;
+}
+
+.axis-sensory-field::before {
+  animation: axis-sensory-bloom 4200ms ease-in-out infinite;
+  background:
+    radial-gradient(
+      ellipse at 50% 58%,
+      rgba(215, 192, 138, calc(0.018 + var(--axis-sensory-thermal) * 0.12 + var(--axis-sensory-bloom) * 0.08)),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at 42% 48%,
+      rgba(92, 58, 34, calc(var(--axis-sensory-pressure) * 0.12)),
+      transparent 48%
+    );
+  mix-blend-mode: screen;
+  z-index: 12;
+}
+
+.axis-sensory-field::after {
+  animation: axis-sensory-resonance 6800ms ease-in-out infinite;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(215, 192, 138, calc(var(--axis-sensory-replay-echo) * 0.12)),
+      transparent
+    ),
+    radial-gradient(circle at 50% 50%, rgba(242, 241, 237, calc(var(--axis-sensory-resonance) * 0.09)) 0.6px, transparent 1px);
+  background-size: 100% 100%, 56px 56px;
+  mix-blend-mode: screen;
+  z-index: 13;
+}
+
+.axis-sensory-echo {
+  animation: axis-sensory-bloom 1600ms cubic-bezier(0.2, 0, 0.18, 1) both;
+}
+
+.axis-sensory-touch {
+  filter: brightness(calc(1 + var(--axis-sensory-confirmation) * 0.1))
+    saturate(calc(1 + var(--axis-sensory-thermal) * 0.08));
 }

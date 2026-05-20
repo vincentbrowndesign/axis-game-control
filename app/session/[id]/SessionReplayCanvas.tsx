@@ -3,10 +3,12 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type MouseEvent,
+  type MutableRefObject,
   type PointerEvent,
 } from "react"
 import Link from "next/link"
@@ -83,6 +85,16 @@ type AxisClimateStyle = CSSProperties & {
   "--axis-interaction-pull": number
   "--axis-interaction-thermal": number
   "--axis-interaction-evaporation": number
+  "--axis-sensory-thermal": number
+  "--axis-sensory-haptic": number
+  "--axis-sensory-replay-echo": number
+  "--axis-sensory-pressure": number
+  "--axis-sensory-bloom": number
+  "--axis-sensory-resonance": number
+  "--axis-sensory-confirmation": number
+  "--axis-sensory-afterglow": number
+  "--axis-sensory-continuity": number
+  "--axis-sensory-reflection": number
 }
 type AxisDensityStyle = CSSProperties & {
   "--axis-density-force": number
@@ -104,6 +116,16 @@ type AxisDensityStyle = CSSProperties & {
   "--axis-interaction-pull": number
   "--axis-interaction-thermal": number
   "--axis-interaction-evaporation": number
+  "--axis-sensory-thermal": number
+  "--axis-sensory-haptic": number
+  "--axis-sensory-replay-echo": number
+  "--axis-sensory-pressure": number
+  "--axis-sensory-bloom": number
+  "--axis-sensory-resonance": number
+  "--axis-sensory-confirmation": number
+  "--axis-sensory-afterglow": number
+  "--axis-sensory-continuity": number
+  "--axis-sensory-reflection": number
 }
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
@@ -141,6 +163,10 @@ type AxisSpeechRecognitionConstructor = new () => AxisSpeechRecognition
 type AxisSpeechWindow = Window & {
   SpeechRecognition?: AxisSpeechRecognitionConstructor
   webkitSpeechRecognition?: AxisSpeechRecognitionConstructor
+}
+
+type AxisAudioWindow = Window & {
+  webkitAudioContext?: new () => AudioContext
 }
 
 type TrainingMemoryRecord = {
@@ -250,6 +276,53 @@ function hapticForDensity(density: number) {
   if (density >= 2.4) return [18, 26, 14]
   if (density >= 1.35) return [12, 18, 8]
   return 7
+}
+
+function hapticForEcho(intensity: number, density: number) {
+  const weighted = Math.max(density, intensity * 2.2)
+
+  if (weighted >= 2.4) return [18, 24, 10, 34, 12]
+  if (weighted >= 1.35) return [12, 20, 8]
+  return Math.max(4, Math.round(5 + intensity * 8))
+}
+
+function playSensoryTone(
+  audioContextRef: MutableRefObject<AudioContext | null>,
+  intensity = 0.24
+) {
+  if (typeof window === "undefined") return
+
+  const audioWindow = window as AxisAudioWindow
+  const AudioContextConstructor = window.AudioContext || audioWindow.webkitAudioContext
+  if (!AudioContextConstructor) return
+
+  try {
+    const context = audioContextRef.current || new AudioContextConstructor()
+    audioContextRef.current = context
+
+    if (context.state === "suspended") {
+      void context.resume()
+    }
+
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    const now = context.currentTime
+    const duration = 0.12 + Math.min(0.12, intensity * 0.08)
+    const volume = Math.min(0.012, 0.003 + intensity * 0.006)
+
+    oscillator.type = "sine"
+    oscillator.frequency.setValueAtTime(46 + intensity * 42, now)
+    oscillator.frequency.exponentialRampToValueAtTime(38 + intensity * 30, now + duration)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.02)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
+    oscillator.connect(gain)
+    gain.connect(context.destination)
+    oscillator.start(now)
+    oscillator.stop(now + duration + 0.03)
+  } catch {
+    return
+  }
 }
 
 function densityWarmth(density: number) {
@@ -542,6 +615,8 @@ function ReplayVideo({
   const voicePhraseRef = useRef("")
   const chronologyMomentumRef = useRef(0.18)
   const chronologyDriftRef = useRef(0.14)
+  const sensoryEchoIdRef = useRef(0)
+  const sensoryAudioRef = useRef<AudioContext | null>(null)
   const [unresolvedReplaySeed] = useState(() => readUnresolvedReplay(session.id))
   const unresolvedReplayRef = useRef(unresolvedReplaySeed)
   const thermalHeatRef = useRef(unresolvedReplaySeed?.heat ?? 0.34)
@@ -554,6 +629,12 @@ function ReplayVideo({
   const [thermalHeat, setThermalHeat] = useState(() => unresolvedReplaySeed?.heat ?? 0.34)
   const [chronologyMomentum, setChronologyMomentum] = useState(0.18)
   const [chronologyDrift, setChronologyDrift] = useState(0.14)
+  const [sensoryEcho, setSensoryEcho] = useState({
+    id: 0,
+    heat: 0.16,
+    pressure: 0.14,
+    resonance: 0.1,
+  })
   const [unresolvedAnchorTime, setUnresolvedAnchorTime] = useState<number | null>(
     () => unresolvedReplaySeed?.time ?? null
   )
@@ -581,18 +662,21 @@ function ReplayVideo({
         playback: state.playback,
       }))
     )
-  const pressureAnchors =
-    unresolvedAnchorTime === null
-      ? densityAnchors
-      : [
-          ...densityAnchors,
-          {
-            id: `unresolved-${session.id}`,
-            time: unresolvedAnchorTime,
-            weight: 2.35,
-            source: "unresolved" as const,
-          },
-        ]
+  const pressureAnchors = useMemo(
+    () =>
+      unresolvedAnchorTime === null
+        ? densityAnchors
+        : [
+            ...densityAnchors,
+            {
+              id: `unresolved-${session.id}`,
+              time: unresolvedAnchorTime,
+              weight: 2.35,
+              source: "unresolved" as const,
+            },
+          ],
+    [densityAnchors, session.id, unresolvedAnchorTime]
+  )
   const currentDensity = memoryDensityAt(
     Number(playback.currentTimelineAnchor) || 0,
     pressureAnchors,
@@ -632,6 +716,20 @@ function ReplayVideo({
   const interactionPull = clampClimateVariable(0.1 + currentDensity * 0.06 + (radialIntent ? 0.12 : 0))
   const interactionThermal = clampClimateVariable(0.16 + roomTemperature * 0.34 + interactionPressure * 0.12)
   const interactionEvaporation = clampClimateVariable(0.52 - interactionPressure * 0.16, 0.24, 0.62)
+  const sensoryThermal = clampClimateVariable(
+    0.16 + roomTemperature * 0.24 + sensoryEcho.heat * 0.34 + (replaySettled ? 0.1 : 0)
+  )
+  const sensoryHaptic = clampClimateVariable(0.12 + currentDensity * 0.08 + sensoryEcho.pressure * 0.34)
+  const sensoryReplayEcho = clampClimateVariable(
+    0.14 + chronologyAfterglow * 0.24 + sensoryEcho.resonance * 0.34 + (replaySettled ? 0.14 : 0)
+  )
+  const sensoryPressure = clampClimateVariable(0.14 + interactionPressure * 0.28 + sensoryEcho.pressure * 0.32)
+  const sensoryBloom = clampClimateVariable(0.12 + sensoryEcho.heat * 0.42 + currentDensity * 0.04)
+  const sensoryResonance = clampClimateVariable(0.1 + sensoryEcho.resonance * 0.4 + chronologyMomentum * 0.12)
+  const sensoryConfirmation = clampClimateVariable(0.08 + sensoryEcho.pressure * 0.38)
+  const sensoryAfterglow = clampClimateVariable(0.16 + chronologyAfterglow * 0.28 + sensoryEcho.heat * 0.24)
+  const sensoryContinuity = clampClimateVariable(0.18 + chronologyContinuity * 0.24 + sensoryEcho.resonance * 0.18)
+  const sensoryReflection = clampClimateVariable(0.12 + sensoryEcho.heat * 0.22 + sensoryEcho.pressure * 0.2)
   const replayDensityStyle: AxisDensityStyle = {
     "--axis-density-force": Math.min(0.94, 0.22 + currentDensity * 0.16 + roomTemperature * 0.16),
     "--axis-density-gravity": Math.min(0.88, 0.16 + currentDensity * 0.12),
@@ -652,6 +750,16 @@ function ReplayVideo({
     "--axis-interaction-pull": interactionPull,
     "--axis-interaction-thermal": interactionThermal,
     "--axis-interaction-evaporation": interactionEvaporation,
+    "--axis-sensory-thermal": sensoryThermal,
+    "--axis-sensory-haptic": sensoryHaptic,
+    "--axis-sensory-replay-echo": sensoryReplayEcho,
+    "--axis-sensory-pressure": sensoryPressure,
+    "--axis-sensory-bloom": sensoryBloom,
+    "--axis-sensory-resonance": sensoryResonance,
+    "--axis-sensory-confirmation": sensoryConfirmation,
+    "--axis-sensory-afterglow": sensoryAfterglow,
+    "--axis-sensory-continuity": sensoryContinuity,
+    "--axis-sensory-reflection": sensoryReflection,
   }
 
   const warmRoom = useCallback((amount = 0.12) => {
@@ -680,6 +788,46 @@ function ReplayVideo({
     setUnresolvedAnchorTime(safeTime)
     writeUnresolvedReplay(session.id, safeTime, thermalHeatRef.current)
   }, [session.duration_seconds, session.id])
+
+  const emitSensoryEcho = useCallback((
+    time: number,
+    intensity = 0.28,
+    density = currentDensity,
+    includeTone = true
+  ) => {
+    const safeIntensity = clampClimateVariable(intensity, 0.08, 0.86)
+    const pressure = clampClimateVariable(0.12 + density * 0.08 + safeIntensity * 0.42)
+    const resonance = clampClimateVariable(0.1 + safeIntensity * 0.38 + chronologyMomentumRef.current * 0.16)
+
+    sensoryEchoIdRef.current += 1
+    setSensoryEcho({
+      id: sensoryEchoIdRef.current,
+      heat: safeIntensity,
+      pressure,
+      resonance,
+    })
+    warmRoom(safeIntensity * 0.26)
+    holdUnresolvedReplay(time, thermalHeatRef.current + safeIntensity * 0.24)
+    carryChronology(Math.min(0.14, 0.04 + safeIntensity * 0.1), Math.min(0.09, 0.025 + pressure * 0.06))
+    pulseHaptic(hapticForEcho(safeIntensity, density))
+
+    if (includeTone) {
+      playSensoryTone(sensoryAudioRef, safeIntensity)
+    }
+
+    window.setTimeout(() => {
+      setSensoryEcho((echo) =>
+        echo.id === sensoryEchoIdRef.current
+          ? {
+              ...echo,
+              heat: 0.16,
+              pressure: 0.14,
+              resonance: 0.1,
+            }
+          : echo
+      )
+    }, 980 + safeIntensity * 620)
+  }, [carryChronology, currentDensity, holdUnresolvedReplay, warmRoom])
 
   const saveCurrentFrameToTrainingSet = async () => {
     const video = videoRef.current
@@ -747,9 +895,7 @@ function ReplayVideo({
 
       if (payload.memory) onTrainingMemoryStored(payload.memory)
       setMemoryPulse(true)
-      warmRoom(0.28)
-      holdUnresolvedReplay(sessionTime, thermalHeatRef.current + 0.28)
-      pulseHaptic([20, 34, 12])
+      emitSensoryEcho(sessionTime, 0.72, 2.5)
       onRitualPractice()
       setTrainingStatus("stored")
       window.setTimeout(() => setMemoryPulse(false), 620)
@@ -767,9 +913,7 @@ function ReplayVideo({
     const video = videoRef.current
     if (!video) return
     setReplaySettled(false)
-    warmRoom(0.08)
-    holdUnresolvedReplay(targetTime, thermalHeatRef.current + 0.08)
-    carryChronology(0.1, 0.08)
+    emitSensoryEcho(targetTime, 0.26, memoryDensityAt(targetTime, pressureAnchors, Number(session.duration_seconds) || 0), false)
 
     const seekVersion = seekVersionRef.current + 1
     seekVersionRef.current = seekVersion
@@ -837,7 +981,14 @@ function ReplayVideo({
         type: "FREEZE_FRAME",
       })
     }
-  }, [carryChronology, holdActive, holdUnresolvedReplay, playback.currentTimelineAnchor, syncMediaPlayback, warmRoom])
+  }, [
+    emitSensoryEcho,
+    holdActive,
+    playback.currentTimelineAnchor,
+    pressureAnchors,
+    session.duration_seconds,
+    syncMediaPlayback,
+  ])
 
   const saveGesturePhrase = async (phrase: string, occurredAtSeconds: number) => {
     const clean = cleanGesturePhrase(phrase)
@@ -856,10 +1007,7 @@ function ReplayVideo({
           occurredAtSeconds,
         }),
       })
-      warmRoom(0.18)
-      holdUnresolvedReplay(occurredAtSeconds, thermalHeatRef.current + 0.18)
-      carryChronology(0.12, 0.05)
-      pulseHaptic([14, 28, 10])
+      emitSensoryEcho(occurredAtSeconds, 0.5, currentDensity)
     } catch {
       return
     }
@@ -922,7 +1070,7 @@ function ReplayVideo({
       recognition.start()
       recognitionRef.current = recognition
       setGestureMode("voice")
-      pulseHaptic([8, 22, 8])
+      emitSensoryEcho(Number(videoRef.current?.currentTime) || Number(playback.currentTimelineAnchor) || 0, 0.34, currentDensity)
     } catch {
       recognitionRef.current = null
     }
@@ -955,13 +1103,10 @@ function ReplayVideo({
 
     if (video.paused) {
       setReplaySettled(false)
-      warmRoom(0.08)
-      holdUnresolvedReplay(video.currentTime, thermalHeatRef.current + 0.08)
-      carryChronology(0.08, 0.04)
+      emitSensoryEcho(video.currentTime, 0.3, currentDensity)
       void video.play().catch(() => undefined)
     } else {
-      holdUnresolvedReplay(video.currentTime, thermalHeatRef.current + 0.12)
-      carryChronology(0.05, 0.03)
+      emitSensoryEcho(video.currentTime, 0.22, currentDensity, false)
       video.pause()
     }
   }
@@ -973,10 +1118,7 @@ function ReplayVideo({
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     })
-    pulseHaptic(8)
-    warmRoom(0.1)
-    holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.1)
-    carryChronology(0.1, 0.08)
+    emitSensoryEcho(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, 0.34, currentDensity)
     onRitualPractice()
     radialTimerRef.current = window.setTimeout(() => {
       radialTimerRef.current = null
@@ -1000,10 +1142,8 @@ function ReplayVideo({
 
     if (intent === "Observe") {
       resumeAfterSeekRef.current = false
-      holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.14)
-      carryChronology(0.06, 0.04)
+      emitSensoryEcho(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, 0.32, currentDensity, false)
       videoRef.current?.pause()
-      pulseHaptic(9)
       return
     }
 
@@ -1011,7 +1151,7 @@ function ReplayVideo({
     if (state.activeEventId) {
       setReplaySettled(false)
       state.requestEventJump(state.activeEventId)
-      pulseHaptic(7)
+      emitSensoryEcho(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, 0.26, currentDensity, false)
     }
   }
 
@@ -1044,12 +1184,9 @@ function ReplayVideo({
       holdTriggeredRef.current = true
       resumeAfterSeekRef.current = false
       setGestureMode("hold")
-      warmRoom(0.12)
-      holdUnresolvedReplay(video?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.12)
-      carryChronology(0.08, 0.04)
+      emitSensoryEcho(video?.currentTime || Number(playback.currentTimelineAnchor) || 0, 0.38, currentDensity)
       setHoldActive(true)
       video?.pause()
-      pulseHaptic(10)
       onRitualPractice()
     }, 520)
     voiceHoldTimerRef.current = window.setTimeout(() => {
@@ -1067,8 +1204,7 @@ function ReplayVideo({
     }
     stopVoiceHold()
     setHoldActive(false)
-    holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.06)
-    carryChronology(0.04, 0.02)
+    emitSensoryEcho(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, 0.18, currentDensity, false)
     setGestureMode((mode) => (mode === "hold" || mode === "voice" ? "idle" : mode))
   }
 
@@ -1126,10 +1262,7 @@ function ReplayVideo({
         setRadialIntent(null)
         onSetInspectionDepth(1)
         setGestureMode("close")
-        warmRoom(0.08)
-        holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.08)
-        carryChronology(0.07, 0.04)
-        pulseHaptic([9, 18, 9])
+        emitSensoryEcho(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, 0.34, currentDensity)
         onRitualPractice()
       }
       return
@@ -1305,13 +1438,13 @@ function ReplayVideo({
   return (
     <div className="overflow-hidden bg-black">
       <div
-        className={`axis-replay-surface axis-density-field axis-chronology-field axis-witness-field relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
+        className={`axis-replay-surface axis-density-field axis-chronology-field axis-witness-field axis-sensory-field axis-sensory-touch relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
           memoryPulse
             ? "brightness-[1.03]"
             : replaySettled
               ? "brightness-[1.015]"
               : ""
-        }`}
+        } ${sensoryEcho.id > 0 ? "axis-sensory-echo" : ""}`}
         style={replayDensityStyle}
         onClick={handleReplayTap}
         onContextMenu={(event) => event.preventDefault()}
@@ -1388,8 +1521,7 @@ function ReplayVideo({
             })
           }}
           onPause={(event) => {
-            holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.1)
-            carryChronology(0.04, 0.02)
+            emitSensoryEcho(event.currentTarget.currentTime, 0.22, currentDensity, false)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -1401,8 +1533,7 @@ function ReplayVideo({
           }}
           onPlay={(event) => {
             setReplaySettled(false)
-            holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.08)
-            carryChronology(0.08, 0.04)
+            emitSensoryEcho(event.currentTarget.currentTime, 0.3, currentDensity)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -1424,8 +1555,7 @@ function ReplayVideo({
           }}
           onSeeked={(event) => {
             setReplaySettled(false)
-            holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.08)
-            carryChronology(0.06, 0.06)
+            emitSensoryEcho(event.currentTarget.currentTime, 0.28, currentDensity, false)
             useAxisChronologyStore.getState().completeSeekTransaction(event.currentTarget.currentTime)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
@@ -1449,9 +1579,7 @@ function ReplayVideo({
           }}
           onEnded={(event) => {
             setReplaySettled(true)
-            warmRoom(0.34)
-            holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.34)
-            carryChronology(0.16, 0.08)
+            emitSensoryEcho(event.currentTarget.currentTime, 0.82, currentDensity + 1)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -2259,6 +2387,16 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   const interactionPull = clampClimateVariable(0.1 + densityPull * 0.3 + chronologyDrift * 0.12)
   const interactionThermal = clampClimateVariable(0.16 + climateWarmth * 0.34 + interactionPressure * 0.1)
   const interactionEvaporation = clampClimateVariable(0.52 - interactionPressure * 0.14, 0.28, 0.64)
+  const sensoryThermal = clampClimateVariable(0.16 + climateWarmth * 0.28 + chronologyAfterglow * 0.12)
+  const sensoryHaptic = clampClimateVariable(0.12 + densityForce * 0.14 + interactionPressure * 0.18)
+  const sensoryReplayEcho = clampClimateVariable(0.14 + chronologyAfterglow * 0.24 + climateResidue * 0.12)
+  const sensoryPressure = clampClimateVariable(0.14 + climatePressure * 0.24 + densityGravity * 0.12)
+  const sensoryBloom = clampClimateVariable(0.12 + densityEmergence * 0.16 + interactionCondensation * 0.12)
+  const sensoryResonance = clampClimateVariable(0.1 + chronologyMomentum * 0.18 + interactionWitness * 0.14)
+  const sensoryConfirmation = clampClimateVariable(0.08 + (activeEventId ? 0.18 : 0.1))
+  const sensoryAfterglow = clampClimateVariable(0.16 + chronologyAfterglow * 0.32)
+  const sensoryContinuity = clampClimateVariable(0.18 + chronologyContinuity * 0.28)
+  const sensoryReflection = clampClimateVariable(0.12 + climateResidue * 0.16 + interactionResidue * 0.16)
   const climateStyle: AxisClimateStyle = {
     "--axis-climate-warmth": climateWarmth,
     "--axis-climate-pressure": climatePressure,
@@ -2294,6 +2432,16 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     "--axis-interaction-pull": interactionPull,
     "--axis-interaction-thermal": interactionThermal,
     "--axis-interaction-evaporation": interactionEvaporation,
+    "--axis-sensory-thermal": sensoryThermal,
+    "--axis-sensory-haptic": sensoryHaptic,
+    "--axis-sensory-replay-echo": sensoryReplayEcho,
+    "--axis-sensory-pressure": sensoryPressure,
+    "--axis-sensory-bloom": sensoryBloom,
+    "--axis-sensory-resonance": sensoryResonance,
+    "--axis-sensory-confirmation": sensoryConfirmation,
+    "--axis-sensory-afterglow": sensoryAfterglow,
+    "--axis-sensory-continuity": sensoryContinuity,
+    "--axis-sensory-reflection": sensoryReflection,
   }
 
   useEffect(() => {
