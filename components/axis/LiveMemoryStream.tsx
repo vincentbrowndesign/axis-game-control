@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -24,6 +24,16 @@ import { startPassiveContinuityObservers } from "@/lib/passiveContinuityObserver
 import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
 import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
 import { blobFromUrl } from "@/lib/trainingSetMemory"
+import {
+  applyLiveStatEvent,
+  createLiveBasketballStatEvent,
+  createLiveBoxScore,
+  scoreFromLiveBoxScore,
+  summarizeLiveReport,
+  type LiveBasketballStatEvent,
+  type LiveBoxScore,
+  type LiveStatTeam,
+} from "@/lib/liveBasketballStats"
 
 type WorkingSession = {
   id: string
@@ -115,10 +125,12 @@ const recorderTimesliceMs = 2000
 const liveOpticalDepths: LiveOpticalDepth[] = [0.5, 1, 2, 2.5]
 const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
 const quickBasketballEvents: BasketballEvent[] = [
-  "SHOT",
+  "MAKE",
+  "MISS",
   "REBOUND",
   "TURNOVER",
   "ASSIST",
+  "STEAL",
   "FOUL",
   "BLOCK",
 ]
@@ -272,7 +284,7 @@ function BasketballEventSelector({
   const visibleEvents = quickBasketballEvents
   const visibleSuggested = pending.suggested.filter((event) => visibleEvents.includes(event))
   const [activeEvent, setActiveEvent] = useState<BasketballEvent | null>(
-    visibleSuggested[0] || "SHOT"
+    visibleSuggested[0] || "MAKE"
   )
   const [isSliding, setIsSliding] = useState(false)
   const spokes = visibleEvents.map((basketballEvent, index) => {
@@ -296,7 +308,7 @@ function BasketballEventSelector({
     const distance = Math.sqrt((clientX - centerX) ** 2 + (clientY - centerY) ** 2)
 
     if (distance < bounds.width * 0.14) {
-      setActiveEvent(visibleSuggested[0] || "SHOT")
+      setActiveEvent(visibleSuggested[0] || "MAKE")
       return
     }
 
@@ -1100,6 +1112,9 @@ export function LiveMemoryStream() {
   const [showLiveTrainingLabels, setShowLiveTrainingLabels] = useState(false)
   const [pendingContinuitySelection, setPendingContinuitySelection] =
     useState<PendingContinuitySelection | null>(null)
+  const [activeStatTeam, setActiveStatTeam] = useState<LiveStatTeam>("home")
+  const [liveBoxScore, setLiveBoxScore] = useState<LiveBoxScore>(() => createLiveBoxScore())
+  const [liveStatEvents, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -1117,6 +1132,8 @@ export function LiveMemoryStream() {
   const passiveObserversRef = useRef<ReturnType<typeof startPassiveContinuityObservers> | null>(null)
   const continuityAssistRef = useRef<ContinuityAssistSample | null>(null)
   const basketballSequenceRef = useRef<BasketballEvent[]>([])
+  const liveBoxScoreRef = useRef<LiveBoxScore>(createLiveBoxScore())
+  const liveStatEventsRef = useRef<LiveBasketballStatEvent[]>([])
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
@@ -1143,42 +1160,6 @@ export function LiveMemoryStream() {
     })
   }, [])
 
-  const attachBasketballEvent = useCallback(
-    (basketballEvent: BasketballEvent, machineSuggested: boolean) => {
-      const pending = pendingContinuitySelection
-      const session = workingSessionRef.current
-      if (!pending || !session) {
-        setPendingContinuitySelection(null)
-        return
-      }
-
-      useAxisChronologyStore.getState().triggerAttentionSignal(
-        "BASKETBALL_EVENT",
-        pending.sessionTime,
-        {
-          basketball_event: basketballEvent,
-          reconstruction_chapter: reconstructionChapterForEvent(basketballEvent),
-          timestamp: pending.sessionTime,
-          source: "human_confirmed",
-          machineSuggested,
-          snapshot_id: pending.snapshotId,
-          sequence: {
-            index: basketballSequenceRef.current.length,
-            previous: basketballSequenceRef.current.slice(-3),
-            next: [...basketballSequenceRef.current.slice(-3), basketballEvent],
-          },
-          replay_window: {
-            before: 0,
-            after: 0,
-          },
-        }
-      )
-      basketballSequenceRef.current = [...basketballSequenceRef.current, basketballEvent].slice(-12)
-      setPendingContinuitySelection(null)
-    },
-    [pendingContinuitySelection]
-  )
-
   const emitEvent = useCallback(
     (type: LiveIngestEventType, metadata?: Record<string, unknown>) => {
       const event: LiveIngestEvent = {
@@ -1193,6 +1174,78 @@ export function LiveMemoryStream() {
       return event
     },
     []
+  )
+
+  const attachBasketballEvent = useCallback(
+    (basketballEvent: BasketballEvent, machineSuggested: boolean) => {
+      const pending = pendingContinuitySelection
+      const session = workingSessionRef.current
+      if (!pending || !session) {
+        setPendingContinuitySelection(null)
+        return
+      }
+      const previousEvents = basketballSequenceRef.current.slice(-3)
+      const statEvent = createLiveBasketballStatEvent({
+        id: createId("axis-stat"),
+        sessionId: session.id,
+        type: basketballEvent,
+        team: activeStatTeam,
+        sessionTime: pending.sessionTime,
+        scoreBefore: liveBoxScoreRef.current,
+        snapshotId: pending.snapshotId,
+        sequenceIndex: basketballSequenceRef.current.length,
+        previousEvents,
+        continuity: continuityAssistRef.current,
+      })
+      const nextBoxScore = applyLiveStatEvent(liveBoxScoreRef.current, statEvent)
+
+      liveBoxScoreRef.current = nextBoxScore
+      liveStatEventsRef.current = [...liveStatEventsRef.current, statEvent].slice(-80)
+      setLiveBoxScore(nextBoxScore)
+      setLiveStatEvents(liveStatEventsRef.current)
+      emitEvent("basketball_stat", {
+        visible: {
+          team: statEvent.team,
+          eventType: statEvent.type,
+          points: statEvent.points,
+          score: statEvent.score,
+          playByPlay: statEvent.playByPlay,
+        },
+        replayAnchor: statEvent.replayAnchor,
+        training: statEvent.training,
+      })
+
+      useAxisChronologyStore.getState().triggerAttentionSignal(
+        "BASKETBALL_EVENT",
+        pending.sessionTime,
+        {
+          basketball_event: basketballEvent,
+          team: activeStatTeam,
+          points: statEvent.points,
+          score_state: statEvent.score,
+          play_by_play: statEvent.playByPlay,
+          reconstruction_chapter: reconstructionChapterForEvent(basketballEvent),
+          timestamp: pending.sessionTime,
+          source: "human_confirmed",
+          machineSuggested,
+          snapshot_id: pending.snapshotId,
+          sequence: {
+            index: basketballSequenceRef.current.length,
+            previous: previousEvents,
+            next: [...previousEvents, basketballEvent],
+          },
+          replay_window: {
+            before: Math.max(0, pending.sessionTime - statEvent.replayAnchor.clipStart),
+            after: Math.max(0, statEvent.replayAnchor.clipEnd - pending.sessionTime),
+          },
+          replay_anchor: statEvent.replayAnchor,
+          training_rep: statEvent.training,
+        }
+      )
+      basketballSequenceRef.current = [...basketballSequenceRef.current, basketballEvent].slice(-12)
+      setPendingContinuitySelection(null)
+    },
+    [activeStatTeam, emitEvent, pendingContinuitySelection]
   )
 
   const appendTemporalEvent = useCallback(
@@ -1305,6 +1358,8 @@ export function LiveMemoryStream() {
           chronologyPosition: sessionTime,
           storagePath: session?.storagePath || archivedRecording?.storagePath || null,
           source: "live_review",
+          latestStatEvent: liveStatEventsRef.current.at(-1) || null,
+          liveReport: summarizeLiveReport(liveStatEventsRef.current, liveBoxScoreRef.current),
           motionState: continuityAssistRef.current
             ? {
                 attention_state: continuityAssistRef.current.attentionState,
@@ -1478,6 +1533,11 @@ export function LiveMemoryStream() {
       eventSequenceRef.current = 0
       elapsedRef.current = 0
       basketballSequenceRef.current = []
+      liveBoxScoreRef.current = createLiveBoxScore()
+      liveStatEventsRef.current = []
+      setLiveBoxScore(liveBoxScoreRef.current)
+      setLiveStatEvents([])
+      setActiveStatTeam("home")
       setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()
@@ -1704,6 +1764,8 @@ export function LiveMemoryStream() {
         replayId: result.replayId,
         size: blob.size,
         storagePath,
+        liveReport: summarizeLiveReport(liveStatEventsRef.current, liveBoxScoreRef.current),
+        statEvents: liveStatEventsRef.current,
       })
 
       const archived: LiveArchiveSession = {
@@ -1816,6 +1878,12 @@ export function LiveMemoryStream() {
             : status === "ARCHIVED"
               ? "SAVED"
               : "RECONNECTING"
+  const liveReport = useMemo(
+    () => summarizeLiveReport(liveStatEvents, liveBoxScore),
+    [liveBoxScore, liveStatEvents]
+  )
+  const activeScore = scoreFromLiveBoxScore(liveBoxScore)
+  const recentStatEvents = liveStatEvents.slice(-4).reverse()
 
   return (
     <main className="axis-display axis-sync-room axis-familiar-room h-dvh overflow-hidden">
@@ -1849,6 +1917,9 @@ export function LiveMemoryStream() {
             <div>
               <p className="axis-mono text-[10px] font-black uppercase tracking-[0.26em] text-white/54">
                 {formatClock(elapsed)}
+              </p>
+              <p className="axis-mono mt-1 text-[15px] font-black uppercase tracking-[0.16em] text-white/76">
+                HOME {activeScore.home} - {activeScore.away} AWAY
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -1980,6 +2051,51 @@ export function LiveMemoryStream() {
         ) : null}
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
+          {status === "LIVE" ? (
+            <div className="axis-familiar-bar mx-auto mb-3 max-w-sm border p-2">
+              <div className="mb-2 grid grid-cols-2 gap-1">
+                {(["home", "away"] as const).map((team) => (
+                  <button
+                    key={team}
+                    type="button"
+                    onClick={() => setActiveStatTeam(team)}
+                    className={`axis-mono px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] transition ${
+                      activeStatTeam === team
+                        ? "axis-familiar-primary"
+                        : "axis-familiar-control"
+                    }`}
+                  >
+                    {team}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-[auto_1fr] gap-3">
+                <div className="axis-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/72">
+                  {liveReport.score}
+                </div>
+                <div className="min-w-0 text-right">
+                  <p className="axis-mono truncate text-[8px] font-black uppercase tracking-[0.14em] text-white/44">
+                    {liveReport.run}
+                  </p>
+                  <p className="axis-mono mt-1 truncate text-[8px] font-black uppercase tracking-[0.12em] text-white/30">
+                    REB {liveReport.rebounds} / TO {liveReport.turnovers}
+                  </p>
+                </div>
+              </div>
+              {recentStatEvents.length ? (
+                <div className="mt-2 grid gap-1">
+                  {recentStatEvents.slice(0, 2).map((event) => (
+                    <p
+                      key={event.id}
+                      className="axis-mono truncate text-[8px] font-black uppercase tracking-[0.12em] text-white/46"
+                    >
+                      {formatClock(event.timestamp)} / {event.playByPlay}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {status === "LIVE" && latestSnapshot ? (
             <div className="axis-familiar-bar mx-auto mb-3 flex max-w-sm items-center gap-3 border p-1.5">
               {latestSnapshot.image_url || latestSnapshot.localUrl ? (
