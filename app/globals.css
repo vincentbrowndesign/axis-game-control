@@ -835,3 +835,26 @@ button {
   background: rgba(215, 192, 138, calc(0.045 + var(--axis-familiar-tagging) * 0.06));
   color: rgba(232, 219, 188, calc(0.58 + var(--axis-familiar-tagging) * 0.22));
 }
+
+.axis-broadcast-scorebug {
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(242, 241, 237, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(242, 241, 237, 0.08),
+    0 16px 42px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.axis-broadcast-chip {
+  background: rgba(242, 241, 237, 0.92);
+  color: #000000;
+}
+
+.axis-operator-hub {
+  background: rgba(0, 0, 0, 0.66);
+  border: 1px solid rgba(242, 241, 237, 0.13);
+  box-shadow:
+    inset 0 1px 0 rgba(242, 241, 237, 0.06),
+    0 18px 54px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(16px);
+}

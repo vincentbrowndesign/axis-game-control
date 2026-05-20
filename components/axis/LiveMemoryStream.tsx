@@ -122,7 +122,6 @@ const mobileCaptureConstraints: MediaStreamConstraints = {
 const reconnectDebounceMs = 1400
 const trackFailureGraceMs = 5200
 const recorderTimesliceMs = 2000
-const liveOpticalDepths: LiveOpticalDepth[] = [0.5, 1, 2, 2.5]
 const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
 const quickBasketballEvents: BasketballEvent[] = [
   "MAKE",
@@ -1106,12 +1105,13 @@ export function LiveMemoryStream() {
   const [status, setStatus] = useState<LiveSessionStatus>("READY")
   const [elapsed, setElapsed] = useState(0)
   const [archivedRecording, setArchivedRecording] = useState<LiveArchiveSession | null>(null)
-  const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("MOTION_ECHO")
-  const [liveOpticalDepth, setLiveOpticalDepth] = useState<LiveOpticalDepth>(1)
+  const [liveViewMode] = useState<LiveViewMode>("RECON")
+  const [liveOpticalDepth] = useState<LiveOpticalDepth>(1)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
   const [showLiveTrainingLabels, setShowLiveTrainingLabels] = useState(false)
   const [pendingContinuitySelection, setPendingContinuitySelection] =
     useState<PendingContinuitySelection | null>(null)
+  const [operatorHubOpen, setOperatorHubOpen] = useState(false)
   const [activeStatTeam, setActiveStatTeam] = useState<LiveStatTeam>("home")
   const [liveBoxScore, setLiveBoxScore] = useState<LiveBoxScore>(() => createLiveBoxScore())
   const [liveStatEvents, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
@@ -1243,6 +1243,7 @@ export function LiveMemoryStream() {
         }
       )
       basketballSequenceRef.current = [...basketballSequenceRef.current, basketballEvent].slice(-12)
+      setOperatorHubOpen(false)
       setPendingContinuitySelection(null)
     },
     [activeStatTeam, emitEvent, pendingContinuitySelection]
@@ -1538,6 +1539,7 @@ export function LiveMemoryStream() {
       setLiveBoxScore(liveBoxScoreRef.current)
       setLiveStatEvents([])
       setActiveStatTeam("home")
+      setOperatorHubOpen(false)
       setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()
@@ -1884,6 +1886,7 @@ export function LiveMemoryStream() {
   )
   const activeScore = scoreFromLiveBoxScore(liveBoxScore)
   const recentStatEvents = liveStatEvents.slice(-4).reverse()
+  const possessionLabel = activeStatTeam.toUpperCase()
 
   return (
     <main className="axis-display axis-sync-room axis-familiar-room h-dvh overflow-hidden">
@@ -1908,50 +1911,37 @@ export function LiveMemoryStream() {
 
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.44),transparent_27%,transparent_72%,rgba(0,0,0,0.62))]" />
 
-        <div className="axis-mono pointer-events-none absolute bottom-28 left-5 z-20 text-[10px] font-black uppercase tracking-[0.28em] text-white/46 drop-shadow-[0_0_10px_rgba(242,241,237,0.16)]">
-          LIVE
-        </div>
-
         <header className="absolute left-5 right-5 top-5 z-20">
-          <div className="flex items-start justify-between gap-5">
-            <div>
-              <p className="axis-mono text-[10px] font-black uppercase tracking-[0.26em] text-white/54">
-                {formatClock(elapsed)}
-              </p>
-              <p className="axis-mono mt-1 text-[15px] font-black uppercase tracking-[0.16em] text-white/76">
-                HOME {activeScore.home} - {activeScore.away} AWAY
-              </p>
+          <div className="axis-broadcast-scorebug mx-auto grid max-w-xl grid-cols-[1fr_auto_1fr] items-stretch overflow-hidden rounded-md">
+            <div className="grid min-w-0 grid-cols-[auto_1fr] items-center">
+              <span className="axis-broadcast-chip axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
+                HOME
+              </span>
+              <span className="axis-mono grid place-items-center px-4 text-2xl font-black tabular-nums text-white sm:text-3xl">
+                {activeScore.home}
+              </span>
             </div>
-            <div className="flex items-center gap-3">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  status === "LIVE"
-                    ? "bg-emerald-200 shadow-[0_0_12px_rgba(185,215,191,0.42)]"
-                    : "bg-zinc-300/80"
-                }`}
-              />
-              <span className="axis-mono text-[10px] font-black uppercase tracking-[0.24em] text-white/58">
+            <div className="grid min-w-24 place-items-center border-x border-white/12 px-3 py-2 text-center">
+              <span className="axis-mono text-[14px] font-black tabular-nums text-white">
+                {formatClock(elapsed)}
+              </span>
+              <span className="axis-mono mt-1 text-[8px] font-black uppercase tracking-[0.16em] text-white/48">
                 {statusLabel}
               </span>
             </div>
-          </div>
-          <div className="mt-5 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-1.5">
-              {liveOpticalDepths.map((depth) => (
-                <button
-                  key={depth}
-                  type="button"
-                  onClick={() => setLiveOpticalDepth(depth)}
-                  className={`axis-mono axis-optical-transition h-7 min-w-8 px-1 text-[10px] font-black tracking-[0.08em] transition ${
-                    liveOpticalDepth === depth
-                      ? "text-white/86 drop-shadow-[0_0_8px_rgba(242,241,237,0.18)]"
-                      : "text-white/28 hover:text-white/56"
-                  }`}
-                >
-                  {depth}
-                </button>
-              ))}
+            <div className="grid min-w-0 grid-cols-[1fr_auto] items-center">
+              <span className="axis-mono grid place-items-center px-4 text-2xl font-black tabular-nums text-white sm:text-3xl">
+                {activeScore.away}
+              </span>
+              <span className="axis-broadcast-chip axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
+                AWAY
+              </span>
             </div>
+          </div>
+          <div className="mx-auto mt-2 flex max-w-xl items-center justify-between gap-3">
+            <p className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/44">
+              POS {possessionLabel}
+            </p>
             {archivedRecording ? (
               <Link
                 href={`/session/${archivedRecording.id}`}
@@ -1961,22 +1951,6 @@ export function LiveMemoryStream() {
               </Link>
             ) : null}
           </div>
-          <button
-            type="button"
-            aria-label="Toggle tracking overlay"
-            onClick={() =>
-              setLiveViewMode((mode) => (mode === "MOTION_ECHO" ? "RECON" : "MOTION_ECHO"))
-            }
-            className="axis-optical-transition mt-4 inline-flex h-5 w-5 items-center justify-center transition"
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                liveViewMode === "MOTION_ECHO"
-                  ? "bg-zinc-100 shadow-[0_0_12px_rgba(244,244,245,0.42)]"
-                  : "bg-zinc-700"
-              }`}
-            />
-          </button>
         </header>
 
         {status === "ARCHIVED" && archivedRecording ? (
@@ -2051,8 +2025,8 @@ export function LiveMemoryStream() {
         ) : null}
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
-          {status === "LIVE" ? (
-            <div className="axis-familiar-bar mx-auto mb-3 max-w-sm border p-2">
+          {status === "LIVE" && operatorHubOpen ? (
+            <div className="axis-operator-hub mx-auto mb-3 max-w-sm rounded-md p-2">
               <div className="mb-2 grid grid-cols-2 gap-1">
                 {(["home", "away"] as const).map((team) => (
                   <button
@@ -2070,7 +2044,7 @@ export function LiveMemoryStream() {
                 ))}
               </div>
               <div className="grid grid-cols-[auto_1fr] gap-3">
-                <div className="axis-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/72">
+                <div className="axis-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/76">
                   {liveReport.score}
                 </div>
                 <div className="min-w-0 text-right">
@@ -2096,7 +2070,7 @@ export function LiveMemoryStream() {
               ) : null}
             </div>
           ) : null}
-          {status === "LIVE" && latestSnapshot ? (
+          {status === "LIVE" && operatorHubOpen && latestSnapshot ? (
             <div className="axis-familiar-bar mx-auto mb-3 flex max-w-sm items-center gap-3 border p-1.5">
               {latestSnapshot.image_url || latestSnapshot.localUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -2158,22 +2132,51 @@ export function LiveMemoryStream() {
             ) : null}
 
             {status === "LIVE" ? (
-              <div className="grid w-full grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => void captureSnapshot()}
-                  className="axis-familiar-control px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-white/10"
-                >
-                  Snap
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void finalizeSession()}
-                  className="axis-familiar-primary px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-zinc-300"
-                >
-                  End recording
-                </button>
-              </div>
+              operatorHubOpen ? (
+                <div className="grid w-full grid-cols-[1fr_auto] gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void captureSnapshot()}
+                    className="axis-familiar-primary px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-zinc-300"
+                  >
+                    Tag play
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void finalizeSession()}
+                    className="axis-familiar-control px-4 py-4 text-[10px] font-black uppercase tracking-[0.16em] active:bg-white/10"
+                  >
+                    End
+                  </button>
+                </div>
+              ) : (
+                <div className="grid w-full grid-cols-[auto_1fr_auto] gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStatTeam((team) => (team === "home" ? "away" : "home"))}
+                    className="axis-familiar-control px-3 py-4 text-[10px] font-black uppercase tracking-[0.16em] active:bg-white/10"
+                  >
+                    {possessionLabel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOperatorHubOpen(true)
+                      void captureSnapshot()
+                    }}
+                    className="axis-familiar-primary px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-zinc-300"
+                  >
+                    Tag play
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOperatorHubOpen(true)}
+                    className="axis-familiar-control px-3 py-4 text-[10px] font-black uppercase tracking-[0.16em] active:bg-white/10"
+                  >
+                    Stats
+                  </button>
+                </div>
+              )
             ) : null}
           </div>
           {hasRecentArchive && status === "READY" ? (
