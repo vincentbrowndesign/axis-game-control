@@ -75,6 +75,14 @@ type AxisClimateStyle = CSSProperties & {
   "--axis-chronology-afterglow": number
   "--axis-chronology-nextness": number
   "--axis-chronology-unresolved": number
+  "--axis-interaction-pressure": number
+  "--axis-interaction-witness": number
+  "--axis-interaction-condensation": number
+  "--axis-interaction-emergence": number
+  "--axis-interaction-residue": number
+  "--axis-interaction-pull": number
+  "--axis-interaction-thermal": number
+  "--axis-interaction-evaporation": number
 }
 type AxisDensityStyle = CSSProperties & {
   "--axis-density-force": number
@@ -88,6 +96,14 @@ type AxisDensityStyle = CSSProperties & {
   "--axis-chronology-afterglow": number
   "--axis-chronology-nextness": number
   "--axis-chronology-unresolved": number
+  "--axis-interaction-pressure": number
+  "--axis-interaction-witness": number
+  "--axis-interaction-condensation": number
+  "--axis-interaction-emergence": number
+  "--axis-interaction-residue": number
+  "--axis-interaction-pull": number
+  "--axis-interaction-thermal": number
+  "--axis-interaction-evaporation": number
 }
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
@@ -421,7 +437,7 @@ function RadialIntentField({
     },
   ]
   const radius = phase === "mastery" ? 58 : phase === "practitioner" ? 68 : 78
-  const opacity = phase === "mastery" ? "opacity-36" : phase === "practitioner" ? "opacity-58" : "opacity-78"
+  const opacity = phase === "mastery" ? "opacity-36" : phase === "practitioner" ? "opacity-52" : "opacity-64"
 
   const commitFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const bounds = fieldRef.current?.getBoundingClientRect()
@@ -468,14 +484,13 @@ function RadialIntentField({
         return (
           <span
             key={intent.label}
-            className="axis-mono axis-type-emergent pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-[0.16em]"
+            aria-label={intent.label}
+            className="axis-witness-presence pointer-events-none absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#d7c08a]/35 shadow-[0_0_18px_rgba(215,192,138,0.18)]"
             style={{
               left: `${left}%`,
               top: `${top}%`,
             }}
-          >
-            {intent.label}
-          </span>
+          />
         )
       })}
     </div>
@@ -598,6 +613,25 @@ function ReplayVideo({
   const chronologyUnresolved = clampClimateVariable(
     0.24 + (unresolvedAnchorTime === null ? 0 : 0.18) + roomTemperature * 0.2
   )
+  const interactionPressure = clampClimateVariable(
+    0.16 +
+      currentDensity * 0.08 +
+      roomTemperature * 0.08 +
+      (holdActive ? 0.18 : 0) +
+      (radialIntent ? 0.2 : 0) +
+      (gestureMode === "drag" || gestureMode === "voice" ? 0.12 : 0)
+  )
+  const interactionWitness = clampClimateVariable(
+    0.14 + interactionPressure * 0.46 + (playback.isPlaying ? 0.08 : 0) + (replaySettled ? 0.08 : 0)
+  )
+  const interactionCondensation = clampClimateVariable(
+    0.16 + currentDensity * 0.08 + (radialIntent ? 0.28 : 0) + (gestureMode !== "idle" ? 0.1 : 0)
+  )
+  const interactionEmergence = clampClimateVariable(0.18 + interactionWitness * 0.36 + currentDensity * 0.06)
+  const interactionResidue = clampClimateVariable(0.14 + chronologyAfterglow * 0.24 + roomTemperature * 0.12)
+  const interactionPull = clampClimateVariable(0.1 + currentDensity * 0.06 + (radialIntent ? 0.12 : 0))
+  const interactionThermal = clampClimateVariable(0.16 + roomTemperature * 0.34 + interactionPressure * 0.12)
+  const interactionEvaporation = clampClimateVariable(0.52 - interactionPressure * 0.16, 0.24, 0.62)
   const replayDensityStyle: AxisDensityStyle = {
     "--axis-density-force": Math.min(0.94, 0.22 + currentDensity * 0.16 + roomTemperature * 0.16),
     "--axis-density-gravity": Math.min(0.88, 0.16 + currentDensity * 0.12),
@@ -610,6 +644,14 @@ function ReplayVideo({
     "--axis-chronology-afterglow": chronologyAfterglow,
     "--axis-chronology-nextness": chronologyNextness,
     "--axis-chronology-unresolved": chronologyUnresolved,
+    "--axis-interaction-pressure": interactionPressure,
+    "--axis-interaction-witness": interactionWitness,
+    "--axis-interaction-condensation": interactionCondensation,
+    "--axis-interaction-emergence": interactionEmergence,
+    "--axis-interaction-residue": interactionResidue,
+    "--axis-interaction-pull": interactionPull,
+    "--axis-interaction-thermal": interactionThermal,
+    "--axis-interaction-evaporation": interactionEvaporation,
   }
 
   const warmRoom = useCallback((amount = 0.12) => {
@@ -1263,7 +1305,7 @@ function ReplayVideo({
   return (
     <div className="overflow-hidden bg-black">
       <div
-        className={`axis-replay-surface axis-density-field axis-chronology-field relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
+        className={`axis-replay-surface axis-density-field axis-chronology-field axis-witness-field relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
           memoryPulse
             ? "brightness-[1.03]"
             : replaySettled
@@ -1654,7 +1696,7 @@ function InspectionDepthControl({
 }) {
   return (
     <div className="mt-3 flex justify-center">
-      <div className="axis-climate-surface axis-density-surface axis-chronology-residue grid grid-cols-4">
+      <div className="axis-climate-surface axis-density-surface axis-chronology-residue axis-witness-surface axis-witness-field grid grid-cols-4">
         {inspectionDepths.map((depth) => {
           const active = depth === inspectionDepth
 
@@ -1805,7 +1847,7 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
         aria-label="Keep recording"
-        className="axis-mono axis-optical-transition axis-climate-surface axis-density-surface axis-chronology-residue axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
+        className="axis-mono axis-optical-transition axis-climate-surface axis-density-surface axis-chronology-residue axis-witness-surface axis-witness-field axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
       >
         keep
       </button>
@@ -1830,8 +1872,9 @@ function DevelopmentalInputBar({
   )
   const [attention, setAttention] = useState("")
   const [orientationPulse, setOrientationPulse] = useState(false)
+  const [witnessFocused, setWitnessFocused] = useState(false)
 
-  const placeAttention = () => {
+  const placeAttention = useCallback(() => {
     const normalized = attention.trim().toLowerCase()
     const currentTime = Number(playback.currentTimelineAnchor) || 0
     const densityAnchors = buildDevelopmentalAnchors({
@@ -1925,24 +1968,62 @@ function DevelopmentalInputBar({
 
     setOrientationPulse(true)
     window.setTimeout(() => setOrientationPulse(false), 720)
-  }
+  }, [
+    attention,
+    events,
+    playback.currentTimelineAnchor,
+    requestEventJump,
+    sessionId,
+    snapshots,
+    trainingMemories,
+  ])
+
+  useEffect(() => {
+    if (attention.trim().length < 2) return
+
+    const condensation = window.setTimeout(() => {
+      placeAttention()
+    }, witnessFocused ? 640 : 920)
+
+    return () => window.clearTimeout(condensation)
+  }, [attention, placeAttention, witnessFocused])
 
   return (
-    <section className="mx-auto mt-12 w-full max-w-4xl px-2 pb-2">
+    <section className="mx-auto mt-12 w-full px-2 pb-2">
       <div
-        className={`axis-climate-surface axis-density-surface axis-chronology-next relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.052),transparent_72%)] py-4 transition duration-500 ${
-          orientationPulse ? "axis-density-active" : ""
+        className={`axis-climate-surface axis-density-surface axis-chronology-next axis-witness-surface axis-witness-field axis-witness-condensation relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.052),transparent_72%)] py-3 transition duration-500 ${
+          orientationPulse || witnessFocused ? "axis-density-active" : ""
         }`}
       >
-        <div className="pointer-events-none absolute inset-x-8 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#d7c08a]/18 to-transparent" />
-        <label className="sr-only">Place attention</label>
+        <div className="pointer-events-none absolute inset-x-8 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#d7c08a]/14 to-transparent" />
+        <label className="sr-only">Place attention in chronology</label>
         <input
           value={attention}
-          onChange={(event) => setAttention(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") placeAttention()
+          onChange={(event) => {
+            setAttention(event.currentTarget.value)
+            setOrientationPulse(true)
           }}
-          placeholder="attention"
+          onFocus={() => {
+            setWitnessFocused(true)
+            setOrientationPulse(true)
+          }}
+          onBlur={() => {
+            setWitnessFocused(false)
+            if (attention.trim()) {
+              placeAttention()
+            } else {
+              setOrientationPulse(false)
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              placeAttention()
+              event.currentTarget.blur()
+            }
+          }}
+          aria-label="Place attention in chronology"
+          placeholder=""
           className="axis-mono axis-climate-text axis-type-field relative z-10 min-h-12 w-full border-0 bg-transparent px-5 py-2 text-[14px] outline-none"
         />
       </div>
@@ -2170,6 +2251,14 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   const chronologyAfterglow = clampClimateVariable(0.2 + climateWarmth * 0.86 + climateResidue * 0.18)
   const chronologyNextness = clampClimateVariable(0.18 + climatePressure * 0.22 + densityAnchors.length * 0.01)
   const chronologyUnresolved = clampClimateVariable(0.28 + climateResidue * 0.22 + (activeEventId ? 0.08 : 0))
+  const interactionPressure = clampClimateVariable(0.14 + climateDensity * 0.055 + (activeEventId ? 0.12 : 0))
+  const interactionWitness = clampClimateVariable(0.12 + interactionPressure * 0.42 + climateWarmth * 0.1)
+  const interactionCondensation = clampClimateVariable(0.16 + densityEmergence * 0.28 + (activeEventId ? 0.08 : 0))
+  const interactionEmergence = clampClimateVariable(0.18 + interactionWitness * 0.3 + chronologyNextness * 0.12)
+  const interactionResidue = clampClimateVariable(0.14 + climateResidue * 0.26 + chronologyAfterglow * 0.14)
+  const interactionPull = clampClimateVariable(0.1 + densityPull * 0.3 + chronologyDrift * 0.12)
+  const interactionThermal = clampClimateVariable(0.16 + climateWarmth * 0.34 + interactionPressure * 0.1)
+  const interactionEvaporation = clampClimateVariable(0.52 - interactionPressure * 0.14, 0.28, 0.64)
   const climateStyle: AxisClimateStyle = {
     "--axis-climate-warmth": climateWarmth,
     "--axis-climate-pressure": climatePressure,
@@ -2197,6 +2286,14 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     "--axis-chronology-afterglow": chronologyAfterglow,
     "--axis-chronology-nextness": chronologyNextness,
     "--axis-chronology-unresolved": chronologyUnresolved,
+    "--axis-interaction-pressure": interactionPressure,
+    "--axis-interaction-witness": interactionWitness,
+    "--axis-interaction-condensation": interactionCondensation,
+    "--axis-interaction-emergence": interactionEmergence,
+    "--axis-interaction-residue": interactionResidue,
+    "--axis-interaction-pull": interactionPull,
+    "--axis-interaction-thermal": interactionThermal,
+    "--axis-interaction-evaporation": interactionEvaporation,
   }
 
   useEffect(() => {
