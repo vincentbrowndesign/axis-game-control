@@ -14,6 +14,7 @@ export type LiveIngestEventType =
   | "reconnect_success"
   | "chunk_recorded"
   | "basketball_stat"
+  | "basketball_stat_undo"
   | "archive_started"
   | "archive_completed"
   | "archive_failed"

@@ -1,6 +1,7 @@
 import type { BasketballEvent, ContinuityAssistSample } from "@/lib/continuityAssistance"
 import {
   trainingSignalFromTap,
+  type AxisGameAction,
   type AxisGameEvent,
 } from "@/lib/axisEventModel"
 
@@ -21,6 +22,110 @@ export type LiveBoxScoreLine = {
 export type LiveBoxScore = Record<LiveStatTeam, LiveBoxScoreLine>
 
 export type LiveBasketballStatEvent = AxisGameEvent
+
+export type LiveScoringInput = {
+  action: AxisGameAction
+  type: BasketballEvent
+  label: string
+  points: number
+  made: boolean | null
+  assisted?: boolean
+  foulLinked?: boolean
+  possessionChange?: boolean
+}
+
+export const liveScoringInputs: LiveScoringInput[] = [
+  {
+    action: "MAKE_1",
+    type: "MAKE",
+    label: "1 FT",
+    points: 1,
+    made: true,
+  },
+  {
+    action: "MAKE_2",
+    type: "MAKE",
+    label: "2PT",
+    points: 2,
+    made: true,
+    possessionChange: true,
+  },
+  {
+    action: "MAKE_3",
+    type: "MAKE",
+    label: "3PT",
+    points: 3,
+    made: true,
+    possessionChange: true,
+  },
+  {
+    action: "MISS_2",
+    type: "MISS",
+    label: "Miss 2",
+    points: 0,
+    made: false,
+  },
+  {
+    action: "MISS_3",
+    type: "MISS",
+    label: "Miss 3",
+    points: 0,
+    made: false,
+  },
+  {
+    action: "AND_1",
+    type: "MAKE",
+    label: "And 1",
+    points: 2,
+    made: true,
+    foulLinked: true,
+  },
+  {
+    action: "ASSIST",
+    type: "ASSIST",
+    label: "Ast",
+    points: 0,
+    made: null,
+    assisted: true,
+  },
+  {
+    action: "REBOUND",
+    type: "REBOUND",
+    label: "Reb",
+    points: 0,
+    made: null,
+  },
+  {
+    action: "TURNOVER",
+    type: "TURNOVER",
+    label: "TO",
+    points: 0,
+    made: null,
+    possessionChange: true,
+  },
+  {
+    action: "STEAL",
+    type: "STEAL",
+    label: "Stl",
+    points: 0,
+    made: null,
+    possessionChange: true,
+  },
+  {
+    action: "BLOCK",
+    type: "BLOCK",
+    label: "Blk",
+    points: 0,
+    made: null,
+  },
+  {
+    action: "FOUL",
+    type: "FOUL",
+    label: "Foul",
+    points: 0,
+    made: null,
+  },
+]
 
 const emptyLine: LiveBoxScoreLine = {
   points: 0,
@@ -47,11 +152,19 @@ export function createLiveBoxScore(): LiveBoxScore {
   }
 }
 
-export function statDeltaForBasketballEvent(type: BasketballEvent): LiveBoxScoreLine {
+export function liveScoringInputForAction(action: AxisGameAction) {
+  return liveScoringInputs.find((input) => input.action === action) || liveScoringInputs[1]
+}
+
+export function oppositeTeam(team: LiveStatTeam): LiveStatTeam {
+  return team === "home" ? "away" : "home"
+}
+
+export function statDeltaForBasketballEvent(type: BasketballEvent, points = 0): LiveBoxScoreLine {
   const delta = createLine()
 
   if (type === "MAKE") {
-    delta.points = 2
+    delta.points = points
     delta.makes = 1
   } else if (type === "MISS" || type === "SHOT") {
     delta.misses = 1
@@ -81,7 +194,7 @@ export function applyLiveStatEvent(score: LiveBoxScore, event: LiveBasketballSta
       ...score.away,
     },
   }
-  const delta = statDeltaForBasketballEvent(event.type)
+  const delta = statDeltaForBasketballEvent(event.type, event.scoreValue)
   const line = next[event.team]
 
   line.points += delta.points
@@ -105,7 +218,7 @@ export function scoreFromLiveBoxScore(score: LiveBoxScore) {
 }
 
 function eventPhrase(type: BasketballEvent, points: number) {
-  if (type === "MAKE") return `made ${points}PT shot`
+  if (type === "MAKE") return points === 1 ? "made free throw" : `made ${points}PT shot`
   if (type === "MISS" || type === "SHOT") return "missed shot"
   if (type === "ASSIST") return "assist"
   if (type === "REBOUND") return "rebound"
@@ -129,6 +242,8 @@ export function createLiveBasketballStatEvent({
   sequenceIndex,
   previousEvents,
   continuity,
+  input,
+  possessionBefore,
 }: {
   id: string
   sessionId: string
@@ -141,23 +256,34 @@ export function createLiveBasketballStatEvent({
   sequenceIndex: number
   previousEvents: BasketballEvent[]
   continuity: ContinuityAssistSample | null
+  input?: LiveScoringInput
+  possessionBefore: LiveStatTeam
 }): LiveBasketballStatEvent {
-  const delta = statDeltaForBasketballEvent(type)
+  const normalizedInput = input || liveScoringInputForAction(type === "MAKE" ? "MAKE_2" : type as AxisGameAction)
+  const delta = statDeltaForBasketballEvent(type, normalizedInput.points)
   const scoreAfter = {
     home: scoreBefore.home.points + (team === "home" ? delta.points : 0),
     away: scoreBefore.away.points + (team === "away" ? delta.points : 0),
   }
+  const possession = normalizedInput.possessionChange ? oppositeTeam(possessionBefore) : possessionBefore
   const label = player?.trim() || team.toUpperCase()
-  const playByPlay = `${label} ${eventPhrase(type, delta.points)}`
+  const suffix = normalizedInput.foulLinked ? " + foul" : normalizedInput.assisted ? " linked assist" : ""
+  const playByPlay = `${label} ${eventPhrase(type, delta.points)}${suffix}`
 
   return {
     id,
     sessionId,
     type,
+    action: normalizedInput.action,
     team,
     player: player?.trim() || null,
     timestamp: sessionTime,
     points: delta.points,
+    scoreValue: delta.points,
+    made: normalizedInput.made,
+    assisted: Boolean(normalizedInput.assisted),
+    foulLinked: Boolean(normalizedInput.foulLinked),
+    possession,
     score: scoreAfter,
     replayAnchor: {
       sessionTime,

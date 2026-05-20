@@ -864,6 +864,17 @@ button {
   backdrop-filter: blur(16px);
 }
 
+.axis-operator-protected {
+  max-height: min(44dvh, 22rem);
+  overflow: hidden;
+  transform: translateZ(0);
+}
+
+.axis-operator-protected :where(button, a) {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 .axis-retrieval-link {
   background: rgba(242, 241, 237, 0.1);
   border: 1px solid rgba(242, 241, 237, 0.12);

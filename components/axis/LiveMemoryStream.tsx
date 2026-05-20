@@ -28,13 +28,15 @@ import {
   applyLiveStatEvent,
   createLiveBasketballStatEvent,
   createLiveBoxScore,
+  liveScoringInputs,
   scoreFromLiveBoxScore,
   summarizeLiveReport,
   type LiveBasketballStatEvent,
   type LiveBoxScore,
+  type LiveScoringInput,
   type LiveStatTeam,
 } from "@/lib/liveBasketballStats"
-import { AxisScorebug } from "@/components/axis/AxisPrimitives"
+import { AxisButton, AxisScorebug } from "@/components/axis/AxisPrimitives"
 
 type WorkingSession = {
   id: string
@@ -124,16 +126,8 @@ const reconnectDebounceMs = 1400
 const trackFailureGraceMs = 5200
 const recorderTimesliceMs = 2000
 const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
-const quickBasketballEvents: BasketballEvent[] = [
-  "MAKE",
-  "MISS",
-  "REBOUND",
-  "TURNOVER",
-  "ASSIST",
-  "STEAL",
-  "FOUL",
-  "BLOCK",
-]
+const primaryScoringActions = liveScoringInputs.slice(0, 6)
+const secondaryStatActions = liveScoringInputs.slice(6)
 
 type TrainingLabel = (typeof trainingLabels)[number]
 
@@ -278,114 +272,53 @@ function BasketballEventSelector({
 }: {
   pending: PendingContinuitySelection
   onCancel: () => void
-  onSelect: (event: BasketballEvent, machineSuggested: boolean) => void
+  onSelect: (input: LiveScoringInput, machineSuggested: boolean) => void
 }) {
-  const selectorRef = useRef<HTMLDivElement | null>(null)
-  const visibleEvents = quickBasketballEvents
-  const visibleSuggested = pending.suggested.filter((event) => visibleEvents.includes(event))
-  const [activeEvent, setActiveEvent] = useState<BasketballEvent | null>(
-    visibleSuggested[0] || "MAKE"
-  )
-  const [isSliding, setIsSliding] = useState(false)
-  const spokes = visibleEvents.map((basketballEvent, index) => {
-    const angle = -Math.PI / 2 + (index / visibleEvents.length) * Math.PI * 2
-    const radius = 45
-
-    return {
-      event: basketballEvent,
-      x: 50 + Math.cos(angle) * radius,
-      y: 50 + Math.sin(angle) * radius,
-    }
-  })
-
-  const updateFromPointer = (clientX: number, clientY: number) => {
-    const bounds = selectorRef.current?.getBoundingClientRect()
-    if (!bounds) return
-
-    const centerX = bounds.left + bounds.width / 2
-    const centerY = bounds.top + bounds.height / 2
-    const angle = Math.atan2(clientY - centerY, clientX - centerX)
-    const distance = Math.sqrt((clientX - centerX) ** 2 + (clientY - centerY) ** 2)
-
-    if (distance < bounds.width * 0.14) {
-      setActiveEvent(visibleSuggested[0] || "MAKE")
-      return
-    }
-
-    const nearest = spokes.reduce((selected, spoke) => {
-      const spokeAngle = Math.atan2(spoke.y - 50, spoke.x - 50)
-      const delta = Math.abs(Math.atan2(Math.sin(angle - spokeAngle), Math.cos(angle - spokeAngle)))
-      return delta < selected.delta ? { event: spoke.event, delta } : selected
-    }, {
-      event: spokes[0].event,
-      delta: Number.POSITIVE_INFINITY,
-    })
-
-    setActiveEvent(nearest.event)
-  }
-
-  const selectEvent = (event: BasketballEvent) => {
-    onSelect(event, visibleSuggested.includes(event))
+  const visibleSuggested = pending.suggested
+  const selectInput = (input: LiveScoringInput) => {
+    onSelect(input, visibleSuggested.includes(input.type))
   }
 
   return (
-    <div className="absolute inset-x-0 bottom-28 z-30 flex justify-center px-4">
-      <div
-        ref={selectorRef}
-        onPointerDown={(event) => {
-          setIsSliding(true)
-          updateFromPointer(event.clientX, event.clientY)
-        }}
-        onPointerMove={(event) => {
-          if (!isSliding) return
-          updateFromPointer(event.clientX, event.clientY)
-        }}
-        onPointerUp={() => {
-          if (activeEvent) selectEvent(activeEvent)
-        }}
-        onPointerCancel={() => setIsSliding(false)}
-        className="axis-familiar-bar relative h-56 w-56 touch-none border"
-        aria-label="Tag play"
-      >
-        <div className="absolute inset-10 bg-white/[0.025]" />
+    <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
+      <div className="axis-operator-hub axis-operator-protected w-full max-w-sm rounded-md p-2" aria-label="Tag play">
+        <div className="mb-2 grid grid-cols-3 gap-1">
+          {primaryScoringActions.map((input) => {
+            const suggested = visibleSuggested.includes(input.type)
+
+            return (
+              <button
+                key={input.action}
+                type="button"
+                onClick={() => selectInput(input)}
+                className={`axis-mono axis-optical-transition min-h-11 px-2 py-2 text-[9px] font-black uppercase tracking-[0.12em] transition ${
+                  suggested ? "axis-familiar-primary" : "axis-familiar-control"
+                }`}
+              >
+                {input.label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="grid grid-cols-6 gap-1">
+          {secondaryStatActions.map((input) => (
+            <button
+              key={input.action}
+              type="button"
+              onClick={() => selectInput(input)}
+              className="axis-mono axis-familiar-control min-h-9 px-1 text-[8px] font-black uppercase tracking-[0.08em]"
+            >
+              {input.label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation()
-            onCancel()
-          }}
-          className="axis-mono axis-familiar-control absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-[0.2em]"
+          onClick={onCancel}
+          className="axis-mono mt-2 w-full py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/44 transition hover:text-white/78"
         >
-          TAG
+          Cancel
         </button>
-        {spokes.map((spoke) => {
-          const suggested = visibleSuggested.includes(spoke.event)
-          const active = activeEvent === spoke.event
-
-          return (
-            <button
-              key={spoke.event}
-              type="button"
-              onPointerDown={(event) => event.stopPropagation()}
-              onPointerUp={(event) => event.stopPropagation()}
-              onClick={() => selectEvent(spoke.event)}
-              className={`axis-mono axis-optical-transition absolute h-8 min-w-11 -translate-x-1/2 -translate-y-1/2 px-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition ${
-                active
-                  ? "bg-[#f2f1ed]/90 text-black shadow-[0_0_18px_rgba(242,241,237,0.2)]"
-                  : suggested
-                    ? "axis-familiar-tag"
-                    : "axis-familiar-control"
-              }`}
-              style={{
-                left: `${spoke.x}%`,
-                top: `${spoke.y}%`,
-              }}
-            >
-              {spoke.event}
-            </button>
-          )
-        })}
       </div>
     </div>
   )
@@ -1178,13 +1111,14 @@ export function LiveMemoryStream() {
   )
 
   const attachBasketballEvent = useCallback(
-    (basketballEvent: BasketballEvent, machineSuggested: boolean) => {
+    (input: LiveScoringInput, machineSuggested: boolean) => {
       const pending = pendingContinuitySelection
       const session = workingSessionRef.current
       if (!pending || !session) {
         setPendingContinuitySelection(null)
         return
       }
+      const basketballEvent = input.type
       const previousEvents = basketballSequenceRef.current.slice(-3)
       const statEvent = createLiveBasketballStatEvent({
         id: createId("axis-stat"),
@@ -1197,6 +1131,8 @@ export function LiveMemoryStream() {
         sequenceIndex: basketballSequenceRef.current.length,
         previousEvents,
         continuity: continuityAssistRef.current,
+        input,
+        possessionBefore: activeStatTeam,
       })
       const nextBoxScore = applyLiveStatEvent(liveBoxScoreRef.current, statEvent)
 
@@ -1204,11 +1140,14 @@ export function LiveMemoryStream() {
       liveStatEventsRef.current = [...liveStatEventsRef.current, statEvent].slice(-80)
       setLiveBoxScore(nextBoxScore)
       setLiveStatEvents(liveStatEventsRef.current)
+      setActiveStatTeam(statEvent.possession)
       emitEvent("basketball_stat", {
         visible: {
           team: statEvent.team,
           eventType: statEvent.type,
+          action: statEvent.action,
           points: statEvent.points,
+          possession: statEvent.possession,
           score: statEvent.score,
           playByPlay: statEvent.playByPlay,
         },
@@ -1221,8 +1160,13 @@ export function LiveMemoryStream() {
         pending.sessionTime,
         {
           basketball_event: basketballEvent,
+          basketball_action: statEvent.action,
           team: activeStatTeam,
           points: statEvent.points,
+          made: statEvent.made,
+          assisted: statEvent.assisted,
+          foul_linked: statEvent.foulLinked,
+          possession: statEvent.possession,
           score_state: statEvent.score,
           play_by_play: statEvent.playByPlay,
           reconstruction_chapter: reconstructionChapterForEvent(basketballEvent),
@@ -1249,6 +1193,29 @@ export function LiveMemoryStream() {
     },
     [activeStatTeam, emitEvent, pendingContinuitySelection]
   )
+
+  const undoLastStatEvent = useCallback(() => {
+    const lastEvent = liveStatEventsRef.current.at(-1)
+    if (!lastEvent) return
+
+    const remainingEvents = liveStatEventsRef.current.slice(0, -1)
+    const nextBoxScore = remainingEvents.reduce(
+      (score, event) => applyLiveStatEvent(score, event),
+      createLiveBoxScore()
+    )
+
+    liveStatEventsRef.current = remainingEvents
+    liveBoxScoreRef.current = nextBoxScore
+    basketballSequenceRef.current = remainingEvents.map((event) => event.type).slice(-12)
+    setLiveStatEvents(remainingEvents)
+    setLiveBoxScore(nextBoxScore)
+    setActiveStatTeam(lastEvent.team)
+    emitEvent("basketball_stat_undo", {
+      revertedEventId: lastEvent.id,
+      score: scoreFromLiveBoxScore(nextBoxScore),
+      possession: lastEvent.team,
+    })
+  }, [emitEvent])
 
   const appendTemporalEvent = useCallback(
     (type: TemporalEventType, metadata?: Record<string, unknown>) => {
@@ -2020,8 +1987,8 @@ export function LiveMemoryStream() {
         ) : null}
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
-          {status === "LIVE" && operatorHubOpen ? (
-            <div className="axis-operator-hub mx-auto mb-3 max-w-sm rounded-md p-2">
+          {status === "LIVE" && operatorHubOpen && !pendingContinuitySelection ? (
+            <div className="axis-operator-hub axis-operator-protected mx-auto mb-3 max-w-sm rounded-md p-2">
               <div className="mb-2 grid grid-cols-2 gap-1">
                 {(["home", "away"] as const).map((team) => (
                   <button
@@ -2061,11 +2028,18 @@ export function LiveMemoryStream() {
                       {formatClock(event.timestamp)} / {event.playByPlay}
                     </p>
                   ))}
+                  <button
+                    type="button"
+                    onClick={undoLastStatEvent}
+                    className="axis-mono justify-self-end text-[8px] font-black uppercase tracking-[0.14em] text-white/42 transition hover:text-white/82"
+                  >
+                    Undo last
+                  </button>
                 </div>
               ) : null}
             </div>
           ) : null}
-          {status === "LIVE" && operatorHubOpen && latestSnapshot ? (
+          {status === "LIVE" && operatorHubOpen && latestSnapshot && !pendingContinuitySelection ? (
             <div className="axis-familiar-bar mx-auto mb-3 flex max-w-sm items-center gap-3 border p-1.5">
               {latestSnapshot.image_url || latestSnapshot.localUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -2126,50 +2100,53 @@ export function LiveMemoryStream() {
               </div>
             ) : null}
 
-            {status === "LIVE" ? (
+            {status === "LIVE" && !pendingContinuitySelection ? (
               operatorHubOpen ? (
                 <div className="grid w-full grid-cols-[1fr_auto] gap-2">
-                  <button
+                  <AxisButton
                     type="button"
                     onClick={() => void captureSnapshot()}
-                    className="axis-familiar-primary px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-zinc-300"
+                    className="px-3 py-4 tracking-[0.2em] active:bg-zinc-300"
                   >
                     Tag play
-                  </button>
-                  <button
+                  </AxisButton>
+                  <AxisButton
                     type="button"
+                    tone="secondary"
                     onClick={() => void finalizeSession()}
-                    className="axis-familiar-control px-4 py-4 text-[10px] font-black uppercase tracking-[0.16em] active:bg-white/10"
+                    className="px-4 py-4 tracking-[0.16em] active:bg-white/10"
                   >
                     End
-                  </button>
+                  </AxisButton>
                 </div>
               ) : (
                 <div className="grid w-full grid-cols-[auto_1fr_auto] gap-2">
-                  <button
+                  <AxisButton
                     type="button"
                     onClick={() => setActiveStatTeam((team) => (team === "home" ? "away" : "home"))}
-                    className="axis-familiar-control px-3 py-4 text-[10px] font-black uppercase tracking-[0.16em] active:bg-white/10"
+                    tone="secondary"
+                    className="px-3 py-4 tracking-[0.16em] active:bg-white/10"
                   >
                     {possessionLabel}
-                  </button>
-                  <button
+                  </AxisButton>
+                  <AxisButton
                     type="button"
                     onClick={() => {
                       setOperatorHubOpen(true)
                       void captureSnapshot()
                     }}
-                    className="axis-familiar-primary px-3 py-4 text-[10px] font-black uppercase tracking-[0.2em] active:bg-zinc-300"
+                    className="px-3 py-4 tracking-[0.2em] active:bg-zinc-300"
                   >
                     Tag play
-                  </button>
-                  <button
+                  </AxisButton>
+                  <AxisButton
                     type="button"
                     onClick={() => setOperatorHubOpen(true)}
-                    className="axis-familiar-control px-3 py-4 text-[10px] font-black uppercase tracking-[0.16em] active:bg-white/10"
+                    tone="secondary"
+                    className="px-3 py-4 tracking-[0.16em] active:bg-white/10"
                   >
                     Stats
-                  </button>
+                  </AxisButton>
                 </div>
               )
             ) : null}

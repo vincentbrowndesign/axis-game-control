@@ -10,6 +10,20 @@ export type AxisReplayAnchor = {
   snapshotId: string | null
 }
 
+export type AxisGameAction =
+  | "MAKE_1"
+  | "MAKE_2"
+  | "MAKE_3"
+  | "MISS_2"
+  | "MISS_3"
+  | "AND_1"
+  | "ASSIST"
+  | "REBOUND"
+  | "TURNOVER"
+  | "STEAL"
+  | "BLOCK"
+  | "FOUL"
+
 export type AxisTrainingSignal = {
   source: AxisEventSource
   confidence: number
@@ -31,10 +45,16 @@ export type AxisGameEvent = {
   id: string
   sessionId: string
   type: BasketballEvent
+  action: AxisGameAction
   team: LiveStatTeam
   player: string | null
   timestamp: number
   points: number
+  scoreValue: number
+  made: boolean | null
+  assisted: boolean
+  foulLinked: boolean
+  possession: LiveStatTeam
   score: {
     home: number
     away: number
