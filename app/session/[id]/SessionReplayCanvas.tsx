@@ -16,7 +16,7 @@ import {
   type BasketballReconstructionChapter,
 } from "@/lib/continuityAssistance"
 import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
-import { saveTrainingSetMemory, summarizeNearbyEvents } from "@/lib/trainingSetMemory"
+import { summarizeNearbyEvents } from "@/lib/trainingSetMemory"
 import type {
   TemporalEventRecord,
   TemporalSessionRecord,
@@ -32,6 +32,9 @@ type SessionPayload = {
 type InspectionDepth = 0.5 | 1 | 2 | 2.5
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
+const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
+
+type TrainingLabel = (typeof trainingLabels)[number]
 
 function formatClock(totalSeconds: number | null | undefined) {
   const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0))
@@ -149,6 +152,7 @@ function ReplayVideo({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
+  const [showTrainingLabels, setShowTrainingLabels] = useState(false)
   const {
     currentTimelineAnchor,
     isInternalSeeking,
@@ -170,7 +174,7 @@ function ReplayVideo({
       }))
     )
 
-  const saveCurrentFrameToTrainingSet = async () => {
+  const saveCurrentFrameToTrainingSet = async (label: TrainingLabel) => {
     const video = videoRef.current
     if (!video || !session.id || trainingStatus === "saving") return
 
@@ -197,27 +201,40 @@ function ReplayVideo({
 
     try {
       setTrainingStatus("saving")
-      await saveTrainingSetMemory({
-        frame,
-        sessionId: session.id,
-        sessionTime,
-        replayPosition: sessionTime,
-        chronologyPosition: Number(playback.currentTimelineAnchor) || sessionTime,
-        opticalDepth: inspectionDepth,
-        clipReference: {
-          playbackUrl: session.playback_url,
-          storagePath: session.storage_path,
-        },
-        eventContext: {
-          activeEventId,
+      const formData = new FormData()
+      formData.append("image", frame, `${session.id}-${sessionTime.toFixed(2)}.jpg`)
+      formData.append("sessionId", session.id)
+      formData.append("label", label)
+      formData.append("replayTime", String(sessionTime))
+      formData.append("videoUrl", session.playback_url || "")
+      formData.append("clipStart", String(Math.max(0, sessionTime - 2)))
+      formData.append("clipEnd", String(sessionTime + 2))
+      formData.append("eventType", activeEvent?.type ? String(activeEvent.type) : "")
+      formData.append(
+        "metadata",
+        JSON.stringify({
+          selectedEventId: activeEventId,
           eventType: activeEvent?.type ? String(activeEvent.type) : null,
           basketballEvent,
           reconstructionChapter,
+          opticalDepth: inspectionDepth,
+          chronologyPosition: Number(playback.currentTimelineAnchor) || sessionTime,
+          storagePath: session.storage_path,
           nearbyEvents: summarizeNearbyEvents(events, sessionTime),
-        },
-        motionState,
-        source: "replay",
+          motionState,
+        })
+      )
+
+      const response = await fetch("/api/training-memory", {
+        method: "POST",
+        body: formData,
       })
+
+      if (!response.ok) {
+        throw new Error("TRAINING_MEMORY_SAVE_FAILED")
+      }
+
+      setShowTrainingLabels(false)
       setTrainingStatus("stored")
       window.setTimeout(() => setTrainingStatus("idle"), 1800)
     } catch {
@@ -339,14 +356,31 @@ function ReplayVideo({
         <div className="axis-mono pointer-events-none absolute bottom-4 left-4 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
           AXIS
         </div>
-        <button
-          type="button"
-          onClick={() => void saveCurrentFrameToTrainingSet()}
-          disabled={trainingStatus === "saving"}
-          className="axis-mono axis-optical-transition absolute bottom-4 right-4 bg-black/28 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 backdrop-blur transition hover:text-white/82 disabled:text-white/28"
-        >
-          {trainingStatus === "stored" ? "MEMORY SAVED" : "SAVE TO TRAINING SET"}
-        </button>
+        <div className="absolute bottom-4 right-4 flex max-w-[min(20rem,calc(100%-2rem))] flex-col items-end gap-2">
+          {showTrainingLabels ? (
+            <div className="grid grid-cols-3 gap-1 bg-black/36 p-1 backdrop-blur">
+              {trainingLabels.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => void saveCurrentFrameToTrainingSet(label)}
+                  disabled={trainingStatus === "saving"}
+                  className="axis-mono axis-optical-transition bg-white/[0.045] px-3 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white/64 transition hover:bg-[#f2f1ed] hover:text-black disabled:text-white/24"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setShowTrainingLabels((current) => !current)}
+            disabled={trainingStatus === "saving"}
+            className="axis-mono axis-optical-transition bg-black/28 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 backdrop-blur transition hover:text-white/82 disabled:text-white/28"
+          >
+            {trainingStatus === "stored" ? "TRAINING MEMORY STORED" : "SAVE TO TRAINING SET"}
+          </button>
+        </div>
       </div>
     </div>
   )

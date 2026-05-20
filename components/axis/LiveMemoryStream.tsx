@@ -24,7 +24,7 @@ import {
 import { startPassiveContinuityObservers } from "@/lib/passiveContinuityObservers"
 import { captureVideoFrameBlob } from "@/lib/snapshotCapture"
 import { defaultReplayWindow, type TemporalEventType } from "@/lib/temporalEventGraph"
-import { blobFromUrl, saveTrainingSetMemory } from "@/lib/trainingSetMemory"
+import { blobFromUrl } from "@/lib/trainingSetMemory"
 
 type WorkingSession = {
   id: string
@@ -114,6 +114,9 @@ const reconnectDebounceMs = 1400
 const trackFailureGraceMs = 5200
 const recorderTimesliceMs = 2000
 const liveOpticalDepths: LiveOpticalDepth[] = [0.5, 1, 2, 2.5]
+const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
+
+type TrainingLabel = (typeof trainingLabels)[number]
 
 function formatClock(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds))
@@ -1085,6 +1088,7 @@ export function LiveMemoryStream() {
   const [liveViewMode, setLiveViewMode] = useState<LiveViewMode>("MOTION_ECHO")
   const [liveOpticalDepth, setLiveOpticalDepth] = useState<LiveOpticalDepth>(1)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
+  const [showLiveTrainingLabels, setShowLiveTrainingLabels] = useState(false)
   const [pendingContinuitySelection, setPendingContinuitySelection] =
     useState<PendingContinuitySelection | null>(null)
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
@@ -1251,7 +1255,7 @@ export function LiveMemoryStream() {
     openContinuitySelector(sessionTime, snapshot?.id || null)
   }, [appendTemporalEvent, openContinuitySelector])
 
-  const saveLiveReviewToTrainingSet = useCallback(async () => {
+  const saveLiveReviewToTrainingSet = useCallback(async (label: TrainingLabel) => {
     const session = workingSessionRef.current
     const latestSnapshot = useAxisChronologyStore.getState().snapshots.at(-1) || null
     const sessionId = session?.id || archivedRecording?.id
@@ -1275,32 +1279,44 @@ export function LiveMemoryStream() {
         return
       }
 
-      await saveTrainingSetMemory({
-        frame,
-        sessionId,
-        sessionTime,
-        replayPosition: sessionTime,
-        chronologyPosition: sessionTime,
-        opticalDepth: liveOpticalDepth,
-        clipReference: {
-          playbackUrl: session?.playbackUrl || archivedRecording?.playbackUrl || null,
+      const formData = new FormData()
+      formData.append("image", frame, `${sessionId}-${sessionTime.toFixed(2)}.jpg`)
+      formData.append("sessionId", sessionId)
+      formData.append("label", label)
+      formData.append("replayTime", String(sessionTime))
+      formData.append("videoUrl", session?.playbackUrl || archivedRecording?.playbackUrl || "")
+      formData.append("clipStart", String(Math.max(0, sessionTime - 2)))
+      formData.append("clipEnd", String(sessionTime + 2))
+      formData.append("eventType", latestSnapshot ? "SNAPSHOT" : "")
+      formData.append(
+        "metadata",
+        JSON.stringify({
+          selectedSnapshotId: latestSnapshot?.id || null,
+          opticalDepth: liveOpticalDepth,
+          chronologyPosition: sessionTime,
           storagePath: session?.storagePath || archivedRecording?.storagePath || null,
-        },
-        eventContext: {
-          activeEventId: latestSnapshot?.id || null,
-          eventType: latestSnapshot ? "SNAPSHOT" : null,
-          nearbyEvents: [],
-        },
-        motionState: continuityAssistRef.current
-          ? {
-              attention_state: continuityAssistRef.current.attentionState,
-              pressure: continuityAssistRef.current.pressure,
-              kinetic_density: continuityAssistRef.current.kineticDensity,
-              motion_energy: continuityAssistRef.current.motionEnergy,
-            }
-          : null,
-        source: "live_review",
+          source: "live_review",
+          motionState: continuityAssistRef.current
+            ? {
+                attention_state: continuityAssistRef.current.attentionState,
+                pressure: continuityAssistRef.current.pressure,
+                kinetic_density: continuityAssistRef.current.kineticDensity,
+                motion_energy: continuityAssistRef.current.motionEnergy,
+              }
+            : null,
+        })
+      )
+
+      const response = await fetch("/api/training-memory", {
+        method: "POST",
+        body: formData,
       })
+
+      if (!response.ok) {
+        throw new Error("TRAINING_MEMORY_SAVE_FAILED")
+      }
+
+      setShowLiveTrainingLabels(false)
       setTrainingStatus("stored")
       window.setTimeout(() => setTrainingStatus("idle"), 1800)
     } catch {
@@ -1903,14 +1919,31 @@ export function LiveMemoryStream() {
                 </button>
               </div>
               {latestSnapshot ? (
-                <button
-                  type="button"
-                  onClick={() => void saveLiveReviewToTrainingSet()}
-                  disabled={trainingStatus === "saving"}
-                  className="axis-mono mt-5 text-[9px] font-black uppercase tracking-[0.18em] text-white/48 transition hover:text-white/78 disabled:text-white/24"
-                >
-                  {trainingStatus === "stored" ? "MEMORY SAVED" : "SAVE TO TRAINING SET"}
-                </button>
+                <div className="mt-5 flex flex-col items-center gap-2">
+                  {showLiveTrainingLabels ? (
+                    <div className="grid grid-cols-3 gap-1 bg-black/24 p-1">
+                      {trainingLabels.map((label) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => void saveLiveReviewToTrainingSet(label)}
+                          disabled={trainingStatus === "saving"}
+                          className="axis-mono bg-white/[0.045] px-3 py-2 text-[8px] font-black uppercase tracking-[0.12em] text-white/58 disabled:text-white/24"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setShowLiveTrainingLabels((current) => !current)}
+                    disabled={trainingStatus === "saving"}
+                    className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/48 transition hover:text-white/78 disabled:text-white/24"
+                  >
+                    {trainingStatus === "stored" ? "TRAINING MEMORY STORED" : "SAVE TO TRAINING SET"}
+                  </button>
+                </div>
               ) : null}
             </div>
           </div>
@@ -1944,9 +1977,24 @@ export function LiveMemoryStream() {
                 <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/38">
                   {trainingStatus === "stored" ? "MEMORY SAVED" : "Snapshot"}
                 </p>
+                {showLiveTrainingLabels ? (
+                  <div className="mt-2 grid grid-cols-3 gap-1">
+                    {trainingLabels.map((label) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => void saveLiveReviewToTrainingSet(label)}
+                        disabled={trainingStatus === "saving"}
+                        className="axis-mono bg-white/[0.04] px-2 py-1.5 text-[7px] font-black uppercase tracking-[0.1em] text-white/54 disabled:text-white/24"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => void saveLiveReviewToTrainingSet()}
+                  onClick={() => setShowLiveTrainingLabels((current) => !current)}
                   disabled={trainingStatus === "saving"}
                   className="axis-mono mt-1 text-[8px] font-black uppercase tracking-[0.16em] text-white/48 transition hover:text-white/82 disabled:text-white/24"
                 >
