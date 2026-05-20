@@ -106,6 +106,7 @@ export type ReplayNegotiationType =
   | "SCRUB"
   | "ANNOTATION"
   | "EXPORT"
+  | "LANGUAGE_ROUTE"
 
 export function reconstructionChapterForEvent(
   event: BasketballEvent

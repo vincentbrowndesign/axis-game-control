@@ -33,9 +33,6 @@ type SessionPayload = {
 type InspectionDepth = 0.5 | 1 | 2 | 2.5
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
-const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
-
-type TrainingLabel = (typeof trainingLabels)[number]
 
 type TrainingMemoryRecord = {
   id: string
@@ -106,6 +103,16 @@ function memoryProgressionContext(memory: TrainingMemoryRecord) {
   if (typeof metadata.eventType === "string") return metadata.eventType
 
   return "OBSERVATION"
+}
+
+function trainingLabelFromEvent(event: TemporalEventRecord | undefined) {
+  const basketballEvent = event?.payload?.basketball_event
+
+  if (basketballEvent === "MAKE") return "make"
+  if (basketballEvent === "MISS") return "miss"
+  if (basketballEvent === "SHOT") return "release"
+
+  return "other"
 }
 
 export function seekToEvent(
@@ -181,7 +188,6 @@ function ReplayVideo({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
-  const [showTrainingLabels, setShowTrainingLabels] = useState(false)
   const [memoryPulse, setMemoryPulse] = useState(false)
   const {
     currentTimelineAnchor,
@@ -204,7 +210,7 @@ function ReplayVideo({
       }))
     )
 
-  const saveCurrentFrameToTrainingSet = async (label: TrainingLabel) => {
+  const saveCurrentFrameToTrainingSet = async () => {
     const video = videoRef.current
     if (!video || !session.id || trainingStatus === "saving") return
 
@@ -228,6 +234,7 @@ function ReplayVideo({
       typeof activeEvent.payload.continuity_assist === "object"
         ? (activeEvent.payload.continuity_assist as Record<string, unknown>)
         : null
+    const label = trainingLabelFromEvent(activeEvent)
 
     try {
       setTrainingStatus("saving")
@@ -267,7 +274,6 @@ function ReplayVideo({
         memory?: TrainingMemoryRecord
       }
 
-      setShowTrainingLabels(false)
       if (payload.memory) onTrainingMemoryStored(payload.memory)
       setMemoryPulse(true)
       setTrainingStatus("stored")
@@ -421,24 +427,9 @@ function ReplayVideo({
           </div>
         ) : null}
         <div className="absolute bottom-4 right-4 z-30 flex max-w-[min(20rem,calc(100%-2rem))] flex-col items-end gap-2">
-          {showTrainingLabels ? (
-            <div className="grid grid-cols-3 gap-1 bg-black/36 p-1 backdrop-blur">
-              {trainingLabels.map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => void saveCurrentFrameToTrainingSet(label)}
-                  disabled={trainingStatus === "saving"}
-                  className="axis-mono axis-optical-transition bg-white/[0.045] px-3 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white/64 transition hover:bg-[#f2f1ed] hover:text-black disabled:text-white/24"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
           <button
             type="button"
-            onClick={() => setShowTrainingLabels((current) => !current)}
+            onClick={() => void saveCurrentFrameToTrainingSet()}
             disabled={trainingStatus === "saving"}
             className="axis-mono axis-optical-transition bg-black/28 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 backdrop-blur transition hover:text-white/82 disabled:text-white/28"
           >
@@ -634,6 +625,118 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
         </p>
       ) : null}
     </div>
+  )
+}
+
+function DevelopmentalInputBar({
+  trainingMemories,
+}: {
+  trainingMemories: TrainingMemoryRecord[]
+}) {
+  const { events, snapshots, requestEventJump, sessionId } = useAxisChronologyStore(
+    useShallow((state) => ({
+      events: state.events,
+      snapshots: state.snapshots,
+      requestEventJump: state.requestEventJump,
+      sessionId: state.sessionId,
+    }))
+  )
+  const [query, setQuery] = useState("")
+  const [response, setResponse] = useState("Ask the room what to revisit.")
+
+  const submitQuery = () => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return
+
+    const basketballMatches = events.filter((event) => {
+      const payloadText = JSON.stringify(event.payload || {}).toLowerCase()
+      return payloadText.includes(normalized) || String(event.type).toLowerCase().includes(normalized)
+    })
+    const hesitationMatches = normalized.includes("hesitation")
+      ? trainingMemories.filter((memory) =>
+          memoryProgressionContext(memory).toLowerCase().includes("drive")
+        )
+      : []
+    const recoveryMatches = normalized.includes("recover")
+      ? trainingMemories.filter((memory) =>
+          memoryProgressionContext(memory).toLowerCase().includes("recover")
+        )
+      : []
+    const rhythmMatches =
+      normalized.includes("rhythm") || normalized.includes("continuity")
+        ? [...snapshots].slice(0, 6)
+        : []
+    const relatedCount = Math.max(
+      basketballMatches.length,
+      hesitationMatches.length,
+      recoveryMatches.length,
+      rhythmMatches.length,
+      trainingMemories.length ? 1 : 0
+    )
+
+    const targetEvent =
+      basketballMatches[0] ||
+      (rhythmMatches[0]
+        ? events.find(
+            (event) =>
+              event.type === "SNAPSHOT" &&
+              Math.abs(Number(event.session_time) - Number(rhythmMatches[0].session_time)) <= 0.5
+          )
+        : null)
+
+    if (targetEvent) {
+      requestEventJump(targetEvent.id)
+      if (sessionId) {
+        recordReplayNegotiation({
+          sessionId,
+          sessionTime: Number(targetEvent.session_time) || 0,
+          type: "LANGUAGE_ROUTE",
+        })
+      }
+    }
+
+    if (normalized.includes("compare")) {
+      setResponse(`${Math.max(trainingMemories.length, snapshots.length)} comparable memory fragments linked.`)
+    } else if (normalized.includes("pressure")) {
+      setResponse(`${relatedCount} pressure-adjacent replay moments surfaced.`)
+    } else if (normalized.includes("recover")) {
+      setResponse(`${relatedCount} recovery sequences found.`)
+    } else if (normalized.includes("rhythm") || normalized.includes("continuity")) {
+      setResponse(`${relatedCount} continuity moments ready for review.`)
+    } else {
+      setResponse(`${relatedCount} related replay sequences found.`)
+    }
+  }
+
+  return (
+    <section className="mt-4 bg-white/[0.012] px-4 py-4">
+      <form
+        className="flex flex-col gap-3 md:flex-row md:items-center"
+        onSubmit={(event) => {
+          event.preventDefault()
+          submitQuery()
+        }}
+      >
+        <label className="axis-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-600 md:w-44">
+          developmental route
+        </label>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          placeholder="show me where rhythm shifted"
+          className="axis-mono min-h-11 flex-1 border-0 border-b border-white/10 bg-transparent px-0 py-2 text-[13px] text-[#f2f1ed] outline-none placeholder:text-zinc-700 focus:border-[#d7c08a]/40"
+        />
+        <button
+          type="submit"
+          className="axis-mono axis-optical-transition bg-white/[0.04] px-4 py-3 text-[9px] font-black uppercase tracking-[0.16em] text-white/54 transition hover:bg-[#f2f1ed] hover:text-black"
+        >
+          observe
+        </button>
+      </form>
+      <p className="axis-mono mt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/46">
+        {response}
+      </p>
+    </section>
   )
 }
 
@@ -946,6 +1049,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               setInspectionDepth={setInspectionDepth}
             />
             <EventRail inspectionDepth={inspectionDepth} />
+            <DevelopmentalInputBar trainingMemories={trainingMemories} />
             <DevelopmentalMemoryStrip trainingMemories={trainingMemories} />
           </section>
         </div>
