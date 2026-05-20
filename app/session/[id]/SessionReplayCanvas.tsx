@@ -61,6 +61,20 @@ type AxisClimateStyle = CSSProperties & {
   "--axis-type-contrast": number
   "--axis-type-visibility": number
   "--axis-type-residue": number
+  "--axis-density-force": number
+  "--axis-density-gravity": number
+  "--axis-density-pull": number
+  "--axis-density-diffusion": number
+  "--axis-density-emergence": number
+  "--axis-density-pooling": number
+  "--axis-density-latency": number
+}
+type AxisDensityStyle = CSSProperties & {
+  "--axis-density-force": number
+  "--axis-density-gravity": number
+  "--axis-density-pull": number
+  "--axis-density-emergence": number
+  "--axis-density-pooling": number
 }
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
@@ -551,6 +565,13 @@ function ReplayVideo({
   const roomTemperature = clampThermalHeat(
     thermalHeat + Math.min(0.28, currentDensity * 0.045) + (replaySettled ? 0.2 : 0)
   )
+  const replayDensityStyle: AxisDensityStyle = {
+    "--axis-density-force": Math.min(0.94, 0.22 + currentDensity * 0.16 + roomTemperature * 0.16),
+    "--axis-density-gravity": Math.min(0.88, 0.16 + currentDensity * 0.12),
+    "--axis-density-pull": Math.min(0.8, 0.12 + currentDensity * 0.08),
+    "--axis-density-emergence": Math.min(0.9, 0.22 + currentDensity * 0.14),
+    "--axis-density-pooling": Math.min(0.9, 0.18 + roomTemperature * 0.32 + currentDensity * 0.08),
+  }
 
   const warmRoom = useCallback((amount = 0.12) => {
     setThermalHeat((heat) => {
@@ -1162,13 +1183,14 @@ function ReplayVideo({
   return (
     <div className="overflow-hidden bg-black">
       <div
-        className={`axis-replay-surface relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
+        className={`axis-replay-surface axis-density-field relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
           memoryPulse
             ? "brightness-[1.03]"
             : replaySettled
               ? "brightness-[1.015]"
               : ""
         }`}
+        style={replayDensityStyle}
         onClick={handleReplayTap}
         onContextMenu={(event) => event.preventDefault()}
         onPointerEnter={() => warmRoom(0.05)}
@@ -1440,7 +1462,7 @@ function EventRail({
   return (
     <div className="mt-8 px-1 py-4">
       <div
-        className={`relative h-16 touch-none overflow-hidden transition-opacity duration-150 ${
+        className={`axis-density-field relative h-16 touch-none overflow-hidden transition-opacity duration-150 ${
           dragging ? "opacity-100" : "opacity-82"
         }`}
         onPointerDown={(event) => {
@@ -1548,7 +1570,7 @@ function InspectionDepthControl({
 }) {
   return (
     <div className="mt-3 flex justify-center">
-      <div className="axis-climate-surface grid grid-cols-4">
+      <div className="axis-climate-surface axis-density-surface grid grid-cols-4">
         {inspectionDepths.map((depth) => {
           const active = depth === inspectionDepth
 
@@ -1609,7 +1631,7 @@ function ChronologyEdge({
     .filter((node) => node.density >= 1.1)
 
   return (
-    <div className="pointer-events-none fixed inset-y-0 right-0 z-10 hidden w-12 md:block">
+    <div className="axis-density-residue pointer-events-none fixed inset-y-0 right-0 z-10 hidden w-12 md:block">
       <div className="absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#2f1d13]/14 to-transparent" />
       <div className="absolute inset-y-16 right-6 w-px bg-gradient-to-b from-transparent via-[#d7c08a]/10 to-transparent" />
       {pressureZones.map((zone) => {
@@ -1699,7 +1721,7 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
         aria-label="Keep recording"
-        className="axis-mono axis-optical-transition axis-climate-surface axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
+        className="axis-mono axis-optical-transition axis-climate-surface axis-density-surface axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
       >
         keep
       </button>
@@ -1824,8 +1846,8 @@ function DevelopmentalInputBar({
   return (
     <section className="mx-auto mt-12 w-full max-w-4xl px-2 pb-2">
       <div
-        className={`axis-climate-surface relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.052),transparent_72%)] py-4 transition duration-500 ${
-          orientationPulse ? "shadow-[0_0_80px_rgba(215,192,138,0.08)]" : ""
+        className={`axis-climate-surface axis-density-surface relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.052),transparent_72%)] py-4 transition duration-500 ${
+          orientationPulse ? "axis-density-active" : ""
         }`}
       >
         <div className="pointer-events-none absolute inset-x-8 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#d7c08a]/18 to-transparent" />
@@ -1921,7 +1943,7 @@ function DevelopmentalMemoryStrip({
                 key={memory.id}
                 type="button"
                 onClick={() => jumpToMoment(Number(memory.replay_time))}
-                className="axis-optical-transition axis-climate-surface group relative min-w-44 overflow-hidden text-left transition hover:bg-[#d7c08a]/[0.035]"
+                className="axis-optical-transition axis-climate-surface axis-density-surface group relative min-w-44 overflow-hidden text-left transition hover:bg-[#d7c08a]/[0.035]"
               >
                 <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
                 <div className="axis-mono axis-type-residue pointer-events-none absolute left-3 top-3 z-20 text-[8px] font-black lowercase tracking-[0.12em]">
@@ -1956,7 +1978,7 @@ function DevelopmentalMemoryStrip({
           return (
             <div
               key={snapshot.id}
-              className="axis-climate-surface min-w-32"
+              className="axis-climate-surface axis-density-surface min-w-32"
             >
               <button
                 type="button"
@@ -2050,6 +2072,13 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   const typeContrast = Math.min(0.76, 0.38 + climateWarmth * 0.8)
   const typeVisibility = Math.min(0.72, 0.32 + typeFocus * 0.22 + climateWarmth * 0.5)
   const typeResidue = Math.min(0.68, 0.16 + climateResidue * 0.36)
+  const densityForce = Math.min(0.92, 0.18 + climateDensity * 0.12)
+  const densityGravity = Math.min(0.86, 0.12 + climatePressure * 0.62)
+  const densityPull = Math.min(0.8, 0.1 + (activeEventId ? 0.16 : 0) + climateDensity * 0.055)
+  const densityDiffusion = Math.max(0.24, 0.7 - climateDensity * 0.04)
+  const densityEmergence = Math.min(0.88, 0.2 + climateDensity * 0.1)
+  const densityPooling = Math.min(0.88, 0.16 + climateResidue * 0.34 + climateDensity * 0.045)
+  const densityLatency = Math.min(0.72, 0.2 + densityAnchors.length * 0.018)
   const climateStyle: AxisClimateStyle = {
     "--axis-climate-warmth": climateWarmth,
     "--axis-climate-pressure": climatePressure,
@@ -2063,6 +2092,13 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     "--axis-type-contrast": typeContrast,
     "--axis-type-visibility": typeVisibility,
     "--axis-type-residue": typeResidue,
+    "--axis-density-force": densityForce,
+    "--axis-density-gravity": densityGravity,
+    "--axis-density-pull": densityPull,
+    "--axis-density-diffusion": densityDiffusion,
+    "--axis-density-emergence": densityEmergence,
+    "--axis-density-pooling": densityPooling,
+    "--axis-density-latency": densityLatency,
   }
 
   useEffect(() => {
