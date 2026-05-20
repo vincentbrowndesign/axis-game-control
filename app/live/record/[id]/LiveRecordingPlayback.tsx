@@ -38,25 +38,25 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
   }, [id])
 
   return (
-    <main className="min-h-dvh bg-black text-zinc-100">
+    <main className="axis-display axis-sync-room min-h-dvh">
       <section className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 py-4 sm:px-6">
-        <header className="grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-white/10 py-3">
+        <header className="grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b py-3">
           <Link
             href="/live"
-            className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-100"
+            className="axis-sync-text text-[11px] font-black uppercase tracking-[0.24em]"
           >
             AXIS
           </Link>
-          <div className="h-px bg-white/14" />
-          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-400">
+          <div className="h-px bg-[#d7c08a]/14" />
+          <p className="axis-sync-muted text-[11px] font-black uppercase tracking-[0.24em]">
             RECORD
           </p>
         </header>
 
         {!hydrated ? (
           <div className="grid flex-1 place-items-center text-center">
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-zinc-500">
-              Loading recording
+            <p className="axis-sync-muted text-[11px] font-black uppercase tracking-[0.24em]">
+              Gathering recording
             </p>
           </div>
         ) : null}
@@ -64,12 +64,12 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
         {hydrated && !session ? (
           <div className="grid flex-1 place-items-center text-center">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
+              <p className="axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
                 RECORDING NOT FOUND
               </p>
               <Link
                 href="/live"
-                className="mt-7 inline-flex border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
+                className="axis-sync-action mt-7 inline-flex px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
               >
                 Return live
               </Link>
@@ -79,36 +79,36 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
 
         {session ? (
           <div className="flex flex-1 flex-col justify-center gap-5 py-6">
-            <div className="overflow-hidden border border-white/10 bg-zinc-950">
+            <div className="axis-sync-surface overflow-hidden">
               <video
                 src={session.playbackUrl}
                 controls
                 playsInline
-                className="aspect-video w-full bg-black object-contain"
+                className="axis-replay-surface aspect-video w-full object-contain"
               />
             </div>
 
-            <div className="grid gap-4 border-t border-white/10 pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div className="grid gap-4 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+                <p className="axis-sync-muted text-[10px] font-black uppercase tracking-[0.24em]">
                   Archived recording
                 </p>
-                <p className="mt-2 font-mono text-4xl font-black leading-none text-zinc-100">
+                <p className="axis-sync-text mt-2 font-mono text-4xl font-black leading-none">
                   {formatClock(session.duration)}
                 </p>
               </div>
               <div className="text-left sm:text-right">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                <p className="axis-sync-muted text-[10px] font-black uppercase tracking-[0.2em]">
                   Created
                 </p>
-                <p className="mt-1 text-sm font-bold uppercase tracking-[0.12em] text-zinc-200">
+                <p className="axis-sync-text mt-1 text-sm font-bold uppercase tracking-[0.12em]">
                   {formatDate(session.createdAt)}
                 </p>
                 <a
                   href={session.playbackUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-4 inline-flex border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-100"
+                  className="axis-sync-action mt-4 inline-flex px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em]"
                 >
                   Open file
                 </a>

@@ -18,14 +18,14 @@ export default async function SessionPage({ params }: SessionPageProps) {
 
   if (!user) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-black px-6 text-center text-zinc-100">
+      <main className="axis-display axis-sync-room grid min-h-dvh place-items-center px-6 text-center">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
+          <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             SESSION ACCESS REQUIRED
           </p>
           <Link
             href="/auth"
-            className="mt-7 inline-flex border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
+            className="axis-mono axis-sync-action mt-7 inline-flex px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
           >
             Sign in
           </Link>
@@ -43,14 +43,14 @@ export default async function SessionPage({ params }: SessionPageProps) {
 
   if (!session) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-black px-6 text-center text-zinc-100">
+      <main className="axis-display axis-sync-room grid min-h-dvh place-items-center px-6 text-center">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
+          <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             RECORD NOT FOUND
           </p>
           <Link
             href="/live"
-            className="mt-7 inline-flex border border-white/10 bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
+            className="axis-mono axis-sync-action mt-7 inline-flex px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
           >
             Return live
           </Link>

@@ -55,6 +55,13 @@
   --axis-sensory-afterglow: 0.16;
   --axis-sensory-continuity: 0.18;
   --axis-sensory-reflection: 0.12;
+  --axis-sync-propagation: 0.44;
+  --axis-sync-typography: 0.38;
+  --axis-sync-interaction: 0.34;
+  --axis-sync-residue: 0.3;
+  --axis-sync-thermal: 0.36;
+  --axis-sync-harmonic: 0.28;
+  --axis-sync-organism: 0.42;
 }
 
 @theme inline {
@@ -72,11 +79,100 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(
+      ellipse at 50% 18%,
+      rgba(215, 192, 138, calc(0.02 + var(--axis-sync-thermal) * 0.06)),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse at 12% 88%,
+      rgba(83, 47, 27, calc(var(--axis-sync-residue) * 0.1)),
+      transparent 54%
+    ),
+    var(--background);
   color: var(--foreground);
   font-family: var(--font-space-grotesk), "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
+}
+
+body.axis-organism-root {
+  --axis-climate-warmth: calc(0.18 + var(--axis-sync-thermal) * 0.08);
+  --axis-climate-residue: calc(0.16 + var(--axis-sync-residue) * 0.08);
+  --axis-type-emergence: calc(0.22 + var(--axis-sync-typography) * 0.08);
+  --axis-density-force: calc(0.18 + var(--axis-sync-harmonic) * 0.06);
+  --axis-chronology-continuity: calc(0.3 + var(--axis-sync-propagation) * 0.08);
+  --axis-interaction-witness: calc(0.12 + var(--axis-sync-interaction) * 0.08);
+  --axis-sensory-continuity: calc(0.18 + var(--axis-sync-organism) * 0.08);
+  isolation: isolate;
+  position: relative;
+}
+
+body.axis-organism-root::before,
+body.axis-organism-root::after {
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+}
+
+body.axis-organism-root::before {
+  animation:
+    axis-climate-breathe 16s ease-in-out infinite,
+    axis-sensory-resonance 22s ease-in-out infinite;
+  background:
+    radial-gradient(
+      ellipse at 50% 42%,
+      rgba(215, 192, 138, calc(0.018 + var(--axis-sync-thermal) * 0.06 + var(--axis-sync-propagation) * 0.04)),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse at 70% 76%,
+      rgba(92, 58, 34, calc(var(--axis-sync-residue) * 0.08)),
+      transparent 58%
+    );
+  mix-blend-mode: screen;
+  opacity: calc(0.28 + var(--axis-sync-organism) * 0.18);
+  z-index: -2;
+}
+
+body.axis-organism-root::after {
+  animation: axis-climate-drift 24s ease-in-out infinite;
+  background-image:
+    radial-gradient(circle at 18% 28%, rgba(242, 241, 237, calc(var(--axis-climate-grain) * 0.08 + var(--axis-sync-propagation) * 0.035)) 0.6px, transparent 1px),
+    radial-gradient(circle at 74% 68%, rgba(215, 192, 138, calc(var(--axis-sync-residue) * 0.06)) 0.7px, transparent 1.1px);
+  background-size: 46px 46px, 68px 68px;
+  mix-blend-mode: screen;
+  opacity: calc(0.12 + var(--axis-sync-harmonic) * 0.18);
+  z-index: -1;
+}
+
+body.axis-organism-root > * {
+  position: relative;
+  z-index: 1;
+}
+
+body.axis-organism-root :where(main) {
+  background-color: transparent;
+}
+
+body.axis-organism-root :where(h1, h2, h3, p, a, button, label, span, input, textarea) {
+  text-shadow: 0 0 18px rgba(215, 192, 138, calc(var(--axis-sync-typography) * 0.045 + var(--axis-type-residue) * 0.1));
+  transition:
+    color calc(var(--axis-type-condensation) + 120ms) cubic-bezier(0.2, 0, 0.18, 1),
+    opacity calc(var(--axis-type-evaporation) + 180ms) cubic-bezier(0.2, 0, 0.18, 1),
+    filter calc(var(--axis-type-condensation) + 120ms) cubic-bezier(0.2, 0, 0.18, 1),
+    background-color 1400ms cubic-bezier(0.2, 0, 0.18, 1),
+    border-color 1400ms cubic-bezier(0.2, 0, 0.18, 1);
+}
+
+body.axis-organism-root :where(article, header, footer, nav, aside, form) {
+  border-color: rgba(215, 192, 138, calc(0.035 + var(--axis-sync-residue) * 0.05));
+}
+
+body.axis-organism-root :where(button, a, input, textarea, select) {
+  outline-color: rgba(215, 192, 138, calc(0.12 + var(--axis-sync-interaction) * 0.12));
 }
 
 button,
@@ -94,7 +190,13 @@ button {
 }
 
 .axis-shell {
-  background: var(--axis-climate-black);
+  background:
+    radial-gradient(
+      ellipse at 50% 24%,
+      rgba(215, 192, 138, calc(0.012 + var(--axis-sync-thermal) * 0.045)),
+      transparent 58%
+    ),
+    var(--axis-climate-black);
 }
 
 .axis-panel {
@@ -403,11 +505,12 @@ button {
   animation:
     axis-climate-breathe 14s ease-in-out infinite,
     axis-density-pool 17s ease-in-out infinite,
-    axis-chronology-current 19s ease-in-out infinite;
+    axis-chronology-current 19s ease-in-out infinite,
+    axis-sensory-resonance 23s ease-in-out infinite;
   background:
     radial-gradient(
       ellipse at 52% 42%,
-      rgba(215, 192, 138, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-force) * 0.08 + var(--axis-chronology-continuity) * 0.08 + var(--axis-interaction-thermal) * 0.05 + var(--axis-sensory-thermal) * 0.05)),
+      rgba(215, 192, 138, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-force) * 0.08 + var(--axis-chronology-continuity) * 0.08 + var(--axis-interaction-thermal) * 0.05 + var(--axis-sensory-thermal) * 0.05 + var(--axis-sync-propagation) * 0.04)),
       transparent 62%
     ),
     radial-gradient(
@@ -435,7 +538,7 @@ button {
     calc(42px - var(--axis-density-force) * 8px) calc(42px - var(--axis-density-force) * 8px),
     calc(62px - var(--axis-density-gravity) * 10px) calc(62px - var(--axis-density-gravity) * 10px);
   mix-blend-mode: screen;
-  opacity: calc(0.1 + var(--axis-climate-grain) * 0.38 + var(--axis-density-emergence) * 0.18 + var(--axis-chronology-unresolved) * 0.16);
+  opacity: calc(0.1 + var(--axis-climate-grain) * 0.38 + var(--axis-density-emergence) * 0.18 + var(--axis-chronology-unresolved) * 0.16 + var(--axis-sync-harmonic) * 0.08);
 }
 
 .axis-replay-surface {
@@ -644,4 +747,52 @@ button {
 .axis-sensory-touch {
   filter: brightness(calc(1 + var(--axis-sensory-confirmation) * 0.1))
     saturate(calc(1 + var(--axis-sensory-thermal) * 0.08));
+}
+
+.axis-sync-room {
+  background:
+    radial-gradient(
+      ellipse at 50% 26%,
+      rgba(215, 192, 138, calc(0.018 + var(--axis-sync-thermal) * 0.07)),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at 18% 82%,
+      rgba(92, 58, 34, calc(var(--axis-sync-residue) * 0.12)),
+      transparent 58%
+    ),
+    linear-gradient(180deg, transparent, rgba(0, 0, 0, calc(0.18 + var(--axis-sync-organism) * 0.12)));
+  color: rgba(242, 241, 237, calc(0.76 + var(--axis-sync-typography) * 0.18));
+}
+
+.axis-sync-surface {
+  background:
+    radial-gradient(
+      ellipse at 50% 52%,
+      rgba(215, 192, 138, calc(0.01 + var(--axis-sync-thermal) * 0.045)),
+      transparent 72%
+    ),
+    rgba(0, 0, 0, calc(0.22 + var(--axis-climate-depth) * 0.1));
+  box-shadow:
+    inset 0 0 0 1px rgba(215, 192, 138, calc(0.015 + var(--axis-sync-residue) * 0.04)),
+    0 0 70px rgba(92, 58, 34, calc(var(--axis-sync-thermal) * 0.06));
+}
+
+.axis-sync-text {
+  color: rgba(224, 216, 198, calc(0.44 + var(--axis-sync-typography) * 0.24));
+}
+
+.axis-sync-muted {
+  color: rgba(140, 123, 102, calc(0.34 + var(--axis-sync-residue) * 0.22));
+}
+
+.axis-sync-action {
+  background: rgba(215, 192, 138, calc(0.035 + var(--axis-sync-interaction) * 0.045));
+  color: rgba(232, 219, 188, calc(0.56 + var(--axis-sync-typography) * 0.2));
+}
+
+.axis-sync-action:hover,
+.axis-sync-action:focus-visible {
+  background: rgba(215, 192, 138, calc(0.06 + var(--axis-sync-interaction) * 0.07));
+  color: rgba(242, 241, 237, calc(0.72 + var(--axis-sync-typography) * 0.18));
 }

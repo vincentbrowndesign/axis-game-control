@@ -12,14 +12,14 @@ export default async function TrainingSetPage() {
 
   if (!user) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-black px-6 text-center text-zinc-100">
+      <main className="axis-display axis-sync-room grid min-h-dvh place-items-center px-6 text-center">
         <div>
-          <p className="axis-mono text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
+          <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             SESSION ACCESS REQUIRED
           </p>
           <Link
             href="/auth"
-            className="axis-mono mt-7 inline-flex bg-zinc-100 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-black"
+            className="axis-mono axis-sync-action mt-7 inline-flex px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
           >
             Sign in
           </Link>
@@ -36,35 +36,35 @@ export default async function TrainingSetPage() {
     })
 
   return (
-    <main className="axis-display min-h-dvh bg-black text-[#f2f1ed]">
+    <main className="axis-display axis-sync-room min-h-dvh">
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 py-4 sm:px-6">
         <header className="flex items-center justify-between py-3">
           <Link
             href="/live"
-            className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#f2f1ed]"
+            className="axis-sync-text text-[11px] font-bold uppercase tracking-[0.32em]"
           >
             AXIS
           </Link>
-          <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
-            TRAINING SET
+          <p className="axis-mono axis-sync-muted text-[10px] font-semibold uppercase tracking-[0.22em]">
+            HELD REPS
           </p>
         </header>
 
         <section className="py-8">
-          <p className="axis-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-600">
-            MACHINE MEMORY
+          <p className="axis-mono axis-sync-muted text-[10px] font-semibold uppercase tracking-[0.24em]">
+            HELD MEMORY
           </p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-none tracking-normal text-[#f2f1ed] sm:text-6xl">
-            Saved reps for the machine to study.
+          <h1 className="axis-sync-text mt-3 max-w-3xl text-4xl font-bold leading-none tracking-normal sm:text-6xl">
+            Saved reps that keep their heat.
           </h1>
         </section>
 
         {memories?.length ? (
           <TrainingSetRoom memories={memories} />
         ) : (
-          <div className="grid min-h-64 place-items-center bg-white/[0.012] text-center">
-            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-              NO TRAINING MEMORIES YET
+          <div className="axis-sync-surface grid min-h-64 place-items-center text-center">
+            <p className="axis-mono axis-sync-muted text-[10px] font-black uppercase tracking-[0.22em]">
+              NO HELD REPS YET
             </p>
           </div>
         )}
