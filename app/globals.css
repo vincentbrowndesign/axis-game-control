@@ -1,12 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #050505;
+  --background: #000000;
   --foreground: #f2f1ed;
   --axis-silver: #b9b8b2;
   --axis-muted: #77766f;
   --axis-amber: #d7c08a;
   --axis-green: #b9d7bf;
+  --axis-climate-black: #000000;
+  --axis-climate-charcoal: #050403;
+  --axis-climate-warmth: 0.18;
+  --axis-climate-pressure: 0.12;
+  --axis-climate-residue: 0.16;
+  --axis-climate-depth: 0.72;
+  --axis-climate-grain: 0.08;
 }
 
 @theme inline {
@@ -18,8 +25,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #000000;
+    --foreground: #f2f1ed;
   }
 }
 
@@ -46,20 +53,20 @@ button {
 }
 
 .axis-shell {
-  background: #050505;
+  background: var(--axis-climate-black);
 }
 
 .axis-panel {
-  background: #080808;
-  border: 1px solid rgba(242, 241, 237, 0.1);
-  box-shadow: inset 0 1px 0 rgba(242, 241, 237, 0.035);
+  background: color-mix(in srgb, var(--axis-climate-charcoal) 78%, #000000);
+  border: 1px solid rgba(215, 192, 138, 0.08);
+  box-shadow: inset 0 1px 0 rgba(215, 192, 138, 0.018);
 }
 
 .axis-glass {
-  background: rgba(8, 8, 8, 0.88);
+  background: rgba(0, 0, 0, 0.82);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(242, 241, 237, 0.1);
-  box-shadow: inset 0 1px 0 rgba(242, 241, 237, 0.025);
+  border: 1px solid rgba(215, 192, 138, 0.07);
+  box-shadow: inset 0 1px 0 rgba(215, 192, 138, 0.016);
 }
 
 @keyframes axis-breathe {
@@ -96,6 +103,30 @@ button {
   50% {
     opacity: 0.56;
     transform: translate3d(0.4px, -0.6px, 0);
+  }
+}
+
+@keyframes axis-climate-breathe {
+  0%,
+  100% {
+    opacity: calc(0.5 + var(--axis-climate-warmth) * 0.24);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    opacity: calc(0.62 + var(--axis-climate-warmth) * 0.28);
+    transform: translate3d(0, -0.35%, 0) scale(1.012);
+  }
+}
+
+@keyframes axis-climate-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0.7%, -0.45%, 0);
   }
 }
 
@@ -145,4 +176,84 @@ button {
 .axis-atmosphere > * {
   position: relative;
   z-index: 1;
+}
+
+.axis-climate-root {
+  background: var(--axis-climate-black);
+  color: rgba(242, 241, 237, calc(0.78 + var(--axis-climate-warmth) * 0.16));
+}
+
+.axis-climate-field {
+  background:
+    radial-gradient(
+      ellipse at 50% 34%,
+      rgba(215, 192, 138, calc(0.05 + var(--axis-climate-warmth) * 0.12)),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse at 18% 86%,
+      rgba(83, 47, 27, calc(0.05 + var(--axis-climate-residue) * 0.18)),
+      transparent 54%
+    ),
+    radial-gradient(
+      ellipse at 86% 70%,
+      rgba(58, 43, 72, calc(0.04 + var(--axis-climate-pressure) * 0.08)),
+      transparent 48%
+    ),
+    linear-gradient(180deg, #000000 0%, #030201 46%, #000000 100%);
+}
+
+.axis-climate-field::before,
+.axis-climate-field::after {
+  content: "";
+  inset: -12%;
+  pointer-events: none;
+  position: absolute;
+}
+
+.axis-climate-field::before {
+  animation: axis-climate-breathe 14s ease-in-out infinite;
+  background:
+    radial-gradient(
+      ellipse at 52% 42%,
+      rgba(215, 192, 138, calc(0.06 + var(--axis-climate-warmth) * 0.14)),
+      transparent 62%
+    ),
+    linear-gradient(180deg, rgba(20, 10, 4, calc(0.14 + var(--axis-climate-depth) * 0.2)), transparent 42%);
+}
+
+.axis-climate-field::after {
+  animation: axis-climate-drift 18s ease-in-out infinite;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(242, 241, 237, calc(var(--axis-climate-grain) * 0.16)) 0.6px, transparent 0.9px),
+    radial-gradient(circle at 70% 62%, rgba(215, 192, 138, calc(var(--axis-climate-residue) * 0.14)) 0.7px, transparent 1px);
+  background-size: 36px 36px, 54px 54px;
+  mix-blend-mode: screen;
+  opacity: calc(0.16 + var(--axis-climate-grain) * 0.7);
+}
+
+.axis-replay-surface {
+  background:
+    radial-gradient(
+      ellipse at 50% 64%,
+      rgba(215, 192, 138, calc(0.035 + var(--axis-climate-warmth) * 0.09)),
+      transparent 64%
+    ),
+    linear-gradient(180deg, #000000, var(--axis-climate-charcoal) 52%, #000000);
+  box-shadow:
+    0 44px 160px rgba(0, 0, 0, calc(0.7 + var(--axis-climate-depth) * 0.18)),
+    0 0 150px rgba(92, 58, 34, calc(0.06 + var(--axis-climate-warmth) * 0.14));
+}
+
+.axis-climate-surface {
+  background: rgba(0, 0, 0, calc(0.34 + var(--axis-climate-depth) * 0.18));
+  box-shadow: inset 0 0 0 1px rgba(215, 192, 138, calc(0.025 + var(--axis-climate-residue) * 0.035));
+}
+
+.axis-climate-text {
+  color: rgba(242, 241, 237, calc(0.74 + var(--axis-climate-warmth) * 0.18));
+}
+
+.axis-climate-muted {
+  color: rgba(140, 123, 102, calc(0.48 + var(--axis-climate-residue) * 0.18));
 }
