@@ -83,10 +83,19 @@ export async function GET(_request: Request, context: Context) {
       ascending: true,
     })
 
+  const trainingMemories = await supabase
+    .from("training_memories")
+    .select("*")
+    .eq("session_id", id)
+    .order("replay_time", {
+      ascending: true,
+    })
+
   return NextResponse.json({
     ok: true,
     session: session.data,
     events: events.data || [],
     snapshots: snapshots.data || [],
+    trainingMemories: trainingMemories.data || [],
   })
 }

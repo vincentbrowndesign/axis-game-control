@@ -27,6 +27,7 @@ type SessionPayload = {
   ok?: boolean
   events?: TemporalEventRecord[]
   snapshots?: TemporalSnapshotRecord[]
+  trainingMemories?: TrainingMemoryRecord[]
 }
 
 type InspectionDepth = 0.5 | 1 | 2 | 2.5
@@ -35,6 +36,22 @@ const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
 const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
 
 type TrainingLabel = (typeof trainingLabels)[number]
+
+type TrainingMemoryRecord = {
+  id: string
+  session_id: string
+  label: string
+  frame_url: string
+  video_url: string | null
+  replay_time: number
+  clip_start: number | null
+  clip_end: number | null
+  event_type: string | null
+  metadata: Record<string, unknown>
+  roboflow_status: string
+  roboflow_response: unknown
+  created_at: string
+}
 
 function formatClock(totalSeconds: number | null | undefined) {
   const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0))
@@ -145,14 +162,17 @@ function ReplayVideo({
   playbackUrl,
   inspectionDepth,
   session,
+  onTrainingMemoryStored,
 }: {
   playbackUrl: string | null
   inspectionDepth: InspectionDepth
   session: TemporalSessionRecord
+  onTrainingMemoryStored: (memory: TrainingMemoryRecord) => void
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
   const [showTrainingLabels, setShowTrainingLabels] = useState(false)
+  const [memoryPulse, setMemoryPulse] = useState(false)
   const {
     currentTimelineAnchor,
     isInternalSeeking,
@@ -233,10 +253,16 @@ function ReplayVideo({
       if (!response.ok) {
         throw new Error("TRAINING_MEMORY_SAVE_FAILED")
       }
+      const payload = (await response.json().catch(() => ({}))) as {
+        memory?: TrainingMemoryRecord
+      }
 
       setShowTrainingLabels(false)
+      if (payload.memory) onTrainingMemoryStored(payload.memory)
+      setMemoryPulse(true)
       setTrainingStatus("stored")
-      window.setTimeout(() => setTrainingStatus("idle"), 1800)
+      window.setTimeout(() => setMemoryPulse(false), 620)
+      window.setTimeout(() => setTrainingStatus("idle"), 1900)
     } catch {
       setTrainingStatus("idle")
     }
@@ -294,7 +320,7 @@ function ReplayVideo({
 
   return (
     <div className="overflow-hidden bg-[#050505]">
-      <div className="relative overflow-hidden">
+      <div className="relative overflow-hidden bg-[#020202] shadow-[0_30px_120px_rgba(0,0,0,0.72)]">
         <video
           ref={videoRef}
           src={playbackUrl}
@@ -348,14 +374,32 @@ function ReplayVideo({
             })
             completeInternalSeek()
           }}
-          className="aspect-video w-full bg-black object-contain transition-transform duration-[120ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
+          className={`aspect-video w-full bg-black object-contain transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
+            memoryPulse ? "brightness-[1.12] contrast-[1.08]" : "brightness-[0.96]"
+          }`}
           style={{
             transform: `scale(${inspectionDepth})`,
           }}
         />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.08),transparent_33%),linear-gradient(180deg,rgba(0,0,0,0.1),rgba(0,0,0,0.48))]" />
+        <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-2">
+          <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/34">
+            REPLAY MEMORY ACTIVE
+          </p>
+          <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-[#d7c08a]/46">
+            MACHINE STUDYING
+          </p>
+        </div>
         <div className="axis-mono pointer-events-none absolute bottom-4 left-4 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
           AXIS
         </div>
+        {memoryPulse ? (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f2f1ed]/[0.035]">
+            <div className="axis-mono bg-black/28 px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/78 backdrop-blur">
+              ADDED TO DEVELOPMENT LOOP
+            </div>
+          </div>
+        ) : null}
         <div className="absolute bottom-4 right-4 flex max-w-[min(20rem,calc(100%-2rem))] flex-col items-end gap-2">
           {showTrainingLabels ? (
             <div className="grid grid-cols-3 gap-1 bg-black/36 p-1 backdrop-blur">
@@ -568,7 +612,11 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
   )
 }
 
-function SnapshotStrip() {
+function DevelopmentalMemoryStrip({
+  trainingMemories,
+}: {
+  trainingMemories: TrainingMemoryRecord[]
+}) {
   const { snapshots, requestEventJump, events, updateSnapshotAnnotation, sessionId } =
     useAxisChronologyStore(
       useShallow((state) => ({
@@ -580,21 +628,22 @@ function SnapshotStrip() {
       }))
     )
 
-  if (!snapshots.length) return null
+  if (!snapshots.length && !trainingMemories.length) return null
 
-  const jumpToSnapshot = (snapshot: AxisSnapshot) => {
+  const jumpToMoment = (sessionTime: number, snapshotId?: string | null) => {
     const snapshotEvent = events.find(
       (event) =>
         event.type === "SNAPSHOT" &&
-        (event.payload?.snapshot_id === snapshot.id ||
-          Math.abs(Number(event.session_time) - Number(snapshot.session_time)) < 0.01)
+        (snapshotId
+          ? event.payload?.snapshot_id === snapshotId
+          : Math.abs(Number(event.session_time) - Number(sessionTime)) <= 0.5)
     )
 
     if (snapshotEvent) requestEventJump(snapshotEvent.id)
     if (sessionId) {
       recordReplayNegotiation({
         sessionId,
-        sessionTime: Number(snapshot.session_time) || 0,
+        sessionTime: Number(sessionTime) || 0,
         type: "SNAPSHOT_JUMP",
       })
     }
@@ -620,8 +669,54 @@ function SnapshotStrip() {
   }
 
   return (
-    <section className="mt-4">
-      <div className="flex gap-2 overflow-x-auto pb-1">
+    <section className="mt-7">
+      <div className="mb-3 flex items-end justify-between gap-4">
+        <div>
+          <p className="axis-mono text-[9px] font-black uppercase tracking-[0.24em] text-[#d7c08a]/58">
+            Developmental memory
+          </p>
+          <p className="mt-1 text-sm font-semibold text-zinc-500">
+            Frames the machine has been asked to study.
+          </p>
+        </div>
+        <Link
+          href="/training-set"
+          className="axis-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/38 transition hover:text-white/76"
+        >
+          Training set
+        </Link>
+      </div>
+      <div className="relative overflow-hidden bg-white/[0.012] px-3 py-3">
+        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/[0.055]" />
+        <div className="relative flex gap-2 overflow-x-auto pb-1">
+          {trainingMemories.map((memory) => (
+            <button
+              key={memory.id}
+              type="button"
+              onClick={() => jumpToMoment(Number(memory.replay_time))}
+              className="axis-optical-transition min-w-44 bg-black/42 text-left transition hover:bg-white/[0.04]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={memory.frame_url}
+                alt={`${memory.label} memory at ${formatClock(memory.replay_time)}`}
+                className="aspect-video w-44 object-cover grayscale-[10%]"
+              />
+              <div className="space-y-2 px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="axis-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#f2f1ed]">
+                    {memory.label}
+                  </p>
+                  <p className="axis-mono text-[9px] font-black text-[#d7c08a]/72">
+                    {formatClock(memory.replay_time)}
+                  </p>
+                </div>
+                <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+                  CHRONOLOGY ATTACHED
+                </p>
+              </div>
+            </button>
+          ))}
         {snapshots.map((snapshot) => {
           const source = snapshot.image_url || snapshot.localUrl
           const chapter = chapterForSnapshot(snapshot)
@@ -629,11 +724,11 @@ function SnapshotStrip() {
           return (
             <div
               key={snapshot.id}
-              className="min-w-32 bg-black/36"
+              className="min-w-36 bg-black/30"
             >
               <button
                 type="button"
-                onClick={() => jumpToSnapshot(snapshot)}
+                onClick={() => jumpToMoment(Number(snapshot.session_time), snapshot.id)}
                 className="axis-optical-transition block text-left transition active:bg-white/10"
               >
                 {source ? (
@@ -641,10 +736,10 @@ function SnapshotStrip() {
                   <img
                     src={source}
                     alt={`Snapshot at ${formatClock(snapshot.session_time)}`}
-                    className="aspect-video w-32 object-cover grayscale-[18%]"
+                    className="aspect-video w-36 object-cover grayscale-[22%]"
                   />
                 ) : (
-                  <div className="grid aspect-video w-32 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">
+                  <div className="grid aspect-video w-36 place-items-center bg-zinc-950 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">
                     SNAP
                   </div>
                 )}
@@ -658,6 +753,9 @@ function SnapshotStrip() {
                     {chapter}
                   </p>
                 ) : null}
+                <p className="axis-mono mt-1 text-[8px] font-semibold uppercase tracking-[0.12em] text-zinc-700">
+                  replay state
+                </p>
                 <input
                   type="text"
                   value={snapshot.annotation}
@@ -681,6 +779,7 @@ function SnapshotStrip() {
             </div>
           )
         })}
+        </div>
       </div>
     </section>
   )
@@ -688,6 +787,7 @@ function SnapshotStrip() {
 
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
+  const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
   const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
@@ -722,6 +822,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           events: payload.events || [],
         })
         hydrateSnapshots(payload.snapshots || [])
+        setTrainingMemories(payload.trainingMemories || [])
       } finally {
         return
       }
@@ -734,9 +835,17 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     }
   }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
 
+  const storedCount = trainingMemories.length
+  const observationCount = useAxisChronologyStore.getState().events.length
+
   return (
-    <main className="axis-display min-h-dvh bg-black text-[#f2f1ed]">
-      <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 py-4 sm:px-6">
+    <main className="axis-display min-h-dvh overflow-hidden bg-[#030303] text-[#f2f1ed]">
+      <section className="pointer-events-none fixed inset-0 opacity-70">
+        <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_50%_0%,rgba(215,192,138,0.10),transparent_55%)]" />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-white/[0.025]" />
+        <div className="absolute bottom-0 left-0 right-0 h-80 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.84))]" />
+      </section>
+      <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 py-4 sm:px-6">
         <header className="py-3">
           <div className="flex items-center justify-between gap-6">
             <Link
@@ -751,37 +860,48 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 py-5 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4 border-t border-white/[0.055] py-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">
               {compactNodeId(session.id)}
             </p>
-            <p className="mt-2 text-5xl font-bold leading-none tracking-normal text-[#f2f1ed] sm:text-6xl">
+            <p className="mt-2 text-6xl font-bold leading-none tracking-normal text-[#f2f1ed] sm:text-7xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
-            <p className="axis-mono mt-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-zinc-600">
-              LOCKED
-            </p>
-            <p className="axis-mono mt-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+            <div className="axis-mono mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+              <span>LOCKED</span>
+              <span>DEVELOPMENT LOOP ACTIVE</span>
+              <span>{storedCount} MACHINE MEMORIES</span>
+              <span>{observationCount} OBSERVATIONS</span>
+            </div>
+            <p className="axis-mono mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
               {formatEnvironmentalTimestamp(session.created_at)}
             </p>
           </div>
           <DeviceExportControl session={session} />
         </div>
 
-        <div className="grid flex-1 gap-5 py-5">
+        <div className="grid flex-1 gap-5 py-4">
           <section className="min-w-0">
             <ReplayVideo
               playbackUrl={session.playback_url}
               inspectionDepth={inspectionDepth}
               session={session}
+              onTrainingMemoryStored={(memory) =>
+                setTrainingMemories((current) => {
+                  if (current.some((item) => item.id === memory.id)) return current
+                  return [...current, memory].sort(
+                    (a, b) => Number(a.replay_time) - Number(b.replay_time)
+                  )
+                })
+              }
             />
             <InspectionDepthControl
               inspectionDepth={inspectionDepth}
               setInspectionDepth={setInspectionDepth}
             />
             <EventRail inspectionDepth={inspectionDepth} />
-            <SnapshotStrip />
+            <DevelopmentalMemoryStrip trainingMemories={trainingMemories} />
           </section>
         </div>
       </section>
