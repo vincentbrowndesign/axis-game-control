@@ -2220,10 +2220,10 @@ function DevelopmentalMemoryStrip({
     <section className="mt-14">
       <div className="mb-3 flex justify-end">
         <Link
-          href="/training-set"
+          href="/retrieve"
           className="axis-mono axis-type-dormant text-[9px] font-black lowercase tracking-[0.14em] transition hover:opacity-70"
         >
-          saved clips
+          find related clips
         </Link>
       </div>
       <div className="relative overflow-hidden px-1 py-2">
@@ -2514,30 +2514,44 @@ export function SessionReplayCanvas({
 
   return (
     <main
-      className="axis-display axis-climate-root min-h-dvh overflow-hidden"
+      className="axis-display axis-climate-root axis-world-state min-h-dvh overflow-hidden"
       style={climateStyle}
     >
       <section className="axis-climate-field pointer-events-none fixed inset-0" />
       <ChronologyEdge trainingMemories={trainingMemories} />
       <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 py-6 sm:px-8">
-        <header className="py-3">
+        <header className="axis-world-header py-3">
           <div className="flex items-center justify-between gap-6">
             <Link
               href="/live"
               aria-label="Return live"
-              className="axis-mono axis-type-dormant text-[10px] font-semibold uppercase tracking-[0.14em] transition hover:opacity-70"
+              className="axis-mono axis-world-link text-[10px] font-semibold uppercase tracking-[0.14em] transition"
             >
               Live
             </Link>
+            <nav className="axis-world-nav">
+              <Link
+                href="/retrieve"
+                className="axis-mono axis-retrieval-link px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] transition"
+              >
+                Find clips
+              </Link>
+              <Link
+                href="/training-set"
+                className="axis-mono axis-world-link text-[10px] font-semibold uppercase tracking-[0.14em] transition"
+              >
+                Saved clips
+              </Link>
+            </nav>
           </div>
         </header>
 
         <div className="flex flex-col gap-4 py-12 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="axis-mono axis-type-residue text-[10px] font-semibold uppercase tracking-[0.18em]">
+            <p className="axis-mono axis-world-kicker text-[10px] font-semibold uppercase tracking-[0.18em]">
               Replay
             </p>
-            <p className="axis-type-presence mt-2 text-5xl font-bold leading-none tracking-normal sm:text-6xl">
+            <p className="axis-type-presence axis-world-title mt-2 text-5xl font-bold leading-none tracking-normal sm:text-6xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
             <p className="axis-mono axis-type-residue mt-5 text-[10px] font-semibold uppercase tracking-[0.18em]">

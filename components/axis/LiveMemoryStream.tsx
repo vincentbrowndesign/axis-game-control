@@ -1889,7 +1889,7 @@ export function LiveMemoryStream() {
   const possessionLabel = activeStatTeam.toUpperCase()
 
   return (
-    <main className="axis-display axis-sync-room axis-familiar-room h-dvh overflow-hidden">
+    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state h-dvh overflow-hidden">
       <section className="relative h-dvh overflow-hidden">
         <video
           ref={localVideoRef}
@@ -1942,14 +1942,22 @@ export function LiveMemoryStream() {
             <p className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/44">
               POS {possessionLabel}
             </p>
-            {archivedRecording ? (
+            <nav className="axis-world-nav">
               <Link
-                href={`/session/${archivedRecording.id}`}
-                className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/42 transition hover:text-white/76"
+                href="/retrieve"
+                className="axis-mono axis-retrieval-link px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] transition"
               >
-                Replay
+                Find clips
               </Link>
-            ) : null}
+              {archivedRecording ? (
+                <Link
+                  href={`/session/${archivedRecording.id}`}
+                  className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/42 transition hover:text-white/76"
+                >
+                  Replay
+                </Link>
+              ) : null}
+            </nav>
           </div>
         </header>
 
@@ -1968,6 +1976,12 @@ export function LiveMemoryStream() {
                   className="axis-familiar-primary px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
                 >
                   Open replay
+                </Link>
+                <Link
+                  href="/retrieve"
+                  className="axis-retrieval-link px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
+                >
+                  Find clips
                 </Link>
                 <button
                   type="button"

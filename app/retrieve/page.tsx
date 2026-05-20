@@ -37,7 +37,7 @@ function RetrievalClipCard({ clip }: { clip: ReplayRetrievalClip }) {
   return (
     <Link
       href={clipHref(clip)}
-      className="axis-familiar-bar axis-optical-transition block border p-4 transition hover:bg-white/[0.055]"
+      className="axis-familiar-bar axis-world-panel axis-optical-transition block p-4 transition hover:bg-white/[0.055]"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -48,7 +48,7 @@ function RetrievalClipCard({ clip }: { clip: ReplayRetrievalClip }) {
             {clip.label}
           </h2>
         </div>
-        <div className="axis-broadcast-chip axis-mono shrink-0 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em]">
+        <div className="axis-broadcast-chip axis-world-badge axis-mono shrink-0 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em]">
           {clip.score}
         </div>
       </div>
@@ -71,7 +71,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
 
   if (!user) {
     return (
-      <main className="axis-display axis-sync-room grid min-h-dvh place-items-center px-6 text-center">
+      <main className="axis-display axis-sync-room axis-world-state grid min-h-dvh place-items-center px-6 text-center">
         <div>
           <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             SIGN IN TO FIND REPLAYS
@@ -118,28 +118,36 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
   const q = params.q || ""
 
   return (
-    <main className="axis-display axis-sync-room axis-familiar-room min-h-dvh px-4 py-6 text-white sm:px-8">
+    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state min-h-dvh px-4 py-6 text-white sm:px-8">
       <section className="mx-auto grid max-w-6xl gap-8">
-        <header className="grid gap-5">
+        <header className="axis-world-header grid gap-5 pb-5">
           <div className="flex items-center justify-between gap-4">
             <Link
               href="/live"
-              className="axis-mono text-[10px] font-black uppercase tracking-[0.18em] text-white/46 transition hover:text-white/78"
+              className="axis-mono axis-world-link text-[10px] font-black uppercase tracking-[0.18em] transition"
             >
               Live
             </Link>
-            <Link
-              href="/training-set"
-              className="axis-mono text-[10px] font-black uppercase tracking-[0.18em] text-white/46 transition hover:text-white/78"
-            >
-              Saved clips
-            </Link>
+            <nav className="axis-world-nav">
+              <Link
+                href="/retrieve"
+                className="axis-mono axis-retrieval-link px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition"
+              >
+                Replay recall
+              </Link>
+              <Link
+                href="/training-set"
+                className="axis-mono axis-world-link text-[10px] font-black uppercase tracking-[0.18em] transition"
+              >
+                Saved clips
+              </Link>
+            </nav>
           </div>
           <div>
-            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.24em] text-white/42">
+            <p className="axis-mono axis-world-kicker text-[10px] font-black uppercase tracking-[0.24em]">
               Replay recall
             </p>
-            <h1 className="mt-3 max-w-3xl text-5xl font-black uppercase leading-[0.92] tracking-normal text-white sm:text-7xl">
+            <h1 className="axis-world-title mt-3 max-w-3xl text-5xl font-black uppercase leading-[0.92] tracking-normal sm:text-7xl">
               Find the play.
             </h1>
           </div>
@@ -185,7 +193,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
               <Link
                 key={cluster.id}
                 href={`/retrieve?preset=${cluster.id === "scoring" ? "makes" : cluster.id}`}
-                className="axis-familiar-bar axis-optical-transition border p-4 transition hover:bg-white/[0.05]"
+                className="axis-familiar-bar axis-world-panel axis-optical-transition p-4 transition hover:bg-white/[0.05]"
               >
                 <p className="axis-mono text-[10px] font-black uppercase tracking-[0.18em] text-white/46">
                   {cluster.subtitle}
@@ -194,7 +202,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
                   <h2 className="text-2xl font-black uppercase tracking-normal text-white/86">
                     {cluster.title}
                   </h2>
-                  <span className="axis-broadcast-chip axis-mono px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em]">
+                  <span className="axis-broadcast-chip axis-world-badge axis-mono px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em]">
                     {cluster.clips.length}
                   </span>
                 </div>
@@ -219,7 +227,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
               ))}
             </div>
           ) : (
-            <div className="axis-familiar-bar border p-6">
+            <div className="axis-familiar-bar axis-world-panel p-6">
               <p className="text-2xl font-black uppercase tracking-normal text-white/80">
                 No tagged clips yet.
               </p>

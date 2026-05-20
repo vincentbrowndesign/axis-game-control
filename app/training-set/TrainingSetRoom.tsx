@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 
 type TrainingMemory = {
@@ -84,7 +85,7 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {records.map((memory) => (
-        <article key={memory.id} className="axis-sync-surface">
+        <article key={memory.id} className="axis-sync-surface axis-world-panel">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={memory.frame_url}
@@ -112,6 +113,12 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
+              <Link
+                href={`/retrieve?q=${encodeURIComponent(memory.label)}`}
+                className="axis-mono axis-optical-transition axis-retrieval-link px-3 py-3 text-center text-[9px] font-black uppercase tracking-[0.12em] transition"
+              >
+                Find similar
+              </Link>
               <button
                 type="button"
                 disabled={busyId === memory.id}
@@ -120,15 +127,15 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
               >
                 Save frame
               </button>
-              <button
-                type="button"
-                disabled={busyId === memory.id}
-                onClick={() => void deleteMemory(memory.id)}
-                className="axis-mono axis-optical-transition axis-sync-surface px-3 py-3 text-[9px] font-black uppercase tracking-[0.12em] transition hover:text-zinc-100 disabled:cursor-wait disabled:text-zinc-700"
-              >
-                Remove
-              </button>
             </div>
+            <button
+              type="button"
+              disabled={busyId === memory.id}
+              onClick={() => void deleteMemory(memory.id)}
+              className="axis-mono axis-optical-transition axis-sync-surface w-full px-3 py-3 text-[9px] font-black uppercase tracking-[0.12em] transition hover:text-zinc-100 disabled:cursor-wait disabled:text-zinc-700"
+            >
+              Remove
+            </button>
           </div>
         </article>
       ))}
