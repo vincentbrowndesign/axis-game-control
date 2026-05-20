@@ -1520,48 +1520,54 @@ function DevelopmentalInputBar({
 }: {
   trainingMemories: TrainingMemoryRecord[]
 }) {
-  const { events, snapshots, requestEventJump, sessionId, playback } = useAxisChronologyStore(
-    useShallow((state) => ({
-      events: state.events,
-      snapshots: state.snapshots,
-      requestEventJump: state.requestEventJump,
-      sessionId: state.sessionId,
-      playback: state.playback,
-    }))
-  )
-  const [query, setQuery] = useState("")
-  const [response, setResponse] = useState("")
+  const { events, snapshots, requestEventJump, sessionId, playback, duration } =
+    useAxisChronologyStore(
+      useShallow((state) => ({
+        events: state.events,
+        snapshots: state.snapshots,
+        requestEventJump: state.requestEventJump,
+        sessionId: state.sessionId,
+        playback: state.playback,
+        duration: state.duration,
+      }))
+    )
+  const [attention, setAttention] = useState("")
+  const [orientation, setOrientation] = useState("")
+  const [orientationPulse, setOrientationPulse] = useState(false)
 
-  const submitQuery = () => {
-    const normalized = query.trim().toLowerCase()
-    if (!normalized) return
-
-    const basketballMatches = events.filter((event) => {
-      const payloadText = JSON.stringify(event.payload || {}).toLowerCase()
-      return payloadText.includes(normalized) || String(event.type).toLowerCase().includes(normalized)
+  const placeAttention = () => {
+    const normalized = attention.trim().toLowerCase()
+    const currentTime = Number(playback.currentTimelineAnchor) || 0
+    const densityAnchors = buildDevelopmentalAnchors({
+      events,
+      trainingMemories,
+      activeEventId: null,
     })
-    const hesitationMatches = normalized.includes("hesitation")
+
+    const languageEvents = normalized
+      ? events.filter((event) => {
+          const payloadText = JSON.stringify(event.payload || {}).toLowerCase()
+          return (
+            payloadText.includes(normalized) ||
+            String(event.type).toLowerCase().includes(normalized)
+          )
+        })
+      : []
+    const hesitationMemories = normalized.includes("hesitation")
       ? trainingMemories.filter((memory) =>
           memoryProgressionContext(memory).toLowerCase().includes("drive")
         )
       : []
-    const recoveryMatches = normalized.includes("recover")
+    const recoveryMemories = normalized.includes("recover")
       ? trainingMemories.filter((memory) =>
           memoryProgressionContext(memory).toLowerCase().includes("recover")
         )
       : []
-    const rhythmMatches =
+    const rhythmSnapshots =
       normalized.includes("rhythm") || normalized.includes("continuity")
         ? [...snapshots].slice(0, 6)
         : []
-    const relatedCount = Math.max(
-      basketballMatches.length,
-      hesitationMatches.length,
-      recoveryMatches.length,
-      rhythmMatches.length,
-      trainingMemories.length ? 1 : 0
-    )
-    const currentTime = Number(playback.currentTimelineAnchor) || 0
+    const memoryTarget = [...hesitationMemories, ...recoveryMemories][0]
     const nearestEvent = events.reduce<typeof events[number] | null>((nearest, event) => {
       if (!nearest) return event
 
@@ -1570,16 +1576,44 @@ function DevelopmentalInputBar({
         ? event
         : nearest
     }, null)
+    const nearestDensity = densityAnchors.reduce<DevelopmentalAnchor | null>((nearest, anchor) => {
+      if (!nearest) return anchor
+
+      return Math.abs(anchor.time - currentTime) < Math.abs(nearest.time - currentTime)
+        ? anchor
+        : nearest
+    }, null)
+    const densityEvent = nearestDensity
+      ? events.reduce<typeof events[number] | null>((nearest, event) => {
+          if (!nearest) return event
+
+          return Math.abs(Number(event.session_time) - nearestDensity.time) <
+            Math.abs(Number(nearest.session_time) - nearestDensity.time)
+            ? event
+            : nearest
+        }, null)
+      : null
 
     const targetEvent =
-      basketballMatches[0] ||
-      (rhythmMatches[0]
+      languageEvents[0] ||
+      (rhythmSnapshots[0]
         ? events.find(
             (event) =>
               event.type === "SNAPSHOT" &&
-              Math.abs(Number(event.session_time) - Number(rhythmMatches[0].session_time)) <= 0.5
+              Math.abs(Number(event.session_time) - Number(rhythmSnapshots[0].session_time)) <= 0.5
           )
         : null) ||
+      (memoryTarget
+        ? events.reduce<typeof events[number] | null>((nearest, event) => {
+            if (!nearest) return event
+
+            return Math.abs(Number(event.session_time) - Number(memoryTarget.replay_time)) <
+              Math.abs(Number(nearest.session_time) - Number(memoryTarget.replay_time))
+              ? event
+              : nearest
+          }, null)
+        : null) ||
+      densityEvent ||
       nearestEvent
 
     if (targetEvent) {
@@ -1593,49 +1627,47 @@ function DevelopmentalInputBar({
       }
     }
 
-    const feltCount = Math.max(1, relatedCount)
+    const orientedTime = Number(targetEvent?.session_time) || nearestDensity?.time || currentTime
+    const density = memoryDensityAt(orientedTime, densityAnchors, Number(duration) || 1)
+    const movement =
+      normalized.includes("pressure") || density > 1.6
+        ? "pressure warming"
+        : normalized.includes("recover")
+          ? "recovery nearby"
+          : normalized.includes("rhythm") || normalized.includes("continuity")
+            ? "rhythm close"
+            : "chronology moving"
 
-    if (!relatedCount && targetEvent) {
-      setResponse("nearby rhythm")
-    } else if (normalized.includes("compare")) {
-      setResponse(`${Math.max(1, trainingMemories.length, snapshots.length)} linked.`)
-    } else if (normalized.includes("pressure")) {
-      setResponse(`${feltCount} to watch again.`)
-    } else if (normalized.includes("recover")) {
-      setResponse(`${feltCount} found.`)
-    } else if (normalized.includes("rhythm") || normalized.includes("continuity")) {
-      setResponse(`${feltCount} to watch again.`)
-    } else {
-      setResponse(`${feltCount} to watch again.`)
-    }
+    setOrientation(movement)
+    setOrientationPulse(true)
+    window.setTimeout(() => setOrientationPulse(false), 720)
   }
 
   return (
     <section className="mx-auto mt-12 w-full max-w-4xl px-2 pb-2">
-      <form
-        className="flex flex-col gap-3 rounded-none bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.045),transparent_72%)] py-2 md:flex-row md:items-center"
-        onSubmit={(event) => {
-          event.preventDefault()
-          submitQuery()
-        }}
+      <div
+        className={`relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.065),transparent_72%)] py-4 transition duration-500 ${
+          orientationPulse ? "shadow-[0_0_80px_rgba(215,192,138,0.08)]" : ""
+        }`}
       >
-        <label className="sr-only">Ask</label>
+        <div className="pointer-events-none absolute inset-x-8 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#d7c08a]/18 to-transparent" />
+        <label className="sr-only">Place attention</label>
         <input
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder="watch that again"
-          className="axis-mono min-h-12 flex-1 border-0 border-b border-[#d7c08a]/10 bg-transparent px-1 py-2 text-center text-[14px] text-[#f2f1ed] outline-none placeholder:text-[#8c7b66]/42 focus:border-[#d7c08a]/34 md:text-left"
+          value={attention}
+          onChange={(event) => setAttention(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") placeAttention()
+          }}
+          onFocus={() => {
+            if (!orientation) setOrientation("room listening")
+          }}
+          placeholder="place attention"
+          className="axis-mono relative z-10 min-h-12 w-full border-0 bg-transparent px-1 py-2 text-center text-[14px] text-[#f2f1ed]/84 outline-none placeholder:text-[#8c7b66]/38"
         />
-        <button
-          type="submit"
-          className="axis-mono axis-optical-transition self-center bg-[#d7c08a]/[0.035] px-4 py-3 text-[9px] font-black uppercase tracking-[0.16em] text-[#f2f1ed]/44 transition hover:bg-[#f2f1ed]/86 hover:text-black md:self-auto"
-        >
-          observe
-        </button>
-      </form>
-      {response ? (
-        <p className="axis-mono mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/34 md:text-left">
-          {response}
+      </div>
+      {orientation ? (
+        <p className="axis-mono mt-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#d7c08a]/32">
+          {orientation}
         </p>
       ) : null}
     </section>
