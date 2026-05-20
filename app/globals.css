@@ -14,6 +14,15 @@
   --axis-climate-residue: 0.16;
   --axis-climate-depth: 0.72;
   --axis-climate-grain: 0.08;
+  --axis-type-emergence: 0.24;
+  --axis-type-dormancy: 0.34;
+  --axis-type-focus: 0.12;
+  --axis-type-decay: 0.56;
+  --axis-type-contrast: 0.48;
+  --axis-type-visibility: 0.42;
+  --axis-type-condensation: 960ms;
+  --axis-type-residue: 0.18;
+  --axis-type-evaporation: 1800ms;
 }
 
 @theme inline {
@@ -130,6 +139,34 @@ button {
   }
 }
 
+@keyframes axis-type-condense {
+  0%,
+  100% {
+    opacity: calc(var(--axis-type-dormancy) + var(--axis-type-residue) * 0.16);
+    filter: blur(0.16px);
+    transform: translate3d(0, 0.35px, 0);
+  }
+
+  52% {
+    opacity: calc(var(--axis-type-visibility) + var(--axis-type-focus) * 0.26);
+    filter: blur(0);
+    transform: translate3d(0, -0.2px, 0);
+  }
+}
+
+@keyframes axis-type-evaporate {
+  0%,
+  100% {
+    opacity: calc(var(--axis-type-residue) + 0.08);
+    filter: blur(0.18px);
+  }
+
+  42% {
+    opacity: calc(var(--axis-type-visibility) + var(--axis-type-emergence) * 0.18);
+    filter: blur(0);
+  }
+}
+
 .axis-atmosphere {
   position: relative;
   overflow: hidden;
@@ -181,6 +218,14 @@ button {
 .axis-climate-root {
   background: var(--axis-climate-black);
   color: rgba(242, 241, 237, calc(0.78 + var(--axis-climate-warmth) * 0.16));
+}
+
+.axis-climate-root :where(p, a, button, input, span) {
+  text-shadow: 0 0 18px rgba(215, 192, 138, calc(var(--axis-type-residue) * 0.16));
+  transition:
+    color var(--axis-type-condensation) cubic-bezier(0.2, 0, 0.18, 1),
+    opacity var(--axis-type-evaporation) cubic-bezier(0.2, 0, 0.18, 1),
+    filter var(--axis-type-condensation) cubic-bezier(0.2, 0, 0.18, 1);
 }
 
 .axis-climate-field {
@@ -251,9 +296,45 @@ button {
 }
 
 .axis-climate-text {
-  color: rgba(242, 241, 237, calc(0.74 + var(--axis-climate-warmth) * 0.18));
+  animation: axis-type-condense var(--axis-type-evaporation) ease-in-out infinite;
+  color: rgba(220, 211, 190, calc(var(--axis-type-visibility) + var(--axis-climate-warmth) * 0.22));
 }
 
 .axis-climate-muted {
-  color: rgba(140, 123, 102, calc(0.48 + var(--axis-climate-residue) * 0.18));
+  color: rgba(140, 123, 102, calc(var(--axis-type-dormancy) + var(--axis-climate-residue) * 0.2));
+}
+
+.axis-type-dormant {
+  color: rgba(140, 123, 102, calc(var(--axis-type-dormancy) + var(--axis-type-focus) * 0.08));
+  filter: blur(calc((1 - var(--axis-type-focus)) * 0.18px));
+  opacity: calc(var(--axis-type-dormancy) + var(--axis-type-residue) * 0.2);
+}
+
+.axis-type-emergent {
+  animation: axis-type-condense var(--axis-type-condensation) cubic-bezier(0.2, 0, 0.18, 1) both;
+  color: rgba(224, 214, 190, calc(var(--axis-type-visibility) + var(--axis-type-emergence) * 0.22));
+}
+
+.axis-type-residue {
+  animation: axis-type-evaporate calc(var(--axis-type-evaporation) * 1.35) ease-in-out infinite;
+  color: rgba(166, 140, 96, calc(var(--axis-type-residue) + var(--axis-climate-warmth) * 0.28));
+}
+
+.axis-type-presence {
+  color: rgba(224, 216, 198, calc(0.52 + var(--axis-type-focus) * 0.22));
+  opacity: calc(0.52 + var(--axis-type-visibility) * 0.28);
+}
+
+.axis-type-control {
+  color: rgba(213, 192, 146, calc(var(--axis-type-dormancy) + var(--axis-type-focus) * 0.24));
+}
+
+.axis-type-control:hover,
+.axis-type-control:focus-visible {
+  color: rgba(232, 219, 188, calc(var(--axis-type-visibility) + var(--axis-type-focus) * 0.22));
+  opacity: calc(0.66 + var(--axis-type-focus) * 0.24);
+}
+
+.axis-type-field::placeholder {
+  color: rgba(140, 123, 102, calc(var(--axis-type-residue) + 0.1));
 }

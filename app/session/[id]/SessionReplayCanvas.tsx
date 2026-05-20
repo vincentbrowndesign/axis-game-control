@@ -54,6 +54,13 @@ type AxisClimateStyle = CSSProperties & {
   "--axis-climate-residue": number
   "--axis-climate-depth": number
   "--axis-climate-grain": number
+  "--axis-type-emergence": number
+  "--axis-type-dormancy": number
+  "--axis-type-focus": number
+  "--axis-type-decay": number
+  "--axis-type-contrast": number
+  "--axis-type-visibility": number
+  "--axis-type-residue": number
 }
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
@@ -430,7 +437,7 @@ function RadialIntentField({
         return (
           <span
             key={intent.label}
-            className="axis-mono pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-[0.16em] text-[#f2f1ed]/70"
+            className="axis-mono axis-type-emergent pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-[0.16em]"
             style={{
               left: `${left}%`,
               top: `${top}%`,
@@ -1552,8 +1559,8 @@ function InspectionDepthControl({
               onClick={() => setInspectionDepth(depth)}
               className={`axis-mono axis-optical-transition h-8 min-w-12 px-3 text-[10px] font-semibold transition ${
                 active
-                  ? "bg-[#d7c08a]/42 text-[#f2f1ed]/88"
-                  : "bg-transparent text-[#8c7b66]/48 hover:bg-[#d7c08a]/[0.035] hover:text-[#f2f1ed]/62"
+                  ? "axis-type-emergent bg-[#d7c08a]/28"
+                  : "axis-type-dormant bg-transparent hover:bg-[#d7c08a]/[0.035]"
               }`}
             >
               {depth}
@@ -1692,7 +1699,7 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
         aria-label="Keep recording"
-        className="axis-mono axis-optical-transition axis-climate-surface px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] text-[#f2f1ed]/62 transition hover:text-[#f2f1ed]/82 disabled:cursor-wait disabled:text-[#8c7b66]/34"
+        className="axis-mono axis-optical-transition axis-climate-surface axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
       >
         keep
       </button>
@@ -1830,7 +1837,7 @@ function DevelopmentalInputBar({
             if (event.key === "Enter") placeAttention()
           }}
           placeholder="attention"
-          className="axis-mono axis-climate-text relative z-10 min-h-12 w-full border-0 bg-transparent px-1 py-2 text-center text-[14px] outline-none placeholder:text-[#8c7b66]/38"
+          className="axis-mono axis-climate-text axis-type-field relative z-10 min-h-12 w-full border-0 bg-transparent px-5 py-2 text-[14px] outline-none"
         />
       </div>
     </section>
@@ -1898,7 +1905,7 @@ function DevelopmentalMemoryStrip({
       <div className="mb-3 flex justify-end">
         <Link
           href="/training-set"
-          className="axis-mono text-[9px] font-black lowercase tracking-[0.14em] text-white/24 transition hover:text-white/54"
+          className="axis-mono axis-type-dormant text-[9px] font-black lowercase tracking-[0.14em] transition hover:opacity-70"
         >
           held
         </Link>
@@ -1917,7 +1924,7 @@ function DevelopmentalMemoryStrip({
                 className="axis-optical-transition axis-climate-surface group relative min-w-44 overflow-hidden text-left transition hover:bg-[#d7c08a]/[0.035]"
               >
                 <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
-                <div className="pointer-events-none absolute left-3 top-3 z-20 axis-mono text-[8px] font-black lowercase tracking-[0.12em] text-white/38">
+                <div className="axis-mono axis-type-residue pointer-events-none absolute left-3 top-3 z-20 text-[8px] font-black lowercase tracking-[0.12em]">
                   held {String(index + 1).padStart(2, "0")}
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1928,14 +1935,14 @@ function DevelopmentalMemoryStrip({
                 />
                 <div className="relative z-20 space-y-2 px-3 py-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="axis-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#f2f1ed]/82">
+                    <p className="axis-mono axis-type-emergent text-[10px] font-black uppercase tracking-[0.14em]">
                       {memory.label}
                     </p>
-                    <p className="axis-mono text-[9px] font-black text-[#d7c08a]/72">
+                    <p className="axis-mono axis-type-residue text-[9px] font-black">
                       {formatClock(memory.replay_time)}
                     </p>
                   </div>
-                  <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#8c7b66]/54">
+                  <p className="axis-mono axis-type-dormant text-[8px] font-semibold uppercase tracking-[0.14em]">
                     {progressionContext}
                   </p>
                 </div>
@@ -1968,11 +1975,11 @@ function DevelopmentalMemoryStrip({
                 )}
               </button>
               <div className="px-2 py-2">
-                <p className="axis-mono text-[10px] font-bold text-zinc-400">
+                <p className="axis-mono axis-type-dormant text-[10px] font-bold">
                   {formatClock(snapshot.session_time)}
                 </p>
                 {chapter ? (
-                  <p className="axis-mono mt-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#d7c08a]/50">
+                  <p className="axis-mono axis-type-residue mt-1 text-[9px] font-black uppercase tracking-[0.14em]">
                     {chapter}
                   </p>
                 ) : null}
@@ -1993,7 +2000,7 @@ function DevelopmentalMemoryStrip({
                   placeholder="note"
                   maxLength={120}
                   aria-label={`Snapshot note at ${formatClock(snapshot.session_time)}`}
-                  className="axis-mono axis-optical-transition mt-2 w-full border-0 border-b border-[#d7c08a]/10 bg-transparent px-0 py-1 text-[11px] font-semibold lowercase text-zinc-200 outline-none transition placeholder:text-[#8c7b66]/44 focus:border-[#d7c08a]/60"
+                  className="axis-mono axis-optical-transition axis-type-field axis-type-emergent mt-2 w-full border-0 border-b border-[#d7c08a]/10 bg-transparent px-0 py-1 text-[11px] font-semibold lowercase outline-none transition focus:border-[#d7c08a]/42"
                 />
               </div>
             </div>
@@ -2036,12 +2043,26 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   const climateResidue = Math.min(0.82, 0.16 + densityAnchors.length * 0.018)
   const climateDepth = Math.min(0.95, 0.7 + climateDensity * 0.035)
   const climateGrain = Math.min(0.72, 0.1 + climateResidue * 0.42)
+  const typeEmergence = Math.min(0.78, 0.18 + climateDensity * 0.08)
+  const typeDormancy = Math.max(0.18, 0.38 - climateDensity * 0.018)
+  const typeFocus = Math.min(0.82, 0.18 + (activeEventId ? 0.18 : 0) + climateDensity * 0.052)
+  const typeDecay = Math.min(0.84, 0.5 + climateResidue * 0.24)
+  const typeContrast = Math.min(0.76, 0.38 + climateWarmth * 0.8)
+  const typeVisibility = Math.min(0.72, 0.32 + typeFocus * 0.22 + climateWarmth * 0.5)
+  const typeResidue = Math.min(0.68, 0.16 + climateResidue * 0.36)
   const climateStyle: AxisClimateStyle = {
     "--axis-climate-warmth": climateWarmth,
     "--axis-climate-pressure": climatePressure,
     "--axis-climate-residue": climateResidue,
     "--axis-climate-depth": climateDepth,
     "--axis-climate-grain": climateGrain,
+    "--axis-type-emergence": typeEmergence,
+    "--axis-type-dormancy": typeDormancy,
+    "--axis-type-focus": typeFocus,
+    "--axis-type-decay": typeDecay,
+    "--axis-type-contrast": typeContrast,
+    "--axis-type-visibility": typeVisibility,
+    "--axis-type-residue": typeResidue,
   }
 
   useEffect(() => {
@@ -2108,7 +2129,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
             <Link
               href="/live"
               aria-label="Return live"
-              className="axis-mono axis-climate-muted text-[10px] font-semibold lowercase tracking-[0.14em] transition hover:text-[#f2f1ed]/70"
+              className="axis-mono axis-type-dormant text-[10px] font-semibold lowercase tracking-[0.14em] transition hover:opacity-70"
             >
               live
             </Link>
@@ -2117,10 +2138,10 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
 
         <div className="flex flex-col gap-4 py-12 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="axis-climate-text mt-2 text-6xl font-bold leading-none tracking-normal sm:text-7xl">
+            <p className="axis-type-presence mt-2 text-5xl font-bold leading-none tracking-normal sm:text-6xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
-            <p className="axis-mono axis-climate-muted mt-5 text-[10px] font-semibold uppercase tracking-[0.18em]">
+            <p className="axis-mono axis-type-residue mt-5 text-[10px] font-semibold uppercase tracking-[0.18em]">
               {formatEnvironmentalTimestamp(session.created_at)}
             </p>
           </div>
