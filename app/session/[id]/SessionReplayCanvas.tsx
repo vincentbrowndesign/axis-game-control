@@ -98,6 +98,16 @@ function compactNodeId(sessionId: string) {
   return `AXS-${suffix}`
 }
 
+function memoryProgressionContext(memory: TrainingMemoryRecord) {
+  const metadata = memory.metadata || {}
+
+  if (typeof metadata.reconstructionChapter === "string") return metadata.reconstructionChapter
+  if (typeof metadata.basketballEvent === "string") return metadata.basketballEvent
+  if (typeof metadata.eventType === "string") return metadata.eventType
+
+  return "OBSERVATION"
+}
+
 export function seekToEvent(
   videoElement: HTMLVideoElement | null,
   anchor: TimelineAnchor | null
@@ -321,6 +331,12 @@ function ReplayVideo({
   return (
     <div className="overflow-hidden bg-[#050505]">
       <div className="relative overflow-hidden bg-[#020202] shadow-[0_30px_120px_rgba(0,0,0,0.72)]">
+        <div className="pointer-events-none absolute -inset-10 z-0 opacity-70">
+          <div className="absolute inset-x-12 top-8 h-px bg-gradient-to-r from-transparent via-[#f2f1ed]/12 to-transparent" />
+          <div className="absolute bottom-10 left-10 right-10 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/12 to-transparent" />
+          <div className="absolute left-6 top-1/4 h-2/3 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+          <div className="absolute right-8 top-1/3 h-1/2 w-px bg-gradient-to-b from-transparent via-white/8 to-transparent" />
+        </div>
         <video
           ref={videoRef}
           src={playbackUrl}
@@ -374,33 +390,37 @@ function ReplayVideo({
             })
             completeInternalSeek()
           }}
-          className={`aspect-video w-full bg-black object-contain transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
+          className={`relative z-10 aspect-video w-full bg-black object-contain transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
             memoryPulse ? "brightness-[1.12] contrast-[1.08]" : "brightness-[0.96]"
           }`}
           style={{
             transform: `scale(${inspectionDepth})`,
           }}
         />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.08),transparent_33%),linear-gradient(180deg,rgba(0,0,0,0.1),rgba(0,0,0,0.48))]" />
-        <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-2">
+        <div className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(circle_at_50%_58%,rgba(242,241,237,0.08),transparent_33%),linear-gradient(180deg,rgba(0,0,0,0.1),rgba(0,0,0,0.48))]" />
+        <div className="pointer-events-none absolute left-4 top-4 z-30 flex flex-col gap-2">
           <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/34">
-            REPLAY MEMORY ACTIVE
+            MACHINE OBSERVING
           </p>
           <p className="axis-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-[#d7c08a]/46">
-            MACHINE STUDYING
+            TIME MADE OBSERVABLE
           </p>
         </div>
-        <div className="axis-mono pointer-events-none absolute bottom-4 left-4 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
+        <div className="axis-mono pointer-events-none absolute right-4 top-4 z-30 text-right text-[9px] font-semibold uppercase tracking-[0.16em] text-white/28">
+          REPLAY NEGOTIATION ACTIVE
+        </div>
+        <div className="axis-mono pointer-events-none absolute bottom-4 left-4 z-30 text-[10px] font-black uppercase tracking-[0.28em] text-white/38 drop-shadow-[0_0_8px_rgba(242,241,237,0.14)]">
           AXIS
         </div>
         {memoryPulse ? (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f2f1ed]/[0.035]">
-            <div className="axis-mono bg-black/28 px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/78 backdrop-blur">
-              ADDED TO DEVELOPMENT LOOP
+          <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-[#f2f1ed]/[0.035]">
+            <div className="axis-mono bg-black/28 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.22em] text-[#f2f1ed]/78 backdrop-blur">
+              <p>REMEMBER THIS</p>
+              <p className="mt-2 text-[8px] text-[#d7c08a]/66">TRAINING MEMORY STORED</p>
             </div>
           </div>
         ) : null}
-        <div className="absolute bottom-4 right-4 flex max-w-[min(20rem,calc(100%-2rem))] flex-col items-end gap-2">
+        <div className="absolute bottom-4 right-4 z-30 flex max-w-[min(20rem,calc(100%-2rem))] flex-col items-end gap-2">
           {showTrainingLabels ? (
             <div className="grid grid-cols-3 gap-1 bg-black/36 p-1 backdrop-blur">
               {trainingLabels.map((label) => (
@@ -468,6 +488,10 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
 
   return (
     <div className="mt-4 bg-white/[0.012] px-4 py-4">
+      <div className="axis-mono mb-2 flex items-center justify-between text-[8px] font-semibold uppercase tracking-[0.18em] text-zinc-700">
+        <span>memory trace</span>
+        <span>reflection path</span>
+      </div>
       <div
         className="relative h-12"
         onClick={(event) => {
@@ -486,6 +510,7 @@ function EventRail({ inspectionDepth }: { inspectionDepth: InspectionDepth }) {
           />
         ))}
         <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/18" />
+        <div className="absolute left-0 right-0 top-[calc(50%+7px)] h-px -translate-y-1/2 bg-[#d7c08a]/8" />
         {visibleEvents.map((event) => {
           const position = Math.min(
             100,
@@ -673,10 +698,10 @@ function DevelopmentalMemoryStrip({
       <div className="mb-3 flex items-end justify-between gap-4">
         <div>
           <p className="axis-mono text-[9px] font-black uppercase tracking-[0.24em] text-[#d7c08a]/58">
-            Developmental memory
+            Developmental mirror
           </p>
           <p className="mt-1 text-sm font-semibold text-zinc-500">
-            Frames the machine has been asked to study.
+            Fragments where repetition becomes visible.
           </p>
         </div>
         <Link
@@ -688,35 +713,47 @@ function DevelopmentalMemoryStrip({
       </div>
       <div className="relative overflow-hidden bg-white/[0.012] px-3 py-3">
         <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/[0.055]" />
+        <div className="pointer-events-none absolute left-0 right-0 top-[calc(50%+11px)] h-px bg-[#d7c08a]/[0.055]" />
         <div className="relative flex gap-2 overflow-x-auto pb-1">
-          {trainingMemories.map((memory) => (
-            <button
-              key={memory.id}
-              type="button"
-              onClick={() => jumpToMoment(Number(memory.replay_time))}
-              className="axis-optical-transition min-w-44 bg-black/42 text-left transition hover:bg-white/[0.04]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={memory.frame_url}
-                alt={`${memory.label} memory at ${formatClock(memory.replay_time)}`}
-                className="aspect-video w-44 object-cover grayscale-[10%]"
-              />
-              <div className="space-y-2 px-3 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="axis-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#f2f1ed]">
-                    {memory.label}
+          {trainingMemories.map((memory, index) => {
+            const progressionContext = memoryProgressionContext(memory)
+
+            return (
+              <button
+                key={memory.id}
+                type="button"
+                onClick={() => jumpToMoment(Number(memory.replay_time))}
+                className="axis-optical-transition group relative min-w-48 overflow-hidden bg-black/42 text-left transition hover:bg-white/[0.04]"
+              >
+                <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
+                <div className="pointer-events-none absolute left-3 top-3 z-20 axis-mono text-[8px] font-black uppercase tracking-[0.14em] text-white/46">
+                  MEMORY {String(index + 1).padStart(2, "0")}
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={memory.frame_url}
+                  alt={`${memory.label} memory at ${formatClock(memory.replay_time)}`}
+                  className="aspect-video w-48 object-cover grayscale-[10%] transition duration-150 group-hover:brightness-110"
+                />
+                <div className="relative z-20 space-y-2 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="axis-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#f2f1ed]">
+                      {memory.label}
+                    </p>
+                    <p className="axis-mono text-[9px] font-black text-[#d7c08a]/72">
+                      {formatClock(memory.replay_time)}
+                    </p>
+                  </div>
+                  <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+                    {progressionContext}
                   </p>
-                  <p className="axis-mono text-[9px] font-black text-[#d7c08a]/72">
-                    {formatClock(memory.replay_time)}
+                  <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
+                    CHRONOLOGY ATTACHED
                   </p>
                 </div>
-                <p className="axis-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
-                  CHRONOLOGY ATTACHED
-                </p>
-              </div>
-            </button>
-          ))}
+              </button>
+            )
+          })}
         {snapshots.map((snapshot) => {
           const source = snapshot.image_url || snapshot.localUrl
           const chapter = chapterForSnapshot(snapshot)
@@ -788,6 +825,7 @@ function DevelopmentalMemoryStrip({
 export function SessionReplayCanvas({ session }: { session: TemporalSessionRecord }) {
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
+  const [observationCount, setObservationCount] = useState(0)
   const { hydrateChronology, hydrateSnapshots, setUiStatus } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
@@ -823,6 +861,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
         })
         hydrateSnapshots(payload.snapshots || [])
         setTrainingMemories(payload.trainingMemories || [])
+        setObservationCount((payload.events || []).length)
       } finally {
         return
       }
@@ -836,13 +875,15 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
 
   const storedCount = trainingMemories.length
-  const observationCount = useAxisChronologyStore.getState().events.length
+  const snapshotCount = useAxisChronologyStore.getState().snapshots.length
 
   return (
     <main className="axis-display min-h-dvh overflow-hidden bg-[#030303] text-[#f2f1ed]">
       <section className="pointer-events-none fixed inset-0 opacity-70">
         <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_50%_0%,rgba(215,192,138,0.10),transparent_55%)]" />
         <div className="absolute inset-y-0 left-1/2 w-px bg-white/[0.025]" />
+        <div className="absolute inset-y-0 left-[18%] w-px bg-white/[0.018]" />
+        <div className="absolute inset-y-0 right-[18%] w-px bg-white/[0.018]" />
         <div className="absolute bottom-0 left-0 right-0 h-80 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.84))]" />
       </section>
       <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 py-4 sm:px-6">
@@ -862,6 +903,9 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
 
         <div className="flex flex-col gap-4 border-t border-white/[0.055] py-5 md:flex-row md:items-end md:justify-between">
           <div>
+            <p className="axis-mono mb-4 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d7c08a]/50">
+              replay is externalized self-observation
+            </p>
             <p className="axis-mono text-sm font-semibold uppercase tracking-[0.18em] text-zinc-300">
               {compactNodeId(session.id)}
             </p>
@@ -873,6 +917,7 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
               <span>DEVELOPMENT LOOP ACTIVE</span>
               <span>{storedCount} MACHINE MEMORIES</span>
               <span>{observationCount} OBSERVATIONS</span>
+              <span>{snapshotCount} REFLECTIONS</span>
             </div>
             <p className="axis-mono mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
               {formatEnvironmentalTimestamp(session.created_at)}
