@@ -68,6 +68,13 @@ type AxisClimateStyle = CSSProperties & {
   "--axis-density-emergence": number
   "--axis-density-pooling": number
   "--axis-density-latency": number
+  "--axis-chronology-continuity": number
+  "--axis-chronology-momentum": number
+  "--axis-chronology-drift": number
+  "--axis-chronology-persistence": number
+  "--axis-chronology-afterglow": number
+  "--axis-chronology-nextness": number
+  "--axis-chronology-unresolved": number
 }
 type AxisDensityStyle = CSSProperties & {
   "--axis-density-force": number
@@ -75,6 +82,12 @@ type AxisDensityStyle = CSSProperties & {
   "--axis-density-pull": number
   "--axis-density-emergence": number
   "--axis-density-pooling": number
+  "--axis-chronology-continuity": number
+  "--axis-chronology-momentum": number
+  "--axis-chronology-drift": number
+  "--axis-chronology-afterglow": number
+  "--axis-chronology-nextness": number
+  "--axis-chronology-unresolved": number
 }
 
 const inspectionDepths: InspectionDepth[] = [0.5, 1, 2, 2.5]
@@ -229,6 +242,10 @@ function densityWarmth(density: number) {
 
 function clampThermalHeat(value: number) {
   return Math.min(1, Math.max(0.18, value))
+}
+
+function clampClimateVariable(value: number, floor = 0.08, ceiling = 0.96) {
+  return Math.min(ceiling, Math.max(floor, value))
 }
 
 function unresolvedReplayStorageKey(sessionId: string) {
@@ -508,6 +525,8 @@ function ReplayVideo({
   } | null>(null)
   const recognitionRef = useRef<AxisSpeechRecognition | null>(null)
   const voicePhraseRef = useRef("")
+  const chronologyMomentumRef = useRef(0.18)
+  const chronologyDriftRef = useRef(0.14)
   const [unresolvedReplaySeed] = useState(() => readUnresolvedReplay(session.id))
   const unresolvedReplayRef = useRef(unresolvedReplaySeed)
   const thermalHeatRef = useRef(unresolvedReplaySeed?.heat ?? 0.34)
@@ -518,6 +537,8 @@ function ReplayVideo({
   const [gestureMode, setGestureMode] = useState<ReplayGestureMode>("idle")
   const [replaySettled, setReplaySettled] = useState(false)
   const [thermalHeat, setThermalHeat] = useState(() => unresolvedReplaySeed?.heat ?? 0.34)
+  const [chronologyMomentum, setChronologyMomentum] = useState(0.18)
+  const [chronologyDrift, setChronologyDrift] = useState(0.14)
   const [unresolvedAnchorTime, setUnresolvedAnchorTime] = useState<number | null>(
     () => unresolvedReplaySeed?.time ?? null
   )
@@ -565,12 +586,30 @@ function ReplayVideo({
   const roomTemperature = clampThermalHeat(
     thermalHeat + Math.min(0.28, currentDensity * 0.045) + (replaySettled ? 0.2 : 0)
   )
+  const chronologyContinuity = clampClimateVariable(
+    0.28 + currentDensity * 0.09 + roomTemperature * 0.24 + (replaySettled ? 0.1 : 0)
+  )
+  const chronologyAfterglow = clampClimateVariable(
+    0.2 + thermalHeat * 0.32 + (replaySettled ? 0.22 : 0) + currentDensity * 0.05
+  )
+  const chronologyNextness = clampClimateVariable(
+    0.18 + (unresolvedAnchorTime === null ? 0.08 : 0.18) + currentDensity * 0.06
+  )
+  const chronologyUnresolved = clampClimateVariable(
+    0.24 + (unresolvedAnchorTime === null ? 0 : 0.18) + roomTemperature * 0.2
+  )
   const replayDensityStyle: AxisDensityStyle = {
     "--axis-density-force": Math.min(0.94, 0.22 + currentDensity * 0.16 + roomTemperature * 0.16),
     "--axis-density-gravity": Math.min(0.88, 0.16 + currentDensity * 0.12),
     "--axis-density-pull": Math.min(0.8, 0.12 + currentDensity * 0.08),
     "--axis-density-emergence": Math.min(0.9, 0.22 + currentDensity * 0.14),
     "--axis-density-pooling": Math.min(0.9, 0.18 + roomTemperature * 0.32 + currentDensity * 0.08),
+    "--axis-chronology-continuity": chronologyContinuity,
+    "--axis-chronology-momentum": chronologyMomentum,
+    "--axis-chronology-drift": chronologyDrift,
+    "--axis-chronology-afterglow": chronologyAfterglow,
+    "--axis-chronology-nextness": chronologyNextness,
+    "--axis-chronology-unresolved": chronologyUnresolved,
   }
 
   const warmRoom = useCallback((amount = 0.12) => {
@@ -579,6 +618,16 @@ function ReplayVideo({
       thermalHeatRef.current = nextHeat
       return nextHeat
     })
+  }, [])
+
+  const carryChronology = useCallback((momentum = 0.08, drift = 0.05) => {
+    const nextMomentum = clampClimateVariable(chronologyMomentumRef.current + momentum, 0.12, 0.92)
+    const nextDrift = clampClimateVariable(chronologyDriftRef.current + drift, 0.08, 0.74)
+
+    chronologyMomentumRef.current = nextMomentum
+    chronologyDriftRef.current = nextDrift
+    setChronologyMomentum(nextMomentum)
+    setChronologyDrift(nextDrift)
   }, [])
 
   const holdUnresolvedReplay = useCallback((time: number, heat = thermalHeatRef.current) => {
@@ -678,11 +727,19 @@ function ReplayVideo({
     setReplaySettled(false)
     warmRoom(0.08)
     holdUnresolvedReplay(targetTime, thermalHeatRef.current + 0.08)
+    carryChronology(0.1, 0.08)
 
     const seekVersion = seekVersionRef.current + 1
     seekVersionRef.current = seekVersion
     const duration = Number.isFinite(video.duration) ? video.duration : 0
-    const clampedTarget = Math.min(Math.max(0, Number(targetTime) || 0), Math.max(duration, 0))
+    const rawTarget = Math.min(Math.max(0, Number(targetTime) || 0), Math.max(duration, 0))
+    const currentTime = Number(video.currentTime) || Number(playback.currentTimelineAnchor) || 0
+    const driftWindow = Math.min(0.42, 0.08 + chronologyDriftRef.current * 0.28)
+    const driftDirection = rawTarget >= currentTime ? 1 : -1
+    const clampedTarget = Math.min(
+      Math.max(0, rawTarget + driftDirection * driftWindow),
+      Math.max(duration, 0)
+    )
     const resumeAfterSeek = shouldResume || resumeAfterSeekRef.current || (!video.paused && !video.ended)
     resumeAfterSeekRef.current = resumeAfterSeek
 
@@ -738,7 +795,7 @@ function ReplayVideo({
         type: "FREEZE_FRAME",
       })
     }
-  }, [holdActive, holdUnresolvedReplay, syncMediaPlayback, warmRoom])
+  }, [carryChronology, holdActive, holdUnresolvedReplay, playback.currentTimelineAnchor, syncMediaPlayback, warmRoom])
 
   const saveGesturePhrase = async (phrase: string, occurredAtSeconds: number) => {
     const clean = cleanGesturePhrase(phrase)
@@ -759,6 +816,7 @@ function ReplayVideo({
       })
       warmRoom(0.18)
       holdUnresolvedReplay(occurredAtSeconds, thermalHeatRef.current + 0.18)
+      carryChronology(0.12, 0.05)
       pulseHaptic([14, 28, 10])
     } catch {
       return
@@ -857,9 +915,11 @@ function ReplayVideo({
       setReplaySettled(false)
       warmRoom(0.08)
       holdUnresolvedReplay(video.currentTime, thermalHeatRef.current + 0.08)
+      carryChronology(0.08, 0.04)
       void video.play().catch(() => undefined)
     } else {
       holdUnresolvedReplay(video.currentTime, thermalHeatRef.current + 0.12)
+      carryChronology(0.05, 0.03)
       video.pause()
     }
   }
@@ -874,6 +934,7 @@ function ReplayVideo({
     pulseHaptic(8)
     warmRoom(0.1)
     holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.1)
+    carryChronology(0.1, 0.08)
     onRitualPractice()
     radialTimerRef.current = window.setTimeout(() => {
       radialTimerRef.current = null
@@ -898,6 +959,7 @@ function ReplayVideo({
     if (intent === "Observe") {
       resumeAfterSeekRef.current = false
       holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.14)
+      carryChronology(0.06, 0.04)
       videoRef.current?.pause()
       pulseHaptic(9)
       return
@@ -942,6 +1004,7 @@ function ReplayVideo({
       setGestureMode("hold")
       warmRoom(0.12)
       holdUnresolvedReplay(video?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.12)
+      carryChronology(0.08, 0.04)
       setHoldActive(true)
       video?.pause()
       pulseHaptic(10)
@@ -963,6 +1026,7 @@ function ReplayVideo({
     stopVoiceHold()
     setHoldActive(false)
     holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.06)
+    carryChronology(0.04, 0.02)
     setGestureMode((mode) => (mode === "hold" || mode === "voice" ? "idle" : mode))
   }
 
@@ -1022,6 +1086,7 @@ function ReplayVideo({
         setGestureMode("close")
         warmRoom(0.08)
         holdUnresolvedReplay(videoRef.current?.currentTime || Number(playback.currentTimelineAnchor) || 0, thermalHeatRef.current + 0.08)
+        carryChronology(0.07, 0.04)
         pulseHaptic([9, 18, 9])
         onRitualPractice()
       }
@@ -1058,6 +1123,7 @@ function ReplayVideo({
 
     scheduleDragSeek(targetTime, dragStart.wasPlaying)
     holdUnresolvedReplay(targetTime, thermalHeatRef.current + Math.min(0.16, 0.05 + density * 0.025))
+    carryChronology(Math.min(0.12, 0.04 + density * 0.018), Math.min(0.08, 0.03 + density * 0.012))
     pulseHaptic(density > 1.3 ? hapticForDensity(density) : 4)
   }
 
@@ -1146,6 +1212,20 @@ function ReplayVideo({
         thermalHeatRef.current = nextHeat
         return nextHeat
       })
+      const nextMomentum = clampClimateVariable(
+        chronologyMomentumRef.current - (replaySettled ? 0.004 : 0.006),
+        0.14,
+        0.92
+      )
+      const nextDrift = clampClimateVariable(
+        chronologyDriftRef.current - (replaySettled ? 0.003 : 0.005),
+        0.1,
+        0.74
+      )
+      chronologyMomentumRef.current = nextMomentum
+      chronologyDriftRef.current = nextDrift
+      setChronologyMomentum(nextMomentum)
+      setChronologyDrift(nextDrift)
     }, 1400)
 
     return () => window.clearInterval(cooling)
@@ -1183,7 +1263,7 @@ function ReplayVideo({
   return (
     <div className="overflow-hidden bg-black">
       <div
-        className={`axis-replay-surface axis-density-field relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
+        className={`axis-replay-surface axis-density-field axis-chronology-field relative overflow-hidden transition duration-[140ms] ease-[cubic-bezier(0.2,0,0.18,1)] ${
           memoryPulse
             ? "brightness-[1.03]"
             : replaySettled
@@ -1267,6 +1347,7 @@ function ReplayVideo({
           }}
           onPause={(event) => {
             holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.1)
+            carryChronology(0.04, 0.02)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -1279,6 +1360,7 @@ function ReplayVideo({
           onPlay={(event) => {
             setReplaySettled(false)
             holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.08)
+            carryChronology(0.08, 0.04)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -1301,6 +1383,7 @@ function ReplayVideo({
           onSeeked={(event) => {
             setReplaySettled(false)
             holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.08)
+            carryChronology(0.06, 0.06)
             useAxisChronologyStore.getState().completeSeekTransaction(event.currentTarget.currentTime)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
@@ -1326,6 +1409,7 @@ function ReplayVideo({
             setReplaySettled(true)
             warmRoom(0.34)
             holdUnresolvedReplay(event.currentTarget.currentTime, thermalHeatRef.current + 0.34)
+            carryChronology(0.16, 0.08)
             syncMediaPlayback({
               currentTime: event.currentTarget.currentTime,
               currentTimelineAnchor: event.currentTarget.currentTime,
@@ -1462,7 +1546,7 @@ function EventRail({
   return (
     <div className="mt-8 px-1 py-4">
       <div
-        className={`axis-density-field relative h-16 touch-none overflow-hidden transition-opacity duration-150 ${
+        className={`axis-density-field axis-chronology-field relative h-16 touch-none overflow-hidden transition-opacity duration-150 ${
           dragging ? "opacity-100" : "opacity-82"
         }`}
         onPointerDown={(event) => {
@@ -1570,7 +1654,7 @@ function InspectionDepthControl({
 }) {
   return (
     <div className="mt-3 flex justify-center">
-      <div className="axis-climate-surface axis-density-surface grid grid-cols-4">
+      <div className="axis-climate-surface axis-density-surface axis-chronology-residue grid grid-cols-4">
         {inspectionDepths.map((depth) => {
           const active = depth === inspectionDepth
 
@@ -1631,7 +1715,7 @@ function ChronologyEdge({
     .filter((node) => node.density >= 1.1)
 
   return (
-    <div className="axis-density-residue pointer-events-none fixed inset-y-0 right-0 z-10 hidden w-12 md:block">
+    <div className="axis-density-residue axis-chronology-residue pointer-events-none fixed inset-y-0 right-0 z-10 hidden w-12 md:block">
       <div className="absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#2f1d13]/14 to-transparent" />
       <div className="absolute inset-y-16 right-6 w-px bg-gradient-to-b from-transparent via-[#d7c08a]/10 to-transparent" />
       {pressureZones.map((zone) => {
@@ -1721,7 +1805,7 @@ function DeviceExportControl({ session }: { session: TemporalSessionRecord }) {
           void executeNativeExport(session.playback_url, `axis-record-${session.id}`)
         }}
         aria-label="Keep recording"
-        className="axis-mono axis-optical-transition axis-climate-surface axis-density-surface axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
+        className="axis-mono axis-optical-transition axis-climate-surface axis-density-surface axis-chronology-residue axis-type-control px-4 py-3 text-[10px] font-bold lowercase tracking-[0.14em] transition disabled:cursor-wait"
       >
         keep
       </button>
@@ -1846,7 +1930,7 @@ function DevelopmentalInputBar({
   return (
     <section className="mx-auto mt-12 w-full max-w-4xl px-2 pb-2">
       <div
-        className={`axis-climate-surface axis-density-surface relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.052),transparent_72%)] py-4 transition duration-500 ${
+        className={`axis-climate-surface axis-density-surface axis-chronology-next relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(215,192,138,0.052),transparent_72%)] py-4 transition duration-500 ${
           orientationPulse ? "axis-density-active" : ""
         }`}
       >
@@ -1943,7 +2027,7 @@ function DevelopmentalMemoryStrip({
                 key={memory.id}
                 type="button"
                 onClick={() => jumpToMoment(Number(memory.replay_time))}
-                className="axis-optical-transition axis-climate-surface axis-density-surface group relative min-w-44 overflow-hidden text-left transition hover:bg-[#d7c08a]/[0.035]"
+                className="axis-optical-transition axis-climate-surface axis-density-surface axis-chronology-residue group relative min-w-44 overflow-hidden text-left transition hover:bg-[#d7c08a]/[0.035]"
               >
                 <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.54))]" />
                 <div className="axis-mono axis-type-residue pointer-events-none absolute left-3 top-3 z-20 text-[8px] font-black lowercase tracking-[0.12em]">
@@ -1978,7 +2062,7 @@ function DevelopmentalMemoryStrip({
           return (
             <div
               key={snapshot.id}
-              className="axis-climate-surface axis-density-surface min-w-32"
+              className="axis-climate-surface axis-density-surface axis-chronology-residue min-w-32"
             >
               <button
                 type="button"
@@ -2079,6 +2163,13 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
   const densityEmergence = Math.min(0.88, 0.2 + climateDensity * 0.1)
   const densityPooling = Math.min(0.88, 0.16 + climateResidue * 0.34 + climateDensity * 0.045)
   const densityLatency = Math.min(0.72, 0.2 + densityAnchors.length * 0.018)
+  const chronologyContinuity = clampClimateVariable(0.3 + climateDensity * 0.08 + climateResidue * 0.16)
+  const chronologyMomentum = clampClimateVariable(0.18 + climateDensity * 0.06 + (activeEventId ? 0.12 : 0))
+  const chronologyDrift = clampClimateVariable(0.14 + climatePressure * 0.18 + climateDensity * 0.026)
+  const chronologyPersistence = clampClimateVariable(0.22 + climateResidue * 0.28)
+  const chronologyAfterglow = clampClimateVariable(0.2 + climateWarmth * 0.86 + climateResidue * 0.18)
+  const chronologyNextness = clampClimateVariable(0.18 + climatePressure * 0.22 + densityAnchors.length * 0.01)
+  const chronologyUnresolved = clampClimateVariable(0.28 + climateResidue * 0.22 + (activeEventId ? 0.08 : 0))
   const climateStyle: AxisClimateStyle = {
     "--axis-climate-warmth": climateWarmth,
     "--axis-climate-pressure": climatePressure,
@@ -2099,6 +2190,13 @@ export function SessionReplayCanvas({ session }: { session: TemporalSessionRecor
     "--axis-density-emergence": densityEmergence,
     "--axis-density-pooling": densityPooling,
     "--axis-density-latency": densityLatency,
+    "--axis-chronology-continuity": chronologyContinuity,
+    "--axis-chronology-momentum": chronologyMomentum,
+    "--axis-chronology-drift": chronologyDrift,
+    "--axis-chronology-persistence": chronologyPersistence,
+    "--axis-chronology-afterglow": chronologyAfterglow,
+    "--axis-chronology-nextness": chronologyNextness,
+    "--axis-chronology-unresolved": chronologyUnresolved,
   }
 
   useEffect(() => {

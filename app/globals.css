@@ -30,6 +30,13 @@
   --axis-density-emergence: 0.22;
   --axis-density-pooling: 0.16;
   --axis-density-latency: 0.24;
+  --axis-chronology-continuity: 0.3;
+  --axis-chronology-momentum: 0.18;
+  --axis-chronology-drift: 0.14;
+  --axis-chronology-persistence: 0.22;
+  --axis-chronology-afterglow: 0.2;
+  --axis-chronology-nextness: 0.18;
+  --axis-chronology-unresolved: 0.28;
 }
 
 @theme inline {
@@ -201,6 +208,33 @@ button {
   }
 }
 
+@keyframes axis-chronology-current {
+  0%,
+  100% {
+    opacity: calc(0.18 + var(--axis-chronology-persistence) * 0.2);
+    transform: translate3d(calc(var(--axis-chronology-drift) * -0.4%), 0, 0);
+  }
+
+  45% {
+    opacity: calc(0.26 + var(--axis-chronology-continuity) * 0.24);
+    transform: translate3d(calc(var(--axis-chronology-momentum) * 0.5%), calc(var(--axis-chronology-drift) * -0.26%), 0);
+  }
+}
+
+@keyframes axis-chronology-afterglow {
+  0%,
+  100% {
+    opacity: calc(0.08 + var(--axis-chronology-afterglow) * 0.18);
+    transform: translate3d(calc(var(--axis-chronology-nextness) * -0.24%), 0, 0) scale(1);
+  }
+
+  55% {
+    opacity: calc(0.12 + var(--axis-chronology-unresolved) * 0.24);
+    transform: translate3d(calc(var(--axis-chronology-nextness) * 0.32%), calc(var(--axis-chronology-momentum) * -0.2%), 0)
+      scale(calc(1 + var(--axis-chronology-continuity) * 0.012));
+  }
+}
+
 .axis-atmosphere {
   position: relative;
   overflow: hidden;
@@ -293,17 +327,23 @@ button {
 .axis-climate-field::before {
   animation:
     axis-climate-breathe 14s ease-in-out infinite,
-    axis-density-pool 17s ease-in-out infinite;
+    axis-density-pool 17s ease-in-out infinite,
+    axis-chronology-current 19s ease-in-out infinite;
   background:
     radial-gradient(
       ellipse at 52% 42%,
-      rgba(215, 192, 138, calc(0.04 + var(--axis-climate-warmth) * 0.1 + var(--axis-density-force) * 0.1)),
+      rgba(215, 192, 138, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-force) * 0.08 + var(--axis-chronology-continuity) * 0.08)),
       transparent 62%
     ),
     radial-gradient(
       ellipse at 48% 62%,
-      rgba(92, 58, 34, calc(0.035 + var(--axis-density-pooling) * 0.14)),
+      rgba(92, 58, 34, calc(0.03 + var(--axis-density-pooling) * 0.1 + var(--axis-chronology-afterglow) * 0.1)),
       transparent 54%
+    ),
+    radial-gradient(
+      ellipse at 58% 72%,
+      rgba(166, 120, 72, calc(var(--axis-chronology-nextness) * 0.08)),
+      transparent 58%
     ),
     linear-gradient(180deg, rgba(20, 10, 4, calc(0.12 + var(--axis-climate-depth) * 0.16)), transparent 42%);
 }
@@ -311,22 +351,23 @@ button {
 .axis-climate-field::after {
   animation:
     axis-climate-drift 18s ease-in-out infinite,
-    axis-density-diffuse 13s ease-in-out infinite;
+    axis-density-diffuse 13s ease-in-out infinite,
+    axis-chronology-afterglow 21s ease-in-out infinite;
   background-image:
-    radial-gradient(circle at 20% 30%, rgba(242, 241, 237, calc(var(--axis-climate-grain) * 0.12 + var(--axis-density-emergence) * 0.08)) 0.6px, transparent 0.9px),
-    radial-gradient(circle at 70% 62%, rgba(215, 192, 138, calc(var(--axis-climate-residue) * 0.1 + var(--axis-density-pooling) * 0.1)) 0.7px, transparent 1px);
+    radial-gradient(circle at 20% 30%, rgba(242, 241, 237, calc(var(--axis-climate-grain) * 0.1 + var(--axis-density-emergence) * 0.06 + var(--axis-chronology-drift) * 0.06)) 0.6px, transparent 0.9px),
+    radial-gradient(circle at 70% 62%, rgba(215, 192, 138, calc(var(--axis-climate-residue) * 0.08 + var(--axis-density-pooling) * 0.08 + var(--axis-chronology-persistence) * 0.08)) 0.7px, transparent 1px);
   background-size:
     calc(42px - var(--axis-density-force) * 8px) calc(42px - var(--axis-density-force) * 8px),
     calc(62px - var(--axis-density-gravity) * 10px) calc(62px - var(--axis-density-gravity) * 10px);
   mix-blend-mode: screen;
-  opacity: calc(0.12 + var(--axis-climate-grain) * 0.45 + var(--axis-density-emergence) * 0.24);
+  opacity: calc(0.1 + var(--axis-climate-grain) * 0.38 + var(--axis-density-emergence) * 0.18 + var(--axis-chronology-unresolved) * 0.16);
 }
 
 .axis-replay-surface {
   background:
     radial-gradient(
       ellipse at 50% 64%,
-      rgba(215, 192, 138, calc(0.03 + var(--axis-climate-warmth) * 0.07 + var(--axis-density-force) * 0.08)),
+      rgba(215, 192, 138, calc(0.028 + var(--axis-climate-warmth) * 0.06 + var(--axis-density-force) * 0.06 + var(--axis-chronology-afterglow) * 0.08)),
       transparent 64%
     ),
     radial-gradient(
@@ -334,10 +375,15 @@ button {
       rgba(92, 58, 34, calc(var(--axis-density-pooling) * 0.1)),
       transparent 58%
     ),
+    radial-gradient(
+      ellipse at 60% 68%,
+      rgba(166, 120, 72, calc(var(--axis-chronology-momentum) * 0.08)),
+      transparent 62%
+    ),
     linear-gradient(180deg, #000000, var(--axis-climate-charcoal) 52%, #000000);
   box-shadow:
     0 44px 160px rgba(0, 0, 0, calc(0.7 + var(--axis-climate-depth) * 0.18)),
-    0 0 150px rgba(92, 58, 34, calc(0.04 + var(--axis-climate-warmth) * 0.1 + var(--axis-density-gravity) * 0.12));
+    0 0 150px rgba(92, 58, 34, calc(0.035 + var(--axis-climate-warmth) * 0.08 + var(--axis-density-gravity) * 0.1 + var(--axis-chronology-persistence) * 0.08));
 }
 
 .axis-climate-surface {
@@ -413,4 +459,22 @@ button {
 
 .axis-density-residue {
   opacity: calc(0.2 + var(--axis-density-latency) * 0.22 + var(--axis-density-emergence) * 0.18);
+}
+
+.axis-chronology-field {
+  opacity: calc(0.58 + var(--axis-chronology-continuity) * 0.28);
+  transform: translate3d(calc(var(--axis-chronology-drift) * 2px), calc(var(--axis-chronology-momentum) * -1.5px), 0);
+  transition:
+    opacity 1800ms cubic-bezier(0.2, 0, 0.18, 1),
+    transform 2200ms cubic-bezier(0.2, 0, 0.18, 1);
+}
+
+.axis-chronology-residue {
+  opacity: calc(0.18 + var(--axis-chronology-persistence) * 0.22 + var(--axis-chronology-afterglow) * 0.18);
+}
+
+.axis-chronology-next {
+  box-shadow:
+    inset 0 0 0 1px rgba(215, 192, 138, calc(0.018 + var(--axis-chronology-nextness) * 0.04)),
+    0 0 80px rgba(92, 58, 34, calc(var(--axis-chronology-unresolved) * 0.08));
 }
