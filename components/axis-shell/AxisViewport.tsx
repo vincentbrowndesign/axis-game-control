@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { AxisMemoryStream } from "@/components/axis-shell/AxisMemoryStream"
 import { AxisOverlayLayer } from "@/components/axis-shell/AxisOverlayLayer"
 import { AxisReplayView } from "@/components/axis-shell/AxisReplayView"
+import { machineObservationsFromMemory, observationClosure } from "@/lib/axis/perception/machineObservations"
 import { useAxisStore, type AxisMemoryNode } from "@/store/useAxisStore"
 import styles from "./AxisShell.module.css"
 
@@ -19,6 +20,7 @@ type LivePulseSignal = {
   context: string
   intensity: number
   replayLinked: boolean
+  machineObserved: boolean
 }
 
 export function AxisViewport() {
@@ -41,7 +43,7 @@ function LiveMemoryWorld() {
   const memories = useAxisStore((state) => state.memoryState.nodes)
   const [pulseIndex, setPulseIndex] = useState(0)
   const [cameraActive, setCameraActive] = useState(false)
-  const signals = useMemo(() => memories.slice(0, 6).map(toLivePulseSignal), [memories])
+  const signals = useMemo(() => memories.slice(0, 6).flatMap(toLivePulseSignals), [memories])
   const visibleSignals = useMemo(() => {
     if (!signals.length) return []
     return Array.from({ length: Math.min(MAX_VIEWPORT_STACK, signals.length) }, (_, index) => {
@@ -175,14 +177,29 @@ function InspectView({ label }: { label: string }) {
   )
 }
 
-function toLivePulseSignal(memory: AxisMemoryNode): LivePulseSignal {
-  return {
+function toLivePulseSignals(memory: AxisMemoryNode): LivePulseSignal[] {
+  const coachSignal: LivePulseSignal = {
     id: memory.id,
     label: coachShorthand(memory.label, memory.tags),
     context: memory.replayLinked ? `${memory.time} - remembered` : memory.time,
     intensity: signalIntensity(memory.tags),
     replayLinked: memory.replayLinked,
+    machineObserved: false,
   }
+
+  const observations = machineObservationsFromMemory(memory)
+  if (!observations.length) return [coachSignal]
+
+  const observationSignals = observations.slice(0, 1).map((item) => ({
+    id: item.id,
+    label: observationClosure(item.label, coachSignal.label),
+    context: `${memory.time} - precursor`,
+    intensity: Math.min(1, signalIntensity(memory.tags) + item.confidence * 0.16),
+    replayLinked: memory.replayLinked,
+    machineObserved: true,
+  }))
+
+  return [...observationSignals, coachSignal]
 }
 
 function coachShorthand(label: string, tags: string[]) {
