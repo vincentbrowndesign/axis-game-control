@@ -14,7 +14,7 @@ export function AxisViewport() {
       {mode === "live" ? <LiveMemoryWorld /> : null}
       {mode === "memory" ? <AxisMemoryStream /> : null}
       {mode === "replay" ? <AxisReplayView /> : null}
-      {mode === "inspect" ? <InspectView label={activeOverlay?.label ?? "movement context"} /> : null}
+      {mode === "inspect" ? <InspectView label={activeOverlay?.label ?? "Form"} /> : null}
     </section>
   )
 }
@@ -25,7 +25,7 @@ function LiveMemoryWorld() {
       <div className={styles.nativeLens} aria-hidden="true">
         <span />
       </div>
-      <p>Live memory observation</p>
+      <p>Live</p>
     </div>
   )
 }

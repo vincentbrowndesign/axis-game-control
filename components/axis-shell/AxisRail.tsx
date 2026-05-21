@@ -6,7 +6,6 @@ import styles from "./AxisShell.module.css"
 
 export function AxisRail() {
   const value = useAxisStore((state) => state.railState.value)
-  const segments = useAxisStore((state) => state.railState.segments)
   const setValue = useAxisStore((state) => state.setRailValue)
   const setFocused = useAxisStore((state) => state.setRailFocused)
   const submitRail = useAxisStore((state) => state.submitRail)
@@ -31,17 +30,6 @@ export function AxisRail() {
 
   return (
     <section className={styles.rail} aria-label="Axis memory rail">
-      {segments.length ? (
-        <div className={styles.railFlow} aria-label="Recent memory language">
-          {segments.slice(0, 3).map((segment) => (
-            <span key={segment.id}>
-              <b>{segment.intent}</b>
-              {segment.text}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
       <textarea
         ref={inputRef}
         value={value}
@@ -49,7 +37,7 @@ export function AxisRail() {
         inputMode="text"
         enterKeyHint="send"
         spellCheck
-        placeholder="Ask, remember, replay, inspect..."
+        placeholder="What happened?"
         onBlur={() => setFocused(false)}
         onFocus={() => setFocused(true)}
         onChange={(event) => setValue(event.target.value)}

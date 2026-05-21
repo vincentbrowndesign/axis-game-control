@@ -1,7 +1,7 @@
 "use client"
 
 import { create } from "zustand"
-import { parseAxisQueryIntent, type AxisQueryIntent, type AxisViewState } from "@/lib/axis/intent"
+import { parseAxisQueryIntent, type AxisQueryIntent } from "@/lib/axis/intent"
 
 export type AxisMode = "live" | "memory" | "replay" | "inspect"
 
@@ -74,17 +74,7 @@ type AxisState = {
   setRailValue: (value: string) => void
   setRailFocused: (focused: boolean) => void
   submitRail: () => void
-
-  // Compatibility with the first V2 shell while /axis-shell becomes the new root.
-  view: AxisViewState
-  score: AxisSessionState["score"]
-  possession: AxisSessionState["possession"]
-  railValue: string
   lastIntent: AxisQueryIntent | null
-  memoryFilter: string
-  replayFocus: string
-  moments: AxisMemoryMoment[]
-  setView: (view: AxisViewState) => void
 }
 
 const initialNodes: AxisMemoryNode[] = [
@@ -96,7 +86,7 @@ const initialNodes: AxisMemoryNode[] = [
     context: "possession stayed alive",
     tags: ["rebound", "continuity"],
     replayLinked: true,
-    continuity: "kept the possession connected",
+    continuity: "replay",
     query: "show rebounds",
   },
   {
@@ -107,7 +97,7 @@ const initialNodes: AxisMemoryNode[] = [
     context: "run started to open",
     tags: ["scoring", "run"],
     replayLinked: true,
-    continuity: "shifted the floor into a run",
+    continuity: "replay",
     query: "they scored",
   },
   {
@@ -118,7 +108,7 @@ const initialNodes: AxisMemoryNode[] = [
     context: "pressure changed the floor",
     tags: ["stop", "replay"],
     replayLinked: true,
-    continuity: "pressure became retrieval context",
+    continuity: "replay",
     query: "where was the steal?",
   },
 ]
@@ -127,27 +117,12 @@ function nextId(prefix = "m") {
   return `${prefix}-${Date.now().toString(36)}`
 }
 
-function viewFromMode(mode: AxisMode): AxisViewState {
-  return mode
-}
-
 function segmentLabel(intent: AxisQueryIntent) {
-  if (intent.kind === "memory") return "remember"
-  if (intent.kind === "retrieval") return "retrieve"
+  if (intent.kind === "memory") return "memory"
+  if (intent.kind === "retrieval") return "memory"
   if (intent.kind === "replay") return intent.action === "anchor" ? "anchor" : "replay"
   if (intent.kind === "inspect") return "inspect"
-  return "state"
-}
-
-function toMoment(node: AxisMemoryNode): AxisMemoryMoment {
-  return {
-    id: node.id,
-    label: node.label,
-    time: node.time,
-    score: node.score,
-    context: node.context,
-    tags: node.tags,
-  }
+  return "axis"
 }
 
 export const useAxisStore = create<AxisState>((set, get) => ({
@@ -171,7 +146,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       {
         id: "s-1",
         text: "show last run",
-        intent: "retrieve",
+        intent: "memory",
         createdAt: "now",
       },
     ],
@@ -187,21 +162,13 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       away: 8,
     },
   },
-
-  view: "memory",
-  score: {
-    home: 11,
-    away: 8,
-  },
-  possession: "HOME",
-  railValue: "",
   lastIntent: null,
-  memoryFilter: "all",
-  replayFocus: "latest memory",
-  moments: initialNodes.map(toMoment),
 
-  setMode: (mode) => set({ mode, view: viewFromMode(mode), activeOverlay: mode === "inspect" ? { kind: "inspect", label: "Form context" } : null }),
-  setView: (view) => set({ view, mode: view }),
+  setMode: (mode) =>
+    set({
+      mode,
+      activeOverlay: mode === "inspect" ? { kind: "inspect", label: "Form" } : null,
+    }),
   setRailFocused: (focused) =>
     set((state) => ({
       railState: {
@@ -211,7 +178,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     })),
   setRailValue: (value) =>
     set((state) => ({
-      railValue: value,
       railState: {
         ...state.railState,
         value,
@@ -219,7 +185,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     })),
   submitRail: () => {
     const state = get()
-    const value = state.railState.value || state.railValue
+    const value = state.railState.value
     const intent = parseAxisQueryIntent(value, state.mode)
     if (!intent) return
 
@@ -236,18 +202,16 @@ export const useAxisStore = create<AxisState>((set, get) => ({
         label: intent.text,
         time: "now",
         score: `${state.sessionState.score.home}-${state.sessionState.score.away}`,
-        context: "captured from the rail",
+        context: "rail",
         tags: ["memory"],
         replayLinked: false,
-        continuity: "new memory waiting for reinforcement",
+        continuity: "memory",
         query: intent.text,
       }
 
       const nodes = [node, ...state.memoryState.nodes].slice(0, 16)
       set({
-        railValue: "",
         lastIntent: intent,
-        moments: nodes.map(toMoment),
         memoryState: {
           ...state.memoryState,
           nodes,
@@ -265,10 +229,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     if (intent.kind === "retrieval") {
       set({
         mode: "memory",
-        view: "memory",
-        railValue: "",
         lastIntent: intent,
-        memoryFilter: intent.filter,
         memoryState: {
           ...state.memoryState,
           filter: intent.filter,
@@ -287,10 +248,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       const selectedReplay = state.memoryState.nodes.find((node) => node.replayLinked) ?? state.memoryState.nodes[0] ?? null
       set({
         mode: "replay",
-        view: "replay",
-        railValue: "",
         lastIntent: intent,
-        replayFocus: intent.query,
         selectedReplay,
         replayState: {
           status: intent.action === "anchor" ? "anchored" : "ready",
@@ -310,8 +268,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     if (intent.kind === "inspect") {
       set({
         mode: "inspect",
-        view: "inspect",
-        railValue: "",
         lastIntent: intent,
         activeOverlay: {
           kind: "inspect",
@@ -328,8 +284,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
 
     set({
       mode: intent.view,
-      view: intent.view,
-      railValue: "",
       lastIntent: intent,
       activeOverlay: null,
       railState: {

@@ -16,18 +16,13 @@ export function AxisMemoryStream() {
 
   return (
     <div className={styles.memoryStream} aria-label="Axis memory stream">
-      <div className={styles.memoryHeading}>
-        <span>{memory.query}</span>
-      </div>
       {nodes.map((node) => (
         <article key={node.id} className={styles.memoryNode}>
           <div>
             <span>{node.time}</span>
-            <span>{node.score}</span>
             {node.replayLinked ? <span>replay</span> : null}
           </div>
           <p>{node.label}</p>
-          <small>{node.continuity}</small>
         </article>
       ))}
     </div>
