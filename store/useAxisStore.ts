@@ -194,7 +194,12 @@ function inferTags(text: string) {
 }
 
 function isResponsiveConfirmation(text: string) {
-  return /^(yes|yeah|yep|right|correct)\b/i.test(text.trim()) || /\b(same side|weak side|same weak side|strong side|left|right|middle|push after to|same action|dead ball)\b/i.test(text.trim())
+  return (
+    /^(yes|yeah|yep|right|correct)\b/i.test(text.trim()) ||
+    /\b(same side|weak side|same weak side|strong side|left|right|middle|push after to|same action|dead ball|timeout|and[\s-]?one|foul|two|three|2|3)\b/i.test(
+      text.trim(),
+    )
+  )
 }
 
 function isResponsiveContradiction(text: string) {
@@ -214,8 +219,8 @@ function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): 
   if (/\band[\s-]?one\b/.test(normalized)) {
     return {
       id: nextId("rp"),
-      label: "three-possession swing",
-      context: "stat",
+      label: "and one?",
+      context: "confirm",
       createdAt: Date.now(),
       sourceQuery: text,
       state: "unresolved",
@@ -240,7 +245,7 @@ function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): 
   if (/\blate help|no help|help\b/.test(normalized)) {
     return {
       id: nextId("rp"),
-      label: "weak side?",
+      label: "late help?",
       context: "confirm",
       createdAt: Date.now(),
       sourceQuery: text,
@@ -252,12 +257,24 @@ function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): 
   if (/\bsame action|again\b/.test(normalized)) {
     return {
       id: nextId("rp"),
-      label: "same side?",
+      label: "same side again?",
       context: "recurrence",
       createdAt: Date.now(),
       sourceQuery: text,
       state: "unresolved",
       tags: ["recurrence", "continuity"],
+    }
+  }
+
+  if (/\bbad switch|switch|wrong player|player\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: "same player?",
+      context: "confirm",
+      createdAt: Date.now(),
+      sourceQuery: text,
+      state: "unresolved",
+      tags: ["matchup", "continuity"],
     }
   }
 
@@ -288,8 +305,8 @@ function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): 
   if (/\bthree points|three|3\b/.test(normalized)) {
     return {
       id: nextId("rp"),
-      label: "three confirmed",
-      context: "stat",
+      label: "three?",
+      context: "confirm",
       createdAt: Date.now(),
       sourceQuery: text,
       state: "unresolved",
@@ -300,7 +317,7 @@ function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): 
   if (/\bfoul|timeout|dead ball\b/.test(normalized)) {
     return {
       id: nextId("rp"),
-      label: /\btimeout\b/.test(normalized) ? "timeout confirmed" : /\bdead ball\b/.test(normalized) ? "dead ball" : "foul confirmed",
+      label: /\btimeout\b/.test(normalized) ? "timeout?" : /\bdead ball\b/.test(normalized) ? "dead ball?" : "foul?",
       context: "confirm",
       createdAt: Date.now(),
       sourceQuery: text,

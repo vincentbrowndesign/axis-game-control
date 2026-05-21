@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { exportMemoryResidueToCamera, isCameraExportQuery } from "@/lib/axis/export/cameraArtifact"
 import { useAxisStore } from "@/store/useAxisStore"
 import styles from "./AxisShell.module.css"
 
@@ -46,12 +47,15 @@ export function AxisRail() {
   const setValue = useAxisStore((state) => state.setRailValue)
   const setFocused = useAxisStore((state) => state.setRailFocused)
   const submitRail = useAxisStore((state) => state.submitRail)
+  const memories = useAxisStore((state) => state.memoryState.nodes)
+  const session = useAxisStore((state) => state.sessionState)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const recognitionRef = useRef<AxisSpeechRecognition | null>(null)
   const latestSpeechRef = useRef("")
   const pendingVoiceSubmitRef = useRef(false)
   const [listening, setListening] = useState(false)
   const [transcriptPreview, setTranscriptPreview] = useState("")
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     inputRef.current?.blur()
@@ -64,18 +68,39 @@ export function AxisRail() {
     input.style.height = `${Math.min(input.scrollHeight, 144)}px`
   }, [value])
 
+  const submitRailText = useCallback(
+    async (text: string) => {
+      const cleanText = text.trim()
+      if (!cleanText) return
+
+      if (isCameraExportQuery(cleanText)) {
+        setExporting(true)
+        try {
+          await exportMemoryResidueToCamera({ memories, session })
+          setValue("")
+        } finally {
+          setExporting(false)
+        }
+        return
+      }
+
+      await submitRail()
+    },
+    [memories, session, setValue, submitRail],
+  )
+
   const submitSpokenRail = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const cleanText = text.trim()
       if (!cleanText) return
       setValue(cleanText)
       requestAnimationFrame(() => {
-        void submitRail()
+        void submitRailText(cleanText)
         latestSpeechRef.current = ""
         setTranscriptPreview("")
       })
     },
-    [setValue, submitRail],
+    [setValue, submitRailText],
   )
 
   useEffect(() => {
@@ -116,7 +141,7 @@ export function AxisRail() {
 
   function submit() {
     if (!value.trim()) return
-    submitRail()
+    void submitRailText(value)
   }
 
   function startHoldToSpeak() {
@@ -175,8 +200,8 @@ export function AxisRail() {
           stopHoldToSpeak()
         }}
       >
-        <span>{listening ? "Listening" : "Hold to speak"}</span>
-        <strong>{transcriptPreview || (listening ? "..." : "late help / dead ball / push after TO")}</strong>
+        <span>{exporting ? "Saving" : listening ? "Listening" : "Hold to speak"}</span>
+        <strong>{exporting ? "camera artifact" : transcriptPreview || (listening ? "..." : "late help / dead ball / push after TO")}</strong>
       </button>
       <textarea
         ref={inputRef}
