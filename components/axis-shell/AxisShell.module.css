@@ -9,6 +9,9 @@
   --opacity-depth-3: 0.5;
   --opacity-depth-4: 0.35;
   --opacity-muted: 0.42;
+  --pulse-fade-in: 420ms;
+  --pulse-hold: 3600ms;
+  --pulse-migrate: 1100ms;
   --rail-padding: 0.44rem;
   --scoreboard-spacing: 0.34rem;
   --track-meta: 0.025em;
@@ -225,7 +228,121 @@
   position: relative;
 }
 
-.nativeLens span {
+.pressureMap {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+}
+
+.pressureMap::before {
+  animation: pressureDrift 9s ease-in-out infinite alternate;
+  background:
+    radial-gradient(circle at 24% 62%, rgba(36, 36, 36, 0.075), transparent 16%),
+    radial-gradient(circle at 72% 35%, rgba(36, 36, 36, 0.055), transparent 18%),
+    linear-gradient(125deg, transparent 24%, rgba(36, 36, 36, 0.035), transparent 62%);
+  content: "";
+  inset: -8%;
+  opacity: 0.72;
+  position: absolute;
+}
+
+.pressureMap span {
+  background: rgba(36, 36, 36, 0.07);
+  border-radius: 999px;
+  filter: blur(18px);
+  height: 20%;
+  opacity: 0.32;
+  position: absolute;
+  width: 24%;
+}
+
+.pressureMap span:nth-child(1) {
+  left: 18%;
+  top: 24%;
+}
+
+.pressureMap span:nth-child(2) {
+  right: 16%;
+  top: 48%;
+}
+
+.pressureMap span:nth-child(3) {
+  bottom: 18%;
+  left: 42%;
+}
+
+.livePulseLayer {
+  align-content: center;
+  display: grid;
+  inset: 0;
+  justify-items: center;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.livePulseSignal {
+  --pulse-intensity: 0.5;
+  animation: liveMemorySettle calc(var(--fade-in-ms, var(--pulse-fade-in)) + var(--hold-ms, var(--pulse-hold)) + var(--migrate-ms, var(--pulse-migrate))) cubic-bezier(0.2, 0, 0.14, 1) both;
+  color: rgba(36, 36, 36, calc(0.62 + var(--pulse-intensity) * 0.22));
+  display: grid;
+  gap: 0.22rem;
+  margin-top: calc(var(--depth-offset, 0) * 2.15rem);
+  max-width: min(82%, 28rem);
+  opacity: 0;
+  position: absolute;
+  text-align: left;
+  transform-origin: 50% 54%;
+  width: max-content;
+}
+
+.livePulseSignal[data-depth="0"] {
+  --depth-offset: 0;
+}
+
+.livePulseSignal[data-depth="1"] {
+  --depth-offset: 1;
+  animation-delay: 180ms;
+  opacity: 0;
+}
+
+.livePulseSignal[data-depth="2"] {
+  --depth-offset: 2;
+  animation-delay: 360ms;
+}
+
+.livePulseSignal span {
+  color: rgba(36, 36, 36, 0.42);
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.56rem;
+  font-weight: 720;
+  letter-spacing: var(--track-meta);
+  line-height: var(--lh-meta);
+}
+
+.livePulseSignal strong {
+  color: currentColor;
+  font-size: clamp(1.02rem, 2.6vw, 1.62rem);
+  font-weight: 560;
+  letter-spacing: 0;
+  line-height: var(--lh-dense);
+  text-wrap: balance;
+}
+
+.settlingTrace {
+  background: linear-gradient(90deg, transparent, rgba(36, 36, 36, 0.12), transparent);
+  bottom: 1.52rem;
+  height: 1px;
+  left: 50%;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(34%, 13rem);
+}
+
+.nativeLens > span {
   background: rgba(36, 36, 36, 0.24);
   border-radius: 999px;
   bottom: 1rem;
@@ -439,6 +556,44 @@
   100% {
     opacity: 0;
     transform: translateY(-3px) scale(1.002);
+  }
+}
+
+@keyframes pressureDrift {
+  from {
+    opacity: 0.5;
+    transform: translate3d(-0.8%, 0.4%, 0) scale(1);
+  }
+
+  to {
+    opacity: 0.78;
+    transform: translate3d(0.8%, -0.5%, 0) scale(1.012);
+  }
+}
+
+@keyframes liveMemorySettle {
+  0% {
+    filter: blur(8px);
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.992);
+  }
+
+  9% {
+    filter: blur(0);
+    opacity: calc(0.38 + var(--pulse-intensity) * 0.38);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  68% {
+    filter: blur(0);
+    opacity: calc(0.42 + var(--pulse-intensity) * 0.42);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  100% {
+    filter: blur(2px);
+    opacity: 0;
+    transform: translate3d(0, 5.8rem, 0) scale(0.965);
   }
 }
 
