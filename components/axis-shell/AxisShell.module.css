@@ -1,4 +1,17 @@
 .shell {
+  --divider-opacity: 0.055;
+  --gap-row: 0.46rem;
+  --gap-section: 0.64rem;
+  --lh-dense: 1.12;
+  --lh-meta: 1.05;
+  --opacity-depth-1: 1;
+  --opacity-depth-2: 0.75;
+  --opacity-depth-3: 0.5;
+  --opacity-depth-4: 0.35;
+  --opacity-muted: 0.42;
+  --rail-padding: 0.44rem;
+  --scoreboard-spacing: 0.34rem;
+  --track-meta: 0.025em;
   background:
     radial-gradient(ellipse at 50% -12%, rgba(255, 255, 255, 0.92), transparent 42%),
     linear-gradient(180deg, #f7f7f4 0%, #efefeb 58%, #e7e7e2 100%);
@@ -9,7 +22,7 @@
   inset: 0;
   isolation: isolate;
   overflow: hidden;
-  padding: max(0.9rem, env(safe-area-inset-top)) clamp(0.9rem, 3vw, 1.9rem) max(0.72rem, env(safe-area-inset-bottom));
+  padding: max(0.68rem, env(safe-area-inset-top)) clamp(0.86rem, 2.6vw, 1.55rem) max(0.28rem, env(safe-area-inset-bottom));
   position: fixed;
 }
 
@@ -29,16 +42,16 @@
 .telemetry {
   align-items: center;
   display: grid;
-  gap: 1rem;
+  gap: var(--scoreboard-spacing);
   grid-template-columns: minmax(0, 1fr) auto auto;
-  min-height: 4.5rem;
+  min-height: 3.2rem;
   pointer-events: none;
 }
 
 .session,
 .continuity {
   display: grid;
-  gap: 0.24rem;
+  gap: 0.12rem;
   min-width: 0;
 }
 
@@ -52,9 +65,10 @@
 .replayCopy span,
 .inspect span {
   font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.61rem;
+  font-size: 0.56rem;
   font-weight: 750;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--track-meta);
+  line-height: var(--lh-meta);
   text-transform: uppercase;
 }
 
@@ -68,10 +82,10 @@
 
 .session strong {
   color: rgba(36, 36, 36, 0.86);
-  font-size: 1.02rem;
+  font-size: 0.88rem;
   font-weight: 620;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: var(--lh-dense);
   text-transform: capitalize;
 }
 
@@ -86,8 +100,8 @@
   border: 0.5px solid rgba(36, 36, 36, 0.12);
   border-radius: 999px;
   display: flex;
-  gap: clamp(0.58rem, 2vw, 0.92rem);
-  padding: 0.54rem 0.76rem;
+  gap: clamp(0.28rem, 1vw, 0.48rem);
+  padding: 0.34rem 0.5rem;
   pointer-events: auto;
 }
 
@@ -104,7 +118,7 @@
   display: grid;
   min-height: 0;
   overflow: hidden;
-  padding: clamp(0.78rem, 2.3vh, 1.7rem) 0 clamp(0.5rem, 1.6vh, 1rem);
+  padding: clamp(0.24rem, 0.9vh, 0.58rem) 0 0;
   position: relative;
 }
 
@@ -114,53 +128,70 @@
   gap: 0;
   margin: auto;
   max-height: 100%;
-  max-width: 43rem;
+  max-width: 38rem;
   overflow: hidden;
-  padding-bottom: clamp(0.45rem, 2vh, 1.2rem);
-  width: min(100%, 43rem);
+  padding-bottom: 0.38rem;
+  width: min(100%, 38rem);
 }
 
 .memoryAnswer {
-  border-bottom: 0.5px solid rgba(36, 36, 36, 0.13);
+  border-bottom: 1px solid rgba(36, 36, 36, var(--divider-opacity));
   display: grid;
-  gap: 0.58rem;
-  margin-bottom: 0.4rem;
-  padding: 0 0.08rem clamp(1rem, 2.6vh, 1.4rem);
+  gap: 0.36rem;
+  margin-bottom: 0.1rem;
+  padding: 0 0.04rem var(--gap-section);
 }
 
 .memoryAnswer p {
   color: rgba(36, 36, 36, 0.9);
-  font-size: clamp(1.46rem, 3.1vw, 2.25rem);
-  font-weight: 620;
+  font-size: clamp(1.12rem, 2.35vw, 1.62rem);
+  font-weight: 580;
   letter-spacing: 0;
-  line-height: 1.06;
+  line-height: var(--lh-dense);
 }
 
 .memoryAnswer div {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  gap: 0.42rem;
 }
 
 .memoryNode {
-  border-bottom: 0.5px solid rgba(36, 36, 36, 0.105);
+  border-bottom: 1px solid rgba(36, 36, 36, var(--divider-opacity));
   display: grid;
-  gap: 0.44rem;
-  padding: clamp(0.86rem, 2vh, 1.08rem) 0.08rem;
+  gap: 0.18rem;
+  opacity: var(--opacity-depth-1);
+  padding: var(--gap-row) 0.04rem;
+  transition: opacity 180ms ease;
 }
 
 .memoryNode div {
+  align-items: baseline;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.68rem;
+  gap: 0.28rem;
+  min-height: 0.62rem;
+  text-transform: none;
 }
 
 .memoryNode p {
   color: rgba(36, 36, 36, 0.84);
-  font-size: clamp(1.12rem, 2.55vw, 1.72rem);
-  font-weight: 560;
+  font-size: clamp(0.94rem, 1.95vw, 1.2rem);
+  font-weight: 540;
   letter-spacing: 0;
-  line-height: 1.1;
+  line-height: var(--lh-dense);
+}
+
+.memoryNode:nth-of-type(2) {
+  opacity: var(--opacity-depth-2);
+}
+
+.memoryNode:nth-of-type(3) {
+  opacity: var(--opacity-depth-3);
+}
+
+.memoryNode:nth-of-type(n + 4) {
+  opacity: var(--opacity-depth-4);
 }
 
 .liveWorld,
@@ -244,30 +275,31 @@
   align-self: end;
   display: grid;
   justify-items: center;
-  margin-inline: calc(clamp(0.9rem, 3vw, 1.9rem) * -1);
-  padding: 0.62rem clamp(0.9rem, 3vw, 1.9rem) 0;
+  margin-inline: calc(clamp(0.86rem, 2.6vw, 1.55rem) * -1);
+  padding: 0.22rem clamp(0.86rem, 2.6vw, 1.55rem) 0;
   position: relative;
 }
 
 .railDock::before {
-  background: linear-gradient(180deg, transparent, rgba(239, 239, 234, 0.78) 40%, rgba(239, 239, 234, 0.98));
+  background: linear-gradient(180deg, transparent, rgba(239, 239, 234, 0.72) 48%, rgba(239, 239, 234, 0.98));
   content: "";
-  inset: -3.8rem 0 0;
+  inset: -1.72rem 0 0;
   pointer-events: none;
   position: absolute;
 }
 
 .rail {
   backdrop-filter: blur(28px) saturate(1.03);
-  background: rgba(255, 255, 255, 0.66);
-  border: 0.5px solid rgba(36, 36, 36, 0.12);
-  border-radius: 1.08rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 18px 60px rgba(75, 75, 67, 0.12);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(36, 36, 36, 0.08);
+  border-bottom-color: rgba(36, 36, 36, 0.04);
+  border-radius: 0.82rem 0.82rem 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68), 0 -1px 0 rgba(36, 36, 36, 0.035);
   display: grid;
-  max-width: 52rem;
-  padding: 0.42rem;
+  max-width: 38rem;
+  padding: var(--rail-padding);
   position: relative;
-  width: min(100%, 52rem);
+  width: min(100%, 38rem);
   z-index: 1;
 }
 
@@ -281,12 +313,12 @@
   font: inherit;
   font-size: 16px;
   font-weight: 500;
-  line-height: 1.36;
+  line-height: 1.22;
   max-height: 9rem;
-  min-height: 3.2rem;
+  min-height: 2.48rem;
   outline: none;
   overflow-y: auto;
-  padding: 0.82rem 0.92rem;
+  padding: 0.48rem 0.6rem;
   resize: none;
   width: 100%;
 }
@@ -416,9 +448,9 @@
   }
 
   .telemetry {
-    gap: 0.48rem;
+    gap: 0.34rem;
     grid-template-columns: 1fr auto;
-    min-height: 5.75rem;
+    min-height: 4.12rem;
   }
 
   .continuity {
@@ -432,6 +464,6 @@
 
   .memoryAnswer p,
   .memoryNode p {
-    font-size: clamp(1.16rem, 6vw, 1.68rem);
+    font-size: clamp(0.94rem, 4.8vw, 1.22rem);
   }
 }
