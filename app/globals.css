@@ -998,6 +998,61 @@ button {
   color: rgba(232, 219, 188, calc(0.58 + var(--axis-familiar-tagging) * 0.22));
 }
 
+.axis-live-shell {
+  background:
+    linear-gradient(180deg, rgba(20, 21, 18, 0.94), rgba(0, 0, 0, 0.98)),
+    #050505;
+  isolation: isolate;
+}
+
+.axis-live-top-dock {
+  background:
+    linear-gradient(180deg, rgba(5, 5, 5, 0.96), rgba(5, 5, 5, 0.62) 72%, transparent),
+    rgba(5, 5, 5, 0.7);
+  flex: 0 0 auto;
+  padding-bottom: 0.6rem;
+  padding-top: max(0.95rem, calc(env(safe-area-inset-top) + 0.72rem));
+}
+
+.axis-live-camera-plane {
+  background: #000000;
+  box-shadow:
+    inset 0 18px 52px rgba(0, 0, 0, 0.36),
+    inset 0 -18px 52px rgba(0, 0, 0, 0.4);
+  contain: layout paint;
+}
+
+.axis-live-camera-plane::before,
+.axis-live-camera-plane::after {
+  content: "";
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: 12;
+}
+
+.axis-live-camera-plane::before {
+  background: linear-gradient(180deg, rgba(5, 5, 5, 0.44), transparent);
+  height: 3rem;
+  top: 0;
+}
+
+.axis-live-camera-plane::after {
+  background: linear-gradient(0deg, rgba(5, 5, 5, 0.5), transparent);
+  bottom: 0;
+  height: 3.5rem;
+}
+
+.axis-live-bottom-dock {
+  background:
+    linear-gradient(0deg, rgba(5, 5, 5, 0.97), rgba(5, 5, 5, 0.72) 72%, transparent),
+    rgba(5, 5, 5, 0.72);
+  flex: 0 0 auto;
+  padding-bottom: max(0.85rem, calc(env(safe-area-inset-bottom) + 0.65rem));
+  padding-top: 0.75rem;
+}
+
 .axis-live-environment-vignette {
   background:
     radial-gradient(

@@ -29,6 +29,43 @@ Replay behavior teaches Axis what should resurface.
 - Show Choose File, keyframes, captions, timestamps, resurfaced sessions, and player mentions first.
 - Keep organization in the background.
 
+## Universal Design Chain
+
+Axis is a calm live operating environment for memory, perception, replay, and intelligence.
+
+Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, or floating overlay system.
+
+Every UI generation must feel:
+
+- Calm.
+- Operational.
+- Cinematic.
+- Embedded.
+- Spatial.
+- Modern.
+- Alive underneath.
+- Structurally stable.
+- Low-friction.
+- Inevitable.
+
+Every Axis screen follows the same structure:
+
+- Top: environmental telemetry.
+- Center: dominant world or content layer.
+- Bottom: interaction, memory, or navigation layer.
+
+Axis is structural UI, not overlay UI. Interfaces must feel built into the screen itself, preserve screen integrity, and avoid random floating cards, stacked panels, disconnected widgets, viewport collisions, and keyboard instability.
+
+Use black, charcoal, smoke gray, white, subtle transparency, soft blur, and restrained glow. Avoid bright startup gradients, excessive color, loud shadows, thick borders, giant cards, and unnecessary framing.
+
+Typography carries hierarchy through spacing, rhythm, scale, alignment, and restraint. Avoid repeated state language, excessive labels, giant explanation, and visual shouting.
+
+The universal memory rail is the primary interaction surface for live statting, memory creation, replay retrieval, questions, perception requests, semantic tagging, system control, and future AI interactions. It should feel continuous, native, fluid, and conversational, not like a form field. Enter submits, focus remains active, the keyboard remains open, and duplicate submit controls stay out of the operator flow.
+
+AI stays ambient and underneath the system. The interface should not visually announce AI; intelligence should feel invisible, attentive, and embedded into reality.
+
+Future passes must evolve gradually without breaking continuity. Refine, compress, stabilize, and mature the same operating world instead of restarting the visual language.
+
 ## Do Not Add
 
 - Dashboards.

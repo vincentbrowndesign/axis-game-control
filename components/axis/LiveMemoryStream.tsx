@@ -2342,28 +2342,8 @@ export function LiveMemoryStream() {
 
   return (
     <main className="axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field h-dvh overflow-hidden">
-      <section className="relative h-dvh overflow-hidden">
-        <video
-          ref={localVideoRef}
-          autoPlay
-          muted
-          playsInline
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-[150ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
-          style={{
-            transform: `scale(${liveOpticalDepth})`,
-          }}
-        />
-
-        <LiveMachinePerceptionOverlay
-          active={status === "LIVE" || status === "READY" || status === "STARTING"}
-          enabled={liveViewMode === "MOTION_ECHO"}
-          onContinuitySample={handleContinuitySample}
-          videoRef={localVideoRef}
-        />
-
-        <div className="axis-live-environment-vignette absolute inset-0" />
-
-        <header className="absolute left-5 right-5 top-5 z-20">
+      <section className="axis-live-shell relative flex h-dvh flex-col overflow-hidden">
+        <header className="axis-live-top-dock relative z-20 px-5">
           <AxisScorebug
             home={activeScore.home}
             away={activeScore.away}
@@ -2377,6 +2357,28 @@ export function LiveMemoryStream() {
             <span>{statusLabel}</span>
           </div>
         </header>
+
+        <section className="axis-live-camera-plane relative min-h-0 flex-1 overflow-hidden" aria-label="Live camera">
+          <video
+            ref={localVideoRef}
+            autoPlay
+            muted
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-[150ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
+            style={{
+              transform: `scale(${liveOpticalDepth})`,
+            }}
+          />
+
+          <LiveMachinePerceptionOverlay
+            active={status === "LIVE" || status === "READY" || status === "STARTING"}
+            enabled={liveViewMode === "MOTION_ECHO"}
+            onContinuitySample={handleContinuitySample}
+            videoRef={localVideoRef}
+          />
+
+          <div className="axis-live-environment-vignette absolute inset-0" />
+        </section>
 
         {status === "ARCHIVED" && archivedRecording ? (
           <div className="absolute inset-0 z-30 grid place-items-center bg-black/78 px-6 text-center backdrop-blur-sm">
@@ -2455,7 +2457,7 @@ export function LiveMemoryStream() {
           />
         ) : null}
 
-        <footer className="absolute bottom-5 left-4 right-4 z-20">
+        <footer className="axis-live-bottom-dock relative z-20 px-4">
           <div className="mx-auto flex max-w-xl justify-center">
             {status === "READY" ? (
               <button

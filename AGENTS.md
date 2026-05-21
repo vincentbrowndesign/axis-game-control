@@ -17,6 +17,10 @@ Codex must:
 - Keep AI invisible and assistive.
 - Use basketball-first wording.
 - Hide video-first UX, systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.
+- Preserve the Axis universal design chain: calm, operational, cinematic, embedded, spatial, structurally stable, low-friction, and inevitable.
+- Use structural UI rather than floating overlay UI: top telemetry, center world/content, bottom interaction or memory rail.
+- Keep the memory rail continuous and native: Enter submits, focus remains active, keyboard stays open, and duplicate submit mechanics stay out of the operator flow.
+- Evolve UI gradually without restarting the visual language.
 
 Do not:
 
@@ -30,6 +34,7 @@ Do not:
 - Add video breakdown software.
 - Add manual clipping or timeline editing tools.
 - Add startup, platform, neuroscience, or abstract product language.
+- Add widget stacks, random floating cards, dashboard-heavy surfaces, loud gradients, or web-form-based primary interaction.
 
 Every task must identify:
 
