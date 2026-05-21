@@ -216,6 +216,55 @@
   opacity: var(--opacity-depth-4);
 }
 
+.memoryResidue {
+  align-content: end;
+  bottom: clamp(4.8rem, 12vh, 7rem);
+  display: grid;
+  gap: 0.26rem;
+  max-width: min(18rem, 62vw);
+  opacity: 0.74;
+  pointer-events: none;
+  position: absolute;
+  right: clamp(1rem, 3vw, 1.8rem);
+  text-align: right;
+  width: min(18rem, 62vw);
+  z-index: 6;
+}
+
+.memoryResidue article {
+  display: grid;
+  gap: 0.06rem;
+  opacity: 0.56;
+}
+
+.memoryResidue article:first-child {
+  opacity: 0.78;
+}
+
+.memoryResidue article:nth-child(n + 4) {
+  opacity: 0.34;
+}
+
+.memoryResidue span {
+  color: rgba(255, 255, 246, 0.26);
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.42rem;
+  font-weight: 520;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.memoryResidue p {
+  color: rgba(255, 255, 246, 0.58);
+  font-size: clamp(0.62rem, 0.92vw, 0.74rem);
+  font-weight: 460;
+  letter-spacing: 0;
+  line-height: 1.08;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .liveWorld,
 .replay,
 .inspect {

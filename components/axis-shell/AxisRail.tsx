@@ -42,7 +42,6 @@ type AxisSpeechWindow = Window & {
 }
 
 export function AxisRail() {
-  const mode = useAxisStore((state) => state.mode)
   const value = useAxisStore((state) => state.railState.value)
   const setValue = useAxisStore((state) => state.setRailValue)
   const setFocused = useAxisStore((state) => state.setRailFocused)
@@ -53,11 +52,10 @@ export function AxisRail() {
   const pendingVoiceSubmitRef = useRef(false)
   const [listening, setListening] = useState(false)
   const [transcriptPreview, setTranscriptPreview] = useState("")
-  const isLive = mode === "live"
 
   useEffect(() => {
-    if (!isLive) inputRef.current?.focus({ preventScroll: true })
-  }, [isLive])
+    inputRef.current?.blur()
+  }, [])
 
   useEffect(() => {
     const input = inputRef.current
@@ -119,7 +117,6 @@ export function AxisRail() {
   function submit() {
     if (!value.trim()) return
     submitRail()
-    if (!isLive) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
   }
 
   function startHoldToSpeak() {
@@ -188,7 +185,7 @@ export function AxisRail() {
         inputMode="text"
         enterKeyHint="send"
         spellCheck
-        placeholder={isLive ? "Type fallback" : "What happened?"}
+        placeholder="Type fallback"
         onBlur={() => setFocused(false)}
         onFocus={() => setFocused(true)}
         onChange={(event) => setValue(event.target.value)}
