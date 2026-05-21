@@ -9,6 +9,13 @@ export const MACHINE_OBSERVATION_LABELS = [
   "downhill",
   "ball pressure gone",
   "late close-out",
+  "acceleration drop",
+  "recovery lag",
+  "balance instability",
+  "burst reduction",
+  "pressure movement drift",
+  "containment loss",
+  "fatigue slowdown",
 ] as const
 
 export type AxisMachineObservationLabel = (typeof MACHINE_OBSERVATION_LABELS)[number]
@@ -21,12 +28,24 @@ export type AxisMachineObservation = {
   tags: string[]
 }
 
+export type AxisObservationConfidence = "low" | "mid" | "high"
+
 export type AxisBodyRelationshipSignal = {
   hipCenterDistance: number
   directionalContainmentLoss: number
   recoveryAngleBreak: number
   downhillLaneOpening: number
   defenderMomentumSeparation: number
+}
+
+export type AxisSubtleBiometricSignal = {
+  accelerationDrop: number
+  recoveryLag: number
+  balanceInstability: number
+  burstReduction: number
+  pressureMovementDrift: number
+  containmentLoss: number
+  fatigueSlowdown: number
 }
 
 export function machineObservationsFromMemory(input: {
@@ -96,6 +115,31 @@ export function machineObservationsFromBodyRelationship(
   return observations
 }
 
+export function machineObservationsFromSubtleBiometrics(
+  id: string,
+  signal: AxisSubtleBiometricSignal,
+): AxisMachineObservation[] {
+  const observations: AxisMachineObservation[] = []
+
+  if (signal.containmentLoss >= 0.62 && signal.pressureMovementDrift >= 0.48) {
+    observations.push(observation(id, "containment loss", 2, 0.74, ["containment", "pressure", "movement"]))
+  }
+
+  if (signal.recoveryLag >= 0.58 && signal.accelerationDrop >= 0.42) {
+    observations.push(observation(id, "recovery lag", 2, 0.7, ["recovery", "pressure", "movement"]))
+  }
+
+  if (signal.balanceInstability >= 0.6 && signal.pressureMovementDrift >= 0.4) {
+    observations.push(observation(id, "balance instability", 2, 0.68, ["balance", "pressure", "movement"]))
+  }
+
+  if (signal.burstReduction >= 0.64 || signal.fatigueSlowdown >= 0.66) {
+    observations.push(observation(id, "burst reduction", 2, 0.66, ["burst", "fatigue", "movement"]))
+  }
+
+  return observations
+}
+
 export function machineObservationsFromMotionSignatures(
   id: string,
   signatures: AxisMotionSignature[],
@@ -115,8 +159,18 @@ export function machineObservationsFromMotionSignatures(
   return observations
 }
 
-export function observationClosure(label: AxisMachineObservationLabel, coachText: string) {
+export function observationConfidence(confidence: number): AxisObservationConfidence {
+  if (confidence >= 0.8) return "high"
+  if (confidence >= 0.7) return "mid"
+  return "low"
+}
+
+export function observationClosure(label: AxisMachineObservationLabel, coachText: string, confidence = 1) {
   const closure = coachText.trim()
+  const band = observationConfidence(confidence)
+
+  if (band === "low") return `${label}?`
+  if (band === "mid") return `${label}?`
   if (!closure) return label
   return `${label} -> ${closure}`
 }

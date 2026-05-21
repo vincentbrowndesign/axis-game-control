@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { AxisMemoryStream } from "@/components/axis-shell/AxisMemoryStream"
 import { AxisOverlayLayer } from "@/components/axis-shell/AxisOverlayLayer"
 import { AxisReplayView } from "@/components/axis-shell/AxisReplayView"
-import { machineObservationsFromMemory, observationClosure } from "@/lib/axis/perception/machineObservations"
+import { machineObservationsFromMemory, observationClosure, observationConfidence } from "@/lib/axis/perception/machineObservations"
 import { useAxisStore, type AxisMemoryNode } from "@/store/useAxisStore"
 import styles from "./AxisShell.module.css"
 
@@ -43,7 +43,10 @@ function LiveMemoryWorld() {
   const memories = useAxisStore((state) => state.memoryState.nodes)
   const [pulseIndex, setPulseIndex] = useState(0)
   const [cameraActive, setCameraActive] = useState(false)
-  const signals = useMemo(() => memories.slice(0, 6).flatMap(toLivePulseSignals), [memories])
+  const signals = useMemo(
+    () => [...continuityObserverSignals(memories), ...memories.slice(0, 6).flatMap(toLivePulseSignals)],
+    [memories],
+  )
   const visibleSignals = useMemo(() => {
     if (!signals.length) return []
     return Array.from({ length: Math.min(MAX_VIEWPORT_STACK, signals.length) }, (_, index) => {
@@ -196,14 +199,40 @@ function toLivePulseSignals(memory: AxisMemoryNode): LivePulseSignal[] {
 
   const observationSignals = observations.slice(0, 1).map((item) => ({
     id: item.id,
-    label: observationClosure(item.label, coachSignal.label),
-    context: observerContext(item.label, memory.time),
+    label: observationClosure(item.label, coachSignal.label, item.confidence),
+    context: observerContext(item.label, item.confidence, memory.time),
     intensity: Math.min(1, signalIntensity(memory.tags) + item.confidence * 0.16),
     replayLinked: memory.replayLinked,
     machineObserved: true,
   }))
 
   return [...observationSignals, coachSignal]
+}
+
+function continuityObserverSignals(memories: AxisMemoryNode[]): LivePulseSignal[] {
+  const recent = memories.slice(0, 6)
+  const weakSideCount = recent.filter((memory) => /\bweak[- ]side|late help|no help\b/i.test(memory.label)).length
+  const transitionCount = recent.filter((memory) => memory.tags.includes("turnover") || /\bpush|outlet|transition\b/i.test(memory.label)).length
+  const downhillCount = recent.filter((memory) => /\bdownhill|easy rim|layup\b/i.test(memory.label)).length
+  const leftSidePressure = recent.filter((memory) => /\bleft side|left wing|weak[- ]side\b/i.test(memory.label)).length
+
+  if (weakSideCount >= 2) {
+    return [observerSignal(recent[0], "same weak side again?", 0.68)]
+  }
+
+  if (transitionCount >= 3) {
+    return [observerSignal(recent[0], "transition heavy tonight?", 0.72)]
+  }
+
+  if (downhillCount >= 2) {
+    return [observerSignal(recent[0], "downhill again?", 0.7)]
+  }
+
+  if (leftSidePressure >= 2) {
+    return [observerSignal(recent[0], "pressure rising left side", 0.78)]
+  }
+
+  return []
 }
 
 function observerPrompt(memory: AxisMemoryNode, coachSignal: LivePulseSignal): LivePulseSignal | null {
@@ -240,7 +269,8 @@ function observerSignal(memory: AxisMemoryNode, label: string, intensity: number
   }
 }
 
-function observerContext(label: string, time: string) {
+function observerContext(label: string, confidence: number, time: string) {
+  if (observationConfidence(confidence) !== "high") return "watch"
   if (label === "dead ball" || label === "and-1" || label === "early foul") return time
   return "watch"
 }
