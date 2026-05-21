@@ -18,6 +18,7 @@ type LivePulseSignal = {
   label: string
   context: string
   intensity: number
+  replayLinked: boolean
 }
 
 export function AxisViewport() {
@@ -49,6 +50,7 @@ function LiveMemoryWorld() {
       }
     })
   }, [pulseIndex, signals])
+  const activeSignal = visibleSignals[0] ?? null
 
   useEffect(() => {
     if (signals.length <= 1) return
@@ -66,6 +68,29 @@ function LiveMemoryWorld() {
           <span />
           <span />
         </div>
+        {activeSignal?.replayLinked ? (
+          <div
+            key={`replay-${activeSignal.id}-${pulseIndex}`}
+            className={styles.atmosphericReplay}
+            style={{
+              "--pulse-intensity": activeSignal.intensity,
+              "--fade-in-ms": `${FADE_IN_MS}ms`,
+              "--hold-ms": `${HOLD_MS}ms`,
+              "--migrate-ms": `${MIGRATE_MS}ms`,
+            } as CSSProperties}
+          >
+            <div className={styles.replayMemoryFrame}>
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className={styles.replayMemoryCaption}>
+              <span>{activeSignal.context}</span>
+              <strong>{activeSignal.label}</strong>
+            </div>
+            <div className={styles.replayMemoryProgress} />
+          </div>
+        ) : null}
         <div className={styles.livePulseLayer}>
           {visibleSignals.map((signal) => (
             <div
@@ -105,20 +130,21 @@ function toLivePulseSignal(memory: AxisMemoryNode): LivePulseSignal {
   return {
     id: memory.id,
     label: coachShorthand(memory.label, memory.tags),
-    context: memory.replayLinked ? `${memory.time} · remembered` : memory.time,
+    context: memory.replayLinked ? `${memory.time} - remembered` : memory.time,
     intensity: signalIntensity(memory.tags),
+    replayLinked: memory.replayLinked,
   }
 }
 
 function coachShorthand(label: string, tags: string[]) {
   const normalized = label.toLowerCase()
-  if (/\bnae\b/.test(normalized) && tags.includes("rebound")) return "Nae board → quick push"
-  if (tags.includes("turnover") && /\bcorner|3|three\b/.test(normalized)) return "Push after TO → corner 3"
-  if (tags.includes("turnover")) return "Bad switch → easy rim"
-  if (tags.includes("stop") || /\bsteal\b/.test(normalized)) return "Press break → layup"
-  if (tags.includes("rebound")) return "Board → early push"
-  if (tags.includes("scoring") && /\bright side|wing\b/.test(normalized)) return "Late help → open wing"
-  if (tags.includes("scoring")) return "Weak closeout → cash"
+  if (/\bnae\b/.test(normalized) && tags.includes("rebound")) return "Nae board -> quick push"
+  if (tags.includes("turnover") && /\bcorner|3|three\b/.test(normalized)) return "Push after TO -> corner 3"
+  if (tags.includes("turnover")) return "Bad switch -> easy rim"
+  if (tags.includes("stop") || /\bsteal\b/.test(normalized)) return "Press break -> layup"
+  if (tags.includes("rebound")) return "Board -> early push"
+  if (tags.includes("scoring") && /\bright side|wing\b/.test(normalized)) return "Late help -> open wing"
+  if (tags.includes("scoring")) return "Weak closeout -> cash"
   return label
 }
 

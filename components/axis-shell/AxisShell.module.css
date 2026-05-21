@@ -272,6 +272,102 @@
   left: 42%;
 }
 
+.atmosphericReplay {
+  --pulse-intensity: 0.6;
+  animation: atmosphericReplaySettle calc(var(--fade-in-ms, var(--pulse-fade-in)) + var(--hold-ms, var(--pulse-hold)) + var(--migrate-ms, var(--pulse-migrate))) cubic-bezier(0.2, 0, 0.14, 1) both;
+  inset: 8% 8% 14%;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transform-origin: 50% 74%;
+  z-index: 2;
+}
+
+.replayMemoryFrame {
+  background:
+    radial-gradient(ellipse at 52% 38%, rgba(255, 255, 255, 0.22), transparent 32%),
+    linear-gradient(135deg, rgba(36, 36, 36, 0.16), rgba(36, 36, 36, 0.04)),
+    rgba(36, 36, 36, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 1.05rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 22px 80px rgba(54, 54, 48, 0.12);
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.replayMemoryFrame::before {
+  animation: replayBreath 2.7s ease-in-out infinite alternate;
+  background:
+    linear-gradient(115deg, transparent 18%, rgba(255, 248, 220, 0.12), transparent 46%),
+    radial-gradient(circle at 68% 36%, rgba(255, 248, 220, 0.12), transparent 18%);
+  content: "";
+  inset: -10%;
+  position: absolute;
+}
+
+.replayMemoryFrame span {
+  background: rgba(255, 248, 220, 0.12);
+  border-radius: 999px;
+  filter: blur(12px);
+  height: 18%;
+  opacity: 0.36;
+  position: absolute;
+  width: 18%;
+}
+
+.replayMemoryFrame span:nth-child(1) {
+  left: 18%;
+  top: 30%;
+}
+
+.replayMemoryFrame span:nth-child(2) {
+  right: 22%;
+  top: 42%;
+}
+
+.replayMemoryFrame span:nth-child(3) {
+  bottom: 18%;
+  left: 46%;
+}
+
+.replayMemoryCaption {
+  bottom: 1rem;
+  display: grid;
+  gap: 0.2rem;
+  left: 1rem;
+  max-width: min(72%, 24rem);
+  position: absolute;
+  text-align: left;
+}
+
+.replayMemoryCaption span {
+  color: rgba(255, 255, 246, 0.54);
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: var(--track-meta);
+  line-height: var(--lh-meta);
+}
+
+.replayMemoryCaption strong {
+  color: rgba(255, 255, 246, 0.82);
+  font-size: clamp(1rem, 2.2vw, 1.44rem);
+  font-weight: 560;
+  line-height: var(--lh-dense);
+}
+
+.replayMemoryProgress {
+  animation: replayMemoryProgress calc(var(--fade-in-ms, var(--pulse-fade-in)) + var(--hold-ms, var(--pulse-hold))) linear both;
+  background: rgba(255, 248, 220, 0.34);
+  bottom: 0;
+  height: 1px;
+  left: 0;
+  position: absolute;
+  transform-origin: left center;
+  width: 100%;
+}
+
 .livePulseLayer {
   align-content: center;
   display: grid;
@@ -279,7 +375,7 @@
   justify-items: center;
   pointer-events: none;
   position: absolute;
-  z-index: 2;
+  z-index: 3;
 }
 
 .livePulseSignal {
@@ -568,6 +664,60 @@
   to {
     opacity: 0.78;
     transform: translate3d(0.8%, -0.5%, 0) scale(1.012);
+  }
+}
+
+@keyframes replayBreath {
+  from {
+    opacity: 0.54;
+    transform: translate3d(-0.4%, 0.2%, 0) scale(1);
+  }
+
+  to {
+    opacity: 0.86;
+    transform: translate3d(0.6%, -0.3%, 0) scale(1.01);
+  }
+}
+
+@keyframes replayMemoryProgress {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+
+  12% {
+    opacity: 0.72;
+  }
+
+  to {
+    opacity: 0.16;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes atmosphericReplaySettle {
+  0% {
+    filter: blur(10px);
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.986);
+  }
+
+  10% {
+    filter: blur(0);
+    opacity: calc(0.3 + var(--pulse-intensity) * 0.32);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  68% {
+    filter: blur(0);
+    opacity: calc(0.34 + var(--pulse-intensity) * 0.36);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  100% {
+    filter: blur(4px);
+    opacity: 0;
+    transform: translate3d(0, 6.4rem, 0) scale(0.72);
   }
 }
 
