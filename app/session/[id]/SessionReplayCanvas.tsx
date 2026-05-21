@@ -248,6 +248,99 @@ function trainingLabelFromEvent(event: TemporalEventRecord | undefined) {
   return "other"
 }
 
+function payloadRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function payloadText(value: unknown) {
+  return typeof value === "string" ? value : ""
+}
+
+function replayMemoryObject(event: TemporalEventRecord | undefined) {
+  return payloadRecord(event?.payload?.memory_object)
+}
+
+function eventScoreLabel(value: unknown) {
+  const score = payloadRecord(value)
+  const home = Number(score.home) || 0
+  const away = Number(score.away) || 0
+
+  return `${home}-${away}`
+}
+
+function replayEventLabel(event: TemporalEventRecord | undefined) {
+  if (!event) return "Replay memory"
+
+  const memory = replayMemoryObject(event)
+  const player = payloadText(memory.player) || payloadText(event.payload?.player)
+  const team = payloadText(memory.team) || payloadText(event.payload?.team)
+  const eventType =
+    payloadText(memory.eventType) ||
+    payloadText(event.payload?.basketball_event) ||
+    String(event.type || "memory")
+  const points = Number(event.payload?.points) || 0
+  const owner = player || team || "Memory"
+
+  if (eventType === "MAKE") return `${owner} ${points === 1 ? "FT" : `${points || 2}PT`}`.toUpperCase()
+  if (eventType === "MISS" || eventType === "SHOT") return `${owner} MISS`.toUpperCase()
+  if (eventType === "TURNOVER") return `${owner} TURNOVER`.toUpperCase()
+  if (eventType === "REBOUND") return `${owner} REBOUND`.toUpperCase()
+  if (eventType === "ASSIST") return `${owner} ASSIST`.toUpperCase()
+  if (eventType === "STEAL") return `${owner} STEAL`.toUpperCase()
+  if (eventType === "BLOCK") return `${owner} BLOCK`.toUpperCase()
+  if (eventType === "FOUL") return `${owner} FOUL`.toUpperCase()
+
+  return eventType.replaceAll("_", " ").toUpperCase()
+}
+
+function isReplayMemoryEvent(event: TemporalEventRecord) {
+  return event.type === "BASKETBALL_EVENT" || event.type === "LIVE_MEMORY_COMMAND" || event.type === "SNAPSHOT"
+}
+
+function replayMemoryContext(
+  events: TemporalEventRecord[],
+  activeEventId: string | null,
+  currentTime: number
+) {
+  const memoryEvents = events.filter(isReplayMemoryEvent)
+  const activeEvent = activeEventId
+    ? memoryEvents.find((event) => event.id === activeEventId)
+    : memoryEvents.reduce<TemporalEventRecord | null>((nearest, event) => {
+        if (!nearest) return event
+
+        return Math.abs(Number(event.session_time) - currentTime) <
+          Math.abs(Number(nearest.session_time) - currentTime)
+          ? event
+          : nearest
+      }, null)
+
+  if (!activeEvent) return null
+
+  const memory = replayMemoryObject(activeEvent)
+  const previousEventId = payloadText(memory.previousEventId)
+  const nextEventId = payloadText(memory.nextEventId)
+  const previous = previousEventId ? memoryEvents.find((event) => {
+    const candidateMemory = replayMemoryObject(event)
+    return payloadText(candidateMemory.eventId) === previousEventId
+  }) : null
+  const next = nextEventId ? memoryEvents.find((event) => {
+    const candidateMemory = replayMemoryObject(event)
+    return payloadText(candidateMemory.eventId) === nextEventId
+  }) : null
+  const scoreState = memory.scoreAfter || activeEvent.payload?.score_state
+  const possession = payloadText(memory.possessionAfter) || payloadText(activeEvent.payload?.possession)
+
+  return {
+    event: activeEvent,
+    label: replayEventLabel(activeEvent),
+    time: Number(activeEvent.session_time) || 0,
+    score: eventScoreLabel(scoreState),
+    possession: possession || "LIVE",
+    previousLabel: previous ? replayEventLabel(previous) : null,
+    nextLabel: next ? replayEventLabel(next) : null,
+  }
+}
+
 function pulseHaptic(pattern: number | number[] = 8) {
   if (typeof navigator === "undefined" || !("vibrate" in navigator)) return
   navigator.vibrate(pattern)
@@ -581,6 +674,7 @@ function ReplayVideo({
   session,
   ritualPhase,
   densityAnchors,
+  activeMemoryContext,
   onRitualPractice,
   onTrainingMemoryStored,
   onSetInspectionDepth,
@@ -590,6 +684,7 @@ function ReplayVideo({
   session: TemporalSessionRecord
   ritualPhase: RitualPhase
   densityAnchors: DevelopmentalAnchor[]
+  activeMemoryContext: ReturnType<typeof replayMemoryContext>
   onRitualPractice: () => void
   onTrainingMemoryStored: (memory: TrainingMemoryRecord) => void
   onSetInspectionDepth: (depth: InspectionDepth) => void
@@ -1653,6 +1748,23 @@ function ReplayVideo({
             <div className="absolute inset-x-16 top-1/2 h-px bg-gradient-to-r from-transparent via-[#d7c08a]/30 to-transparent" />
           </div>
         ) : null}
+        {activeMemoryContext ? (
+          <div className="pointer-events-none absolute bottom-4 left-4 z-40 max-w-[min(30rem,calc(100%-2rem))] text-left">
+            <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/42">
+              {formatClock(activeMemoryContext.time)} / {activeMemoryContext.score} / POS {activeMemoryContext.possession}
+            </p>
+            <p className="mt-1 text-lg font-black uppercase leading-none tracking-normal text-white/86">
+              {activeMemoryContext.label}
+            </p>
+            {activeMemoryContext.previousLabel || activeMemoryContext.nextLabel ? (
+              <p className="axis-mono mt-2 truncate text-[9px] font-black uppercase tracking-[0.16em] text-white/34">
+                {activeMemoryContext.previousLabel ? `Before ${activeMemoryContext.previousLabel}` : ""}
+                {activeMemoryContext.previousLabel && activeMemoryContext.nextLabel ? " / " : ""}
+                {activeMemoryContext.nextLabel ? `After ${activeMemoryContext.nextLabel}` : ""}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -1680,7 +1792,7 @@ function EventRail({
     trainingMemories,
     activeEventId,
   })
-  const visibleEvents = events.filter((event) => event.type === "SNAPSHOT")
+  const visibleEvents = events.filter(isReplayMemoryEvent)
   const densityRegions = densityAnchors
     .map((anchor) => ({
       ...anchor,
@@ -2026,6 +2138,33 @@ function DevelopmentalInputBar({
       trainingMemories,
       activeEventId: null,
     })
+    const memoryEvents = events
+      .filter(isReplayMemoryEvent)
+      .sort((a, b) => {
+        const timeDelta = Number(a.session_time) - Number(b.session_time)
+        if (Math.abs(timeDelta) > 0.001) return timeDelta
+
+        return Number(a.sequence_order || 0) - Number(b.sequence_order || 0)
+      })
+    const nearestMemoryIndex = memoryEvents.reduce((nearestIndex, event, index) => {
+      if (nearestIndex < 0) return index
+
+      return Math.abs(Number(event.session_time) - currentTime) <
+        Math.abs(Number(memoryEvents[nearestIndex].session_time) - currentTime)
+        ? index
+        : nearestIndex
+    }, -1)
+    const directNavigationTarget =
+      /\b(next|after)\b/.test(normalized)
+        ? memoryEvents[Math.min(memoryEvents.length - 1, nearestMemoryIndex + 1)]
+        : /\b(previous|before|back)\b/.test(normalized) && !/\bstream\b/.test(normalized)
+          ? memoryEvents[Math.max(0, nearestMemoryIndex - 1)]
+          : null
+
+    if (/\b(back|return)\s+to\s+(stream|find)\b/.test(normalized)) {
+      window.location.href = "/retrieve"
+      return
+    }
 
     const languageEvents = normalized
       ? events.filter((event) => {
@@ -2078,6 +2217,7 @@ function DevelopmentalInputBar({
       : null
 
     const targetEvent =
+      directNavigationTarget ||
       languageEvents[0] ||
       (rhythmSnapshots[0]
         ? events.find(
@@ -2355,7 +2495,7 @@ export function SessionReplayCanvas({
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
   const [ritualPhase, setRitualPhase] = useState<RitualPhase>("apprentice")
-  const { hydrateChronology, hydrateSnapshots, setUiStatus, requestEventJump, events, activeEventId } = useAxisChronologyStore(
+  const { hydrateChronology, hydrateSnapshots, setUiStatus, requestEventJump, events, activeEventId, playback } = useAxisChronologyStore(
     useShallow((state) => ({
       hydrateChronology: state.hydrateChronology,
       hydrateSnapshots: state.hydrateSnapshots,
@@ -2363,6 +2503,7 @@ export function SessionReplayCanvas({
       requestEventJump: state.requestEventJump,
       events: state.events,
       activeEventId: state.activeEventId,
+      playback: state.playback,
     }))
   )
   const initialJumpAppliedRef = useRef<string | null>(null)
@@ -2371,6 +2512,14 @@ export function SessionReplayCanvas({
     trainingMemories,
     activeEventId,
   })
+  const activeMemoryContext = useMemo(
+    () => replayMemoryContext(
+      events,
+      activeEventId,
+      Number(playback.currentTimelineAnchor) || 0
+    ),
+    [activeEventId, events, playback.currentTimelineAnchor]
+  )
   const climateDensity = densityAnchors.reduce(
     (warmth, anchor) =>
       Math.max(
@@ -2551,23 +2700,25 @@ export function SessionReplayCanvas({
       <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 pb-8 pt-2 sm:px-8">
         <AxisHeader title="Live">
           <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
-            Find clips
+            Memory stream
           </AxisLinkButton>
           <AxisLinkButton href="/training-set" tone="ghost" className="px-0 py-0">
-            Saved clips
+            Saved moments
           </AxisLinkButton>
         </AxisHeader>
 
         <div className="flex flex-col gap-4 py-7 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="axis-mono axis-world-kicker text-[10px] font-black uppercase tracking-[0.18em]">
-              Replay
+              Memory inspection
             </p>
             <p className="axis-world-title mt-2 text-5xl font-black uppercase leading-none tracking-normal sm:text-6xl">
               {formatPreciseClock(session.duration_seconds)}
             </p>
             <p className="axis-mono mt-4 text-[10px] font-black uppercase tracking-[0.18em] text-white/56">
-              {formatEnvironmentalTimestamp(session.created_at)}
+              {activeMemoryContext
+                ? `${activeMemoryContext.label} / ${formatClock(activeMemoryContext.time)} / ${activeMemoryContext.score}`
+                : formatEnvironmentalTimestamp(session.created_at)}
             </p>
           </div>
           <DeviceExportControl session={session} />
@@ -2581,6 +2732,7 @@ export function SessionReplayCanvas({
               session={session}
               ritualPhase={ritualPhase}
               densityAnchors={densityAnchors}
+              activeMemoryContext={activeMemoryContext}
               onRitualPractice={markRitual}
               onTrainingMemoryStored={(memory) =>
                 setTrainingMemories((current) => {

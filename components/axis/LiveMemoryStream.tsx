@@ -2364,24 +2364,24 @@ export function LiveMemoryStream() {
         </header>
 
         {status === "ARCHIVED" && archivedRecording ? (
-          <div className="absolute inset-0 z-30 grid place-items-center bg-black/78 px-6 text-center backdrop-blur-sm">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-zinc-500">
+          <div className="axis-live-return-layer absolute inset-0 z-30 grid place-items-center px-6 text-center">
+            <div className="axis-live-return-state">
+              <p className="axis-live-return-kicker">
                 ARCHIVED
               </p>
-              <p className="mt-5 font-mono text-5xl font-black uppercase text-zinc-100 sm:text-7xl">
+              <p className="axis-live-return-duration">
                 {formatClock(archivedRecording.duration)}
               </p>
-              <div className="mt-7 flex justify-center gap-3">
+              <div className="axis-live-return-actions">
                 <Link
                   href={`/session/${archivedRecording.id}`}
-                  className="axis-familiar-primary px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
+                  className="axis-live-return-action axis-live-return-action-primary"
                 >
                   Open replay
                 </Link>
                 <Link
                   href="/retrieve"
-                  className="axis-retrieval-link px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
+                  className="axis-live-return-action"
                 >
                   Find clips
                 </Link>
@@ -2395,22 +2395,22 @@ export function LiveMemoryStream() {
                       setFailure(error instanceof Error ? error.message : "Camera failed")
                     })
                   }}
-                  className="axis-familiar-control px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em]"
+                  className="axis-live-return-action"
                 >
                   New recording
                 </button>
               </div>
               {latestSnapshot ? (
-                <div className="mt-5 flex flex-col items-center gap-2">
+                <div className="axis-live-return-memory-tools">
                   {showLiveTrainingLabels ? (
-                    <div className="axis-familiar-bar grid grid-cols-3 gap-1 border p-1">
+                    <div className="axis-live-return-training-grid">
                       {trainingLabels.map((label) => (
                         <button
                           key={label}
                           type="button"
                           onClick={() => void saveLiveReviewToTrainingSet(label)}
                           disabled={trainingStatus === "saving"}
-                          className="axis-mono axis-familiar-tag px-3 py-2 text-[8px] font-black uppercase tracking-[0.12em] disabled:text-white/24"
+                          className="axis-live-return-training-action"
                         >
                           {label}
                         </button>
@@ -2421,7 +2421,7 @@ export function LiveMemoryStream() {
                     type="button"
                     onClick={() => setShowLiveTrainingLabels((current) => !current)}
                     disabled={trainingStatus === "saving"}
-                    className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/48 transition hover:text-white/78 disabled:text-white/24"
+                    className="axis-live-return-save"
                   >
                     {trainingStatus === "stored" ? "CLIP SAVED" : "SAVE CLIP"}
                   </button>
