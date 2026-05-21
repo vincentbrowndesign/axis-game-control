@@ -858,6 +858,11 @@ function ReplayVideo({
       typeof activeEvent.payload.continuity_assist === "object"
         ? (activeEvent.payload.continuity_assist as Record<string, unknown>)
         : null
+    const activeMemoryObject =
+      activeEvent?.payload?.memory_object &&
+      typeof activeEvent.payload.memory_object === "object"
+        ? (activeEvent.payload.memory_object as Record<string, unknown>)
+        : null
     const label = trainingLabelFromEvent(activeEvent)
 
     try {
@@ -875,9 +880,14 @@ function ReplayVideo({
         "metadata",
         JSON.stringify({
           selectedEventId: activeEventId,
+          selectedMemoryId:
+            typeof activeMemoryObject?.eventId === "string"
+              ? activeMemoryObject.eventId
+              : null,
           eventType: activeEvent?.type ? String(activeEvent.type) : null,
           basketballEvent,
           reconstructionChapter,
+          memoryObject: activeMemoryObject,
           opticalDepth: inspectionDepth,
           chronologyPosition: Number(playback.currentTimelineAnchor) || sessionTime,
           storagePath: session.storage_path,
@@ -2336,9 +2346,11 @@ function DevelopmentalMemoryStrip({
 export function SessionReplayCanvas({
   session,
   initialEventId = null,
+  initialMemoryId = null,
 }: {
   session: TemporalSessionRecord
   initialEventId?: string | null
+  initialMemoryId?: string | null
 }) {
   const [inspectionDepth, setInspectionDepth] = useState<InspectionDepth>(1)
   const [trainingMemories, setTrainingMemories] = useState<TrainingMemoryRecord[]>([])
@@ -2510,12 +2522,24 @@ export function SessionReplayCanvas({
   }, [hydrateChronology, hydrateSnapshots, session.duration_seconds, session.id])
 
   useEffect(() => {
-    if (!initialEventId || initialJumpAppliedRef.current === initialEventId) return
-    if (!events.some((event) => event.id === initialEventId)) return
+    const initialMemoryEvent = initialMemoryId
+      ? events.find((event) => {
+          const memoryObject = event.payload?.memory_object
+          return (
+            memoryObject &&
+            typeof memoryObject === "object" &&
+            "eventId" in memoryObject &&
+            memoryObject.eventId === initialMemoryId
+          )
+        })
+      : null
+    const targetEventId = initialEventId || initialMemoryEvent?.id || null
+    if (!targetEventId || initialJumpAppliedRef.current === targetEventId) return
+    if (!events.some((event) => event.id === targetEventId)) return
 
-    initialJumpAppliedRef.current = initialEventId
-    requestEventJump(initialEventId)
-  }, [events, initialEventId, requestEventJump])
+    initialJumpAppliedRef.current = targetEventId
+    requestEventJump(targetEventId)
+  }, [events, initialEventId, initialMemoryId, requestEventJump])
 
   return (
     <main

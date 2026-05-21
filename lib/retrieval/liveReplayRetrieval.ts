@@ -36,6 +36,8 @@ export type ReplayRetrievalClip = {
   retrievalRole: "match" | "context"
   clusterTags: ReplayMemoryClusterKind[]
   contextStack: ReplayRetrievalContextStack
+  continuityStates: ReplayContinuityState[]
+  memoryLoop: ReplayMemoryLoopState
 }
 
 export type ReplayMemoryClusterKind =
@@ -54,6 +56,21 @@ export type ReplayRetrievalContextStack = {
   nearbyCount: number
   scoreState: string
   possessionState: string
+}
+
+export type ReplayContinuityState =
+  | "unanswered-run"
+  | "collapse-window"
+  | "stabilization-sequence"
+  | "pressure-escalation"
+  | "recovery-moment"
+
+export type ReplayMemoryLoopState = {
+  createdInLive: boolean
+  findVisible: boolean
+  replayReady: boolean
+  continuityLinked: boolean
+  streamPosition: number
 }
 
 export type ReplayRetrievalCluster = {
@@ -198,6 +215,31 @@ function hiddenContinuityScore(payload: Record<string, unknown>) {
   return pressure * 0.42 + density * 0.36 + previous * 0.12
 }
 
+function continuityStateFromPayload(payload: Record<string, unknown>) {
+  const training = asRecord(payload.training_rep)
+  const memory = asRecord(payload.memory_object)
+  const continuity = asRecord(training.continuity)
+  const memoryContinuity = asRecord(memory.continuityState)
+
+  return {
+    pressure: number(continuity.pressure) || number(memoryContinuity.pressure),
+    density: number(continuity.density) || number(memoryContinuity.density),
+    attentionState: text(continuity.attentionState) || text(memoryContinuity.attentionState),
+  }
+}
+
+function inferContinuityStates(clip: ReplayRetrievalClip): ReplayContinuityState[] {
+  const states = new Set<ReplayContinuityState>()
+
+  if (clip.hiddenContinuityScore > 0.28) states.add("pressure-escalation")
+  if (clip.eventType === "TURNOVER") states.add("collapse-window")
+  if (["STEAL", "BLOCK", "REBOUND"].includes(clip.eventType)) states.add("recovery-moment")
+  if (clip.eventType === "MAKE" && clip.contextStack.nearbyCount > 1) states.add("unanswered-run")
+  if (clip.contextStack.previousLabel && clip.contextStack.nextLabel) states.add("stabilization-sequence")
+
+  return [...states]
+}
+
 function clipFromEvent(
   event: TemporalEventRecord,
   session: TemporalSessionRecord | undefined
@@ -237,6 +279,8 @@ function clipFromEvent(
   const rawInput = text(memory.rawInput) || text(payload.raw)
   const score = scoreLabel(memory.scoreAfter || payload.score_state)
   const points = number(payload.points)
+  const continuityState = continuityStateFromPayload(payload)
+  const hiddenScore = hiddenContinuityScore(payload)
 
   return {
     id: `${session.id}:${event.id}`,
@@ -263,8 +307,8 @@ function clipFromEvent(
     normalizedMeaning,
     createdAt: session.created_at,
     playbackUrl: session.playback_url,
-    relevance: 1 + hiddenContinuityScore(payload),
-    hiddenContinuityScore: hiddenContinuityScore(payload),
+    relevance: 1 + hiddenScore,
+    hiddenContinuityScore: hiddenScore,
     retrievalRole: "match",
     clusterTags: [],
     contextStack: {
@@ -273,6 +317,14 @@ function clipFromEvent(
       nearbyCount: 0,
       scoreState: score,
       possessionState: text(memory.possessionAfter) || text(payload.possession).toUpperCase() || "LIVE",
+    },
+    continuityStates: continuityState.pressure > 0.28 ? ["pressure-escalation"] : [],
+    memoryLoop: {
+      createdInLive: event.type === "BASKETBALL_EVENT" || event.type === "LIVE_MEMORY_COMMAND",
+      findVisible: true,
+      replayReady: Boolean(session.playback_url),
+      continuityLinked: false,
+      streamPosition: 0,
     },
   }
 }
@@ -430,15 +482,30 @@ function stackContext(sourceClips: ReplayRetrievalClip[]) {
   return tagged.map((clip) => {
     const previous = clip.previousEventId ? byMemoryId.get(clip.previousEventId) : null
     const next = clip.nextEventId ? byMemoryId.get(clip.nextEventId) : null
+    const contextStack = {
+      previousLabel: previous?.label || null,
+      nextLabel: next?.label || null,
+      nearbyCount: sameSessionWindow(tagged, clip, 24).length,
+      scoreState: clip.score,
+      possessionState: clip.possession,
+    }
+    const stackedClip = {
+      ...clip,
+      contextStack,
+    }
+    const continuityStates = inferContinuityStates(stackedClip)
 
     return {
-      ...clip,
-      contextStack: {
-        previousLabel: previous?.label || null,
-        nextLabel: next?.label || null,
-        nearbyCount: sameSessionWindow(tagged, clip, 24).length,
-        scoreState: clip.score,
-        possessionState: clip.possession,
+      ...stackedClip,
+      continuityStates,
+      memoryLoop: {
+        ...clip.memoryLoop,
+        continuityLinked: Boolean(
+          previous ||
+          next ||
+          continuityStates.length ||
+          clip.clusterTags.length
+        ),
       },
     }
   })
@@ -542,6 +609,13 @@ export function buildReplayRetrieval({
       return b.createdAt.localeCompare(a.createdAt)
     })
     .slice(0, limit)
+    .map((clip, index) => ({
+      ...clip,
+      memoryLoop: {
+        ...clip.memoryLoop,
+        streamPosition: index,
+      },
+    }))
   return {
     preset: selectedPreset,
     queryMode: hasReorganizationQuery ? "reorganized" : "chronological",

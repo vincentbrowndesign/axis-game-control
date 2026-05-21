@@ -35,6 +35,7 @@ function formatClock(totalSeconds: number) {
 function clipHref(clip: ReplayRetrievalClip) {
   const params = new URLSearchParams({
     jump: clip.eventId,
+    memory: clip.memoryEventId,
   })
 
   return `/session/${clip.sessionId}?${params.toString()}`
@@ -91,8 +92,8 @@ function MomentRow({ clip }: { clip: ReplayRetrievalClip }) {
         </div>
       </div>
       <div className="axis-mono flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-white/34 transition group-hover:text-white/62">
-        <span>{clip.retrievalRole === "context" ? "Nearby" : clip.contextStack.nearbyCount ? "Stacked" : "First memory"}</span>
-        <span>Open</span>
+        <span>{clip.retrievalRole === "context" ? "Nearby" : clip.memoryLoop.continuityLinked ? "Stacked" : "First memory"}</span>
+        <span>{clip.memoryLoop.replayReady ? "Open" : "Live memory"}</span>
       </div>
     </Link>
   )

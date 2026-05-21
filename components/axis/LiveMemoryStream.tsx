@@ -1503,8 +1503,10 @@ export function LiveMemoryStream() {
   useEffect(() => {
     const handleCommand = (event: WindowEventMap["axis-command"]) => {
       const payload = event.detail as AxisCommandPayload
-      recordCommandMemory(payload)
-      if (payload.intent.kind !== "stat") return
+      if (payload.intent.kind !== "stat") {
+        recordCommandMemory(payload)
+        return
+      }
 
       recordCommandStat(liveScoringInputForAction(payload.intent.action), payload.intent.team, {
         raw: payload.raw,
