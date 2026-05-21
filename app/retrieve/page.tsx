@@ -64,7 +64,7 @@ function MomentRow({ clip }: { clip: ReplayRetrievalClip }) {
         </div>
       </div>
       <div className="axis-mono flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-white/34 transition group-hover:text-white/62">
-        <span>{clip.previousEventId ? "Context linked" : "First memory"}</span>
+        <span>{clip.retrievalRole === "context" ? "Nearby" : clip.previousEventId ? "Context linked" : "First memory"}</span>
         <span>Open</span>
       </div>
     </Link>

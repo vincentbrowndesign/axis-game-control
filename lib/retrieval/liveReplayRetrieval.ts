@@ -16,6 +16,7 @@ export type ReplayRetrievalClip = {
   id: string
   sessionId: string
   eventId: string
+  memoryEventId: string
   sessionTime: number
   clipStart: number
   clipEnd: number
@@ -32,6 +33,7 @@ export type ReplayRetrievalClip = {
   playbackUrl: string | null
   relevance: number
   hiddenContinuityScore: number
+  retrievalRole: "match" | "context"
 }
 
 export type ReplayRetrievalCluster = {
@@ -144,7 +146,7 @@ function presetFromQuery(query?: string | null): ReplayRetrievalPreset | null {
   if (/\brebounds?\b|\bboards?\b/.test(normalized)) return "rebounds"
   if (/\bassists?\b|\bast\b/.test(normalized)) return "assists"
   if (/\bmade\b|\bmakes?\b|\bscor(e|ing)\b/.test(normalized)) return "makes"
-  if (/\bstops?\b|\bsteals?\b|\bblocks?\b/.test(normalized)) return "stops"
+  if (/\bstops?\b/.test(normalized)) return "stops"
 
   return null
 }
@@ -206,6 +208,7 @@ function clipFromEvent(
     id: `${session.id}:${event.id}`,
     sessionId: session.id,
     eventId: event.id,
+    memoryEventId: text(memory.eventId) || event.id,
     sessionTime,
     clipStart,
     clipEnd,
@@ -228,11 +231,22 @@ function clipFromEvent(
     playbackUrl: session.playback_url,
     relevance: 1 + hiddenContinuityScore(payload),
     hiddenContinuityScore: hiddenContinuityScore(payload),
+    retrievalRole: "match",
   }
 }
 
+function queryParts(query: string) {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !["show", "find", "replay", "open", "get", "clips", "clip", "plays", "play"].includes(part))
+}
+
 function queryMatches(clip: ReplayRetrievalClip, query: string) {
-  if (!query) return true
+  const parts = queryParts(query)
+  if (!parts.length) return true
   const haystack = [
     clip.label,
     clip.eventType,
@@ -246,11 +260,44 @@ function queryMatches(clip: ReplayRetrievalClip, query: string) {
     .join(" ")
     .toLowerCase()
 
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((part) => haystack.includes(part) || haystack.includes(part.replace(/s$/, "")))
+  return parts.every((part) => haystack.includes(part) || haystack.includes(part.replace(/s$/, "")))
+}
+
+function withRetrievalRole(clip: ReplayRetrievalClip, retrievalRole: ReplayRetrievalClip["retrievalRole"]) {
+  return {
+    ...clip,
+    retrievalRole,
+  }
+}
+
+function expandWithMemoryContext(
+  sourceClips: ReplayRetrievalClip[],
+  matchedClips: ReplayRetrievalClip[]
+) {
+  const byMemoryId = new Map(sourceClips.map((clip) => [clip.memoryEventId, clip]))
+  const byId = new Map<string, ReplayRetrievalClip>()
+
+  function append(clip: ReplayRetrievalClip, retrievalRole: ReplayRetrievalClip["retrievalRole"]) {
+    const existing = byId.get(clip.id)
+    if (existing?.retrievalRole === "match") return
+    byId.set(clip.id, withRetrievalRole(clip, retrievalRole))
+  }
+
+  matchedClips.forEach((clip) => {
+    append(clip, "match")
+
+    const previous = clip.previousEventId ? byMemoryId.get(clip.previousEventId) : null
+    const next = clip.nextEventId ? byMemoryId.get(clip.nextEventId) : null
+    if (previous) append(previous, "context")
+    if (next) append(next, "context")
+
+    sourceClips
+      .filter((candidate) => candidate.sessionId === clip.sessionId)
+      .filter((candidate) => Math.abs(candidate.sessionTime - clip.sessionTime) <= 24)
+      .forEach((candidate) => append(candidate, candidate.id === clip.id ? "match" : "context"))
+  })
+
+  return [...byId.values()]
 }
 
 function cluster(
@@ -279,14 +326,27 @@ export function buildReplayRetrieval({
   const queryPreset = preset ? null : presetFromQuery(query)
   const selectedPreset = queryPreset || normalizedPreset(preset)
   const effectiveQuery = queryPreset ? "" : query || ""
+  const hasReorganizationQuery = Boolean(queryPreset || queryParts(effectiveQuery).length)
   const sessionsById = new Map(sessions.map((session) => [session.id, session]))
-  const clips = events
+  const sourceClips = events
     .map((event) => clipFromEvent(event, sessionsById.get(event.session_id)))
     .filter((clip): clip is ReplayRetrievalClip => Boolean(clip))
+  const matchedClips = sourceClips
     .filter((clip) => eventMatchesPreset(clip.eventType, selectedPreset))
     .filter((clip) => queryMatches(clip, effectiveQuery))
+
+  const clips = (hasReorganizationQuery
+    ? expandWithMemoryContext(sourceClips, matchedClips)
+    : matchedClips
+  )
     .sort((a, b) => {
       if (selectedPreset === "last-run") return b.sessionTime - a.sessionTime
+      if (hasReorganizationQuery) {
+        const sessionDelta = b.createdAt.localeCompare(a.createdAt)
+        if (sessionDelta !== 0) return sessionDelta
+
+        return a.sessionTime - b.sessionTime
+      }
       if (!effectiveQuery && selectedPreset === "all") {
         const sessionDelta = b.createdAt.localeCompare(a.createdAt)
         if (sessionDelta !== 0) return sessionDelta
@@ -300,9 +360,6 @@ export function buildReplayRetrieval({
       return b.createdAt.localeCompare(a.createdAt)
     })
     .slice(0, limit)
-  const sourceClips = events
-    .map((event) => clipFromEvent(event, sessionsById.get(event.session_id)))
-    .filter((clip): clip is ReplayRetrievalClip => Boolean(clip))
   const clusters = [
     cluster(
       "last-run",
@@ -334,6 +391,7 @@ export function buildReplayRetrieval({
 
   return {
     preset: selectedPreset,
+    queryMode: hasReorganizationQuery ? "reorganized" : "chronological",
     clips,
     clusters,
   }
