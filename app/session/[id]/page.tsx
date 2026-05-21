@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import type { TemporalSessionRecord } from "@/lib/temporalEventGraph"
+import { AxisPage } from "@/components/axis/AxisPrimitives"
 import { SessionReplayCanvas } from "./SessionReplayCanvas"
 
 type SessionPageProps = {
@@ -23,7 +24,7 @@ export default async function SessionPage({ params, searchParams }: SessionPageP
 
   if (!user) {
     return (
-      <main className="axis-display axis-sync-room grid min-h-dvh place-items-center px-6 text-center">
+      <AxisPage center max="max-w-xl" mode="SIGN IN" telemetry="AXIS">
         <div>
           <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             SESSION ACCESS REQUIRED
@@ -35,7 +36,7 @@ export default async function SessionPage({ params, searchParams }: SessionPageP
             Sign in
           </Link>
         </div>
-      </main>
+      </AxisPage>
     )
   }
 
@@ -48,7 +49,7 @@ export default async function SessionPage({ params, searchParams }: SessionPageP
 
   if (!session) {
     return (
-      <main className="axis-display axis-sync-room grid min-h-dvh place-items-center px-6 text-center">
+      <AxisPage center max="max-w-xl" mode="REPLAY" telemetry="AXIS">
         <div>
           <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             RECORD NOT FOUND
@@ -60,7 +61,7 @@ export default async function SessionPage({ params, searchParams }: SessionPageP
             Return live
           </Link>
         </div>
-      </main>
+      </AxisPage>
     )
   }
 

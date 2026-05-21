@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server"
 import { TrainingSetRoom } from "./TrainingSetRoom"
 import {
   AxisEmptyState,
-  AxisHeader,
   AxisLinkButton,
   AxisPage,
 } from "@/components/axis/AxisPrimitives"
@@ -17,7 +16,7 @@ export default async function TrainingSetPage() {
 
   if (!user) {
     return (
-      <AxisPage center max="max-w-xl">
+      <AxisPage center max="max-w-xl" mode="SIGN IN" telemetry="AXIS">
         <div>
           <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             SESSION ACCESS REQUIRED
@@ -38,30 +37,29 @@ export default async function TrainingSetPage() {
     })
 
   return (
-    <AxisPage className="axis-replay-operating-room">
-        <AxisHeader>
-          <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
-            Find clips
+    <AxisPage className="axis-replay-operating-room" mode="MEMORY" telemetry="Saved moments">
+      <section className="pb-7">
+        <p className="axis-mono axis-world-kicker text-[10px] font-semibold uppercase tracking-[0.24em]">
+          Preserved memory
+        </p>
+        <h1 className="axis-world-title mt-3 max-w-3xl text-4xl font-bold leading-none tracking-normal sm:text-6xl">
+          Moments held for review.
+        </h1>
+        <div className="axis-mono mt-5 flex gap-x-5 text-[10px] font-black uppercase tracking-[0.16em] text-white/32">
+          <AxisLinkButton href="/retrieve" tone="ghost" className="px-0 py-0">
+            Memory stream
           </AxisLinkButton>
-          <p className="axis-mono axis-sync-muted text-[10px] font-semibold uppercase tracking-[0.22em]">
-            Saved clips
-          </p>
-        </AxisHeader>
+          <AxisLinkButton href="/live" tone="ghost" className="px-0 py-0">
+            Live
+          </AxisLinkButton>
+        </div>
+      </section>
 
-        <section className="py-8">
-          <p className="axis-mono axis-world-kicker text-[10px] font-semibold uppercase tracking-[0.24em]">
-            Replay clips
-          </p>
-          <h1 className="axis-world-title mt-3 max-w-3xl text-4xl font-bold leading-none tracking-normal sm:text-6xl">
-            Clips coaches marked for review.
-          </h1>
-        </section>
-
-        {memories?.length ? (
-          <TrainingSetRoom memories={memories} />
-        ) : (
-          <AxisEmptyState title="No saved clips yet" />
-        )}
+      {memories?.length ? (
+        <TrainingSetRoom memories={memories} />
+      ) : (
+        <AxisEmptyState title="No saved moments yet" />
+      )}
     </AxisPage>
   )
 }

@@ -4,8 +4,6 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { type LiveArchiveSession, loadArchivedRecording } from "@/lib/liveArchive"
 import {
-  AxisHeader,
-  AxisLinkButton,
   AxisPage,
   AxisReplayFrame,
 } from "@/components/axis/AxisPrimitives"
@@ -44,13 +42,7 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
   }, [id])
 
   return (
-    <AxisPage max="max-w-6xl" className="axis-replay-operating-room">
-        <AxisHeader>
-          <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
-            Find clips
-          </AxisLinkButton>
-        </AxisHeader>
-
+    <AxisPage max="max-w-6xl" className="axis-replay-operating-room" mode="REPLAY" telemetry="Archived memory">
         {!hydrated ? (
           <div className="grid flex-1 place-items-center text-center">
             <p className="axis-sync-muted text-[11px] font-black uppercase tracking-[0.24em]">
@@ -63,7 +55,7 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
           <div className="grid flex-1 place-items-center text-center">
             <div>
               <p className="axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
-                RECORDING NOT FOUND
+                MEMORY NOT FOUND
               </p>
               <Link
                 href="/live"
@@ -89,7 +81,7 @@ export function LiveRecordingPlayback({ id }: { id: string }) {
             <div className="grid gap-4 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
               <div>
                 <p className="axis-world-kicker text-[10px] font-black uppercase tracking-[0.24em]">
-                  Archived recording
+                  Archived memory
                 </p>
                 <p className="axis-world-title mt-2 font-mono text-4xl font-black leading-none">
                   {formatClock(session.duration)}

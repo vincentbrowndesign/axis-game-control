@@ -3,9 +3,7 @@
 import Link from "next/link"
 import { useState } from "react"
 import {
-  AxisActionGrid,
   AxisButton,
-  AxisSurface,
 } from "@/components/axis/AxisPrimitives"
 
 type TrainingMemory = {
@@ -88,39 +86,39 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-1">
       {records.map((memory) => (
-        <AxisSurface key={memory.id} as="article">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={memory.frame_url}
-            alt={`${memory.label} at ${formatClock(memory.replay_time)}`}
-            className="aspect-video w-full object-cover opacity-95"
-          />
-          <div className="space-y-4 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="axis-sync-text text-sm font-bold uppercase tracking-[0.18em]">
-                  {memory.label}
-                </p>
-                <p className="axis-mono axis-sync-muted mt-2 text-[10px] font-semibold uppercase tracking-[0.14em]">
-                  {compactSessionId(memory.session_id)}
-                </p>
-              </div>
-              <p className="axis-mono axis-sync-text text-[11px] font-black">
+        <article
+          key={memory.id}
+          className="grid gap-4 border-t border-white/[0.07] py-4 transition hover:bg-white/[0.018] sm:grid-cols-[7.5rem_minmax(0,1fr)_auto]"
+        >
+          <div className="overflow-hidden bg-black/38">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={memory.frame_url}
+              alt={`${memory.label} at ${formatClock(memory.replay_time)}`}
+              className="aspect-video w-full object-cover opacity-75"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-baseline gap-3">
+              <p className="truncate text-2xl font-black uppercase leading-none tracking-normal text-white/84">
+                {memory.label}
+              </p>
+              <p className="axis-mono shrink-0 text-[10px] font-black uppercase tracking-[0.16em] text-white/34">
                 {formatClock(memory.replay_time)}
               </p>
             </div>
-
-            <div className="axis-mono axis-sync-muted flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.14em]">
+            <div className="axis-mono mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-black uppercase tracking-[0.14em] text-white/34">
+              <span>{compactSessionId(memory.session_id)}</span>
               <span>{formatHeldState(memory.roboflow_status)}</span>
               <span>{new Date(memory.created_at).toLocaleDateString()}</span>
             </div>
-
-            <AxisActionGrid className="grid-cols-2">
+          </div>
+          <div className="axis-mono flex flex-wrap items-center gap-3 text-[9px] font-black uppercase tracking-[0.12em] sm:justify-end">
               <Link
                 href={`/retrieve?q=${encodeURIComponent(memory.label)}`}
-                className="axis-mono axis-optical-transition axis-retrieval-link px-3 py-3 text-center text-[9px] font-black uppercase tracking-[0.12em] transition"
+                className="text-white/38 transition hover:text-white/72"
               >
                 Find similar
               </Link>
@@ -128,22 +126,22 @@ export function TrainingSetRoom({ memories }: { memories: TrainingMemory[] }) {
                 type="button"
                 disabled={busyId === memory.id}
                 onClick={() => void sendToRoboflow(memory.id)}
-                className="px-3 py-3 text-[9px] tracking-[0.12em] disabled:bg-white/10 disabled:text-zinc-600"
+                tone="ghost"
+                className="px-0 py-0 text-white/38 disabled:text-zinc-600"
               >
-                Save frame
+                Save
               </AxisButton>
-            </AxisActionGrid>
             <AxisButton
               type="button"
               tone="ghost"
               disabled={busyId === memory.id}
               onClick={() => void deleteMemory(memory.id)}
-              className="w-full px-3 py-3 text-[9px] tracking-[0.12em] hover:text-zinc-100 disabled:text-zinc-700"
+              className="px-0 py-0 text-white/26 hover:text-zinc-100 disabled:text-zinc-700"
             >
               Remove
             </AxisButton>
           </div>
-        </AxisSurface>
+        </article>
       ))}
     </div>
   )
