@@ -49,6 +49,8 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   min-height: 3.2rem;
   pointer-events: none;
+  position: relative;
+  z-index: 8;
 }
 
 .session,
@@ -123,6 +125,14 @@
   overflow: hidden;
   padding: clamp(0.24rem, 0.9vh, 0.58rem) 0 0;
   position: relative;
+}
+
+.shell[data-mode="live"] .viewport {
+  inset: 0;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  z-index: 0;
 }
 
 .memoryStream {
@@ -211,8 +221,15 @@
 }
 
 .liveWorld {
+  height: 100%;
   max-width: 72rem;
   width: min(100%, 72rem);
+}
+
+.shell[data-mode="live"] .liveWorld {
+  height: 100%;
+  max-width: none;
+  width: 100%;
 }
 
 .liveWorld > p {
@@ -241,6 +258,15 @@
   position: relative;
 }
 
+.shell[data-mode="live"] .nativeLens {
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  height: 100%;
+  width: 100%;
+}
+
 .liveCameraFeed {
   background: #111;
   display: block;
@@ -254,8 +280,16 @@
   width: 100%;
 }
 
+.shell[data-mode="live"] .liveCameraFeed {
+  opacity: 0.22;
+}
+
 .nativeLens[data-camera="active"] .liveCameraFeed {
   opacity: 0.92;
+}
+
+.shell[data-mode="live"] .nativeLens[data-camera="active"] .liveCameraFeed {
+  opacity: 1;
 }
 
 .cameraAtmosphere {
@@ -523,6 +557,7 @@
   margin-inline: calc(clamp(0.86rem, 2.6vw, 1.55rem) * -1);
   padding: 0.22rem clamp(0.86rem, 2.6vw, 1.55rem) 0;
   position: relative;
+  z-index: 8;
 }
 
 .railDock::before {
