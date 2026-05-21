@@ -12,6 +12,7 @@ import {
   saveArchivedRecording,
 } from "@/lib/liveArchive"
 import { useAxisChronologyStore } from "@/lib/axisChronologyStore"
+import { buildAmbientPerceptionSnapshot } from "@/lib/ambientPerception"
 import {
   buildContinuitySnapshotPayload,
   generateContinuityPrimitives,
@@ -276,11 +277,13 @@ function createId(prefix = "axis") {
 
 function LiveMachinePerceptionOverlay({
   active,
+  assistive = false,
   enabled,
   onContinuitySample,
   videoRef,
 }: {
   active: boolean
+  assistive?: boolean
   enabled: boolean
   onContinuitySample?: (sample: ContinuityAssistSample) => void
   videoRef: RefObject<HTMLVideoElement | null>
@@ -299,7 +302,7 @@ function LiveMachinePerceptionOverlay({
   const lastPrimaryRegionRef = useRef<ContinuityRegion | null>(null)
 
   useEffect(() => {
-    if (!enabled || !active || typeof document === "undefined") {
+    if (!active || (!enabled && !assistive) || typeof document === "undefined") {
       previousFrameRef.current = null
       smoothedLocksRef.current = []
       residueLocksRef.current = []
@@ -665,8 +668,8 @@ function LiveMachinePerceptionOverlay({
     const sample = (timestamp: number) => {
       if (disposed) return
       frameId = window.requestAnimationFrame(sample)
-      drawLocks(timestamp)
-      if (timestamp - lastSampleAt < 90) return
+      if (enabled) drawLocks(timestamp)
+      if (timestamp - lastSampleAt < (enabled ? 90 : 260)) return
       lastSampleAt = timestamp
 
       const video = videoRef.current
@@ -674,7 +677,7 @@ function LiveMachinePerceptionOverlay({
         return
       }
 
-      requestRoboflowLocks(video, timestamp)
+      if (enabled) requestRoboflowLocks(video, timestamp)
 
       try {
         sampleContext.drawImage(video, 0, 0, sampleWidth, sampleHeight)
@@ -915,7 +918,7 @@ function LiveMachinePerceptionOverlay({
         outputContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
       }
     }
-  }, [active, enabled, onContinuitySample, videoRef])
+  }, [active, assistive, enabled, onContinuitySample, videoRef])
 
   return (
     <canvas
@@ -1262,6 +1265,15 @@ export function LiveMemoryStream() {
       const normalizedCommand = `${team.toUpperCase()} ${input.label}`.toUpperCase()
       const rawInput = options?.raw || normalizedCommand
       const previousMemory = memoryObjectsRef.current.at(-1) || null
+      const ambientPerception = buildAmbientPerceptionSnapshot({
+        sessionTime,
+        gameClock: formatClock(sessionTime),
+        scoreBefore: scoreBeforeState,
+        scoreAfter: statEvent.score,
+        possession: axisMemoryTeam(statEvent.possession),
+        replayAnchor: statEvent.replayAnchor,
+        continuity: continuityAssistRef.current,
+      })
       const memoryObject = createAxisMemoryObject({
         eventId: statEvent.id,
         sessionId: session.id,
@@ -1289,9 +1301,9 @@ export function LiveMemoryStream() {
           statEvent.action.toLowerCase(),
         ],
         continuityState: statEvent.training.continuity,
-        spatialMetadata: null,
-        cvMetadata: null,
-        movementMetadata: null,
+        spatialMetadata: ambientPerception.spatialMetadata,
+        cvMetadata: ambientPerception.cvMetadata,
+        movementMetadata: ambientPerception.movementMetadata,
       })
       const resolvedEvent = {
         ...memoryObject,
@@ -1343,6 +1355,7 @@ export function LiveMemoryStream() {
           nextEventId: memoryObject.nextEventId,
           timelineIndex: memoryObjectsRef.current.length - 1,
         },
+        perception: ambientPerception.cvMetadata,
         replayAnchor: statEvent.replayAnchor,
         training: statEvent.training,
         raw: rawInput,
@@ -1370,6 +1383,7 @@ export function LiveMemoryStream() {
           normalized_command: normalizedCommand,
           resolved_event: resolvedEvent,
           memory_object: memoryObject,
+          ambient_perception: ambientPerception.cvMetadata,
           player: options?.player || null,
           replay_anchor: statEvent.replayAnchor,
           training_rep: statEvent.training,
@@ -1396,6 +1410,15 @@ export function LiveMemoryStream() {
         snapshotId: useAxisChronologyStore.getState().snapshots.at(-1)?.id || null,
       }
       const previousMemory = memoryObjectsRef.current.at(-1) || null
+      const ambientPerception = buildAmbientPerceptionSnapshot({
+        sessionTime,
+        gameClock: formatClock(sessionTime),
+        scoreBefore: score,
+        scoreAfter: score,
+        possession: axisMemoryTeam(activeStatTeam),
+        replayAnchor,
+        continuity: continuityAssistRef.current,
+      })
       const memoryObject = createAxisMemoryObject({
         eventId: createId("axis-memory"),
         sessionId: session.id,
@@ -1424,9 +1447,9 @@ export function LiveMemoryStream() {
               attentionState: continuityAssistRef.current.attentionState,
             }
           : null,
-        spatialMetadata: null,
-        cvMetadata: null,
-        movementMetadata: null,
+        spatialMetadata: ambientPerception.spatialMetadata,
+        cvMetadata: ambientPerception.cvMetadata,
+        movementMetadata: ambientPerception.movementMetadata,
       })
 
       memoryObjectsRef.current = appendAxisMemoryObject(memoryObjectsRef.current, memoryObject)
@@ -1465,6 +1488,7 @@ export function LiveMemoryStream() {
           nextEventId: memoryObject.nextEventId,
           timelineIndex: memoryObjectsRef.current.length - 1,
         },
+        perception: ambientPerception.cvMetadata,
         sequence: {
           index: basketballSequenceRef.current.length,
           previous: previousEvents,
@@ -1482,6 +1506,7 @@ export function LiveMemoryStream() {
           event_id: memoryObject.eventId,
           normalized_command: normalizedCommand,
           memory_object: memoryObject,
+          ambient_perception: ambientPerception.cvMetadata,
           possession: activeStatTeam,
           score_state: score,
           replay_window: replayWindow,
@@ -2340,6 +2365,7 @@ export function LiveMemoryStream() {
 
           <LiveMachinePerceptionOverlay
             active={status === "LIVE" || status === "READY" || status === "STARTING"}
+            assistive={status === "LIVE"}
             enabled={liveViewMode === "MOTION_ECHO"}
             onContinuitySample={handleContinuitySample}
             videoRef={localVideoRef}
