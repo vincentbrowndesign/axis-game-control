@@ -793,6 +793,64 @@
   background: rgba(255, 255, 255, 0.16);
   border-color: rgba(255, 255, 246, 0.13);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 -1px 0 rgba(0, 0, 0, 0.1);
+  gap: 0.16rem;
+  padding: 0.34rem;
+}
+
+.holdToSpeak {
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: rgba(36, 36, 36, 0.86);
+  cursor: pointer;
+  display: none;
+  font: inherit;
+  gap: 0.1rem;
+  min-height: 2.66rem;
+  outline: none;
+  padding: 0.42rem 0.54rem 0.38rem;
+  text-align: left;
+  touch-action: none;
+  width: 100%;
+}
+
+.shell[data-mode="live"] .holdToSpeak {
+  color: rgba(255, 255, 246, 0.9);
+  display: grid;
+}
+
+.holdToSpeak span {
+  color: rgba(36, 36, 36, 0.36);
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.shell[data-mode="live"] .holdToSpeak span {
+  color: rgba(255, 255, 246, 0.44);
+}
+
+.holdToSpeak strong {
+  color: currentColor;
+  font-size: 16px;
+  font-weight: 520;
+  letter-spacing: 0;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail[data-listening="true"] .holdToSpeak {
+  background: rgba(255, 255, 246, 0.08);
+}
+
+.rail[data-listening="true"] .holdToSpeak span {
+  color: rgba(255, 255, 246, 0.62);
 }
 
 .rail textarea {
@@ -817,6 +875,9 @@
 
 .shell[data-mode="live"] .rail textarea {
   color: rgba(255, 255, 246, 0.92);
+  min-height: 1.92rem;
+  opacity: 0.58;
+  padding: 0.16rem 0.54rem 0.38rem;
 }
 
 .rail textarea::placeholder {
