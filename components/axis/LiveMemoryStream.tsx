@@ -1224,12 +1224,14 @@ export function LiveMemoryStream() {
     useState<PendingContinuitySelection | null>(null)
   const [activeStatTeam, setActiveStatTeam] = useState<LiveStatTeam>("home")
   const [memoryInput, setMemoryInput] = useState("")
+  const [memoryInputFocused, setMemoryInputFocused] = useState(false)
   const [memoryQuestion, setMemoryQuestion] = useState<LiveMemoryQuestion | null>(null)
   const [liveBoxScore, setLiveBoxScore] = useState<LiveBoxScore>(() => createLiveBoxScore())
   const [, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
+  const memoryInputRef = useRef<HTMLInputElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -1261,6 +1263,12 @@ export function LiveMemoryStream() {
 
   const handleContinuitySample = useCallback((sample: ContinuityAssistSample) => {
     continuityAssistRef.current = sample
+  }, [])
+
+  const focusMemoryInput = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      memoryInputRef.current?.focus()
+    })
   }, [])
 
   const emitEvent = useCallback(
@@ -1762,7 +1770,8 @@ export function LiveMemoryStream() {
 
   const submitMemoryInput = useCallback(() => {
     runMemoryText(memoryInput)
-  }, [memoryInput, runMemoryText])
+    focusMemoryInput()
+  }, [focusMemoryInput, memoryInput, runMemoryText])
 
   const saveLiveReviewToTrainingSet = useCallback(async (label: TrainingLabel) => {
     const session = workingSessionRef.current
@@ -1986,6 +1995,7 @@ export function LiveMemoryStream() {
       setLiveStatEvents([])
       setActiveStatTeam("home")
       setMemoryInput("")
+      setMemoryInputFocused(false)
       setMemoryQuestion(null)
       setPendingContinuitySelection(null)
 
@@ -2475,19 +2485,25 @@ export function LiveMemoryStream() {
                   {memoryQuestion ? (
                     <div className="axis-live-memory-status">{memoryQuestion.prompt}</div>
                   ) : null}
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <div className={`grid gap-2 ${memoryInputFocused ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
                     <input
+                      ref={memoryInputRef}
                       value={memoryInput}
                       onChange={(event) => setMemoryInput(event.currentTarget.value)}
+                      onBlur={() => setMemoryInputFocused(false)}
+                      onFocus={() => setMemoryInputFocused(true)}
                       placeholder={memoryQuestion ? "Answer" : "they scored / home 3 / nae reb"}
                       className="axis-live-memory-input"
                       autoCapitalize="words"
+                      enterKeyHint="send"
                       spellCheck={false}
                       aria-label="Live memory"
                     />
-                    <button type="submit" className="axis-live-memory-run">
-                      Run
-                    </button>
+                    {!memoryInputFocused ? (
+                      <button type="submit" className="axis-live-memory-run">
+                        Run
+                      </button>
+                    ) : null}
                   </div>
                 </form>
 
@@ -2496,7 +2512,11 @@ export function LiveMemoryStream() {
                     <button
                       key={chip}
                       type="button"
-                      onClick={() => runMemoryText(chip === "CLIP" ? "CLIP LAST" : chip)}
+                      onClick={() => {
+                        runMemoryText(chip === "CLIP" ? "CLIP LAST" : chip)
+                        focusMemoryInput()
+                      }}
+                      onPointerDown={(event) => event.preventDefault()}
                       className="axis-live-memory-chip"
                     >
                       {chip}
@@ -2504,7 +2524,11 @@ export function LiveMemoryStream() {
                   ))}
                   <button
                     type="button"
-                    onClick={undoLastStatEvent}
+                    onClick={() => {
+                      undoLastStatEvent()
+                      focusMemoryInput()
+                    }}
+                    onPointerDown={(event) => event.preventDefault()}
                     className="axis-live-memory-chip"
                   >
                     Undo

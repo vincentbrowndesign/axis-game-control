@@ -1206,7 +1206,7 @@ button {
 }
 
 .axis-live-command-stack:not(:focus-within):not(:hover) .axis-live-memory-rail {
-  opacity: 0.72;
+  opacity: 0.62;
   transform: translateY(2px);
 }
 
@@ -1234,7 +1234,7 @@ button {
 }
 
 .axis-live-memory-input {
-  background: rgba(0, 0, 0, 0.12);
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 0.86rem;
   color: rgba(242, 241, 237, 0.88);
@@ -1251,7 +1251,7 @@ button {
 }
 
 .axis-live-memory-input:focus {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.1);
   border-color: rgba(242, 241, 237, 0.08);
 }
 
@@ -1266,6 +1266,10 @@ button {
   min-height: 3rem;
   padding: 0 0.8rem;
   text-transform: uppercase;
+}
+
+.axis-live-command-stack:focus-within .axis-live-memory-run {
+  display: none;
 }
 
 @media (min-width: 768px) {
@@ -1288,7 +1292,8 @@ button {
 }
 
 .axis-live-memory-chips {
-  opacity: 0.28;
+  opacity: 0;
+  pointer-events: none;
   transform: translateY(-2px);
   transition:
     opacity 180ms ease,
@@ -1297,7 +1302,8 @@ button {
 
 .axis-live-command-stack:hover .axis-live-memory-chips,
 .axis-live-command-stack:focus-within .axis-live-memory-chips {
-  opacity: 0.82;
+  opacity: 0.74;
+  pointer-events: auto;
   transform: translateY(0);
 }
 
