@@ -2351,7 +2351,7 @@ export function LiveMemoryStream() {
           videoRef={localVideoRef}
         />
 
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.44),transparent_27%,transparent_72%,rgba(0,0,0,0.62))]" />
+        <div className="axis-live-environment-vignette absolute inset-0" />
 
         <header className="absolute left-5 right-5 top-5 z-20">
           <AxisScorebug
@@ -2464,7 +2464,7 @@ export function LiveMemoryStream() {
             ) : null}
 
             {status === "LIVE" && !pendingContinuitySelection ? (
-              <div className="w-full">
+              <div className="axis-live-command-stack w-full">
                 <form
                   className="axis-live-memory-rail"
                   onSubmit={(event) => {
@@ -2491,7 +2491,7 @@ export function LiveMemoryStream() {
                   </div>
                 </form>
 
-                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                <div className="axis-live-memory-chips mt-2 flex flex-wrap justify-center gap-1.5">
                   {["HOME 3", "AWAY TO", "CLIP", "REB", "SUB"].map((chip) => (
                     <button
                       key={chip}
@@ -2517,7 +2517,6 @@ export function LiveMemoryStream() {
                     End
                   </button>
                 </div>
-
               </div>
             ) : null}
           </div>
