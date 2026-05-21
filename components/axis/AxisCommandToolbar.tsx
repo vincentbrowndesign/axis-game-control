@@ -48,7 +48,9 @@ export function AxisCommandToolbar({
       return
     }
 
-    router.push(parsed.intent.href)
+    if (parsed.intent.kind === "navigate") {
+      router.push(parsed.intent.href)
+    }
   }
 
   return (
