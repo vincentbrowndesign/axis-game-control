@@ -47,6 +47,11 @@ function LiveMemoryWorld() {
         if (!video) return
         video.srcObject = stream
         video.muted = true
+        video.controls = false
+        video.disablePictureInPicture = true
+        video.disableRemotePlayback = true
+        video.setAttribute("controlsList", "nodownload nofullscreen noremoteplayback")
+        video.setAttribute("webkit-playsinline", "true")
         await video.play()
         setCameraActive(true)
       } catch {
@@ -66,7 +71,24 @@ function LiveMemoryWorld() {
   return (
     <div className={styles.liveWorld}>
       <div className={styles.nativeLens} data-camera={cameraActive ? "active" : "idle"} aria-label="Live camera memory field">
-        <video ref={cameraRef} className={styles.liveCameraFeed} playsInline muted autoPlay aria-hidden="true" />
+        <video
+          ref={cameraRef}
+          className={styles.liveCameraFeed}
+          playsInline
+          muted
+          autoPlay
+          controls={false}
+          controlsList="nodownload nofullscreen noremoteplayback"
+          disablePictureInPicture
+          disableRemotePlayback
+          aria-hidden="true"
+          onClick={(event) => event.preventDefault()}
+          onContextMenu={(event) => event.preventDefault()}
+          onDoubleClick={(event) => event.preventDefault()}
+          onPause={(event) => {
+            void event.currentTarget.play()
+          }}
+        />
         <div className={styles.cameraAtmosphere} aria-hidden="true" />
         <div className={styles.signalBand}>
           {responsivePrompt ? <ResponsiveContinuityPrompt prompt={responsivePrompt} /> : null}
