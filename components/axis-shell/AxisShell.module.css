@@ -484,6 +484,16 @@
   z-index: 5;
 }
 
+.shell[data-mode="live"] .livePulseLayer {
+  align-content: end;
+  display: block;
+  inset: auto auto clamp(5.9rem, 14vh, 9.2rem) clamp(0.95rem, 4vw, 3.2rem);
+  justify-items: start;
+  max-width: min(32rem, 78vw);
+  min-height: 6.8rem;
+  width: min(32rem, 78vw);
+}
+
 .livePulseSignal {
   --pulse-intensity: 0.5;
   animation: liveMemorySettle calc(var(--fade-in-ms, var(--pulse-fade-in)) + var(--hold-ms, var(--pulse-hold)) + var(--migrate-ms, var(--pulse-migrate))) cubic-bezier(0.2, 0, 0.14, 1) both;
@@ -502,10 +512,14 @@
 .shell[data-mode="live"] .livePulseSignal {
   color: rgba(255, 255, 246, calc(0.68 + var(--pulse-intensity) * 0.24));
   filter: drop-shadow(0 1px 18px rgba(0, 0, 0, 0.28));
+  left: 0;
+  max-width: min(100%, 26rem);
+  top: calc(var(--depth-offset, 0) * 1.42rem);
 }
 
 .shell[data-mode="live"] .livePulseSignal[data-observer="machine"] {
   color: rgba(255, 255, 246, calc(0.56 + var(--pulse-intensity) * 0.2));
+  max-width: min(100%, 22rem);
 }
 
 .livePulseSignal[data-depth="0"] {
@@ -533,11 +547,14 @@
 }
 
 .shell[data-mode="live"] .livePulseSignal span {
-  color: rgba(255, 255, 246, 0.5);
+  color: rgba(255, 255, 246, 0.38);
+  font-size: 0.48rem;
+  letter-spacing: 0.01em;
+  text-transform: lowercase;
 }
 
 .shell[data-mode="live"] .livePulseSignal[data-observer="machine"] span {
-  color: rgba(255, 255, 246, 0.42);
+  color: rgba(255, 255, 246, 0.32);
 }
 
 .livePulseSignal strong {
@@ -547,6 +564,16 @@
   letter-spacing: 0;
   line-height: var(--lh-dense);
   text-wrap: balance;
+}
+
+.shell[data-mode="live"] .livePulseSignal strong {
+  font-size: clamp(0.82rem, 1.5vw, 1.12rem);
+  font-weight: 500;
+}
+
+.shell[data-mode="live"] .livePulseSignal[data-observer="machine"] strong {
+  font-size: clamp(0.74rem, 1.25vw, 0.96rem);
+  font-weight: 480;
 }
 
 .nativeLens > span {
@@ -615,7 +642,48 @@
 }
 
 .shell[data-mode="live"] .telemetry {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 2rem;
+  opacity: 0.54;
   padding: max(0.68rem, env(safe-area-inset-top)) clamp(0.86rem, 2.6vw, 1.55rem) 0;
+}
+
+.shell[data-mode="live"] .session {
+  align-content: center;
+}
+
+.shell[data-mode="live"] .session span {
+  color: rgba(255, 255, 246, 0.36);
+  font-size: 0.5rem;
+}
+
+.shell[data-mode="live"] .session strong {
+  display: none;
+}
+
+.shell[data-mode="live"] .continuity {
+  justify-self: start;
+  opacity: 0.4;
+}
+
+.shell[data-mode="live"] .continuity span {
+  color: rgba(255, 255, 246, 0.44);
+  font-size: 0.5rem;
+  text-transform: lowercase;
+}
+
+.shell[data-mode="live"] .scoreboard {
+  backdrop-filter: blur(16px) saturate(1.02);
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(255, 255, 246, 0.08);
+  gap: 0.28rem;
+  padding: 0.2rem 0.36rem;
+}
+
+.shell[data-mode="live"] .scoreboard span {
+  color: rgba(255, 255, 246, 0.48);
+  font-size: 0.5rem;
+  letter-spacing: 0.01em;
 }
 
 .railDock::before {
