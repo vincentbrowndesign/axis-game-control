@@ -1566,6 +1566,35 @@ export function LiveMemoryStream() {
     return () => window.removeEventListener("axis-command", handleCommand)
   }, [recordCommandMemory, recordCommandStat])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const root = document.documentElement
+    const viewport = window.visualViewport
+
+    const syncKeyboardOffset = () => {
+      if (!viewport) {
+        root.style.setProperty("--axis-live-keyboard-offset", "0px")
+        return
+      }
+
+      const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      root.style.setProperty("--axis-live-keyboard-offset", `${Math.round(offset)}px`)
+    }
+
+    syncKeyboardOffset()
+    viewport?.addEventListener("resize", syncKeyboardOffset)
+    viewport?.addEventListener("scroll", syncKeyboardOffset)
+    window.addEventListener("orientationchange", syncKeyboardOffset)
+
+    return () => {
+      viewport?.removeEventListener("resize", syncKeyboardOffset)
+      viewport?.removeEventListener("scroll", syncKeyboardOffset)
+      window.removeEventListener("orientationchange", syncKeyboardOffset)
+      root.style.removeProperty("--axis-live-keyboard-offset")
+    }
+  }, [])
+
   const undoLastStatEvent = useCallback(() => {
     const lastEvent = liveStatEventsRef.current.at(-1)
     if (!lastEvent) return
@@ -2343,7 +2372,7 @@ export function LiveMemoryStream() {
   return (
     <main className="axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field fixed inset-0 overflow-hidden">
       <section className="axis-live-shell fixed inset-0 overflow-hidden">
-        <section className="axis-live-camera-plane absolute inset-0 overflow-hidden" aria-label="Live camera">
+        <section className="axis-live-content-region axis-live-camera-plane overflow-hidden" aria-label="Live camera">
           <video
             ref={localVideoRef}
             autoPlay

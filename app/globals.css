@@ -999,6 +999,8 @@ button {
 }
 
 .axis-live-shell {
+  --axis-live-bottom-space: clamp(7.25rem, 16svh, 9rem);
+  --axis-live-top-space: clamp(6.4rem, 13svh, 7.75rem);
   background:
     linear-gradient(180deg, rgba(20, 21, 18, 0.94), rgba(0, 0, 0, 0.98)),
     #050505;
@@ -1018,8 +1020,17 @@ button {
   will-change: transform;
 }
 
+.axis-live-content-region {
+  bottom: var(--axis-live-bottom-space);
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: var(--axis-live-top-space);
+}
+
 .axis-live-camera-plane {
   background: #000000;
+  border-block: 1px solid rgba(242, 241, 237, 0.035);
   box-shadow:
     inset 0 18px 52px rgba(0, 0, 0, 0.36),
     inset 0 -18px 52px rgba(0, 0, 0, 0.4);
@@ -1055,7 +1066,8 @@ button {
     rgba(5, 5, 5, 0.66);
   padding-bottom: max(0.85rem, calc(env(safe-area-inset-bottom) + 0.65rem));
   padding-top: 0.92rem;
-  transform: translateZ(0);
+  transform: translate3d(0, calc(var(--axis-live-keyboard-offset, 0px) * -1), 0);
+  transition: transform 120ms ease;
   will-change: transform;
 }
 
