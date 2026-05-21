@@ -1376,6 +1376,9 @@ button {
     opacity 180ms ease,
     transform 180ms ease;
   backdrop-filter: blur(26px) saturate(1.14);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .axis-live-command-stack:not(:focus-within):not(:hover) .axis-live-memory-rail {

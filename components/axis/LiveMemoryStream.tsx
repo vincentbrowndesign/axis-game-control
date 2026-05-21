@@ -1267,7 +1267,9 @@ export function LiveMemoryStream() {
 
   const focusMemoryInput = useCallback(() => {
     window.requestAnimationFrame(() => {
-      memoryInputRef.current?.focus()
+      memoryInputRef.current?.focus({
+        preventScroll: true,
+      })
     })
   }, [])
 
@@ -2508,6 +2510,7 @@ export function LiveMemoryStream() {
               <div className="axis-live-command-stack w-full">
                 <form
                   className="axis-live-memory-rail"
+                  autoComplete="off"
                   onSubmit={(event) => {
                     event.preventDefault()
                     submitMemoryInput()
@@ -2526,6 +2529,8 @@ export function LiveMemoryStream() {
                       placeholder={memoryQuestion ? "Answer" : "they scored / home 3 / nae reb"}
                       className="axis-live-memory-input"
                       autoCapitalize="words"
+                      autoComplete="off"
+                      autoCorrect="off"
                       enterKeyHint="send"
                       spellCheck={false}
                       aria-label="Live memory"
