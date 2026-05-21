@@ -1,5 +1,5 @@
-import { LiveMemoryStream } from "@/components/axis/LiveMemoryStream"
+import { AxisShell } from "@/components/axis/AxisShell"
 
 export default function LivePage() {
-  return <LiveMemoryStream />
+  return <AxisShell initialView="live" />
 }

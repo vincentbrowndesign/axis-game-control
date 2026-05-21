@@ -1810,3 +1810,271 @@ body.axis-native-camera-locked {
   background: rgba(242, 241, 237, 0.9);
   color: #000000;
 }
+
+.axis-v2-shell {
+  background:
+    radial-gradient(ellipse at 50% -8%, rgba(242, 241, 237, 0.09), transparent 34%),
+    radial-gradient(ellipse at 12% 92%, rgba(92, 119, 255, 0.08), transparent 42%),
+    radial-gradient(ellipse at 88% 76%, rgba(215, 192, 138, 0.055), transparent 38%),
+    #050505;
+  color: rgba(242, 241, 237, 0.92);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  isolation: isolate;
+  overflow: hidden;
+  padding: max(0.8rem, env(safe-area-inset-top)) clamp(0.9rem, 2.8vw, 1.5rem) max(0.82rem, env(safe-area-inset-bottom));
+  position: fixed;
+  inset: 0;
+}
+
+.axis-v2-shell::before {
+  background:
+    linear-gradient(180deg, rgba(242, 241, 237, 0.028), transparent 24%, transparent 72%, rgba(0, 0, 0, 0.42)),
+    radial-gradient(circle at 50% 50%, rgba(242, 241, 237, 0.045) 0.5px, transparent 1px);
+  background-size: 100% 100%, 72px 72px;
+  content: "";
+  inset: 0;
+  opacity: 0.28;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.axis-v2-topbar {
+  align-items: center;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 1fr auto;
+  min-height: 4.2rem;
+  pointer-events: none;
+}
+
+.axis-v2-topbar > div:first-child {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.axis-v2-topbar span,
+.axis-v2-scoreboard span {
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.axis-v2-topbar span:first-child {
+  color: rgba(242, 241, 237, 0.78);
+}
+
+.axis-v2-topbar span:last-child {
+  color: rgba(242, 241, 237, 0.34);
+}
+
+.axis-v2-scoreboard {
+  align-items: center;
+  backdrop-filter: blur(22px) saturate(1.08);
+  background: rgba(10, 10, 10, 0.34);
+  border: 1px solid rgba(242, 241, 237, 0.06);
+  border-radius: 999px;
+  display: flex;
+  gap: clamp(0.65rem, 2.8vw, 1rem);
+  padding: 0.58rem 0.82rem;
+  pointer-events: auto;
+}
+
+.axis-v2-scoreboard span {
+  color: rgba(242, 241, 237, 0.68);
+  white-space: nowrap;
+}
+
+.axis-v2-scoreboard span:nth-child(2) {
+  color: rgba(242, 241, 237, 0.32);
+}
+
+.axis-v2-viewport {
+  align-items: stretch;
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(0.6rem, 2vh, 1.2rem) 0;
+}
+
+.axis-v2-memory-stream {
+  align-content: end;
+  display: grid;
+  gap: 0.56rem;
+  margin: auto;
+  max-height: 100%;
+  max-width: 46rem;
+  overflow: hidden;
+  width: min(100%, 46rem);
+}
+
+.axis-v2-memory-moment {
+  border-bottom: 1px solid rgba(242, 241, 237, 0.055);
+  padding: 0.82rem 0.08rem;
+}
+
+.axis-v2-memory-moment p {
+  color: rgba(242, 241, 237, 0.9);
+  font-size: clamp(1.2rem, 3.6vw, 2.15rem);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.04;
+}
+
+.axis-v2-memory-moment div {
+  color: rgba(242, 241, 237, 0.34);
+  display: flex;
+  flex-wrap: wrap;
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  gap: 0.64rem;
+  letter-spacing: 0.08em;
+  margin-top: 0.56rem;
+  text-transform: uppercase;
+}
+
+.axis-v2-live-world,
+.axis-v2-inspect-view,
+.axis-v2-replay-view {
+  align-self: stretch;
+  display: grid;
+  margin: 0 auto;
+  max-width: 54rem;
+  place-items: center;
+  width: min(100%, 54rem);
+}
+
+.axis-v2-live-world {
+  gap: 1rem;
+}
+
+.axis-v2-live-lens {
+  aspect-ratio: 16 / 10;
+  background:
+    radial-gradient(ellipse at 50% 34%, rgba(242, 241, 237, 0.11), transparent 28%),
+    linear-gradient(180deg, rgba(242, 241, 237, 0.04), rgba(0, 0, 0, 0.34)),
+    #090909;
+  border: 1px solid rgba(242, 241, 237, 0.05);
+  border-radius: 2rem;
+  box-shadow: inset 0 1px 0 rgba(242, 241, 237, 0.05), 0 30px 100px rgba(0, 0, 0, 0.34);
+  width: 100%;
+}
+
+.axis-v2-live-world p,
+.axis-v2-inspect-view p,
+.axis-v2-replay-caption p {
+  color: rgba(242, 241, 237, 0.84);
+  font-size: clamp(1.3rem, 4vw, 2.6rem);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+}
+
+.axis-v2-inspect-view {
+  gap: 0.7rem;
+  text-align: center;
+}
+
+.axis-v2-inspect-view span,
+.axis-v2-replay-caption span {
+  color: rgba(242, 241, 237, 0.36);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.axis-v2-replay-view {
+  gap: 1.1rem;
+}
+
+.axis-v2-replay-surface {
+  align-items: end;
+  aspect-ratio: 16 / 9;
+  background:
+    linear-gradient(180deg, rgba(242, 241, 237, 0.035), rgba(0, 0, 0, 0.4)),
+    radial-gradient(ellipse at 50% 50%, rgba(92, 119, 255, 0.09), transparent 42%),
+    #070707;
+  border: 1px solid rgba(242, 241, 237, 0.06);
+  border-radius: 1.35rem;
+  display: flex;
+  justify-content: flex-start;
+  padding: 1rem;
+  width: 100%;
+}
+
+.axis-v2-replay-surface span {
+  color: rgba(242, 241, 237, 0.52);
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.axis-v2-replay-caption {
+  display: grid;
+  gap: 0.4rem;
+  text-align: center;
+}
+
+.axis-v2-rail-dock {
+  align-self: end;
+  display: grid;
+  justify-items: center;
+  padding-top: 0.72rem;
+}
+
+.axis-v2-rail {
+  backdrop-filter: blur(28px) saturate(1.12);
+  background:
+    linear-gradient(180deg, rgba(242, 241, 237, 0.06), rgba(242, 241, 237, 0.024)),
+    rgba(12, 12, 12, 0.72);
+  border: 1px solid rgba(242, 241, 237, 0.085);
+  border-radius: 1.35rem;
+  box-shadow: inset 0 1px 0 rgba(242, 241, 237, 0.06), 0 18px 80px rgba(0, 0, 0, 0.34);
+  max-width: 50rem;
+  padding: 0.52rem;
+  width: min(100%, 50rem);
+}
+
+.axis-v2-rail textarea {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: rgba(242, 241, 237, 0.94);
+  display: block;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 520;
+  line-height: 1.35;
+  max-height: 9.25rem;
+  min-height: 3rem;
+  outline: none;
+  overflow-y: auto;
+  padding: 0.74rem 0.82rem;
+  resize: none;
+  width: 100%;
+}
+
+.axis-v2-rail textarea::placeholder {
+  color: rgba(242, 241, 237, 0.3);
+}
+
+@media (max-width: 640px) {
+  .axis-v2-shell {
+    padding-inline: 0.72rem;
+  }
+
+  .axis-v2-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-v2-scoreboard {
+    justify-content: space-between;
+  }
+}

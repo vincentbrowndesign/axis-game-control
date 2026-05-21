@@ -1,5 +1,5 @@
-import { redirectToLiveThread } from "@/lib/liveThreadRedirect"
+import { AxisShell } from "@/components/axis/AxisShell"
 
 export default function ReplayPage() {
-  redirectToLiveThread()
+  return <AxisShell initialView="replay" />
 }
