@@ -284,7 +284,7 @@ function BasketballEventSelector({
 
   return (
     <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
-      <div className="axis-operator-hub axis-operator-protected w-full max-w-sm rounded-md p-2" aria-label="Tag play">
+      <div className="axis-operator-hub axis-operator-protected w-full max-w-sm p-2" aria-label="Tag play">
         <div className="mb-2 grid grid-cols-3 gap-1">
           {primaryScoringActions.map((input) => {
             const suggested = visibleSuggested.includes(input.type)
@@ -1266,9 +1266,59 @@ export function LiveMemoryStream() {
     [emitEvent]
   )
 
+  const recordCommandMemory = useCallback(
+    (payload: AxisCommandPayload) => {
+      const session = workingSessionRef.current
+      if (!session) return
+
+      const sessionTime = elapsedRef.current
+      const previousEvents = basketballSequenceRef.current.slice(-3)
+      const replayWindow = defaultReplayWindow()
+      const score = scoreFromLiveBoxScore(liveBoxScoreRef.current)
+
+      emitEvent("memory_command", {
+        raw: payload.raw,
+        intent: payload.intent.kind,
+        label: payload.intent.label,
+        sessionId: session.id,
+        timestamp: sessionTime,
+        possession: activeStatTeam,
+        score,
+        replayAnchor: {
+          sessionTime,
+          clipStart: Math.max(0, sessionTime - replayWindow.before),
+          clipEnd: sessionTime + replayWindow.after,
+          snapshotId: useAxisChronologyStore.getState().snapshots.at(-1)?.id || null,
+        },
+        sequence: {
+          index: basketballSequenceRef.current.length,
+          previous: previousEvents,
+        },
+        continuity: continuityAssistRef.current,
+        source: "live_command",
+      })
+
+      useAxisChronologyStore.getState().triggerAttentionSignal(
+        "LIVE_MEMORY_COMMAND",
+        sessionTime,
+        {
+          raw: payload.raw,
+          intent: payload.intent.kind,
+          possession: activeStatTeam,
+          score_state: score,
+          replay_window: replayWindow,
+          previous: previousEvents,
+          source: "live_command",
+        }
+      )
+    },
+    [activeStatTeam, emitEvent]
+  )
+
   useEffect(() => {
     const handleCommand = (event: WindowEventMap["axis-command"]) => {
       const payload = event.detail as AxisCommandPayload
+      recordCommandMemory(payload)
       if (payload.intent.kind !== "stat") return
 
       recordCommandStat(liveScoringInputForAction(payload.intent.action), payload.intent.team)
@@ -1276,7 +1326,7 @@ export function LiveMemoryStream() {
 
     window.addEventListener("axis-command", handleCommand)
     return () => window.removeEventListener("axis-command", handleCommand)
-  }, [recordCommandStat])
+  }, [recordCommandMemory, recordCommandStat])
 
   const undoLastStatEvent = useCallback(() => {
     const lastEvent = liveStatEventsRef.current.at(-1)
@@ -1991,7 +2041,6 @@ export function LiveMemoryStream() {
               ) : null}
             </nav>
           </div>
-          <AxisCommandToolbar compact className="mx-auto mt-3 max-w-xl" />
         </header>
 
         {status === "ARCHIVED" && archivedRecording ? (
@@ -2073,7 +2122,7 @@ export function LiveMemoryStream() {
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
           {status === "LIVE" && operatorHubOpen && !pendingContinuitySelection ? (
-            <div className="axis-operator-hub axis-operator-protected mx-auto mb-3 max-w-sm rounded-md p-2">
+            <div className="axis-operator-hub axis-operator-protected mx-auto mb-3 max-w-sm p-2">
               <div className="mb-2 grid grid-cols-2 gap-1">
                 {(["home", "away"] as const).map((team) => (
                   <button
@@ -2168,6 +2217,7 @@ export function LiveMemoryStream() {
               </div>
             </div>
           ) : null}
+          <AxisCommandToolbar compact liveMemory className="mx-auto mb-3 max-w-sm" />
           <div className="mx-auto flex max-w-sm justify-center">
             {status === "READY" ? (
               <button

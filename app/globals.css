@@ -15,7 +15,7 @@
   --axis-os-border: rgba(242, 241, 237, 0.12);
   --axis-os-border-soft: rgba(242, 241, 237, 0.075);
   --axis-os-shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
-  --axis-os-radius: 8px;
+  --axis-os-radius: 0px;
   --axis-space-1: 0.25rem;
   --axis-space-2: 0.5rem;
   --axis-space-3: 0.75rem;
@@ -1035,16 +1035,16 @@ button {
 }
 
 .axis-retrieval-link {
-  background: rgba(148, 184, 255, 0.1);
-  border: 1px solid rgba(148, 184, 255, 0.18);
+  background: rgba(242, 241, 237, 0.1);
+  border: 1px solid rgba(242, 241, 237, 0.13);
   border-radius: var(--axis-os-radius);
-  color: rgba(210, 225, 255, 0.82);
+  color: rgba(242, 241, 237, 0.72);
 }
 
 .axis-retrieval-link:hover,
 .axis-retrieval-link:focus-visible {
-  background: rgba(148, 184, 255, 0.18);
-  color: rgba(238, 244, 255, 0.96);
+  background: rgba(242, 241, 237, 0.16);
+  color: rgba(242, 241, 237, 0.94);
 }
 
 .axis-command-shell {
@@ -1102,7 +1102,7 @@ button {
 
 .axis-command-submit {
   background: rgba(242, 241, 237, 0.9);
-  border-radius: calc(var(--axis-os-radius) - 2px);
+  border-radius: var(--axis-os-radius);
   color: #000000;
   font-size: 0.68rem;
   font-weight: 900;
@@ -1136,9 +1136,9 @@ button {
 }
 
 .axis-command-suggestion {
-  background: rgba(148, 184, 255, 0.08);
-  border-radius: calc(var(--axis-os-radius) - 2px);
-  color: rgba(210, 225, 255, 0.62);
+  background: rgba(242, 241, 237, 0.08);
+  border-radius: var(--axis-os-radius);
+  color: rgba(242, 241, 237, 0.58);
   flex: 0 0 auto;
   padding: 0.35rem 0.5rem;
   transition: 120ms cubic-bezier(0.2, 0, 0.18, 1);

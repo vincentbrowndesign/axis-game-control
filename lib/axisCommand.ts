@@ -32,16 +32,15 @@ export type AxisCommandPayload = {
 }
 
 export const axisCommandSuggestions = [
-  "RECORD",
-  "LIVE",
-  "REPLAY",
-  "FIND REBOUNDS",
   "HOME 3",
-  "AWAY TURNOVER",
-  "CLIP LAST POSSESSION",
+  "AWAY TO",
+  "NAE REB",
+  "CLIP LAST",
+  "FOUL HOME",
+  "TIMEOUT AWAY",
+  "MISS 2 HOME",
+  "FIND REBOUNDS",
   "SHOW LAST RUN",
-  "SHOW TIMELINE",
-  "TIMEOUT HOME",
 ]
 
 const statAliases: Array<{

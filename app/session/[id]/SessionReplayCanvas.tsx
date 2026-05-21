@@ -2525,7 +2525,6 @@ export function SessionReplayCanvas({
       <section className="axis-climate-field pointer-events-none fixed inset-0" />
       <ChronologyEdge trainingMemories={trainingMemories} />
       <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 pb-8 pt-2 sm:px-8">
-        <div className="axis-replay-topbar">
         <AxisHeader title="Live">
           <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
             Find clips
@@ -2534,8 +2533,6 @@ export function SessionReplayCanvas({
             Saved clips
           </AxisLinkButton>
         </AxisHeader>
-        <AxisCommandToolbar compact className="mt-3" />
-        </div>
 
         <div className="flex flex-col gap-4 py-7 md:flex-row md:items-end md:justify-between">
           <div>
@@ -2579,6 +2576,9 @@ export function SessionReplayCanvas({
             <DevelopmentalInputBar trainingMemories={trainingMemories} />
             <DevelopmentalMemoryStrip trainingMemories={trainingMemories} />
           </section>
+        </div>
+        <div className="sticky bottom-3 z-30 mt-auto pt-6">
+          <AxisCommandToolbar />
         </div>
       </section>
     </main>

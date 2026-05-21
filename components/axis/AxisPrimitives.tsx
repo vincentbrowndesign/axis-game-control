@@ -156,7 +156,7 @@ export function AxisScorebug({
   className?: string
 }) {
   return (
-    <div className={joinClasses("axis-broadcast-scorebug mx-auto grid max-w-xl grid-cols-[1fr_auto_1fr] items-stretch overflow-hidden rounded-md", className)}>
+    <div className={joinClasses("axis-broadcast-scorebug mx-auto grid max-w-xl grid-cols-[1fr_auto_1fr] items-stretch overflow-hidden", className)}>
       <div className="grid min-w-0 grid-cols-[auto_1fr] items-center">
         <span className="axis-broadcast-chip axis-world-badge axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
           HOME

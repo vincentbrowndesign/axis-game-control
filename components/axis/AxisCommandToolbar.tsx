@@ -17,9 +17,11 @@ declare global {
 export function AxisCommandToolbar({
   compact = false,
   className = "",
+  liveMemory = false,
 }: {
   compact?: boolean
   className?: string
+  liveMemory?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -42,6 +44,8 @@ export function AxisCommandToolbar({
     setLastAction(parsed.intent.label.toUpperCase())
     setCommand("")
 
+    if (liveMemory) return
+
     if (parsed.intent.kind === "stat") {
       if (pathname !== "/live") router.push("/live")
       return
@@ -63,7 +67,7 @@ export function AxisCommandToolbar({
         <input
           value={command}
           onChange={(event) => setCommand(event.currentTarget.value)}
-          placeholder="RECORD / FIND REBOUNDS / HOME 3"
+          placeholder={liveMemory ? "HOME 3 / NAE REB / CLIP LAST" : "FIND REBOUNDS / SHOW LAST RUN / CLIP THIS"}
           className="axis-command-input"
           autoCapitalize="characters"
           spellCheck={false}
