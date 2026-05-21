@@ -1,0 +1,343 @@
+.shell {
+  background:
+    radial-gradient(ellipse at 50% -14%, rgba(245, 244, 239, 0.11), transparent 38%),
+    linear-gradient(180deg, #121212 0%, #080808 56%, #030303 100%);
+  color: rgb(245, 244, 239);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  padding: max(0.88rem, env(safe-area-inset-top)) clamp(0.82rem, 2.8vw, 1.55rem) max(0.86rem, env(safe-area-inset-bottom));
+  position: fixed;
+}
+
+.shell::before {
+  background:
+    linear-gradient(180deg, rgba(245, 244, 239, 0.04), transparent 18%, transparent 76%, rgba(0, 0, 0, 0.48)),
+    radial-gradient(circle at 50% 48%, rgba(245, 244, 239, 0.045) 0.5px, transparent 1px);
+  background-size: 100% 100%, 64px 64px;
+  content: "";
+  inset: 0;
+  opacity: 0.34;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.telemetry {
+  align-items: center;
+  display: grid;
+  gap: 0.78rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 4.4rem;
+  pointer-events: none;
+}
+
+.session,
+.continuity {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.session span,
+.continuity span,
+.scoreboard span,
+.memoryHeading span,
+.memoryNode div,
+.replaySurface span,
+.replayCopy span,
+.inspect span,
+.railFlow span b {
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.session span,
+.continuity span {
+  color: rgba(245, 244, 239, 0.38);
+}
+
+.session strong {
+  color: rgba(245, 244, 239, 0.92);
+  font-size: 1.05rem;
+  font-weight: 680;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: capitalize;
+}
+
+.continuity {
+  justify-items: end;
+}
+
+.scoreboard {
+  align-items: center;
+  backdrop-filter: blur(22px) saturate(1.08);
+  background: rgba(245, 244, 239, 0.052);
+  border: 1px solid rgba(245, 244, 239, 0.08);
+  border-radius: 999px;
+  display: flex;
+  gap: clamp(0.58rem, 2vw, 0.9rem);
+  padding: 0.58rem 0.78rem;
+  pointer-events: auto;
+}
+
+.scoreboard span {
+  color: rgba(245, 244, 239, 0.68);
+  white-space: nowrap;
+}
+
+.scoreboard span:last-child {
+  color: rgba(245, 244, 239, 0.38);
+}
+
+.viewport {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(0.5rem, 2vh, 1.25rem) 0;
+}
+
+.memoryStream {
+  align-content: end;
+  display: grid;
+  gap: 0.42rem;
+  margin: auto;
+  max-height: 100%;
+  max-width: 45rem;
+  overflow: hidden;
+  width: min(100%, 45rem);
+}
+
+.memoryHeading {
+  margin-bottom: 0.22rem;
+}
+
+.memoryHeading span,
+.memoryNode div,
+.memoryNode small,
+.replayCopy small {
+  color: rgba(245, 244, 239, 0.42);
+}
+
+.memoryNode {
+  border-bottom: 1px solid rgba(245, 244, 239, 0.065);
+  display: grid;
+  gap: 0.38rem;
+  padding: 0.82rem 0.1rem;
+}
+
+.memoryNode div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.68rem;
+}
+
+.memoryNode p {
+  color: rgba(245, 244, 239, 0.94);
+  font-size: clamp(1.28rem, 3.4vw, 2.28rem);
+  font-weight: 680;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.memoryNode small {
+  font-size: 0.92rem;
+  font-weight: 580;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.liveWorld,
+.replay,
+.inspect {
+  align-self: stretch;
+  display: grid;
+  gap: 1rem;
+  margin: 0 auto;
+  max-width: 55rem;
+  place-items: center;
+  text-align: center;
+  width: min(100%, 55rem);
+}
+
+.nativeLens,
+.replaySurface {
+  background:
+    radial-gradient(ellipse at 50% 28%, rgba(245, 244, 239, 0.13), transparent 32%),
+    linear-gradient(180deg, rgba(245, 244, 239, 0.045), rgba(0, 0, 0, 0.44)),
+    #070707;
+  border: 1px solid rgba(245, 244, 239, 0.07);
+  box-shadow: inset 0 1px 0 rgba(245, 244, 239, 0.06), 0 36px 120px rgba(0, 0, 0, 0.38);
+  overflow: hidden;
+  width: 100%;
+}
+
+.nativeLens {
+  aspect-ratio: 16 / 10;
+  border-radius: 2rem;
+  position: relative;
+}
+
+.nativeLens span {
+  background: rgba(245, 244, 239, 0.42);
+  border-radius: 999px;
+  bottom: 1rem;
+  height: 0.28rem;
+  left: 50%;
+  opacity: 0.44;
+  position: absolute;
+  transform: translateX(-50%);
+  width: 4rem;
+}
+
+.liveWorld p,
+.inspect p,
+.replayCopy p {
+  color: rgba(245, 244, 239, 0.9);
+  font-size: clamp(1.42rem, 4vw, 3rem);
+  font-weight: 690;
+  letter-spacing: 0;
+  line-height: 0.98;
+}
+
+.inspect {
+  align-content: center;
+}
+
+.inspect span,
+.replayCopy span {
+  color: rgba(245, 244, 239, 0.4);
+}
+
+.replaySurface {
+  align-items: end;
+  aspect-ratio: 16 / 9;
+  border-radius: 1.55rem;
+  display: flex;
+  justify-content: flex-start;
+  padding: 1rem;
+}
+
+.replaySurface span {
+  color: rgba(245, 244, 239, 0.58);
+}
+
+.replayCopy {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.replayCopy small {
+  font-size: 0.94rem;
+  font-weight: 580;
+}
+
+.railDock {
+  align-self: end;
+  display: grid;
+  justify-items: center;
+  padding-top: 0.72rem;
+}
+
+.rail {
+  backdrop-filter: blur(30px) saturate(1.12);
+  background:
+    linear-gradient(180deg, rgba(245, 244, 239, 0.075), rgba(245, 244, 239, 0.028)),
+    rgba(12, 12, 12, 0.78);
+  border: 1px solid rgba(245, 244, 239, 0.095);
+  border-radius: 1.42rem;
+  box-shadow: inset 0 1px 0 rgba(245, 244, 239, 0.07), 0 22px 90px rgba(0, 0, 0, 0.36);
+  display: grid;
+  gap: 0.3rem;
+  max-width: 50rem;
+  padding: 0.52rem;
+  width: min(100%, 50rem);
+}
+
+.railFlow {
+  display: flex;
+  gap: 0.44rem;
+  overflow: hidden;
+  padding: 0.24rem 0.34rem 0;
+}
+
+.railFlow span {
+  background: rgba(245, 244, 239, 0.045);
+  border: 1px solid rgba(245, 244, 239, 0.055);
+  border-radius: 999px;
+  color: rgba(245, 244, 239, 0.58);
+  display: inline-flex;
+  flex: 0 1 auto;
+  font-size: 0.78rem;
+  gap: 0.42rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.38rem 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.railFlow span b {
+  color: rgba(245, 244, 239, 0.36);
+  flex: 0 0 auto;
+}
+
+.rail textarea {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: rgba(245, 244, 239, 0.95);
+  display: block;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 540;
+  line-height: 1.36;
+  max-height: 9rem;
+  min-height: 3rem;
+  outline: none;
+  overflow-y: auto;
+  padding: 0.76rem 0.82rem;
+  resize: none;
+  width: 100%;
+}
+
+.rail textarea::placeholder {
+  color: rgba(245, 244, 239, 0.32);
+}
+
+@media (max-width: 720px) {
+  .shell {
+    padding-inline: 0.68rem;
+  }
+
+  .telemetry {
+    gap: 0.48rem;
+    grid-template-columns: 1fr auto;
+    min-height: 5.8rem;
+  }
+
+  .continuity {
+    display: none;
+  }
+
+  .scoreboard {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
+  .memoryNode p {
+    font-size: clamp(1.22rem, 7vw, 2rem);
+  }
+
+  .railFlow span {
+    max-width: 12rem;
+  }
+}
