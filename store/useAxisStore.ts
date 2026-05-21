@@ -318,7 +318,7 @@ const initialRebuilt = rebuildState(initialEvents, {
 const initialMemoryNodes = initialRebuilt.memories.map(fromMemoryObject).reverse()
 
 export const useAxisStore = create<AxisState>((set, get) => ({
-  mode: "memory",
+  mode: "live",
   eventLog: initialEvents,
   replayState: {
     status: "ready",

@@ -29,6 +29,11 @@
   position: fixed;
 }
 
+.shell[data-mode="live"] {
+  background: #050505;
+  padding: 0;
+}
+
 .shell::before {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 22%, transparent 74%, rgba(218, 218, 211, 0.48)),
@@ -40,6 +45,10 @@
   pointer-events: none;
   position: absolute;
   z-index: -1;
+}
+
+.shell[data-mode="live"]::before {
+  display: none;
 }
 
 .telemetry {
@@ -229,6 +238,7 @@
 .shell[data-mode="live"] .liveWorld {
   height: 100%;
   max-width: none;
+  position: relative;
   width: 100%;
 }
 
@@ -260,6 +270,7 @@
 
 .shell[data-mode="live"] .nativeLens {
   aspect-ratio: auto;
+  background: #050505;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -281,7 +292,8 @@
 }
 
 .shell[data-mode="live"] .liveCameraFeed {
-  opacity: 0.22;
+  opacity: 0;
+  transition-duration: 220ms;
 }
 
 .nativeLens[data-camera="active"] .liveCameraFeed {
@@ -305,9 +317,9 @@
 
 .shell[data-mode="live"] .cameraAtmosphere {
   background:
-    radial-gradient(ellipse at 50% 42%, transparent 46%, rgba(0, 0, 0, 0.34)),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 30%, rgba(0, 0, 0, 0.24)),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.18), transparent 28%, transparent 72%, rgba(0, 0, 0, 0.18));
+    radial-gradient(ellipse at 50% 44%, transparent 52%, rgba(0, 0, 0, 0.22)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1), transparent 32%, rgba(0, 0, 0, 0.2)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.14), transparent 30%, transparent 70%, rgba(0, 0, 0, 0.14));
 }
 
 .pressureMap {
@@ -332,7 +344,7 @@
 }
 
 .shell[data-mode="live"] .pressureMap::before {
-  opacity: 0.38;
+  opacity: 0.28;
 }
 
 .pressureMap span {
@@ -347,7 +359,8 @@
 
 .shell[data-mode="live"] .pressureMap span {
   background: rgba(255, 255, 246, 0.08);
-  opacity: 0.18;
+  mix-blend-mode: soft-light;
+  opacity: 0.14;
 }
 
 .pressureMap span:nth-child(1) {
@@ -597,12 +610,24 @@
   z-index: 8;
 }
 
+.shell[data-mode="live"] .railDock {
+  padding: 0 clamp(0.86rem, 2.6vw, 1.55rem) max(0.28rem, env(safe-area-inset-bottom));
+}
+
+.shell[data-mode="live"] .telemetry {
+  padding: max(0.68rem, env(safe-area-inset-top)) clamp(0.86rem, 2.6vw, 1.55rem) 0;
+}
+
 .railDock::before {
   background: linear-gradient(180deg, transparent, rgba(239, 239, 234, 0.72) 48%, rgba(239, 239, 234, 0.98));
   content: "";
   inset: -1.72rem 0 0;
   pointer-events: none;
   position: absolute;
+}
+
+.shell[data-mode="live"] .railDock::before {
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.18) 58%, rgba(0, 0, 0, 0.42));
 }
 
 .rail {
@@ -618,6 +643,12 @@
   position: relative;
   width: min(100%, 38rem);
   z-index: 1;
+}
+
+.shell[data-mode="live"] .rail {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 246, 0.13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
 .rail textarea {
@@ -640,8 +671,16 @@
   width: 100%;
 }
 
+.shell[data-mode="live"] .rail textarea {
+  color: rgba(255, 255, 246, 0.92);
+}
+
 .rail textarea::placeholder {
   color: rgba(36, 36, 36, 0.34);
+}
+
+.shell[data-mode="live"] .rail textarea::placeholder {
+  color: rgba(255, 255, 246, 0.48);
 }
 
 .overlayLayer {
