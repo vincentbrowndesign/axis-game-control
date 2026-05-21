@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -37,8 +37,8 @@ import {
   type LiveScoringInput,
   type LiveStatTeam,
 } from "@/lib/liveBasketballStats"
-import { AxisButton, AxisScorebug } from "@/components/axis/AxisPrimitives"
-import { AxisCommandToolbar } from "@/components/axis/AxisCommandToolbar"
+import type { AxisGameAction } from "@/lib/axisEventModel"
+import { AxisScorebug } from "@/components/axis/AxisPrimitives"
 import type { AxisCommandPayload } from "@/lib/axisCommand"
 
 type WorkingSession = {
@@ -94,6 +94,37 @@ type PendingContinuitySelection = {
   suggested: BasketballEvent[]
   openedAt: number
 }
+
+type LiveMemoryDraft = {
+  raw: string
+  team: LiveStatTeam | null
+  player: string | null
+  action: AxisGameAction | null
+}
+
+type LiveMemoryQuestion = {
+  prompt: "who?" | "who/team?" | "home or away?" | "2 or 3?"
+  draft: LiveMemoryDraft
+}
+
+type LiveMemoryResolution =
+  | {
+      kind: "stat"
+      raw: string
+      team: LiveStatTeam
+      player: string | null
+      action: AxisGameAction
+    }
+  | {
+      kind: "question"
+      prompt: LiveMemoryQuestion["prompt"]
+      draft: LiveMemoryDraft
+    }
+  | {
+      kind: "memory"
+      raw: string
+      label: string
+    }
 
 const recorderTypes = [
   "video/mp4;codecs=h264,mp4a.40.2",
@@ -244,28 +275,6 @@ function createId(prefix = "axis") {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function suggestedBasketballEvents(sample: ContinuityAssistSample | null) {
-  if (!sample || Date.now() - sample.recordedAt > 3200) return [] as BasketballEvent[]
-
-  const suggested = new Set<BasketballEvent>()
-  const primitives = new Set(sample.primitives)
-
-  if (primitives.has("JUMP") || primitives.has("LAND")) suggested.add("SHOT")
-  if (primitives.has("FAST") || sample.acceleration > 0.22) suggested.add("DRIVE")
-  if (primitives.has("TURN") || primitives.has("LEAN")) suggested.add("PASS")
-  if (primitives.has("CLOSE") || sample.pressure > 0.5) {
-    suggested.add("TURNOVER")
-    suggested.add("STEAL")
-  }
-  if (primitives.has("SET") || primitives.has("STOP")) suggested.add("SHOT")
-  if (sample.motionEnergy < 0.04 && sample.pressure < 0.08) suggested.add("REBOUND")
-  if (sample.attentionState === "OVERLOADED") {
-    suggested.add("TURNOVER")
-  }
-
-  return Array.from(suggested).slice(0, 3)
 }
 
 function BasketballEventSelector({
@@ -1018,6 +1027,171 @@ function hasLiveVideoTrack(stream: MediaStream | null) {
   )
 }
 
+function normalizeMemoryText(value: string) {
+  return value.trim().replace(/\s+/g, " ")
+}
+
+function explicitTeamFromMemoryText(value: string): LiveStatTeam | null {
+  const normalized = value.toUpperCase()
+  if (/\bHOME\b/.test(normalized)) return "home"
+  if (/\bAWAY\b/.test(normalized)) return "away"
+  return null
+}
+
+function actionFromMemoryText(value: string): AxisGameAction | null {
+  const normalized = value.toUpperCase()
+
+  if (/\b(MISS 3|MISSED 3|3 MISS)\b/.test(normalized)) return "MISS_3"
+  if (/\b(MISS 2|MISSED 2|2 MISS)\b/.test(normalized)) return "MISS_2"
+  if (/\b(AND 1|AND-1|AND ONE)\b/.test(normalized)) return "AND_1"
+  if (/\b(3|3PT|THREE)\b/.test(normalized)) return "MAKE_3"
+  if (/\b(2|2PT|TWO)\b/.test(normalized)) return "MAKE_2"
+  if (/\b(1|1PT|FT|FREE THROW)\b/.test(normalized)) return "MAKE_1"
+  if (/\b(REBOUND|REB|BOARD)\b/.test(normalized)) return "REBOUND"
+  if (/\b(TURNOVER|TO)\b/.test(normalized)) return "TURNOVER"
+  if (/\b(ASSIST|AST)\b/.test(normalized)) return "ASSIST"
+  if (/\b(STEAL|STL)\b/.test(normalized)) return "STEAL"
+  if (/\b(BLOCK|BLK)\b/.test(normalized)) return "BLOCK"
+  if (/\b(FOUL)\b/.test(normalized)) return "FOUL"
+
+  return null
+}
+
+function playerFromMemoryText(value: string) {
+  const normalized = value
+    .toUpperCase()
+    .replace(/\b(HOME|AWAY|THEY|HE|SHE|WE|US|SCORED|SCORE|MADE|MAKE|HIT|BUCKET|POINTS?)\b/g, " ")
+    .replace(/\b(MISS|MISSED|REBOUND|REB|BOARD|TURNOVER|TO|ASSIST|AST|STEAL|STL|BLOCK|BLK|FOUL|AND|ONE|FREE|THROW|FT|PT|TWO|THREE)\b/g, " ")
+    .replace(/\b[123]\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return normalized || null
+}
+
+function scoringNeedsPoints(value: string, action: AxisGameAction | null) {
+  return !action && /\b(SCORED|SCORE|MADE|MAKE|HIT|BUCKET)\b/i.test(value)
+}
+
+function memoryTextIsAmbiguousPerson(value: string) {
+  return /\b(THEY|HE|SHE|SOMEONE)\b/i.test(value)
+}
+
+function actionNeedsActor(value: string, action: AxisGameAction | null) {
+  const hasExplicitTeam = Boolean(explicitTeamFromMemoryText(value))
+  if (hasExplicitTeam || memoryTextIsAmbiguousPerson(value)) return false
+  return action === "REBOUND" || action === "MAKE_1" || action === "MAKE_2" || action === "MAKE_3"
+}
+
+function actionNeedsTeam(value: string, action: AxisGameAction | null) {
+  if (explicitTeamFromMemoryText(value) || playerFromMemoryText(value)) return false
+  return action === "TURNOVER" || action === "FOUL"
+}
+
+function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveMemoryResolution | null {
+  const raw = normalizeMemoryText(value)
+  if (!raw) return null
+
+  const normalized = raw.toUpperCase()
+  if (/^(CLIP|SAVE CLIP|CLIP LAST|CLIP LAST PLAY|CLIP LAST POSSESSION)\b/.test(normalized)) {
+    return {
+      kind: "memory",
+      raw,
+      label: "Clip anchor stored",
+    }
+  }
+
+  if (/^(SUB|SUBSTITUTION|TIMEOUT)\b/.test(normalized)) {
+    return {
+      kind: "memory",
+      raw,
+      label: "Game note stored",
+    }
+  }
+
+  const explicitTeam = explicitTeamFromMemoryText(raw)
+  const team = explicitTeam || fallbackTeam
+  const action = actionFromMemoryText(raw)
+  const player = playerFromMemoryText(raw)
+  const scoredButMissingPoints = scoringNeedsPoints(raw, action)
+
+  if (memoryTextIsAmbiguousPerson(raw) && (action || scoredButMissingPoints)) {
+    return {
+      kind: "question",
+      prompt: "who?",
+      draft: {
+        raw,
+        team: explicitTeam,
+        player: null,
+        action,
+      },
+    }
+  }
+
+  if (actionNeedsActor(raw, action)) {
+    return {
+      kind: "question",
+      prompt: action === "REBOUND" ? "who?" : "who/team?",
+      draft: {
+        raw,
+        team: explicitTeam,
+        player: null,
+        action,
+      },
+    }
+  }
+
+  if (actionNeedsTeam(raw, action)) {
+    return {
+      kind: "question",
+      prompt: "home or away?",
+      draft: {
+        raw,
+        team: null,
+        player: null,
+        action,
+      },
+    }
+  }
+
+  if (scoredButMissingPoints) {
+    return {
+      kind: "question",
+      prompt: "2 or 3?",
+      draft: {
+        raw,
+        team,
+        player,
+        action: null,
+      },
+    }
+  }
+
+  if (action) {
+    return {
+      kind: "stat",
+      raw,
+      team,
+      player,
+      action,
+    }
+  }
+
+  return {
+    kind: "memory",
+    raw,
+    label: "Memory stored",
+  }
+}
+
+function pointsAnswerToAction(value: string): AxisGameAction | null {
+  const normalized = value.toUpperCase()
+  if (/\b(3|3PT|THREE)\b/.test(normalized)) return "MAKE_3"
+  if (/\b(2|2PT|TWO)\b/.test(normalized)) return "MAKE_2"
+  if (/\b(1|1PT|FT|FREE THROW)\b/.test(normalized)) return "MAKE_1"
+  return null
+}
+
 async function postJson<T>(url: string, body: Record<string, unknown>) {
   const response = await fetch(url, {
     method: "POST",
@@ -1048,8 +1222,10 @@ export function LiveMemoryStream() {
   const [showLiveTrainingLabels, setShowLiveTrainingLabels] = useState(false)
   const [pendingContinuitySelection, setPendingContinuitySelection] =
     useState<PendingContinuitySelection | null>(null)
-  const [operatorHubOpen, setOperatorHubOpen] = useState(false)
   const [activeStatTeam, setActiveStatTeam] = useState<LiveStatTeam>("home")
+  const [memoryInput, setMemoryInput] = useState("")
+  const [memoryQuestion, setMemoryQuestion] = useState<LiveMemoryQuestion | null>(null)
+  const [memoryStatus, setMemoryStatus] = useState("Ready")
   const [liveBoxScore, setLiveBoxScore] = useState<LiveBoxScore>(() => createLiveBoxScore())
   const [liveStatEvents, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
@@ -1086,15 +1262,6 @@ export function LiveMemoryStream() {
 
   const handleContinuitySample = useCallback((sample: ContinuityAssistSample) => {
     continuityAssistRef.current = sample
-  }, [])
-
-  const openContinuitySelector = useCallback((sessionTime: number, snapshotId: string | null) => {
-    setPendingContinuitySelection({
-      sessionTime,
-      snapshotId,
-      suggested: suggestedBasketballEvents(continuityAssistRef.current),
-      openedAt: Date.now(),
-    })
   }, [])
 
   const emitEvent = useCallback(
@@ -1191,34 +1358,62 @@ export function LiveMemoryStream() {
         }
       )
       basketballSequenceRef.current = [...basketballSequenceRef.current, basketballEvent].slice(-12)
-      setOperatorHubOpen(false)
       setPendingContinuitySelection(null)
     },
     [activeStatTeam, emitEvent, pendingContinuitySelection]
   )
 
   const recordCommandStat = useCallback(
-    (input: LiveScoringInput, team: LiveStatTeam) => {
+    (
+      input: LiveScoringInput,
+      team: LiveStatTeam,
+      options?: {
+        player?: string | null
+        raw?: string
+        source?: string
+      }
+    ) => {
       const session = workingSessionRef.current
       if (!session) return
 
       const sessionTime = elapsedRef.current
       const previousEvents = basketballSequenceRef.current.slice(-3)
+      const scoreBefore = liveBoxScoreRef.current
       const statEvent = createLiveBasketballStatEvent({
         id: createId("axis-stat"),
         sessionId: session.id,
         type: input.type,
         team,
         sessionTime,
-        scoreBefore: liveBoxScoreRef.current,
+        scoreBefore,
         snapshotId: useAxisChronologyStore.getState().snapshots.at(-1)?.id || null,
         sequenceIndex: basketballSequenceRef.current.length,
         previousEvents,
         continuity: continuityAssistRef.current,
         input,
+        player: options?.player || null,
         possessionBefore: team,
       })
       const nextBoxScore = applyLiveStatEvent(liveBoxScoreRef.current, statEvent)
+      const normalizedCommand = `${team.toUpperCase()} ${input.label}`.toUpperCase()
+      const resolvedEvent = {
+        eventId: statEvent.id,
+        sessionId: session.id,
+        timestamp: sessionTime,
+        gameClock: formatClock(sessionTime),
+        team: team.toUpperCase(),
+        player: options?.player || null,
+        eventType: statEvent.type,
+        points: statEvent.points,
+        possessionBefore: team.toUpperCase(),
+        possessionAfter: statEvent.possession.toUpperCase(),
+        scoreBefore: scoreFromLiveBoxScore(scoreBefore),
+        scoreAfter: statEvent.score,
+        source: "conversation",
+        rawInput: options?.raw || normalizedCommand,
+        normalizedCommand,
+        needsReview: false,
+      }
 
       liveBoxScoreRef.current = nextBoxScore
       liveStatEventsRef.current = [...liveStatEventsRef.current, statEvent].slice(-80)
@@ -1236,9 +1431,11 @@ export function LiveMemoryStream() {
           score: statEvent.score,
           playByPlay: statEvent.playByPlay,
         },
+        resolvedEvent,
         replayAnchor: statEvent.replayAnchor,
         training: statEvent.training,
-        source: "command",
+        raw: options?.raw,
+        source: options?.source || "command",
       })
 
       useAxisChronologyStore.getState().triggerAttentionSignal(
@@ -1257,7 +1454,11 @@ export function LiveMemoryStream() {
           play_by_play: statEvent.playByPlay,
           reconstruction_chapter: reconstructionChapterForEvent(input.type),
           timestamp: sessionTime,
-          source: "command_confirmed",
+          source: options?.source || "command_confirmed",
+          raw: options?.raw,
+          normalized_command: normalizedCommand,
+          resolved_event: resolvedEvent,
+          player: options?.player || null,
           replay_anchor: statEvent.replayAnchor,
           training_rep: statEvent.training,
         }
@@ -1266,8 +1467,8 @@ export function LiveMemoryStream() {
     [emitEvent]
   )
 
-  const recordCommandMemory = useCallback(
-    (payload: AxisCommandPayload) => {
+  const recordLiveMemoryNote = useCallback(
+    (raw: string, label = "Memory stored", intent = "memory") => {
       const session = workingSessionRef.current
       if (!session) return
 
@@ -1275,13 +1476,28 @@ export function LiveMemoryStream() {
       const previousEvents = basketballSequenceRef.current.slice(-3)
       const replayWindow = defaultReplayWindow()
       const score = scoreFromLiveBoxScore(liveBoxScoreRef.current)
+      const normalizedCommand = raw.toUpperCase()
 
-      emitEvent("memory_command", {
-        raw: payload.raw,
-        intent: payload.intent.kind,
-        label: payload.intent.label,
+      const memoryEvent = emitEvent("memory_command", {
+        raw,
+        intent,
+        label,
+        eventId: "",
         sessionId: session.id,
         timestamp: sessionTime,
+        gameClock: formatClock(sessionTime),
+        team: null,
+        player: null,
+        eventType: intent,
+        points: 0,
+        possessionBefore: activeStatTeam.toUpperCase(),
+        possessionAfter: activeStatTeam.toUpperCase(),
+        scoreBefore: score,
+        scoreAfter: score,
+        source: "conversation",
+        rawInput: raw,
+        normalizedCommand,
+        needsReview: false,
         possession: activeStatTeam,
         score,
         replayAnchor: {
@@ -1295,15 +1511,20 @@ export function LiveMemoryStream() {
           previous: previousEvents,
         },
         continuity: continuityAssistRef.current,
-        source: "live_command",
+        memorySource: "live_command",
       })
+      if (memoryEvent.metadata) {
+        memoryEvent.metadata.eventId = memoryEvent.id
+      }
 
       useAxisChronologyStore.getState().triggerAttentionSignal(
         "LIVE_MEMORY_COMMAND",
         sessionTime,
         {
-          raw: payload.raw,
-          intent: payload.intent.kind,
+          raw,
+          intent,
+          event_id: memoryEvent.id,
+          normalized_command: normalizedCommand,
           possession: activeStatTeam,
           score_state: score,
           replay_window: replayWindow,
@@ -1315,13 +1536,23 @@ export function LiveMemoryStream() {
     [activeStatTeam, emitEvent]
   )
 
+  const recordCommandMemory = useCallback(
+    (payload: AxisCommandPayload) => {
+      recordLiveMemoryNote(payload.raw, payload.intent.label, payload.intent.kind)
+    },
+    [recordLiveMemoryNote]
+  )
+
   useEffect(() => {
     const handleCommand = (event: WindowEventMap["axis-command"]) => {
       const payload = event.detail as AxisCommandPayload
       recordCommandMemory(payload)
       if (payload.intent.kind !== "stat") return
 
-      recordCommandStat(liveScoringInputForAction(payload.intent.action), payload.intent.team)
+      recordCommandStat(liveScoringInputForAction(payload.intent.action), payload.intent.team, {
+        raw: payload.raw,
+        source: "command_confirmed",
+      })
     }
 
     window.addEventListener("axis-command", handleCommand)
@@ -1386,39 +1617,161 @@ export function LiveMemoryStream() {
     []
   )
 
-  const captureSnapshot = useCallback(async () => {
-    const session = workingSessionRef.current
-    if (!session) return
+  const resolveMemoryStat = useCallback(
+    (resolution: Extract<LiveMemoryResolution, { kind: "stat" }>) => {
+      recordCommandStat(liveScoringInputForAction(resolution.action), resolution.team, {
+        player: resolution.player,
+        raw: resolution.raw,
+        source: "memory_conversation",
+      })
+      setMemoryQuestion(null)
+      setMemoryInput("")
+      setMemoryStatus("Stored")
+    },
+    [recordCommandStat]
+  )
 
-    const sessionTime = elapsedRef.current
-    const videoElement = localVideoRef.current
+  const runMemoryText = useCallback(
+    (value: string) => {
+      const raw = normalizeMemoryText(value)
+      if (!raw) return
 
-    if (!videoElement) {
-      appendTemporalEvent("SNAPSHOT")
-      openContinuitySelector(sessionTime, null)
-      return
-    }
+      if (memoryQuestion) {
+        if (memoryQuestion.prompt === "home or away?") {
+          const team = explicitTeamFromMemoryText(raw)
+          if (!team) {
+            setMemoryInput("")
+            setMemoryStatus("Axis: home or away?")
+            return
+          }
 
-    const blob = await captureVideoFrameBlob(videoElement)
+          const action = memoryQuestion.draft.action
+          if (!action) {
+            setMemoryQuestion({
+              prompt: "2 or 3?",
+              draft: {
+                ...memoryQuestion.draft,
+                team,
+              },
+            })
+            setMemoryInput("")
+            setMemoryStatus("Axis: 2 or 3?")
+            return
+          }
 
-    if (!blob) {
-      appendTemporalEvent("SNAPSHOT")
-      openContinuitySelector(sessionTime, null)
-      return
-    }
+          resolveMemoryStat({
+            kind: "stat",
+            raw: `${memoryQuestion.draft.raw} / ${team.toUpperCase()}`,
+            team,
+            player: null,
+            action,
+          })
+          return
+        }
 
-    const localUrl =
-      typeof URL !== "undefined" && "createObjectURL" in URL
-        ? URL.createObjectURL(blob)
-        : ""
+        if (memoryQuestion.prompt === "who/team?") {
+          const team = explicitTeamFromMemoryText(raw)
+          const player = team ? null : playerFromMemoryText(raw) || raw.toUpperCase()
+          const nextTeam = team || memoryQuestion.draft.team || activeStatTeam
+          const action = memoryQuestion.draft.action
 
-    const payload = buildContinuitySnapshotPayload(sessionTime, continuityAssistRef.current)
+          if (!action) {
+            setMemoryQuestion({
+              prompt: "2 or 3?",
+              draft: {
+                ...memoryQuestion.draft,
+                team: nextTeam,
+                player,
+              },
+            })
+            setMemoryInput("")
+            setMemoryStatus("Axis: 2 or 3?")
+            return
+          }
 
-    const snapshot = useAxisChronologyStore.getState().triggerSnapshotCapture(sessionTime, blob, localUrl, {
-      ...payload,
-    })
-    openContinuitySelector(sessionTime, snapshot?.id || null)
-  }, [appendTemporalEvent, openContinuitySelector])
+          resolveMemoryStat({
+            kind: "stat",
+            raw: `${memoryQuestion.draft.raw} / ${raw}`,
+            team: nextTeam,
+            player,
+            action,
+          })
+          return
+        }
+
+        if (memoryQuestion.prompt === "who?") {
+          const player = playerFromMemoryText(raw) || raw.toUpperCase()
+          const nextDraft = {
+            ...memoryQuestion.draft,
+            team: memoryQuestion.draft.team || activeStatTeam,
+            player,
+          }
+
+          if (nextDraft.action) {
+            resolveMemoryStat({
+              kind: "stat",
+              raw: `${nextDraft.raw} / ${player}`,
+              team: nextDraft.team || activeStatTeam,
+              player,
+              action: nextDraft.action,
+            })
+            return
+          }
+
+          setMemoryQuestion({
+            prompt: "2 or 3?",
+            draft: nextDraft,
+          })
+          setMemoryInput("")
+          setMemoryStatus("Axis: 2 or 3?")
+          return
+        }
+
+        const action = pointsAnswerToAction(raw)
+        if (!action) {
+          setMemoryInput("")
+          setMemoryStatus("Axis: 2 or 3?")
+          return
+        }
+
+        resolveMemoryStat({
+          kind: "stat",
+          raw: `${memoryQuestion.draft.raw} / ${raw}`,
+          team: memoryQuestion.draft.team || activeStatTeam,
+          player: memoryQuestion.draft.player,
+          action,
+        })
+        return
+      }
+
+      const resolution = resolveLiveMemoryText(raw, activeStatTeam)
+      if (!resolution) return
+
+      if (resolution.kind === "question") {
+        setMemoryQuestion({
+          prompt: resolution.prompt,
+          draft: resolution.draft,
+        })
+        setMemoryInput("")
+        setMemoryStatus(`Axis: ${resolution.prompt}`)
+        return
+      }
+
+      if (resolution.kind === "memory") {
+        recordLiveMemoryNote(resolution.raw, resolution.label, "memory")
+        setMemoryInput("")
+        setMemoryStatus(resolution.label)
+        return
+      }
+
+      resolveMemoryStat(resolution)
+    },
+    [activeStatTeam, memoryQuestion, recordLiveMemoryNote, resolveMemoryStat]
+  )
+
+  const submitMemoryInput = useCallback(() => {
+    runMemoryText(memoryInput)
+  }, [memoryInput, runMemoryText])
 
   const saveLiveReviewToTrainingSet = useCallback(async (label: TrainingLabel) => {
     const session = workingSessionRef.current
@@ -1641,7 +1994,9 @@ export function LiveMemoryStream() {
       setLiveBoxScore(liveBoxScoreRef.current)
       setLiveStatEvents([])
       setActiveStatTeam("home")
-      setOperatorHubOpen(false)
+      setMemoryInput("")
+      setMemoryQuestion(null)
+      setMemoryStatus("Ready")
       setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()
@@ -1982,10 +2337,6 @@ export function LiveMemoryStream() {
             : status === "ARCHIVED"
               ? "SAVED"
               : "RECONNECTING"
-  const liveReport = useMemo(
-    () => summarizeLiveReport(liveStatEvents, liveBoxScore),
-    [liveBoxScore, liveStatEvents]
-  )
   const activeScore = scoreFromLiveBoxScore(liveBoxScore)
   const recentStatEvents = liveStatEvents.slice(-4).reverse()
   const possessionLabel = activeStatTeam.toUpperCase()
@@ -2020,26 +2371,11 @@ export function LiveMemoryStream() {
             clock={formatClock(elapsed)}
             status={statusLabel}
           />
-          <div className="mx-auto mt-2 flex max-w-xl items-center justify-between gap-3">
+          <div className="axis-mono mx-auto mt-2 flex max-w-xl items-center justify-center gap-4 text-[9px] font-black uppercase tracking-[0.18em] text-white/44">
             <p className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/44">
               POS {possessionLabel}
             </p>
-            <nav className="axis-world-nav">
-              <Link
-                href="/retrieve"
-                className="axis-mono axis-retrieval-link px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] transition"
-              >
-                Find clips
-              </Link>
-              {archivedRecording ? (
-                <Link
-                  href={`/session/${archivedRecording.id}`}
-                  className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/42 transition hover:text-white/76"
-                >
-                  Replay
-                </Link>
-              ) : null}
-            </nav>
+            <span>{statusLabel}</span>
           </div>
         </header>
 
@@ -2121,104 +2457,7 @@ export function LiveMemoryStream() {
         ) : null}
 
         <footer className="absolute bottom-5 left-4 right-4 z-20">
-          {status === "LIVE" && operatorHubOpen && !pendingContinuitySelection ? (
-            <div className="axis-operator-hub axis-operator-protected mx-auto mb-3 max-w-sm p-2">
-              <div className="mb-2 grid grid-cols-2 gap-1">
-                {(["home", "away"] as const).map((team) => (
-                  <button
-                    key={team}
-                    type="button"
-                    onClick={() => setActiveStatTeam(team)}
-                    className={`axis-mono px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] transition ${
-                      activeStatTeam === team
-                        ? "axis-familiar-primary"
-                        : "axis-familiar-control"
-                    }`}
-                  >
-                    {team}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-[auto_1fr] gap-3">
-                <div className="axis-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/76">
-                  {liveReport.score}
-                </div>
-                <div className="min-w-0 text-right">
-                  <p className="axis-mono truncate text-[8px] font-black uppercase tracking-[0.14em] text-white/44">
-                    {liveReport.run}
-                  </p>
-                  <p className="axis-mono mt-1 truncate text-[8px] font-black uppercase tracking-[0.12em] text-white/30">
-                    REB {liveReport.rebounds} / TO {liveReport.turnovers}
-                  </p>
-                </div>
-              </div>
-              {recentStatEvents.length ? (
-                <div className="mt-2 grid gap-1">
-                  {recentStatEvents.slice(0, 2).map((event) => (
-                    <p
-                      key={event.id}
-                      className="axis-mono truncate text-[8px] font-black uppercase tracking-[0.12em] text-white/46"
-                    >
-                      {formatClock(event.timestamp)} / {event.playByPlay}
-                    </p>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={undoLastStatEvent}
-                    className="axis-mono justify-self-end text-[8px] font-black uppercase tracking-[0.14em] text-white/42 transition hover:text-white/82"
-                  >
-                    Undo last
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {status === "LIVE" && operatorHubOpen && latestSnapshot && !pendingContinuitySelection ? (
-            <div className="axis-familiar-bar mx-auto mb-3 flex max-w-sm items-center gap-3 border p-1.5">
-              {latestSnapshot.image_url || latestSnapshot.localUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={latestSnapshot.image_url || latestSnapshot.localUrl || ""}
-                  alt="Latest snapshot"
-                  className="h-12 w-16 object-cover"
-                />
-              ) : (
-                <div className="grid h-12 w-16 place-items-center bg-zinc-950 text-[8px] font-black uppercase tracking-[0.14em] text-zinc-600">
-                  SNAP
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="axis-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/38">
-                  {trainingStatus === "stored" ? "CLIP SAVED" : "Latest snap"}
-                </p>
-                {showLiveTrainingLabels ? (
-                  <div className="mt-2 grid grid-cols-3 gap-1">
-                    {trainingLabels.map((label) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => void saveLiveReviewToTrainingSet(label)}
-                        disabled={trainingStatus === "saving"}
-                        className="axis-mono axis-familiar-tag px-2 py-1.5 text-[7px] font-black uppercase tracking-[0.1em] disabled:text-white/24"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setShowLiveTrainingLabels((current) => !current)}
-                  disabled={trainingStatus === "saving"}
-                  className="axis-mono mt-1 text-[8px] font-black uppercase tracking-[0.16em] text-white/48 transition hover:text-white/82 disabled:text-white/24"
-                >
-                  SAVE CLIP
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <AxisCommandToolbar compact liveMemory className="mx-auto mb-3 max-w-sm" />
-          <div className="mx-auto flex max-w-sm justify-center">
+          <div className="mx-auto flex max-w-xl justify-center">
             {status === "READY" ? (
               <button
                 type="button"
@@ -2236,54 +2475,66 @@ export function LiveMemoryStream() {
             ) : null}
 
             {status === "LIVE" && !pendingContinuitySelection ? (
-              operatorHubOpen ? (
-                <div className="grid w-full grid-cols-[1fr_auto] gap-2">
-                  <AxisButton
+              <div className="w-full">
+                <form
+                  className="axis-live-memory-rail"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    submitMemoryInput()
+                  }}
+                >
+                  <div className="axis-live-memory-status">
+                    {memoryQuestion ? `Axis: ${memoryQuestion.prompt}` : memoryStatus}
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <input
+                      value={memoryInput}
+                      onChange={(event) => setMemoryInput(event.currentTarget.value)}
+                      placeholder={memoryQuestion ? "Answer" : "they scored / home 3 / nae reb"}
+                      className="axis-live-memory-input"
+                      autoCapitalize="words"
+                      spellCheck={false}
+                      aria-label="Live memory"
+                    />
+                    <button type="submit" className="axis-live-memory-run">
+                      Run
+                    </button>
+                  </div>
+                </form>
+
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                  {["HOME 3", "AWAY TO", "CLIP", "REB", "SUB"].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => runMemoryText(chip === "CLIP" ? "CLIP LAST" : chip)}
+                      className="axis-live-memory-chip"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                  <button
                     type="button"
-                    onClick={() => void captureSnapshot()}
-                    className="px-3 py-4 tracking-[0.2em] active:bg-zinc-300"
+                    onClick={undoLastStatEvent}
+                    className="axis-live-memory-chip"
                   >
-                    Tag play
-                  </AxisButton>
-                  <AxisButton
+                    Undo
+                  </button>
+                  <button
                     type="button"
-                    tone="secondary"
                     onClick={() => void finalizeSession()}
-                    className="px-4 py-4 tracking-[0.16em] active:bg-white/10"
+                    className="axis-live-memory-chip"
                   >
                     End
-                  </AxisButton>
+                  </button>
                 </div>
-              ) : (
-                <div className="grid w-full grid-cols-[auto_1fr_auto] gap-2">
-                  <AxisButton
-                    type="button"
-                    onClick={() => setActiveStatTeam((team) => (team === "home" ? "away" : "home"))}
-                    tone="secondary"
-                    className="px-3 py-4 tracking-[0.16em] active:bg-white/10"
-                  >
-                    {possessionLabel}
-                  </AxisButton>
-                  <AxisButton
-                    type="button"
-                    onClick={() => {
-                      setOperatorHubOpen(true)
-                      void captureSnapshot()
-                    }}
-                    className="px-3 py-4 tracking-[0.2em] active:bg-zinc-300"
-                  >
-                    Tag play
-                  </AxisButton>
-                  <AxisButton
-                    type="button"
-                    onClick={() => setOperatorHubOpen(true)}
-                    tone="secondary"
-                    className="px-3 py-4 tracking-[0.16em] active:bg-white/10"
-                  >
-                    Stats
-                  </AxisButton>
-                </div>
-              )
+
+                {recentStatEvents.length ? (
+                  <p className="axis-mono mt-2 truncate text-center text-[9px] font-black uppercase tracking-[0.14em] text-white/38">
+                    {recentStatEvents[0].playByPlay}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </div>
           {hasRecentArchive && status === "READY" ? (
