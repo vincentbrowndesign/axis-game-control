@@ -4,6 +4,10 @@ import { create } from "zustand"
 import { parseAxisQueryIntent, type AxisQueryIntent } from "@/lib/axis/intent"
 import type { AxisIntelligenceResponse } from "@/lib/axis/intelligence"
 import { buildPoseOverlay, type AxisMemoryOverlayEnrichment, type AxisOverlayState } from "@/lib/axis/overlays"
+import { createAxisEvent, type AxisChronologyEvent } from "@/lib/axis/state/eventLog"
+import { rebuildState, type AxisRebuiltState } from "@/lib/axis/state/rebuildState"
+import { createReplayAnchorEvent } from "@/lib/axis/state/replayChronology"
+import { parseRewindTransition, rewindTransition } from "@/lib/axis/state/rewindTransition"
 import type { AxisMemoryObject } from "@/lib/axis/types"
 
 export type AxisMode = "live" | "memory" | "replay" | "inspect"
@@ -65,6 +69,7 @@ export type AxisSessionState = {
 
 type AxisState = {
   mode: AxisMode
+  eventLog: AxisChronologyEvent[]
   replayState: AxisReplayState
   memoryState: AxisMemoryState
   selectedReplay: AxisMemoryNode | null
@@ -123,6 +128,7 @@ function nextId(prefix = "m") {
 }
 
 function segmentLabel(intent: AxisQueryIntent) {
+  if (intent.kind === "rewind") return "memory"
   if (intent.kind === "memory") return "memory"
   if (intent.kind === "retrieval") return "memory"
   if (intent.kind === "analytics") return "memory"
@@ -153,22 +159,181 @@ function inferPlayers(label: string) {
   return Array.from(ids)
 }
 
+function inferTags(text: string) {
+  const normalized = text.toLowerCase()
+  const tags = new Set<string>(["memory"])
+  if (/\brebounds?\b|\bboards?\b/.test(normalized)) tags.add("rebound")
+  if (/\bassist\b/.test(normalized)) tags.add("assist")
+  if (/\bturnover\b/.test(normalized)) tags.add("turnover")
+  if (/\bfoul\b/.test(normalized)) tags.add("foul")
+  if (/\bsteal|block|stop\b/.test(normalized)) tags.add("stop")
+  if (/\bscored|score|bucket|three|3\b/.test(normalized)) tags.add("scoring")
+  if (/\breplay|clip|anchor\b/.test(normalized)) tags.add("replay")
+  return Array.from(tags)
+}
+
+function toTeamPossession(team: AxisRebuiltState["possession"]): AxisSessionState["possession"] {
+  return team === "home" ? "HOME" : "AWAY"
+}
+
+function continuityLabel(rebuilt: AxisRebuiltState) {
+  if (rebuilt.continuity.stabilizationMoment) return rebuilt.continuity.stabilizationMoment
+  if (rebuilt.continuity.pressure === "rising") return "pressure rising"
+  if (rebuilt.continuity.pressure === "swinging") return "momentum moving"
+  return "settled"
+}
+
+function fromMemoryObject(memory: AxisMemoryObject): AxisMemoryNode {
+  return {
+    id: memory.id,
+    label: memory.label,
+    time: memory.timestamp,
+    score: memory.scoreState,
+    context: memory.eventLabel,
+    tags: memory.tags,
+    replayLinked: Boolean(memory.replayAnchor),
+    continuity: memory.tags.includes("replay") ? "replay" : "memory",
+    query: memory.label,
+    enrichments: [],
+  }
+}
+
+function applyRebuiltState(state: AxisState, eventLog: AxisChronologyEvent[], mode = state.mode) {
+  const enrichmentById = new Map(state.memoryState.nodes.map((node) => [node.id, node.enrichments]))
+  const rebuilt = rebuildState(eventLog, {
+    mode,
+    initialScore: {
+      home: 0,
+      away: 0,
+    },
+    initialPossession: "home",
+  })
+  const nodes = rebuilt.memories
+    .map((memory) => ({
+      ...fromMemoryObject(memory),
+      enrichments: enrichmentById.get(memory.id) ?? [],
+    }))
+    .reverse()
+    .slice(0, 16)
+  const selectedReplay = nodes.find((node) => node.replayLinked) ?? nodes[0] ?? null
+
+  return {
+    eventLog,
+    mode,
+    selectedReplay,
+    sessionState: {
+      ...state.sessionState,
+      possession: toTeamPossession(rebuilt.possession),
+      continuity: continuityLabel(rebuilt),
+      score: rebuilt.score,
+    },
+    replayState: {
+      ...state.replayState,
+      title: rebuilt.replayChronology.latestAnchor?.label ?? state.replayState.title,
+      timestamp: rebuilt.replayChronology.latestAnchor?.timestamp ?? state.replayState.timestamp,
+      memoryId: rebuilt.replayChronology.latestAnchor?.memoryId ?? state.replayState.memoryId,
+    },
+    memoryState: {
+      ...state.memoryState,
+      nodes,
+      output: null,
+    },
+  }
+}
+
+const initialEvents: AxisChronologyEvent[] = [
+  createAxisEvent(
+    {
+      type: "score.initialized",
+      score: {
+        home: 11,
+        away: 8,
+      },
+    },
+    {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      gameTime: "00:00",
+      period: "Q1",
+      source: "system",
+      query: "session score",
+    },
+  ),
+  createAxisEvent(
+    {
+      type: "memory.recorded",
+      label: "Nae rebound, quick outlet",
+      scoreState: "8-6",
+      playerIds: ["Nae"],
+      tags: ["memory", "rebound", "continuity", "replay"],
+    },
+    {
+      createdAt: "2026-01-01T00:02:14.000Z",
+      gameTime: "02:14",
+      period: "Q1",
+      source: "system",
+      query: "show rebounds",
+    },
+  ),
+  createAxisEvent(
+    {
+      type: "memory.recorded",
+      label: "Home 3 from the right side",
+      scoreState: "11-6",
+      playerIds: ["Home"],
+      tags: ["memory", "scoring", "run", "replay"],
+    },
+    {
+      createdAt: "2026-01-01T00:03:02.000Z",
+      gameTime: "03:02",
+      period: "Q1",
+      source: "system",
+      query: "they scored",
+    },
+  ),
+  createAxisEvent(
+    {
+      type: "memory.recorded",
+      label: "Steal into early replay anchor",
+      scoreState: "11-8",
+      playerIds: [],
+      tags: ["memory", "stop", "replay"],
+    },
+    {
+      createdAt: "2026-01-01T00:04:18.000Z",
+      gameTime: "04:18",
+      period: "Q1",
+      source: "system",
+      query: "where was the steal?",
+    },
+  ),
+]
+
+const initialRebuilt = rebuildState(initialEvents, {
+  initialScore: {
+    home: 0,
+    away: 0,
+  },
+  initialPossession: "home",
+})
+const initialMemoryNodes = initialRebuilt.memories.map(fromMemoryObject).reverse()
+
 export const useAxisStore = create<AxisState>((set, get) => ({
   mode: "memory",
+  eventLog: initialEvents,
   replayState: {
     status: "ready",
-    title: "Latest replay memory",
-    timestamp: "04:18",
-    memoryId: "m-3",
+    title: initialMemoryNodes[0]?.label ?? "Latest replay memory",
+    timestamp: initialMemoryNodes[0]?.time ?? "04:18",
+    memoryId: initialMemoryNodes[0]?.id ?? "m-3",
   },
   memoryState: {
     filter: "all",
     query: "session flow",
-    nodes: initialNodes,
+    nodes: initialMemoryNodes,
     output: null,
     loading: false,
   },
-  selectedReplay: initialNodes[2],
+  selectedReplay: initialMemoryNodes[0] ?? initialNodes[2],
   activeOverlay: null,
   railState: {
     value: "",
@@ -228,28 +393,46 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     }
 
     if (intent.kind === "memory") {
-      const node: AxisMemoryNode = {
-        id: nextId(),
-        label: intent.text,
-        time: "now",
-        score: `${state.sessionState.score.home}-${state.sessionState.score.away}`,
-        context: "rail",
-        tags: ["memory"],
-        replayLinked: false,
-        continuity: "memory",
-        query: intent.text,
-        enrichments: [],
-      }
-
-      const nodes = [node, ...state.memoryState.nodes].slice(0, 16)
+      const event = createAxisEvent(
+        {
+          type: "memory.recorded",
+          label: intent.text,
+          scoreState: `${state.sessionState.score.home}-${state.sessionState.score.away}`,
+          playerIds: inferPlayers(intent.text),
+          tags: inferTags(intent.text),
+        },
+        {
+          gameTime: "now",
+          period: state.sessionState.quarter,
+          source: "rail",
+          query: intent.text,
+        },
+      )
+      const eventLog = [...state.eventLog, event]
       set({
+        ...applyRebuiltState(state, eventLog),
         lastIntent: intent,
         memoryState: {
-          ...state.memoryState,
-          nodes,
+          ...applyRebuiltState(state, eventLog).memoryState,
           query: intent.text,
-          output: null,
         },
+        railState: {
+          ...state.railState,
+          value: "",
+          segments: [nextSegment, ...state.railState.segments].slice(0, 5),
+        },
+      })
+      return
+    }
+
+    if (intent.kind === "rewind") {
+      const transition = parseRewindTransition(intent.query)
+      const result = transition ? rewindTransition(state.eventLog, transition) : null
+      const eventLog = result?.events ?? state.eventLog
+
+      set({
+        ...applyRebuiltState(state, eventLog),
+        lastIntent: intent,
         railState: {
           ...state.railState,
           value: "",
@@ -312,7 +495,10 @@ export const useAxisStore = create<AxisState>((set, get) => ({
 
     if (intent.kind === "replay") {
       const selectedReplay = state.memoryState.nodes.find((node) => node.replayLinked) ?? state.memoryState.nodes[0] ?? null
+      const replayEvent = selectedReplay ? createReplayAnchorEvent(toMemoryObject(selectedReplay)) : null
+      const eventLog = replayEvent ? [...state.eventLog, replayEvent] : state.eventLog
       set({
+        eventLog,
         mode: "replay",
         lastIntent: intent,
         selectedReplay,

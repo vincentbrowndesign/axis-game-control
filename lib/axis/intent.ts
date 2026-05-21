@@ -40,6 +40,12 @@ export type AxisQueryIntent =
       text: string
       label: string
     }
+  | {
+      kind: "rewind"
+      view: AxisViewState
+      query: string
+      label: string
+    }
 
 function normalizeQuery(value: string) {
   return value.trim().replace(/\s+/g, " ")
@@ -59,6 +65,18 @@ export function parseAxisQueryIntent(value: string, currentView: AxisViewState):
   if (!raw) return null
 
   const normalized = raw.toLowerCase()
+
+  if (
+    /^(undo|undo last|take it back|remove last)$/.test(normalized) ||
+    /\b(actually\s+[123]|that was\s+[123]|wrong player|remove turnover|no turnover|remove rebound|no rebound)\b/.test(normalized)
+  ) {
+    return {
+      kind: "rewind",
+      view: currentView,
+      query: raw,
+      label: "Corrected",
+    }
+  }
 
   if (/^(live|camera|start live)$/.test(normalized)) {
     return {
