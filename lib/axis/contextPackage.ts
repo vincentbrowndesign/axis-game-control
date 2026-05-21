@@ -1,4 +1,7 @@
 import { parseAxisQueryIntent } from "@/lib/axis/intent"
+import { createFreshSigmaField, type SigmaMemoryPackage } from "@/lib/axis/continuity/fieldTypes"
+import { normalizeField } from "@/lib/axis/continuity/normalizeField"
+import { propagateSigma } from "@/lib/axis/continuity/propagateSigma"
 import type { AxisChronologyEvent } from "@/lib/axis/state/eventLog"
 import { AXIS_PRIMITIVE_BOUNDARY, type AxisPrimitiveBoundary } from "@/lib/axis/state/primitives"
 import { rebuildState, type AxisRebuiltState } from "@/lib/axis/state/rebuildState"
@@ -43,6 +46,7 @@ export type AxisContextPackage = {
   }
   continuityState: AxisContextualOutputs
   replayContext: AxisRebuiltState["replayChronology"] | null
+  sigmaMemoryPackage: SigmaMemoryPackage | null
   playerContext: {
     activePlayers: string[]
     playerMemory: AxisStaticOutputs["players"]
@@ -69,6 +73,9 @@ export function buildAxisContextPackage(input: AxisContextPackageInput): AxisCon
     rebuiltState?.staticOutputs ?? extractStaticOutputs(memories, input.session.score, input.session.possession)
   const contextualOutputs = rebuiltState?.continuity ?? extractContextualOutputs(memories)
   const queryIntent = parseAxisQueryIntent(input.query, input.mode)
+  const sigmaMemoryPackage = memories.length
+    ? normalizeField(propagateSigma(createFreshSigmaField(memories), "both"))
+    : null
 
   return {
     kernel: {
@@ -89,6 +96,7 @@ export function buildAxisContextPackage(input: AxisContextPackageInput): AxisCon
     },
     continuityState: contextualOutputs,
     replayContext: rebuiltState?.replayChronology ?? null,
+    sigmaMemoryPackage,
     playerContext: {
       activePlayers: Array.from(new Set(memories.flatMap((memory) => memory.playerIds))).slice(0, 8),
       playerMemory: staticAnalytics.players,
