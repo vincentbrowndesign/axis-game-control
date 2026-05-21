@@ -21,8 +21,13 @@ export type ReplayRetrievalClip = {
   clipEnd: number
   eventType: string
   team: string
+  player: string | null
   label: string
   score: string
+  possession: string
+  previousEventId: string | null
+  nextEventId: string | null
+  normalizedMeaning: string
   createdAt: string
   playbackUrl: string | null
   relevance: number
@@ -65,6 +70,33 @@ function scoreLabel(value: unknown) {
   return `${home}-${away}`
 }
 
+function compactEventLabel({
+  eventType,
+  team,
+  player,
+  points,
+  fallback,
+}: {
+  eventType: string
+  team: string
+  player: string | null
+  points: number
+  fallback: string
+}) {
+  const owner = player || team
+  if (eventType === "MAKE") return `${owner} ${points === 1 ? "FT" : `${points || 2}PT`}`
+  if (eventType === "MISS" || eventType === "SHOT") return `${owner} MISS`
+  if (eventType === "TURNOVER") return `${owner} TURNOVER`
+  if (eventType === "REBOUND") return `${owner} REBOUND`
+  if (eventType === "ASSIST") return `${owner} ASSIST`
+  if (eventType === "STEAL") return `${owner} STEAL`
+  if (eventType === "BLOCK") return `${owner} BLOCK`
+  if (eventType === "FOUL") return `${owner} FOUL`
+  if (fallback) return fallback.toUpperCase()
+
+  return eventLabel(eventType).toUpperCase()
+}
+
 function eventLabel(eventType: string) {
   if (eventType === "MAKE") return "Made shot"
   if (eventType === "MISS" || eventType === "SHOT") return "Shot"
@@ -74,7 +106,7 @@ function eventLabel(eventType: string) {
   if (eventType === "STEAL") return "Steal"
   if (eventType === "BLOCK") return "Block"
   if (eventType === "FOUL") return "Foul"
-  if (eventType === "SNAPSHOT") return "Saved clip"
+  if (eventType === "SNAPSHOT") return "Saved moment"
 
   return eventType.replaceAll("_", " ").toLowerCase()
 }
@@ -105,11 +137,25 @@ function normalizedPreset(value?: string | null): ReplayRetrievalPreset {
   return "all"
 }
 
+function presetFromQuery(query?: string | null): ReplayRetrievalPreset | null {
+  const normalized = (query || "").toLowerCase()
+  if (/\blast\s+run\b/.test(normalized)) return "last-run"
+  if (/\bturnovers?\b|\bto\b/.test(normalized)) return "turnovers"
+  if (/\brebounds?\b|\bboards?\b/.test(normalized)) return "rebounds"
+  if (/\bassists?\b|\bast\b/.test(normalized)) return "assists"
+  if (/\bmade\b|\bmakes?\b|\bscor(e|ing)\b/.test(normalized)) return "makes"
+  if (/\bstops?\b|\bsteals?\b|\bblocks?\b/.test(normalized)) return "stops"
+
+  return null
+}
+
 function hiddenContinuityScore(payload: Record<string, unknown>) {
   const training = asRecord(payload.training_rep)
+  const memory = asRecord(payload.memory_object)
   const continuity = asRecord(training.continuity)
-  const pressure = number(continuity.pressure)
-  const density = number(continuity.density)
+  const memoryContinuity = asRecord(memory.continuityState)
+  const pressure = number(continuity.pressure) || number(memoryContinuity.pressure)
+  const density = number(continuity.density) || number(memoryContinuity.density)
   const sequence = asRecord(payload.sequence)
   const previous = Array.isArray(sequence.previous) ? sequence.previous.length : 0
 
@@ -121,12 +167,24 @@ function clipFromEvent(
   session: TemporalSessionRecord | undefined
 ): ReplayRetrievalClip | null {
   if (!session) return null
-  if (event.type !== "BASKETBALL_EVENT" && event.type !== "SNAPSHOT") return null
+  if (
+    event.type !== "BASKETBALL_EVENT" &&
+    event.type !== "LIVE_MEMORY_COMMAND" &&
+    event.type !== "SNAPSHOT"
+  ) {
+    return null
+  }
 
   const payload = asRecord(event.payload)
-  const anchor = asRecord(payload.replay_anchor)
+  const memory = asRecord(payload.memory_object)
+  const anchor = {
+    ...asRecord(memory.replayAnchor),
+    ...asRecord(payload.replay_anchor),
+  }
   const eventType =
-    text(payload.basketball_event) || (event.type === "SNAPSHOT" ? "SNAPSHOT" : event.type)
+    text(memory.eventType) ||
+    text(payload.basketball_event) ||
+    (event.type === "SNAPSHOT" ? "SNAPSHOT" : event.type)
   const sessionTime = number(event.session_time)
   const clipStart = Math.max(
     0,
@@ -136,8 +194,13 @@ function clipFromEvent(
     number(anchor.clipEnd) ||
     sessionTime + number(asRecord(payload.replay_window).after) ||
     sessionTime + 4
-  const team = text(payload.team).toUpperCase() || "TEAM"
+  const team = text(memory.team).toUpperCase() || text(payload.team).toUpperCase() || "TEAM"
+  const player = text(memory.player) || text(payload.player) || null
   const playByPlay = text(payload.play_by_play)
+  const normalizedMeaning = text(memory.normalizedMeaning) || text(payload.normalized_command)
+  const rawInput = text(memory.rawInput) || text(payload.raw)
+  const score = scoreLabel(memory.scoreAfter || payload.score_state)
+  const points = number(payload.points)
 
   return {
     id: `${session.id}:${event.id}`,
@@ -148,8 +211,19 @@ function clipFromEvent(
     clipEnd,
     eventType,
     team,
-    label: playByPlay || `${team} ${eventLabel(eventType)}`,
-    score: scoreLabel(payload.score_state),
+    player,
+    label: compactEventLabel({
+      eventType,
+      team,
+      player,
+      points,
+      fallback: playByPlay || rawInput || normalizedMeaning,
+    }),
+    score,
+    possession: text(memory.possessionAfter) || text(payload.possession).toUpperCase() || "LIVE",
+    previousEventId: text(memory.previousEventId) || null,
+    nextEventId: text(memory.nextEventId) || null,
+    normalizedMeaning,
     createdAt: session.created_at,
     playbackUrl: session.playback_url,
     relevance: 1 + hiddenContinuityScore(payload),
@@ -163,7 +237,10 @@ function queryMatches(clip: ReplayRetrievalClip, query: string) {
     clip.label,
     clip.eventType,
     clip.team,
+    clip.player,
     clip.score,
+    clip.possession,
+    clip.normalizedMeaning,
     `${Math.floor(clip.sessionTime)}`,
   ]
     .join(" ")
@@ -173,7 +250,7 @@ function queryMatches(clip: ReplayRetrievalClip, query: string) {
     .toLowerCase()
     .split(/\s+/)
     .filter(Boolean)
-    .every((part) => haystack.includes(part))
+    .every((part) => haystack.includes(part) || haystack.includes(part.replace(/s$/, "")))
 }
 
 function cluster(
@@ -199,15 +276,23 @@ export function buildReplayRetrieval({
   query,
   limit = 18,
 }: RetrievalInput) {
-  const selectedPreset = normalizedPreset(preset)
+  const queryPreset = preset ? null : presetFromQuery(query)
+  const selectedPreset = queryPreset || normalizedPreset(preset)
+  const effectiveQuery = queryPreset ? "" : query || ""
   const sessionsById = new Map(sessions.map((session) => [session.id, session]))
   const clips = events
     .map((event) => clipFromEvent(event, sessionsById.get(event.session_id)))
     .filter((clip): clip is ReplayRetrievalClip => Boolean(clip))
     .filter((clip) => eventMatchesPreset(clip.eventType, selectedPreset))
-    .filter((clip) => queryMatches(clip, query || ""))
+    .filter((clip) => queryMatches(clip, effectiveQuery))
     .sort((a, b) => {
       if (selectedPreset === "last-run") return b.sessionTime - a.sessionTime
+      if (!effectiveQuery && selectedPreset === "all") {
+        const sessionDelta = b.createdAt.localeCompare(a.createdAt)
+        if (sessionDelta !== 0) return sessionDelta
+
+        return a.sessionTime - b.sessionTime
+      }
 
       const relevanceDelta = b.relevance - a.relevance
       if (Math.abs(relevanceDelta) > 0.01) return relevanceDelta
@@ -234,12 +319,12 @@ export function buildReplayRetrieval({
     cluster(
       "scoring",
       "Made shots",
-      "Scoring clips with score state",
+      "Scoring moments with score state",
       sourceClips.filter((clip) => clip.eventType === "MAKE")
     ),
     cluster(
       "pressure",
-      "High-value clips",
+      "High-value moments",
       "Tagged plays with stronger game context",
       [...sourceClips]
         .filter((clip) => clip.hiddenContinuityScore > 0.18)
@@ -260,7 +345,7 @@ export const replayRetrievalPresets: Array<{
 }> = [
   {
     key: "all",
-    label: "All clips",
+    label: "All moments",
   },
   {
     key: "last-run",

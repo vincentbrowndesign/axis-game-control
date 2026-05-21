@@ -10,7 +10,6 @@ import {
   type ReplayRetrievalClip,
 } from "@/lib/retrieval/liveReplayRetrieval"
 import {
-  AxisClipCard,
   AxisEmptyState,
   AxisHeader,
   AxisLinkButton,
@@ -40,22 +39,35 @@ function clipHref(clip: ReplayRetrievalClip) {
   return `/session/${clip.sessionId}?${params.toString()}`
 }
 
-function RetrievalClipCard({ clip }: { clip: ReplayRetrievalClip }) {
+function MomentRow({ clip }: { clip: ReplayRetrievalClip }) {
   return (
-    <AxisClipCard
+    <Link
       href={clipHref(clip)}
-      kicker={`${clip.team} / ${clip.eventType}`}
-      title={clip.label}
-      badge={clip.score}
-      meta={
-        <>
-          <span>{formatClock(clip.sessionTime)}</span>
+      className="group grid gap-3 border-t border-white/[0.08] py-4 transition hover:border-white/[0.18] hover:bg-white/[0.025] sm:grid-cols-[minmax(0,1fr)_auto]"
+    >
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <h2 className="truncate text-2xl font-black uppercase leading-none tracking-normal text-white/90 sm:text-3xl">
+            {clip.label}
+          </h2>
+          <span className="axis-mono shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-white/38">
+            {formatClock(clip.sessionTime)}
+          </span>
+        </div>
+        <div className="axis-mono mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/42">
+          <span>{clip.score}</span>
+          <span>POS {clip.possession}</span>
           <span>
             {formatClock(clip.clipStart)}-{formatClock(clip.clipEnd)}
           </span>
-        </>
-      }
-    />
+          {clip.player ? <span>{clip.player}</span> : null}
+        </div>
+      </div>
+      <div className="axis-mono flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-white/34 transition group-hover:text-white/62">
+        <span>{clip.previousEventId ? "Context linked" : "First memory"}</span>
+        <span>Open</span>
+      </div>
+    </Link>
   )
 }
 
@@ -110,42 +122,30 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
     query: params.q,
   })
   const q = params.q || ""
+  const activeContext = q || replayRetrievalPresets.find((preset) => preset.key === retrieval.preset)?.label || "All moments"
 
   return (
-    <AxisPage max="max-w-6xl" className="axis-replay-operating-room px-4 py-6 sm:px-8">
-      <div className="grid gap-8">
-        <header className="grid gap-5 pb-5">
+    <AxisPage max="max-w-5xl" className="axis-replay-operating-room px-4 py-6 sm:px-8">
+      <div className="grid gap-7 pb-24">
+        <header className="grid gap-6 pb-2">
           <AxisHeader title="Live">
-            <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
-              Replay recall
-            </AxisLinkButton>
-            <AxisLinkButton href="/training-set" tone="ghost" className="px-0 py-0">
-              Saved clips
+            <AxisLinkButton href="/live" tone="ghost" className="px-0 py-0">
+              Live
             </AxisLinkButton>
           </AxisHeader>
           <div>
             <p className="axis-mono axis-world-kicker text-[10px] font-black uppercase tracking-[0.24em]">
-              Replay recall
+              Memory retrieval
             </p>
-            <h1 className="axis-world-title mt-3 max-w-3xl text-5xl font-black uppercase leading-[0.92] tracking-normal sm:text-7xl">
-              Find the play.
+            <h1 className="axis-world-title mt-3 max-w-4xl text-5xl font-black uppercase leading-[0.92] tracking-normal sm:text-7xl">
+              Memory timeline.
             </h1>
+            <div className="axis-mono mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/42">
+              <span>{activeContext}</span>
+              <span>{retrieval.clips.length} moments</span>
+            </div>
           </div>
-          <form className="axis-replay-command-surface grid gap-3 p-3 sm:grid-cols-[1fr_auto]">
-            <input
-              name="q"
-              defaultValue={q}
-              placeholder="Player, score, turnover, rebound"
-              className="min-h-12 bg-transparent px-3 text-sm font-bold uppercase tracking-[0.08em] text-white/82 outline-none placeholder:text-white/30"
-            />
-            <button
-              type="submit"
-              className="axis-familiar-primary px-5 py-3 text-[10px] font-black uppercase tracking-[0.18em]"
-            >
-              Find clips
-            </button>
-          </form>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 border-y border-white/[0.08] py-3">
             {replayRetrievalPresets.map((preset) => {
               const active = retrieval.preset === preset.key
               const href = q
@@ -156,8 +156,8 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
                 <Link
                   key={preset.key}
                   href={href}
-                  className={`axis-mono px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition ${
-                    active ? "axis-familiar-primary" : "axis-familiar-control"
+                  className={`axis-mono text-[10px] font-black uppercase tracking-[0.14em] transition ${
+                    active ? "text-white" : "text-white/36 hover:text-white/68"
                   }`}
                 >
                   {preset.label}
@@ -168,48 +168,30 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
         </header>
 
         {retrieval.clusters.length ? (
-          <section className="grid gap-3 md:grid-cols-2">
+          <section className="flex flex-wrap gap-x-5 gap-y-2">
             {retrieval.clusters.slice(0, 4).map((cluster) => (
               <Link
                 key={cluster.id}
                 href={`/retrieve?preset=${cluster.id === "scoring" ? "makes" : cluster.id}`}
-                className="axis-familiar-bar axis-world-panel axis-optical-transition p-4 transition hover:bg-white/[0.05]"
+                className="axis-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/38 transition hover:text-white/70"
               >
-                <p className="axis-mono text-[10px] font-black uppercase tracking-[0.18em] text-white/46">
-                  {cluster.subtitle}
-                </p>
-                <div className="mt-4 flex items-end justify-between gap-3">
-                  <h2 className="text-2xl font-black uppercase tracking-normal text-white/86">
-                    {cluster.title}
-                  </h2>
-                  <span className="axis-broadcast-chip axis-world-badge axis-mono px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em]">
-                    {cluster.clips.length}
-                  </span>
-                </div>
+                {cluster.title} / {cluster.clips.length}
               </Link>
             ))}
           </section>
         ) : null}
 
-        <section className="grid gap-3">
-          <div className="flex items-center justify-between gap-4">
-            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/62">
-              {retrieval.clips.length} clips ready
-            </p>
-            <p className="axis-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/48">
-              Opens exact replay
-            </p>
-          </div>
+        <section className="grid gap-1">
           {retrieval.clips.length ? (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div>
               {retrieval.clips.map((clip) => (
-                <RetrievalClipCard key={clip.id} clip={clip} />
+                <MomentRow key={clip.id} clip={clip} />
               ))}
             </div>
           ) : (
-            <AxisEmptyState title="No tagged clips yet.">
+            <AxisEmptyState title="No memory yet." className="border-0 bg-transparent">
               <p>
-                Start a live recording, tag a few plays, then come back here for instant recall.
+                Start live, speak the game into the rail, then return here as moments accumulate.
               </p>
             </AxisEmptyState>
           )}
