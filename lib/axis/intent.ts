@@ -28,6 +28,13 @@ export type AxisQueryIntent =
       label: string
     }
   | {
+      kind: "analytics"
+      view: "memory"
+      query: string
+      metric: "score" | "player" | "run" | "review" | "momentum"
+      label: string
+    }
+  | {
       kind: "memory"
       view: AxisViewState
       text: string
@@ -88,6 +95,36 @@ export function parseAxisQueryIntent(value: string, currentView: AxisViewState):
           : "form",
       query: raw,
       label: "Inspect",
+    }
+  }
+
+  if (/\b#?\d+\s*(stats?|impact|points|rebounds?)\b/.test(normalized) || /\bwho has\b/.test(normalized)) {
+    return {
+      kind: "analytics",
+      view: "memory",
+      query: raw,
+      metric: "player",
+      label: "Memory",
+    }
+  }
+
+  if (/\b(last run|caused the run|changed momentum|changed the game|what changed)\b/.test(normalized)) {
+    return {
+      kind: "analytics",
+      view: "memory",
+      query: raw,
+      metric: /\bmomentum|changed/.test(normalized) ? "momentum" : "run",
+      label: "Memory",
+    }
+  }
+
+  if (/\bwhat should we review|review\b/.test(normalized)) {
+    return {
+      kind: "analytics",
+      view: "memory",
+      query: raw,
+      metric: "review",
+      label: "Memory",
     }
   }
 

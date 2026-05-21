@@ -16,6 +16,19 @@ export function AxisMemoryStream() {
 
   return (
     <div className={styles.memoryStream} aria-label="Axis memory stream">
+      {memory.output ? (
+        <section className={styles.memoryAnswer} aria-label="Axis answer">
+          <span>{memory.query}</span>
+          <p>{memory.output.answer}</p>
+          <div>
+            <span>{memory.output.staticOutputs.eventCount} events</span>
+            <span>
+              {memory.output.staticOutputs.score.home}-{memory.output.staticOutputs.score.away}
+            </span>
+            {memory.output.contextualOutputs.lastRun ? <span>{memory.output.contextualOutputs.lastRun}</span> : null}
+          </div>
+        </section>
+      ) : null}
       {nodes.map((node) => (
         <article key={node.id} className={styles.memoryNode}>
           <div>

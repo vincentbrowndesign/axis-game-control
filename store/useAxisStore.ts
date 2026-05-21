@@ -2,6 +2,8 @@
 
 import { create } from "zustand"
 import { parseAxisQueryIntent, type AxisQueryIntent } from "@/lib/axis/intent"
+import type { AxisIntelligenceResponse } from "@/lib/axis/intelligence"
+import type { AxisMemoryObject } from "@/lib/axis/types"
 
 export type AxisMode = "live" | "memory" | "replay" | "inspect"
 
@@ -31,6 +33,8 @@ export type AxisMemoryState = {
   filter: string
   query: string
   nodes: AxisMemoryNode[]
+  output: AxisIntelligenceResponse | null
+  loading: boolean
 }
 
 export type AxisRailSegment = {
@@ -73,7 +77,7 @@ type AxisState = {
   setMode: (mode: AxisMode) => void
   setRailValue: (value: string) => void
   setRailFocused: (focused: boolean) => void
-  submitRail: () => void
+  submitRail: () => Promise<void>
   lastIntent: AxisQueryIntent | null
 }
 
@@ -120,9 +124,32 @@ function nextId(prefix = "m") {
 function segmentLabel(intent: AxisQueryIntent) {
   if (intent.kind === "memory") return "memory"
   if (intent.kind === "retrieval") return "memory"
+  if (intent.kind === "analytics") return "memory"
   if (intent.kind === "replay") return intent.action === "anchor" ? "anchor" : "replay"
   if (intent.kind === "inspect") return "inspect"
   return "axis"
+}
+
+function toMemoryObject(node: AxisMemoryNode): AxisMemoryObject {
+  return {
+    id: node.id,
+    label: node.label,
+    timestamp: node.time,
+    scoreState: node.score,
+    playerIds: inferPlayers(node.label),
+    eventLabel: node.tags[0] ?? "memory",
+    replayAnchor: node.replayLinked ? node.id : null,
+    tags: node.tags,
+  }
+}
+
+function inferPlayers(label: string) {
+  const ids = new Set<string>()
+  if (/\bnae\b/i.test(label)) ids.add("Nae")
+  const jerseyMatches = label.match(/#\d+/g) ?? []
+  for (const match of jerseyMatches) ids.add(match)
+  if (!ids.size && /\bhome\b/i.test(label)) ids.add("Home")
+  return Array.from(ids)
 }
 
 export const useAxisStore = create<AxisState>((set, get) => ({
@@ -137,6 +164,8 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     filter: "all",
     query: "session flow",
     nodes: initialNodes,
+    output: null,
+    loading: false,
   },
   selectedReplay: initialNodes[2],
   activeOverlay: null,
@@ -183,7 +212,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
         value,
       },
     })),
-  submitRail: () => {
+  submitRail: async () => {
     const state = get()
     const value = state.railState.value
     const intent = parseAxisQueryIntent(value, state.mode)
@@ -216,6 +245,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
           ...state.memoryState,
           nodes,
           query: intent.text,
+          output: null,
         },
         railState: {
           ...state.railState,
@@ -226,14 +256,16 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       return
     }
 
-    if (intent.kind === "retrieval") {
+    if (intent.kind === "retrieval" || intent.kind === "analytics") {
+      const query = intent.query
       set({
         mode: "memory",
         lastIntent: intent,
         memoryState: {
           ...state.memoryState,
-          filter: intent.filter,
-          query: intent.query,
+          filter: intent.kind === "retrieval" ? intent.filter : state.memoryState.filter,
+          query,
+          loading: true,
         },
         railState: {
           ...state.railState,
@@ -241,6 +273,37 @@ export const useAxisStore = create<AxisState>((set, get) => ({
           segments: [nextSegment, ...state.railState.segments].slice(0, 5),
         },
       })
+
+      const latest = get()
+      try {
+        const response = await fetch("/api/axis/query", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: latest.mode,
+            query,
+            session: latest.sessionState,
+            memories: latest.memoryState.nodes.map(toMemoryObject),
+          }),
+        })
+        const output = (await response.json()) as AxisIntelligenceResponse
+        set((current) => ({
+          memoryState: {
+            ...current.memoryState,
+            output,
+            loading: false,
+          },
+        }))
+      } catch {
+        set((current) => ({
+          memoryState: {
+            ...current.memoryState,
+            loading: false,
+          },
+        }))
+      }
       return
     }
 

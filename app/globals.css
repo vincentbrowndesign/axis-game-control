@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --background: #060606;
-  --foreground: #f5f4ef;
-  --axis-surface: #0d0d0d;
-  --axis-muted: rgba(245, 244, 239, 0.48);
+  --background: #efefeb;
+  --foreground: #242424;
+  --axis-surface: #f8f8f5;
+  --axis-muted: rgba(36, 36, 36, 0.48);
 }
 
 * {
@@ -38,7 +38,7 @@ textarea {
 }
 
 ::selection {
-  background: rgba(245, 244, 239, 0.18);
+  background: rgba(36, 36, 36, 0.12);
   color: var(--foreground);
 }
 
