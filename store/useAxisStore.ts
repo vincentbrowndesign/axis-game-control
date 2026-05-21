@@ -67,6 +67,10 @@ export type AxisSessionState = {
   }
 }
 
+export type AxisWorldOverlayState = {
+  subjectFrames: boolean
+}
+
 type AxisState = {
   mode: AxisMode
   eventLog: AxisChronologyEvent[]
@@ -76,7 +80,9 @@ type AxisState = {
   activeOverlay: AxisOverlayState | null
   railState: AxisRailState
   sessionState: AxisSessionState
+  worldOverlayState: AxisWorldOverlayState
   setMode: (mode: AxisMode) => void
+  setSubjectFrames: (enabled: boolean) => void
   setRailValue: (value: string) => void
   setRailFocused: (focused: boolean) => void
   dismissOverlay: () => void
@@ -357,6 +363,9 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       away: 8,
     },
   },
+  worldOverlayState: {
+    subjectFrames: true,
+  },
   lastIntent: null,
 
   setMode: (mode) =>
@@ -364,6 +373,13 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       mode,
       activeOverlay: null,
     }),
+  setSubjectFrames: (enabled) =>
+    set((state) => ({
+      worldOverlayState: {
+        ...state.worldOverlayState,
+        subjectFrames: enabled,
+      },
+    })),
   dismissOverlay: () => set({ activeOverlay: null }),
   setRailFocused: (focused) =>
     set((state) => ({
@@ -433,6 +449,23 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       set({
         ...applyRebuiltState(state, eventLog),
         lastIntent: intent,
+        railState: {
+          ...state.railState,
+          value: "",
+          segments: [nextSegment, ...state.railState.segments].slice(0, 5),
+        },
+      })
+      return
+    }
+
+    if (intent.kind === "overlay_control") {
+      set({
+        mode: intent.view,
+        lastIntent: intent,
+        worldOverlayState: {
+          ...state.worldOverlayState,
+          subjectFrames: intent.action === "on",
+        },
         railState: {
           ...state.railState,
           value: "",

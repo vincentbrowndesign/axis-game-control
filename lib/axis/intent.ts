@@ -35,6 +35,13 @@ export type AxisQueryIntent =
       label: string
     }
   | {
+      kind: "overlay_control"
+      view: AxisViewState
+      action: "on" | "off"
+      target: "subject_frames"
+      label: string
+    }
+  | {
       kind: "memory"
       view: AxisViewState
       text: string
@@ -99,6 +106,26 @@ export function parseAxisQueryIntent(value: string, currentView: AxisViewState):
       kind: "state",
       view: "replay",
       label: "Replay",
+    }
+  }
+
+  if (/^(overlay|overlays|frames?|subject frames?)\s+(off|hide|down)$/.test(normalized) || /^(hide|remove)\s+(overlay|overlays|frames?|subject frames?)$/.test(normalized)) {
+    return {
+      kind: "overlay_control",
+      view: currentView,
+      action: "off",
+      target: "subject_frames",
+      label: "Overlay off",
+    }
+  }
+
+  if (/^(overlay|overlays|frames?|subject frames?)\s+(on|show|up)$/.test(normalized) || /^(show|restore)\s+(overlay|overlays|frames?|subject frames?)$/.test(normalized)) {
+    return {
+      kind: "overlay_control",
+      view: currentView,
+      action: "on",
+      target: "subject_frames",
+      label: "Overlay on",
     }
   }
 

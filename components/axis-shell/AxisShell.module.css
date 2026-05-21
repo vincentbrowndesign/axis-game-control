@@ -378,6 +378,76 @@
   left: 42%;
 }
 
+.subjectFrameLayer {
+  inset: 0;
+  opacity: 0.86;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+
+.subjectFrame {
+  --frame-alpha: 0.22;
+  --frame-delay: 0ms;
+  animation: subjectFrameGate 3.8s cubic-bezier(0.2, 0, 0.16, 1) var(--frame-delay) infinite both;
+  border: 0.5px solid rgba(255, 255, 246, var(--frame-alpha));
+  border-radius: 0.42rem;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 246, 0.035),
+    0 0 18px rgba(255, 255, 246, 0.045);
+  display: block;
+  position: absolute;
+  transform-origin: center;
+}
+
+.subjectFrame::before,
+.subjectFrame::after {
+  border-color: rgba(255, 255, 246, calc(var(--frame-alpha) + 0.08));
+  border-style: solid;
+  content: "";
+  height: 24%;
+  position: absolute;
+  width: 22%;
+}
+
+.subjectFrame::before {
+  border-width: 0.5px 0 0 0.5px;
+  left: -0.5px;
+  top: -0.5px;
+}
+
+.subjectFrame::after {
+  border-width: 0 0.5px 0.5px 0;
+  bottom: -0.5px;
+  right: -0.5px;
+}
+
+.subjectFrame[data-subject="primary"] {
+  --frame-alpha: 0.24;
+  height: 28%;
+  left: 42%;
+  top: 33%;
+  width: 15%;
+}
+
+.subjectFrame[data-subject="trail"] {
+  --frame-alpha: 0.18;
+  --frame-delay: 520ms;
+  height: 23%;
+  left: 24%;
+  top: 40%;
+  width: 13%;
+}
+
+.subjectFrame[data-subject="weak"] {
+  --frame-alpha: 0.16;
+  --frame-delay: 980ms;
+  height: 21%;
+  right: 22%;
+  top: 28%;
+  width: 12%;
+}
+
 .atmosphericReplay {
   --pulse-intensity: 0.6;
   animation: atmosphericReplaySettle calc(var(--fade-in-ms, var(--pulse-fade-in)) + var(--hold-ms, var(--pulse-hold)) + var(--migrate-ms, var(--pulse-migrate))) cubic-bezier(0.2, 0, 0.14, 1) both;
@@ -881,6 +951,25 @@
   to {
     opacity: 0.78;
     transform: translate3d(0.8%, -0.5%, 0) scale(1.012);
+  }
+}
+
+@keyframes subjectFrameGate {
+  0%,
+  100% {
+    opacity: 0.18;
+    transform: translate3d(0, 0, 0) scale(0.992);
+  }
+
+  18%,
+  72% {
+    opacity: 0.82;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  46% {
+    opacity: 0.48;
+    transform: translate3d(0.2%, -0.15%, 0) scale(1.006);
   }
 }
 

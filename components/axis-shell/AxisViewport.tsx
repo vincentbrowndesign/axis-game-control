@@ -41,6 +41,7 @@ export function AxisViewport() {
 function LiveMemoryWorld() {
   const cameraRef = useRef<HTMLVideoElement>(null)
   const memories = useAxisStore((state) => state.memoryState.nodes)
+  const subjectFramesEnabled = useAxisStore((state) => state.worldOverlayState.subjectFrames)
   const [pulseIndex, setPulseIndex] = useState(0)
   const [cameraActive, setCameraActive] = useState(false)
   const signals = useMemo(
@@ -123,6 +124,7 @@ function LiveMemoryWorld() {
           <span />
           <span />
         </div>
+        {subjectFramesEnabled ? <SubjectFrameOverlay /> : null}
         {activeSignal?.replayLinked ? (
           <div
             key={`replay-${activeSignal.id}-${pulseIndex}`}
@@ -168,6 +170,16 @@ function LiveMemoryWorld() {
         <span />
       </div>
       <p>Live</p>
+    </div>
+  )
+}
+
+function SubjectFrameOverlay() {
+  return (
+    <div className={styles.subjectFrameLayer} aria-hidden="true">
+      <span className={styles.subjectFrame} data-subject="primary" />
+      <span className={styles.subjectFrame} data-subject="trail" />
+      <span className={styles.subjectFrame} data-subject="weak" />
     </div>
   )
 }
