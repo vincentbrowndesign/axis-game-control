@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { AxisMemoryStream } from "@/components/axis-shell/AxisMemoryStream"
 import { AxisOverlayLayer } from "@/components/axis-shell/AxisOverlayLayer"
 import { AxisReplayView } from "@/components/axis-shell/AxisReplayView"
@@ -37,8 +37,10 @@ export function AxisViewport() {
 }
 
 function LiveMemoryWorld() {
+  const cameraRef = useRef<HTMLVideoElement>(null)
   const memories = useAxisStore((state) => state.memoryState.nodes)
   const [pulseIndex, setPulseIndex] = useState(0)
+  const [cameraActive, setCameraActive] = useState(false)
   const signals = useMemo(() => memories.slice(0, 6).map(toLivePulseSignal), [memories])
   const visibleSignals = useMemo(() => {
     if (!signals.length) return []
@@ -60,9 +62,57 @@ function LiveMemoryWorld() {
     return () => window.clearInterval(timer)
   }, [signals.length])
 
+  useEffect(() => {
+    let disposed = false
+    let stream: MediaStream | null = null
+
+    async function startCamera() {
+      if (!navigator.mediaDevices?.getUserMedia) return
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: "environment",
+            width: {
+              ideal: 1920,
+            },
+            height: {
+              ideal: 1080,
+            },
+          },
+        })
+
+        if (disposed) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+
+        const video = cameraRef.current
+        if (!video) return
+        video.srcObject = stream
+        video.muted = true
+        await video.play()
+        setCameraActive(true)
+      } catch {
+        setCameraActive(false)
+      }
+    }
+
+    startCamera()
+
+    return () => {
+      disposed = true
+      setCameraActive(false)
+      stream?.getTracks().forEach((track) => track.stop())
+    }
+  }, [])
+
   return (
     <div className={styles.liveWorld}>
-      <div className={styles.nativeLens} aria-hidden="true">
+      <div className={styles.nativeLens} data-camera={cameraActive ? "active" : "idle"} aria-label="Live camera memory field">
+        <video ref={cameraRef} className={styles.liveCameraFeed} playsInline muted autoPlay aria-hidden="true" />
+        <div className={styles.cameraAtmosphere} aria-hidden="true" />
         <div className={styles.pressureMap}>
           <span />
           <span />
@@ -109,7 +159,6 @@ function LiveMemoryWorld() {
             </div>
           ))}
         </div>
-        <div className={styles.settlingTrace} />
         <span />
       </div>
       <p>Live</p>
