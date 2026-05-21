@@ -79,24 +79,6 @@ export type AxisResponsivePrompt = {
   tags: string[]
 }
 
-export type AxisPerceptionSample = {
-  at: number
-  motion: number
-  acceleration: number
-  sideBias: "left" | "right" | "center"
-  pressure: number
-}
-
-export type AxisPerceptionState = {
-  sampleCount: number
-  pressureScore: number
-  transitionBursts: number
-  leftBias: number
-  rightBias: number
-  recurrenceScore: number
-  lastSignalAt: number
-}
-
 type AxisState = {
   mode: AxisMode
   eventLog: AxisChronologyEvent[]
@@ -109,10 +91,8 @@ type AxisState = {
   worldOverlayState: AxisWorldOverlayState
   responsivePrompt: AxisResponsivePrompt | null
   pendingResponsivePrompt: AxisResponsivePrompt | null
-  perceptionState: AxisPerceptionState
   setMode: (mode: AxisMode) => void
   setSubjectFrames: (enabled: boolean) => void
-  ingestPerceptionSample: (sample: AxisPerceptionSample) => void
   setRailValue: (value: string) => void
   setRailFocused: (focused: boolean) => void
   dismissOverlay: () => void
@@ -215,108 +195,65 @@ function isResponsiveConfirmation(text: string) {
   return /^(yes|yeah|yep|right|correct|same|same side|weak side|same weak side|no|nah|not that|other side)$/i.test(text.trim())
 }
 
-function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): AxisResponsivePrompt | null {
-  const normalized = text.toLowerCase()
-  const previousText = previousNodes
-    .slice(0, 8)
-    .map((node) => node.label.toLowerCase())
-    .join(" ")
-  const repeated = (pattern: RegExp) => pattern.test(previousText)
-
-  if (/\bturnover|bad pass|lost it\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "push after TO?",
-      context: "confirm",
-      sourceQuery: text,
-      tags: ["turnover", "transition", "continuity"],
-    }
-  }
-
-  if (/\blate help|weak side|weak-side|no help\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: repeated(/\blate help|weak side|weak-side|no help\b/) ? "same side again?" : "same side?",
-      context: repeated(/\blate help|weak side|weak-side|no help\b/) ? "recurrence" : "confirm",
-      sourceQuery: text,
-      tags: ["containment", "recurrence", "pressure"],
-    }
-  }
-
-  if (/\bbad switch|switch\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "same player?",
-      context: "confirm",
-      sourceQuery: text,
-      tags: ["containment", "matchup"],
-    }
-  }
-
-  if (/\bdownhill|rim pressure|paint\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: repeated(/\bdownhill|rim pressure|paint\b/) ? "downhill again?" : "same side?",
-      context: "recurrence",
-      sourceQuery: text,
-      tags: ["pressure", "transition"],
-    }
-  }
-
-  if (/\bdead ball|timeout\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "timeout?",
-      context: "confirm",
-      sourceQuery: text,
-      tags: ["dead-ball", "reset"],
-    }
-  }
-
-  if (/\bscored|score|bucket|three|3\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: /\bthree|3\b/.test(normalized) ? "2 or 3?" : "same action?",
-      context: "confirm",
-      sourceQuery: text,
-      tags: ["scoring", "clarification"],
-    }
-  }
-
-  return null
+function ordinalWord(value: number) {
+  if (value === 1) return "first"
+  if (value === 2) return "second"
+  if (value === 3) return "third"
+  return `${value}th`
 }
 
-function createPerceptionPrompt(perception: AxisPerceptionState, sample: AxisPerceptionSample): AxisResponsivePrompt | null {
-  if (perception.sampleCount < 8) return null
-  if (sample.at - perception.lastSignalAt < 12000) return null
+function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): AxisResponsivePrompt | null {
+  const normalized = text.toLowerCase()
 
-  if (perception.transitionBursts >= 3 && perception.pressureScore > 0.72) {
+  if (/\band[\s-]?one\b/.test(normalized)) {
     return {
       id: nextId("rp"),
-      label: "transition heavy?",
-      context: "recurrence",
-      sourceQuery: "background perception",
-      tags: ["transition", "pressure", "recurrence"],
+      label: "three-possession swing",
+      context: "stat",
+      sourceQuery: text,
+      tags: ["scoring", "foul", "swing"],
     }
   }
 
-  if (perception.recurrenceScore >= 4 && Math.max(perception.leftBias, perception.rightBias) >= 4) {
+  if (/\bturnover|bad pass|lost it\b/.test(normalized)) {
+    const turnoverCount = previousNodes.filter((node) => node.tags.includes("turnover")).length + 1
+
     return {
       id: nextId("rp"),
-      label: "same side again?",
-      context: "recurrence",
-      sourceQuery: "background perception",
-      tags: ["side-bias", "recurrence", "pressure"],
+      label: `${ordinalWord(turnoverCount)} this quarter`,
+      context: "stat",
+      sourceQuery: text,
+      tags: ["turnover", "state"],
     }
   }
 
-  if (sample.acceleration > 0.34 && perception.pressureScore > 0.82) {
+  if (/\btwo points|two|2\b/.test(normalized)) {
     return {
       id: nextId("rp"),
-      label: "pressure rising?",
+      label: "cut it to 2",
+      context: "stat",
+      sourceQuery: text,
+      tags: ["scoring", "state"],
+    }
+  }
+
+  if (/\bthree points|three|3\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: "three confirmed",
+      context: "stat",
+      sourceQuery: text,
+      tags: ["scoring", "state"],
+    }
+  }
+
+  if (/\bfoul|timeout|dead ball\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: /\btimeout\b/.test(normalized) ? "timeout confirmed" : /\bdead ball\b/.test(normalized) ? "dead ball" : "foul confirmed",
       context: "confirm",
-      sourceQuery: "background perception",
-      tags: ["pressure", "continuity"],
+      sourceQuery: text,
+      tags: ["state"],
     }
   }
 
@@ -513,15 +450,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
   },
   responsivePrompt: null,
   pendingResponsivePrompt: null,
-  perceptionState: {
-    sampleCount: 0,
-    pressureScore: 0,
-    transitionBursts: 0,
-    leftBias: 0,
-    rightBias: 0,
-    recurrenceScore: 0,
-    lastSignalAt: 0,
-  },
   lastIntent: null,
 
   setMode: (mode) =>
@@ -536,38 +464,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
         subjectFrames: enabled,
       },
     })),
-  ingestPerceptionSample: (sample) =>
-    set((state) => {
-      const pressureScore = state.perceptionState.pressureScore * 0.74 + sample.pressure * 0.26
-      const transitionBursts =
-        sample.motion > 0.58 && sample.acceleration > 0.08
-          ? Math.min(8, state.perceptionState.transitionBursts + 1)
-          : Math.max(0, state.perceptionState.transitionBursts - 1)
-      const leftBias =
-        sample.sideBias === "left" && sample.motion > 0.38 ? Math.min(8, state.perceptionState.leftBias + 1) : Math.max(0, state.perceptionState.leftBias - 1)
-      const rightBias =
-        sample.sideBias === "right" && sample.motion > 0.38 ? Math.min(8, state.perceptionState.rightBias + 1) : Math.max(0, state.perceptionState.rightBias - 1)
-      const recurrenceScore = Math.max(leftBias, rightBias, transitionBursts)
-      const nextPerception = {
-        sampleCount: state.perceptionState.sampleCount + 1,
-        pressureScore,
-        transitionBursts,
-        leftBias,
-        rightBias,
-        recurrenceScore,
-        lastSignalAt: state.perceptionState.lastSignalAt,
-      }
-      const prompt = createPerceptionPrompt(nextPerception, sample)
-
-      return {
-        perceptionState: {
-          ...nextPerception,
-          lastSignalAt: prompt ? sample.at : nextPerception.lastSignalAt,
-        },
-        responsivePrompt: prompt ?? state.responsivePrompt,
-        pendingResponsivePrompt: prompt ?? state.pendingResponsivePrompt,
-      }
-    }),
   dismissOverlay: () => set({ activeOverlay: null }),
   setRailFocused: (focused) =>
     set((state) => ({
