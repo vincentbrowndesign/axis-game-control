@@ -2341,24 +2341,9 @@ export function LiveMemoryStream() {
   const possessionLabel = activeStatTeam.toUpperCase()
 
   return (
-    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field h-dvh overflow-hidden">
-      <section className="axis-live-shell relative flex h-dvh flex-col overflow-hidden">
-        <header className="axis-live-top-dock relative z-20 px-5">
-          <AxisScorebug
-            home={activeScore.home}
-            away={activeScore.away}
-            clock={formatClock(elapsed)}
-            status={statusLabel}
-          />
-          <div className="axis-mono mx-auto mt-2 flex max-w-xl items-center justify-center gap-4 text-[9px] font-black uppercase tracking-[0.18em] text-white/44">
-            <p className="axis-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/44">
-              POS {possessionLabel}
-            </p>
-            <span>{statusLabel}</span>
-          </div>
-        </header>
-
-        <section className="axis-live-camera-plane relative min-h-0 flex-1 overflow-hidden" aria-label="Live camera">
+    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field fixed inset-0 overflow-hidden">
+      <section className="axis-live-shell fixed inset-0 overflow-hidden">
+        <section className="axis-live-camera-plane absolute inset-0 overflow-hidden" aria-label="Live camera">
           <video
             ref={localVideoRef}
             autoPlay
@@ -2379,6 +2364,21 @@ export function LiveMemoryStream() {
 
           <div className="axis-live-environment-vignette absolute inset-0" />
         </section>
+
+        <header className="axis-live-top-dock fixed left-0 right-0 top-0 z-20 px-5">
+          <AxisScorebug
+            home={activeScore.home}
+            away={activeScore.away}
+            clock={formatClock(elapsed)}
+            status={statusLabel}
+          />
+          <div className="axis-live-telemetry-row">
+            <span>POS {possessionLabel}</span>
+            {status === "LIVE" || status === "RECONNECTING" ? (
+              <span className="axis-live-telemetry-pulse" aria-hidden="true" />
+            ) : null}
+          </div>
+        </header>
 
         {status === "ARCHIVED" && archivedRecording ? (
           <div className="absolute inset-0 z-30 grid place-items-center bg-black/78 px-6 text-center backdrop-blur-sm">
@@ -2457,20 +2457,20 @@ export function LiveMemoryStream() {
           />
         ) : null}
 
-        <footer className="axis-live-bottom-dock relative z-20 px-4">
+        <footer className="axis-live-bottom-dock fixed bottom-0 left-0 right-0 z-20 px-4">
           <div className="mx-auto flex max-w-xl justify-center">
             {status === "READY" ? (
               <button
                 type="button"
                 onClick={() => void startSession()}
-                className="axis-familiar-primary w-full px-5 py-4 text-[11px] font-black uppercase tracking-[0.24em] active:bg-zinc-300"
+                className="axis-live-start-trigger w-full"
               >
                 Start recording
               </button>
             ) : null}
 
             {status === "STARTING" || status === "FINALIZING" || status === "RECONNECTING" ? (
-              <div className="axis-familiar-bar w-full border px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.24em] text-white/56">
+              <div className="axis-live-transition-state w-full">
                 {statusLabel}
               </div>
             ) : null}
@@ -2547,7 +2547,7 @@ export function LiveMemoryStream() {
             ) : null}
           </div>
           {hasRecentArchive && status === "READY" ? (
-            <p className="axis-mono mt-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-white/34">
+            <p className="axis-live-archive-note">
               Last replay saved
             </p>
           ) : null}
