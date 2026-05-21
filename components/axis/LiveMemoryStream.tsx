@@ -37,6 +37,13 @@ import {
   type LiveStatTeam,
 } from "@/lib/liveBasketballStats"
 import type { AxisGameAction } from "@/lib/axisEventModel"
+import {
+  appendAxisMemoryObject,
+  axisMemoryTeam,
+  axisReplayWindowFromAnchor,
+  createAxisMemoryObject,
+  type AxisMemoryObject,
+} from "@/lib/axisMemoryObject"
 import { AxisScorebug } from "@/components/axis/AxisPrimitives"
 import type { AxisCommandPayload } from "@/lib/axisCommand"
 
@@ -1177,6 +1184,7 @@ export function LiveMemoryStream() {
   const basketballSequenceRef = useRef<BasketballEvent[]>([])
   const liveBoxScoreRef = useRef<LiveBoxScore>(createLiveBoxScore())
   const liveStatEventsRef = useRef<LiveBasketballStatEvent[]>([])
+  const memoryObjectsRef = useRef<AxisMemoryObject[]>([])
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
@@ -1234,6 +1242,7 @@ export function LiveMemoryStream() {
       const sessionTime = elapsedRef.current
       const previousEvents = basketballSequenceRef.current.slice(-3)
       const scoreBefore = liveBoxScoreRef.current
+      const scoreBeforeState = scoreFromLiveBoxScore(scoreBefore)
       const statEvent = createLiveBasketballStatEvent({
         id: createId("axis-stat"),
         sessionId: session.id,
@@ -1251,28 +1260,69 @@ export function LiveMemoryStream() {
       })
       const nextBoxScore = applyLiveStatEvent(liveBoxScoreRef.current, statEvent)
       const normalizedCommand = `${team.toUpperCase()} ${input.label}`.toUpperCase()
-      const resolvedEvent = {
+      const rawInput = options?.raw || normalizedCommand
+      const previousMemory = memoryObjectsRef.current.at(-1) || null
+      const memoryObject = createAxisMemoryObject({
         eventId: statEvent.id,
         sessionId: session.id,
         timestamp: sessionTime,
         gameClock: formatClock(sessionTime),
+        quarter: null,
+        team: axisMemoryTeam(team),
+        player: options?.player || null,
+        eventType: statEvent.type,
+        scoreBefore: scoreBeforeState,
+        scoreAfter: statEvent.score,
+        possessionBefore: axisMemoryTeam(team),
+        possessionAfter: axisMemoryTeam(statEvent.possession),
+        replayAnchor: statEvent.replayAnchor,
+        replayWindow: axisReplayWindowFromAnchor(statEvent.replayAnchor),
+        rawInput,
+        normalizedMeaning: `${team.toUpperCase()}_${statEvent.action}`,
+        createdBy: "conversation",
+        confidenceLevel: "human_confirmed",
+        previousEventId: previousMemory?.eventId || null,
+        semanticTags: [
+          "live",
+          "basketball",
+          statEvent.type.toLowerCase(),
+          statEvent.action.toLowerCase(),
+        ],
+        continuityState: statEvent.training.continuity,
+        spatialMetadata: null,
+        cvMetadata: null,
+        movementMetadata: null,
+      })
+      const resolvedEvent = {
+        ...memoryObject,
+        eventId: statEvent.id,
+        sessionId: session.id,
+        timestamp: sessionTime,
+        gameClock: formatClock(sessionTime),
+        quarter: null,
         team: team.toUpperCase(),
         player: options?.player || null,
         eventType: statEvent.type,
         points: statEvent.points,
         possessionBefore: team.toUpperCase(),
         possessionAfter: statEvent.possession.toUpperCase(),
-        scoreBefore: scoreFromLiveBoxScore(scoreBefore),
+        scoreBefore: scoreBeforeState,
         scoreAfter: statEvent.score,
+        replayAnchor: statEvent.replayAnchor,
+        replayWindow: memoryObject.replayWindow,
         source: "conversation",
-        rawInput: options?.raw || normalizedCommand,
+        rawInput,
         normalizedCommand,
+        normalizedMeaning: memoryObject.normalizedMeaning,
+        createdBy: memoryObject.createdBy,
+        confidenceLevel: memoryObject.confidenceLevel,
         needsReview: false,
       }
 
       liveBoxScoreRef.current = nextBoxScore
       liveStatEventsRef.current = [...liveStatEventsRef.current, statEvent].slice(-80)
       basketballSequenceRef.current = [...basketballSequenceRef.current, input.type].slice(-12)
+      memoryObjectsRef.current = appendAxisMemoryObject(memoryObjectsRef.current, memoryObject)
       setLiveBoxScore(nextBoxScore)
       setLiveStatEvents(liveStatEventsRef.current)
       setActiveStatTeam(statEvent.possession)
@@ -1287,9 +1337,15 @@ export function LiveMemoryStream() {
           playByPlay: statEvent.playByPlay,
         },
         resolvedEvent,
+        memoryObject,
+        memoryGraph: {
+          previousEventId: memoryObject.previousEventId,
+          nextEventId: memoryObject.nextEventId,
+          timelineIndex: memoryObjectsRef.current.length - 1,
+        },
         replayAnchor: statEvent.replayAnchor,
         training: statEvent.training,
-        raw: options?.raw,
+        raw: rawInput,
         source: options?.source || "command",
       })
 
@@ -1313,6 +1369,7 @@ export function LiveMemoryStream() {
           raw: options?.raw,
           normalized_command: normalizedCommand,
           resolved_event: resolvedEvent,
+          memory_object: memoryObject,
           player: options?.player || null,
           replay_anchor: statEvent.replayAnchor,
           training_rep: statEvent.training,
@@ -1332,15 +1389,57 @@ export function LiveMemoryStream() {
       const replayWindow = defaultReplayWindow()
       const score = scoreFromLiveBoxScore(liveBoxScoreRef.current)
       const normalizedCommand = raw.toUpperCase()
-
-      const memoryEvent = emitEvent("memory_command", {
-        raw,
-        intent,
-        label,
-        eventId: "",
+      const replayAnchor = {
+        sessionTime,
+        clipStart: Math.max(0, sessionTime - replayWindow.before),
+        clipEnd: sessionTime + replayWindow.after,
+        snapshotId: useAxisChronologyStore.getState().snapshots.at(-1)?.id || null,
+      }
+      const previousMemory = memoryObjectsRef.current.at(-1) || null
+      const memoryObject = createAxisMemoryObject({
+        eventId: createId("axis-memory"),
         sessionId: session.id,
         timestamp: sessionTime,
         gameClock: formatClock(sessionTime),
+        quarter: null,
+        team: null,
+        player: null,
+        eventType: intent,
+        scoreBefore: score,
+        scoreAfter: score,
+        possessionBefore: axisMemoryTeam(activeStatTeam),
+        possessionAfter: axisMemoryTeam(activeStatTeam),
+        replayAnchor,
+        replayWindow: axisReplayWindowFromAnchor(replayAnchor, replayWindow),
+        rawInput: raw,
+        normalizedMeaning: normalizedCommand,
+        createdBy: "conversation",
+        confidenceLevel: "human_confirmed",
+        previousEventId: previousMemory?.eventId || null,
+        semanticTags: ["live", "memory", intent],
+        continuityState: continuityAssistRef.current
+          ? {
+              pressure: continuityAssistRef.current.pressure,
+              density: continuityAssistRef.current.kineticDensity,
+              attentionState: continuityAssistRef.current.attentionState,
+            }
+          : null,
+        spatialMetadata: null,
+        cvMetadata: null,
+        movementMetadata: null,
+      })
+
+      memoryObjectsRef.current = appendAxisMemoryObject(memoryObjectsRef.current, memoryObject)
+
+      emitEvent("memory_command", {
+        raw,
+        intent,
+        label,
+        eventId: memoryObject.eventId,
+        sessionId: session.id,
+        timestamp: sessionTime,
+        gameClock: formatClock(sessionTime),
+        quarter: null,
         team: null,
         player: null,
         eventType: intent,
@@ -1352,14 +1451,19 @@ export function LiveMemoryStream() {
         source: "conversation",
         rawInput: raw,
         normalizedCommand,
+        normalizedMeaning: memoryObject.normalizedMeaning,
+        createdBy: memoryObject.createdBy,
+        confidenceLevel: memoryObject.confidenceLevel,
         needsReview: false,
         possession: activeStatTeam,
         score,
-        replayAnchor: {
-          sessionTime,
-          clipStart: Math.max(0, sessionTime - replayWindow.before),
-          clipEnd: sessionTime + replayWindow.after,
-          snapshotId: useAxisChronologyStore.getState().snapshots.at(-1)?.id || null,
+        replayAnchor,
+        replayWindow: memoryObject.replayWindow,
+        memoryObject,
+        memoryGraph: {
+          previousEventId: memoryObject.previousEventId,
+          nextEventId: memoryObject.nextEventId,
+          timelineIndex: memoryObjectsRef.current.length - 1,
         },
         sequence: {
           index: basketballSequenceRef.current.length,
@@ -1368,9 +1472,6 @@ export function LiveMemoryStream() {
         continuity: continuityAssistRef.current,
         memorySource: "live_command",
       })
-      if (memoryEvent.metadata) {
-        memoryEvent.metadata.eventId = memoryEvent.id
-      }
 
       useAxisChronologyStore.getState().triggerAttentionSignal(
         "LIVE_MEMORY_COMMAND",
@@ -1378,8 +1479,9 @@ export function LiveMemoryStream() {
         {
           raw,
           intent,
-          event_id: memoryEvent.id,
+          event_id: memoryObject.eventId,
           normalized_command: normalizedCommand,
+          memory_object: memoryObject,
           possession: activeStatTeam,
           score_state: score,
           replay_window: replayWindow,
@@ -1853,6 +1955,7 @@ export function LiveMemoryStream() {
       basketballSequenceRef.current = []
       liveBoxScoreRef.current = createLiveBoxScore()
       liveStatEventsRef.current = []
+      memoryObjectsRef.current = []
       setLiveBoxScore(liveBoxScoreRef.current)
       setLiveStatEvents([])
       setActiveStatTeam("home")
@@ -2084,6 +2187,7 @@ export function LiveMemoryStream() {
         storagePath,
         liveReport: summarizeLiveReport(liveStatEventsRef.current, liveBoxScoreRef.current),
         statEvents: liveStatEventsRef.current,
+        memoryObjects: memoryObjectsRef.current,
       })
 
       const archived: LiveArchiveSession = {
