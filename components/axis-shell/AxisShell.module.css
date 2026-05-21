@@ -62,54 +62,6 @@
   z-index: 1;
 }
 
-.memoryResidue {
-  bottom: clamp(4.8rem, 12vh, 7rem);
-  display: grid;
-  gap: 0.26rem;
-  max-width: min(18rem, 62vw);
-  opacity: 0.74;
-  pointer-events: none;
-  position: absolute;
-  right: clamp(1rem, 3vw, 1.8rem);
-  text-align: right;
-  width: min(18rem, 62vw);
-  z-index: 5;
-}
-
-.memoryResidue article {
-  display: grid;
-  gap: 0.06rem;
-  opacity: 0.52;
-}
-
-.memoryResidue article:first-child {
-  opacity: 0.76;
-}
-
-.memoryResidue article:nth-child(n + 4) {
-  opacity: 0.32;
-}
-
-.memoryResidue span {
-  color: rgba(255, 255, 246, 0.24);
-  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.42rem;
-  font-weight: 520;
-  letter-spacing: 0.01em;
-  line-height: 1;
-}
-
-.memoryResidue p {
-  color: rgba(255, 255, 246, 0.56);
-  font-size: clamp(0.62rem, 0.92vw, 0.74rem);
-  font-weight: 460;
-  letter-spacing: 0;
-  line-height: 1.08;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .railDock {
   bottom: max(0.28rem, env(safe-area-inset-bottom));
   display: grid;
@@ -215,12 +167,4 @@
 
 .rail textarea::placeholder {
   color: rgba(255, 255, 246, 0.48);
-}
-
-@media (max-width: 720px) {
-  .memoryResidue {
-    bottom: clamp(5.8rem, 14vh, 7.6rem);
-    max-width: 44vw;
-    width: 44vw;
-  }
 }
