@@ -22,7 +22,7 @@ export function AxisPage({
     <main
       {...props}
       className={joinClasses(
-        "axis-display axis-sync-room axis-familiar-room axis-world-state min-h-dvh text-white",
+        "axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field min-h-dvh text-white",
         className
       )}
     >
@@ -75,7 +75,7 @@ export function AxisSurface({
   as?: "section" | "article" | "div" | "form"
 }) {
   return (
-    <Component {...props} className={joinClasses("axis-sync-surface axis-world-panel", className)}>
+    <Component {...props} className={joinClasses("axis-sync-surface axis-world-panel axis-os-surface", className)}>
       {children}
     </Component>
   )

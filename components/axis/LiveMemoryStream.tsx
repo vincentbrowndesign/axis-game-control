@@ -1941,7 +1941,7 @@ export function LiveMemoryStream() {
   const possessionLabel = activeStatTeam.toUpperCase()
 
   return (
-    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state h-dvh overflow-hidden">
+    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field h-dvh overflow-hidden">
       <section className="relative h-dvh overflow-hidden">
         <video
           ref={localVideoRef}

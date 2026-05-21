@@ -130,30 +130,30 @@ export default function AuthConsole() {
   }
 
   return (
-    <section className="min-h-screen bg-black px-5 py-10 text-white">
+    <section className="axis-display axis-world-state axis-os-field min-h-screen px-5 py-10 text-white">
       <div className="mx-auto grid min-h-[calc(100vh-5rem)] w-full max-w-6xl items-end gap-10 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="pb-8">
-          <p className="text-[10px] uppercase tracking-[0.55em] text-white/30">
-            Axis Account
+          <p className="axis-os-label">
+            AXIS ACCOUNT
           </p>
-          <h1 className="mt-6 text-[clamp(4.5rem,15vw,10rem)] font-black leading-[0.82] tracking-[-0.07em]">
+          <h1 className="axis-os-title mt-6 text-[clamp(4rem,13vw,8rem)]">
             SESSION
             <br />
             ACCESS
           </h1>
-          <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/45">
+          <p className="mt-6 max-w-xl text-lg font-bold leading-relaxed text-white/48">
             Sign in to save uploads, review film, and keep notes attached to one Axis profile.
           </p>
         </div>
 
-        <div className="border border-white/10 bg-white/[0.03] p-6">
-          <div className="mb-8 flex border border-white/10 p-1">
+        <div className="axis-os-surface p-6">
+          <div className="axis-familiar-bar mb-8 flex border p-1">
             <button
               type="button"
               onClick={() => setMode("login")}
               className={`flex-1 px-4 py-3 text-xs font-black uppercase tracking-[0.28em] transition ${
                 mode === "login"
-                  ? "bg-white text-black"
+                  ? "axis-familiar-primary"
                   : "text-white/40"
               }`}
             >
@@ -164,7 +164,7 @@ export default function AuthConsole() {
               onClick={() => setMode("signup")}
               className={`flex-1 px-4 py-3 text-xs font-black uppercase tracking-[0.28em] transition ${
                 mode === "signup"
-                  ? "bg-white text-black"
+                  ? "axis-familiar-primary"
                   : "text-white/40"
               }`}
             >
@@ -180,7 +180,7 @@ export default function AuthConsole() {
                   setDisplayName(event.target.value)
                 }
                 placeholder="Display name"
-                className="w-full border border-white/10 bg-black px-5 py-5 text-lg text-white outline-none placeholder:text-white/25"
+                className="axis-familiar-bar w-full border px-5 py-5 text-lg text-white outline-none placeholder:text-white/25"
               />
             )}
 
@@ -189,7 +189,7 @@ export default function AuthConsole() {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="Email"
               type="email"
-              className="w-full border border-white/10 bg-black px-5 py-5 text-lg text-white outline-none placeholder:text-white/25"
+              className="axis-familiar-bar w-full border px-5 py-5 text-lg text-white outline-none placeholder:text-white/25"
             />
 
             <input
@@ -199,7 +199,7 @@ export default function AuthConsole() {
               }
               placeholder="Password"
               type="password"
-              className="w-full border border-white/10 bg-black px-5 py-5 text-lg text-white outline-none placeholder:text-white/25"
+              className="axis-familiar-bar w-full border px-5 py-5 text-lg text-white outline-none placeholder:text-white/25"
             />
           </div>
 
@@ -207,7 +207,7 @@ export default function AuthConsole() {
             type="button"
             onClick={submit}
             disabled={loading || !email || !password}
-            className="mt-6 w-full bg-white px-6 py-5 text-lg font-black uppercase tracking-[0.12em] text-black transition active:scale-[0.99] disabled:opacity-40"
+            className="axis-familiar-primary mt-6 w-full px-6 py-5 text-lg font-black uppercase tracking-[0.12em] transition active:scale-[0.99] disabled:opacity-40"
           >
             {loading ? "LINKING..." : "ENTER AXIS"}
           </button>
@@ -216,7 +216,7 @@ export default function AuthConsole() {
             <button
               type="button"
               onClick={resetPassword}
-              className="mt-4 w-full border border-white/10 px-6 py-4 text-xs font-black uppercase tracking-[0.22em] text-white/40 transition hover:text-white"
+              className="axis-familiar-control mt-4 w-full px-6 py-4 text-xs font-black uppercase tracking-[0.22em] transition hover:text-white"
             >
               Reset Access
             </button>

@@ -2519,7 +2519,7 @@ export function SessionReplayCanvas({
 
   return (
     <main
-      className="axis-display axis-climate-root axis-world-state axis-replay-operating-room min-h-dvh overflow-hidden"
+      className="axis-display axis-climate-root axis-world-state axis-os-field axis-replay-operating-room min-h-dvh overflow-hidden"
       style={climateStyle}
     >
       <section className="axis-climate-field pointer-events-none fixed inset-0" />
