@@ -105,6 +105,7 @@
   min-height: 0;
   overflow: hidden;
   padding: clamp(0.78rem, 2.3vh, 1.7rem) 0 clamp(0.5rem, 1.6vh, 1rem);
+  position: relative;
 }
 
 .memoryStream {
@@ -292,6 +293,121 @@
 
 .rail textarea::placeholder {
   color: rgba(36, 36, 36, 0.34);
+}
+
+.overlayLayer {
+  animation: overlayBreathe 6.8s cubic-bezier(0.2, 0, 0.18, 1) both;
+  inset: clamp(1rem, 4vh, 2.2rem) 0 clamp(1.8rem, 7vh, 4rem);
+  margin: auto;
+  max-width: 54rem;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: min(100%, 54rem);
+  z-index: 4;
+}
+
+.overlaySvg {
+  display: block;
+  height: 100%;
+  min-height: 24rem;
+  overflow: visible;
+  width: 100%;
+}
+
+.skeletonLine,
+.balanceAxis,
+.alignmentLine,
+.footLine,
+.releaseLine,
+.movementPath {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.skeletonLine {
+  filter: url("#axis-overlay-softness");
+  opacity: 0.42;
+  stroke: rgba(46, 46, 44, 0.34);
+  stroke-width: 0.68;
+}
+
+.balanceAxis {
+  opacity: 0.32;
+  stroke: rgba(46, 46, 44, 0.42);
+  stroke-dasharray: 2 4;
+  stroke-width: 0.62;
+}
+
+.alignmentLine,
+.footLine {
+  opacity: 0.42;
+  stroke: rgba(46, 46, 44, 0.46);
+  stroke-width: 0.72;
+}
+
+.releaseLine {
+  opacity: 0.46;
+  stroke: rgba(46, 46, 44, 0.48);
+  stroke-dasharray: 8 8;
+  stroke-width: 0.66;
+}
+
+.movementPath {
+  opacity: 0.38;
+  stroke: rgba(46, 46, 44, 0.42);
+  stroke-width: 0.8;
+}
+
+.landmarkPoint {
+  fill: rgba(255, 255, 255, 0.58);
+  opacity: 0.72;
+  stroke: rgba(46, 46, 44, 0.36);
+  stroke-width: 0.22;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlayCaption {
+  bottom: clamp(0.9rem, 3vh, 1.5rem);
+  color: rgba(36, 36, 36, 0.46);
+  display: grid;
+  left: 50%;
+  letter-spacing: 0.12em;
+  position: absolute;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+}
+
+.overlayCaption span {
+  backdrop-filter: blur(18px) saturate(1.02);
+  background: rgba(255, 255, 255, 0.44);
+  border: 0.5px solid rgba(36, 36, 36, 0.1);
+  border-radius: 999px;
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.58rem;
+  font-weight: 750;
+  padding: 0.46rem 0.68rem;
+  white-space: nowrap;
+}
+
+@keyframes overlayBreathe {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(1.006);
+  }
+
+  16%,
+  72% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-3px) scale(1.002);
+  }
 }
 
 @media (max-width: 720px) {

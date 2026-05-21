@@ -3,6 +3,7 @@
 import { create } from "zustand"
 import { parseAxisQueryIntent, type AxisQueryIntent } from "@/lib/axis/intent"
 import type { AxisIntelligenceResponse } from "@/lib/axis/intelligence"
+import { buildPoseOverlay, type AxisMemoryOverlayEnrichment, type AxisOverlayState } from "@/lib/axis/overlays"
 import type { AxisMemoryObject } from "@/lib/axis/types"
 
 export type AxisMode = "live" | "memory" | "replay" | "inspect"
@@ -20,6 +21,7 @@ export type AxisMemoryNode = AxisMemoryMoment & {
   replayLinked: boolean
   continuity: string
   query: string
+  enrichments: AxisMemoryOverlayEnrichment[]
 }
 
 export type AxisReplayState = {
@@ -61,22 +63,18 @@ export type AxisSessionState = {
   }
 }
 
-export type AxisOverlayState = null | {
-  kind: "inspect" | "continuity" | "replay"
-  label: string
-}
-
 type AxisState = {
   mode: AxisMode
   replayState: AxisReplayState
   memoryState: AxisMemoryState
   selectedReplay: AxisMemoryNode | null
-  activeOverlay: AxisOverlayState
+  activeOverlay: AxisOverlayState | null
   railState: AxisRailState
   sessionState: AxisSessionState
   setMode: (mode: AxisMode) => void
   setRailValue: (value: string) => void
   setRailFocused: (focused: boolean) => void
+  dismissOverlay: () => void
   submitRail: () => Promise<void>
   lastIntent: AxisQueryIntent | null
 }
@@ -92,6 +90,7 @@ const initialNodes: AxisMemoryNode[] = [
     replayLinked: true,
     continuity: "replay",
     query: "show rebounds",
+    enrichments: [],
   },
   {
     id: "m-2",
@@ -103,6 +102,7 @@ const initialNodes: AxisMemoryNode[] = [
     replayLinked: true,
     continuity: "replay",
     query: "they scored",
+    enrichments: [],
   },
   {
     id: "m-3",
@@ -114,6 +114,7 @@ const initialNodes: AxisMemoryNode[] = [
     replayLinked: true,
     continuity: "replay",
     query: "where was the steal?",
+    enrichments: [],
   },
 ]
 
@@ -196,8 +197,9 @@ export const useAxisStore = create<AxisState>((set, get) => ({
   setMode: (mode) =>
     set({
       mode,
-      activeOverlay: mode === "inspect" ? { kind: "inspect", label: "Form" } : null,
+      activeOverlay: null,
     }),
+  dismissOverlay: () => set({ activeOverlay: null }),
   setRailFocused: (focused) =>
     set((state) => ({
       railState: {
@@ -236,6 +238,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
         replayLinked: false,
         continuity: "memory",
         query: intent.text,
+        enrichments: [],
       }
 
       const nodes = [node, ...state.memoryState.nodes].slice(0, 16)
@@ -329,12 +332,32 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     }
 
     if (intent.kind === "inspect") {
+      const targetMemory = state.selectedReplay ?? state.memoryState.nodes[0] ?? null
+      const overlay = buildPoseOverlay(targetMemory ? toMemoryObject(targetMemory) : null, intent.query)
+      const nodes = targetMemory
+        ? state.memoryState.nodes.map((node) =>
+            node.id === targetMemory.id
+              ? {
+                  ...node,
+                  enrichments: [
+                    {
+                      overlayId: overlay.id,
+                      label: overlay.label,
+                      output: overlay.output,
+                    },
+                    ...node.enrichments,
+                  ].slice(0, 4),
+                }
+              : node,
+          )
+        : state.memoryState.nodes
+
       set({
-        mode: "inspect",
         lastIntent: intent,
-        activeOverlay: {
-          kind: "inspect",
-          label: intent.query,
+        activeOverlay: overlay,
+        memoryState: {
+          ...state.memoryState,
+          nodes,
         },
         railState: {
           ...state.railState,

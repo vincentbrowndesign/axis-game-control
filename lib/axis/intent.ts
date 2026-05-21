@@ -84,13 +84,13 @@ export function parseAxisQueryIntent(value: string, currentView: AxisViewState):
     }
   }
 
-  if (/\b(analyze|inspect|form|pose)\b/.test(normalized)) {
+  if (/\b(analyze|inspect|form|pose|balance|release|jumper|movement|shoulder|foot|feet|landmarks?)\b/.test(normalized)) {
     return {
       kind: "inspect",
       view: "inspect",
       focus: /\b(player|nae|who)\b/.test(normalized)
         ? "player"
-        : /\b(collapse|pressure|continuity)\b/.test(normalized)
+        : /\b(collapse|pressure|continuity|movement)\b/.test(normalized)
           ? "continuity"
           : "form",
       query: raw,

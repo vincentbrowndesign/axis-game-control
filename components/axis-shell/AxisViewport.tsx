@@ -1,6 +1,7 @@
 "use client"
 
 import { AxisMemoryStream } from "@/components/axis-shell/AxisMemoryStream"
+import { AxisOverlayLayer } from "@/components/axis-shell/AxisOverlayLayer"
 import { AxisReplayView } from "@/components/axis-shell/AxisReplayView"
 import { useAxisStore } from "@/store/useAxisStore"
 import styles from "./AxisShell.module.css"
@@ -15,6 +16,7 @@ export function AxisViewport() {
       {mode === "memory" ? <AxisMemoryStream /> : null}
       {mode === "replay" ? <AxisReplayView /> : null}
       {mode === "inspect" ? <InspectView label={activeOverlay?.label ?? "Form"} /> : null}
+      <AxisOverlayLayer />
     </section>
   )
 }
