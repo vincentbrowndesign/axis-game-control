@@ -557,15 +557,15 @@
 .shell[data-mode="live"] .livePulseLayer {
   align-content: end;
   display: block;
-  bottom: clamp(8.2rem, 27vh, 15rem);
-  left: 50%;
+  bottom: clamp(6.2rem, 18vh, 9.8rem);
+  left: clamp(1rem, 3vw, 1.8rem);
   right: auto;
   top: auto;
-  transform: translateX(-50%);
+  transform: none;
   justify-items: start;
-  max-width: min(34rem, 74vw);
-  min-height: 6.8rem;
-  width: min(34rem, 74vw);
+  max-width: min(18rem, 64vw);
+  min-height: 2rem;
+  width: min(18rem, 64vw);
 }
 
 .livePulseSignal {
@@ -653,25 +653,25 @@
 }
 
 .responsiveContinuityPrompt {
-  animation: responsiveContinuitySettle 4.4s cubic-bezier(0.2, 0, 0.16, 1) both;
-  color: rgba(255, 255, 246, 0.9);
+  animation: responsiveContinuitySettle 3.8s cubic-bezier(0.2, 0, 0.16, 1) both;
+  color: rgba(255, 255, 246, 0.78);
   display: grid;
-  filter: drop-shadow(0 1px 18px rgba(0, 0, 0, 0.28));
-  gap: 0.16rem;
+  filter: drop-shadow(0 1px 12px rgba(0, 0, 0, 0.22));
+  gap: 0.1rem;
   left: 0;
-  max-width: min(100%, 24rem);
+  max-width: min(100%, 18rem);
   opacity: 0;
   position: absolute;
-  text-align: center;
+  text-align: left;
   top: 0;
   width: 100%;
   z-index: 2;
 }
 
 .responsiveContinuityPrompt span {
-  color: rgba(255, 255, 246, 0.34);
+  color: rgba(255, 255, 246, 0.26);
   font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.48rem;
+  font-size: 0.44rem;
   font-weight: 520;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -680,7 +680,7 @@
 
 .responsiveContinuityPrompt strong {
   color: currentColor;
-  font-size: clamp(0.82rem, 1.5vw, 1.06rem);
+  font-size: clamp(0.68rem, 1vw, 0.82rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: var(--lh-dense);
@@ -1150,22 +1150,22 @@
 
 @keyframes responsiveContinuitySettle {
   0% {
-    filter: blur(6px);
+    filter: blur(4px);
     opacity: 0;
-    transform: translate3d(0, 8px, 0) scale(0.994);
+    transform: translate3d(0, 4px, 0) scale(0.996);
   }
 
   12%,
   72% {
     filter: blur(0);
-    opacity: 0.88;
+    opacity: 0.74;
     transform: translate3d(0, 0, 0) scale(1);
   }
 
   100% {
-    filter: blur(2px);
+    filter: blur(1px);
     opacity: 0;
-    transform: translate3d(0, 2.6rem, 0) scale(0.975);
+    transform: translate3d(0, 1.4rem, 0) scale(0.985);
   }
 }
 
