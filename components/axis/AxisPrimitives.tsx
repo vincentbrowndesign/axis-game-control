@@ -158,7 +158,7 @@ export function AxisScorebug({
   return (
     <div className={joinClasses("axis-broadcast-scorebug mx-auto grid max-w-xl grid-cols-[1fr_auto_1fr] items-stretch overflow-hidden", className)}>
       <div className="grid min-w-0 grid-cols-[auto_1fr] items-center">
-        <span className="axis-broadcast-chip axis-world-badge axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
+        <span className="axis-broadcast-chip axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
           HOME
         </span>
         <span className="axis-mono grid place-items-center px-4 text-2xl font-black tabular-nums text-white sm:text-3xl">
@@ -175,7 +175,7 @@ export function AxisScorebug({
         <span className="axis-mono grid place-items-center px-4 text-2xl font-black tabular-nums text-white sm:text-3xl">
           {away}
         </span>
-        <span className="axis-broadcast-chip axis-world-badge axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
+        <span className="axis-broadcast-chip axis-mono grid h-full min-w-16 place-items-center px-3 text-[10px] font-black uppercase tracking-[0.16em]">
           AWAY
         </span>
       </div>

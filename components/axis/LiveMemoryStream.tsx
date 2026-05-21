@@ -1225,9 +1225,8 @@ export function LiveMemoryStream() {
   const [activeStatTeam, setActiveStatTeam] = useState<LiveStatTeam>("home")
   const [memoryInput, setMemoryInput] = useState("")
   const [memoryQuestion, setMemoryQuestion] = useState<LiveMemoryQuestion | null>(null)
-  const [memoryStatus, setMemoryStatus] = useState("Ready")
   const [liveBoxScore, setLiveBoxScore] = useState<LiveBoxScore>(() => createLiveBoxScore())
-  const [liveStatEvents, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
+  const [, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -1626,7 +1625,6 @@ export function LiveMemoryStream() {
       })
       setMemoryQuestion(null)
       setMemoryInput("")
-      setMemoryStatus("Stored")
     },
     [recordCommandStat]
   )
@@ -1641,7 +1639,6 @@ export function LiveMemoryStream() {
           const team = explicitTeamFromMemoryText(raw)
           if (!team) {
             setMemoryInput("")
-            setMemoryStatus("Axis: home or away?")
             return
           }
 
@@ -1655,7 +1652,6 @@ export function LiveMemoryStream() {
               },
             })
             setMemoryInput("")
-            setMemoryStatus("Axis: 2 or 3?")
             return
           }
 
@@ -1685,7 +1681,6 @@ export function LiveMemoryStream() {
               },
             })
             setMemoryInput("")
-            setMemoryStatus("Axis: 2 or 3?")
             return
           }
 
@@ -1723,14 +1718,12 @@ export function LiveMemoryStream() {
             draft: nextDraft,
           })
           setMemoryInput("")
-          setMemoryStatus("Axis: 2 or 3?")
           return
         }
 
         const action = pointsAnswerToAction(raw)
         if (!action) {
           setMemoryInput("")
-          setMemoryStatus("Axis: 2 or 3?")
           return
         }
 
@@ -1753,14 +1746,12 @@ export function LiveMemoryStream() {
           draft: resolution.draft,
         })
         setMemoryInput("")
-        setMemoryStatus(`Axis: ${resolution.prompt}`)
         return
       }
 
       if (resolution.kind === "memory") {
         recordLiveMemoryNote(resolution.raw, resolution.label, "memory")
         setMemoryInput("")
-        setMemoryStatus(resolution.label)
         return
       }
 
@@ -1996,7 +1987,6 @@ export function LiveMemoryStream() {
       setActiveStatTeam("home")
       setMemoryInput("")
       setMemoryQuestion(null)
-      setMemoryStatus("Ready")
       setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()
@@ -2338,7 +2328,6 @@ export function LiveMemoryStream() {
               ? "SAVED"
               : "RECONNECTING"
   const activeScore = scoreFromLiveBoxScore(liveBoxScore)
-  const recentStatEvents = liveStatEvents.slice(-4).reverse()
   const possessionLabel = activeStatTeam.toUpperCase()
 
   return (
@@ -2483,9 +2472,9 @@ export function LiveMemoryStream() {
                     submitMemoryInput()
                   }}
                 >
-                  <div className="axis-live-memory-status">
-                    {memoryQuestion ? `Axis: ${memoryQuestion.prompt}` : memoryStatus}
-                  </div>
+                  {memoryQuestion ? (
+                    <div className="axis-live-memory-status">{memoryQuestion.prompt}</div>
+                  ) : null}
                   <div className="grid grid-cols-[1fr_auto] gap-2">
                     <input
                       value={memoryInput}
@@ -2529,11 +2518,6 @@ export function LiveMemoryStream() {
                   </button>
                 </div>
 
-                {recentStatEvents.length ? (
-                  <p className="axis-mono mt-2 truncate text-center text-[9px] font-black uppercase tracking-[0.14em] text-white/38">
-                    {recentStatEvents[0].playByPlay}
-                  </p>
-                ) : null}
               </div>
             ) : null}
           </div>
