@@ -6,7 +6,7 @@ import type {
   SigmaMemoryPackage,
   SigmaRawContributions,
 } from "@/lib/axis/continuity/fieldTypes"
-import type { AxisNarrativeSeed } from "@/lib/axis/continuity/narrativeSeeds"
+import type { NarrativeSeed } from "@/lib/axis/continuity/narrativeSeeds"
 
 export function normalizeField(field: SigmaField): SigmaMemoryPackage {
   if (field.lifecycle === "normalized") {
@@ -65,7 +65,7 @@ function preventEntropyInflation(nodes: ReturnType<typeof preserveAnchorGroundin
 }
 
 function buildClusters(nodes: ReturnType<typeof preventEntropyInflation>): SigmaContinuityCluster[] {
-  const clustered = new Map<AxisNarrativeSeed, typeof nodes>()
+  const clustered = new Map<NarrativeSeed, typeof nodes>()
 
   for (const node of nodes) {
     for (const seed of node.narrativeSeeds) {
@@ -110,6 +110,6 @@ export function directionBiasFromContributions(contributions: SigmaRawContributi
   return "balanced"
 }
 
-function uniqueSeeds(seeds: AxisNarrativeSeed[]) {
+function uniqueSeeds(seeds: NarrativeSeed[]) {
   return Array.from(new Set(seeds))
 }

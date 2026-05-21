@@ -1,5 +1,5 @@
 import type { AxisMemoryObject } from "@/lib/axis/types"
-import { narrativeSeedsFromTags, type AxisNarrativeSeed } from "@/lib/axis/continuity/narrativeSeeds"
+import { narrativeSeedsFromTags, type NarrativeSeed } from "@/lib/axis/continuity/narrativeSeeds"
 
 export type SigmaEdgeDirection = "forward" | "backward" | "lateral"
 
@@ -21,7 +21,7 @@ export type SigmaFieldNode = {
   baseSigma: number
   sigma: number
   anchor: boolean
-  narrativeSeeds: AxisNarrativeSeed[]
+  narrativeSeeds: NarrativeSeed[]
   rawContributions: SigmaRawContributions
 }
 
@@ -31,14 +31,14 @@ export type SigmaFieldEdge = {
   direction: SigmaEdgeDirection
   weight: number
   impedance: number
-  narrativeSeeds: AxisNarrativeSeed[]
+  narrativeSeeds: NarrativeSeed[]
 }
 
 export type SigmaContinuityCluster = {
   id: string
   memoryIds: string[]
   sigma: number
-  narrativeSeeds: AxisNarrativeSeed[]
+  narrativeSeeds: NarrativeSeed[]
   rawContributions: SigmaRawContributions
   directionBias: SigmaDirectionBias
 }
@@ -58,11 +58,18 @@ export type SigmaMemoryPackage = {
   anchors: Array<{
     memoryId: string
     sigma: number
-    narrativeSeeds: AxisNarrativeSeed[]
+    narrativeSeeds: NarrativeSeed[]
   }>
   rankedMemoryIds: string[]
   clusters: SigmaContinuityCluster[]
-  narrativeSeeds: AxisNarrativeSeed[]
+  narrativeSeeds: NarrativeSeed[]
+}
+
+export type MemorySliceRef = {
+  memoryId: string
+  expectedSigmaProfile: {
+    dominantClusterSignatures: NarrativeSeed[]
+  }
 }
 
 export function createFreshSigmaField(memories: AxisMemoryObject[]): SigmaField {
