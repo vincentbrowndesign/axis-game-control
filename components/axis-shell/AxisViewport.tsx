@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { AxisMemoryStream } from "@/components/axis-shell/AxisMemoryStream"
 import { AxisOverlayLayer } from "@/components/axis-shell/AxisOverlayLayer"
 import { AxisReplayView } from "@/components/axis-shell/AxisReplayView"
-import { useAxisStore, type AxisMemoryNode } from "@/store/useAxisStore"
+import { useAxisStore, type AxisMemoryNode, type AxisResponsivePrompt } from "@/store/useAxisStore"
 import styles from "./AxisShell.module.css"
 
 const HOLD_MS = 3600
@@ -40,6 +40,7 @@ export function AxisViewport() {
 function LiveMemoryWorld() {
   const cameraRef = useRef<HTMLVideoElement>(null)
   const memories = useAxisStore((state) => state.memoryState.nodes)
+  const responsivePrompt = useAxisStore((state) => state.responsivePrompt)
   const subjectFramesEnabled = useAxisStore((state) => state.worldOverlayState.subjectFrames)
   const [pulseIndex, setPulseIndex] = useState(0)
   const [cameraActive, setCameraActive] = useState(false)
@@ -145,7 +146,10 @@ function LiveMemoryWorld() {
           </div>
         ) : null}
         <div className={styles.livePulseLayer}>
-          {visibleSignals.map((signal) => (
+          {responsivePrompt ? <ResponsiveContinuityPrompt prompt={responsivePrompt} /> : null}
+          {responsivePrompt
+            ? null
+            : visibleSignals.map((signal) => (
             <div
               key={`${signal.id}-${pulseIndex}-${signal.stackIndex}`}
               className={styles.livePulseSignal}
@@ -161,11 +165,20 @@ function LiveMemoryWorld() {
               <span>{signal.context}</span>
               <strong>{signal.label}</strong>
             </div>
-          ))}
+              ))}
         </div>
         <span />
       </div>
       <p>Live</p>
+    </div>
+  )
+}
+
+function ResponsiveContinuityPrompt({ prompt }: { prompt: AxisResponsivePrompt }) {
+  return (
+    <div key={prompt.id} className={styles.responsiveContinuityPrompt}>
+      <span>{prompt.context}</span>
+      <strong>{prompt.label}</strong>
     </div>
   )
 }

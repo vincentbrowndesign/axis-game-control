@@ -71,6 +71,14 @@ export type AxisWorldOverlayState = {
   subjectFrames: boolean
 }
 
+export type AxisResponsivePrompt = {
+  id: string
+  label: string
+  context: "confirm" | "recurrence" | "stat"
+  sourceQuery: string
+  tags: string[]
+}
+
 type AxisState = {
   mode: AxisMode
   eventLog: AxisChronologyEvent[]
@@ -81,6 +89,8 @@ type AxisState = {
   railState: AxisRailState
   sessionState: AxisSessionState
   worldOverlayState: AxisWorldOverlayState
+  responsivePrompt: AxisResponsivePrompt | null
+  pendingResponsivePrompt: AxisResponsivePrompt | null
   setMode: (mode: AxisMode) => void
   setSubjectFrames: (enabled: boolean) => void
   setRailValue: (value: string) => void
@@ -175,7 +185,85 @@ function inferTags(text: string) {
   if (/\bsteal|block|stop\b/.test(normalized)) tags.add("stop")
   if (/\bscored|score|bucket|three|3\b/.test(normalized)) tags.add("scoring")
   if (/\breplay|clip|anchor\b/.test(normalized)) tags.add("replay")
+  if (/\blate help|weak side|weak-side|no help|bad switch\b/.test(normalized)) tags.add("containment")
+  if (/\bpush after to|after to|transition|outlet|downhill\b/.test(normalized)) tags.add("transition")
+  if (/\bsame side|same weak side|again\b/.test(normalized)) tags.add("recurrence")
   return Array.from(tags)
+}
+
+function isResponsiveConfirmation(text: string) {
+  return /^(yes|yeah|yep|right|correct|same|same side|weak side|same weak side|no|nah|not that|other side)$/i.test(text.trim())
+}
+
+function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): AxisResponsivePrompt | null {
+  const normalized = text.toLowerCase()
+  const previousText = previousNodes
+    .slice(0, 8)
+    .map((node) => node.label.toLowerCase())
+    .join(" ")
+  const repeated = (pattern: RegExp) => pattern.test(previousText)
+
+  if (/\bturnover|bad pass|lost it\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: "push after TO?",
+      context: "confirm",
+      sourceQuery: text,
+      tags: ["turnover", "transition", "continuity"],
+    }
+  }
+
+  if (/\blate help|weak side|weak-side|no help\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: repeated(/\blate help|weak side|weak-side|no help\b/) ? "same side again?" : "same side?",
+      context: repeated(/\blate help|weak side|weak-side|no help\b/) ? "recurrence" : "confirm",
+      sourceQuery: text,
+      tags: ["containment", "recurrence", "pressure"],
+    }
+  }
+
+  if (/\bbad switch|switch\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: "same player?",
+      context: "confirm",
+      sourceQuery: text,
+      tags: ["containment", "matchup"],
+    }
+  }
+
+  if (/\bdownhill|rim pressure|paint\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: repeated(/\bdownhill|rim pressure|paint\b/) ? "downhill again?" : "same side?",
+      context: "recurrence",
+      sourceQuery: text,
+      tags: ["pressure", "transition"],
+    }
+  }
+
+  if (/\bdead ball|timeout\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: "timeout?",
+      context: "confirm",
+      sourceQuery: text,
+      tags: ["dead-ball", "reset"],
+    }
+  }
+
+  if (/\bscored|score|bucket|three|3\b/.test(normalized)) {
+    return {
+      id: nextId("rp"),
+      label: /\bthree|3\b/.test(normalized) ? "2 or 3?" : "same action?",
+      context: "confirm",
+      sourceQuery: text,
+      tags: ["scoring", "clarification"],
+    }
+  }
+
+  return null
 }
 
 function toTeamPossession(team: AxisRebuiltState["possession"]): AxisSessionState["possession"] {
@@ -366,6 +454,8 @@ export const useAxisStore = create<AxisState>((set, get) => ({
   worldOverlayState: {
     subjectFrames: true,
   },
+  responsivePrompt: null,
+  pendingResponsivePrompt: null,
   lastIntent: null,
 
   setMode: (mode) =>
@@ -409,13 +499,15 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     }
 
     if (intent.kind === "memory") {
+      const pendingPrompt = state.pendingResponsivePrompt
+      const confirmationTags = pendingPrompt && isResponsiveConfirmation(intent.text) ? pendingPrompt.tags : []
       const event = createAxisEvent(
         {
           type: "memory.recorded",
           label: intent.text,
           scoreState: `${state.sessionState.score.home}-${state.sessionState.score.away}`,
           playerIds: inferPlayers(intent.text),
-          tags: inferTags(intent.text),
+          tags: Array.from(new Set([...inferTags(intent.text), ...confirmationTags])),
         },
         {
           gameTime: "now",
@@ -425,13 +517,18 @@ export const useAxisStore = create<AxisState>((set, get) => ({
         },
       )
       const eventLog = [...state.eventLog, event]
+      const rebuiltState = applyRebuiltState(state, eventLog)
+      const responsivePrompt =
+        state.mode === "live" && !confirmationTags.length ? createResponsivePrompt(intent.text, state.memoryState.nodes) : null
       set({
-        ...applyRebuiltState(state, eventLog),
+        ...rebuiltState,
         lastIntent: intent,
         memoryState: {
-          ...applyRebuiltState(state, eventLog).memoryState,
+          ...rebuiltState.memoryState,
           query: intent.text,
         },
+        responsivePrompt,
+        pendingResponsivePrompt: responsivePrompt,
         railState: {
           ...state.railState,
           value: "",
