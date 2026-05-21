@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, type CSSProperties } from "react"
-import { GhostPoseOverlay } from "@/components/axis/perception/GhostPoseOverlay"
+import { MotionSignatureOverlay } from "@/components/axis/perception/MotionSignatureOverlay"
 
 export function PoseDemoViewport() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -54,7 +54,7 @@ export function PoseDemoViewport() {
 
   return (
     <main style={styles.page}>
-      <section style={styles.viewport} aria-label="Axis ghost pose demo">
+      <section style={styles.viewport} aria-label="Axis motion signature demo">
         <video
           ref={videoRef}
           playsInline
@@ -63,7 +63,7 @@ export function PoseDemoViewport() {
           style={styles.video}
           onCanPlay={() => setActive(true)}
         />
-        <GhostPoseOverlay videoRef={videoRef} active={active} />
+        <MotionSignatureOverlay videoRef={videoRef} active={active} />
         <div style={styles.vignette} aria-hidden="true" />
       </section>
 
@@ -72,7 +72,7 @@ export function PoseDemoViewport() {
           Camera
         </button>
         <label style={styles.control}>
-          Clip
+          Motion
           <input
             type="file"
             accept="video/*"
