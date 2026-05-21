@@ -72,6 +72,16 @@ export function rebuildState(events: AxisChronologyEvent[], options: AxisRebuild
     }
 
     if (event.type === "memory.recorded") {
+      for (const playerId of event.playerIds) {
+        const line = getPlayerLine(players, playerId)
+        if (event.tags.includes("scoring")) line.points += inferPointValue(event.label)
+        if (event.tags.includes("rebound")) line.rebounds += 1
+        if (event.tags.includes("assist")) line.assists += 1
+        if (event.tags.includes("turnover")) line.turnovers += 1
+        if (event.tags.includes("foul")) line.fouls += 1
+        players.set(playerId, line)
+      }
+
       memories.push({
         id: event.id,
         label: event.label,
@@ -142,4 +152,8 @@ function statLabel(event: Extract<AxisSourceEvent, { type: "stat.recorded" }>) {
 
 function teamLabel(team: AxisTeam) {
   return team === "home" ? "Home" : "Away"
+}
+
+function inferPointValue(label: string) {
+  return /\b3\b|three|right side/i.test(label) ? 3 : 2
 }

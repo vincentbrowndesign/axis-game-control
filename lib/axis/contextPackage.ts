@@ -1,4 +1,7 @@
 import { parseAxisQueryIntent } from "@/lib/axis/intent"
+import type { AxisChronologyEvent } from "@/lib/axis/state/eventLog"
+import { AXIS_PRIMITIVE_BOUNDARY, type AxisPrimitiveBoundary } from "@/lib/axis/state/primitives"
+import { rebuildState, type AxisRebuiltState } from "@/lib/axis/state/rebuildState"
 import type {
   AxisContextualOutputs,
   AxisIntelligenceOutput,
@@ -11,6 +14,7 @@ import type {
 export type AxisContextPackageInput = {
   mode: AxisMode
   query: string
+  eventLog?: AxisChronologyEvent[]
   session: {
     label: string
     quarter: string
@@ -24,35 +28,74 @@ export type AxisContextPackageInput = {
 }
 
 export type AxisContextPackage = {
+  kernel: {
+    source: "chronology" | "memory_snapshot"
+    primitiveBoundary: AxisPrimitiveBoundary
+  }
   currentState: AxisContextPackageInput["session"] & {
     mode: AxisMode
   }
+  recentChronology: AxisChronologyEvent[]
   recentMemory: {
     lastEvents: AxisMemoryObject[]
     recentRun: string | null
     recentPlayers: string[]
   }
+  continuityState: AxisContextualOutputs
+  replayContext: AxisRebuiltState["replayChronology"] | null
+  playerContext: {
+    activePlayers: string[]
+    playerMemory: AxisStaticOutputs["players"]
+  }
   staticAnalytics: AxisStaticOutputs
+  retrievalIntent: ReturnType<typeof parseAxisQueryIntent>
   queryIntent: ReturnType<typeof parseAxisQueryIntent>
   availableTools: AxisToolAvailability
 }
 
 export function buildAxisContextPackage(input: AxisContextPackageInput): AxisContextPackage {
-  const staticAnalytics = extractStaticOutputs(input.memories, input.session.score, input.session.possession)
-  const contextualOutputs = extractContextualOutputs(input.memories)
+  const rebuiltState = input.eventLog?.length
+    ? rebuildState(input.eventLog, {
+        mode: input.mode,
+        initialScore: {
+          home: 0,
+          away: 0,
+        },
+        initialPossession: input.session.possession === "HOME" ? "home" : "away",
+      })
+    : null
+  const memories = rebuiltState?.memories ?? input.memories
+  const staticAnalytics =
+    rebuiltState?.staticOutputs ?? extractStaticOutputs(memories, input.session.score, input.session.possession)
+  const contextualOutputs = rebuiltState?.continuity ?? extractContextualOutputs(memories)
+  const queryIntent = parseAxisQueryIntent(input.query, input.mode)
 
   return {
+    kernel: {
+      source: rebuiltState ? "chronology" : "memory_snapshot",
+      primitiveBoundary: AXIS_PRIMITIVE_BOUNDARY,
+    },
     currentState: {
       ...input.session,
+      possession: rebuiltState?.possession === "home" ? "HOME" : rebuiltState?.possession === "away" ? "AWAY" : input.session.possession,
+      score: rebuiltState?.score ?? input.session.score,
       mode: input.mode,
     },
+    recentChronology: input.eventLog?.slice(-8) ?? [],
     recentMemory: {
-      lastEvents: input.memories.slice(0, 5),
+      lastEvents: memories.slice(-5).reverse(),
       recentRun: contextualOutputs.lastRun,
-      recentPlayers: Array.from(new Set(input.memories.flatMap((memory) => memory.playerIds))).slice(0, 8),
+      recentPlayers: Array.from(new Set(memories.flatMap((memory) => memory.playerIds))).slice(0, 8),
+    },
+    continuityState: contextualOutputs,
+    replayContext: rebuiltState?.replayChronology ?? null,
+    playerContext: {
+      activePlayers: Array.from(new Set(memories.flatMap((memory) => memory.playerIds))).slice(0, 8),
+      playerMemory: staticAnalytics.players,
     },
     staticAnalytics,
-    queryIntent: parseAxisQueryIntent(input.query, input.mode),
+    retrievalIntent: queryIntent,
+    queryIntent,
     availableTools: {
       openai: Boolean(process.env.OPENAI_API_KEY),
       supabase: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),

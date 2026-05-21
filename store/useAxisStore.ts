@@ -471,6 +471,7 @@ export const useAxisStore = create<AxisState>((set, get) => ({
             mode: latest.mode,
             query,
             session: latest.sessionState,
+            eventLog: latest.eventLog,
             memories: latest.memoryState.nodes.map(toMemoryObject),
           }),
         })
