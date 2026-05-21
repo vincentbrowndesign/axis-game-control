@@ -149,6 +149,7 @@ function LiveMemoryWorld() {
               key={`${signal.id}-${pulseIndex}-${signal.stackIndex}`}
               className={styles.livePulseSignal}
               data-depth={signal.stackIndex}
+              data-observer={signal.machineObserved ? "machine" : "coach"}
               style={{
                 "--pulse-intensity": signal.intensity,
                 "--fade-in-ms": `${FADE_IN_MS}ms`,
@@ -181,25 +182,67 @@ function toLivePulseSignals(memory: AxisMemoryNode): LivePulseSignal[] {
   const coachSignal: LivePulseSignal = {
     id: memory.id,
     label: coachShorthand(memory.label, memory.tags),
-    context: memory.replayLinked ? `${memory.time} - remembered` : memory.time,
+    context: memory.time,
     intensity: signalIntensity(memory.tags),
     replayLinked: memory.replayLinked,
     machineObserved: false,
   }
 
   const observations = machineObservationsFromMemory(memory)
-  if (!observations.length) return [coachSignal]
+  if (!observations.length) {
+    const observerSignal = observerPrompt(memory, coachSignal)
+    return observerSignal ? [observerSignal, coachSignal] : [coachSignal]
+  }
 
   const observationSignals = observations.slice(0, 1).map((item) => ({
     id: item.id,
     label: observationClosure(item.label, coachSignal.label),
-    context: `${memory.time} - precursor`,
+    context: observerContext(item.label, memory.time),
     intensity: Math.min(1, signalIntensity(memory.tags) + item.confidence * 0.16),
     replayLinked: memory.replayLinked,
     machineObserved: true,
   }))
 
   return [...observationSignals, coachSignal]
+}
+
+function observerPrompt(memory: AxisMemoryNode, coachSignal: LivePulseSignal): LivePulseSignal | null {
+  const tags = new Set(memory.tags.map((tag) => tag.toLowerCase()))
+  const normalized = memory.label.toLowerCase()
+
+  if (tags.has("turnover")) {
+    return observerSignal(memory, "push after TO?", coachSignal.intensity + 0.1)
+  }
+
+  if (tags.has("stop")) {
+    return observerSignal(memory, "watch weak side", coachSignal.intensity + 0.08)
+  }
+
+  if (tags.has("rebound")) {
+    return observerSignal(memory, "same action again?", coachSignal.intensity + 0.06)
+  }
+
+  if (tags.has("scoring") && /\bwing|corner|right side|3|three\b/.test(normalized)) {
+    return observerSignal(memory, "late close-out", coachSignal.intensity + 0.08)
+  }
+
+  return null
+}
+
+function observerSignal(memory: AxisMemoryNode, label: string, intensity: number): LivePulseSignal {
+  return {
+    id: `${memory.id}-observer`,
+    label,
+    context: "watch",
+    intensity: Math.min(1, intensity),
+    replayLinked: false,
+    machineObserved: true,
+  }
+}
+
+function observerContext(label: string, time: string) {
+  if (label === "dead ball" || label === "and-1" || label === "early foul") return time
+  return "watch"
 }
 
 function coachShorthand(label: string, tags: string[]) {

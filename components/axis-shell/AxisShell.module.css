@@ -303,6 +303,13 @@
   z-index: 1;
 }
 
+.shell[data-mode="live"] .cameraAtmosphere {
+  background:
+    radial-gradient(ellipse at 50% 42%, transparent 46%, rgba(0, 0, 0, 0.34)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 30%, rgba(0, 0, 0, 0.24)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.18), transparent 28%, transparent 72%, rgba(0, 0, 0, 0.18));
+}
+
 .pressureMap {
   inset: 0;
   overflow: hidden;
@@ -324,6 +331,10 @@
   position: absolute;
 }
 
+.shell[data-mode="live"] .pressureMap::before {
+  opacity: 0.38;
+}
+
 .pressureMap span {
   background: rgba(36, 36, 36, 0.07);
   border-radius: 999px;
@@ -332,6 +343,11 @@
   opacity: 0.32;
   position: absolute;
   width: 24%;
+}
+
+.shell[data-mode="live"] .pressureMap span {
+  background: rgba(255, 255, 246, 0.08);
+  opacity: 0.18;
 }
 
 .pressureMap span:nth-child(1) {
@@ -470,6 +486,15 @@
   width: max-content;
 }
 
+.shell[data-mode="live"] .livePulseSignal {
+  color: rgba(255, 255, 246, calc(0.68 + var(--pulse-intensity) * 0.24));
+  filter: drop-shadow(0 1px 18px rgba(0, 0, 0, 0.28));
+}
+
+.shell[data-mode="live"] .livePulseSignal[data-observer="machine"] {
+  color: rgba(255, 255, 246, calc(0.56 + var(--pulse-intensity) * 0.2));
+}
+
 .livePulseSignal[data-depth="0"] {
   --depth-offset: 0;
 }
@@ -494,6 +519,14 @@
   line-height: var(--lh-meta);
 }
 
+.shell[data-mode="live"] .livePulseSignal span {
+  color: rgba(255, 255, 246, 0.5);
+}
+
+.shell[data-mode="live"] .livePulseSignal[data-observer="machine"] span {
+  color: rgba(255, 255, 246, 0.42);
+}
+
 .livePulseSignal strong {
   color: currentColor;
   font-size: clamp(1.02rem, 2.6vw, 1.62rem);
@@ -514,6 +547,10 @@
   transform: translateX(-50%);
   width: 3.7rem;
   z-index: 6;
+}
+
+.shell[data-mode="live"] .nativeLens > span {
+  display: none;
 }
 
 .liveWorld p,
