@@ -13,31 +13,41 @@ export function AxisPage({
   className,
   max = "max-w-7xl",
   center = false,
+  mode = "MEMORY",
+  telemetry = "AXIS",
   ...props
 }: HTMLAttributes<HTMLElement> & {
   max?: string
   center?: boolean
+  mode?: string
+  telemetry?: string
 }) {
   return (
     <main
       {...props}
       className={joinClasses(
-        "axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field min-h-dvh text-white",
+        "axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field axis-persistent-shell text-white",
         className
       )}
     >
       <section
         className={joinClasses(
-          "relative mx-auto flex min-h-dvh w-full flex-col px-4 py-4 sm:px-6",
+          "axis-persistent-content-region mx-auto flex w-full flex-col px-4 sm:px-6",
           max,
           center && "items-center justify-center text-center"
         )}
       >
+        <header className="axis-persistent-telemetry" aria-label="Axis shell telemetry">
+          <span>{telemetry}</span>
+          <span>{mode}</span>
+        </header>
         {children}
-        <div className="sticky bottom-3 z-30 mt-auto pt-6">
-          <AxisCommandToolbar />
-        </div>
       </section>
+      <footer className="axis-persistent-rail-dock" aria-label="Axis memory rail">
+        <div className="mx-auto w-full max-w-xl px-4">
+          <AxisCommandToolbar compact />
+        </div>
+      </footer>
     </main>
   )
 }

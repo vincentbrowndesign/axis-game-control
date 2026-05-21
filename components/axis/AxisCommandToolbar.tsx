@@ -1,9 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  axisCommandSuggestions,
   parseAxisCommand,
   type AxisCommandPayload,
 } from "@/lib/axisCommand"
@@ -25,16 +24,9 @@ export function AxisCommandToolbar({
 }) {
   const router = useRouter()
   const pathname = usePathname()
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const [command, setCommand] = useState("")
   const [lastAction, setLastAction] = useState("READY")
-  const visibleSuggestions = useMemo(() => {
-    const normalized = command.trim().toUpperCase()
-    if (!normalized) return axisCommandSuggestions.slice(0, compact ? 4 : 6)
-
-    return axisCommandSuggestions
-      .filter((suggestion) => suggestion.includes(normalized))
-      .slice(0, compact ? 3 : 5)
-  }, [command, compact])
 
   function runCommand(value: string) {
     const parsed = parseAxisCommand(value)
@@ -43,6 +35,11 @@ export function AxisCommandToolbar({
     window.dispatchEvent(new CustomEvent("axis-command", { detail: parsed }))
     setLastAction(parsed.intent.label.toUpperCase())
     setCommand("")
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus({
+        preventScroll: true,
+      })
+    })
 
     if (liveMemory) return
 
@@ -56,41 +53,33 @@ export function AxisCommandToolbar({
 
   return (
     <section className={`axis-command-shell ${compact ? "axis-command-shell-compact" : ""} ${className}`}>
-      <form
+      <div
         className="axis-command-bar"
-        onSubmit={(event) => {
-          event.preventDefault()
-          runCommand(command)
-        }}
+        role="group"
+        aria-label="Axis memory rail"
       >
         <span className="axis-command-prompt">&gt;</span>
         <input
+          ref={inputRef}
           value={command}
           onChange={(event) => setCommand(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return
+            event.preventDefault()
+            runCommand(command)
+          }}
           placeholder={liveMemory ? "HOME 3 / NAE REB / CLIP LAST" : "FIND REBOUNDS / SHOW LAST RUN / CLIP THIS"}
           className="axis-command-input"
           autoCapitalize="characters"
+          autoComplete="off"
+          autoCorrect="off"
+          enterKeyHint="send"
           spellCheck={false}
           aria-label="Axis command"
         />
-        <button type="submit" className="axis-command-submit">
-          RUN
-        </button>
-      </form>
+      </div>
       <div className="axis-command-meta">
         <span>{lastAction}</span>
-        <div className="axis-command-suggestions">
-          {visibleSuggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => runCommand(suggestion)}
-              className="axis-command-suggestion"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
       </div>
     </section>
   )

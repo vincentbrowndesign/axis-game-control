@@ -12,10 +12,6 @@ import {
   type PointerEvent,
 } from "react"
 import Link from "next/link"
-import {
-  AxisHeader,
-  AxisLinkButton,
-} from "@/components/axis/AxisPrimitives"
 import { AxisCommandToolbar } from "@/components/axis/AxisCommandToolbar"
 import { useShallow } from "zustand/react/shallow"
 import {
@@ -2692,22 +2688,17 @@ export function SessionReplayCanvas({
 
   return (
     <main
-      className="axis-display axis-climate-root axis-world-state axis-os-field axis-replay-operating-room min-h-dvh overflow-hidden"
+      className="axis-display axis-climate-root axis-world-state axis-os-field axis-replay-operating-room axis-persistent-shell overflow-hidden"
       style={climateStyle}
     >
       <section className="axis-climate-field pointer-events-none fixed inset-0" />
       <ChronologyEdge trainingMemories={trainingMemories} />
-      <section className="relative mx-auto flex min-h-dvh w-full max-w-[92rem] flex-col px-4 pb-8 pt-2 sm:px-8">
-        <AxisHeader title="Live">
-          <AxisLinkButton href="/retrieve" tone="retrieval" className="px-3 py-2">
-            Memory stream
-          </AxisLinkButton>
-          <AxisLinkButton href="/training-set" tone="ghost" className="px-0 py-0">
-            Saved moments
-          </AxisLinkButton>
-        </AxisHeader>
-
-        <div className="flex flex-col gap-4 py-7 md:flex-row md:items-end md:justify-between">
+      <header className="axis-persistent-telemetry" aria-label="Axis shell telemetry">
+        <span>{activeMemoryContext ? activeMemoryContext.label : "Memory inspection"}</span>
+        <span>Replay</span>
+      </header>
+      <section className="axis-persistent-content-region relative mx-auto flex w-full max-w-[92rem] flex-col px-4 sm:px-8">
+        <div className="flex flex-col gap-4 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="axis-mono axis-world-kicker text-[10px] font-black uppercase tracking-[0.18em]">
               Memory inspection
@@ -2753,10 +2744,20 @@ export function SessionReplayCanvas({
             <DevelopmentalMemoryStrip trainingMemories={trainingMemories} />
           </section>
         </div>
-        <div className="sticky bottom-3 z-30 mt-auto pt-6">
-          <AxisCommandToolbar />
+        <div className="axis-mono mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/32">
+          <Link href="/retrieve" className="transition hover:text-white/68">
+            Memory stream
+          </Link>
+          <Link href="/training-set" className="transition hover:text-white/68">
+            Saved moments
+          </Link>
         </div>
       </section>
+      <footer className="axis-persistent-rail-dock" aria-label="Axis memory rail">
+        <div className="mx-auto w-full max-w-xl px-4">
+          <AxisCommandToolbar compact />
+        </div>
+      </footer>
     </main>
   )
 }

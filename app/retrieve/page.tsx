@@ -12,7 +12,6 @@ import {
 } from "@/lib/retrieval/liveReplayRetrieval"
 import {
   AxisEmptyState,
-  AxisHeader,
   AxisLinkButton,
   AxisPage,
 } from "@/components/axis/AxisPrimitives"
@@ -131,7 +130,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
 
   if (!user) {
     return (
-      <AxisPage center max="max-w-xl">
+      <AxisPage center max="max-w-xl" mode="SIGN IN" telemetry="AXIS">
         <div>
           <p className="axis-mono axis-sync-muted text-[11px] font-black uppercase tracking-[0.28em]">
             SIGN IN TO FIND REPLAYS
@@ -176,27 +175,24 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
   const activeContext = q || replayRetrievalPresets.find((preset) => preset.key === retrieval.preset)?.label || "All moments"
 
   return (
-    <AxisPage max="max-w-5xl" className="axis-replay-operating-room px-4 py-6 sm:px-8">
-      <div className="grid gap-7 pb-24">
-        <header className="grid gap-6 pb-2">
-          <AxisHeader title="Live">
-            <AxisLinkButton href="/live" tone="ghost" className="px-0 py-0">
-              Live
-            </AxisLinkButton>
-          </AxisHeader>
+    <AxisPage max="max-w-5xl" mode="FIND" telemetry={activeContext}>
+      <div className="grid gap-7">
+        <header className="grid gap-5 pb-2">
           <div>
             <p className="axis-mono axis-world-kicker text-[10px] font-black uppercase tracking-[0.24em]">
-              Memory retrieval
+              Memory retrieval / {retrieval.clips.length} moments
             </p>
             <h1 className="axis-world-title mt-3 max-w-4xl text-5xl font-black uppercase leading-[0.92] tracking-normal sm:text-7xl">
-              Memory timeline.
+              Memory stream.
             </h1>
             <div className="axis-mono mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/42">
               <span>{activeContext}</span>
-              <span>{retrieval.clips.length} moments</span>
+              <AxisLinkButton href="/live" tone="ghost" className="px-0 py-0 text-white/36">
+                Live
+              </AxisLinkButton>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 border-y border-white/[0.08] py-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-2 border-y border-white/[0.055] py-3">
             {replayRetrievalPresets.map((preset) => {
               const active = retrieval.preset === preset.key
               const href = q
@@ -208,7 +204,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
                   key={preset.key}
                   href={href}
                   className={`axis-mono text-[10px] font-black uppercase tracking-[0.14em] transition ${
-                    active ? "text-white" : "text-white/36 hover:text-white/68"
+                    active ? "text-white/78" : "text-white/30 hover:text-white/62"
                   }`}
                 >
                   {preset.label}
@@ -219,7 +215,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
         </header>
 
         {retrieval.clusters.length ? (
-          <section className="flex flex-wrap gap-x-5 gap-y-2">
+          <section className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Memory clusters">
             {retrieval.clusters.slice(0, 4).map((cluster) => (
               <Link
                 key={cluster.id}
@@ -232,7 +228,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
           </section>
         ) : null}
 
-        <section className="grid gap-1">
+        <section className="grid gap-1" aria-label="Memory stream">
           {retrieval.clips.length ? (
             <MomentStream clips={retrieval.clips} />
           ) : (
