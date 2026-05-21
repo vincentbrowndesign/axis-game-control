@@ -487,11 +487,15 @@
 .shell[data-mode="live"] .livePulseLayer {
   align-content: end;
   display: block;
-  inset: auto auto clamp(5.9rem, 14vh, 9.2rem) clamp(0.95rem, 4vw, 3.2rem);
+  bottom: clamp(8.2rem, 27vh, 15rem);
+  left: 50%;
+  right: auto;
+  top: auto;
+  transform: translateX(-50%);
   justify-items: start;
-  max-width: min(32rem, 78vw);
+  max-width: min(34rem, 74vw);
   min-height: 6.8rem;
-  width: min(32rem, 78vw);
+  width: min(34rem, 74vw);
 }
 
 .livePulseSignal {
@@ -514,12 +518,14 @@
   filter: drop-shadow(0 1px 18px rgba(0, 0, 0, 0.28));
   left: 0;
   max-width: min(100%, 26rem);
+  text-align: center;
   top: calc(var(--depth-offset, 0) * 1.42rem);
+  width: 100%;
 }
 
 .shell[data-mode="live"] .livePulseSignal[data-observer="machine"] {
   color: rgba(255, 255, 246, calc(0.56 + var(--pulse-intensity) * 0.2));
-  max-width: min(100%, 22rem);
+  max-width: 100%;
 }
 
 .livePulseSignal[data-depth="0"] {
