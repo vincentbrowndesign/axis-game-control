@@ -71,16 +71,6 @@ export type AxisWorldOverlayState = {
   subjectFrames: boolean
 }
 
-export type AxisResponsivePrompt = {
-  id: string
-  label: string
-  context: "confirm" | "recurrence" | "stat"
-  sourceQuery: string
-  tags: string[]
-  createdAt: number
-  state: "unresolved" | "confirmed" | "contradicted"
-}
-
 type AxisState = {
   mode: AxisMode
   eventLog: AxisChronologyEvent[]
@@ -91,8 +81,6 @@ type AxisState = {
   railState: AxisRailState
   sessionState: AxisSessionState
   worldOverlayState: AxisWorldOverlayState
-  responsivePrompt: AxisResponsivePrompt | null
-  pendingResponsivePrompt: AxisResponsivePrompt | null
   setMode: (mode: AxisMode) => void
   setSubjectFrames: (enabled: boolean) => void
   setRailValue: (value: string) => void
@@ -191,142 +179,6 @@ function inferTags(text: string) {
   if (/\bpush after to|after to|transition|outlet|downhill\b/.test(normalized)) tags.add("transition")
   if (/\bsame side|same weak side|again\b/.test(normalized)) tags.add("recurrence")
   return Array.from(tags)
-}
-
-function isResponsiveConfirmation(text: string) {
-  return (
-    /^(yes|yeah|yep|right|correct)\b/i.test(text.trim()) ||
-    /\b(same side|weak side|same weak side|strong side|left|right|middle|push after to|same action|dead ball|timeout|and[\s-]?one|foul|two|three|2|3)\b/i.test(
-      text.trim(),
-    )
-  )
-}
-
-function isResponsiveContradiction(text: string) {
-  return /^(no|nah|not that|other side|wrong|not it|clear)\b/i.test(text.trim())
-}
-
-function ordinalWord(value: number) {
-  if (value === 1) return "first"
-  if (value === 2) return "second"
-  if (value === 3) return "third"
-  return `${value}th`
-}
-
-function createResponsivePrompt(text: string, previousNodes: AxisMemoryNode[]): AxisResponsivePrompt | null {
-  const normalized = text.toLowerCase()
-
-  if (/\band[\s-]?one\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "and one?",
-      context: "confirm",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["scoring", "foul", "swing"],
-    }
-  }
-
-  if (/\bturnover|bad pass|lost it\b/.test(normalized)) {
-    const turnoverCount = previousNodes.filter((node) => node.tags.includes("turnover")).length + 1
-
-    return {
-      id: nextId("rp"),
-      label: `${ordinalWord(turnoverCount)} this quarter`,
-      context: "stat",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["turnover", "state"],
-    }
-  }
-
-  if (/\blate help|no help|help\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "late help?",
-      context: "confirm",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["containment", "weak-side"],
-    }
-  }
-
-  if (/\bsame action|again\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "same side again?",
-      context: "recurrence",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["recurrence", "continuity"],
-    }
-  }
-
-  if (/\bbad switch|switch|wrong player|player\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "same player?",
-      context: "confirm",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["matchup", "continuity"],
-    }
-  }
-
-  if (/\bdownhill|rim pressure|paint\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "downhill?",
-      context: "confirm",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["pressure", "transition"],
-    }
-  }
-
-  if (/\btwo points|two|2\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "cut it to 2",
-      context: "stat",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["scoring", "state"],
-    }
-  }
-
-  if (/\bthree points|three|3\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: "three?",
-      context: "confirm",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["scoring", "state"],
-    }
-  }
-
-  if (/\bfoul|timeout|dead ball\b/.test(normalized)) {
-    return {
-      id: nextId("rp"),
-      label: /\btimeout\b/.test(normalized) ? "timeout?" : /\bdead ball\b/.test(normalized) ? "dead ball?" : "foul?",
-      context: "confirm",
-      createdAt: Date.now(),
-      sourceQuery: text,
-      state: "unresolved",
-      tags: ["state"],
-    }
-  }
-
-  return null
 }
 
 function toTeamPossession(team: AxisRebuiltState["possession"]): AxisSessionState["possession"] {
@@ -517,8 +369,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
   worldOverlayState: {
     subjectFrames: true,
   },
-  responsivePrompt: null,
-  pendingResponsivePrompt: null,
   lastIntent: null,
 
   setMode: (mode) =>
@@ -562,17 +412,13 @@ export const useAxisStore = create<AxisState>((set, get) => ({
     }
 
     if (intent.kind === "memory") {
-      const pendingPrompt = state.pendingResponsivePrompt
-      const promptConfirmed = Boolean(pendingPrompt && isResponsiveConfirmation(intent.text))
-      const promptContradicted = Boolean(pendingPrompt && isResponsiveContradiction(intent.text))
-      const confirmationTags = pendingPrompt && promptConfirmed ? pendingPrompt.tags : []
       const event = createAxisEvent(
         {
           type: "memory.recorded",
           label: intent.text,
           scoreState: `${state.sessionState.score.home}-${state.sessionState.score.away}`,
           playerIds: inferPlayers(intent.text),
-          tags: Array.from(new Set([...inferTags(intent.text), ...confirmationTags])),
+          tags: inferTags(intent.text),
         },
         {
           gameTime: "now",
@@ -583,8 +429,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
       )
       const eventLog = [...state.eventLog, event]
       const rebuiltState = applyRebuiltState(state, eventLog)
-      const responsivePrompt =
-        state.mode === "live" && !promptConfirmed && !promptContradicted ? createResponsivePrompt(intent.text, state.memoryState.nodes) : null
       set({
         ...rebuiltState,
         lastIntent: intent,
@@ -592,8 +436,6 @@ export const useAxisStore = create<AxisState>((set, get) => ({
           ...rebuiltState.memoryState,
           query: intent.text,
         },
-        responsivePrompt: responsivePrompt ?? (promptConfirmed || promptContradicted ? null : state.responsivePrompt),
-        pendingResponsivePrompt: responsivePrompt ?? (promptConfirmed || promptContradicted ? null : state.pendingResponsivePrompt),
         railState: {
           ...state.railState,
           value: "",

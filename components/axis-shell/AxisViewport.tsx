@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useAxisStore, type AxisResponsivePrompt } from "@/store/useAxisStore"
 import styles from "./AxisShell.module.css"
 
 export function AxisViewport() {
@@ -14,7 +13,6 @@ export function AxisViewport() {
 
 function LiveMemoryWorld() {
   const cameraRef = useRef<HTMLVideoElement>(null)
-  const responsivePrompt = useAxisStore((state) => state.responsivePrompt)
   const [cameraActive, setCameraActive] = useState(false)
 
   useEffect(() => {
@@ -90,19 +88,7 @@ function LiveMemoryWorld() {
           }}
         />
         <div className={styles.cameraAtmosphere} aria-hidden="true" />
-        <div className={styles.signalBand}>
-          {responsivePrompt ? <ResponsiveContinuityPrompt prompt={responsivePrompt} /> : null}
-        </div>
       </div>
-    </div>
-  )
-}
-
-function ResponsiveContinuityPrompt({ prompt }: { prompt: AxisResponsivePrompt }) {
-  return (
-    <div key={prompt.id} className={styles.responsiveContinuityPrompt} data-state={prompt.state}>
-      <span>{prompt.context}</span>
-      <strong>{prompt.label}</strong>
     </div>
   )
 }
