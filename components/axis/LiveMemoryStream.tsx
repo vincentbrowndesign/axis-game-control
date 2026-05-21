@@ -2345,13 +2345,10 @@ export function LiveMemoryStream() {
 
             {status === "LIVE" ? (
               <div className="axis-live-command-stack w-full">
-                <form
+                <div
                   className="axis-live-memory-rail"
-                  autoComplete="off"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    submitMemoryInput()
-                  }}
+                  role="group"
+                  aria-label="Live memory rail"
                 >
                   {memoryQuestion ? (
                     <div className="axis-live-memory-status">{memoryQuestion.prompt}</div>
@@ -2361,6 +2358,11 @@ export function LiveMemoryStream() {
                       ref={memoryInputRef}
                       value={memoryInput}
                       onChange={(event) => setMemoryInput(event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return
+                        event.preventDefault()
+                        submitMemoryInput()
+                      }}
                       placeholder={memoryQuestion ? "Answer" : "they scored / home 3 / nae reb"}
                       className="axis-live-memory-input"
                       autoCapitalize="words"
@@ -2371,7 +2373,7 @@ export function LiveMemoryStream() {
                       aria-label="Live memory"
                     />
                   </div>
-                </form>
+                </div>
               </div>
             ) : null}
           </div>
