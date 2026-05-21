@@ -1,42 +1,40 @@
 # AXIS OVERVIEW
 
-Axis is AI-assisted coaching memory extraction for basketball.
+Axis is queryable basketball memory.
 
-It helps a coach upload basketball footage, extract replay landmarks, add light reinforcement, and turn long video into playable captions, timestamps, player memory, and resurfacing replay loops.
+It helps a coach record or upload basketball footage, tag meaningful game events, and retrieve replay moments through direct sports commands.
+
+The command toolbar is the primary interface. Commands are operating instructions, not chat messages.
 
 ## Product Loop
 
 - Open Axis.
-- Choose File.
-- Upload practice or game footage.
-- Axis extracts candidate landmarks, keyframes, captions, and timestamps.
-- Coach lightly reinforces the moments that matter.
-- Players replay meaningful moments.
-- Replayed and repeated moments resurface more often.
-- Behavior gets reinforced over time.
+- Run a command such as `RECORD`, `LIVE`, `FIND REBOUNDS`, `HOME 3`, or `AWAY TURNOVER`.
+- Axis creates basketball events, replay anchors, timestamps, and play-by-play memory.
+- Coaches retrieve moments and sequences by command.
+- Replay behavior teaches Axis what should resurface.
 
 ## App Sections
 
-- Upload.
-- Sessions.
-- Players.
+- Command.
+- Live.
+- Replay.
+- Clips.
 
 ## Product Feel
 
 Axis should feel like:
 
-- Memory extraction for basketball footage.
-- Coaching memory becoming playable media.
-- Caption-led session playback.
-- Reinforcement landmarks.
-- A stream that adapts to replay behavior.
-- A quiet replay companion.
-- A fast way to find repeated corrections.
+- Courtside replay infrastructure.
+- Basketball memory addressed through language.
+- Fast stat input that becomes replay memory.
+- Searchable game chronology.
+- Minimal command surface with deep retrieval underneath.
 
 Axis should not feel like:
 
-- Basketball analytics software.
-- Tactical dashboard software.
-- Video breakdown software.
-- Manual clipping software.
-- AI coaching software.
+- A generic stat app.
+- A dashboard.
+- A chatbot.
+- A clip organizer.
+- Traditional analytics software.

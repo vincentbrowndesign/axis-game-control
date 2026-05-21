@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react"
+import { AxisCommandToolbar } from "@/components/axis/AxisCommandToolbar"
 
 type AxisTone = "primary" | "secondary" | "ghost"
 
@@ -33,6 +34,9 @@ export function AxisPage({
         )}
       >
         {children}
+        <div className="sticky bottom-3 z-30 mt-auto pt-6">
+          <AxisCommandToolbar />
+        </div>
       </section>
     </main>
   )

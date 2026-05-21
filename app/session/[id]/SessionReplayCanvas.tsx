@@ -16,6 +16,7 @@ import {
   AxisHeader,
   AxisLinkButton,
 } from "@/components/axis/AxisPrimitives"
+import { AxisCommandToolbar } from "@/components/axis/AxisCommandToolbar"
 import { useShallow } from "zustand/react/shallow"
 import {
   type AxisSnapshot,
@@ -2533,6 +2534,7 @@ export function SessionReplayCanvas({
             Saved clips
           </AxisLinkButton>
         </AxisHeader>
+        <AxisCommandToolbar compact className="mt-3" />
         </div>
 
         <div className="flex flex-col gap-4 py-7 md:flex-row md:items-end md:justify-between">

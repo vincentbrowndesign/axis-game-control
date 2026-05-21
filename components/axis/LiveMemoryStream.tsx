@@ -28,6 +28,7 @@ import {
   applyLiveStatEvent,
   createLiveBasketballStatEvent,
   createLiveBoxScore,
+  liveScoringInputForAction,
   liveScoringInputs,
   scoreFromLiveBoxScore,
   summarizeLiveReport,
@@ -37,6 +38,8 @@ import {
   type LiveStatTeam,
 } from "@/lib/liveBasketballStats"
 import { AxisButton, AxisScorebug } from "@/components/axis/AxisPrimitives"
+import { AxisCommandToolbar } from "@/components/axis/AxisCommandToolbar"
+import type { AxisCommandPayload } from "@/lib/axisCommand"
 
 type WorkingSession = {
   id: string
@@ -1194,6 +1197,87 @@ export function LiveMemoryStream() {
     [activeStatTeam, emitEvent, pendingContinuitySelection]
   )
 
+  const recordCommandStat = useCallback(
+    (input: LiveScoringInput, team: LiveStatTeam) => {
+      const session = workingSessionRef.current
+      if (!session) return
+
+      const sessionTime = elapsedRef.current
+      const previousEvents = basketballSequenceRef.current.slice(-3)
+      const statEvent = createLiveBasketballStatEvent({
+        id: createId("axis-stat"),
+        sessionId: session.id,
+        type: input.type,
+        team,
+        sessionTime,
+        scoreBefore: liveBoxScoreRef.current,
+        snapshotId: useAxisChronologyStore.getState().snapshots.at(-1)?.id || null,
+        sequenceIndex: basketballSequenceRef.current.length,
+        previousEvents,
+        continuity: continuityAssistRef.current,
+        input,
+        possessionBefore: team,
+      })
+      const nextBoxScore = applyLiveStatEvent(liveBoxScoreRef.current, statEvent)
+
+      liveBoxScoreRef.current = nextBoxScore
+      liveStatEventsRef.current = [...liveStatEventsRef.current, statEvent].slice(-80)
+      basketballSequenceRef.current = [...basketballSequenceRef.current, input.type].slice(-12)
+      setLiveBoxScore(nextBoxScore)
+      setLiveStatEvents(liveStatEventsRef.current)
+      setActiveStatTeam(statEvent.possession)
+      emitEvent("basketball_stat", {
+        visible: {
+          team: statEvent.team,
+          eventType: statEvent.type,
+          action: statEvent.action,
+          points: statEvent.points,
+          possession: statEvent.possession,
+          score: statEvent.score,
+          playByPlay: statEvent.playByPlay,
+        },
+        replayAnchor: statEvent.replayAnchor,
+        training: statEvent.training,
+        source: "command",
+      })
+
+      useAxisChronologyStore.getState().triggerAttentionSignal(
+        "BASKETBALL_EVENT",
+        sessionTime,
+        {
+          basketball_event: input.type,
+          basketball_action: statEvent.action,
+          team,
+          points: statEvent.points,
+          made: statEvent.made,
+          assisted: statEvent.assisted,
+          foul_linked: statEvent.foulLinked,
+          possession: statEvent.possession,
+          score_state: statEvent.score,
+          play_by_play: statEvent.playByPlay,
+          reconstruction_chapter: reconstructionChapterForEvent(input.type),
+          timestamp: sessionTime,
+          source: "command_confirmed",
+          replay_anchor: statEvent.replayAnchor,
+          training_rep: statEvent.training,
+        }
+      )
+    },
+    [emitEvent]
+  )
+
+  useEffect(() => {
+    const handleCommand = (event: WindowEventMap["axis-command"]) => {
+      const payload = event.detail as AxisCommandPayload
+      if (payload.intent.kind !== "stat") return
+
+      recordCommandStat(liveScoringInputForAction(payload.intent.action), payload.intent.team)
+    }
+
+    window.addEventListener("axis-command", handleCommand)
+    return () => window.removeEventListener("axis-command", handleCommand)
+  }, [recordCommandStat])
+
   const undoLastStatEvent = useCallback(() => {
     const lastEvent = liveStatEventsRef.current.at(-1)
     if (!lastEvent) return
@@ -1907,6 +1991,7 @@ export function LiveMemoryStream() {
               ) : null}
             </nav>
           </div>
+          <AxisCommandToolbar compact className="mx-auto mt-3 max-w-xl" />
         </header>
 
         {status === "ARCHIVED" && archivedRecording ? (
