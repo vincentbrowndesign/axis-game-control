@@ -78,7 +78,7 @@ function LiveMemoryWorld() {
 
 function ResponsiveContinuityPrompt({ prompt }: { prompt: AxisResponsivePrompt }) {
   return (
-    <div key={prompt.id} className={styles.responsiveContinuityPrompt}>
+    <div key={prompt.id} className={styles.responsiveContinuityPrompt} data-state={prompt.state}>
       <span>{prompt.context}</span>
       <strong>{prompt.label}</strong>
     </div>

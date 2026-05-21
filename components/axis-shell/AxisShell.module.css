@@ -60,12 +60,12 @@
 }
 
 .responsiveContinuityPrompt {
-  animation: responsiveContinuitySettle 3.8s cubic-bezier(0.2, 0, 0.16, 1) both;
+  animation: unresolvedSignalPulse 3.2s ease-in-out infinite;
   color: rgba(255, 255, 246, 0.78);
   display: grid;
   filter: drop-shadow(0 1px 12px rgba(0, 0, 0, 0.22));
   gap: 0.1rem;
-  opacity: 0;
+  opacity: 0.74;
   text-align: left;
 }
 
@@ -242,24 +242,19 @@
   color: rgba(255, 255, 246, 0.48);
 }
 
-@keyframes responsiveContinuitySettle {
+@keyframes unresolvedSignalPulse {
   0% {
-    filter: blur(4px);
-    opacity: 0;
-    transform: translate3d(0, 4px, 0) scale(0.996);
+    opacity: 0.56;
+    transform: translate3d(0, 0, 0);
   }
 
-  12%,
-  72% {
-    filter: blur(0);
-    opacity: 0.74;
-    transform: translate3d(0, 0, 0) scale(1);
+  42% {
+    opacity: 0.78;
   }
 
   100% {
-    filter: blur(1px);
-    opacity: 0;
-    transform: translate3d(0, 1.4rem, 0) scale(0.985);
+    opacity: 0.56;
+    transform: translate3d(0, 0, 0);
   }
 }
 
