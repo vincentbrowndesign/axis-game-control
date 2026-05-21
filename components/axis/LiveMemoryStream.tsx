@@ -29,7 +29,6 @@ import {
   createLiveBasketballStatEvent,
   createLiveBoxScore,
   liveScoringInputForAction,
-  liveScoringInputs,
   scoreFromLiveBoxScore,
   summarizeLiveReport,
   type LiveBasketballStatEvent,
@@ -86,13 +85,6 @@ type RoboflowPrediction = {
   width?: number
   height?: number
   confidence?: number
-}
-
-type PendingContinuitySelection = {
-  sessionTime: number
-  snapshotId: string | null
-  suggested: BasketballEvent[]
-  openedAt: number
 }
 
 type LiveMemoryDraft = {
@@ -160,8 +152,6 @@ const reconnectDebounceMs = 1400
 const trackFailureGraceMs = 5200
 const recorderTimesliceMs = 2000
 const trainingLabels = ["ball", "rim", "make", "miss", "release", "other"] as const
-const primaryScoringActions = liveScoringInputs.slice(0, 6)
-const secondaryStatActions = liveScoringInputs.slice(6)
 
 type TrainingLabel = (typeof trainingLabels)[number]
 
@@ -275,65 +265,6 @@ function createId(prefix = "axis") {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function BasketballEventSelector({
-  pending,
-  onCancel,
-  onSelect,
-}: {
-  pending: PendingContinuitySelection
-  onCancel: () => void
-  onSelect: (input: LiveScoringInput, machineSuggested: boolean) => void
-}) {
-  const visibleSuggested = pending.suggested
-  const selectInput = (input: LiveScoringInput) => {
-    onSelect(input, visibleSuggested.includes(input.type))
-  }
-
-  return (
-    <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
-      <div className="axis-operator-hub axis-operator-protected w-full max-w-sm p-2" aria-label="Tag play">
-        <div className="mb-2 grid grid-cols-3 gap-1">
-          {primaryScoringActions.map((input) => {
-            const suggested = visibleSuggested.includes(input.type)
-
-            return (
-              <button
-                key={input.action}
-                type="button"
-                onClick={() => selectInput(input)}
-                className={`axis-mono axis-optical-transition min-h-11 px-2 py-2 text-[9px] font-black uppercase tracking-[0.12em] transition ${
-                  suggested ? "axis-familiar-primary" : "axis-familiar-control"
-                }`}
-              >
-                {input.label}
-              </button>
-            )
-          })}
-        </div>
-        <div className="grid grid-cols-6 gap-1">
-          {secondaryStatActions.map((input) => (
-            <button
-              key={input.action}
-              type="button"
-              onClick={() => selectInput(input)}
-              className="axis-mono axis-familiar-control min-h-9 px-1 text-[8px] font-black uppercase tracking-[0.08em]"
-            >
-              {input.label}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="axis-mono mt-2 w-full py-2 text-[9px] font-black uppercase tracking-[0.16em] text-white/44 transition hover:text-white/78"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  )
 }
 
 function LiveMachinePerceptionOverlay({
@@ -1220,11 +1151,8 @@ export function LiveMemoryStream() {
   const [liveOpticalDepth] = useState<LiveOpticalDepth>(1)
   const [trainingStatus, setTrainingStatus] = useState<"idle" | "saving" | "stored">("idle")
   const [showLiveTrainingLabels, setShowLiveTrainingLabels] = useState(false)
-  const [pendingContinuitySelection, setPendingContinuitySelection] =
-    useState<PendingContinuitySelection | null>(null)
   const [activeStatTeam, setActiveStatTeam] = useState<LiveStatTeam>("home")
   const [memoryInput, setMemoryInput] = useState("")
-  const [memoryInputFocused, setMemoryInputFocused] = useState(false)
   const [memoryQuestion, setMemoryQuestion] = useState<LiveMemoryQuestion | null>(null)
   const [liveBoxScore, setLiveBoxScore] = useState<LiveBoxScore>(() => createLiveBoxScore())
   const [, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
@@ -1234,6 +1162,7 @@ export function LiveMemoryStream() {
   const memoryInputRef = useRef<HTMLInputElement | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
+  const finalizeSessionRef = useRef<(() => void) | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const workingSessionRef = useRef<WorkingSession | null>(null)
   const eventsRef = useRef<LiveIngestEvent[]>([])
@@ -1287,89 +1216,6 @@ export function LiveMemoryStream() {
       return event
     },
     []
-  )
-
-  const attachBasketballEvent = useCallback(
-    (input: LiveScoringInput, machineSuggested: boolean) => {
-      const pending = pendingContinuitySelection
-      const session = workingSessionRef.current
-      if (!pending || !session) {
-        setPendingContinuitySelection(null)
-        return
-      }
-      const basketballEvent = input.type
-      const previousEvents = basketballSequenceRef.current.slice(-3)
-      const statEvent = createLiveBasketballStatEvent({
-        id: createId("axis-stat"),
-        sessionId: session.id,
-        type: basketballEvent,
-        team: activeStatTeam,
-        sessionTime: pending.sessionTime,
-        scoreBefore: liveBoxScoreRef.current,
-        snapshotId: pending.snapshotId,
-        sequenceIndex: basketballSequenceRef.current.length,
-        previousEvents,
-        continuity: continuityAssistRef.current,
-        input,
-        possessionBefore: activeStatTeam,
-      })
-      const nextBoxScore = applyLiveStatEvent(liveBoxScoreRef.current, statEvent)
-
-      liveBoxScoreRef.current = nextBoxScore
-      liveStatEventsRef.current = [...liveStatEventsRef.current, statEvent].slice(-80)
-      setLiveBoxScore(nextBoxScore)
-      setLiveStatEvents(liveStatEventsRef.current)
-      setActiveStatTeam(statEvent.possession)
-      emitEvent("basketball_stat", {
-        visible: {
-          team: statEvent.team,
-          eventType: statEvent.type,
-          action: statEvent.action,
-          points: statEvent.points,
-          possession: statEvent.possession,
-          score: statEvent.score,
-          playByPlay: statEvent.playByPlay,
-        },
-        replayAnchor: statEvent.replayAnchor,
-        training: statEvent.training,
-      })
-
-      useAxisChronologyStore.getState().triggerAttentionSignal(
-        "BASKETBALL_EVENT",
-        pending.sessionTime,
-        {
-          basketball_event: basketballEvent,
-          basketball_action: statEvent.action,
-          team: activeStatTeam,
-          points: statEvent.points,
-          made: statEvent.made,
-          assisted: statEvent.assisted,
-          foul_linked: statEvent.foulLinked,
-          possession: statEvent.possession,
-          score_state: statEvent.score,
-          play_by_play: statEvent.playByPlay,
-          reconstruction_chapter: reconstructionChapterForEvent(basketballEvent),
-          timestamp: pending.sessionTime,
-          source: "human_confirmed",
-          machineSuggested,
-          snapshot_id: pending.snapshotId,
-          sequence: {
-            index: basketballSequenceRef.current.length,
-            previous: previousEvents,
-            next: [...previousEvents, basketballEvent],
-          },
-          replay_window: {
-            before: Math.max(0, pending.sessionTime - statEvent.replayAnchor.clipStart),
-            after: Math.max(0, statEvent.replayAnchor.clipEnd - pending.sessionTime),
-          },
-          replay_anchor: statEvent.replayAnchor,
-          training_rep: statEvent.training,
-        }
-      )
-      basketballSequenceRef.current = [...basketballSequenceRef.current, basketballEvent].slice(-12)
-      setPendingContinuitySelection(null)
-    },
-    [activeStatTeam, emitEvent, pendingContinuitySelection]
   )
 
   const recordCommandStat = useCallback(
@@ -1597,29 +1443,6 @@ export function LiveMemoryStream() {
     }
   }, [])
 
-  const undoLastStatEvent = useCallback(() => {
-    const lastEvent = liveStatEventsRef.current.at(-1)
-    if (!lastEvent) return
-
-    const remainingEvents = liveStatEventsRef.current.slice(0, -1)
-    const nextBoxScore = remainingEvents.reduce(
-      (score, event) => applyLiveStatEvent(score, event),
-      createLiveBoxScore()
-    )
-
-    liveStatEventsRef.current = remainingEvents
-    liveBoxScoreRef.current = nextBoxScore
-    basketballSequenceRef.current = remainingEvents.map((event) => event.type).slice(-12)
-    setLiveStatEvents(remainingEvents)
-    setLiveBoxScore(nextBoxScore)
-    setActiveStatTeam(lastEvent.team)
-    emitEvent("basketball_stat_undo", {
-      revertedEventId: lastEvent.id,
-      score: scoreFromLiveBoxScore(nextBoxScore),
-      possession: lastEvent.team,
-    })
-  }, [emitEvent])
-
   const appendTemporalEvent = useCallback(
     (type: TemporalEventType, metadata?: Record<string, unknown>) => {
       const session = workingSessionRef.current
@@ -1672,6 +1495,14 @@ export function LiveMemoryStream() {
     (value: string) => {
       const raw = normalizeMemoryText(value)
       if (!raw) return
+      const normalized = raw.toUpperCase()
+
+      if (/^(END|STOP|SAVE|END RECORDING|STOP RECORDING|SAVE RECORDING)$/.test(normalized)) {
+        setMemoryInput("")
+        setMemoryQuestion(null)
+        finalizeSessionRef.current?.()
+        return
+      }
 
       if (memoryQuestion) {
         if (memoryQuestion.prompt === "home or away?") {
@@ -2026,9 +1857,7 @@ export function LiveMemoryStream() {
       setLiveStatEvents([])
       setActiveStatTeam("home")
       setMemoryInput("")
-      setMemoryInputFocused(false)
       setMemoryQuestion(null)
-      setPendingContinuitySelection(null)
 
       const createdAt = new Date().toISOString()
       const sessionId = createId("axis-live")
@@ -2121,7 +1950,7 @@ export function LiveMemoryStream() {
     }
   }
 
-  const finalizeSession = async () => {
+  const finalizeSession = useCallback(async () => {
     const session = workingSessionRef.current
 
     if (
@@ -2133,7 +1962,6 @@ export function LiveMemoryStream() {
     }
 
     setLiveStatus("FINALIZING")
-    setPendingContinuitySelection(null)
     stopElapsedTimer()
     clearReconnectTimers()
     finalizingRef.current = true
@@ -2291,7 +2119,25 @@ export function LiveMemoryStream() {
       recorderRef.current = null
       chunksRef.current = []
     }
-  }
+  }, [
+    appendTemporalEvent,
+    cleanupCamera,
+    clearReconnectTimers,
+    emitEvent,
+    setFailure,
+    setLiveStatus,
+    stopElapsedTimer,
+  ])
+
+  useEffect(() => {
+    finalizeSessionRef.current = () => {
+      void finalizeSession()
+    }
+
+    return () => {
+      finalizeSessionRef.current = null
+    }
+  }, [finalizeSession])
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
@@ -2479,15 +2325,6 @@ export function LiveMemoryStream() {
           </div>
         ) : null}
 
-        {status === "LIVE" && pendingContinuitySelection ? (
-          <BasketballEventSelector
-            key={pendingContinuitySelection.openedAt}
-            pending={pendingContinuitySelection}
-            onCancel={() => setPendingContinuitySelection(null)}
-            onSelect={attachBasketballEvent}
-          />
-        ) : null}
-
         <footer className="axis-live-bottom-dock fixed bottom-0 left-0 right-0 z-20 px-4">
           <div className="mx-auto flex max-w-xl justify-center">
             {status === "READY" ? (
@@ -2506,7 +2343,7 @@ export function LiveMemoryStream() {
               </div>
             ) : null}
 
-            {status === "LIVE" && !pendingContinuitySelection ? (
+            {status === "LIVE" ? (
               <div className="axis-live-command-stack w-full">
                 <form
                   className="axis-live-memory-rail"
@@ -2519,13 +2356,11 @@ export function LiveMemoryStream() {
                   {memoryQuestion ? (
                     <div className="axis-live-memory-status">{memoryQuestion.prompt}</div>
                   ) : null}
-                  <div className={`grid gap-2 ${memoryInputFocused ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
+                  <div>
                     <input
                       ref={memoryInputRef}
                       value={memoryInput}
                       onChange={(event) => setMemoryInput(event.currentTarget.value)}
-                      onBlur={() => setMemoryInputFocused(false)}
-                      onFocus={() => setMemoryInputFocused(true)}
                       placeholder={memoryQuestion ? "Answer" : "they scored / home 3 / nae reb"}
                       className="axis-live-memory-input"
                       autoCapitalize="words"
@@ -2535,48 +2370,8 @@ export function LiveMemoryStream() {
                       spellCheck={false}
                       aria-label="Live memory"
                     />
-                    {!memoryInputFocused ? (
-                      <button type="submit" className="axis-live-memory-run">
-                        Run
-                      </button>
-                    ) : null}
                   </div>
                 </form>
-
-                <div className="axis-live-memory-chips mt-2 flex flex-wrap justify-center gap-1.5">
-                  {["HOME 3", "AWAY TO", "CLIP", "REB", "SUB"].map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => {
-                        runMemoryText(chip === "CLIP" ? "CLIP LAST" : chip)
-                        focusMemoryInput()
-                      }}
-                      onPointerDown={(event) => event.preventDefault()}
-                      className="axis-live-memory-chip"
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      undoLastStatEvent()
-                      focusMemoryInput()
-                    }}
-                    onPointerDown={(event) => event.preventDefault()}
-                    className="axis-live-memory-chip"
-                  >
-                    Undo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void finalizeSession()}
-                    className="axis-live-memory-chip"
-                  >
-                    End
-                  </button>
-                </div>
               </div>
             ) : null}
           </div>
