@@ -34,10 +34,31 @@ export type ReplayRetrievalClip = {
   relevance: number
   hiddenContinuityScore: number
   retrievalRole: "match" | "context"
+  clusterTags: ReplayMemoryClusterKind[]
+  contextStack: ReplayRetrievalContextStack
+}
+
+export type ReplayMemoryClusterKind =
+  | "last-run"
+  | "player-sequence"
+  | "collapse-window"
+  | "pressure-sequence"
+  | "momentum-shift"
+  | "turnover-chain"
+  | "rebound-sequence"
+  | "transition-window"
+
+export type ReplayRetrievalContextStack = {
+  previousLabel: string | null
+  nextLabel: string | null
+  nearbyCount: number
+  scoreState: string
+  possessionState: string
 }
 
 export type ReplayRetrievalCluster = {
   id: string
+  kind: ReplayMemoryClusterKind
   title: string
   subtitle: string
   clips: ReplayRetrievalClip[]
@@ -151,6 +172,19 @@ function presetFromQuery(query?: string | null): ReplayRetrievalPreset | null {
   return null
 }
 
+function clusterKindFromQuery(query?: string | null): ReplayMemoryClusterKind | null {
+  const normalized = (query || "").toLowerCase()
+  if (/\bplayer\s+sequence\b|\bnae\s+sequence\b/.test(normalized)) return "player-sequence"
+  if (/\bcollapse\b/.test(normalized)) return "collapse-window"
+  if (/\bpressure\b/.test(normalized)) return "pressure-sequence"
+  if (/\bmomentum\b/.test(normalized)) return "momentum-shift"
+  if (/\bturnover\s+chain\b/.test(normalized)) return "turnover-chain"
+  if (/\brebound\s+sequence\b/.test(normalized)) return "rebound-sequence"
+  if (/\btransition\b/.test(normalized)) return "transition-window"
+
+  return null
+}
+
 function hiddenContinuityScore(payload: Record<string, unknown>) {
   const training = asRecord(payload.training_rep)
   const memory = asRecord(payload.memory_object)
@@ -232,6 +266,14 @@ function clipFromEvent(
     relevance: 1 + hiddenContinuityScore(payload),
     hiddenContinuityScore: hiddenContinuityScore(payload),
     retrievalRole: "match",
+    clusterTags: [],
+    contextStack: {
+      previousLabel: null,
+      nextLabel: null,
+      nearbyCount: 0,
+      scoreState: score,
+      possessionState: text(memory.possessionAfter) || text(payload.possession).toUpperCase() || "LIVE",
+    },
   }
 }
 
@@ -241,7 +283,22 @@ function queryParts(query: string) {
     .split(/\s+/)
     .map((part) => part.trim())
     .filter(Boolean)
-    .filter((part) => !["show", "find", "replay", "open", "get", "clips", "clip", "plays", "play"].includes(part))
+    .filter((part) => ![
+      "show",
+      "find",
+      "replay",
+      "open",
+      "get",
+      "clips",
+      "clip",
+      "plays",
+      "play",
+      "moments",
+      "moment",
+      "sequence",
+      "window",
+      "chain",
+    ].includes(part))
 }
 
 function queryMatches(clip: ReplayRetrievalClip, query: string) {
@@ -268,6 +325,123 @@ function withRetrievalRole(clip: ReplayRetrievalClip, retrievalRole: ReplayRetri
     ...clip,
     retrievalRole,
   }
+}
+
+function withClusterTag(clip: ReplayRetrievalClip, tag: ReplayMemoryClusterKind) {
+  if (clip.clusterTags.includes(tag)) return clip
+
+  return {
+    ...clip,
+    clusterTags: [...clip.clusterTags, tag],
+  }
+}
+
+function markCluster(clips: ReplayRetrievalClip[], tag: ReplayMemoryClusterKind) {
+  const ids = new Set(clips.map((clip) => clip.id))
+  return (clip: ReplayRetrievalClip) => (ids.has(clip.id) ? withClusterTag(clip, tag) : clip)
+}
+
+function chronological(clips: ReplayRetrievalClip[]) {
+  return [...clips].sort((a, b) => {
+    const sessionDelta = a.createdAt.localeCompare(b.createdAt)
+    if (sessionDelta !== 0) return sessionDelta
+
+    return a.sessionTime - b.sessionTime
+  })
+}
+
+function sameSessionWindow(clips: ReplayRetrievalClip[], source: ReplayRetrievalClip, seconds: number) {
+  return clips.filter((clip) => (
+    clip.sessionId === source.sessionId &&
+    Math.abs(clip.sessionTime - source.sessionTime) <= seconds &&
+    clip.id !== source.id
+  ))
+}
+
+function strongestPlayerSequence(clips: ReplayRetrievalClip[]) {
+  const byPlayer = new Map<string, ReplayRetrievalClip[]>()
+  clips.forEach((clip) => {
+    if (!clip.player) return
+    byPlayer.set(clip.player, [...(byPlayer.get(clip.player) || []), clip])
+  })
+
+  return [...byPlayer.values()]
+    .filter((group) => group.length > 1)
+    .sort((a, b) => b.length - a.length)[0] || []
+}
+
+function relatedSequence(
+  clips: ReplayRetrievalClip[],
+  predicate: (clip: ReplayRetrievalClip) => boolean,
+  windowSeconds = 42
+) {
+  const matches = clips.filter(predicate)
+  const related = new Map<string, ReplayRetrievalClip>()
+  matches.forEach((match) => {
+    related.set(match.id, match)
+    sameSessionWindow(clips, match, windowSeconds).forEach((clip) => related.set(clip.id, clip))
+  })
+
+  return chronological([...related.values()])
+}
+
+function buildNaturalClusters(sourceClips: ReplayRetrievalClip[]): ReplayRetrievalCluster[] {
+  const newest = [...sourceClips]
+    .sort((a, b) => {
+      const sessionDelta = b.createdAt.localeCompare(a.createdAt)
+      if (sessionDelta !== 0) return sessionDelta
+
+      return b.sessionTime - a.sessionTime
+    })
+    .slice(0, 6)
+  const playerSequence = strongestPlayerSequence(sourceClips)
+  const turnoverChain = relatedSequence(sourceClips, (clip) => clip.eventType === "TURNOVER")
+  const reboundSequence = relatedSequence(sourceClips, (clip) => clip.eventType === "REBOUND")
+  const pressureSequence = relatedSequence(sourceClips, (clip) => clip.hiddenContinuityScore > 0.18)
+  const transitionWindow = relatedSequence(sourceClips, (clip) => ["STEAL", "BLOCK"].includes(clip.eventType), 28)
+  const collapseWindow = relatedSequence(sourceClips, (clip) => (
+    clip.eventType === "TURNOVER" || clip.hiddenContinuityScore > 0.28
+  ), 36)
+  const momentumShift = relatedSequence(sourceClips, (clip) => (
+    ["MAKE", "STEAL", "BLOCK", "TURNOVER"].includes(clip.eventType)
+  ), 24)
+
+  return [
+    cluster("last-run", "last-run", "Last run", "Newest tagged possessions", newest),
+    cluster("player-sequence", "player-sequence", "Player sequence", "Repeated player memory", playerSequence),
+    cluster("collapse-window", "collapse-window", "Collapse window", "Turnovers and pressure nearby", collapseWindow),
+    cluster("pressure-sequence", "pressure-sequence", "Pressure sequence", "Moments carrying stronger context", pressureSequence),
+    cluster("momentum-shift", "momentum-shift", "Momentum shift", "Score and possession changes together", momentumShift),
+    cluster("turnover-chain", "turnover-chain", "Turnover chain", "Possessions connected by giveaways", turnoverChain),
+    cluster("rebound-sequence", "rebound-sequence", "Rebound sequence", "Boards with nearby possessions", reboundSequence),
+    cluster("transition-window", "transition-window", "Transition window", "Stops and open-floor chances", transitionWindow),
+  ].filter((item): item is ReplayRetrievalCluster => Boolean(item))
+}
+
+function stackContext(sourceClips: ReplayRetrievalClip[]) {
+  const byMemoryId = new Map(sourceClips.map((clip) => [clip.memoryEventId, clip]))
+  const clusters = buildNaturalClusters(sourceClips)
+  let tagged = sourceClips
+
+  clusters.forEach((clusterItem) => {
+    tagged = tagged.map(markCluster(clusterItem.clips, clusterItem.kind))
+  })
+
+  return tagged.map((clip) => {
+    const previous = clip.previousEventId ? byMemoryId.get(clip.previousEventId) : null
+    const next = clip.nextEventId ? byMemoryId.get(clip.nextEventId) : null
+
+    return {
+      ...clip,
+      contextStack: {
+        previousLabel: previous?.label || null,
+        nextLabel: next?.label || null,
+        nearbyCount: sameSessionWindow(tagged, clip, 24).length,
+        scoreState: clip.score,
+        possessionState: clip.possession,
+      },
+    }
+  })
 }
 
 function expandWithMemoryContext(
@@ -302,6 +476,7 @@ function expandWithMemoryContext(
 
 function cluster(
   id: string,
+  kind: ReplayMemoryClusterKind,
   title: string,
   subtitle: string,
   clips: ReplayRetrievalClip[]
@@ -310,6 +485,7 @@ function cluster(
 
   return {
     id,
+    kind,
     title,
     subtitle,
     clips: clips.slice(0, 5),
@@ -326,17 +502,23 @@ export function buildReplayRetrieval({
   const queryPreset = preset ? null : presetFromQuery(query)
   const selectedPreset = queryPreset || normalizedPreset(preset)
   const effectiveQuery = queryPreset ? "" : query || ""
-  const hasReorganizationQuery = Boolean(queryPreset || queryParts(effectiveQuery).length)
+  const queryClusterKind = preset ? null : clusterKindFromQuery(query)
+  const hasReorganizationQuery = Boolean(queryPreset || queryClusterKind || queryParts(effectiveQuery).length)
   const sessionsById = new Map(sessions.map((session) => [session.id, session]))
   const sourceClips = events
     .map((event) => clipFromEvent(event, sessionsById.get(event.session_id)))
     .filter((clip): clip is ReplayRetrievalClip => Boolean(clip))
-  const matchedClips = sourceClips
-    .filter((clip) => eventMatchesPreset(clip.eventType, selectedPreset))
-    .filter((clip) => queryMatches(clip, effectiveQuery))
+  const contextualClips = stackContext(sourceClips)
+  const clusters = buildNaturalClusters(contextualClips)
+  const clusterClips = queryClusterKind
+    ? clusters.find((clusterItem) => clusterItem.kind === queryClusterKind)?.clips || []
+    : null
+  const matchedClips = clusterClips || contextualClips
+      .filter((clip) => eventMatchesPreset(clip.eventType, selectedPreset))
+      .filter((clip) => queryMatches(clip, effectiveQuery))
 
   const clips = (hasReorganizationQuery
-    ? expandWithMemoryContext(sourceClips, matchedClips)
+    ? expandWithMemoryContext(contextualClips, matchedClips)
     : matchedClips
   )
     .sort((a, b) => {
@@ -360,35 +542,6 @@ export function buildReplayRetrieval({
       return b.createdAt.localeCompare(a.createdAt)
     })
     .slice(0, limit)
-  const clusters = [
-    cluster(
-      "last-run",
-      "Last run",
-      "Newest tagged possessions",
-      [...sourceClips].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6)
-    ),
-    cluster(
-      "turnovers",
-      "Turnovers",
-      "Possession changes ready to review",
-      sourceClips.filter((clip) => clip.eventType === "TURNOVER")
-    ),
-    cluster(
-      "scoring",
-      "Made shots",
-      "Scoring moments with score state",
-      sourceClips.filter((clip) => clip.eventType === "MAKE")
-    ),
-    cluster(
-      "pressure",
-      "High-value moments",
-      "Tagged plays with stronger game context",
-      [...sourceClips]
-        .filter((clip) => clip.hiddenContinuityScore > 0.18)
-        .sort((a, b) => b.hiddenContinuityScore - a.hiddenContinuityScore)
-    ),
-  ].filter((item): item is ReplayRetrievalCluster => Boolean(item))
-
   return {
     preset: selectedPreset,
     queryMode: hasReorganizationQuery ? "reorganized" : "chronological",

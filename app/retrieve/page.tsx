@@ -7,6 +7,7 @@ import type {
 import {
   buildReplayRetrieval,
   replayRetrievalPresets,
+  type ReplayMemoryClusterKind,
   type ReplayRetrievalClip,
 } from "@/lib/retrieval/liveReplayRetrieval"
 import {
@@ -39,6 +40,32 @@ function clipHref(clip: ReplayRetrievalClip) {
   return `/session/${clip.sessionId}?${params.toString()}`
 }
 
+function clusterLabel(kind?: ReplayMemoryClusterKind) {
+  if (kind === "last-run") return "Last run"
+  if (kind === "player-sequence") return "Player sequence"
+  if (kind === "collapse-window") return "Collapse window"
+  if (kind === "pressure-sequence") return "Pressure sequence"
+  if (kind === "momentum-shift") return "Momentum shift"
+  if (kind === "turnover-chain") return "Turnover chain"
+  if (kind === "rebound-sequence") return "Rebound sequence"
+  if (kind === "transition-window") return "Transition window"
+
+  return null
+}
+
+function clusterQuery(kind: ReplayMemoryClusterKind) {
+  if (kind === "last-run") return "last run"
+  if (kind === "player-sequence") return "player sequence"
+  if (kind === "collapse-window") return "turnover"
+  if (kind === "pressure-sequence") return "pressure"
+  if (kind === "momentum-shift") return "score"
+  if (kind === "turnover-chain") return "turnovers"
+  if (kind === "rebound-sequence") return "rebounds"
+  if (kind === "transition-window") return "steals"
+
+  return "memory"
+}
+
 function MomentRow({ clip }: { clip: ReplayRetrievalClip }) {
   return (
     <Link
@@ -64,10 +91,33 @@ function MomentRow({ clip }: { clip: ReplayRetrievalClip }) {
         </div>
       </div>
       <div className="axis-mono flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.16em] text-white/34 transition group-hover:text-white/62">
-        <span>{clip.retrievalRole === "context" ? "Nearby" : clip.previousEventId ? "Context linked" : "First memory"}</span>
+        <span>{clip.retrievalRole === "context" ? "Nearby" : clip.contextStack.nearbyCount ? "Stacked" : "First memory"}</span>
         <span>Open</span>
       </div>
     </Link>
+  )
+}
+
+function MomentStream({ clips }: { clips: ReplayRetrievalClip[] }) {
+  return (
+    <div>
+      {clips.map((clip, index) => {
+        const cluster = clip.clusterTags[0] || ""
+        const previousCluster = clips[index - 1]?.clusterTags[0] || ""
+        const label = cluster && cluster !== previousCluster ? clusterLabel(cluster) : null
+
+        return (
+          <div key={clip.id}>
+            {label ? (
+              <p className="axis-mono border-t border-white/[0.08] pt-5 text-[10px] font-black uppercase tracking-[0.2em] text-white/35">
+                {label}
+              </p>
+            ) : null}
+            <MomentRow clip={clip} />
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -172,7 +222,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
             {retrieval.clusters.slice(0, 4).map((cluster) => (
               <Link
                 key={cluster.id}
-                href={`/retrieve?preset=${cluster.id === "scoring" ? "makes" : cluster.id}`}
+                href={`/retrieve?q=${encodeURIComponent(clusterQuery(cluster.kind))}`}
                 className="axis-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/38 transition hover:text-white/70"
               >
                 {cluster.title} / {cluster.clips.length}
@@ -183,11 +233,7 @@ export default async function RetrievePage({ searchParams }: RetrievePageProps) 
 
         <section className="grid gap-1">
           {retrieval.clips.length ? (
-            <div>
-              {retrieval.clips.map((clip) => (
-                <MomentRow key={clip.id} clip={clip} />
-              ))}
-            </div>
+            <MomentStream clips={retrieval.clips} />
           ) : (
             <AxisEmptyState title="No memory yet." className="border-0 bg-transparent">
               <p>
