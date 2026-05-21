@@ -2,6 +2,10 @@ import type {
   TemporalEventRecord,
   TemporalSessionRecord,
 } from "@/lib/temporalEventGraph"
+import {
+  buildContextualMemoryPackage,
+  planContextualMemoryOperation,
+} from "@/lib/contextualMemoryLanguage"
 
 export type ReplayRetrievalPreset =
   | "all"
@@ -184,7 +188,7 @@ function presetFromQuery(query?: string | null): ReplayRetrievalPreset | null {
   if (/\brebounds?\b|\bboards?\b/.test(normalized)) return "rebounds"
   if (/\bassists?\b|\bast\b/.test(normalized)) return "assists"
   if (/\bmade\b|\bmakes?\b|\bscor(e|ing)\b/.test(normalized)) return "makes"
-  if (/\bstops?\b/.test(normalized)) return "stops"
+  if (/\bstops?\b|\bsteals?\b|\bstrips?\b|\bblocks?\b/.test(normalized)) return "stops"
 
   return null
 }
@@ -195,6 +199,7 @@ function clusterKindFromQuery(query?: string | null): ReplayMemoryClusterKind | 
   if (/\bcollapse\b/.test(normalized)) return "collapse-window"
   if (/\bpressure\b/.test(normalized)) return "pressure-sequence"
   if (/\bmomentum\b/.test(normalized)) return "momentum-shift"
+  if (/\bstabiliz(e|ation)|settle|reset\b/.test(normalized)) return "pressure-sequence"
   if (/\bturnover\s+chain\b/.test(normalized)) return "turnover-chain"
   if (/\brebound\s+sequence\b/.test(normalized)) return "rebound-sequence"
   if (/\btransition\b/.test(normalized)) return "transition-window"
@@ -616,11 +621,30 @@ export function buildReplayRetrieval({
         streamPosition: index,
       },
     }))
+  const contextPackage = buildContextualMemoryPackage({
+    raw: query || preset || "all moments",
+    mode: "find",
+    score: null,
+    possession: null,
+    quarter: null,
+    replayState: clips.some((clip) => clip.playbackUrl) ? "anchored" : "idle",
+    recentMoments: [],
+    continuityFlow: clips
+      .map((clip) => clip.eventType)
+      .filter((eventType): eventType is "MAKE" | "MISS" | "SHOT" | "REBOUND" | "ASSIST" | "TURNOVER" | "STEAL" | "BLOCK" | "FOUL" =>
+        ["MAKE", "MISS", "SHOT", "REBOUND", "ASSIST", "TURNOVER", "STEAL", "BLOCK", "FOUL"].includes(eventType)
+      )
+      .slice(-8),
+    activePlayers: clips.flatMap((clip) => clip.player ? [clip.player] : []),
+  })
+
   return {
     preset: selectedPreset,
     queryMode: hasReorganizationQuery ? "reorganized" : "chronological",
     clips,
     clusters,
+    contextPackage,
+    plannerDecision: planContextualMemoryOperation(contextPackage),
   }
 }
 

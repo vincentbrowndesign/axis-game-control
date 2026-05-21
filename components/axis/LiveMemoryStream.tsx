@@ -45,6 +45,11 @@ import {
   createAxisMemoryObject,
   type AxisMemoryObject,
 } from "@/lib/axisMemoryObject"
+import {
+  buildContextualMemoryPackage,
+  planContextualMemoryOperation,
+} from "@/lib/contextualMemoryLanguage"
+import { buildStateDependentMemoryGraph } from "@/lib/stateDependentMemoryGraph"
 import { AxisScorebug } from "@/components/axis/AxisPrimitives"
 import type { AxisCommandPayload } from "@/lib/axisCommand"
 
@@ -100,6 +105,7 @@ type LiveMemoryDraft = {
   team: LiveStatTeam | null
   player: string | null
   action: AxisGameAction | null
+  shotResult?: "make" | "miss"
 }
 
 type LiveMemoryQuestion = {
@@ -972,6 +978,39 @@ function normalizeMemoryText(value: string) {
   return value.trim().replace(/\s+/g, " ")
 }
 
+function normalizeBasketballMemoryText(value: string) {
+  return normalizeMemoryText(value)
+    .replace(/\bboards?\b/gi, "rebound")
+    .replace(/\bdimes?\b/gi, "assist")
+    .replace(/\bstrips?\b/gi, "steal")
+    .replace(/\b(cash|good|bucket)\b/gi, "made shot")
+    .replace(/\bputback\b/gi, "rebound score")
+    .replace(/\bthe rebound\b/gi, "rebound")
+    .replace(/\bthat was a foul\b/gi, "foul")
+    .replace(/\bclip that\b/gi, "clip last")
+    .replace(/\bhe missed\b/gi, "missed shot")
+    .replace(/\bshe missed\b/gi, "missed shot")
+    .replace(/\bthey scored\b/gi, "they scored")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function oppositeLiveStatTeam(team: LiveStatTeam): LiveStatTeam {
+  return team === "home" ? "away" : "home"
+}
+
+function memoryTextMeansSamePlayer(value: string) {
+  return /\b(SAME|SAME KID|SAME PLAYER|SAME GUY|SAME ONE)\b/i.test(value)
+}
+
+function memoryTextMeansOtherTeam(value: string) {
+  return /\b(OTHER TEAM|OTHER SIDE|THEM|THEY)\b/i.test(value)
+}
+
+function memoryTextMeansAgain(value: string) {
+  return /\b(AGAIN|SAME AGAIN|DO IT AGAIN)\b/i.test(value)
+}
+
 function explicitTeamFromMemoryText(value: string): LiveStatTeam | null {
   const normalized = value.toUpperCase()
   if (/\bHOME\b/.test(normalized)) return "home"
@@ -980,7 +1019,7 @@ function explicitTeamFromMemoryText(value: string): LiveStatTeam | null {
 }
 
 function actionFromMemoryText(value: string): AxisGameAction | null {
-  const normalized = value.toUpperCase()
+  const normalized = normalizeBasketballMemoryText(value).toUpperCase()
 
   if (/\b(MISS 3|MISSED 3|3 MISS)\b/.test(normalized)) return "MISS_3"
   if (/\b(MISS 2|MISSED 2|2 MISS)\b/.test(normalized)) return "MISS_2"
@@ -999,10 +1038,14 @@ function actionFromMemoryText(value: string): AxisGameAction | null {
 }
 
 function playerFromMemoryText(value: string) {
-  const normalized = value
+  if (memoryTextMeansSamePlayer(value) || memoryTextMeansOtherTeam(value) || memoryTextMeansAgain(value)) {
+    return null
+  }
+
+  const normalized = normalizeBasketballMemoryText(value)
     .toUpperCase()
-    .replace(/\b(HOME|AWAY|THEY|HE|SHE|WE|US|SCORED|SCORE|MADE|MAKE|HIT|BUCKET|POINTS?)\b/g, " ")
-    .replace(/\b(MISS|MISSED|REBOUND|REB|BOARD|TURNOVER|TO|ASSIST|AST|STEAL|STL|BLOCK|BLK|FOUL|AND|ONE|FREE|THROW|FT|PT|TWO|THREE)\b/g, " ")
+    .replace(/\b(HOME|AWAY|THEY|HE|SHE|WE|US|SCORED|SCORE|MADE|MAKE|HIT|BUCKET|POINTS?|SHOT)\b/g, " ")
+    .replace(/\b(MISS|MISSED|REBOUND|REB|BOARD|TURNOVER|TO|ASSIST|AST|DIME|STEAL|STL|STRIP|BLOCK|BLK|FOUL|AND|ONE|FREE|THROW|FT|PT|TWO|THREE|LEFT|RIGHT|SIDE|TRANSITION)\b/g, " ")
     .replace(/\b[123]\b/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -1011,7 +1054,15 @@ function playerFromMemoryText(value: string) {
 }
 
 function scoringNeedsPoints(value: string, action: AxisGameAction | null) {
-  return !action && /\b(SCORED|SCORE|MADE|MAKE|HIT|BUCKET)\b/i.test(value)
+  return !action && /\b(SCORED|SCORE|MADE|MAKE|HIT|BUCKET|CASH|GOOD|PUTBACK)\b/i.test(value)
+}
+
+function missedShotNeedsPoints(value: string, action: AxisGameAction | null) {
+  return !action && /\b(MISSED|MISS|MISSED SHOT)\b/i.test(value)
+}
+
+function shotResultFromText(value: string): "make" | "miss" {
+  return /\b(MISSED|MISS|MISSED SHOT)\b/i.test(value) ? "miss" : "make"
 }
 
 function memoryTextIsAmbiguousPerson(value: string) {
@@ -1021,7 +1072,14 @@ function memoryTextIsAmbiguousPerson(value: string) {
 function actionNeedsActor(value: string, action: AxisGameAction | null) {
   const hasExplicitTeam = Boolean(explicitTeamFromMemoryText(value))
   if (hasExplicitTeam || memoryTextIsAmbiguousPerson(value)) return false
-  return action === "REBOUND" || action === "MAKE_1" || action === "MAKE_2" || action === "MAKE_3"
+  return (
+    action === "REBOUND" ||
+    action === "MAKE_1" ||
+    action === "MAKE_2" ||
+    action === "MAKE_3" ||
+    action === "MISS_2" ||
+    action === "MISS_3"
+  )
 }
 
 function actionNeedsTeam(value: string, action: AxisGameAction | null) {
@@ -1033,7 +1091,8 @@ function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveM
   const raw = normalizeMemoryText(value)
   if (!raw) return null
 
-  const normalized = raw.toUpperCase()
+  const semantic = normalizeBasketballMemoryText(raw)
+  const normalized = semantic.toUpperCase()
   if (/^(CLIP|SAVE CLIP|CLIP LAST|CLIP LAST PLAY|CLIP LAST POSSESSION)\b/.test(normalized)) {
     return {
       kind: "memory",
@@ -1052,11 +1111,13 @@ function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveM
 
   const explicitTeam = explicitTeamFromMemoryText(raw)
   const team = explicitTeam || fallbackTeam
-  const action = actionFromMemoryText(raw)
-  const player = playerFromMemoryText(raw)
-  const scoredButMissingPoints = scoringNeedsPoints(raw, action)
+  const action = actionFromMemoryText(semantic)
+  const player = playerFromMemoryText(semantic)
+  const scoredButMissingPoints = scoringNeedsPoints(semantic, action)
+  const missedButMissingPoints = missedShotNeedsPoints(semantic, action)
+  const needsShotValue = scoredButMissingPoints || missedButMissingPoints
 
-  if (memoryTextIsAmbiguousPerson(raw) && (action || scoredButMissingPoints)) {
+  if (memoryTextIsAmbiguousPerson(raw) && (action || needsShotValue)) {
     return {
       kind: "question",
       prompt: "who?",
@@ -1065,6 +1126,7 @@ function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveM
         team: explicitTeam,
         player: null,
         action,
+        shotResult: shotResultFromText(semantic),
       },
     }
   }
@@ -1078,6 +1140,7 @@ function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveM
         team: explicitTeam,
         player: null,
         action,
+        shotResult: shotResultFromText(semantic),
       },
     }
   }
@@ -1091,11 +1154,12 @@ function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveM
         team: null,
         player: null,
         action,
+        shotResult: shotResultFromText(semantic),
       },
     }
   }
 
-  if (scoredButMissingPoints) {
+  if (needsShotValue) {
     return {
       kind: "question",
       prompt: "2 or 3?",
@@ -1104,6 +1168,7 @@ function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveM
         team,
         player,
         action: null,
+        shotResult: shotResultFromText(semantic),
       },
     }
   }
@@ -1125,10 +1190,10 @@ function resolveLiveMemoryText(value: string, fallbackTeam: LiveStatTeam): LiveM
   }
 }
 
-function pointsAnswerToAction(value: string): AxisGameAction | null {
+function pointsAnswerToAction(value: string, shotResult: "make" | "miss" = "make"): AxisGameAction | null {
   const normalized = value.toUpperCase()
-  if (/\b(3|3PT|THREE)\b/.test(normalized)) return "MAKE_3"
-  if (/\b(2|2PT|TWO)\b/.test(normalized)) return "MAKE_2"
+  if (/\b(3|3PT|THREE)\b/.test(normalized)) return shotResult === "miss" ? "MISS_3" : "MAKE_3"
+  if (/\b(2|2PT|TWO)\b/.test(normalized)) return shotResult === "miss" ? "MISS_2" : "MAKE_2"
   if (/\b(1|1PT|FT|FREE THROW)\b/.test(normalized)) return "MAKE_1"
   return null
 }
@@ -1164,6 +1229,11 @@ export function LiveMemoryStream() {
   const [activeStatTeam, setActiveStatTeam] = useState<LiveStatTeam>("home")
   const [memoryInput, setMemoryInput] = useState("")
   const [memoryQuestion, setMemoryQuestion] = useState<LiveMemoryQuestion | null>(null)
+  const [memorySegments, setMemorySegments] = useState<Array<{
+    id: string
+    label: string
+    status: string
+  }>>([])
   const [liveBoxScore, setLiveBoxScore] = useState<LiveBoxScore>(() => createLiveBoxScore())
   const [, setLiveStatEvents] = useState<LiveBasketballStatEvent[]>([])
   const snapshots = useAxisChronologyStore((state) => state.snapshots)
@@ -1188,6 +1258,11 @@ export function LiveMemoryStream() {
   const liveBoxScoreRef = useRef<LiveBoxScore>(createLiveBoxScore())
   const liveStatEventsRef = useRef<LiveBasketballStatEvent[]>([])
   const memoryObjectsRef = useRef<AxisMemoryObject[]>([])
+  const lastMemoryContextRef = useRef<{
+    team: LiveStatTeam
+    player: string | null
+    action: AxisGameAction
+  } | null>(null)
   const openingCameraRef = useRef(false)
   const finalizingRef = useRef(false)
   const hardStoppedRef = useRef(false)
@@ -1211,6 +1286,23 @@ export function LiveMemoryStream() {
         preventScroll: true,
       })
     })
+  }, [])
+
+  const settleMemorySegment = useCallback((label: string, status = "memory") => {
+    const cleanLabel = normalizeMemoryText(label)
+    if (!cleanLabel) return
+    const timestamp = Date.now()
+
+    setMemorySegments((current) =>
+      [
+        ...current,
+        {
+          id: `${timestamp}-${cleanLabel}`,
+          label: cleanLabel,
+          status,
+        },
+      ].slice(-4)
+    )
   }, [])
 
   const emitEvent = useCallback(
@@ -1331,10 +1423,35 @@ export function LiveMemoryStream() {
         needsReview: false,
       }
 
+      const nextMemoryTimeline = appendAxisMemoryObject(memoryObjectsRef.current, memoryObject)
+      const nextContinuityFlow = [...basketballSequenceRef.current, input.type].slice(-12)
+      const activePlayers = nextMemoryTimeline.flatMap((memory) => memory.player ? [memory.player] : [])
+      const contextPackage = buildContextualMemoryPackage({
+        raw: rawInput,
+        mode: "live",
+        score: statEvent.score,
+        possession: statEvent.possession,
+        quarter: null,
+        replayState: "anchored",
+        recentMoments: nextMemoryTimeline,
+        continuityFlow: nextContinuityFlow,
+        activePlayers,
+      })
+      const plannerDecision = planContextualMemoryOperation(contextPackage)
+      const stateDependentGraph = buildStateDependentMemoryGraph({
+        memories: nextMemoryTimeline,
+        contextPackage,
+      })
+
       liveBoxScoreRef.current = nextBoxScore
       liveStatEventsRef.current = [...liveStatEventsRef.current, statEvent].slice(-80)
-      basketballSequenceRef.current = [...basketballSequenceRef.current, input.type].slice(-12)
-      memoryObjectsRef.current = appendAxisMemoryObject(memoryObjectsRef.current, memoryObject)
+      basketballSequenceRef.current = nextContinuityFlow
+      memoryObjectsRef.current = nextMemoryTimeline
+      lastMemoryContextRef.current = {
+        team,
+        player: options?.player || null,
+        action: statEvent.action,
+      }
       setLiveBoxScore(nextBoxScore)
       setLiveStatEvents(liveStatEventsRef.current)
       setActiveStatTeam(statEvent.possession)
@@ -1354,7 +1471,12 @@ export function LiveMemoryStream() {
           previousEventId: memoryObject.previousEventId,
           nextEventId: memoryObject.nextEventId,
           timelineIndex: memoryObjectsRef.current.length - 1,
+          edgeCount: stateDependentGraph.edges.length,
+          graphTruth: stateDependentGraph.stateSummary.graphTruth,
         },
+        contextPackage,
+        plannerDecision,
+        stateDependentGraph,
         perception: ambientPerception.cvMetadata,
         replayAnchor: statEvent.replayAnchor,
         training: statEvent.training,
@@ -1383,6 +1505,9 @@ export function LiveMemoryStream() {
           normalized_command: normalizedCommand,
           resolved_event: resolvedEvent,
           memory_object: memoryObject,
+          contextual_memory_package: contextPackage,
+          planner_decision: plannerDecision,
+          state_dependent_graph: stateDependentGraph,
           ambient_perception: ambientPerception.cvMetadata,
           player: options?.player || null,
           replay_anchor: statEvent.replayAnchor,
@@ -1452,7 +1577,26 @@ export function LiveMemoryStream() {
         movementMetadata: ambientPerception.movementMetadata,
       })
 
-      memoryObjectsRef.current = appendAxisMemoryObject(memoryObjectsRef.current, memoryObject)
+      const nextMemoryTimeline = appendAxisMemoryObject(memoryObjectsRef.current, memoryObject)
+      const activePlayers = nextMemoryTimeline.flatMap((memory) => memory.player ? [memory.player] : [])
+      const contextPackage = buildContextualMemoryPackage({
+        raw,
+        mode: "live",
+        score,
+        possession: activeStatTeam,
+        quarter: null,
+        replayState: "anchored",
+        recentMoments: nextMemoryTimeline,
+        continuityFlow: basketballSequenceRef.current,
+        activePlayers,
+      })
+      const plannerDecision = planContextualMemoryOperation(contextPackage)
+      const stateDependentGraph = buildStateDependentMemoryGraph({
+        memories: nextMemoryTimeline,
+        contextPackage,
+      })
+
+      memoryObjectsRef.current = nextMemoryTimeline
 
       emitEvent("memory_command", {
         raw,
@@ -1487,7 +1631,12 @@ export function LiveMemoryStream() {
           previousEventId: memoryObject.previousEventId,
           nextEventId: memoryObject.nextEventId,
           timelineIndex: memoryObjectsRef.current.length - 1,
+          edgeCount: stateDependentGraph.edges.length,
+          graphTruth: stateDependentGraph.stateSummary.graphTruth,
         },
+        contextPackage,
+        plannerDecision,
+        stateDependentGraph,
         perception: ambientPerception.cvMetadata,
         sequence: {
           index: basketballSequenceRef.current.length,
@@ -1506,6 +1655,9 @@ export function LiveMemoryStream() {
           event_id: memoryObject.eventId,
           normalized_command: normalizedCommand,
           memory_object: memoryObject,
+          contextual_memory_package: contextPackage,
+          planner_decision: plannerDecision,
+          state_dependent_graph: stateDependentGraph,
           ambient_perception: ambientPerception.cvMetadata,
           possession: activeStatTeam,
           score_state: score,
@@ -1546,10 +1698,21 @@ export function LiveMemoryStream() {
   useEffect(() => {
     if (typeof window === "undefined") return
 
+    const body = document.body
     const root = document.documentElement
     const viewport = window.visualViewport
+    const previousBodyOverflow = body.style.overflow
+    const previousRootOverflow = root.style.overflow
+
+    body.classList.add("axis-native-camera-locked")
+    root.classList.add("axis-native-camera-locked")
+    body.style.overflow = "hidden"
+    root.style.overflow = "hidden"
 
     const syncKeyboardOffset = () => {
+      const viewportHeight = viewport?.height || window.innerHeight
+      root.style.setProperty("--axis-live-viewport-height", `${Math.round(viewportHeight)}px`)
+
       if (!viewport) {
         root.style.setProperty("--axis-live-keyboard-offset", "0px")
         return
@@ -1568,6 +1731,11 @@ export function LiveMemoryStream() {
       viewport?.removeEventListener("resize", syncKeyboardOffset)
       viewport?.removeEventListener("scroll", syncKeyboardOffset)
       window.removeEventListener("orientationchange", syncKeyboardOffset)
+      body.classList.remove("axis-native-camera-locked")
+      root.classList.remove("axis-native-camera-locked")
+      body.style.overflow = previousBodyOverflow
+      root.style.overflow = previousRootOverflow
+      root.style.removeProperty("--axis-live-viewport-height")
       root.style.removeProperty("--axis-live-keyboard-offset")
     }
   }, [])
@@ -1627,6 +1795,7 @@ export function LiveMemoryStream() {
       const normalized = raw.toUpperCase()
 
       if (/^(END|STOP|SAVE|END RECORDING|STOP RECORDING|SAVE RECORDING)$/.test(normalized)) {
+        settleMemorySegment(raw, "session")
         setMemoryInput("")
         setMemoryQuestion(null)
         finalizeSessionRef.current?.()
@@ -1635,7 +1804,8 @@ export function LiveMemoryStream() {
 
       if (memoryQuestion) {
         if (memoryQuestion.prompt === "home or away?") {
-          const team = explicitTeamFromMemoryText(raw)
+          const previousTeam = lastMemoryContextRef.current?.team || activeStatTeam
+          const team = explicitTeamFromMemoryText(raw) || (memoryTextMeansOtherTeam(raw) ? oppositeLiveStatTeam(previousTeam) : null)
           if (!team) {
             setMemoryInput("")
             return
@@ -1643,6 +1813,7 @@ export function LiveMemoryStream() {
 
           const action = memoryQuestion.draft.action
           if (!action) {
+            settleMemorySegment(raw, "team")
             setMemoryQuestion({
               prompt: "2 or 3?",
               draft: {
@@ -1654,6 +1825,7 @@ export function LiveMemoryStream() {
             return
           }
 
+          settleMemorySegment(raw, "resolved")
           resolveMemoryStat({
             kind: "stat",
             raw: `${memoryQuestion.draft.raw} / ${team.toUpperCase()}`,
@@ -1666,11 +1838,17 @@ export function LiveMemoryStream() {
 
         if (memoryQuestion.prompt === "who/team?") {
           const team = explicitTeamFromMemoryText(raw)
-          const player = team ? null : playerFromMemoryText(raw) || raw.toUpperCase()
+          const contextualPlayer = memoryTextMeansSamePlayer(raw) ? lastMemoryContextRef.current?.player || null : null
+          if (memoryTextMeansSamePlayer(raw) && !contextualPlayer) {
+            setMemoryInput("")
+            return
+          }
+          const player = team ? null : contextualPlayer || playerFromMemoryText(raw) || raw.toUpperCase()
           const nextTeam = team || memoryQuestion.draft.team || activeStatTeam
           const action = memoryQuestion.draft.action
 
           if (!action) {
+            settleMemorySegment(raw, "actor")
             setMemoryQuestion({
               prompt: "2 or 3?",
               draft: {
@@ -1683,6 +1861,7 @@ export function LiveMemoryStream() {
             return
           }
 
+          settleMemorySegment(raw, "resolved")
           resolveMemoryStat({
             kind: "stat",
             raw: `${memoryQuestion.draft.raw} / ${raw}`,
@@ -1694,7 +1873,12 @@ export function LiveMemoryStream() {
         }
 
         if (memoryQuestion.prompt === "who?") {
-          const player = playerFromMemoryText(raw) || raw.toUpperCase()
+          const contextualPlayer = memoryTextMeansSamePlayer(raw) ? lastMemoryContextRef.current?.player || null : null
+          if (memoryTextMeansSamePlayer(raw) && !contextualPlayer) {
+            setMemoryInput("")
+            return
+          }
+          const player = contextualPlayer || playerFromMemoryText(raw) || raw.toUpperCase()
           const nextDraft = {
             ...memoryQuestion.draft,
             team: memoryQuestion.draft.team || activeStatTeam,
@@ -1702,6 +1886,7 @@ export function LiveMemoryStream() {
           }
 
           if (nextDraft.action) {
+            settleMemorySegment(raw, "resolved")
             resolveMemoryStat({
               kind: "stat",
               raw: `${nextDraft.raw} / ${player}`,
@@ -1712,6 +1897,7 @@ export function LiveMemoryStream() {
             return
           }
 
+          settleMemorySegment(raw, "actor")
           setMemoryQuestion({
             prompt: "2 or 3?",
             draft: nextDraft,
@@ -1720,12 +1906,13 @@ export function LiveMemoryStream() {
           return
         }
 
-        const action = pointsAnswerToAction(raw)
+        const action = pointsAnswerToAction(raw, memoryQuestion.draft.shotResult)
         if (!action) {
           setMemoryInput("")
           return
         }
 
+        settleMemorySegment(raw, "resolved")
         resolveMemoryStat({
           kind: "stat",
           raw: `${memoryQuestion.draft.raw} / ${raw}`,
@@ -1736,10 +1923,40 @@ export function LiveMemoryStream() {
         return
       }
 
+      if (memoryTextMeansAgain(raw) && lastMemoryContextRef.current) {
+        const context = lastMemoryContextRef.current
+        settleMemorySegment(raw, "resolved")
+        resolveMemoryStat({
+          kind: "stat",
+          raw,
+          team: context.team,
+          player: context.player,
+          action: context.action,
+        })
+        return
+      }
+
+      if (memoryTextMeansSamePlayer(raw) && lastMemoryContextRef.current?.player) {
+        settleMemorySegment(raw, "2 or 3?")
+        setMemoryQuestion({
+          prompt: "2 or 3?",
+          draft: {
+            raw,
+            team: lastMemoryContextRef.current.team,
+            player: lastMemoryContextRef.current.player,
+            action: null,
+            shotResult: "make",
+          },
+        })
+        setMemoryInput("")
+        return
+      }
+
       const resolution = resolveLiveMemoryText(raw, activeStatTeam)
       if (!resolution) return
 
       if (resolution.kind === "question") {
+        settleMemorySegment(raw, resolution.prompt)
         setMemoryQuestion({
           prompt: resolution.prompt,
           draft: resolution.draft,
@@ -1749,14 +1966,16 @@ export function LiveMemoryStream() {
       }
 
       if (resolution.kind === "memory") {
+        settleMemorySegment(resolution.raw, resolution.label)
         recordLiveMemoryNote(resolution.raw, resolution.label, "memory")
         setMemoryInput("")
         return
       }
 
+      settleMemorySegment(resolution.raw, resolution.action.replaceAll("_", " "))
       resolveMemoryStat(resolution)
     },
-    [activeStatTeam, memoryQuestion, recordLiveMemoryNote, resolveMemoryStat]
+    [activeStatTeam, memoryQuestion, recordLiveMemoryNote, resolveMemoryStat, settleMemorySegment]
   )
 
   const submitMemoryInput = useCallback(() => {
@@ -1983,11 +2202,13 @@ export function LiveMemoryStream() {
       liveBoxScoreRef.current = createLiveBoxScore()
       liveStatEventsRef.current = []
       memoryObjectsRef.current = []
+      lastMemoryContextRef.current = null
       setLiveBoxScore(liveBoxScoreRef.current)
       setLiveStatEvents([])
       setActiveStatTeam("home")
       setMemoryInput("")
       setMemoryQuestion(null)
+      setMemorySegments([])
 
       const createdAt = new Date().toISOString()
       const sessionId = createId("axis-live")
@@ -2349,15 +2570,17 @@ export function LiveMemoryStream() {
   const possessionLabel = activeStatTeam.toUpperCase()
 
   return (
-    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field fixed inset-0 overflow-hidden">
+    <main className="axis-display axis-sync-room axis-familiar-room axis-world-state axis-os-field axis-native-camera-root fixed inset-0 overflow-hidden">
       <section className="axis-live-shell fixed inset-0 overflow-hidden">
-        <section className="axis-live-content-region axis-live-camera-plane overflow-hidden" aria-label="Live camera">
+        <section className="axis-live-content-region axis-live-camera-plane axis-native-camera-stage overflow-hidden" aria-label="Live camera">
           <video
             ref={localVideoRef}
             autoPlay
             muted
             playsInline
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-[150ms] ease-[cubic-bezier(0.2,0,0.18,1)]"
+            disablePictureInPicture
+            controlsList="nodownload noplaybackrate noremoteplayback"
+            className="axis-native-camera-feed absolute inset-0 h-full w-full object-cover"
             style={{
               transform: `scale(${liveOpticalDepth})`,
             }}
@@ -2482,6 +2705,16 @@ export function LiveMemoryStream() {
                   role="group"
                   aria-label="Live memory rail"
                 >
+                  {memorySegments.length ? (
+                    <div className="axis-live-memory-stream" aria-label="Recent live memory">
+                      {memorySegments.map((segment) => (
+                        <div key={segment.id} className="axis-live-memory-segment">
+                          <span>{segment.label}</span>
+                          <span>{segment.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   {memoryQuestion ? (
                     <div className="axis-live-memory-status">{memoryQuestion.prompt}</div>
                   ) : null}

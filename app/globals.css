@@ -1012,6 +1012,25 @@ button {
   color: rgba(232, 219, 188, calc(0.58 + var(--axis-familiar-tagging) * 0.22));
 }
 
+.axis-native-camera-locked {
+  overscroll-behavior: none;
+  scrollbar-gutter: stable;
+  touch-action: manipulation;
+}
+
+body.axis-native-camera-locked {
+  background: #050505;
+  height: var(--axis-live-viewport-height, 100dvh);
+  position: relative;
+}
+
+.axis-native-camera-root {
+  height: var(--axis-live-viewport-height, 100dvh);
+  max-height: var(--axis-live-viewport-height, 100dvh);
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
 .axis-live-shell {
   --axis-live-bottom-space: clamp(6.8rem, 14svh, 8.4rem);
   --axis-live-top-space: clamp(6rem, 11.5svh, 7.2rem);
@@ -1020,7 +1039,9 @@ button {
     linear-gradient(180deg, rgba(18, 19, 17, 0.94), rgba(0, 0, 0, 0.98)),
     #050505;
   isolation: isolate;
-  min-height: 100svh;
+  height: var(--axis-live-viewport-height, 100dvh);
+  max-height: var(--axis-live-viewport-height, 100dvh);
+  min-height: var(--axis-live-viewport-height, 100dvh);
   overscroll-behavior: none;
   -webkit-user-select: none;
   user-select: none;
@@ -1047,6 +1068,8 @@ button {
   position: fixed;
   right: 0;
   top: var(--axis-live-top-space);
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .axis-live-camera-plane {
@@ -1057,6 +1080,24 @@ button {
     inset 0 -24px 64px rgba(0, 0, 0, 0.38);
   contain: layout paint;
   z-index: 0;
+}
+
+.axis-native-camera-stage {
+  overflow: hidden;
+  transform: translate3d(0, 0, 0);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.axis-native-camera-feed {
+  background: #000000;
+  object-fit: cover;
+  object-position: center;
+  transform-origin: center;
+  transition: opacity 180ms ease;
+  -webkit-user-select: none;
+  user-select: none;
+  will-change: transform;
 }
 
 .axis-live-camera-plane::before,
