@@ -12,37 +12,76 @@ type AxisPoint = {
   y: number
 }
 
+export type AxisTraceSourceContext = {
+  backgroundType: "live-camera" | "clip"
+  replayTime: number
+  roomId: string
+}
+
+export type AxisGestureMetadata = {
+  averagePressure: number
+  durationMs: number
+  pointCount: number
+  redrawCount: number
+}
+
+export type AxisCorrectionMetadata = {
+  ghostedBySequence: number | null
+  revisedAt: number | null
+  wipeId: string | null
+}
+
 export type AxisRoomStroke = {
+  createdAt: number
+  gesture: AxisGestureMetadata
   ghosted: boolean
   id: string
   intensity: number
   points: AxisPoint[]
-  revisedAt: number | null
+  sequence: number
+  source: AxisTraceSourceContext
+  correction: AxisCorrectionMetadata
 }
 
 export type AxisRoomDot = AxisPoint & {
+  createdAt: number
+  gesture: AxisGestureMetadata
   ghosted: boolean
   id: string
-  revisedAt: number | null
+  sequence: number
+  source: AxisTraceSourceContext
+  correction: AxisCorrectionMetadata
 }
 
 type AxisViewportProps = {
   activeTool: AxisRoomTool
   dots: AxisRoomDot[]
+  nextSequence: () => number
+  roomId: string
+  scrubProgress: number
   setDots: Dispatch<SetStateAction<AxisRoomDot[]>>
   setStrokes: Dispatch<SetStateAction<AxisRoomStroke[]>>
   strokes: AxisRoomStroke[]
 }
 
-export function AxisViewport({ activeTool, dots, setDots, setStrokes, strokes }: AxisViewportProps) {
+export function AxisViewport({ activeTool, dots, nextSequence, roomId, scrubProgress, setDots, setStrokes, strokes }: AxisViewportProps) {
   return (
     <section className={styles.viewport} aria-label="Axis room video">
-      <LiveRoomWorld activeTool={activeTool} dots={dots} setDots={setDots} setStrokes={setStrokes} strokes={strokes} />
+      <LiveRoomWorld
+        activeTool={activeTool}
+        dots={dots}
+        nextSequence={nextSequence}
+        roomId={roomId}
+        scrubProgress={scrubProgress}
+        setDots={setDots}
+        setStrokes={setStrokes}
+        strokes={strokes}
+      />
     </section>
   )
 }
 
-function LiveRoomWorld({ activeTool, dots, setDots, setStrokes, strokes }: AxisViewportProps) {
+function LiveRoomWorld({ activeTool, dots, nextSequence, roomId, scrubProgress, setDots, setStrokes, strokes }: AxisViewportProps) {
   const cameraRef = useRef<HTMLVideoElement>(null)
   const activeStrokeRef = useRef<string | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
@@ -114,13 +153,54 @@ function LiveRoomWorld({ activeTool, dots, setDots, setStrokes, strokes }: AxisV
     const point = readPoint(event)
 
     if (activeTool === "dot") {
-      setDots((current) => [...current, { id: `dot-${Date.now().toString(36)}`, ghosted: false, revisedAt: null, ...point }].slice(-28))
+      const sequence = nextSequence()
+      setDots((current) =>
+        [
+          ...current,
+          {
+            id: `dot-${Date.now().toString(36)}`,
+            correction: emptyCorrection(),
+            createdAt: Date.now(),
+            gesture: {
+              averagePressure: point.pressure,
+              durationMs: 0,
+              pointCount: 1,
+              redrawCount: countNearbyDots(current, point),
+            },
+            ghosted: false,
+            sequence,
+            source: traceSource(roomId, scrubProgress),
+            ...point,
+          },
+        ].slice(-36),
+      )
       return
     }
 
     const id = `stroke-${Date.now().toString(36)}`
     activeStrokeRef.current = id
-    setStrokes((current) => [...current, { id, ghosted: false, intensity: point.pressure, points: [point], revisedAt: null }].slice(-18))
+    const sequence = nextSequence()
+    setStrokes((current) =>
+      [
+        ...current,
+        {
+          id,
+          correction: emptyCorrection(),
+          createdAt: Date.now(),
+          gesture: {
+            averagePressure: point.pressure,
+            durationMs: 0,
+            pointCount: 1,
+            redrawCount: countOverlappingStrokes(current, point),
+          },
+          ghosted: false,
+          intensity: point.pressure,
+          points: [point],
+          sequence,
+          source: traceSource(roomId, scrubProgress),
+        },
+      ].slice(-24),
+    )
   }
 
   function moveInteraction(event: PointerEvent<SVGSVGElement>) {
@@ -133,6 +213,7 @@ function LiveRoomWorld({ activeTool, dots, setDots, setStrokes, strokes }: AxisV
           ? {
               ...stroke,
               intensity: Math.min(1, stroke.intensity * 0.88 + point.pressure * 0.28),
+              gesture: updateGesture(stroke, point),
               points: [...stroke.points, point].slice(-128),
             }
           : stroke,
@@ -179,6 +260,16 @@ function LiveRoomWorld({ activeTool, dots, setDots, setStrokes, strokes }: AxisV
           onPointerMove={moveInteraction}
           onPointerUp={endInteraction}
         >
+          {buildRecurringRegions(strokes, dots).map((region) => (
+            <circle
+              key={region.id}
+              className={styles.recurrenceRegion}
+              cx={region.x * 100}
+              cy={region.y * 100}
+              r={region.r * 100}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
           {strokes.map((stroke) => (
             <polyline
               key={stroke.id}
@@ -206,4 +297,68 @@ function LiveRoomWorld({ activeTool, dots, setDots, setStrokes, strokes }: AxisV
 
 function clamp(value: number) {
   return Math.min(1, Math.max(0, value))
+}
+
+function emptyCorrection(): AxisCorrectionMetadata {
+  return {
+    ghostedBySequence: null,
+    revisedAt: null,
+    wipeId: null,
+  }
+}
+
+function traceSource(roomId: string, replayProgress: number): AxisTraceSourceContext {
+  return {
+    backgroundType: "live-camera",
+    replayTime: Math.round(replayProgress * 1000) / 1000,
+    roomId,
+  }
+}
+
+function updateGesture(stroke: AxisRoomStroke, point: AxisPoint): AxisGestureMetadata {
+  const nextCount = stroke.points.length + 1
+  return {
+    ...stroke.gesture,
+    averagePressure: (stroke.gesture.averagePressure * stroke.points.length + point.pressure) / nextCount,
+    durationMs: Math.max(0, point.t - stroke.points[0].t),
+    pointCount: nextCount,
+  }
+}
+
+function countNearbyDots(dots: AxisRoomDot[], point: AxisPoint) {
+  return dots.filter((dot) => !dot.ghosted && distance(dot, point) < 0.08).length
+}
+
+function countOverlappingStrokes(strokes: AxisRoomStroke[], point: AxisPoint) {
+  return strokes.filter((stroke) => !stroke.ghosted && stroke.points.some((tracePoint) => distance(tracePoint, point) < 0.1)).length
+}
+
+function distance(a: AxisPoint, b: AxisPoint) {
+  return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+function buildRecurringRegions(strokes: AxisRoomStroke[], dots: AxisRoomDot[]) {
+  const points: Array<Pick<AxisPoint, "x" | "y"> & { ghosted: boolean }> = [
+    ...dots.map((dot) => ({ x: dot.x, y: dot.y, ghosted: dot.ghosted })),
+    ...strokes.flatMap((stroke) => stroke.points.filter((_, index) => index % 12 === 0).map((point) => ({ x: point.x, y: point.y, ghosted: stroke.ghosted }))),
+  ]
+
+  return points
+    .map((point, index) => {
+      const nearby = points.filter((other) => spatialDistance(point, other) < 0.11)
+      return {
+        id: `recurrence-${index}`,
+        x: point.x,
+        y: point.y,
+        r: Math.min(0.12, 0.045 + nearby.length * 0.008),
+        weight: nearby.length + (point.ghosted ? 0.35 : 0),
+      }
+    })
+    .filter((region) => region.weight >= 4)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 4)
+}
+
+function spatialDistance(a: Pick<AxisPoint, "x" | "y">, b: Pick<AxisPoint, "x" | "y">) {
+  return Math.hypot(a.x - b.x, a.y - b.y)
 }

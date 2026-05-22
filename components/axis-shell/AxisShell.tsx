@@ -1,7 +1,7 @@
 "use client"
 
 import { Mic, Pencil, ScanLine, Sparkle, X } from "lucide-react"
-import { type ReactNode, useMemo, useState } from "react"
+import { type ReactNode, useMemo, useRef, useState } from "react"
 import { AxisViewport, type AxisRoomDot, type AxisRoomStroke, type AxisRoomTool } from "@/components/axis-shell/AxisViewport"
 import styles from "./AxisShell.module.css"
 
@@ -9,8 +9,10 @@ type RoomTool = AxisRoomTool
 
 const roomPresence = ["V", "AJ", "BK"]
 const densityMarks = [0.08, 0.16, 0.25, 0.33, 0.47, 0.58, 0.63, 0.74, 0.86]
+const ROOM_ID = "timeout-room"
 
 export function AxisShell() {
+  const sequenceRef = useRef(0)
   const [activeTool, setActiveTool] = useState<RoomTool>("draw")
   const [strokes, setStrokes] = useState<AxisRoomStroke[]>([])
   const [dots, setDots] = useState<AxisRoomDot[]>([])
@@ -23,10 +25,41 @@ export function AxisShell() {
     return Math.min(1, activeStrokeWeight * 0.16 + activeDotWeight + ghostWeight + scrubProgress * 0.22 || 0.18)
   }, [dots, scrubProgress, strokes])
 
+  function nextSequence() {
+    sequenceRef.current += 1
+    return sequenceRef.current
+  }
+
   function wipeRoom() {
     const revisedAt = Date.now()
-    setStrokes((current) => current.map((stroke) => ({ ...stroke, ghosted: true, revisedAt })).slice(-18))
-    setDots((current) => current.map((dot) => ({ ...dot, ghosted: true, revisedAt })).slice(-28))
+    const wipeSequence = nextSequence()
+    const wipeId = `wipe-${wipeSequence}`
+    setStrokes((current) =>
+      current
+        .map((stroke) => ({
+          ...stroke,
+          ghosted: true,
+          correction: {
+            ghostedBySequence: wipeSequence,
+            revisedAt,
+            wipeId,
+          },
+        }))
+        .slice(-24),
+    )
+    setDots((current) =>
+      current
+        .map((dot) => ({
+          ...dot,
+          ghosted: true,
+          correction: {
+            ghostedBySequence: wipeSequence,
+            revisedAt,
+            wipeId,
+          },
+        }))
+        .slice(-36),
+    )
   }
 
   return (
@@ -44,7 +77,16 @@ export function AxisShell() {
         </div>
       </header>
 
-      <AxisViewport activeTool={activeTool} dots={dots} setDots={setDots} setStrokes={setStrokes} strokes={strokes} />
+      <AxisViewport
+        activeTool={activeTool}
+        dots={dots}
+        nextSequence={nextSequence}
+        roomId={ROOM_ID}
+        scrubProgress={scrubProgress}
+        setDots={setDots}
+        setStrokes={setStrokes}
+        strokes={strokes}
+      />
 
       <footer className={styles.roomDock} aria-label="Room controls">
         <ReplayRail progress={scrubProgress} setProgress={setScrubProgress} />
