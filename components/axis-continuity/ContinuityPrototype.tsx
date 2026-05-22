@@ -487,12 +487,12 @@ function drawPuckInfluence(context: CanvasRenderingContext2D, width: number, hei
     const point = toPixels(puck, width, height)
     const radius = puckRadius(width, height) * stateScale(puck.state)
     const pulse = (Math.sin(performance.now() / 850 + puck.x * 8) + 1) / 2
-    const gradient = context.createRadialGradient(point.x, point.y, radius * 0.4, point.x, point.y, radius * (1.9 + pulse * 0.3))
-    gradient.addColorStop(0, stateGlow(puck.state, 0.18))
+    const gradient = context.createRadialGradient(point.x, point.y, radius * 0.28, point.x, point.y, radius * (1.72 + pulse * 0.2))
+    gradient.addColorStop(0, stateGlow(puck.state, 0.095))
     gradient.addColorStop(1, stateGlow(puck.state, 0))
     context.fillStyle = gradient
     context.beginPath()
-    context.arc(point.x, point.y, radius * (2 + pulse * 0.18), 0, Math.PI * 2)
+    context.arc(point.x, point.y, radius * (1.86 + pulse * 0.1), 0, Math.PI * 2)
     context.fill()
   }
   context.restore()
@@ -507,9 +507,9 @@ function drawPucks(context: CanvasRenderingContext2D, width: number, height: num
     const point = toPixels(puck, width, height)
     const radius = puckRadius(width, height) * stateScale(puck.state)
     context.save()
-    context.globalAlpha = puck.state === "fatigue" ? 0.68 : 0.94
-    context.shadowBlur = 18
-    context.shadowColor = "rgba(0,0,0,0.34)"
+    context.globalAlpha = puck.state === "fatigue" ? 0.62 : 0.9
+    context.shadowBlur = 11
+    context.shadowColor = "rgba(0,0,0,0.26)"
     context.fillStyle = puckFill(puck.state)
     context.beginPath()
     context.arc(point.x, point.y, radius, 0, Math.PI * 2)
@@ -520,19 +520,22 @@ function drawPucks(context: CanvasRenderingContext2D, width: number, height: num
     context.stroke()
 
     if (puck.number) {
-      context.fillStyle = "rgba(255,255,255,0.92)"
-      context.font = `800 ${Math.round(radius * 0.52)}px ui-sans-serif, system-ui`
-      context.fillText(puck.number, point.x, point.y - radius * 0.12)
-      context.fillStyle = "rgba(255,255,255,0.46)"
-      context.font = `700 ${Math.round(radius * 0.19)}px ui-sans-serif, system-ui`
-      context.fillText(puck.role, point.x, point.y + radius * 0.36)
+      context.fillStyle = "rgba(255,255,255,0.84)"
+      context.font = `760 ${Math.round(radius * 0.43)}px ui-sans-serif, system-ui`
+      context.fillText(puck.number, point.x, point.y - radius * 0.19)
+      context.fillStyle = "rgba(255,255,255,0.5)"
+      context.font = `640 ${Math.round(radius * 0.16)}px ui-sans-serif, system-ui`
+      context.fillText(puck.name.slice(0, 6), point.x, point.y + radius * 0.2)
+      context.fillStyle = "rgba(255,255,255,0.34)"
+      context.font = `620 ${Math.round(radius * 0.12)}px ui-sans-serif, system-ui`
+      context.fillText(puck.role.slice(0, 7), point.x, point.y + radius * 0.43)
     } else {
-      context.fillStyle = "rgba(255,255,255,0.9)"
-      context.font = `800 ${Math.round(radius * 0.28)}px ui-sans-serif, system-ui`
-      context.fillText(puck.name.slice(0, 5), point.x, point.y - radius * 0.04)
-      context.fillStyle = "rgba(255,255,255,0.46)"
-      context.font = `700 ${Math.round(radius * 0.18)}px ui-sans-serif, system-ui`
-      context.fillText(puck.role, point.x, point.y + radius * 0.32)
+      context.fillStyle = "rgba(255,255,255,0.82)"
+      context.font = `720 ${Math.round(radius * 0.24)}px ui-sans-serif, system-ui`
+      context.fillText(puck.name.slice(0, 6), point.x, point.y - radius * 0.06)
+      context.fillStyle = "rgba(255,255,255,0.34)"
+      context.font = `620 ${Math.round(radius * 0.14)}px ui-sans-serif, system-ui`
+      context.fillText(puck.role.slice(0, 7), point.x, point.y + radius * 0.28)
     }
     context.restore()
   }
@@ -626,7 +629,7 @@ function toPixels(point: { x: number; y: number }, width: number, height: number
 }
 
 function puckRadius(width: number, height: number) {
-  return Math.max(22, Math.min(width, height) * 0.045)
+  return Math.max(19, Math.min(width, height) * 0.0385)
 }
 
 function linePath(context: CanvasRenderingContext2D, points: Array<[number, number]>) {
@@ -663,32 +666,32 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function stateScale(state: TacticalState) {
-  if (state === "pressure") return 0.95
-  if (state === "fatigue") return 0.88
-  if (state === "hot") return 1.05
+  if (state === "pressure") return 0.94
+  if (state === "fatigue") return 0.9
+  if (state === "hot") return 1.02
   return 1
 }
 
 function puckFill(state: TacticalState) {
-  if (state === "pressure") return "rgba(92,38,34,0.82)"
-  if (state === "advantage") return "rgba(28,68,52,0.82)"
-  if (state === "fatigue") return "rgba(64,64,64,0.68)"
-  if (state === "weakside") return "rgba(121,86,38,0.78)"
-  return "rgba(126,76,31,0.86)"
+  if (state === "pressure") return "rgba(68,36,34,0.74)"
+  if (state === "advantage") return "rgba(34,58,47,0.76)"
+  if (state === "fatigue") return "rgba(55,55,55,0.62)"
+  if (state === "weakside") return "rgba(88,68,42,0.72)"
+  return "rgba(88,57,35,0.76)"
 }
 
 function stateStroke(state: TacticalState) {
-  if (state === "pressure") return "rgba(255,148,132,0.38)"
-  if (state === "advantage") return "rgba(169,255,203,0.3)"
-  if (state === "fatigue") return "rgba(255,255,255,0.18)"
-  if (state === "weakside") return "rgba(255,206,122,0.26)"
-  return "rgba(255,184,92,0.35)"
+  if (state === "pressure") return "rgba(205,128,118,0.24)"
+  if (state === "advantage") return "rgba(151,207,172,0.2)"
+  if (state === "fatigue") return "rgba(255,255,255,0.13)"
+  if (state === "weakside") return "rgba(215,178,112,0.18)"
+  return "rgba(218,157,94,0.22)"
 }
 
 function stateGlow(state: TacticalState, alpha: number) {
-  if (state === "pressure") return `rgba(199,54,42,${alpha})`
-  if (state === "advantage") return `rgba(87,194,128,${alpha * 0.72})`
-  if (state === "fatigue") return `rgba(255,255,255,${alpha * 0.34})`
-  if (state === "weakside") return `rgba(255,176,72,${alpha * 0.56})`
-  return `rgba(255,126,37,${alpha * 0.8})`
+  if (state === "pressure") return `rgba(150,64,56,${alpha})`
+  if (state === "advantage") return `rgba(98,150,112,${alpha * 0.58})`
+  if (state === "fatigue") return `rgba(255,255,255,${alpha * 0.22})`
+  if (state === "weakside") return `rgba(176,132,70,${alpha * 0.42})`
+  return `rgba(184,103,55,${alpha * 0.52})`
 }
