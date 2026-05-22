@@ -14,8 +14,15 @@ type Point = {
 }
 
 type Stroke = {
+  createdAt: number
   id: string
   points: Point[]
+}
+
+type TrailPoint = {
+  t: number
+  x: number
+  y: number
 }
 
 type Puck = {
@@ -26,6 +33,7 @@ type Puck = {
   symbol: PuckSymbol
   targetX: number
   targetY: number
+  trail: TrailPoint[]
   vx: number
   vy: number
   x: number
@@ -165,6 +173,7 @@ export function ContinuityPrototype() {
 
     engine.drawing = true
     engine.workingStroke = {
+      createdAt: performance.now(),
       id: `stroke-${engine.strokeSequence + 1}`,
       points: [point],
     }
@@ -313,6 +322,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   context.fillRect(0, 0, width, height)
   drawAtmosphere(context, width, height, engine)
   drawCourt(context, width, height)
+  drawTemporalTrails(context, width, height, engine.pucks)
   drawStrokes(context, width, height, engine.strokes, false)
   if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
   drawMovementIntent(context, width, height, engine)
@@ -382,11 +392,15 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
   context.save()
   context.lineCap = "round"
   context.lineJoin = "round"
-  context.strokeStyle = active ? "rgba(8,8,7,0.72)" : "rgba(8,8,7,0.56)"
 
   for (const stroke of strokes) {
     if (stroke.points.length < 2) continue
+    const age = performance.now() - stroke.createdAt
+    const alpha = active ? 0.72 : 0.56 * strokeFade(age)
+    if (alpha <= 0.01) continue
+
     context.beginPath()
+    context.strokeStyle = `rgba(8,8,7,${alpha})`
     const first = toPixels(stroke.points[0], width, height)
     context.moveTo(first.x, first.y)
     for (let index = 1; index < stroke.points.length - 1; index += 1) {
@@ -400,6 +414,35 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
     }
     context.stroke()
   }
+  context.restore()
+}
+
+function drawTemporalTrails(context: CanvasRenderingContext2D, width: number, height: number, pucks: Puck[]) {
+  const now = performance.now()
+  context.save()
+
+  for (const puck of pucks) {
+    if (puck.trail.length < 2) continue
+
+    for (let index = 1; index < puck.trail.length; index += 1) {
+      const previous = puck.trail[index - 1]
+      const current = puck.trail[index]
+      const age = now - current.t
+      const alpha = clamp(1 - age / 2200, 0, 1) * (puck.symbol === "O" ? 0.09 : 0.055)
+      if (alpha <= 0.004) continue
+
+      const start = toPixels(previous, width, height)
+      const end = toPixels(current, width, height)
+      context.strokeStyle = puck.symbol === "O" ? `rgba(8,8,7,${alpha})` : `rgba(8,8,7,${alpha * 0.72})`
+      context.lineWidth = Math.max(1, Math.min(width, height) * 0.0022 * alpha * 8)
+      context.lineCap = "round"
+      context.beginPath()
+      context.moveTo(start.x, start.y)
+      context.lineTo(end.x, end.y)
+      context.stroke()
+    }
+  }
+
   context.restore()
 }
 
@@ -524,9 +567,12 @@ function updatePhysics(engine: Engine) {
   const damping = 0.76
   const settle = 0.00006
 
+  pruneTemporalMemory(engine)
   applyBasketballRelationships(engine)
 
   for (const puck of engine.pucks) {
+    const previousX = puck.x
+    const previousY = puck.y
     puck.vx += (puck.targetX - puck.x) * spring
     puck.vy += (puck.targetY - puck.y) * spring
     puck.vx *= damping
@@ -539,6 +585,30 @@ function updatePhysics(engine: Engine) {
     puck.y = clamp(puck.y, 0.06, 0.94)
     puck.targetX = clamp(puck.targetX, 0.04, 0.96)
     puck.targetY = clamp(puck.targetY, 0.06, 0.94)
+    captureTrailPoint(puck, previousX, previousY)
+  }
+}
+
+function pruneTemporalMemory(engine: Engine) {
+  const now = performance.now()
+  engine.strokes = engine.strokes.filter((stroke) => strokeFade(now - stroke.createdAt) > 0.015)
+
+  for (const puck of engine.pucks) {
+    puck.trail = puck.trail.filter((point) => now - point.t < 2200)
+  }
+}
+
+function captureTrailPoint(puck: Puck, previousX: number, previousY: number) {
+  const moved = Math.hypot(puck.x - previousX, puck.y - previousY)
+  if (moved < 0.0014) return
+
+  const last = puck.trail.at(-1)
+  const now = performance.now()
+  if (last && now - last.t < 70 && distance(last, puck) < 0.012) return
+
+  puck.trail.push({ t: now, x: puck.x, y: puck.y })
+  if (puck.trail.length > 32) {
+    puck.trail.shift()
   }
 }
 
@@ -673,11 +743,11 @@ function canCreateStroke(pointerType: string) {
 }
 
 function makePuck(id: string, symbol: PuckSymbol, x: number, y: number): Puck {
-  return { baseX: x, baseY: y, bornAt: -10000, id, symbol, targetX: x, targetY: y, vx: 0, vy: 0, x, y }
+  return { baseX: x, baseY: y, bornAt: -10000, id, symbol, targetX: x, targetY: y, trail: [], vx: 0, vy: 0, x, y }
 }
 
 function clonePucks(pucks: Puck[]) {
-  return pucks.map((puck) => ({ ...puck }))
+  return pucks.map((puck) => ({ ...puck, trail: [] }))
 }
 
 function toPixels(point: { x: number; y: number }, width: number, height: number) {
@@ -727,6 +797,10 @@ function clamp(value: number, min: number, max: number) {
 function puckBirthProgress(puck: Puck) {
   if (puck.bornAt < 0) return 1
   return easeOutCubic(clamp((performance.now() - puck.bornAt) / 320, 0, 1))
+}
+
+function strokeFade(age: number) {
+  return clamp(1 - age / 7200, 0, 1) ** 1.7
 }
 
 function easeOutCubic(value: number) {
