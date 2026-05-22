@@ -243,7 +243,7 @@ export function ContinuityPrototype() {
   }
 
   return (
-    <main className="fixed inset-0 isolate overflow-hidden bg-[#050505] text-white selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
+    <main className="fixed inset-0 isolate overflow-hidden bg-[#f8f5ec] text-black selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -255,7 +255,7 @@ export function ContinuityPrototype() {
         ref={canvasRef}
       />
 
-      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/10 bg-white/[0.065] p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
+      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-black/10 bg-white/45 p-1.5 shadow-[0_16px_42px_rgba(41,32,18,0.12)] backdrop-blur-2xl">
         <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
           <Pencil aria-hidden="true" />
         </ToolbarButton>
@@ -289,7 +289,7 @@ function ToolbarButton({
       aria-label={label}
       className={[
         "grid h-11 w-11 place-items-center rounded-full border transition-colors",
-        active ? "border-white/18 bg-white/18 text-white" : "border-transparent bg-transparent text-white/48",
+        active ? "border-black/14 bg-black text-[#f8f5ec]" : "border-transparent bg-transparent text-black/44",
       ].join(" ")}
       onClick={onClick}
       type="button"
@@ -305,7 +305,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
 
   const width = rect.width
   const height = rect.height
-  context.fillStyle = "#050505"
+  context.fillStyle = "#f8f5ec"
   context.fillRect(0, 0, width, height)
   drawAtmosphere(context, width, height, engine)
   drawCourt(context, width, height)
@@ -321,9 +321,9 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
 function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
   const pressure = Math.min(1, engine.strokes.length * 0.025 + engine.pucks.length * 0.035)
   const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
-  gradient.addColorStop(0, `rgba(255,255,255,${0.04 + pressure * 0.03})`)
-  gradient.addColorStop(0.55, "rgba(255,255,255,0.012)")
-  gradient.addColorStop(1, "rgba(0,0,0,0)")
+  gradient.addColorStop(0, `rgba(0,0,0,${0.018 + pressure * 0.012})`)
+  gradient.addColorStop(0.58, "rgba(82,67,42,0.012)")
+  gradient.addColorStop(1, "rgba(255,255,255,0)")
   context.fillStyle = gradient
   context.fillRect(0, 0, width, height)
 }
@@ -339,8 +339,8 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   const line = Math.max(1, Math.round(Math.min(width, height) * 0.0016))
 
   context.save()
-  context.strokeStyle = "rgba(255,255,255,0.08)"
-  context.lineWidth = line
+  context.strokeStyle = "rgba(8,8,7,0.48)"
+  context.lineWidth = Math.max(1.25, line * 1.6)
   context.lineCap = "round"
   context.lineJoin = "round"
   context.strokeRect(round(x), round(y), round(courtWidth), round(courtHeight))
@@ -369,8 +369,8 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   circle(context, x + hoopInset, centerY, courtHeight * 0.025)
   circle(context, x + courtWidth - hoopInset, centerY, courtHeight * 0.025)
 
-  context.strokeStyle = "rgba(255,255,255,0.04)"
-  context.lineWidth = Math.max(1, line * 0.8)
+  context.strokeStyle = "rgba(8,8,7,0.22)"
+  context.lineWidth = Math.max(1, line)
   arc(context, x + hoopInset, centerY, courtHeight * 0.41, -Math.PI / 2, Math.PI / 2)
   arc(context, x + courtWidth - hoopInset, centerY, courtHeight * 0.41, Math.PI / 2, Math.PI * 1.5)
   linePath(context, [
@@ -392,7 +392,7 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
   context.save()
   context.lineCap = "round"
   context.lineJoin = "round"
-  context.strokeStyle = active ? "rgba(255,255,255,0.82)" : "rgba(255,255,255,0.66)"
+  context.strokeStyle = active ? "rgba(8,8,7,0.72)" : "rgba(8,8,7,0.56)"
 
   for (const stroke of strokes) {
     if (stroke.points.length < 2) continue
@@ -460,18 +460,42 @@ function drawPucks(context: CanvasRenderingContext2D, width: number, height: num
     context.lineWidth = Math.max(1, radius * 0.044)
     context.stroke()
 
-    context.fillStyle = symbolFill(puck.symbol)
-    context.font = `650 ${Math.round(radius * 0.62)}px ui-sans-serif, system-ui`
-    context.fillText(puck.symbol, point.x, point.y + radius * 0.015)
+    drawSymbolMark(context, puck.symbol, point.x, point.y, radius)
     context.restore()
   }
+  context.restore()
+}
+
+function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x: number, y: number, radius: number) {
+  context.save()
+  context.lineCap = "round"
+  context.lineJoin = "round"
+
+  if (symbol === "O") {
+    context.strokeStyle = "rgba(20,18,15,0.68)"
+    context.lineWidth = Math.max(2, radius * 0.13)
+    context.beginPath()
+    context.arc(x, y, radius * 0.38, 0, Math.PI * 2)
+    context.stroke()
+  } else {
+    context.strokeStyle = "rgba(238,235,226,0.74)"
+    context.lineWidth = Math.max(2, radius * 0.12)
+    const inset = radius * 0.33
+    context.beginPath()
+    context.moveTo(x - inset, y - inset)
+    context.lineTo(x + inset, y + inset)
+    context.moveTo(x + inset, y - inset)
+    context.lineTo(x - inset, y + inset)
+    context.stroke()
+  }
+
   context.restore()
 }
 
 function drawEraser(context: CanvasRenderingContext2D, width: number, height: number, point: Point) {
   const pixel = toPixels(point, width, height)
   context.save()
-  context.strokeStyle = "rgba(255,255,255,0.34)"
+  context.strokeStyle = "rgba(8,8,7,0.34)"
   context.lineWidth = 1
   context.beginPath()
   context.arc(pixel.x, pixel.y, Math.min(width, height) * 0.036, 0, Math.PI * 2)
@@ -600,31 +624,26 @@ function easeOutCubic(value: number) {
 }
 
 function puckFill(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(206,199,185,0.76)"
-  return "rgba(47,48,49,0.82)"
+  if (symbol === "O") return "rgba(238,234,222,0.88)"
+  return "rgba(42,42,41,0.9)"
 }
 
 function puckCoreFill(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(242,235,218,0.78)"
-  return "rgba(83,84,84,0.78)"
+  if (symbol === "O") return "rgba(255,252,241,0.92)"
+  return "rgba(88,88,86,0.86)"
 }
 
 function puckEdgeFill(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(126,119,105,0.54)"
-  return "rgba(20,21,22,0.82)"
+  if (symbol === "O") return "rgba(176,167,146,0.64)"
+  return "rgba(18,18,18,0.88)"
 }
 
 function symbolStroke(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(255,248,231,0.16)"
-  return "rgba(210,212,210,0.1)"
+  if (symbol === "O") return "rgba(0,0,0,0.14)"
+  return "rgba(0,0,0,0.24)"
 }
 
 function symbolGlow(symbol: PuckSymbol, alpha: number) {
-  if (symbol === "O") return `rgba(238,230,212,${alpha})`
-  return `rgba(155,158,156,${alpha * 0.46})`
-}
-
-function symbolFill(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(35,33,29,0.72)"
-  return "rgba(220,222,218,0.54)"
+  if (symbol === "O") return `rgba(48,42,31,${alpha * 0.46})`
+  return `rgba(0,0,0,${alpha * 0.58})`
 }
