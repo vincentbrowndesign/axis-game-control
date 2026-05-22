@@ -48,16 +48,16 @@ type Engine = {
 }
 
 const initialPucks: Puck[] = [
-  makePuck("o1", "O", 0.42, 0.55),
-  makePuck("o2", "O", 0.56, 0.4),
-  makePuck("o3", "O", 0.68, 0.58),
-  makePuck("o4", "O", 0.48, 0.72),
-  makePuck("o5", "O", 0.78, 0.32),
-  makePuck("x1", "X", 0.38, 0.42),
-  makePuck("x2", "X", 0.58, 0.52),
-  makePuck("x3", "X", 0.72, 0.45),
-  makePuck("x4", "X", 0.52, 0.64),
-  makePuck("x5", "X", 0.82, 0.54),
+  makePuck("o1", "O", 0.5, 0.2),
+  makePuck("o2", "O", 0.28, 0.4),
+  makePuck("o3", "O", 0.72, 0.4),
+  makePuck("o4", "O", 0.38, 0.68),
+  makePuck("o5", "O", 0.62, 0.68),
+  makePuck("x1", "X", 0.5, 0.31),
+  makePuck("x2", "X", 0.32, 0.5),
+  makePuck("x3", "X", 0.68, 0.5),
+  makePuck("x4", "X", 0.42, 0.78),
+  makePuck("x5", "X", 0.58, 0.78),
 ]
 
 export function ContinuityPrototype() {
@@ -329,62 +329,47 @@ function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height
 }
 
 function drawCourt(context: CanvasRenderingContext2D, width: number, height: number) {
-  const margin = Math.round(Math.min(width, height) * 0.065)
-  const x = margin
-  const y = margin
-  const courtWidth = width - margin * 2
+  const margin = Math.round(Math.min(width, height) * 0.075)
   const courtHeight = height - margin * 2
+  const courtWidth = Math.min(width - margin * 2, courtHeight * 1.2)
+  const x = (width - courtWidth) / 2
+  const y = margin
   const centerX = x + courtWidth / 2
-  const centerY = y + courtHeight / 2
-  const line = Math.max(1, Math.round(Math.min(width, height) * 0.0016))
+  const baselineY = y + courtHeight
+  const hoopY = y + courtHeight * 0.78
+  const line = Math.max(1, Math.round(Math.min(width, height) * 0.00125))
 
   context.save()
-  context.strokeStyle = "rgba(8,8,7,0.48)"
-  context.lineWidth = Math.max(1.25, line * 1.6)
+  context.strokeStyle = "rgba(8,8,7,0.18)"
+  context.lineWidth = Math.max(1, line)
   context.lineCap = "round"
   context.lineJoin = "round"
   context.strokeRect(round(x), round(y), round(courtWidth), round(courtHeight))
-  linePath(context, [
-    [centerX, y],
-    [centerX, y + courtHeight],
-  ])
-  circle(context, centerX, centerY, courtHeight * 0.12)
 
-  const keyWidth = courtWidth * 0.16
-  const keyHeight = courtHeight * 0.36
-  context.strokeRect(round(x), round(centerY - keyHeight / 2), round(keyWidth), round(keyHeight))
-  context.strokeRect(round(x + courtWidth - keyWidth), round(centerY - keyHeight / 2), round(keyWidth), round(keyHeight))
-  circle(context, x + keyWidth, centerY, courtHeight * 0.12)
-  circle(context, x + courtWidth - keyWidth, centerY, courtHeight * 0.12)
+  linePath(context, [
+    [x, y + courtHeight * 0.08],
+    [x + courtWidth, y + courtHeight * 0.08],
+  ])
+  circle(context, centerX, y + courtHeight * 0.08, courtWidth * 0.115)
 
-  const hoopInset = courtWidth * 0.075
-  linePath(context, [
-    [x + hoopInset * 0.68, centerY - courtHeight * 0.07],
-    [x + hoopInset * 0.68, centerY + courtHeight * 0.07],
-  ])
-  linePath(context, [
-    [x + courtWidth - hoopInset * 0.68, centerY - courtHeight * 0.07],
-    [x + courtWidth - hoopInset * 0.68, centerY + courtHeight * 0.07],
-  ])
-  circle(context, x + hoopInset, centerY, courtHeight * 0.025)
-  circle(context, x + courtWidth - hoopInset, centerY, courtHeight * 0.025)
+  const keyWidth = courtWidth * 0.32
+  const keyHeight = courtHeight * 0.32
+  const keyX = centerX - keyWidth / 2
+  const keyY = baselineY - keyHeight
+  context.strokeRect(round(keyX), round(keyY), round(keyWidth), round(keyHeight))
+  circle(context, centerX, keyY, keyWidth * 0.29)
 
-  context.strokeStyle = "rgba(8,8,7,0.22)"
-  context.lineWidth = Math.max(1, line)
-  arc(context, x + hoopInset, centerY, courtHeight * 0.41, -Math.PI / 2, Math.PI / 2)
-  arc(context, x + courtWidth - hoopInset, centerY, courtHeight * 0.41, Math.PI / 2, Math.PI * 1.5)
+  const hoopRadius = courtWidth * 0.025
   linePath(context, [
-    [x + courtWidth * 0.18, y + courtHeight * 0.22],
-    [x + courtWidth * 0.42, y + courtHeight * 0.34],
-    [x + courtWidth * 0.58, y + courtHeight * 0.34],
-    [x + courtWidth * 0.82, y + courtHeight * 0.22],
+    [centerX - courtWidth * 0.07, hoopY + courtHeight * 0.01],
+    [centerX + courtWidth * 0.07, hoopY + courtHeight * 0.01],
   ])
-  linePath(context, [
-    [x + courtWidth * 0.18, y + courtHeight * 0.78],
-    [x + courtWidth * 0.42, y + courtHeight * 0.66],
-    [x + courtWidth * 0.58, y + courtHeight * 0.66],
-    [x + courtWidth * 0.82, y + courtHeight * 0.78],
-  ])
+  circle(context, centerX, hoopY, hoopRadius)
+
+  context.strokeStyle = "rgba(8,8,7,0.1)"
+  context.lineWidth = Math.max(1, line * 0.9)
+  arc(context, centerX, hoopY, courtWidth * 0.43, Math.PI * 1.08, Math.PI * 1.92)
+  arc(context, centerX, hoopY, courtWidth * 0.16, Math.PI * 1.08, Math.PI * 1.92)
   context.restore()
 }
 
