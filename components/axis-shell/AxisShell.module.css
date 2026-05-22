@@ -104,13 +104,14 @@
   border: 0;
   color: rgba(255, 255, 246, 0.9);
   cursor: pointer;
-  display: grid;
+  display: flex;
   font: inherit;
-  gap: 0.1rem;
+  align-items: center;
   min-height: 2.66rem;
   outline: none;
   padding: 0.42rem 0.54rem 0.38rem;
-  text-align: left;
+  justify-content: center;
+  text-align: center;
   touch-action: none;
   width: 100%;
 }
@@ -123,17 +124,6 @@
   letter-spacing: 0.02em;
   line-height: 1;
   text-transform: uppercase;
-}
-
-.holdToSpeak strong {
-  color: currentColor;
-  font-size: 16px;
-  font-weight: 520;
-  letter-spacing: 0;
-  line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .rail[data-listening="true"] .holdToSpeak {

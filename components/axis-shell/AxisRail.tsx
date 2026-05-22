@@ -54,7 +54,6 @@ export function AxisRail() {
   const latestSpeechRef = useRef("")
   const pendingVoiceSubmitRef = useRef(false)
   const [listening, setListening] = useState(false)
-  const [transcriptPreview, setTranscriptPreview] = useState("")
   const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
@@ -97,7 +96,6 @@ export function AxisRail() {
       requestAnimationFrame(() => {
         void submitRailText(cleanText)
         latestSpeechRef.current = ""
-        setTranscriptPreview("")
       })
     },
     [setValue, submitRailText],
@@ -118,7 +116,6 @@ export function AxisRail() {
       }
       const cleanTranscript = transcript.trim()
       latestSpeechRef.current = cleanTranscript
-      setTranscriptPreview(cleanTranscript)
       setValue(cleanTranscript)
     }
     recognition.onerror = () => {
@@ -146,7 +143,6 @@ export function AxisRail() {
 
   function startHoldToSpeak() {
     setFocused(true)
-    setTranscriptPreview("")
     latestSpeechRef.current = ""
     pendingVoiceSubmitRef.current = false
 
@@ -201,7 +197,6 @@ export function AxisRail() {
         }}
       >
         <span>{exporting ? "Saving" : listening ? "Listening" : "Hold to speak"}</span>
-        <strong>{exporting ? "camera artifact" : transcriptPreview || (listening ? "..." : "late help / dead ball / push after TO")}</strong>
       </button>
       <textarea
         ref={inputRef}
