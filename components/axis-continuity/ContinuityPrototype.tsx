@@ -34,12 +34,16 @@ type Puck = {
 
 type Engine = {
   activePointerId: number | null
+  activePointerType: string | null
   draggingPuckId: string | null
   drawing: boolean
   eraseCursor: Point | null
   lastTapAt: number
   lastTapPuckId: string | null
+  longPressId: number | null
+  longPressPoint: Point | null
   moved: boolean
+  penActiveUntil: number
   puckSequence: number
   pucks: Puck[]
   rafId: number
@@ -84,12 +88,16 @@ export function ContinuityPrototype() {
 
     const engine: Engine = {
       activePointerId: null,
+      activePointerType: null,
       draggingPuckId: null,
       drawing: false,
       eraseCursor: null,
       lastTapAt: 0,
       lastTapPuckId: null,
+      longPressId: null,
+      longPressPoint: null,
       moved: false,
+      penActiveUntil: 0,
       puckSequence: initialPucks.length,
       pucks: clonePucks(initialPucks),
       rafId: 0,
@@ -122,6 +130,7 @@ export function ContinuityPrototype() {
     frame()
 
     return () => {
+      clearLongPress(engine)
       observer.disconnect()
       window.cancelAnimationFrame(engine.rafId)
       engineRef.current = null
@@ -137,12 +146,21 @@ export function ContinuityPrototype() {
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     const engine = engineRef.current
     if (!engine) return
+    event.preventDefault()
+
+    if (event.pointerType === "pen") {
+      engine.penActiveUntil = performance.now() + 900
+    }
+
+    if (event.pointerType === "touch" && performance.now() < engine.penActiveUntil) return
+    if (engine.activePointerId !== null && event.pointerType === "touch") return
 
     const point = eventPoint(event, engine)
     if (!point) return
 
     const puck = findPuckAt(engine, point)
     engine.activePointerId = event.pointerId
+    engine.activePointerType = event.pointerType
     engine.moved = false
     setEditTarget(null)
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -174,6 +192,10 @@ export function ContinuityPrototype() {
       return
     }
 
+    startLongPress(engine, point)
+
+    if (!canCreateStroke(event.pointerType)) return
+
     engine.drawing = true
     engine.workingStroke = {
       id: `stroke-${engine.strokeSequence + 1}`,
@@ -184,10 +206,14 @@ export function ContinuityPrototype() {
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
     const engine = engineRef.current
     if (!engine || engine.activePointerId !== event.pointerId) return
+    event.preventDefault()
 
     const point = eventPoint(event, engine)
     if (!point) return
 
+    if (engine.longPressPoint && distance(engine.longPressPoint, point) > 0.012) {
+      clearLongPress(engine)
+    }
     engine.moved = true
 
     if (engine.draggingPuckId) {
@@ -216,8 +242,9 @@ export function ContinuityPrototype() {
   function handlePointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
     const engine = engineRef.current
     if (!engine || engine.activePointerId !== event.pointerId) return
+    event.preventDefault()
 
-    const point = eventPoint(event, engine)
+    clearLongPress(engine)
     event.currentTarget.releasePointerCapture(event.pointerId)
 
     if (engine.drawing && engine.workingStroke) {
@@ -228,14 +255,8 @@ export function ContinuityPrototype() {
       engine.workingStroke = null
     }
 
-    if (!engine.moved && !engine.draggingPuckId && engine.tool === "pencil" && point) {
-      engine.puckSequence += 1
-      engine.pucks.push(
-        makePuck(`p${engine.puckSequence}`, `P${engine.puckSequence}`, "", "Player", nextPuckState(engine.puckSequence), point.x, point.y),
-      )
-    }
-
     engine.activePointerId = null
+    engine.activePointerType = null
     engine.draggingPuckId = null
     engine.drawing = false
     engine.eraseCursor = null
@@ -277,10 +298,11 @@ export function ContinuityPrototype() {
   }
 
   return (
-    <main className="fixed inset-0 isolate overflow-hidden bg-[#050505] text-white selection:bg-white/10">
+    <main className="fixed inset-0 isolate overflow-hidden bg-[#050505] text-white selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
       <canvas
         aria-label="Axis tactical canvas"
-        className="absolute inset-0 h-full w-full touch-none"
+        className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
+        onContextMenu={(event) => event.preventDefault()}
         onPointerCancel={handlePointerUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -611,6 +633,36 @@ function eraseAt(engine: Engine, point: Point) {
       points: stroke.points.filter((strokePoint) => distance(strokePoint, point) > threshold),
     }))
     .filter((stroke) => stroke.points.length > 1)
+}
+
+function startLongPress(engine: Engine, point: Point) {
+  clearLongPress(engine)
+  engine.longPressPoint = point
+  engine.longPressId = window.setTimeout(() => {
+    if (!engine.longPressPoint || engine.moved || engine.draggingPuckId) return
+    addPuckAt(engine, engine.longPressPoint)
+    engine.drawing = false
+    engine.workingStroke = null
+    engine.moved = true
+    clearLongPress(engine)
+  }, 560)
+}
+
+function clearLongPress(engine: Engine) {
+  if (engine.longPressId !== null) {
+    window.clearTimeout(engine.longPressId)
+  }
+  engine.longPressId = null
+  engine.longPressPoint = null
+}
+
+function addPuckAt(engine: Engine, point: Point) {
+  engine.puckSequence += 1
+  engine.pucks.push(makePuck(`p${engine.puckSequence}`, `P${engine.puckSequence}`, "", "Player", nextPuckState(engine.puckSequence), point.x, point.y))
+}
+
+function canCreateStroke(pointerType: string) {
+  return pointerType === "pen" || pointerType === "mouse"
 }
 
 function makePuck(id: string, name: string, number: string, role: string, state: TacticalState, x: number, y: number): Puck {
