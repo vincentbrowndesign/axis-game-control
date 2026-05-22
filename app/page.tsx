@@ -1,5 +1,5 @@
-import { AxisShell } from "@/components/axis-shell/AxisShell"
+import { ContinuityPrototype } from "@/components/axis-continuity/ContinuityPrototype"
 
 export default function HomePage() {
-  return <AxisShell />
+  return <ContinuityPrototype />
 }
