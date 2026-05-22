@@ -1,18 +1,43 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { type Dispatch, type PointerEvent, type SetStateAction, useEffect, useRef, useState } from "react"
 import styles from "./AxisShell.module.css"
 
-export function AxisViewport() {
+export type AxisRoomTool = "draw" | "dot" | "voice" | "scrub"
+
+type AxisPoint = {
+  x: number
+  y: number
+}
+
+export type AxisRoomStroke = {
+  id: string
+  points: AxisPoint[]
+}
+
+export type AxisRoomDot = AxisPoint & {
+  id: string
+}
+
+type AxisViewportProps = {
+  activeTool: AxisRoomTool
+  dots: AxisRoomDot[]
+  setDots: Dispatch<SetStateAction<AxisRoomDot[]>>
+  setStrokes: Dispatch<SetStateAction<AxisRoomStroke[]>>
+  strokes: AxisRoomStroke[]
+}
+
+export function AxisViewport({ activeTool, dots, setDots, setStrokes, strokes }: AxisViewportProps) {
   return (
-    <section className={styles.viewport} aria-label="Axis live world">
-      <LiveMemoryWorld />
+    <section className={styles.viewport} aria-label="Axis room video">
+      <LiveRoomWorld activeTool={activeTool} dots={dots} setDots={setDots} setStrokes={setStrokes} strokes={strokes} />
     </section>
   )
 }
 
-function LiveMemoryWorld() {
+function LiveRoomWorld({ activeTool, dots, setDots, setStrokes, strokes }: AxisViewportProps) {
   const cameraRef = useRef<HTMLVideoElement>(null)
+  const activeStrokeRef = useRef<string | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
 
   useEffect(() => {
@@ -66,9 +91,46 @@ function LiveMemoryWorld() {
     }
   }, [])
 
+  function readPoint(event: PointerEvent<SVGSVGElement>): AxisPoint {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return {
+      x: clamp((event.clientX - rect.left) / rect.width),
+      y: clamp((event.clientY - rect.top) / rect.height),
+    }
+  }
+
+  function startInteraction(event: PointerEvent<SVGSVGElement>) {
+    if (activeTool !== "draw" && activeTool !== "dot") return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const point = readPoint(event)
+
+    if (activeTool === "dot") {
+      setDots((current) => [...current, { id: `dot-${Date.now().toString(36)}`, ...point }].slice(-18))
+      return
+    }
+
+    const id = `stroke-${Date.now().toString(36)}`
+    activeStrokeRef.current = id
+    setStrokes((current) => [...current, { id, points: [point] }].slice(-12))
+  }
+
+  function moveInteraction(event: PointerEvent<SVGSVGElement>) {
+    if (activeTool !== "draw" || !activeStrokeRef.current) return
+    const point = readPoint(event)
+    const id = activeStrokeRef.current
+    setStrokes((current) =>
+      current.map((stroke) => (stroke.id === id ? { ...stroke, points: [...stroke.points, point].slice(-96) } : stroke)),
+    )
+  }
+
+  function endInteraction(event: PointerEvent<SVGSVGElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    activeStrokeRef.current = null
+  }
+
   return (
     <div className={styles.liveWorld}>
-      <div className={styles.nativeLens} data-camera={cameraActive ? "active" : "idle"} aria-label="Live camera memory field">
+      <div className={styles.nativeLens} data-camera={cameraActive ? "active" : "idle"} aria-label="Live room video">
         <video
           ref={cameraRef}
           className={styles.liveCameraFeed}
@@ -88,7 +150,30 @@ function LiveMemoryWorld() {
           }}
         />
         <div className={styles.cameraAtmosphere} aria-hidden="true" />
+        <svg
+          className={styles.roomInk}
+          data-tool={activeTool}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Shared room drawing layer"
+          onPointerCancel={endInteraction}
+          onPointerDown={startInteraction}
+          onPointerMove={moveInteraction}
+          onPointerUp={endInteraction}
+        >
+          {strokes.map((stroke) => (
+            <polyline key={stroke.id} points={stroke.points.map((point) => `${point.x * 100},${point.y * 100}`).join(" ")} vectorEffect="non-scaling-stroke" />
+          ))}
+          {dots.map((dot) => (
+            <circle key={dot.id} cx={dot.x * 100} cy={dot.y * 100} r="0.86" vectorEffect="non-scaling-stroke" />
+          ))}
+        </svg>
       </div>
     </div>
   )
+}
+
+function clamp(value: number) {
+  return Math.min(1, Math.max(0, value))
 }

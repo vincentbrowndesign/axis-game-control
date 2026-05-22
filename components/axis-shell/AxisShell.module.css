@@ -1,11 +1,12 @@
 .shell {
   background: #050505;
-  color: rgba(255, 255, 246, 0.9);
+  color: rgba(255, 255, 238, 0.9);
   height: 100dvh;
   inset: 0;
   isolation: isolate;
   overflow: hidden;
   position: fixed;
+  touch-action: none;
 }
 
 .viewport,
@@ -17,7 +18,9 @@
 }
 
 .nativeLens {
-  background: #050505;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255, 250, 214, 0.06), transparent 48%),
+    #050505;
 }
 
 .liveCameraFeed {
@@ -29,9 +32,9 @@
   opacity: 0;
   pointer-events: none;
   position: absolute;
-  user-select: none;
   transform: scale(1.006);
   transition: opacity 220ms ease;
+  user-select: none;
   width: 100%;
   -webkit-user-select: none;
 }
@@ -53,108 +56,273 @@
 
 .cameraAtmosphere {
   background:
-    radial-gradient(ellipse at 50% 42%, transparent 54%, rgba(0, 0, 0, 0.24)),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.1), transparent 34%, rgba(0, 0, 0, 0.28)),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.16), transparent 28%, transparent 72%, rgba(0, 0, 0, 0.16));
+    radial-gradient(ellipse at 50% 48%, transparent 48%, rgba(0, 0, 0, 0.3)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.44), transparent 23%, transparent 62%, rgba(0, 0, 0, 0.74)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.32), transparent 25%, transparent 75%, rgba(0, 0, 0, 0.32));
   inset: 0;
   pointer-events: none;
   position: absolute;
   z-index: 1;
 }
 
-.railDock {
-  bottom: max(0.28rem, env(safe-area-inset-bottom));
-  display: grid;
-  justify-items: center;
-  left: 0;
-  padding: 0 clamp(0.86rem, 2.6vw, 1.55rem);
+.roomInk {
+  cursor: crosshair;
+  height: 100%;
+  inset: 0;
   position: absolute;
-  right: 0;
-  z-index: 8;
-}
-
-.railDock::before {
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.18) 58%, rgba(0, 0, 0, 0.44));
-  content: "";
-  inset: -1.72rem 0 0;
-  pointer-events: none;
-  position: absolute;
-}
-
-.rail {
-  backdrop-filter: blur(28px) saturate(1.03);
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 246, 0.13);
-  border-bottom-color: rgba(255, 255, 246, 0.08);
-  border-radius: 0.82rem 0.82rem 0 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 -1px 0 rgba(0, 0, 0, 0.1);
-  display: grid;
-  gap: 0.16rem;
-  max-width: 38rem;
-  padding: 0.34rem;
-  position: relative;
-  width: min(100%, 38rem);
-  z-index: 1;
-}
-
-.holdToSpeak {
-  -webkit-tap-highlight-color: transparent;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: rgba(255, 255, 246, 0.9);
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  align-items: center;
-  min-height: 2.66rem;
-  outline: none;
-  padding: 0.42rem 0.54rem 0.38rem;
-  justify-content: center;
-  text-align: center;
   touch-action: none;
   width: 100%;
+  z-index: 2;
 }
 
-.holdToSpeak span {
-  color: rgba(255, 255, 246, 0.44);
-  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.56rem;
-  font-weight: 500;
+.roomInk[data-tool="voice"],
+.roomInk[data-tool="scrub"] {
+  pointer-events: none;
+}
+
+.roomInk polyline {
+  fill: none;
+  opacity: 0.86;
+  stroke: rgba(255, 248, 202, 0.9);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  filter: drop-shadow(0 0 10px rgba(255, 229, 156, 0.2));
+}
+
+.roomInk circle {
+  fill: rgba(255, 239, 174, 0.72);
+  opacity: 0.92;
+  stroke: rgba(255, 255, 238, 0.82);
+  stroke-width: 0.42;
+  filter: drop-shadow(0 0 10px rgba(255, 221, 128, 0.35));
+}
+
+.roomTop {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  left: 0;
+  padding: max(0.86rem, env(safe-area-inset-top)) 1rem 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 6;
+}
+
+.presenceCluster {
+  align-items: center;
+  display: flex;
+  gap: 0.28rem;
+}
+
+.presenceCluster span {
+  align-items: center;
+  backdrop-filter: blur(18px);
+  background: rgba(8, 8, 7, 0.32);
+  border: 1px solid rgba(255, 248, 220, 0.18);
+  border-radius: 999px;
+  color: rgba(255, 255, 238, 0.72);
+  display: grid;
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.58rem;
+  font-weight: 600;
+  height: 1.62rem;
+  justify-items: center;
   letter-spacing: 0.02em;
-  line-height: 1;
-  text-transform: uppercase;
+  width: 1.62rem;
 }
 
-.rail[data-listening="true"] .holdToSpeak {
-  background: rgba(255, 255, 246, 0.08);
+.roomDensity {
+  align-items: center;
+  display: flex;
+  gap: 0.18rem;
 }
 
-.rail[data-listening="true"] .holdToSpeak span {
-  color: rgba(255, 255, 246, 0.62);
+.roomDensity i {
+  background: rgba(255, 239, 174, 0.82);
+  border-radius: 999px;
+  display: block;
+  height: 0.28rem;
+  width: 0.28rem;
 }
 
-.rail textarea {
+.roomDock {
+  bottom: max(0.36rem, env(safe-area-inset-bottom));
+  display: grid;
+  gap: 0.34rem;
+  left: 0;
+  padding: 0 clamp(0.7rem, 3vw, 1.2rem);
+  position: absolute;
+  right: 0;
+  z-index: 7;
+}
+
+.roomDock::before {
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.42) 46%, rgba(0, 0, 0, 0.76));
+  content: "";
+  inset: -3.8rem 0 -0.6rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.replayRail {
+  align-items: center;
+  display: grid;
+  gap: 0.48rem;
+  grid-template-columns: 0.52rem 1fr 0.52rem;
+  margin: 0 auto;
+  max-width: 34rem;
+  width: min(100%, 34rem);
+}
+
+.replayRail span {
+  background: rgba(255, 248, 220, 0.22);
+  border-radius: 999px;
+  height: 0.32rem;
+}
+
+.replayRail input {
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
-  border: 0;
-  color: rgba(255, 255, 246, 0.92);
-  display: block;
-  font: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.22;
-  max-height: 8rem;
-  min-height: 1.92rem;
-  opacity: 0.58;
-  outline: none;
-  overflow-y: auto;
-  padding: 0.16rem 0.54rem 0.38rem;
-  resize: none;
+  height: 1.1rem;
+  margin: 0;
   width: 100%;
 }
 
-.rail textarea::placeholder {
-  color: rgba(255, 255, 246, 0.48);
+.replayRail input::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(90deg, rgba(255, 239, 174, 0.68), rgba(255, 255, 238, 0.2)),
+    repeating-linear-gradient(90deg, transparent 0 8%, rgba(255, 255, 238, 0.18) 8% 8.5%);
+  border-radius: 999px;
+  height: 0.12rem;
+}
+
+.replayRail input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 238, 0.9);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 0 18px rgba(255, 229, 156, 0.42);
+  height: 0.72rem;
+  margin-top: -0.3rem;
+  width: 0.72rem;
+}
+
+.replayRail input::-moz-range-track {
+  background: rgba(255, 255, 238, 0.22);
+  border-radius: 999px;
+  height: 0.12rem;
+}
+
+.replayRail input::-moz-range-thumb {
+  background: rgba(255, 255, 238, 0.9);
+  border: 0;
+  border-radius: 999px;
+  height: 0.72rem;
+  width: 0.72rem;
+}
+
+.voiceTrace {
+  align-items: center;
+  display: flex;
+  gap: 0.16rem;
+  height: 1rem;
+  justify-content: center;
+  opacity: 0.28;
+}
+
+.voiceTrace[data-active="true"] {
+  opacity: 0.76;
+}
+
+.voiceTrace i {
+  animation: voicePulse 840ms ease-in-out infinite;
+  background: rgba(255, 248, 220, 0.72);
+  border-radius: 999px;
+  display: block;
+  height: 0.16rem;
+  transform-origin: center;
+  width: 0.12rem;
+}
+
+.voiceTrace[data-active="true"] i {
+  height: 0.58rem;
+}
+
+.controlDock {
+  backdrop-filter: blur(24px) saturate(1.04);
+  background: rgba(255, 255, 238, 0.12);
+  border: 1px solid rgba(255, 248, 220, 0.14);
+  border-radius: 1.05rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 40px rgba(0, 0, 0, 0.22);
+  display: grid;
+  gap: 0.18rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0 auto;
+  max-width: 34rem;
+  padding: 0.34rem;
+  width: min(100%, 34rem);
+}
+
+.toolButton {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0.76rem;
+  color: rgba(255, 255, 238, 0.58);
+  display: grid;
+  font: inherit;
+  gap: 0.18rem;
+  justify-items: center;
+  min-height: 3rem;
+  padding: 0.44rem 0.2rem;
+  touch-action: manipulation;
+}
+
+.toolButton[data-active="true"] {
+  background: rgba(255, 248, 220, 0.12);
+  color: rgba(255, 248, 220, 0.94);
+}
+
+.toolButton svg {
+  height: 1.02rem;
+  stroke-width: 1.7;
+  width: 1.02rem;
+}
+
+.toolButton span {
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.54rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+@keyframes voicePulse {
+  0%,
+  100% {
+    transform: scaleY(0.58);
+  }
+
+  50% {
+    transform: scaleY(1.32);
+  }
+}
+
+@media (min-width: 740px) {
+  .roomTop {
+    padding-left: 1.4rem;
+    padding-right: 1.4rem;
+  }
+
+  .toolButton {
+    min-height: 3.22rem;
+  }
 }

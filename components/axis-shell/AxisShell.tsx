@@ -1,17 +1,106 @@
 "use client"
 
-import { AxisRail } from "@/components/axis-shell/AxisRail"
-import { AxisViewport } from "@/components/axis-shell/AxisViewport"
+import { Mic, Pencil, ScanLine, Sparkle, X } from "lucide-react"
+import { type ReactNode, useMemo, useState } from "react"
+import { AxisViewport, type AxisRoomDot, type AxisRoomStroke, type AxisRoomTool } from "@/components/axis-shell/AxisViewport"
 import styles from "./AxisShell.module.css"
 
-export function AxisShell() {
-  return (
-    <main className={styles.shell} data-mode="live">
-      <AxisViewport />
+type RoomTool = AxisRoomTool
 
-      <footer className={styles.railDock}>
-        <AxisRail />
+const roomPresence = ["V", "AJ", "BK"]
+const densityMarks = [0.08, 0.16, 0.25, 0.33, 0.47, 0.58, 0.63, 0.74, 0.86]
+
+export function AxisShell() {
+  const [activeTool, setActiveTool] = useState<RoomTool>("draw")
+  const [strokes, setStrokes] = useState<AxisRoomStroke[]>([])
+  const [dots, setDots] = useState<AxisRoomDot[]>([])
+  const [scrubProgress, setScrubProgress] = useState(0.38)
+  const roomDensity = useMemo(() => Math.min(1, (strokes.length * 0.12 + dots.length * 0.09 + scrubProgress * 0.28) || 0.18), [dots.length, scrubProgress, strokes.length])
+
+  function clearRoom() {
+    setStrokes([])
+    setDots([])
+  }
+
+  return (
+    <main className={styles.shell} data-mode="room">
+      <header className={styles.roomTop} aria-label="Room presence">
+        <div className={styles.presenceCluster}>
+          {roomPresence.map((person) => (
+            <span key={person}>{person}</span>
+          ))}
+        </div>
+        <div className={styles.roomDensity} aria-label="Replay density">
+          {densityMarks.map((mark) => (
+            <i key={mark} style={{ opacity: 0.18 + mark * roomDensity }} />
+          ))}
+        </div>
+      </header>
+
+      <AxisViewport activeTool={activeTool} dots={dots} setDots={setDots} setStrokes={setStrokes} strokes={strokes} />
+
+      <footer className={styles.roomDock} aria-label="Room controls">
+        <ReplayRail progress={scrubProgress} setProgress={setScrubProgress} />
+        <VoiceTrace active={activeTool === "voice"} />
+        <ControlDock activeTool={activeTool} clearRoom={clearRoom} setActiveTool={setActiveTool} />
       </footer>
     </main>
+  )
+}
+
+function ReplayRail({ progress, setProgress }: { progress: number; setProgress: (progress: number) => void }) {
+  return (
+    <div className={styles.replayRail} aria-label="Replay rail">
+      <span />
+      <input
+        aria-label="Scrub replay"
+        max="1"
+        min="0"
+        onChange={(event) => setProgress(Number(event.target.value))}
+        step="0.01"
+        type="range"
+        value={progress}
+      />
+      <span />
+    </div>
+  )
+}
+
+function VoiceTrace({ active }: { active: boolean }) {
+  return (
+    <div className={styles.voiceTrace} data-active={active ? "true" : "false"} aria-hidden="true">
+      {Array.from({ length: 18 }).map((_, index) => (
+        <i key={index} style={{ animationDelay: `${index * 52}ms` }} />
+      ))}
+    </div>
+  )
+}
+
+function ControlDock({
+  activeTool,
+  clearRoom,
+  setActiveTool,
+}: {
+  activeTool: RoomTool
+  clearRoom: () => void
+  setActiveTool: (tool: RoomTool) => void
+}) {
+  return (
+    <nav className={styles.controlDock} aria-label="Room tools">
+      <ToolButton active={activeTool === "draw"} icon={<Pencil aria-hidden="true" />} label="Draw" onClick={() => setActiveTool("draw")} />
+      <ToolButton active={activeTool === "dot"} icon={<Sparkle aria-hidden="true" />} label="Dot" onClick={() => setActiveTool("dot")} />
+      <ToolButton active={activeTool === "voice"} icon={<Mic aria-hidden="true" />} label="Voice" onClick={() => setActiveTool("voice")} />
+      <ToolButton active={activeTool === "scrub"} icon={<ScanLine aria-hidden="true" />} label="Scrub" onClick={() => setActiveTool("scrub")} />
+      <ToolButton icon={<X aria-hidden="true" />} label="Clear" onClick={clearRoom} />
+    </nav>
+  )
+}
+
+function ToolButton({ active = false, icon, label, onClick }: { active?: boolean; icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button className={styles.toolButton} data-active={active ? "true" : "false"} type="button" onClick={onClick}>
+      {icon}
+      <span>{label}</span>
+    </button>
   )
 }
