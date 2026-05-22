@@ -86,8 +86,16 @@
   stroke: rgba(255, 248, 202, 0.9);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.8;
+  stroke-width: calc(1.1 + (var(--stroke-force, 0.42) * 1.7));
   filter: drop-shadow(0 0 10px rgba(255, 229, 156, 0.2));
+  transition: opacity 220ms ease, stroke 220ms ease, filter 220ms ease;
+}
+
+.roomInk polyline[data-ghosted="true"] {
+  filter: drop-shadow(0 0 5px rgba(255, 229, 156, 0.08));
+  opacity: 0.2;
+  stroke: rgba(255, 248, 202, 0.54);
+  stroke-width: 1;
 }
 
 .roomInk circle {
@@ -96,6 +104,13 @@
   stroke: rgba(255, 255, 238, 0.82);
   stroke-width: 0.42;
   filter: drop-shadow(0 0 10px rgba(255, 221, 128, 0.35));
+  transition: opacity 220ms ease, r 220ms ease, fill 220ms ease;
+}
+
+.roomInk circle[data-ghosted="true"] {
+  fill: rgba(255, 239, 174, 0.18);
+  opacity: 0.26;
+  stroke: rgba(255, 255, 238, 0.32);
 }
 
 .roomTop {

@@ -15,11 +15,18 @@ export function AxisShell() {
   const [strokes, setStrokes] = useState<AxisRoomStroke[]>([])
   const [dots, setDots] = useState<AxisRoomDot[]>([])
   const [scrubProgress, setScrubProgress] = useState(0.38)
-  const roomDensity = useMemo(() => Math.min(1, (strokes.length * 0.12 + dots.length * 0.09 + scrubProgress * 0.28) || 0.18), [dots.length, scrubProgress, strokes.length])
+  const roomDensity = useMemo(() => {
+    const activeStrokeWeight = strokes.filter((stroke) => !stroke.ghosted).reduce((total, stroke) => total + stroke.intensity, 0)
+    const ghostWeight = strokes.filter((stroke) => stroke.ghosted).length * 0.045 + dots.filter((dot) => dot.ghosted).length * 0.03
+    const activeDotWeight = dots.filter((dot) => !dot.ghosted).reduce((total, dot) => total + dot.pressure * 0.08, 0)
 
-  function clearRoom() {
-    setStrokes([])
-    setDots([])
+    return Math.min(1, activeStrokeWeight * 0.16 + activeDotWeight + ghostWeight + scrubProgress * 0.22 || 0.18)
+  }, [dots, scrubProgress, strokes])
+
+  function wipeRoom() {
+    const revisedAt = Date.now()
+    setStrokes((current) => current.map((stroke) => ({ ...stroke, ghosted: true, revisedAt })).slice(-18))
+    setDots((current) => current.map((dot) => ({ ...dot, ghosted: true, revisedAt })).slice(-28))
   }
 
   return (
@@ -42,7 +49,7 @@ export function AxisShell() {
       <footer className={styles.roomDock} aria-label="Room controls">
         <ReplayRail progress={scrubProgress} setProgress={setScrubProgress} />
         <VoiceTrace active={activeTool === "voice"} />
-        <ControlDock activeTool={activeTool} clearRoom={clearRoom} setActiveTool={setActiveTool} />
+        <ControlDock activeTool={activeTool} setActiveTool={setActiveTool} wipeRoom={wipeRoom} />
       </footer>
     </main>
   )
@@ -78,12 +85,12 @@ function VoiceTrace({ active }: { active: boolean }) {
 
 function ControlDock({
   activeTool,
-  clearRoom,
   setActiveTool,
+  wipeRoom,
 }: {
   activeTool: RoomTool
-  clearRoom: () => void
   setActiveTool: (tool: RoomTool) => void
+  wipeRoom: () => void
 }) {
   return (
     <nav className={styles.controlDock} aria-label="Room tools">
@@ -91,7 +98,7 @@ function ControlDock({
       <ToolButton active={activeTool === "dot"} icon={<Sparkle aria-hidden="true" />} label="Dot" onClick={() => setActiveTool("dot")} />
       <ToolButton active={activeTool === "voice"} icon={<Mic aria-hidden="true" />} label="Voice" onClick={() => setActiveTool("voice")} />
       <ToolButton active={activeTool === "scrub"} icon={<ScanLine aria-hidden="true" />} label="Scrub" onClick={() => setActiveTool("scrub")} />
-      <ToolButton icon={<X aria-hidden="true" />} label="Clear" onClick={clearRoom} />
+      <ToolButton icon={<X aria-hidden="true" />} label="Wipe" onClick={wipeRoom} />
     </nav>
   )
 }
