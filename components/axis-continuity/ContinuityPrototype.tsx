@@ -33,8 +33,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.62,
     confidence: 0.82,
     replaySediment: 0.78,
-    x: 28,
-    y: 36,
+    x: 69,
+    y: 37,
     drift: 0.64,
     lineage: 0.14,
     inertia: 0.82,
@@ -48,8 +48,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.68,
     confidence: 0.72,
     replaySediment: 0.66,
-    x: 42,
-    y: 31,
+    x: 56,
+    y: 30,
     drift: 0.7,
     lineage: 0.24,
     inertia: 0.72,
@@ -63,8 +63,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.88,
     confidence: 0.48,
     replaySediment: 0.58,
-    x: 58,
-    y: 44,
+    x: 49,
+    y: 50,
     drift: 0.86,
     lineage: 0.38,
     inertia: 0.66,
@@ -78,8 +78,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.56,
     confidence: 0.74,
     replaySediment: 0.62,
-    x: 75,
-    y: 30,
+    x: 86,
+    y: 23,
     drift: 0.58,
     lineage: 0.5,
     inertia: 0.6,
@@ -93,8 +93,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.22,
     confidence: 0.91,
     replaySediment: 0.4,
-    x: 66,
-    y: 63,
+    x: 61,
+    y: 64,
     drift: 0.24,
     lineage: 0.62,
     inertia: 0.76,
@@ -108,8 +108,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.3,
     confidence: 0.56,
     replaySediment: 0.34,
-    x: 45,
-    y: 67,
+    x: 73,
+    y: 55,
     drift: 0.42,
     lineage: 0.72,
     inertia: 0.48,
@@ -123,8 +123,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.5,
     confidence: 0.3,
     replaySediment: 0.46,
-    x: 24,
-    y: 61,
+    x: 42,
+    y: 39,
     drift: 0.6,
     lineage: 0.84,
     inertia: 0.52,
@@ -138,8 +138,8 @@ const masses: ContinuityMass[] = [
     pressure: 0.34,
     confidence: 0.6,
     replaySediment: 0.3,
-    x: 82,
-    y: 58,
+    x: 37,
+    y: 62,
     drift: 0.5,
     lineage: 0.94,
     inertia: 0.44,
@@ -237,7 +237,7 @@ function TacticalCourt({
   toggleGrouped: (id: string) => void
 }) {
   return (
-    <div className="relative aspect-[1.72/1] w-full max-w-6xl overflow-hidden rounded-[2rem] border-[1.5px] border-black/80 bg-[#f5f0e4] shadow-[0_24px_70px_rgba(55,44,24,0.18),inset_0_1px_0_rgba(255,255,255,0.74)]">
+    <div className="relative aspect-[1.72/1] w-full max-w-6xl overflow-hidden rounded-[1.45rem] border-2 border-black bg-[#fffdf6] shadow-[0_22px_62px_rgba(55,44,24,0.14),inset_0_1px_0_rgba(255,255,255,0.86)]">
       <CourtGeometry fieldPressure={fieldPressure} packageWeight={packageWeight} posture={posture} />
       <ContinuityFlow focusMass={focusMass} masses={masses} />
       {masses.map((mass) => {
@@ -356,8 +356,10 @@ function PackageComposer({
   const focusIncluded = groupedMasses.some((mass) => mass.id === focusMass.id)
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-3 rounded-[1.7rem] border border-black/12 bg-[#fffaf0]/76 p-3 shadow-[0_12px_38px_rgba(72,56,31,0.1),inset_0_1px_0_rgba(255,255,255,0.7)] backdrop-blur-xl md:grid-cols-[auto_1fr_auto] md:items-center">
-      <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="mx-auto grid max-w-6xl gap-3 rounded-[1.35rem] border border-black/16 bg-[#fffdf6]/88 p-3 shadow-[0_12px_34px_rgba(72,56,31,0.08),inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl md:grid-cols-[auto_1fr_auto] md:items-center">
+      <div className="grid gap-2">
+        <span className="text-[0.58rem] font-semibold uppercase tracking-[0.18em] text-black/42">Export memory</span>
+        <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {packageModes.map((mode) => (
           <button
             className={mode === packageMode ? packageModeButtonClass(true) : packageModeButtonClass(false)}
@@ -368,9 +370,10 @@ function PackageComposer({
             {mode}
           </button>
         ))}
+        </div>
       </div>
 
-      <div className="relative min-h-12 overflow-hidden rounded-[1.05rem] border border-black/10 bg-black/[0.035] px-3 py-2">
+      <div className="relative min-h-12 overflow-hidden rounded-[0.95rem] border border-black/12 bg-black/[0.035] px-3 py-2">
         <div className="absolute inset-y-0 left-0 bg-black/[0.055]" style={{ width: `${Math.max(8, packageWeight * 100)}%` }} />
         <div className="relative flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {groupedMasses.map((mass) => (
@@ -383,7 +386,7 @@ function PackageComposer({
       </div>
 
       <button className={focusIncluded ? addButtonClass(true) : addButtonClass(false)} onClick={() => toggleGrouped(focusMass.id)} type="button">
-        {focusIncluded ? "Remove focused" : "Add focused"}
+        {focusIncluded ? "Remove" : "Add to package"}
       </button>
     </div>
   )
@@ -400,42 +403,54 @@ function CourtGeometry({
 }) {
   return (
     <div className="pointer-events-none absolute inset-0">
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(92,67,32,0.045)_1px,transparent_1px),linear-gradient(0deg,rgba(92,67,32,0.035)_1px,transparent_1px)] bg-[size:34px_34px]" />
       <svg aria-hidden="true" className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 1000 580">
         <motion.g
-          animate={{ opacity: posture === "tense" ? 0.92 : 0.78 + fieldPressure * 0.12 }}
+          animate={{ opacity: posture === "tense" ? 1 : 0.9 + fieldPressure * 0.08 }}
           fill="none"
-          stroke="rgba(8,8,7,0.86)"
+          stroke="rgba(8,8,7,0.92)"
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeWidth="5"
+          strokeWidth="6"
           transition={{ duration: 0.7 }}
         >
-          <path d="M500 0v580" />
+          <rect height="532" rx="2" width="952" x="24" y="24" />
+          <path d="M500 24v532" />
           <circle cx="500" cy="290" r="72" />
-          <path d="M0 84h132v412H0" />
-          <path d="M1000 84H868v412h132" />
-          <path d="M132 128c91 42 138 94 138 162s-47 120-138 162" />
-          <path d="M868 128c-91 42-138 94-138 162s47 120 138 162" />
-          <path d="M76 262a28 28 0 1 0 0 56" />
-          <path d="M924 262a28 28 0 1 1 0 56" />
+          <rect height="200" width="190" x="24" y="190" />
+          <rect height="200" width="190" x="786" y="190" />
+          <circle cx="214" cy="290" r="70" />
+          <circle cx="786" cy="290" r="70" />
+          <path d="M24 86h116" />
+          <path d="M24 494h116" />
+          <path d="M140 86C316 125 316 455 140 494" />
+          <path d="M976 86H860" />
+          <path d="M976 494H860" />
+          <path d="M860 86C684 125 684 455 860 494" />
+          <path d="M80 252v76" />
+          <path d="M920 252v76" />
+          <circle cx="94" cy="290" r="14" />
+          <circle cx="906" cy="290" r="14" />
+          <path d="M118 260a34 34 0 0 1 0 60" />
+          <path d="M882 260a34 34 0 0 0 0 60" />
         </motion.g>
         <motion.g
-          animate={{ opacity: 0.14 + packageWeight * 0.18 }}
+          animate={{ opacity: 0.16 + packageWeight * 0.16 }}
           fill="none"
-          stroke="rgba(8,8,7,0.62)"
+          stroke="rgba(8,8,7,0.5)"
           strokeLinecap="round"
-          strokeWidth="2"
+          strokeWidth="3"
           transition={{ duration: 0.7 }}
         >
-          <path d="M178 198C326 162 498 166 654 216" />
-          <path d="M248 386C412 430 570 414 764 342" />
-          <path d="M342 112C437 202 543 232 682 220" />
+          <path d="M214 190v200" strokeDasharray="12 14" />
+          <path d="M786 190v200" strokeDasharray="12 14" />
+          <path d="M312 174C420 146 576 148 688 176" />
+          <path d="M312 406C428 438 574 436 688 404" />
+          <path d="M392 116C466 184 536 184 608 116" />
         </motion.g>
       </svg>
       <motion.div
-        animate={{ opacity: 0.16 + fieldPressure * 0.16 }}
-        className="absolute inset-0 bg-[radial-gradient(circle_at_28%_38%,rgba(214,166,82,0.18),transparent_21%),radial-gradient(circle_at_70%_42%,rgba(12,12,10,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.3),transparent_32%,rgba(92,67,32,0.08))]"
+        animate={{ opacity: 0.08 + fieldPressure * 0.08 }}
+        className="absolute inset-0 bg-[radial-gradient(circle_at_70%_38%,rgba(214,166,82,0.16),transparent_18%),radial-gradient(circle_at_40%_50%,rgba(8,8,7,0.055),transparent_20%)]"
         transition={{ duration: 0.7 }}
       />
     </div>
@@ -456,8 +471,8 @@ function ContinuityFlow({ focusMass, masses }: { focusMass: ContinuityMass; mass
 
         return (
           <motion.span
-            animate={{ opacity: [0.03, 0.11 * relation, 0.03], scaleX: [0.88, 1.03, 0.88] }}
-            className="absolute h-[2px] origin-left rounded-full bg-black/36"
+            animate={{ opacity: [0.018, 0.064 * relation, 0.018], scaleX: [0.9, 1.02, 0.9] }}
+            className="absolute h-[2px] origin-left rounded-full bg-black/24"
             key={mass.id}
             style={{ left, top, transform: `rotate(${rotate}deg)`, width }}
             transition={{ duration: 7 + mass.inertia * 4, ease: "easeInOut", repeat: Infinity }}
@@ -621,10 +636,10 @@ function surfaceClass(posture: FieldPosture) {
   const spacing = posture === "recovering" ? "gap-5" : posture === "compressed" ? "gap-2" : "gap-3"
 
   return [
-    "fixed inset-0 isolate flex h-dvh flex-col overflow-hidden bg-[#f3eee2] text-black",
+    "fixed inset-0 isolate flex h-dvh flex-col overflow-hidden bg-[#fbf7ec] text-black",
     "selection:bg-black/10 selection:text-black",
-    "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-[radial-gradient(circle_at_50%_38%,rgba(255,255,255,0.72),transparent_46%),linear-gradient(180deg,rgba(255,255,255,0.62),transparent_26%,rgba(190,154,95,0.12))]",
-    "after:pointer-events-none after:absolute after:inset-0 after:z-0 after:bg-[linear-gradient(90deg,rgba(90,66,32,0.035)_1px,transparent_1px),linear-gradient(0deg,rgba(90,66,32,0.026)_1px,transparent_1px)] after:bg-[size:88px_88px] after:opacity-60",
+    "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-[radial-gradient(circle_at_50%_38%,rgba(255,255,255,0.78),transparent_46%),linear-gradient(180deg,rgba(255,255,255,0.72),transparent_28%,rgba(190,154,95,0.08))]",
+    "after:pointer-events-none after:absolute after:inset-0 after:z-0 after:bg-[linear-gradient(90deg,rgba(90,66,32,0.018)_1px,transparent_1px),linear-gradient(0deg,rgba(90,66,32,0.014)_1px,transparent_1px)] after:bg-[size:96px_96px] after:opacity-35",
     spacing,
   ].join(" ")
 }
@@ -653,14 +668,14 @@ function massLabelClass(focus: boolean) {
 
 function packageModeButtonClass(active: boolean) {
   return [
-    "shrink-0 rounded-full border px-3 py-2 text-[0.64rem] font-semibold uppercase tracking-[0.12em] transition-colors",
-    active ? "border-black bg-black text-[#fff8e9]" : "border-black/14 bg-transparent text-black/48",
+    "shrink-0 rounded-full border px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.11em] transition-colors",
+    active ? "border-black bg-black text-[#fff8e9]" : "border-black/16 bg-transparent text-black/48",
   ].join(" ")
 }
 
 function addButtonClass(active: boolean) {
   return [
-    "rounded-full border px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.12em] transition-colors",
+    "rounded-full border px-4 py-3 text-[0.66rem] font-semibold uppercase tracking-[0.11em] transition-colors",
     active ? "border-black/16 bg-black/5 text-black/62" : "border-black bg-black text-[#fff8e9]",
   ].join(" ")
 }
