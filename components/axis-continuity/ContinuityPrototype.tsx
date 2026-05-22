@@ -4,7 +4,7 @@ import { Eraser, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 type Tool = "pencil" | "eraser"
-type TacticalState = "pressure" | "advantage" | "fatigue" | "weakside" | "hot"
+type PuckSymbol = "O" | "X"
 
 type Point = {
   pressure: number
@@ -21,10 +21,7 @@ type Stroke = {
 type Puck = {
   bornAt: number
   id: string
-  name: string
-  number: string
-  role: string
-  state: TacticalState
+  symbol: PuckSymbol
   targetX: number
   targetY: number
   vx: number
@@ -39,15 +36,8 @@ type Engine = {
   draggingPuckId: string | null
   drawing: boolean
   eraseCursor: Point | null
-  lastTapAt: number
-  lastTapPuckId: string | null
-  longPressId: number | null
-  longPressArmed: boolean
-  longPressPoint: Point | null
-  longPressStartedAt: number
   moved: boolean
   penActiveUntil: number
-  puckSequence: number
   pucks: Puck[]
   rafId: number
   rect: DOMRect | null
@@ -57,28 +47,23 @@ type Engine = {
   workingStroke: Stroke | null
 }
 
-type EditTarget = {
-  id: string
-  name: string
-  number: string
-  role: string
-  x: number
-  y: number
-} | null
-
 const initialPucks: Puck[] = [
-  makePuck("p1", "Jalen", "5", "PG", "advantage", 0.42, 0.55),
-  makePuck("p2", "Carter", "12", "Wing", "hot", 0.64, 0.35),
-  makePuck("p3", "Miles", "23", "Big", "pressure", 0.76, 0.52),
-  makePuck("p4", "Nico", "2", "Slot", "weakside", 0.53, 0.72),
-  makePuck("p5", "Wings", "", "Group", "fatigue", 0.84, 0.25),
+  makePuck("o1", "O", 0.42, 0.55),
+  makePuck("o2", "O", 0.56, 0.4),
+  makePuck("o3", "O", 0.68, 0.58),
+  makePuck("o4", "O", 0.48, 0.72),
+  makePuck("o5", "O", 0.78, 0.32),
+  makePuck("x1", "X", 0.38, 0.42),
+  makePuck("x2", "X", 0.58, 0.52),
+  makePuck("x3", "X", 0.72, 0.45),
+  makePuck("x4", "X", 0.52, 0.64),
+  makePuck("x5", "X", 0.82, 0.54),
 ]
 
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
   const [tool, setTool] = useState<Tool>("pencil")
-  const [editTarget, setEditTarget] = useState<EditTarget>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -95,15 +80,8 @@ export function ContinuityPrototype() {
       draggingPuckId: null,
       drawing: false,
       eraseCursor: null,
-      lastTapAt: 0,
-      lastTapPuckId: null,
-      longPressId: null,
-      longPressArmed: false,
-      longPressPoint: null,
-      longPressStartedAt: 0,
       moved: false,
       penActiveUntil: 0,
-      puckSequence: initialPucks.length,
       pucks: clonePucks(initialPucks),
       rafId: 0,
       rect: null,
@@ -135,7 +113,6 @@ export function ContinuityPrototype() {
     frame()
 
     return () => {
-      clearLongPress(engine)
       observer.disconnect()
       window.cancelAnimationFrame(engine.rafId)
       engineRef.current = null
@@ -167,24 +144,9 @@ export function ContinuityPrototype() {
     engine.activePointerId = event.pointerId
     engine.activePointerType = event.pointerType
     engine.moved = false
-    setEditTarget(null)
     event.currentTarget.setPointerCapture(event.pointerId)
 
     if (puck) {
-      const now = event.timeStamp
-      if (engine.lastTapPuckId === puck.id && now - engine.lastTapAt < 320) {
-        setEditTarget({
-          id: puck.id,
-          name: puck.name,
-          number: puck.number,
-          role: puck.role,
-          x: puck.x,
-          y: puck.y,
-        })
-      }
-
-      engine.lastTapAt = now
-      engine.lastTapPuckId = puck.id
       engine.draggingPuckId = puck.id
       puck.targetX = point.x
       puck.targetY = point.y
@@ -195,10 +157,6 @@ export function ContinuityPrototype() {
       engine.eraseCursor = point
       eraseAt(engine, point)
       return
-    }
-
-    if (canCreatePuck(event.pointerType)) {
-      startLongPress(engine, point)
     }
 
     if (!canCreateStroke(event.pointerType)) return
@@ -218,14 +176,7 @@ export function ContinuityPrototype() {
     const point = eventPoint(event, engine)
     if (!point) return
 
-    if (engine.longPressPoint) {
-      if (distance(engine.longPressPoint, point) > 0.012) {
-        clearLongPress(engine)
-        engine.moved = true
-      }
-    } else {
-      engine.moved = true
-    }
+    engine.moved = true
 
     if (engine.draggingPuckId) {
       engine.moved = true
@@ -257,12 +208,6 @@ export function ContinuityPrototype() {
     if (!engine || engine.activePointerId !== event.pointerId) return
     event.preventDefault()
 
-    const creationPoint = engine.longPressPoint
-    const shouldCreatePuck = engine.longPressArmed && creationPoint && !engine.moved && !engine.draggingPuckId
-    if (shouldCreatePuck) {
-      addPuckAt(engine, creationPoint)
-    }
-    clearLongPress(engine)
     event.currentTarget.releasePointerCapture(event.pointerId)
 
     if (engine.drawing && engine.workingStroke) {
@@ -286,11 +231,6 @@ export function ContinuityPrototype() {
 
     if (engine.strokes.length > 0) {
       engine.strokes.pop()
-      return
-    }
-
-    if (engine.pucks.length > 0) {
-      engine.pucks.pop()
     }
   }
 
@@ -300,19 +240,6 @@ export function ContinuityPrototype() {
 
     engine.strokes = []
     engine.workingStroke = null
-  }
-
-  function saveEdit() {
-    const engine = engineRef.current
-    if (!engine || !editTarget) return
-
-    const puck = engine.pucks.find((item) => item.id === editTarget.id)
-    if (puck) {
-      puck.name = editTarget.name
-      puck.number = editTarget.number
-      puck.role = editTarget.role
-    }
-    setEditTarget(null)
   }
 
   return (
@@ -327,41 +254,6 @@ export function ContinuityPrototype() {
         onPointerUp={handlePointerUp}
         ref={canvasRef}
       />
-
-      {editTarget ? (
-        <div
-          className="absolute z-20 grid w-48 gap-2 rounded-2xl border border-white/10 bg-black/54 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
-          style={{
-            left: `${clamp(editTarget.x, 0.16, 0.84) * 100}%`,
-            top: `${clamp(editTarget.y, 0.18, 0.78) * 100}%`,
-            transform: "translate(-50%, -50%)",
-          }}
-        >
-          <input
-            aria-label="Puck name"
-            className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-semibold text-white outline-none"
-            onChange={(event) => setEditTarget((current) => (current ? { ...current, name: event.target.value } : current))}
-            value={editTarget.name}
-          />
-          <div className="grid grid-cols-[0.7fr_1fr] gap-2">
-            <input
-              aria-label="Puck number"
-              className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-semibold text-white outline-none"
-              onChange={(event) => setEditTarget((current) => (current ? { ...current, number: event.target.value } : current))}
-              value={editTarget.number}
-            />
-            <input
-              aria-label="Puck role"
-              className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-semibold text-white outline-none"
-              onChange={(event) => setEditTarget((current) => (current ? { ...current, role: event.target.value } : current))}
-              value={editTarget.role}
-            />
-          </div>
-          <button className="rounded-xl bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-black" onClick={saveEdit} type="button">
-            Done
-          </button>
-        </div>
-      ) : null}
 
       <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/10 bg-white/[0.065] p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
         <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
@@ -419,7 +311,6 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawCourt(context, width, height)
   drawStrokes(context, width, height, engine.strokes, false)
   if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
-  drawCreationAnchor(context, width, height, engine)
   drawPuckInfluence(context, width, height, engine.pucks)
   drawPucks(context, width, height, engine.pucks)
   if (engine.eraseCursor) drawEraser(context, width, height, engine.eraseCursor)
@@ -522,53 +413,19 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
   context.restore()
 }
 
-function drawCreationAnchor(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
-  if (!engine.longPressPoint || engine.moved) return
-
-  const age = performance.now() - engine.longPressStartedAt
-  const reveal = clamp((age - 120) / 140, 0, 1)
-  if (reveal <= 0) return
-
-  const point = toPixels(engine.longPressPoint, width, height)
-  const base = puckRadius(width, height)
-  const capsuleWidth = base * (1.32 + reveal * 0.14)
-  const capsuleHeight = base * (0.72 + reveal * 0.08)
-  const glowRadius = base * (1.28 + reveal * 0.18)
-  const alpha = engine.longPressArmed ? 0.22 : 0.14
-  const gradient = context.createRadialGradient(point.x, point.y, base * 0.1, point.x, point.y, glowRadius)
-
-  context.save()
-  gradient.addColorStop(0, `rgba(255,255,255,${alpha * 0.24})`)
-  gradient.addColorStop(0.54, `rgba(255,255,255,${alpha * 0.08})`)
-  gradient.addColorStop(1, "rgba(255,255,255,0)")
-  context.fillStyle = gradient
-  context.beginPath()
-  context.arc(point.x, point.y, glowRadius, 0, Math.PI * 2)
-  context.fill()
-
-  context.globalAlpha = 0.72
-  context.fillStyle = `rgba(255,255,255,${0.028 + reveal * 0.028})`
-  context.strokeStyle = `rgba(255,255,255,${0.09 + reveal * 0.04})`
-  context.lineWidth = 1
-  roundedRectPath(context, point.x - capsuleWidth / 2, point.y - capsuleHeight / 2, capsuleWidth, capsuleHeight, capsuleHeight / 2)
-  context.fill()
-  context.stroke()
-  context.restore()
-}
-
 function drawPuckInfluence(context: CanvasRenderingContext2D, width: number, height: number, pucks: Puck[]) {
   context.save()
   for (const puck of pucks) {
     const point = toPixels(puck, width, height)
-    const radius = puckRadius(width, height) * stateScale(puck.state)
+    const radius = puckRadius(width, height)
     const birth = puckBirthProgress(puck)
     if (birth <= 0) continue
     const pulse = (Math.sin(performance.now() / 850 + puck.x * 8) + 1) / 2
     const catchLight = 1 + (1 - birth) * 0.45
     const gradient = context.createRadialGradient(point.x, point.y, radius * 0.18, point.x, point.y, radius * (1.54 + pulse * 0.16 + (1 - birth) * 0.22))
-    gradient.addColorStop(0, stateGlow(puck.state, 0.065 * catchLight))
-    gradient.addColorStop(0.52, stateGlow(puck.state, 0.026 * catchLight))
-    gradient.addColorStop(1, stateGlow(puck.state, 0))
+    gradient.addColorStop(0, symbolGlow(puck.symbol, 0.052 * catchLight))
+    gradient.addColorStop(0.52, symbolGlow(puck.symbol, 0.019 * catchLight))
+    gradient.addColorStop(1, symbolGlow(puck.symbol, 0))
     context.fillStyle = gradient
     context.beginPath()
     context.arc(point.x, point.y, radius * (1.68 + pulse * 0.08), 0, Math.PI * 2)
@@ -585,42 +442,27 @@ function drawPucks(context: CanvasRenderingContext2D, width: number, height: num
   for (const puck of pucks) {
     const point = toPixels(puck, width, height)
     const birth = puckBirthProgress(puck)
-    const radius = puckRadius(width, height) * stateScale(puck.state) * (0.85 + birth * 0.15)
+    const radius = puckRadius(width, height) * (0.85 + birth * 0.15)
     context.save()
-    context.globalAlpha = (puck.state === "fatigue" ? 0.58 : 0.88) * birth
+    context.globalAlpha = 0.88 * birth
     context.shadowBlur = 8 + (1 - birth) * 7
     context.shadowColor = "rgba(0,0,0,0.24)"
     const body = context.createRadialGradient(point.x - radius * 0.2, point.y - radius * 0.28, radius * 0.08, point.x, point.y, radius)
-    body.addColorStop(0, puckCoreFill(puck.state))
-    body.addColorStop(0.46, puckFill(puck.state))
-    body.addColorStop(1, puckEdgeFill(puck.state))
+    body.addColorStop(0, puckCoreFill(puck.symbol))
+    body.addColorStop(0.46, puckFill(puck.symbol))
+    body.addColorStop(1, puckEdgeFill(puck.symbol))
     context.fillStyle = body
     context.beginPath()
     context.arc(point.x, point.y, radius, 0, Math.PI * 2)
     context.fill()
     context.shadowBlur = 0
-    context.strokeStyle = stateStroke(puck.state)
+    context.strokeStyle = symbolStroke(puck.symbol)
     context.lineWidth = Math.max(1, radius * 0.044)
     context.stroke()
 
-    if (puck.number) {
-      context.fillStyle = "rgba(255,255,255,0.78)"
-      context.font = `700 ${Math.round(radius * 0.39)}px ui-sans-serif, system-ui`
-      context.fillText(puck.number, point.x, point.y - radius * 0.18)
-      context.fillStyle = "rgba(255,255,255,0.42)"
-      context.font = `600 ${Math.round(radius * 0.145)}px ui-sans-serif, system-ui`
-      context.fillText(puck.name.slice(0, 6), point.x, point.y + radius * 0.18)
-      context.fillStyle = "rgba(255,255,255,0.28)"
-      context.font = `590 ${Math.round(radius * 0.11)}px ui-sans-serif, system-ui`
-      context.fillText(puck.role.slice(0, 7), point.x, point.y + radius * 0.39)
-    } else {
-      context.fillStyle = "rgba(255,255,255,0.76)"
-      context.font = `680 ${Math.round(radius * 0.225)}px ui-sans-serif, system-ui`
-      context.fillText(puck.name.slice(0, 6), point.x, point.y - radius * 0.06)
-      context.fillStyle = "rgba(255,255,255,0.28)"
-      context.font = `590 ${Math.round(radius * 0.125)}px ui-sans-serif, system-ui`
-      context.fillText(puck.role.slice(0, 7), point.x, point.y + radius * 0.28)
-    }
+    context.fillStyle = symbolFill(puck.symbol)
+    context.font = `650 ${Math.round(radius * 0.62)}px ui-sans-serif, system-ui`
+    context.fillText(puck.symbol, point.x, point.y + radius * 0.015)
     context.restore()
   }
   context.restore()
@@ -692,55 +534,16 @@ function eraseAt(engine: Engine, point: Point) {
     .filter((stroke) => stroke.points.length > 1)
 }
 
-function startLongPress(engine: Engine, point: Point) {
-  clearLongPress(engine)
-  engine.longPressArmed = false
-  engine.longPressPoint = point
-  engine.longPressStartedAt = performance.now()
-  engine.longPressId = window.setTimeout(() => {
-    if (!engine.longPressPoint || engine.moved || engine.draggingPuckId) return
-    engine.longPressArmed = true
-    engine.longPressId = null
-  }, 220)
-}
-
-function clearLongPress(engine: Engine) {
-  if (engine.longPressId !== null) {
-    window.clearTimeout(engine.longPressId)
-  }
-  engine.longPressId = null
-  engine.longPressArmed = false
-  engine.longPressPoint = null
-  engine.longPressStartedAt = 0
-}
-
-function addPuckAt(engine: Engine, point: Point) {
-  engine.puckSequence += 1
-  const puck = makePuck(`p${engine.puckSequence}`, `P${engine.puckSequence}`, "", "Player", nextPuckState(engine.puckSequence), point.x, point.y)
-  puck.bornAt = performance.now()
-  puck.vy = -0.0018
-  engine.pucks.push(puck)
-}
-
-function canCreatePuck(pointerType: string) {
-  return pointerType === "touch" || pointerType === "mouse"
-}
-
 function canCreateStroke(pointerType: string) {
   return pointerType === "pen" || pointerType === "mouse"
 }
 
-function makePuck(id: string, name: string, number: string, role: string, state: TacticalState, x: number, y: number): Puck {
-  return { bornAt: -10000, id, name, number, role, state, targetX: x, targetY: y, vx: 0, vy: 0, x, y }
+function makePuck(id: string, symbol: PuckSymbol, x: number, y: number): Puck {
+  return { bornAt: -10000, id, symbol, targetX: x, targetY: y, vx: 0, vy: 0, x, y }
 }
 
 function clonePucks(pucks: Puck[]) {
   return pucks.map((puck) => ({ ...puck }))
-}
-
-function nextPuckState(index: number): TacticalState {
-  const states: TacticalState[] = ["pressure", "advantage", "weakside", "hot", "fatigue"]
-  return states[index % states.length]
 }
 
 function toPixels(point: { x: number; y: number }, width: number, height: number) {
@@ -761,22 +564,6 @@ function linePath(context: CanvasRenderingContext2D, points: Array<[number, numb
     context.lineTo(round(point[0]), round(point[1]))
   }
   context.stroke()
-}
-
-function roundedRectPath(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
-  const right = x + width
-  const bottom = y + height
-  context.beginPath()
-  context.moveTo(x + radius, y)
-  context.lineTo(right - radius, y)
-  context.quadraticCurveTo(right, y, right, y + radius)
-  context.lineTo(right, bottom - radius)
-  context.quadraticCurveTo(right, bottom, right - radius, bottom)
-  context.lineTo(x + radius, bottom)
-  context.quadraticCurveTo(x, bottom, x, bottom - radius)
-  context.lineTo(x, y + radius)
-  context.quadraticCurveTo(x, y, x + radius, y)
-  context.closePath()
 }
 
 function circle(context: CanvasRenderingContext2D, x: number, y: number, radius: number) {
@@ -812,49 +599,32 @@ function easeOutCubic(value: number) {
   return 1 - (1 - value) ** 3
 }
 
-function stateScale(state: TacticalState) {
-  if (state === "pressure") return 0.94
-  if (state === "fatigue") return 0.9
-  if (state === "hot") return 1.02
-  return 1
+function puckFill(symbol: PuckSymbol) {
+  if (symbol === "O") return "rgba(206,199,185,0.76)"
+  return "rgba(47,48,49,0.82)"
 }
 
-function puckFill(state: TacticalState) {
-  if (state === "pressure") return "rgba(60,34,33,0.76)"
-  if (state === "advantage") return "rgba(35,53,45,0.76)"
-  if (state === "fatigue") return "rgba(48,48,48,0.62)"
-  if (state === "weakside") return "rgba(76,61,40,0.72)"
-  return "rgba(78,53,36,0.76)"
+function puckCoreFill(symbol: PuckSymbol) {
+  if (symbol === "O") return "rgba(242,235,218,0.78)"
+  return "rgba(83,84,84,0.78)"
 }
 
-function puckCoreFill(state: TacticalState) {
-  if (state === "pressure") return "rgba(104,61,56,0.78)"
-  if (state === "advantage") return "rgba(63,86,72,0.78)"
-  if (state === "fatigue") return "rgba(78,78,78,0.58)"
-  if (state === "weakside") return "rgba(116,91,55,0.72)"
-  return "rgba(120,77,48,0.74)"
+function puckEdgeFill(symbol: PuckSymbol) {
+  if (symbol === "O") return "rgba(126,119,105,0.54)"
+  return "rgba(20,21,22,0.82)"
 }
 
-function puckEdgeFill(state: TacticalState) {
-  if (state === "pressure") return "rgba(34,24,24,0.8)"
-  if (state === "advantage") return "rgba(24,34,30,0.78)"
-  if (state === "fatigue") return "rgba(31,31,31,0.68)"
-  if (state === "weakside") return "rgba(42,35,27,0.76)"
-  return "rgba(42,30,24,0.78)"
+function symbolStroke(symbol: PuckSymbol) {
+  if (symbol === "O") return "rgba(255,248,231,0.16)"
+  return "rgba(210,212,210,0.1)"
 }
 
-function stateStroke(state: TacticalState) {
-  if (state === "pressure") return "rgba(188,126,118,0.18)"
-  if (state === "advantage") return "rgba(148,188,162,0.16)"
-  if (state === "fatigue") return "rgba(255,255,255,0.1)"
-  if (state === "weakside") return "rgba(198,166,105,0.14)"
-  return "rgba(202,146,94,0.16)"
+function symbolGlow(symbol: PuckSymbol, alpha: number) {
+  if (symbol === "O") return `rgba(238,230,212,${alpha})`
+  return `rgba(155,158,156,${alpha * 0.46})`
 }
 
-function stateGlow(state: TacticalState, alpha: number) {
-  if (state === "pressure") return `rgba(126,58,53,${alpha})`
-  if (state === "advantage") return `rgba(95,128,105,${alpha * 0.5})`
-  if (state === "fatigue") return `rgba(255,255,255,${alpha * 0.18})`
-  if (state === "weakside") return `rgba(143,111,65,${alpha * 0.36})`
-  return `rgba(146,88,54,${alpha * 0.44})`
+function symbolFill(symbol: PuckSymbol) {
+  if (symbol === "O") return "rgba(35,33,29,0.72)"
+  return "rgba(220,222,218,0.54)"
 }
