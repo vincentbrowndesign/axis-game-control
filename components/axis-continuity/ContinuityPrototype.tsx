@@ -487,12 +487,13 @@ function drawPuckInfluence(context: CanvasRenderingContext2D, width: number, hei
     const point = toPixels(puck, width, height)
     const radius = puckRadius(width, height) * stateScale(puck.state)
     const pulse = (Math.sin(performance.now() / 850 + puck.x * 8) + 1) / 2
-    const gradient = context.createRadialGradient(point.x, point.y, radius * 0.28, point.x, point.y, radius * (1.72 + pulse * 0.2))
-    gradient.addColorStop(0, stateGlow(puck.state, 0.095))
+    const gradient = context.createRadialGradient(point.x, point.y, radius * 0.18, point.x, point.y, radius * (1.54 + pulse * 0.16))
+    gradient.addColorStop(0, stateGlow(puck.state, 0.065))
+    gradient.addColorStop(0.52, stateGlow(puck.state, 0.026))
     gradient.addColorStop(1, stateGlow(puck.state, 0))
     context.fillStyle = gradient
     context.beginPath()
-    context.arc(point.x, point.y, radius * (1.86 + pulse * 0.1), 0, Math.PI * 2)
+    context.arc(point.x, point.y, radius * (1.68 + pulse * 0.08), 0, Math.PI * 2)
     context.fill()
   }
   context.restore()
@@ -507,34 +508,38 @@ function drawPucks(context: CanvasRenderingContext2D, width: number, height: num
     const point = toPixels(puck, width, height)
     const radius = puckRadius(width, height) * stateScale(puck.state)
     context.save()
-    context.globalAlpha = puck.state === "fatigue" ? 0.62 : 0.9
-    context.shadowBlur = 11
-    context.shadowColor = "rgba(0,0,0,0.26)"
-    context.fillStyle = puckFill(puck.state)
+    context.globalAlpha = puck.state === "fatigue" ? 0.58 : 0.88
+    context.shadowBlur = 8
+    context.shadowColor = "rgba(0,0,0,0.24)"
+    const body = context.createRadialGradient(point.x - radius * 0.2, point.y - radius * 0.28, radius * 0.08, point.x, point.y, radius)
+    body.addColorStop(0, puckCoreFill(puck.state))
+    body.addColorStop(0.46, puckFill(puck.state))
+    body.addColorStop(1, puckEdgeFill(puck.state))
+    context.fillStyle = body
     context.beginPath()
     context.arc(point.x, point.y, radius, 0, Math.PI * 2)
     context.fill()
     context.shadowBlur = 0
     context.strokeStyle = stateStroke(puck.state)
-    context.lineWidth = Math.max(1, radius * 0.055)
+    context.lineWidth = Math.max(1, radius * 0.044)
     context.stroke()
 
     if (puck.number) {
-      context.fillStyle = "rgba(255,255,255,0.84)"
-      context.font = `760 ${Math.round(radius * 0.43)}px ui-sans-serif, system-ui`
-      context.fillText(puck.number, point.x, point.y - radius * 0.19)
-      context.fillStyle = "rgba(255,255,255,0.5)"
-      context.font = `640 ${Math.round(radius * 0.16)}px ui-sans-serif, system-ui`
-      context.fillText(puck.name.slice(0, 6), point.x, point.y + radius * 0.2)
-      context.fillStyle = "rgba(255,255,255,0.34)"
-      context.font = `620 ${Math.round(radius * 0.12)}px ui-sans-serif, system-ui`
-      context.fillText(puck.role.slice(0, 7), point.x, point.y + radius * 0.43)
+      context.fillStyle = "rgba(255,255,255,0.78)"
+      context.font = `700 ${Math.round(radius * 0.39)}px ui-sans-serif, system-ui`
+      context.fillText(puck.number, point.x, point.y - radius * 0.18)
+      context.fillStyle = "rgba(255,255,255,0.42)"
+      context.font = `600 ${Math.round(radius * 0.145)}px ui-sans-serif, system-ui`
+      context.fillText(puck.name.slice(0, 6), point.x, point.y + radius * 0.18)
+      context.fillStyle = "rgba(255,255,255,0.28)"
+      context.font = `590 ${Math.round(radius * 0.11)}px ui-sans-serif, system-ui`
+      context.fillText(puck.role.slice(0, 7), point.x, point.y + radius * 0.39)
     } else {
-      context.fillStyle = "rgba(255,255,255,0.82)"
-      context.font = `720 ${Math.round(radius * 0.24)}px ui-sans-serif, system-ui`
+      context.fillStyle = "rgba(255,255,255,0.76)"
+      context.font = `680 ${Math.round(radius * 0.225)}px ui-sans-serif, system-ui`
       context.fillText(puck.name.slice(0, 6), point.x, point.y - radius * 0.06)
-      context.fillStyle = "rgba(255,255,255,0.34)"
-      context.font = `620 ${Math.round(radius * 0.14)}px ui-sans-serif, system-ui`
+      context.fillStyle = "rgba(255,255,255,0.28)"
+      context.font = `590 ${Math.round(radius * 0.125)}px ui-sans-serif, system-ui`
       context.fillText(puck.role.slice(0, 7), point.x, point.y + radius * 0.28)
     }
     context.restore()
@@ -673,25 +678,41 @@ function stateScale(state: TacticalState) {
 }
 
 function puckFill(state: TacticalState) {
-  if (state === "pressure") return "rgba(68,36,34,0.74)"
-  if (state === "advantage") return "rgba(34,58,47,0.76)"
-  if (state === "fatigue") return "rgba(55,55,55,0.62)"
-  if (state === "weakside") return "rgba(88,68,42,0.72)"
-  return "rgba(88,57,35,0.76)"
+  if (state === "pressure") return "rgba(60,34,33,0.76)"
+  if (state === "advantage") return "rgba(35,53,45,0.76)"
+  if (state === "fatigue") return "rgba(48,48,48,0.62)"
+  if (state === "weakside") return "rgba(76,61,40,0.72)"
+  return "rgba(78,53,36,0.76)"
+}
+
+function puckCoreFill(state: TacticalState) {
+  if (state === "pressure") return "rgba(104,61,56,0.78)"
+  if (state === "advantage") return "rgba(63,86,72,0.78)"
+  if (state === "fatigue") return "rgba(78,78,78,0.58)"
+  if (state === "weakside") return "rgba(116,91,55,0.72)"
+  return "rgba(120,77,48,0.74)"
+}
+
+function puckEdgeFill(state: TacticalState) {
+  if (state === "pressure") return "rgba(34,24,24,0.8)"
+  if (state === "advantage") return "rgba(24,34,30,0.78)"
+  if (state === "fatigue") return "rgba(31,31,31,0.68)"
+  if (state === "weakside") return "rgba(42,35,27,0.76)"
+  return "rgba(42,30,24,0.78)"
 }
 
 function stateStroke(state: TacticalState) {
-  if (state === "pressure") return "rgba(205,128,118,0.24)"
-  if (state === "advantage") return "rgba(151,207,172,0.2)"
-  if (state === "fatigue") return "rgba(255,255,255,0.13)"
-  if (state === "weakside") return "rgba(215,178,112,0.18)"
-  return "rgba(218,157,94,0.22)"
+  if (state === "pressure") return "rgba(188,126,118,0.18)"
+  if (state === "advantage") return "rgba(148,188,162,0.16)"
+  if (state === "fatigue") return "rgba(255,255,255,0.1)"
+  if (state === "weakside") return "rgba(198,166,105,0.14)"
+  return "rgba(202,146,94,0.16)"
 }
 
 function stateGlow(state: TacticalState, alpha: number) {
-  if (state === "pressure") return `rgba(150,64,56,${alpha})`
-  if (state === "advantage") return `rgba(98,150,112,${alpha * 0.58})`
-  if (state === "fatigue") return `rgba(255,255,255,${alpha * 0.22})`
-  if (state === "weakside") return `rgba(176,132,70,${alpha * 0.42})`
-  return `rgba(184,103,55,${alpha * 0.52})`
+  if (state === "pressure") return `rgba(126,58,53,${alpha})`
+  if (state === "advantage") return `rgba(95,128,105,${alpha * 0.5})`
+  if (state === "fatigue") return `rgba(255,255,255,${alpha * 0.18})`
+  if (state === "weakside") return `rgba(143,111,65,${alpha * 0.36})`
+  return `rgba(146,88,54,${alpha * 0.44})`
 }
