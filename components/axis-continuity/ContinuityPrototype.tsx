@@ -19,6 +19,8 @@ type Stroke = {
 }
 
 type Puck = {
+  baseX: number
+  baseY: number
   bornAt: number
   id: string
   symbol: PuckSymbol
@@ -182,6 +184,8 @@ export function ContinuityPrototype() {
       engine.moved = true
       const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
       if (puck) {
+        puck.baseX = point.x
+        puck.baseY = point.y
         puck.targetX = point.x
         puck.targetY = point.y
       }
@@ -311,6 +315,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawCourt(context, width, height)
   drawStrokes(context, width, height, engine.strokes, false)
   if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
+  drawMovementIntent(context, width, height, engine)
   drawPuckInfluence(context, width, height, engine.pucks)
   drawPucks(context, width, height, engine.pucks)
   if (engine.eraseCursor) drawEraser(context, width, height, engine.eraseCursor)
@@ -395,6 +400,32 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
     }
     context.stroke()
   }
+  context.restore()
+}
+
+function drawMovementIntent(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
+  context.save()
+  context.lineCap = "round"
+  context.lineJoin = "round"
+
+  for (const puck of engine.pucks) {
+    const movement = Math.hypot(puck.targetX - puck.baseX, puck.targetY - puck.baseY)
+    if (movement < 0.014) continue
+
+    const start = toPixels({ x: puck.baseX, y: puck.baseY }, width, height)
+    const end = toPixels({ x: puck.targetX, y: puck.targetY }, width, height)
+    const lift = Math.min(width, height) * 0.018
+    const controlX = (start.x + end.x) / 2
+    const controlY = (start.y + end.y) / 2 - lift
+
+    context.strokeStyle = puck.symbol === "O" ? "rgba(8,8,7,0.13)" : "rgba(8,8,7,0.08)"
+    context.lineWidth = Math.max(1, Math.min(width, height) * 0.0014)
+    context.beginPath()
+    context.moveTo(start.x, start.y)
+    context.quadraticCurveTo(controlX, controlY, end.x, end.y)
+    context.stroke()
+  }
+
   context.restore()
 }
 
@@ -493,6 +524,8 @@ function updatePhysics(engine: Engine) {
   const damping = 0.76
   const settle = 0.00006
 
+  applyBasketballRelationships(engine)
+
   for (const puck of engine.pucks) {
     puck.vx += (puck.targetX - puck.x) * spring
     puck.vy += (puck.targetY - puck.y) * spring
@@ -506,6 +539,98 @@ function updatePhysics(engine: Engine) {
     puck.y = clamp(puck.y, 0.06, 0.94)
     puck.targetX = clamp(puck.targetX, 0.04, 0.96)
     puck.targetY = clamp(puck.targetY, 0.06, 0.94)
+  }
+}
+
+function applyBasketballRelationships(engine: Engine) {
+  const latestStroke = engine.workingStroke ?? engine.strokes.at(-1) ?? null
+
+  for (const puck of engine.pucks) {
+    if (puck.id === engine.draggingPuckId) continue
+
+    let desiredX = puck.baseX
+    let desiredY = puck.baseY
+
+    if (puck.symbol === "X") {
+      const nearestO = nearestPuck(puck, engine.pucks, "O")
+      if (nearestO) {
+        const proximity = clamp(1 - distance(puck, nearestO) / 0.34, 0, 1)
+        desiredX += (nearestO.x - puck.baseX) * 0.1 * proximity
+        desiredY += (nearestO.y - puck.baseY) * 0.1 * proximity
+      }
+
+      const ballSide = averagePuck(engine.pucks, "O")
+      if (ballSide) {
+        desiredX += (ballSide.x - 0.5) * 0.035
+        desiredY += (ballSide.y - puck.baseY) * 0.025
+      }
+    } else {
+      for (const teammate of engine.pucks) {
+        if (teammate.id === puck.id || teammate.symbol !== "O") continue
+        const gap = distance(puck, teammate)
+        if (gap > 0 && gap < 0.18) {
+          desiredX += ((puck.x - teammate.x) / gap) * (0.18 - gap) * 0.09
+          desiredY += ((puck.y - teammate.y) / gap) * (0.18 - gap) * 0.09
+        }
+      }
+
+      const nearestX = nearestPuck(puck, engine.pucks, "X")
+      if (nearestX) {
+        const pressure = clamp(1 - distance(puck, nearestX) / 0.22, 0, 1)
+        desiredX += (puck.x - nearestX.x) * 0.055 * pressure
+        desiredY += (puck.y - nearestX.y) * 0.055 * pressure
+      }
+
+      const strokeIntent = strokeVectorInfluence(puck, latestStroke)
+      if (strokeIntent) {
+        desiredX += strokeIntent.x
+        desiredY += strokeIntent.y
+      }
+    }
+
+    puck.targetX = clamp(desiredX, 0.04, 0.96)
+    puck.targetY = clamp(desiredY, 0.06, 0.94)
+  }
+}
+
+function nearestPuck(origin: Puck, pucks: Puck[], symbol: PuckSymbol) {
+  let nearest: Puck | null = null
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  for (const puck of pucks) {
+    if (puck.id === origin.id || puck.symbol !== symbol) continue
+    const gap = distance(origin, puck)
+    if (gap < nearestDistance) {
+      nearest = puck
+      nearestDistance = gap
+    }
+  }
+
+  return nearest
+}
+
+function averagePuck(pucks: Puck[], symbol: PuckSymbol) {
+  const matching = pucks.filter((puck) => puck.symbol === symbol)
+  if (matching.length === 0) return null
+
+  return {
+    x: matching.reduce((sum, puck) => sum + puck.x, 0) / matching.length,
+    y: matching.reduce((sum, puck) => sum + puck.y, 0) / matching.length,
+  }
+}
+
+function strokeVectorInfluence(puck: Puck, stroke: Stroke | null) {
+  if (!stroke || stroke.points.length < 6) return null
+
+  const start = stroke.points[0]
+  const end = stroke.points[stroke.points.length - 1]
+  const distanceToStart = distance(puck, start)
+  const weight = clamp(1 - distanceToStart / 0.2, 0, 1)
+  if (weight <= 0) return null
+
+  return {
+    x: (end.x - start.x) * 0.08 * weight,
+    y: (end.y - start.y) * 0.08 * weight,
   }
 }
 
@@ -548,7 +673,7 @@ function canCreateStroke(pointerType: string) {
 }
 
 function makePuck(id: string, symbol: PuckSymbol, x: number, y: number): Puck {
-  return { bornAt: -10000, id, symbol, targetX: x, targetY: y, vx: 0, vy: 0, x, y }
+  return { baseX: x, baseY: y, bornAt: -10000, id, symbol, targetX: x, targetY: y, vx: 0, vy: 0, x, y }
 }
 
 function clonePucks(pucks: Puck[]) {
