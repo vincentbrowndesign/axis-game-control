@@ -1,550 +1,660 @@
 "use client"
 
-import { motion, type PanInfo } from "framer-motion"
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { Eraser, Pencil, RotateCcw, Trash2 } from "lucide-react"
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
-type Tool = "move" | "draw" | "erase" | "spot"
-type ResultType = "make" | "miss" | "turnover" | "collapse" | "assist" | "help late"
-type PackageMode = "Scout" | "Practice" | "Teaching" | "Player Dev"
+type Tool = "pencil" | "eraser"
+type TacticalState = "pressure" | "advantage" | "fatigue" | "weakside" | "hot"
 
-type CourtPoint = {
+type Point = {
+  pressure: number
+  t: number
   x: number
   y: number
 }
 
-type PlayerToken = CourtPoint & {
+type Stroke = {
+  id: string
+  points: Point[]
+}
+
+type Puck = {
   id: string
   name: string
   number: string
   role: string
+  state: TacticalState
+  targetX: number
+  targetY: number
+  vx: number
+  vy: number
+  x: number
+  y: number
 }
 
-type ActionStroke = {
+type Engine = {
+  activePointerId: number | null
+  draggingPuckId: string | null
+  drawing: boolean
+  eraseCursor: Point | null
+  lastTapAt: number
+  lastTapPuckId: string | null
+  moved: boolean
+  puckSequence: number
+  pucks: Puck[]
+  rafId: number
+  rect: DOMRect | null
+  strokeSequence: number
+  strokes: Stroke[]
+  tool: Tool
+  workingStroke: Stroke | null
+}
+
+type EditTarget = {
   id: string
-  points: CourtPoint[]
-}
+  name: string
+  number: string
+  role: string
+  x: number
+  y: number
+} | null
 
-type SpotEvent = CourtPoint & {
-  id: string
-  playerId: string
-  result: ResultType
-  timestamp: string
-}
-
-const initialPlayers: PlayerToken[] = [
-  { id: "jalen", name: "Jalen", number: "5", role: "PG", x: 44, y: 52 },
-  { id: "carter", name: "Carter", number: "12", role: "Wing", x: 64, y: 35 },
-  { id: "miles", name: "Miles", number: "23", role: "Big", x: 76, y: 51 },
-  { id: "nico", name: "Nico", number: "2", role: "Slot", x: 55, y: 70 },
-  { id: "wings", name: "Wings", number: "", role: "Group", x: 83, y: 23 },
-]
-
-const resultTypes: ResultType[] = ["make", "miss", "turnover", "collapse", "assist", "help late"]
-const packageModes: PackageMode[] = ["Scout", "Practice", "Teaching", "Player Dev"]
-const baselineTicker = [
-  "Weak-side help arriving late",
-  "Corner touch increasing paint collapse",
-  "Recovery lineup stabilizing",
-  "Slot pressure creating skip lane",
+const initialPucks: Puck[] = [
+  makePuck("p1", "Jalen", "5", "PG", "advantage", 0.42, 0.55),
+  makePuck("p2", "Carter", "12", "Wing", "hot", 0.64, 0.35),
+  makePuck("p3", "Miles", "23", "Big", "pressure", 0.76, 0.52),
+  makePuck("p4", "Nico", "2", "Slot", "weakside", 0.53, 0.72),
+  makePuck("p5", "Wings", "", "Group", "fatigue", 0.84, 0.25),
 ]
 
 export function ContinuityPrototype() {
-  const courtRef = useRef<HTMLDivElement | null>(null)
-  const nextIdRef = useRef(0)
-  const [players, setPlayers] = useState(initialPlayers)
-  const [selectedPlayerId, setSelectedPlayerId] = useState(initialPlayers[0].id)
-  const [tool, setTool] = useState<Tool>("move")
-  const [strokes, setStrokes] = useState<ActionStroke[]>([])
-  const [draftStroke, setDraftStroke] = useState<ActionStroke | null>(null)
-  const [pendingSpot, setPendingSpot] = useState<CourtPoint | null>(null)
-  const [events, setEvents] = useState<SpotEvent[]>([])
-  const [packageMode, setPackageMode] = useState<PackageMode>("Practice")
-  const [packageEventIds, setPackageEventIds] = useState<string[]>([])
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const engineRef = useRef<Engine | null>(null)
+  const [tool, setTool] = useState<Tool>("pencil")
+  const [editTarget, setEditTarget] = useState<EditTarget>(null)
 
-  const selectedPlayer = players.find((player) => player.id === selectedPlayerId) ?? players[0]
-  const tickerItems = useMemo(() => buildTicker(events, players), [events, players])
-  const packageEvents = packageEventIds.map((id) => events.find((event) => event.id === id)).filter((event): event is SpotEvent => Boolean(event))
-  const continuityPressure = Math.min(1, events.length * 0.09 + strokes.length * 0.045 + packageEvents.length * 0.12)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const canvasElement: HTMLCanvasElement = canvas
 
-  function updatePlayer(id: string, update: Partial<PlayerToken>) {
-    setPlayers((current) => current.map((player) => (player.id === id ? { ...player, ...update } : player)))
-  }
+    const canvasContext = canvasElement.getContext("2d", { alpha: false })
+    if (!canvasContext) return
+    const context: CanvasRenderingContext2D = canvasContext
 
-  function nextId(prefix: string) {
-    nextIdRef.current += 1
-    return `${prefix}-${nextIdRef.current}`
-  }
+    const engine: Engine = {
+      activePointerId: null,
+      draggingPuckId: null,
+      drawing: false,
+      eraseCursor: null,
+      lastTapAt: 0,
+      lastTapPuckId: null,
+      moved: false,
+      puckSequence: initialPucks.length,
+      pucks: clonePucks(initialPucks),
+      rafId: 0,
+      rect: null,
+      strokeSequence: 0,
+      strokes: [],
+      tool: "pencil",
+      workingStroke: null,
+    }
+    engineRef.current = engine
 
-  function movePlayer(id: string, info: PanInfo) {
-    const point = pointFromPage(info.point.x, info.point.y)
+    function resize() {
+      const rect = canvasElement.getBoundingClientRect()
+      const dpr = Math.max(1, window.devicePixelRatio || 1)
+      engine.rect = rect
+      canvasElement.width = Math.round(rect.width * dpr)
+      canvasElement.height = Math.round(rect.height * dpr)
+      context.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    function frame() {
+      updatePhysics(engine)
+      render(context, engine, canvasElement)
+      engine.rafId = window.requestAnimationFrame(frame)
+    }
+
+    const observer = new ResizeObserver(resize)
+    observer.observe(canvasElement)
+    resize()
+    frame()
+
+    return () => {
+      observer.disconnect()
+      window.cancelAnimationFrame(engine.rafId)
+      engineRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (engineRef.current) {
+      engineRef.current.tool = tool
+    }
+  }, [tool])
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const engine = engineRef.current
+    if (!engine) return
+
+    const point = eventPoint(event, engine)
     if (!point) return
-    updatePlayer(id, point)
-  }
 
-  function startCourtAction(event: ReactPointerEvent<SVGSVGElement>) {
-    const point = pointFromEvent(event)
-    if (!point) return
+    const puck = findPuckAt(engine, point)
+    engine.activePointerId = event.pointerId
+    engine.moved = false
+    setEditTarget(null)
+    event.currentTarget.setPointerCapture(event.pointerId)
 
-    if (tool === "draw") {
-      event.currentTarget.setPointerCapture(event.pointerId)
-      setDraftStroke({ id: nextId("stroke"), points: [point] })
+    if (puck) {
+      const now = event.timeStamp
+      if (engine.lastTapPuckId === puck.id && now - engine.lastTapAt < 320) {
+        setEditTarget({
+          id: puck.id,
+          name: puck.name,
+          number: puck.number,
+          role: puck.role,
+          x: puck.x,
+          y: puck.y,
+        })
+      }
+
+      engine.lastTapAt = now
+      engine.lastTapPuckId = puck.id
+      engine.draggingPuckId = puck.id
+      puck.targetX = point.x
+      puck.targetY = point.y
       return
     }
 
-    if (tool === "erase") {
-      eraseNear(point)
+    if (engine.tool === "eraser") {
+      engine.eraseCursor = point
+      eraseAt(engine, point)
       return
     }
 
-    if (tool === "spot") {
-      setPendingSpot(point)
+    engine.drawing = true
+    engine.workingStroke = {
+      id: `stroke-${engine.strokeSequence + 1}`,
+      points: [point],
     }
   }
 
-  function moveCourtAction(event: ReactPointerEvent<SVGSVGElement>) {
-    const point = pointFromEvent(event)
+  function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const engine = engineRef.current
+    if (!engine || engine.activePointerId !== event.pointerId) return
+
+    const point = eventPoint(event, engine)
     if (!point) return
 
-    if (tool === "draw" && draftStroke) {
-      setDraftStroke((current) => (current ? { ...current, points: [...current.points, point] } : current))
+    engine.moved = true
+
+    if (engine.draggingPuckId) {
+      const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
+      if (puck) {
+        puck.targetX = point.x
+        puck.targetY = point.y
+      }
       return
     }
 
-    if (tool === "erase") {
-      eraseNear(point)
+    if (engine.tool === "eraser") {
+      engine.eraseCursor = point
+      eraseAt(engine, point)
+      return
+    }
+
+    if (engine.drawing && engine.workingStroke) {
+      const previous = engine.workingStroke.points.at(-1)
+      if (!previous || distance(previous, point) > 0.003) {
+        engine.workingStroke.points.push(point)
+      }
     }
   }
 
-  function finishCourtAction(event: ReactPointerEvent<SVGSVGElement>) {
-    if (tool !== "draw" || !draftStroke) return
+  function handlePointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const engine = engineRef.current
+    if (!engine || engine.activePointerId !== event.pointerId) return
 
+    const point = eventPoint(event, engine)
     event.currentTarget.releasePointerCapture(event.pointerId)
-    if (draftStroke.points.length > 1) {
-      setStrokes((current) => [...current, draftStroke].slice(-18))
-    }
-    setDraftStroke(null)
-  }
 
-  function addResult(result: ResultType) {
-    if (!pendingSpot || !selectedPlayer) return
-
-    const nextEvent: SpotEvent = {
-      ...pendingSpot,
-      id: nextId("event"),
-      playerId: selectedPlayer.id,
-      result,
-      timestamp: `${String(events.length + 1).padStart(2, "0")}`,
+    if (engine.drawing && engine.workingStroke) {
+      if (engine.workingStroke.points.length > 2) {
+        engine.strokeSequence += 1
+        engine.strokes.push(engine.workingStroke)
+      }
+      engine.workingStroke = null
     }
 
-    setEvents((current) => [...current, nextEvent].slice(-24))
-    setPackageEventIds((current) => [...current, nextEvent.id])
-    setPendingSpot(null)
-    setTool("move")
-  }
-
-  function togglePackageEvent(id: string) {
-    setPackageEventIds((current) => (current.includes(id) ? current.filter((eventId) => eventId !== id) : [...current, id]))
-  }
-
-  function eraseNear(point: CourtPoint) {
-    setStrokes((current) =>
-      current.filter((stroke) => {
-        const nearest = stroke.points.some((strokePoint) => distance(strokePoint, point) < 4.8)
-        return !nearest
-      }),
-    )
-  }
-
-  function pointFromEvent(event: ReactPointerEvent<SVGSVGElement>) {
-    return pointFromPage(event.clientX, event.clientY)
-  }
-
-  function pointFromPage(clientX: number, clientY: number): CourtPoint | null {
-    const rect = courtRef.current?.getBoundingClientRect()
-    if (!rect) return null
-
-    return {
-      x: clamp(((clientX - rect.left) / rect.width) * 100, 3, 97),
-      y: clamp(((clientY - rect.top) / rect.height) * 100, 4, 96),
+    if (!engine.moved && !engine.draggingPuckId && engine.tool === "pencil" && point) {
+      engine.puckSequence += 1
+      engine.pucks.push(
+        makePuck(`p${engine.puckSequence}`, `P${engine.puckSequence}`, "", "Player", nextPuckState(engine.puckSequence), point.x, point.y),
+      )
     }
+
+    engine.activePointerId = null
+    engine.draggingPuckId = null
+    engine.drawing = false
+    engine.eraseCursor = null
+  }
+
+  function undo() {
+    const engine = engineRef.current
+    if (!engine) return
+
+    if (engine.strokes.length > 0) {
+      engine.strokes.pop()
+      return
+    }
+
+    if (engine.pucks.length > 0) {
+      engine.pucks.pop()
+    }
+  }
+
+  function clear() {
+    const engine = engineRef.current
+    if (!engine) return
+
+    engine.strokes = []
+    engine.workingStroke = null
+  }
+
+  function saveEdit() {
+    const engine = engineRef.current
+    if (!engine || !editTarget) return
+
+    const puck = engine.pucks.find((item) => item.id === editTarget.id)
+    if (puck) {
+      puck.name = editTarget.name
+      puck.number = editTarget.number
+      puck.role = editTarget.role
+    }
+    setEditTarget(null)
   }
 
   return (
-    <main className="fixed inset-0 isolate flex h-dvh flex-col overflow-hidden bg-[#fbf8ef] text-black selection:bg-black/10">
-      <SurfaceMemory pressure={continuityPressure} />
+    <main className="fixed inset-0 isolate overflow-hidden bg-[#050505] text-white selection:bg-white/10">
+      <canvas
+        aria-label="Axis tactical canvas"
+        className="absolute inset-0 h-full w-full touch-none"
+        onPointerCancel={handlePointerUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        ref={canvasRef}
+      />
 
-      <header className="relative z-20 flex min-h-16 items-center justify-between px-4 pt-[max(0.9rem,env(safe-area-inset-top))] md:px-8">
-        <div className="flex items-center gap-3">
-          <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-black text-[0.68rem] font-black tracking-[-0.04em]">A</span>
-          <div className="grid">
-            <span className="text-[0.64rem] font-black uppercase tracking-[0.2em] text-black/70">Axis Board</span>
-            <span className="text-xs font-medium text-black/42">live coaching surface</span>
-          </div>
-        </div>
-        <TacticalTicker items={tickerItems} />
-      </header>
-
-      <section className="relative z-10 grid min-h-0 flex-1 place-items-center px-3 py-2 md:px-7">
-        <div ref={courtRef} className="relative aspect-[1.72/1] w-full max-w-6xl overflow-hidden rounded-[1.3rem] border-[2.5px] border-black bg-[#fffdf7] shadow-[0_22px_64px_rgba(62,48,24,0.14),inset_0_1px_0_rgba(255,255,255,0.92)]">
-          <CourtGeometry pressure={continuityPressure} />
-          <DrawingSurface
-            draftStroke={draftStroke}
-            events={events}
-            pendingSpot={pendingSpot}
-            players={players}
-            strokes={strokes}
-            tool={tool}
-            onPointerDown={startCourtAction}
-            onPointerMove={moveCourtAction}
-            onPointerUp={finishCourtAction}
-          />
-
-          {players.map((player) => (
-            <PlayerMagnet
-              key={player.id}
-              player={player}
-              selected={player.id === selectedPlayerId}
-              onDragEnd={(info) => movePlayer(player.id, info)}
-              onSelect={() => {
-                setSelectedPlayerId(player.id)
-                setTool("move")
-              }}
-              onUpdate={(update) => updatePlayer(player.id, update)}
-            />
-          ))}
-
-          <ResultPicker pendingSpot={pendingSpot} player={selectedPlayer} onCancel={() => setPendingSpot(null)} onResult={addResult} />
-        </div>
-      </section>
-
-      <section className="relative z-20 px-3 pb-[max(0.8rem,env(safe-area-inset-bottom))] md:px-7">
-        <BoardDock
-          events={events}
-          packageEventIds={packageEventIds}
-          packageEvents={packageEvents}
-          packageMode={packageMode}
-          selectedPlayer={selectedPlayer}
-          setPackageMode={setPackageMode}
-          setTool={setTool}
-          tool={tool}
-          togglePackageEvent={togglePackageEvent}
-          wipe={() => {
-            setDraftStroke(null)
-            setStrokes([])
+      {editTarget ? (
+        <div
+          className="absolute z-20 grid w-48 gap-2 rounded-2xl border border-white/10 bg-black/54 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
+          style={{
+            left: `${clamp(editTarget.x, 0.16, 0.84) * 100}%`,
+            top: `${clamp(editTarget.y, 0.18, 0.78) * 100}%`,
+            transform: "translate(-50%, -50%)",
           }}
-        />
-      </section>
+        >
+          <input
+            aria-label="Puck name"
+            className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-semibold text-white outline-none"
+            onChange={(event) => setEditTarget((current) => (current ? { ...current, name: event.target.value } : current))}
+            value={editTarget.name}
+          />
+          <div className="grid grid-cols-[0.7fr_1fr] gap-2">
+            <input
+              aria-label="Puck number"
+              className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-semibold text-white outline-none"
+              onChange={(event) => setEditTarget((current) => (current ? { ...current, number: event.target.value } : current))}
+              value={editTarget.number}
+            />
+            <input
+              aria-label="Puck role"
+              className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-semibold text-white outline-none"
+              onChange={(event) => setEditTarget((current) => (current ? { ...current, role: event.target.value } : current))}
+              value={editTarget.role}
+            />
+          </div>
+          <button className="rounded-xl bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-black" onClick={saveEdit} type="button">
+            Done
+          </button>
+        </div>
+      ) : null}
+
+      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/10 bg-white/[0.065] p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
+        <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
+          <Pencil aria-hidden="true" />
+        </ToolbarButton>
+        <ToolbarButton active={tool === "eraser"} label="Eraser" onClick={() => setTool("eraser")}>
+          <Eraser aria-hidden="true" />
+        </ToolbarButton>
+        <ToolbarButton label="Undo" onClick={undo}>
+          <RotateCcw aria-hidden="true" />
+        </ToolbarButton>
+        <ToolbarButton label="Clear" onClick={clear}>
+          <Trash2 aria-hidden="true" />
+        </ToolbarButton>
+      </nav>
     </main>
   )
 }
 
-function PlayerMagnet({
-  onDragEnd,
-  onSelect,
-  onUpdate,
-  player,
-  selected,
+function ToolbarButton({
+  active = false,
+  children,
+  label,
+  onClick,
 }: {
-  onDragEnd: (info: PanInfo) => void
-  onSelect: () => void
-  onUpdate: (update: Partial<PlayerToken>) => void
-  player: PlayerToken
-  selected: boolean
+  active?: boolean
+  children: React.ReactNode
+  label: string
+  onClick: () => void
 }) {
   return (
-    <motion.div
-      animate={{ opacity: selected ? 1 : 0.86, scale: selected ? 1.02 : 1 }}
-      className="absolute z-30 -translate-x-1/2 -translate-y-1/2"
-      drag
-      dragElastic={0.08}
-      dragMomentum={false}
-      onDragEnd={(_, info) => onDragEnd(info)}
-      onPointerDown={onSelect}
-      style={{ left: `${player.x}%`, top: `${player.y}%` }}
-      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+    <button
+      aria-label={label}
+      className={[
+        "grid h-11 w-11 place-items-center rounded-full border transition-colors",
+        active ? "border-white/18 bg-white/18 text-white" : "border-transparent bg-transparent text-white/48",
+      ].join(" ")}
+      onClick={onClick}
+      type="button"
     >
-      <button
-        className={[
-          "grid min-w-[5.5rem] touch-manipulation gap-1 rounded-[0.95rem] border bg-[#fffaf0] px-3 py-2 text-left shadow-[0_10px_22px_rgba(32,24,12,0.14),inset_0_1px_0_rgba(255,255,255,0.95)]",
-          selected ? "border-black ring-[3px] ring-black/10" : "border-black/42",
-        ].join(" ")}
-        type="button"
-      >
-        <span className="flex items-center gap-2">
-          {player.number ? <span className="text-[0.64rem] font-black text-black/48">#{player.number}</span> : null}
-          <input
-            aria-label={`${player.name} name`}
-            className="min-w-0 flex-1 bg-transparent text-sm font-black tracking-[-0.03em] text-black outline-none"
-            onChange={(event) => onUpdate({ name: event.target.value })}
-            onFocus={onSelect}
-            value={player.name}
-          />
-        </span>
-        <input
-          aria-label={`${player.name} role`}
-          className="w-full bg-transparent text-[0.62rem] font-semibold uppercase tracking-[0.1em] text-black/42 outline-none"
-          onChange={(event) => onUpdate({ role: event.target.value })}
-          onFocus={onSelect}
-          value={player.role}
-        />
-      </button>
-    </motion.div>
-  )
-}
-
-function DrawingSurface({
-  draftStroke,
-  events,
-  pendingSpot,
-  players,
-  strokes,
-  tool,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-}: {
-  draftStroke: ActionStroke | null
-  events: SpotEvent[]
-  pendingSpot: CourtPoint | null
-  players: PlayerToken[]
-  strokes: ActionStroke[]
-  tool: Tool
-  onPointerDown: (event: ReactPointerEvent<SVGSVGElement>) => void
-  onPointerMove: (event: ReactPointerEvent<SVGSVGElement>) => void
-  onPointerUp: (event: ReactPointerEvent<SVGSVGElement>) => void
-}) {
-  const visibleStrokes = draftStroke ? [...strokes, draftStroke] : strokes
-
-  return (
-    <svg
-      aria-label="Coaching drawing surface"
-      className="absolute inset-0 z-20 h-full w-full touch-none"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      viewBox="0 0 100 100"
-    >
-      {visibleStrokes.map((stroke) => (
-        <polyline fill="none" key={stroke.id} points={stroke.points.map((point) => `${point.x},${point.y}`).join(" ")} stroke="rgba(8,8,7,0.8)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="0.72" />
-      ))}
-      {events.map((event) => {
-        const player = players.find((item) => item.id === event.playerId)
-
-        return (
-          <g key={event.id}>
-            <circle cx={event.x} cy={event.y} fill={resultColor(event.result)} opacity="0.9" r="1.65" stroke="rgba(8,8,7,0.86)" strokeWidth="0.35" />
-            <text fill="rgba(8,8,7,0.62)" fontSize="2" fontWeight="800" textAnchor="middle" x={event.x} y={event.y + 4.4}>
-              {player?.number ? `#${player.number}` : player?.name.slice(0, 2)}
-            </text>
-          </g>
-        )
-      })}
-      {pendingSpot ? <circle cx={pendingSpot.x} cy={pendingSpot.y} fill="none" r="3.1" stroke="rgba(8,8,7,0.8)" strokeDasharray="1.2 1" strokeWidth="0.5" /> : null}
-      <rect fill="transparent" height="100" width="100" />
-      <title>{tool === "draw" ? "Draw action" : tool === "erase" ? "Erase action" : tool === "spot" ? "Place result spot" : "Move player tokens"}</title>
-    </svg>
-  )
-}
-
-function ResultPicker({
-  onCancel,
-  onResult,
-  pendingSpot,
-  player,
-}: {
-  onCancel: () => void
-  onResult: (result: ResultType) => void
-  pendingSpot: CourtPoint | null
-  player: PlayerToken
-}) {
-  if (!pendingSpot) return null
-
-  return (
-    <motion.div
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      className="absolute z-40 grid w-[min(19rem,62vw)] gap-2 rounded-[1rem] border border-black/18 bg-[#fffaf0]/94 p-3 shadow-[0_16px_40px_rgba(42,32,14,0.16)] backdrop-blur-xl"
-      initial={{ opacity: 0, scale: 0.98, y: 8 }}
-      style={{ left: `${clamp(pendingSpot.x, 16, 84)}%`, top: `${clamp(pendingSpot.y, 16, 78)}%`, transform: "translate(-50%, -50%)" }}
-      transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-black uppercase tracking-[0.14em] text-black/52">{player.name}</span>
-        <button className="text-xs font-semibold text-black/40" onClick={onCancel} type="button">
-          close
-        </button>
-      </div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {resultTypes.map((result) => (
-          <button className="rounded-full border border-black/16 bg-white px-2 py-2 text-[0.64rem] font-black uppercase tracking-[0.08em] text-black/72" key={result} onClick={() => onResult(result)} type="button">
-            {result}
-          </button>
-        ))}
-      </div>
-    </motion.div>
-  )
-}
-
-function BoardDock({
-  events,
-  packageEventIds,
-  packageEvents,
-  packageMode,
-  selectedPlayer,
-  setPackageMode,
-  setTool,
-  togglePackageEvent,
-  tool,
-  wipe,
-}: {
-  events: SpotEvent[]
-  packageEventIds: string[]
-  packageEvents: SpotEvent[]
-  packageMode: PackageMode
-  selectedPlayer: PlayerToken
-  setPackageMode: (mode: PackageMode) => void
-  setTool: (tool: Tool) => void
-  togglePackageEvent: (id: string) => void
-  tool: Tool
-  wipe: () => void
-}) {
-  return (
-    <div className="mx-auto grid max-w-6xl gap-3 rounded-[1.2rem] border border-black/16 bg-[#fffdf7]/90 p-3 shadow-[0_12px_34px_rgba(72,56,31,0.08),inset_0_1px_0_rgba(255,255,255,0.86)] backdrop-blur-xl md:grid-cols-[auto_1fr] md:items-center">
-      <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <ToolButton active={tool === "move"} label="Move" onClick={() => setTool("move")} />
-        <ToolButton active={tool === "draw"} label="Draw" onClick={() => setTool("draw")} />
-        <ToolButton active={tool === "erase"} label="Erase" onClick={() => setTool("erase")} />
-        <ToolButton active={tool === "spot"} label="Spot" onClick={() => setTool("spot")} />
-        <button className="rounded-full border border-black/14 px-3 py-2 text-[0.62rem] font-black uppercase tracking-[0.1em] text-black/42" onClick={wipe} type="button">
-          Wipe
-        </button>
-      </div>
-
-      <div className="grid gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[0.58rem] font-black uppercase tracking-[0.16em] text-black/42">{selectedPlayer.name} package</span>
-          <div className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {packageModes.map((mode) => (
-              <button className={mode === packageMode ? packageModeButtonClass(true) : packageModeButtonClass(false)} key={mode} onClick={() => setPackageMode(mode)} type="button">
-                {mode}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="relative min-h-11 overflow-hidden rounded-[0.85rem] border border-black/10 bg-black/[0.035] px-2 py-2">
-          <div className="absolute inset-y-0 left-0 bg-black/[0.055]" style={{ width: `${Math.min(100, Math.max(8, packageEvents.length * 20))}%` }} />
-          <div className="relative flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {events.length === 0 ? <span className="px-2 text-xs font-semibold text-black/42">Use Spot to capture makes, misses, turnovers, assists, and late help.</span> : null}
-            {events.map((event) => (
-              <button
-                className={[
-                  "shrink-0 rounded-full border px-3 py-1.5 text-[0.64rem] font-black uppercase tracking-[0.08em]",
-                  packageEventIds.includes(event.id) ? "border-black bg-black text-[#fff8e9]" : "border-black/16 bg-[#fffaf0] text-black/56",
-                ].join(" ")}
-                key={event.id}
-                onClick={() => togglePackageEvent(event.id)}
-                type="button"
-              >
-                {event.result}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ToolButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button className={active ? activeToolClass() : inactiveToolClass()} onClick={onClick} type="button">
-      {label}
+      <span className="[&_svg]:h-4 [&_svg]:w-4 [&_svg]:stroke-[1.8]">{children}</span>
     </button>
   )
 }
 
-function CourtGeometry({ pressure }: { pressure: number }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 z-0">
-      <svg aria-hidden="true" className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 1000 580">
-        <g fill="none" stroke="rgba(8,8,7,0.94)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="6.5">
-          <rect height="532" rx="2" width="952" x="24" y="24" />
-          <path d="M500 24v532" />
-          <circle cx="500" cy="290" r="72" />
-          <rect height="200" width="190" x="24" y="190" />
-          <rect height="200" width="190" x="786" y="190" />
-          <circle cx="214" cy="290" r="70" />
-          <circle cx="786" cy="290" r="70" />
-          <path d="M24 86h116" />
-          <path d="M24 494h116" />
-          <path d="M140 86C316 125 316 455 140 494" />
-          <path d="M976 86H860" />
-          <path d="M976 494H860" />
-          <path d="M860 86C684 125 684 455 860 494" />
-          <path d="M80 252v76" />
-          <path d="M920 252v76" />
-          <circle cx="94" cy="290" r="14" />
-          <circle cx="906" cy="290" r="14" />
-          <path d="M118 260a34 34 0 0 1 0 60" />
-          <path d="M882 260a34 34 0 0 0 0 60" />
-        </g>
-        <motion.g animate={{ opacity: 0.16 + pressure * 0.16 }} fill="none" stroke="rgba(8,8,7,0.46)" strokeLinecap="round" strokeWidth="3" transition={{ duration: 0.7 }}>
-          <path d="M214 190v200" strokeDasharray="12 14" />
-          <path d="M786 190v200" strokeDasharray="12 14" />
-          <path d="M312 174C420 146 576 148 688 176" />
-          <path d="M312 406C428 438 574 436 688 404" />
-        </motion.g>
-      </svg>
-      <motion.div animate={{ opacity: 0.08 + pressure * 0.1 }} className="absolute inset-0 bg-[radial-gradient(circle_at_72%_38%,rgba(214,166,82,0.15),transparent_18%),radial-gradient(circle_at_40%_58%,rgba(8,8,7,0.05),transparent_20%)]" transition={{ duration: 0.7 }} />
-    </div>
-  )
+function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLCanvasElement) {
+  const rect = engine.rect
+  if (!rect) return
+
+  const width = rect.width
+  const height = rect.height
+  context.fillStyle = "#050505"
+  context.fillRect(0, 0, width, height)
+  drawAtmosphere(context, width, height, engine)
+  drawCourt(context, width, height)
+  drawStrokes(context, width, height, engine.strokes, false)
+  if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
+  drawPuckInfluence(context, width, height, engine.pucks)
+  drawPucks(context, width, height, engine.pucks)
+  if (engine.eraseCursor) drawEraser(context, width, height, engine.eraseCursor)
+
+  canvas.style.cursor = engine.tool === "eraser" ? "none" : "crosshair"
 }
 
-function TacticalTicker({ items }: { items: string[] }) {
-  return (
-    <div className="hidden max-w-[40vw] items-center gap-2 overflow-hidden rounded-full border border-black/12 bg-white/60 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] md:flex">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-black/70" />
-      <span className="truncate text-xs font-semibold text-black/56">{items[0]}</span>
-    </div>
-  )
+function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
+  const pressure = Math.min(1, engine.strokes.length * 0.025 + engine.pucks.length * 0.035)
+  const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
+  gradient.addColorStop(0, `rgba(255,255,255,${0.04 + pressure * 0.03})`)
+  gradient.addColorStop(0.55, "rgba(255,255,255,0.012)")
+  gradient.addColorStop(1, "rgba(0,0,0,0)")
+  context.fillStyle = gradient
+  context.fillRect(0, 0, width, height)
 }
 
-function SurfaceMemory({ pressure }: { pressure: number }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <motion.div
-        animate={{ opacity: 0.1 + pressure * 0.08, scale: [1, 1.01, 1] }}
-        className="absolute left-1/2 top-1/2 h-[84vmin] w-[84vmin] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(213,166,88,0.22),transparent_68%)] blur-2xl"
-        transition={{ duration: 13, ease: "easeInOut", repeat: Infinity }}
-      />
-    </div>
-  )
+function drawCourt(context: CanvasRenderingContext2D, width: number, height: number) {
+  const margin = Math.round(Math.min(width, height) * 0.065)
+  const x = margin
+  const y = margin
+  const courtWidth = width - margin * 2
+  const courtHeight = height - margin * 2
+  const centerX = x + courtWidth / 2
+  const centerY = y + courtHeight / 2
+  const line = Math.max(1, Math.round(Math.min(width, height) * 0.0016))
+
+  context.save()
+  context.strokeStyle = "rgba(255,255,255,0.08)"
+  context.lineWidth = line
+  context.lineCap = "round"
+  context.lineJoin = "round"
+  context.strokeRect(round(x), round(y), round(courtWidth), round(courtHeight))
+  linePath(context, [
+    [centerX, y],
+    [centerX, y + courtHeight],
+  ])
+  circle(context, centerX, centerY, courtHeight * 0.12)
+
+  const keyWidth = courtWidth * 0.16
+  const keyHeight = courtHeight * 0.36
+  context.strokeRect(round(x), round(centerY - keyHeight / 2), round(keyWidth), round(keyHeight))
+  context.strokeRect(round(x + courtWidth - keyWidth), round(centerY - keyHeight / 2), round(keyWidth), round(keyHeight))
+  circle(context, x + keyWidth, centerY, courtHeight * 0.12)
+  circle(context, x + courtWidth - keyWidth, centerY, courtHeight * 0.12)
+
+  const hoopInset = courtWidth * 0.075
+  linePath(context, [
+    [x + hoopInset * 0.68, centerY - courtHeight * 0.07],
+    [x + hoopInset * 0.68, centerY + courtHeight * 0.07],
+  ])
+  linePath(context, [
+    [x + courtWidth - hoopInset * 0.68, centerY - courtHeight * 0.07],
+    [x + courtWidth - hoopInset * 0.68, centerY + courtHeight * 0.07],
+  ])
+  circle(context, x + hoopInset, centerY, courtHeight * 0.025)
+  circle(context, x + courtWidth - hoopInset, centerY, courtHeight * 0.025)
+
+  context.strokeStyle = "rgba(255,255,255,0.04)"
+  context.lineWidth = Math.max(1, line * 0.8)
+  arc(context, x + hoopInset, centerY, courtHeight * 0.41, -Math.PI / 2, Math.PI / 2)
+  arc(context, x + courtWidth - hoopInset, centerY, courtHeight * 0.41, Math.PI / 2, Math.PI * 1.5)
+  linePath(context, [
+    [x + courtWidth * 0.18, y + courtHeight * 0.22],
+    [x + courtWidth * 0.42, y + courtHeight * 0.34],
+    [x + courtWidth * 0.58, y + courtHeight * 0.34],
+    [x + courtWidth * 0.82, y + courtHeight * 0.22],
+  ])
+  linePath(context, [
+    [x + courtWidth * 0.18, y + courtHeight * 0.78],
+    [x + courtWidth * 0.42, y + courtHeight * 0.66],
+    [x + courtWidth * 0.58, y + courtHeight * 0.66],
+    [x + courtWidth * 0.82, y + courtHeight * 0.78],
+  ])
+  context.restore()
 }
 
-function buildTicker(events: SpotEvent[], players: PlayerToken[]) {
-  const latest = events.at(-1)
-  if (!latest) return baselineTicker
+function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], active: boolean) {
+  context.save()
+  context.lineCap = "round"
+  context.lineJoin = "round"
+  context.strokeStyle = active ? "rgba(255,255,255,0.82)" : "rgba(255,255,255,0.66)"
 
-  const player = players.find((item) => item.id === latest.playerId)
-  const name = player?.name ?? "Player"
-  const resultLanguage: Record<ResultType, string> = {
-    assist: `${name} creating connected touches`,
-    collapse: `Paint collapse forming around ${name}`,
-    "help late": `Weak-side help arriving late`,
-    make: `${name} touch converting from this spot`,
-    miss: `${name} shot quality stored for review`,
-    turnover: `${name} pressure moment added to package`,
+  for (const stroke of strokes) {
+    if (stroke.points.length < 2) continue
+    context.beginPath()
+    const first = toPixels(stroke.points[0], width, height)
+    context.moveTo(first.x, first.y)
+    for (let index = 1; index < stroke.points.length - 1; index += 1) {
+      const source = stroke.points[index]
+      const current = toPixels(stroke.points[index], width, height)
+      const next = toPixels(stroke.points[index + 1], width, height)
+      const midX = (current.x + next.x) / 2
+      const midY = (current.y + next.y) / 2
+      context.lineWidth = Math.max(1.5, 4.2 * (0.46 + source.pressure * 0.54))
+      context.quadraticCurveTo(current.x, current.y, midX, midY)
+    }
+    context.stroke()
   }
-
-  return [resultLanguage[latest.result], ...baselineTicker]
+  context.restore()
 }
 
-function resultColor(result: ResultType) {
-  if (result === "make" || result === "assist") return "rgba(29,112,64,0.88)"
-  if (result === "miss" || result === "turnover" || result === "collapse") return "rgba(8,8,7,0.82)"
-  return "rgba(202,139,31,0.9)"
+function drawPuckInfluence(context: CanvasRenderingContext2D, width: number, height: number, pucks: Puck[]) {
+  context.save()
+  for (const puck of pucks) {
+    const point = toPixels(puck, width, height)
+    const radius = puckRadius(width, height) * stateScale(puck.state)
+    const pulse = (Math.sin(performance.now() / 850 + puck.x * 8) + 1) / 2
+    const gradient = context.createRadialGradient(point.x, point.y, radius * 0.4, point.x, point.y, radius * (1.9 + pulse * 0.3))
+    gradient.addColorStop(0, stateGlow(puck.state, 0.18))
+    gradient.addColorStop(1, stateGlow(puck.state, 0))
+    context.fillStyle = gradient
+    context.beginPath()
+    context.arc(point.x, point.y, radius * (2 + pulse * 0.18), 0, Math.PI * 2)
+    context.fill()
+  }
+  context.restore()
 }
 
-function distance(a: CourtPoint, b: CourtPoint) {
+function drawPucks(context: CanvasRenderingContext2D, width: number, height: number, pucks: Puck[]) {
+  context.save()
+  context.textAlign = "center"
+  context.textBaseline = "middle"
+
+  for (const puck of pucks) {
+    const point = toPixels(puck, width, height)
+    const radius = puckRadius(width, height) * stateScale(puck.state)
+    context.save()
+    context.globalAlpha = puck.state === "fatigue" ? 0.68 : 0.94
+    context.shadowBlur = 18
+    context.shadowColor = "rgba(0,0,0,0.34)"
+    context.fillStyle = puckFill(puck.state)
+    context.beginPath()
+    context.arc(point.x, point.y, radius, 0, Math.PI * 2)
+    context.fill()
+    context.shadowBlur = 0
+    context.strokeStyle = stateStroke(puck.state)
+    context.lineWidth = Math.max(1, radius * 0.055)
+    context.stroke()
+
+    if (puck.number) {
+      context.fillStyle = "rgba(255,255,255,0.92)"
+      context.font = `800 ${Math.round(radius * 0.52)}px ui-sans-serif, system-ui`
+      context.fillText(puck.number, point.x, point.y - radius * 0.12)
+      context.fillStyle = "rgba(255,255,255,0.46)"
+      context.font = `700 ${Math.round(radius * 0.19)}px ui-sans-serif, system-ui`
+      context.fillText(puck.role, point.x, point.y + radius * 0.36)
+    } else {
+      context.fillStyle = "rgba(255,255,255,0.9)"
+      context.font = `800 ${Math.round(radius * 0.28)}px ui-sans-serif, system-ui`
+      context.fillText(puck.name.slice(0, 5), point.x, point.y - radius * 0.04)
+      context.fillStyle = "rgba(255,255,255,0.46)"
+      context.font = `700 ${Math.round(radius * 0.18)}px ui-sans-serif, system-ui`
+      context.fillText(puck.role, point.x, point.y + radius * 0.32)
+    }
+    context.restore()
+  }
+  context.restore()
+}
+
+function drawEraser(context: CanvasRenderingContext2D, width: number, height: number, point: Point) {
+  const pixel = toPixels(point, width, height)
+  context.save()
+  context.strokeStyle = "rgba(255,255,255,0.34)"
+  context.lineWidth = 1
+  context.beginPath()
+  context.arc(pixel.x, pixel.y, Math.min(width, height) * 0.036, 0, Math.PI * 2)
+  context.stroke()
+  context.restore()
+}
+
+function updatePhysics(engine: Engine) {
+  const spring = 0.18
+  const damping = 0.76
+  const settle = 0.00006
+
+  for (const puck of engine.pucks) {
+    puck.vx += (puck.targetX - puck.x) * spring
+    puck.vy += (puck.targetY - puck.y) * spring
+    puck.vx *= damping
+    puck.vy *= damping
+    puck.x += puck.vx
+    puck.y += puck.vy
+    if (Math.abs(puck.vx) < settle) puck.vx = 0
+    if (Math.abs(puck.vy) < settle) puck.vy = 0
+    puck.x = clamp(puck.x, 0.04, 0.96)
+    puck.y = clamp(puck.y, 0.06, 0.94)
+    puck.targetX = clamp(puck.targetX, 0.04, 0.96)
+    puck.targetY = clamp(puck.targetY, 0.06, 0.94)
+  }
+}
+
+function eventPoint(event: ReactPointerEvent<HTMLCanvasElement>, engine: Engine): Point | null {
+  const rect = engine.rect
+  if (!rect) return null
+
+  return {
+    pressure: event.pressure || 0.5,
+    t: event.timeStamp,
+    x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+    y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+  }
+}
+
+function findPuckAt(engine: Engine, point: Point) {
+  const rect = engine.rect
+  if (!rect) return null
+
+  const radius = puckRadius(rect.width, rect.height) / Math.min(rect.width, rect.height)
+  for (let index = engine.pucks.length - 1; index >= 0; index -= 1) {
+    const puck = engine.pucks[index]
+    if (distance(puck, point) < radius * 1.45) return puck
+  }
+  return null
+}
+
+function eraseAt(engine: Engine, point: Point) {
+  const threshold = 0.035
+  engine.strokes = engine.strokes
+    .map((stroke) => ({
+      ...stroke,
+      points: stroke.points.filter((strokePoint) => distance(strokePoint, point) > threshold),
+    }))
+    .filter((stroke) => stroke.points.length > 1)
+}
+
+function makePuck(id: string, name: string, number: string, role: string, state: TacticalState, x: number, y: number): Puck {
+  return { id, name, number, role, state, targetX: x, targetY: y, vx: 0, vy: 0, x, y }
+}
+
+function clonePucks(pucks: Puck[]) {
+  return pucks.map((puck) => ({ ...puck }))
+}
+
+function nextPuckState(index: number): TacticalState {
+  const states: TacticalState[] = ["pressure", "advantage", "weakside", "hot", "fatigue"]
+  return states[index % states.length]
+}
+
+function toPixels(point: { x: number; y: number }, width: number, height: number) {
+  return {
+    x: point.x * width,
+    y: point.y * height,
+  }
+}
+
+function puckRadius(width: number, height: number) {
+  return Math.max(22, Math.min(width, height) * 0.045)
+}
+
+function linePath(context: CanvasRenderingContext2D, points: Array<[number, number]>) {
+  context.beginPath()
+  context.moveTo(round(points[0][0]), round(points[0][1]))
+  for (const point of points.slice(1)) {
+    context.lineTo(round(point[0]), round(point[1]))
+  }
+  context.stroke()
+}
+
+function circle(context: CanvasRenderingContext2D, x: number, y: number, radius: number) {
+  context.beginPath()
+  context.arc(round(x), round(y), round(radius), 0, Math.PI * 2)
+  context.stroke()
+}
+
+function arc(context: CanvasRenderingContext2D, x: number, y: number, radius: number, start: number, end: number) {
+  context.beginPath()
+  context.arc(round(x), round(y), round(radius), start, end)
+  context.stroke()
+}
+
+function round(value: number) {
+  return Math.round(value)
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
@@ -552,17 +662,33 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-function packageModeButtonClass(active: boolean) {
-  return [
-    "shrink-0 rounded-full border px-3 py-1.5 text-[0.6rem] font-black uppercase tracking-[0.1em] transition-colors",
-    active ? "border-black bg-black text-[#fff8e9]" : "border-black/14 bg-transparent text-black/46",
-  ].join(" ")
+function stateScale(state: TacticalState) {
+  if (state === "pressure") return 0.95
+  if (state === "fatigue") return 0.88
+  if (state === "hot") return 1.05
+  return 1
 }
 
-function activeToolClass() {
-  return "rounded-full border border-black bg-black px-3 py-2 text-[0.62rem] font-black uppercase tracking-[0.1em] text-[#fff8e9]"
+function puckFill(state: TacticalState) {
+  if (state === "pressure") return "rgba(92,38,34,0.82)"
+  if (state === "advantage") return "rgba(28,68,52,0.82)"
+  if (state === "fatigue") return "rgba(64,64,64,0.68)"
+  if (state === "weakside") return "rgba(121,86,38,0.78)"
+  return "rgba(126,76,31,0.86)"
 }
 
-function inactiveToolClass() {
-  return "rounded-full border border-black/14 bg-transparent px-3 py-2 text-[0.62rem] font-black uppercase tracking-[0.1em] text-black/48"
+function stateStroke(state: TacticalState) {
+  if (state === "pressure") return "rgba(255,148,132,0.38)"
+  if (state === "advantage") return "rgba(169,255,203,0.3)"
+  if (state === "fatigue") return "rgba(255,255,255,0.18)"
+  if (state === "weakside") return "rgba(255,206,122,0.26)"
+  return "rgba(255,184,92,0.35)"
+}
+
+function stateGlow(state: TacticalState, alpha: number) {
+  if (state === "pressure") return `rgba(199,54,42,${alpha})`
+  if (state === "advantage") return `rgba(87,194,128,${alpha * 0.72})`
+  if (state === "fatigue") return `rgba(255,255,255,${alpha * 0.34})`
+  if (state === "weakside") return `rgba(255,176,72,${alpha * 0.56})`
+  return `rgba(255,126,37,${alpha * 0.8})`
 }
