@@ -29,6 +29,19 @@ type Choreography = {
   to: Point
 }
 
+type Ball = {
+  carrierId: string | null
+  lastCarrierId: string | null
+  passedAt: number
+  targetX: number
+  targetY: number
+  trail: TrailPoint[]
+  vx: number
+  vy: number
+  x: number
+  y: number
+}
+
 type MemoryEvent =
   | {
       at: number
@@ -86,6 +99,8 @@ type Engine = {
   abstractReplayState: AbstractReplayState
   advantageFlash: TrailPoint | null
   conditions: ActiveConditions
+  ball: Ball
+  draggingBall: boolean
   draggingPuckId: string | null
   formationPulseAt: number
   lastAbstractReplayAt: number
@@ -111,6 +126,19 @@ const initialPucks: Puck[] = [
   makePuck("x4", "X", 0.24, 0.8),
   makePuck("x5", "X", 0.76, 0.8),
 ]
+
+const initialBall: Ball = {
+  carrierId: "o1",
+  lastCarrierId: "o1",
+  passedAt: -10000,
+  targetX: 0.5,
+  targetY: 0.24,
+  trail: [],
+  vx: 0,
+  vy: 0,
+  x: 0.5,
+  y: 0.24,
+}
 
 const spatialStates: SpatialState[] = [
   {
@@ -520,7 +548,9 @@ export function ContinuityPrototype() {
       abstractReplayFrames: [],
       abstractReplayState: createAbstractReplayState(),
       advantageFlash: null,
+      ball: cloneBall(initialBall),
       conditions: initialConditions,
+      draggingBall: false,
       draggingPuckId: null,
       formationPulseAt: -10000,
       lastAbstractReplayAt: 0,
@@ -576,6 +606,23 @@ export function ContinuityPrototype() {
     const point = eventPoint(event, engine)
     if (!point) return
 
+    if (findBallAt(engine, point)) {
+      engine.activePointerId = event.pointerId
+      engine.activePointerType = event.pointerType
+      engine.draggingBall = true
+      engine.moved = false
+      engine.touchStart = point
+      engine.ball.carrierId = null
+      engine.ball.targetX = point.x
+      engine.ball.targetY = point.y
+      engine.ball.x = point.x
+      engine.ball.y = point.y
+      engine.ball.vx = 0
+      engine.ball.vy = 0
+      event.currentTarget.setPointerCapture(event.pointerId)
+      return
+    }
+
     const puck = findPuckAt(engine, point)
     if (!puck) return
 
@@ -623,6 +670,18 @@ export function ContinuityPrototype() {
       return
     }
 
+    if (engine.draggingBall) {
+      const point = eventPoint(event, engine)
+      if (!point) return
+      engine.ball.carrierId = null
+      engine.ball.targetX = point.x
+      engine.ball.targetY = point.y
+      engine.ball.x = point.x
+      engine.ball.y = point.y
+      engine.ball.vx = 0
+      engine.ball.vy = 0
+      return
+    }
   }
 
   function handlePointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -636,11 +695,22 @@ export function ContinuityPrototype() {
       const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
       if (puck && distance(engine.touchStart, puck) > 0.015) {
         rememberMove(engine, puck, engine.touchStart, { pressure: 0.5, t: event.timeStamp, x: puck.baseX, y: puck.baseY })
+        if (engine.ball.carrierId === puck.id) {
+          passBallTo(engine, puck.id, event.timeStamp)
+        }
+      }
+    }
+
+    if (engine.draggingBall) {
+      const nearest = nearestPuck(engine.ball, engine.pucks, "O")
+      if (nearest && distance(engine.ball, nearest) < 0.18) {
+        passBallTo(engine, nearest.id, event.timeStamp)
       }
     }
 
     engine.activePointerId = null
     engine.activePointerType = null
+    engine.draggingBall = false
     engine.draggingPuckId = null
     engine.touchStart = null
   }
@@ -759,6 +829,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawLiveResponse(context, width, height, engine)
   drawPuckInfluence(context, width, height, engine.pucks)
   drawPucks(context, width, height, engine.pucks)
+  drawBall(context, width, height, engine.ball)
 
   canvas.style.cursor = "grab"
 }
@@ -917,13 +988,11 @@ function drawMovementIntent(context: CanvasRenderingContext2D, width: number, he
 function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
   const offense = engine.pucks.filter((puck) => puck.symbol === "O")
   const defense = engine.pucks.filter((puck) => puck.symbol === "X")
-  const offensiveCenter = averagePuck(engine.pucks, "O")
-  if (!offensiveCenter) return
-
-  const sideLoad = offensiveCenter.x - 0.5
+  const ball = engine.ball
+  const sideLoad = ball.x - 0.5
   const sidePressure = clamp(Math.abs(sideLoad) / 0.2, 0, 1)
   const rim = { x: 0.5, y: 0.78 }
-  const drive = offense.reduce((deepest, puck) => (puck.y > deepest.y ? puck : deepest), offense[0])
+  const drive = offense.reduce((deepest, puck) => (distance(puck, ball) < distance(deepest, ball) ? puck : deepest), offense[0])
   const driveDefender = drive ? nearestPuck(drive, defense, "X") : null
 
   context.save()
@@ -942,8 +1011,8 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
     context.fill()
 
     const weakside = offense
-      .filter((puck) => (sideLoad > 0 ? puck.x < offensiveCenter.x : puck.x > offensiveCenter.x))
-      .sort((a, b) => Math.abs(b.x - offensiveCenter.x) - Math.abs(a.x - offensiveCenter.x))[0]
+      .filter((puck) => (sideLoad > 0 ? puck.x < ball.x : puck.x > ball.x))
+      .sort((a, b) => Math.abs(b.x - ball.x) - Math.abs(a.x - ball.x))[0]
 
     if (weakside) {
       const start = toPixels(weakside, width, height)
@@ -985,6 +1054,7 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
   const offense = engine.pucks.filter((puck) => puck.symbol === "O")
   const defense = engine.pucks.filter((puck) => puck.symbol === "X")
   const rim = { x: 0.5, y: 0.78 }
+  const ball = engine.ball
   const drivingO = offense
     .map((puck) => ({ puck, speed: Math.hypot(puck.vx, puck.vy) }))
     .sort((a, b) => b.speed - a.speed)[0]
@@ -1017,6 +1087,20 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
       context.stroke()
       context.setLineDash([])
     }
+  }
+
+  const ballDepth = clamp((ball.y - 0.38) / 0.34, 0, 1)
+  if (ballDepth > 0.03) {
+    const point = toPixels(ball, width, height)
+    const radius = Math.min(width, height) * (0.1 + ballDepth * 0.12)
+    const collapse = context.createRadialGradient(point.x, point.y, radius * 0.12, point.x, point.y, radius)
+    collapse.addColorStop(0, `rgba(246,214,138,${0.045 * ballDepth})`)
+    collapse.addColorStop(0.6, `rgba(244,237,222,${0.015 * ballDepth})`)
+    collapse.addColorStop(1, "rgba(246,214,138,0)")
+    context.fillStyle = collapse
+    context.beginPath()
+    context.arc(point.x, point.y, radius, 0, Math.PI * 2)
+    context.fill()
   }
 
   const spacing = spacingStress(offense)
@@ -1094,6 +1178,59 @@ function drawPucks(context: CanvasRenderingContext2D, width: number, height: num
   context.restore()
 }
 
+function drawBall(context: CanvasRenderingContext2D, width: number, height: number, ball: Ball) {
+  const point = toPixels(ball, width, height)
+  const radius = Math.max(5.5, Math.min(width, height) * 0.0085)
+  const pulse = (Math.sin(performance.now() / 360) + 1) / 2
+  const passEnergy = clamp(1 - (performance.now() - ball.passedAt) / 520, 0, 1)
+
+  context.save()
+  context.lineCap = "round"
+  context.lineJoin = "round"
+
+  for (let index = 1; index < ball.trail.length; index += 1) {
+    const previous = ball.trail[index - 1]
+    const current = ball.trail[index]
+    const age = performance.now() - current.t
+    const alpha = clamp(1 - age / 620, 0, 1) * 0.18
+    if (alpha <= 0.004) continue
+
+    const start = toPixels(previous, width, height)
+    const end = toPixels(current, width, height)
+    context.strokeStyle = `rgba(246,214,138,${alpha})`
+    context.lineWidth = Math.max(1, radius * 0.34)
+    context.beginPath()
+    context.moveTo(start.x, start.y)
+    context.lineTo(end.x, end.y)
+    context.stroke()
+  }
+
+  const glowRadius = radius * (4.6 + pulse * 0.8 + passEnergy * 2.2)
+  const glow = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, glowRadius)
+  glow.addColorStop(0, `rgba(246,214,138,${0.2 + passEnergy * 0.12})`)
+  glow.addColorStop(0.46, `rgba(246,214,138,${0.05 + passEnergy * 0.04})`)
+  glow.addColorStop(1, "rgba(246,214,138,0)")
+  context.fillStyle = glow
+  context.beginPath()
+  context.arc(point.x, point.y, glowRadius, 0, Math.PI * 2)
+  context.fill()
+
+  context.shadowBlur = radius * (1.3 + passEnergy * 1.1)
+  context.shadowColor = "rgba(246,214,138,0.52)"
+  context.fillStyle = "rgba(246,214,138,0.96)"
+  context.beginPath()
+  context.arc(point.x, point.y, radius * (1 + passEnergy * 0.08), 0, Math.PI * 2)
+  context.fill()
+
+  context.shadowBlur = 0
+  context.fillStyle = "rgba(255,249,230,0.62)"
+  context.beginPath()
+  context.arc(point.x - radius * 0.28, point.y - radius * 0.32, radius * 0.24, 0, Math.PI * 2)
+  context.fill()
+
+  context.restore()
+}
+
 function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x: number, y: number, radius: number) {
   context.save()
   context.lineCap = "round"
@@ -1129,9 +1266,10 @@ function updatePhysics(engine: Engine) {
   const settle = 0.000045
 
   pruneTemporalMemory(engine)
+  updateChoreography(engine)
+  updateBall(engine)
   updateLiveResponse(engine)
   applyBasketballRelationships(engine)
-  updateChoreography(engine)
   updateContinuityEngine(engine)
 
   for (const puck of engine.pucks) {
@@ -1180,6 +1318,43 @@ function updateChoreography(engine: Engine) {
 
     if (progress >= 1) {
       puck.choreography = null
+    }
+  }
+}
+
+function updateBall(engine: Engine) {
+  const previousX = engine.ball.x
+  const previousY = engine.ball.y
+
+  if (engine.ball.carrierId && !engine.draggingBall) {
+    const carrier = engine.pucks.find((puck) => puck.id === engine.ball.carrierId)
+    if (carrier) {
+      engine.ball.targetX = carrier.x
+      engine.ball.targetY = carrier.y - 0.006
+    }
+  }
+
+  const pullX = engine.ball.targetX - engine.ball.x
+  const pullY = engine.ball.targetY - engine.ball.y
+  const pull = Math.hypot(pullX, pullY)
+  const passEnergy = clamp(1 - (performance.now() - engine.ball.passedAt) / 520, 0, 1) * 0.04
+  const spring = 0.23 + clamp(pull / 0.28, 0, 1) * 0.08 + passEnergy
+  const damping = 0.74
+
+  engine.ball.vx += pullX * spring
+  engine.ball.vy += pullY * spring
+  engine.ball.vx *= damping
+  engine.ball.vy *= damping
+  engine.ball.x = clamp(engine.ball.x + engine.ball.vx, 0.04, 0.96)
+  engine.ball.y = clamp(engine.ball.y + engine.ball.vy, 0.06, 0.94)
+
+  const moved = Math.hypot(engine.ball.x - previousX, engine.ball.y - previousY)
+  if (moved > 0.0012) {
+    const last = engine.ball.trail.at(-1)
+    const now = performance.now()
+    if (!last || now - last.t > 24 || distance(last, engine.ball) > 0.01) {
+      engine.ball.trail.push({ t: now, x: engine.ball.x, y: engine.ball.y })
+      if (engine.ball.trail.length > 24) engine.ball.trail.shift()
     }
   }
 }
@@ -1426,6 +1601,7 @@ function possessionBranch(id: string, name: string, moves: Array<[string, number
 
 function applyPossessionBranch(engine: Engine, branch: PossessionBranch, at: number) {
   const now = performance.now()
+  const ballMove = branch.moves.find((move) => move.id.startsWith("o"))
 
   for (const move of branch.moves) {
     const puck = engine.pucks.find((item) => item.id === move.id)
@@ -1444,6 +1620,10 @@ function applyPossessionBranch(engine: Engine, branch: PossessionBranch, at: num
     puck.vx *= 0.18
     puck.vy *= 0.18
     rememberMove(engine, puck, { pressure: 0.5, t: at, x: puck.x, y: puck.y }, to)
+  }
+
+  if (ballMove) {
+    passBallTo(engine, ballMove.id, at)
   }
 
   engine.advantageFlash = { t: now, x: branch.moves[0]?.x ?? 0.5, y: branch.moves[0]?.y ?? 0.5 }
@@ -1524,6 +1704,8 @@ function updateContinuityEngine(engine: Engine) {
     reinforceContinuityCell(engine, puck.x, puck.y, puck.symbol, pressure)
   }
 
+  reinforceContinuityCell(engine, engine.ball.x, engine.ball.y, "pressure", 0.52 + clamp(Math.hypot(engine.ball.vx, engine.ball.vy) / 0.018, 0, 1) * 0.28)
+
   const offense = engine.pucks.filter((puck) => puck.symbol === "O")
   const defense = engine.pucks.filter((puck) => puck.symbol === "X")
   for (const puck of offense) {
@@ -1572,7 +1754,7 @@ function reinforceContinuityCell(engine: Engine, x: number, y: number, symbol: C
 
 function applyBasketballRelationships(engine: Engine) {
   const activeMovement = strongestMovement(engine.pucks)
-  const ballSide = averagePuck(engine.pucks, "O")
+  const ballSide = engine.ball
   const sideLoad = ballSide ? ballSide.x - 0.5 : 0
   const sidePressure = clamp(Math.abs(sideLoad) / 0.2, 0, 1)
   const rim = { x: 0.5, y: 0.78 }
@@ -1598,6 +1780,11 @@ function applyBasketballRelationships(engine: Engine) {
         desiredX += (ballSide.x - 0.5) * 0.035 * defense.shell
         desiredY += (ballSide.y - puck.baseY) * 0.025 * defense.shell
       }
+
+      const ballGap = distance(puck, engine.ball)
+      const ballGravity = clamp(1 - ballGap / 0.44, 0, 1) * defense.help
+      desiredX += (engine.ball.x - puck.baseX) * 0.042 * ballGravity
+      desiredY += (engine.ball.y - puck.baseY) * 0.036 * ballGravity
 
       if (sidePressure > 0.05 && sideLoad !== 0) {
         const weakside = sideLoad > 0 ? puck.baseX < 0.5 : puck.baseX > 0.5
@@ -1635,8 +1822,11 @@ function applyBasketballRelationships(engine: Engine) {
       const nearestX = nearestPuck(puck, engine.pucks, "X")
       if (nearestX) {
         const pressure = clamp(1 - distance(puck, nearestX) / 0.22, 0, 1)
+        const ballPressure = clamp(1 - distance(puck, engine.ball) / 0.28, 0, 1)
         desiredX += (puck.x - nearestX.x) * 0.055 * pressure * offense.space
         desiredY += (puck.y - nearestX.y) * 0.055 * pressure * offense.space
+        desiredX += (puck.x - engine.ball.x) * 0.024 * ballPressure * offense.space
+        desiredY += (puck.y - engine.ball.y) * 0.018 * ballPressure * offense.space
       }
 
       if (driveSpeed > 0.004 && puck.vy > 0.001) {
@@ -1708,7 +1898,7 @@ function tempoProfile(condition = "Controlled") {
   return { damping: 1, spring: 1 }
 }
 
-function nearestPuck(origin: Puck, pucks: Puck[], symbol: PuckSymbol) {
+function nearestPuck(origin: { id?: string; x: number; y: number }, pucks: Puck[], symbol: PuckSymbol) {
   let nearest: Puck | null = null
   let nearestDistance = Number.POSITIVE_INFINITY
 
@@ -1755,16 +1945,6 @@ function idPhase(id: string) {
   return value * 0.17
 }
 
-function averagePuck(pucks: Puck[], symbol: PuckSymbol) {
-  const matching = pucks.filter((puck) => puck.symbol === symbol)
-  if (matching.length === 0) return null
-
-  return {
-    x: matching.reduce((sum, puck) => sum + puck.x, 0) / matching.length,
-    y: matching.reduce((sum, puck) => sum + puck.y, 0) / matching.length,
-  }
-}
-
 function spacingStress(pucks: Puck[]) {
   if (pucks.length < 2) return 0
 
@@ -1802,6 +1982,27 @@ function findPuckAt(engine: Engine, point: Point) {
   return null
 }
 
+function findBallAt(engine: Engine, point: Point) {
+  const rect = engine.rect
+  if (!rect) return false
+
+  const radius = ballHitRadius(rect.width, rect.height) / Math.min(rect.width, rect.height)
+  return distance(engine.ball, point) < radius
+}
+
+function passBallTo(engine: Engine, carrierId: string, at: number) {
+  const carrier = engine.pucks.find((puck) => puck.id === carrierId && puck.symbol === "O")
+  if (!carrier) return
+
+  engine.ball.lastCarrierId = engine.ball.carrierId
+  engine.ball.carrierId = carrier.id
+  engine.ball.passedAt = performance.now()
+  engine.ball.targetX = carrier.x
+  engine.ball.targetY = carrier.y - 0.006
+  engine.ball.trail.push({ t: at, x: engine.ball.x, y: engine.ball.y })
+  if (engine.ball.trail.length > 24) engine.ball.trail.shift()
+}
+
 function rememberMove(engine: Engine, puck: Puck, from: Point, to: Point) {
   appendMemory(engine, {
     at: performance.now(),
@@ -1829,6 +2030,10 @@ function clonePucks(pucks: Puck[]) {
   return pucks.map((puck) => ({ ...puck, choreography: null, trail: [] }))
 }
 
+function cloneBall(ball: Ball) {
+  return { ...ball, trail: [] }
+}
+
 function toPixels(point: { x: number; y: number }, width: number, height: number) {
   return {
     x: point.x * width,
@@ -1838,6 +2043,10 @@ function toPixels(point: { x: number; y: number }, width: number, height: number
 
 function puckRadius(width: number, height: number) {
   return Math.max(19, Math.min(width, height) * 0.0385)
+}
+
+function ballHitRadius(width: number, height: number) {
+  return Math.max(28, Math.min(width, height) * 0.05)
 }
 
 function linePath(context: CanvasRenderingContext2D, points: Array<[number, number]>) {
