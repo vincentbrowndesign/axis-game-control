@@ -22,10 +22,27 @@ export type AbstractReplayEntity = {
   y: number
 }
 
+export type AbstractReplayRelationship = {
+  distance: number
+  fromId: string
+  kind: "pressure" | "recovery" | "spacing"
+  pressure: number
+  toId: string
+}
+
+export type AbstractReplaySpacing = {
+  averageSpeed: number
+  compression: number
+  defenseWidth: number
+  offenseWidth: number
+}
+
 export type AbstractReplayFrame = {
   at: number
   entities: AbstractReplayEntity[]
+  relationships: AbstractReplayRelationship[]
   source: "camera" | "surface"
+  spacing: AbstractReplaySpacing
 }
 
 export type AbstractReplayState = {
@@ -98,14 +115,91 @@ export function updateAbstractReplayFromDetections(state: AbstractReplayState, d
 }
 
 export function buildAbstractReplayFrame(state: AbstractReplayState, at: number, source: AbstractReplayFrame["source"]): AbstractReplayFrame {
+  const entities = state.tracks
+    .slice()
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 10)
+    .map((track) => ({ ...track }))
+
   return {
     at,
-    entities: state.tracks
-      .slice()
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 10)
-      .map((track) => ({ ...track })),
+    entities,
+    relationships: buildRelationships(entities),
     source,
+    spacing: buildSpacing(entities),
+  }
+}
+
+function buildRelationships(entities: AbstractReplayEntity[]) {
+  const relationships: AbstractReplayRelationship[] = []
+  const offense = entities.filter((entity) => entity.symbol === "O")
+  const defense = entities.filter((entity) => entity.symbol === "X")
+
+  for (const offensiveEntity of offense) {
+    const nearestDefender = nearestEntity(offensiveEntity, defense)
+    if (!nearestDefender) continue
+
+    const gap = distance(offensiveEntity, nearestDefender)
+    const pressure = clamp01((0.24 - gap) / 0.24)
+    if (pressure > 0.04) {
+      relationships.push({
+        distance: gap,
+        fromId: nearestDefender.id,
+        kind: "pressure",
+        pressure,
+        toId: offensiveEntity.id,
+      })
+    }
+  }
+
+  for (const defender of defense) {
+    const nearestOffense = nearestEntity(defender, offense)
+    if (!nearestOffense) continue
+
+    const recoveryPressure = clamp01(vectorMagnitude(nearestOffense) / 0.018) * clamp01((0.34 - distance(defender, nearestOffense)) / 0.34)
+    if (recoveryPressure > 0.05) {
+      relationships.push({
+        distance: distance(defender, nearestOffense),
+        fromId: defender.id,
+        kind: "recovery",
+        pressure: recoveryPressure,
+        toId: nearestOffense.id,
+      })
+    }
+  }
+
+  offense.forEach((entity, index) => {
+    for (let nextIndex = index + 1; nextIndex < offense.length; nextIndex += 1) {
+      const teammate = offense[nextIndex]
+      const gap = distance(entity, teammate)
+      const compression = clamp01((0.18 - gap) / 0.18)
+      if (compression > 0.03) {
+        relationships.push({
+          distance: gap,
+          fromId: entity.id,
+          kind: "spacing",
+          pressure: compression,
+          toId: teammate.id,
+        })
+      }
+    }
+  })
+
+  return relationships.sort((a, b) => b.pressure - a.pressure).slice(0, 18)
+}
+
+function buildSpacing(entities: AbstractReplayEntity[]): AbstractReplaySpacing {
+  const offense = entities.filter((entity) => entity.symbol === "O")
+  const defense = entities.filter((entity) => entity.symbol === "X")
+  const offenseWidth = horizontalWidth(offense)
+  const defenseWidth = horizontalWidth(defense)
+  const averageSpeed = entities.length === 0 ? 0 : entities.reduce((sum, entity) => sum + vectorMagnitude(entity), 0) / entities.length
+
+  return {
+    averageSpeed,
+    compression: clamp01((0.44 - offenseWidth) / 0.44),
+    defenseWidth,
+    offenseWidth,
   }
 }
 
@@ -140,8 +234,34 @@ function nearestTrack(tracks: AbstractReplayEntity[], detection: NormalizedDetec
   return nearest
 }
 
+function nearestEntity(origin: AbstractReplayEntity, entities: AbstractReplayEntity[]) {
+  let nearest: AbstractReplayEntity | null = null
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  for (const entity of entities) {
+    if (entity.id === origin.id) continue
+    const gap = distance(origin, entity)
+    if (gap < nearestDistance) {
+      nearest = entity
+      nearestDistance = gap
+    }
+  }
+
+  return nearest
+}
+
 function inferSymbolFromCourtPosition(detection: NormalizedDetection): AbstractReplaySymbol {
   return detection.y < 0.5 ? "O" : "X"
+}
+
+function horizontalWidth(entities: AbstractReplayEntity[]) {
+  if (entities.length < 2) return 0
+  const xs = entities.map((entity) => entity.x)
+  return Math.max(...xs) - Math.min(...xs)
+}
+
+function vectorMagnitude(entity: Pick<AbstractReplayEntity, "vx" | "vy">) {
+  return Math.hypot(entity.vx, entity.vy)
 }
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
