@@ -708,13 +708,13 @@ function drawPuckInfluence(context: CanvasRenderingContext2D, width: number, hei
     if (birth <= 0) continue
     const pulse = (Math.sin(performance.now() / 850 + puck.x * 8) + 1) / 2
     const catchLight = 1 + (1 - birth) * 0.45
-    const gradient = context.createRadialGradient(point.x, point.y, radius * 0.18, point.x, point.y, radius * (1.54 + pulse * 0.16 + (1 - birth) * 0.22))
-    gradient.addColorStop(0, symbolGlow(puck.symbol, 0.052 * catchLight))
-    gradient.addColorStop(0.52, symbolGlow(puck.symbol, 0.019 * catchLight))
+    const gradient = context.createRadialGradient(point.x, point.y, radius * 0.18, point.x, point.y, radius * (1.06 + pulse * 0.12 + (1 - birth) * 0.18))
+    gradient.addColorStop(0, symbolGlow(puck.symbol, 0.026 * catchLight))
+    gradient.addColorStop(0.62, symbolGlow(puck.symbol, 0.009 * catchLight))
     gradient.addColorStop(1, symbolGlow(puck.symbol, 0))
     context.fillStyle = gradient
     context.beginPath()
-    context.arc(point.x, point.y, radius * (1.68 + pulse * 0.08), 0, Math.PI * 2)
+    context.arc(point.x, point.y, radius * (1.16 + pulse * 0.04), 0, Math.PI * 2)
     context.fill()
   }
   context.restore()
@@ -722,30 +722,13 @@ function drawPuckInfluence(context: CanvasRenderingContext2D, width: number, hei
 
 function drawPucks(context: CanvasRenderingContext2D, width: number, height: number, pucks: Puck[]) {
   context.save()
-  context.textAlign = "center"
-  context.textBaseline = "middle"
 
   for (const puck of pucks) {
     const point = toPixels(puck, width, height)
     const birth = puckBirthProgress(puck)
     const radius = puckRadius(width, height) * (0.85 + birth * 0.15)
     context.save()
-    context.globalAlpha = 0.88 * birth
-    context.shadowBlur = 8 + (1 - birth) * 7
-    context.shadowColor = "rgba(0,0,0,0.24)"
-    const body = context.createRadialGradient(point.x - radius * 0.2, point.y - radius * 0.28, radius * 0.08, point.x, point.y, radius)
-    body.addColorStop(0, puckCoreFill(puck.symbol))
-    body.addColorStop(0.46, puckFill(puck.symbol))
-    body.addColorStop(1, puckEdgeFill(puck.symbol))
-    context.fillStyle = body
-    context.beginPath()
-    context.arc(point.x, point.y, radius, 0, Math.PI * 2)
-    context.fill()
-    context.shadowBlur = 0
-    context.strokeStyle = symbolStroke(puck.symbol)
-    context.lineWidth = Math.max(1, radius * 0.044)
-    context.stroke()
-
+    context.globalAlpha = birth
     drawSymbolMark(context, puck.symbol, point.x, point.y, radius)
     context.restore()
   }
@@ -756,17 +739,19 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
   context.save()
   context.lineCap = "round"
   context.lineJoin = "round"
+  context.shadowBlur = Math.max(5, radius * 0.18)
+  context.shadowColor = "rgba(8,8,7,0.14)"
 
   if (symbol === "O") {
-    context.strokeStyle = "rgba(20,18,15,0.68)"
-    context.lineWidth = Math.max(2, radius * 0.13)
+    context.strokeStyle = "rgba(8,8,7,0.72)"
+    context.lineWidth = Math.max(2.2, radius * 0.14)
     context.beginPath()
-    context.arc(x, y, radius * 0.38, 0, Math.PI * 2)
+    context.arc(x, y, radius * 0.48, 0, Math.PI * 2)
     context.stroke()
   } else {
-    context.strokeStyle = "rgba(238,235,226,0.74)"
-    context.lineWidth = Math.max(2, radius * 0.12)
-    const inset = radius * 0.33
+    context.strokeStyle = "rgba(8,8,7,0.68)"
+    context.lineWidth = Math.max(2.2, radius * 0.14)
+    const inset = radius * 0.44
     context.beginPath()
     context.moveTo(x - inset, y - inset)
     context.lineTo(x + inset, y + inset)
@@ -1179,29 +1164,9 @@ function easeOutCubic(value: number) {
   return 1 - (1 - value) ** 3
 }
 
-function puckFill(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(238,234,222,0.88)"
-  return "rgba(42,42,41,0.9)"
-}
-
-function puckCoreFill(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(255,252,241,0.92)"
-  return "rgba(88,88,86,0.86)"
-}
-
-function puckEdgeFill(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(176,167,146,0.64)"
-  return "rgba(18,18,18,0.88)"
-}
-
-function symbolStroke(symbol: PuckSymbol) {
-  if (symbol === "O") return "rgba(0,0,0,0.14)"
-  return "rgba(0,0,0,0.24)"
-}
-
 function symbolGlow(symbol: PuckSymbol, alpha: number) {
-  if (symbol === "O") return `rgba(48,42,31,${alpha * 0.46})`
-  return `rgba(0,0,0,${alpha * 0.58})`
+  if (symbol === "O") return `rgba(8,8,7,${alpha * 0.62})`
+  return `rgba(8,8,7,${alpha * 0.52})`
 }
 
 function continuityColor(symbol: ContinuityCell["symbol"], alpha: number) {
