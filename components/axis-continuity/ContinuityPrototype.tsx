@@ -29,8 +29,9 @@ type TrailPoint = {
 type Choreography = {
   delay: number
   duration: number
-  path: Point[]
+  from: Point
   startedAt: number
+  to: Point
 }
 
 type MemoryEvent =
@@ -95,6 +96,7 @@ type Engine = {
   eraseCursor: Point | null
   moved: boolean
   penActiveUntil: number
+  pendingMovementStrokeId: string | null
   pucks: Puck[]
   rafId: number
   rect: DOMRect | null
@@ -237,6 +239,7 @@ export function ContinuityPrototype() {
       eraseCursor: null,
       moved: false,
       penActiveUntil: 0,
+      pendingMovementStrokeId: null,
       pucks: clonePucks(initialPucks),
       rafId: 0,
       rect: null,
@@ -299,6 +302,11 @@ export function ContinuityPrototype() {
     if (!point) return
 
     const puck = findPuckAt(engine, point)
+    if (event.pointerType === "pen" && puck && assignPendingMovement(engine, puck)) {
+      return
+    }
+    if (event.pointerType === "pen" && puck) return
+
     engine.activePointerId = event.pointerId
     engine.activePointerType = event.pointerType
     engine.moved = false
@@ -375,10 +383,13 @@ export function ContinuityPrototype() {
 
     if (engine.drawing && engine.workingStroke) {
       if (engine.workingStroke.points.length > 2) {
+        if (engine.pendingMovementStrokeId) {
+          engine.strokes = engine.strokes.filter((stroke) => stroke.id !== engine.pendingMovementStrokeId)
+        }
         engine.strokeSequence += 1
         engine.strokes.push(engine.workingStroke)
+        engine.pendingMovementStrokeId = engine.workingStroke.id
         rememberStroke(engine, engine.workingStroke)
-        cueChoreographyFromStroke(engine, engine.workingStroke)
       }
       engine.workingStroke = null
     }
@@ -403,7 +414,10 @@ export function ContinuityPrototype() {
     if (!engine) return
 
     if (engine.strokes.length > 0) {
-      engine.strokes.pop()
+      const stroke = engine.strokes.pop()
+      if (stroke?.id === engine.pendingMovementStrokeId) {
+        engine.pendingMovementStrokeId = null
+      }
       rememberSystemEvent(engine, "undo")
     }
   }
@@ -414,6 +428,7 @@ export function ContinuityPrototype() {
 
     engine.strokes = []
     engine.workingStroke = null
+    engine.pendingMovementStrokeId = null
     rememberSystemEvent(engine, "clear")
   }
 
@@ -953,13 +968,12 @@ function updateChoreography(engine: Engine) {
     if (elapsed < 0) continue
 
     const progress = clamp(elapsed / choreography.duration, 0, 1)
-    const point = pointOnPath(choreography.path, easeInOutCubic(progress))
-    if (!point) continue
+    const eased = easeInOutCubic(progress)
 
-    puck.baseX = point.x
-    puck.baseY = point.y
-    puck.targetX = point.x
-    puck.targetY = point.y
+    puck.baseX = choreography.from.x + (choreography.to.x - choreography.from.x) * eased
+    puck.baseY = choreography.from.y + (choreography.to.y - choreography.from.y) * eased
+    puck.targetX = puck.baseX
+    puck.targetY = puck.baseY
 
     if (progress >= 1) {
       puck.choreography = null
@@ -1008,39 +1022,37 @@ function captureTrailPoint(puck: Puck, previousX: number, previousY: number) {
   }
 }
 
-function cueChoreographyFromStroke(engine: Engine, stroke: Stroke) {
-  if (stroke.points.length < 6) return
+function assignPendingMovement(engine: Engine, puck: Puck) {
+  if (!engine.pendingMovementStrokeId) return false
 
-  const path = reducePath(stroke.points)
-  const start = path[0]
-  const end = path[path.length - 1]
-  const travel = pathLength(path)
-  if (travel < 0.055) return
-
-  const primary = nearestAvailablePuck(engine.pucks, start, null)
-  if (!primary || distance(primary, start) > 0.18) return
+  const stroke = engine.strokes.find((item) => item.id === engine.pendingMovementStrokeId)
+  if (!stroke || stroke.points.length < 2 || pathLength(stroke.points) < 0.035) {
+    engine.pendingMovementStrokeId = null
+    return false
+  }
 
   const now = performance.now()
-  primary.choreography = {
-    delay: 90,
-    duration: clamp(travel * 5200, 860, 2100),
-    path,
-    startedAt: now,
-  }
+  const destination = stroke.points.at(-1)
+  if (!destination) return false
 
-  const reaction = nearestAvailablePuck(engine.pucks, primary, primary.symbol === "O" ? "X" : "O")
-  if (!reaction || distance(reaction, primary) > 0.3) return
+  const from = { pressure: 0.5, t: now, x: puck.baseX, y: puck.baseY }
+  const to = { pressure: destination.pressure, t: now + 1, x: destination.x, y: destination.y }
+  const travel = distance(from, to)
 
-  const reactionTarget = blendPoint(reaction, end, 0.38)
-  reaction.choreography = {
-    delay: 420,
-    duration: clamp(distance(reaction, reactionTarget) * 5000, 620, 1250),
-    path: [
-      { pressure: 0.5, t: now, x: reaction.baseX, y: reaction.baseY },
-      { pressure: 0.5, t: now + 1, x: reactionTarget.x, y: reactionTarget.y },
-    ],
+  puck.choreography = {
+    delay: 70,
+    duration: clamp(travel * 4200, 520, 1500),
+    from,
     startedAt: now,
+    to,
   }
+  puck.vx *= 0.45
+  puck.vy *= 0.45
+
+  engine.strokes = engine.strokes.filter((item) => item.id !== stroke.id)
+  engine.pendingMovementStrokeId = null
+  rememberMove(engine, puck, from, to)
+  return true
 }
 
 function updateLiveResponse(engine: Engine) {
@@ -1194,22 +1206,6 @@ function nearestPuck(origin: Puck, pucks: Puck[], symbol: PuckSymbol) {
 
   for (const puck of pucks) {
     if (puck.id === origin.id || puck.symbol !== symbol) continue
-    const gap = distance(origin, puck)
-    if (gap < nearestDistance) {
-      nearest = puck
-      nearestDistance = gap
-    }
-  }
-
-  return nearest
-}
-
-function nearestAvailablePuck(pucks: Puck[], origin: { x: number; y: number }, symbol: PuckSymbol | null) {
-  let nearest: Puck | null = null
-  let nearestDistance = Number.POSITIVE_INFINITY
-
-  for (const puck of pucks) {
-    if (symbol && puck.symbol !== symbol) continue
     const gap = distance(origin, puck)
     if (gap < nearestDistance) {
       nearest = puck
@@ -1386,58 +1382,6 @@ function pathLength(points: Point[]) {
     length += distance(points[index - 1], points[index])
   }
   return length
-}
-
-function reducePath(points: Point[]) {
-  const reduced: Point[] = []
-  for (const point of points) {
-    const previous = reduced.at(-1)
-    if (!previous || distance(previous, point) > 0.012) {
-      reduced.push({ ...point })
-    }
-  }
-
-  if (reduced.length < 2) {
-    return points.map((point) => ({ ...point }))
-  }
-
-  return reduced
-}
-
-function pointOnPath(points: Point[], progress: number) {
-  if (points.length === 0) return null
-  if (points.length === 1) return points[0]
-
-  const target = pathLength(points) * progress
-  let travelled = 0
-
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1]
-    const current = points[index]
-    const segment = distance(previous, current)
-    if (segment <= 0) continue
-
-    if (travelled + segment >= target) {
-      const local = clamp((target - travelled) / segment, 0, 1)
-      return {
-        pressure: current.pressure,
-        t: current.t,
-        x: previous.x + (current.x - previous.x) * local,
-        y: previous.y + (current.y - previous.y) * local,
-      }
-    }
-
-    travelled += segment
-  }
-
-  return points.at(-1) ?? null
-}
-
-function blendPoint(from: { x: number; y: number }, to: { x: number; y: number }, amount: number) {
-  return {
-    x: from.x + (to.x - from.x) * amount,
-    y: from.y + (to.y - from.y) * amount,
-  }
 }
 
 function clamp(value: number, min: number, max: number) {
