@@ -1133,6 +1133,7 @@ function reinforceContinuityCell(engine: Engine, x: number, y: number, symbol: C
 
 function applyBasketballRelationships(engine: Engine) {
   const latestStroke = engine.workingStroke ?? engine.strokes.at(-1) ?? null
+  const activeMovement = strongestMovement(engine.pucks)
   const ballSide = averagePuck(engine.pucks, "O")
   const sideLoad = ballSide ? ballSide.x - 0.5 : 0
   const sidePressure = clamp(Math.abs(sideLoad) / 0.2, 0, 1)
@@ -1164,6 +1165,21 @@ function applyBasketballRelationships(engine: Engine) {
           desiredY += (rim.y - puck.baseY) * 0.035 * sidePressure
         }
       }
+
+      if (activeMovement && activeMovement.puck.symbol === "O" && activeMovement.puck.id !== puck.id) {
+        const reaction = delayedReaction(puck, activeMovement.puck, activeMovement.pressure)
+        const gap = distance(puck, activeMovement.puck)
+        const lanePull = clamp(1 - gap / 0.42, 0, 1) * reaction
+        desiredX += (activeMovement.puck.x - puck.baseX) * 0.07 * lanePull
+        desiredY += (activeMovement.puck.y - puck.baseY) * 0.055 * lanePull
+
+        const cutPressure = clamp((activeMovement.puck.y - 0.48) / 0.28, 0, 1) * reaction
+        if (cutPressure > 0) {
+          const weakside = activeMovement.puck.x > 0.5 ? puck.baseX < activeMovement.puck.x : puck.baseX > activeMovement.puck.x
+          desiredX += (weakside ? 0.5 - puck.baseX : rim.x - puck.baseX) * 0.034 * cutPressure
+          desiredY += (rim.y - puck.baseY) * 0.028 * cutPressure
+        }
+      }
     } else {
       const driveSpeed = Math.hypot(puck.vx, puck.vy)
       for (const teammate of engine.pucks) {
@@ -1193,6 +1209,33 @@ function applyBasketballRelationships(engine: Engine) {
         desiredX += strokeIntent.x
         desiredY += strokeIntent.y
       }
+
+      if (activeMovement && activeMovement.puck.symbol === "O" && activeMovement.puck.id !== puck.id) {
+        const reaction = delayedReaction(puck, activeMovement.puck, activeMovement.pressure)
+        const gap = distance(puck, activeMovement.puck)
+        const spacingPush = clamp(1 - gap / 0.34, 0, 1) * reaction
+        if (gap > 0) {
+          desiredX += ((puck.x - activeMovement.puck.x) / gap) * 0.038 * spacingPush
+          desiredY += ((puck.y - activeMovement.puck.y) / gap) * 0.024 * spacingPush
+        }
+
+        const cornerX = activeMovement.puck.x < 0.5 ? 0.82 : 0.18
+        const weakside = activeMovement.puck.x < 0.5 ? puck.baseX > 0.5 : puck.baseX < 0.5
+        if (weakside) {
+          desiredX += (cornerX - puck.baseX) * 0.026 * reaction
+          desiredY += (0.74 - puck.baseY) * 0.018 * reaction
+        }
+      }
+
+      if (activeMovement && activeMovement.puck.symbol === "X") {
+        const reaction = delayedReaction(puck, activeMovement.puck, activeMovement.pressure)
+        const gap = distance(puck, activeMovement.puck)
+        const pressureRelease = clamp(1 - gap / 0.28, 0, 1) * reaction
+        if (gap > 0) {
+          desiredX += ((puck.x - activeMovement.puck.x) / gap) * 0.03 * pressureRelease
+          desiredY += ((puck.y - activeMovement.puck.y) / gap) * 0.022 * pressureRelease
+        }
+      }
     }
 
     puck.targetX = clamp(desiredX, 0.04, 0.96)
@@ -1214,6 +1257,37 @@ function nearestPuck(origin: Puck, pucks: Puck[], symbol: PuckSymbol) {
   }
 
   return nearest
+}
+
+function strongestMovement(pucks: Puck[]) {
+  let strongest: { pressure: number; puck: Puck } | null = null
+
+  for (const puck of pucks) {
+    const speed = Math.hypot(puck.vx, puck.vy)
+    const pressure = clamp(speed / 0.015 + (puck.choreography ? 0.45 : 0), 0, 1)
+    if (pressure < 0.12) continue
+
+    if (!strongest || pressure > strongest.pressure) {
+      strongest = { pressure, puck }
+    }
+  }
+
+  return strongest
+}
+
+function delayedReaction(puck: Puck, source: Puck, pressure: number) {
+  const distanceDelay = clamp(distance(puck, source) / 0.46, 0, 1)
+  const phase = (Math.sin(performance.now() / 420 + idPhase(puck.id)) + 1) / 2
+  const hesitation = 0.42 + phase * 0.34
+  return pressure * (1 - distanceDelay * 0.48) * hesitation
+}
+
+function idPhase(id: string) {
+  let value = 0
+  for (let index = 0; index < id.length; index += 1) {
+    value += id.charCodeAt(index) * (index + 1)
+  }
+  return value * 0.17
 }
 
 function averagePuck(pucks: Puck[], symbol: PuckSymbol) {
