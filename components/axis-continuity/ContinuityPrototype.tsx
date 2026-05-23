@@ -8,10 +8,14 @@ type SpatialStateName = string
 type TacticalCategory = "Offense" | "Defense" | "SLOB" | "ATO" | "Tempo" | "Emphasis"
 type ActiveConditions = Partial<Record<TacticalCategory, string>>
 type DecisionStage = "owned" | "afterPass" | "afterDrive"
-type PossessionAction = "pass" | "drive" | "shoot" | "wing" | "corner" | "slot" | "shortRoll" | "kick" | "finish" | "dumpOff" | "reset"
+type PossessionAction = "pass" | "drive" | "shoot" | "wing" | "corner" | "slot" | "shortRoll" | "kick" | "finish" | "dumpOff" | "reset" | "ghost" | "reject" | "lift" | "hammer" | "dho" | "lob" | "quickHit" | "misdirection"
 type PossessionDecision = {
   action: PossessionAction
   label: string
+}
+type TacticalEnvironment = {
+  category: "Offense" | "SLOB" | "ATO"
+  name: string
 }
 
 type Point = {
@@ -573,7 +577,23 @@ const initialConditions: ActiveConditions = {
   Tempo: "Controlled",
 }
 
-const possessionDecisionTree: Record<DecisionStage, PossessionDecision[]> = {
+const tacticalEnvironments: TacticalEnvironment[] = [
+  { category: "Offense", name: "5-Out" },
+  { category: "Offense", name: "Horns" },
+  { category: "Offense", name: "Spain" },
+  { category: "Offense", name: "Delay" },
+  { category: "Offense", name: "Motion" },
+  { category: "Offense", name: "Princeton" },
+  { category: "Offense", name: "Empty" },
+  { category: "Offense", name: "Pistol" },
+  { category: "SLOB", name: "Box" },
+  { category: "SLOB", name: "Stack" },
+  { category: "SLOB", name: "Elevator" },
+  { category: "ATO", name: "Quick Hit" },
+  { category: "ATO", name: "Misdirection" },
+]
+
+const basePossessionDecisionTree: Record<DecisionStage, PossessionDecision[]> = {
   afterDrive: [
     { action: "kick", label: "Kick" },
     { action: "finish", label: "Finish" },
@@ -593,11 +613,96 @@ const possessionDecisionTree: Record<DecisionStage, PossessionDecision[]> = {
   ],
 }
 
+const environmentDecisionTree: Record<string, PossessionDecision[]> = {
+  "5-Out": [
+    { action: "pass", label: "Pass" },
+    { action: "drive", label: "Drive" },
+    { action: "shoot", label: "Shoot" },
+    { action: "ghost", label: "Ghost" },
+  ],
+  Delay: [
+    { action: "dho", label: "DHO" },
+    { action: "pass", label: "Pass" },
+    { action: "drive", label: "Drive" },
+    { action: "reset", label: "Reset" },
+  ],
+  Empty: [
+    { action: "drive", label: "Drive" },
+    { action: "reject", label: "Reject" },
+    { action: "pass", label: "Pass" },
+    { action: "shoot", label: "Shoot" },
+  ],
+  Horns: [
+    { action: "pass", label: "Pass" },
+    { action: "drive", label: "Drive" },
+    { action: "shoot", label: "Shoot" },
+    { action: "reject", label: "Reject" },
+  ],
+  Motion: [
+    { action: "pass", label: "Pass" },
+    { action: "drive", label: "Drive" },
+    { action: "dho", label: "DHO" },
+    { action: "hammer", label: "Hammer" },
+  ],
+  Pistol: [
+    { action: "dho", label: "DHO" },
+    { action: "drive", label: "Drive" },
+    { action: "pass", label: "Pass" },
+    { action: "reject", label: "Reject" },
+  ],
+  Princeton: [
+    { action: "dho", label: "DHO" },
+    { action: "hammer", label: "Hammer" },
+    { action: "pass", label: "Pass" },
+    { action: "reset", label: "Reset" },
+  ],
+  Spain: [
+    { action: "pass", label: "Pass" },
+    { action: "drive", label: "Drive" },
+    { action: "ghost", label: "Ghost" },
+    { action: "lift", label: "Lift" },
+  ],
+}
+
+const specialSituationDecisionTree: Record<string, PossessionDecision[]> = {
+  Box: [
+    { action: "lob", label: "Lob" },
+    { action: "hammer", label: "Hammer" },
+    { action: "pass", label: "Pass" },
+    { action: "reset", label: "Reset" },
+  ],
+  Elevator: [
+    { action: "quickHit", label: "Quick Hit" },
+    { action: "shoot", label: "Shoot" },
+    { action: "dho", label: "DHO" },
+    { action: "reset", label: "Reset" },
+  ],
+  Misdirection: [
+    { action: "misdirection", label: "Misdir" },
+    { action: "reject", label: "Reject" },
+    { action: "hammer", label: "Hammer" },
+    { action: "reset", label: "Reset" },
+  ],
+  "Quick Hit": [
+    { action: "quickHit", label: "Quick Hit" },
+    { action: "shoot", label: "Shoot" },
+    { action: "drive", label: "Drive" },
+    { action: "reset", label: "Reset" },
+  ],
+  Stack: [
+    { action: "lob", label: "Lob" },
+    { action: "dho", label: "DHO" },
+    { action: "hammer", label: "Hammer" },
+    { action: "reset", label: "Reset" },
+  ],
+}
+
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
   const [activeAction, setActiveAction] = useState<PossessionAction | null>(null)
   const [decisionStage, setDecisionStage] = useState<DecisionStage>("owned")
+  const [activeEnvironment, setActiveEnvironment] = useState<TacticalEnvironment>({ category: "Offense", name: "Horns" })
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -807,7 +912,23 @@ export function ContinuityPrototype() {
     window.setTimeout(() => setActiveAction((current) => (current === action ? null : current)), 520)
   }
 
-  const possessionActions = possessionDecisionTree[decisionStage].slice(0, 4)
+  function handleEnvironmentSelect(environment: TacticalEnvironment, at: number) {
+    const engine = engineRef.current
+    if (!engine) return
+
+    const state = stateForEnvironment(environment)
+    if (state) recallSpatialState(engine, state)
+    engine.conditions = {
+      ...engine.conditions,
+      [environment.category]: environment.name,
+      Offense: environment.category === "Offense" ? environment.name : engine.conditions.Offense,
+    }
+    engine.formationPulseAt = at
+    setActiveEnvironment(environment)
+    setDecisionStage("owned")
+  }
+
+  const possessionActions = decisionsForEnvironment(activeEnvironment, decisionStage).slice(0, 4)
 
   return (
     <main className="fixed inset-0 isolate overflow-hidden bg-[#eee6d7] text-[#26231f] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
@@ -824,6 +945,34 @@ export function ContinuityPrototype() {
         onPointerUp={handlePointerUp}
         ref={canvasRef}
       />
+
+      <nav
+        aria-label="Tactical environments"
+        className="absolute left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex w-[min(48rem,calc(100vw-1.25rem))] -translate-x-1/2 snap-x snap-mandatory items-center gap-1.5 overflow-x-auto rounded-full border border-[#4e473d]/7 bg-[#fff8ea]/34 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.74),0_10px_30px_rgba(68,58,43,0.08)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.5rem] [&::-webkit-scrollbar]:hidden"
+      >
+        {tacticalEnvironments.map((environment) => {
+          const active = activeEnvironment.category === environment.category && activeEnvironment.name === environment.name
+          return (
+            <button
+              aria-pressed={active}
+              className={[
+                "snap-center shrink-0 touch-manipulation whitespace-nowrap rounded-full px-3.5 py-1.5 text-[0.58rem] font-medium uppercase leading-none tracking-[0.14em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.96]",
+                active
+                  ? "bg-[#2c2924]/84 text-[#fff8ea] opacity-100 shadow-[0_6px_16px_rgba(70,58,42,0.12)]"
+                  : "bg-[#fffdf7]/18 text-[#3b352d]/42 opacity-80 hover:bg-[#fffdf7]/38 hover:text-[#2c2924]/72 focus-visible:bg-[#fffdf7]/52 focus-visible:text-[#2c2924]",
+              ].join(" ")}
+              key={`${environment.category}-${environment.name}`}
+              onClick={(event) => handleEnvironmentSelect(environment, event.timeStamp)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") handleEnvironmentSelect(environment, event.timeStamp)
+              }}
+              type="button"
+            >
+              {environment.name}
+            </button>
+          )
+        })}
+      </nav>
 
       <nav
         aria-label="Possession decisions"
@@ -1500,6 +1649,20 @@ function nextDecisionStage(action: PossessionAction): DecisionStage {
   return "owned"
 }
 
+function decisionsForEnvironment(environment: TacticalEnvironment, stage: DecisionStage): PossessionDecision[] {
+  if (stage !== "owned") return basePossessionDecisionTree[stage]
+  if (environment.category === "SLOB" || environment.category === "ATO") return specialSituationDecisionTree[environment.name] ?? basePossessionDecisionTree.owned
+  return environmentDecisionTree[environment.name] ?? basePossessionDecisionTree.owned
+}
+
+function stateForEnvironment(environment: TacticalEnvironment) {
+  return (
+    spatialStates.find((state) => state.name === environment.name && (state.category ?? "Offense") === environment.category) ??
+    spatialStates.find((state) => state.name === environment.name) ??
+    null
+  )
+}
+
 function applyPossessionAction(engine: Engine, action: PossessionAction, at: number) {
   const carrier = currentCarrier(engine) ?? nearestPuck(engine.ball, engine.pucks, "O")
   if (!carrier) return
@@ -1511,6 +1674,21 @@ function applyPossessionAction(engine: Engine, action: PossessionAction, at: num
 
   if (action === "drive") {
     driveCarrier(engine, carrier, at)
+    return
+  }
+
+  if (action === "reject") {
+    rejectDrive(engine, carrier, at)
+    return
+  }
+
+  if (action === "ghost") {
+    ghostScreen(engine, carrier, at)
+    return
+  }
+
+  if (action === "lift") {
+    liftWeakside(engine, carrier, at)
     return
   }
 
@@ -1548,6 +1726,11 @@ function decisionPassTarget(engine: Engine, carrier: Puck, action: PossessionAct
   if (action === "wing") return targetByZone(engine, carrier, ["wing-left", "wing-right"])
   if (action === "corner") return targetByZone(engine, carrier, ["corner-left", "corner-right"])
   if (action === "slot") return targetByZone(engine, carrier, ["slot-left", "slot-right", "top"])
+  if (action === "dho") return targetByZone(engine, carrier, ["wing-left", "wing-right", "slot-left", "slot-right"])
+  if (action === "hammer") return weaksideTarget(engine, carrier) ?? targetByZone(engine, carrier, ["corner-left", "corner-right"])
+  if (action === "lob") return targetByZone(engine, carrier, ["dunker-left", "dunker-right", "paint"])
+  if (action === "quickHit") return targetByZone(engine, carrier, ["slot-left", "slot-right", "corner-left", "corner-right"])
+  if (action === "misdirection") return weaksideTarget(engine, carrier) ?? nextPassTarget(engine, carrier)
   if (action === "shortRoll" || action === "dumpOff") return targetByZone(engine, carrier, ["paint", "dunker-left", "dunker-right", "short-left", "short-right"])
   if (action === "kick") return weaksideTarget(engine, carrier) ?? targetByZone(engine, carrier, ["corner-left", "corner-right", "wing-left", "wing-right"])
   return nextPassTarget(engine, carrier)
@@ -1597,19 +1780,58 @@ function driveCarrier(engine: Engine, carrier: Puck, at: number) {
   carrier.targetY = target.y
 }
 
+function rejectDrive(engine: Engine, carrier: Puck, at: number) {
+  setBallOwned(engine, carrier.id, at)
+  const side = carrier.x < 0.5 ? 1 : -1
+  const target = constrainToLiveCourt({
+    x: clamp(carrier.x + side * 0.105, 0.22, 0.78),
+    y: Math.max(carrier.y + 0.14, 0.56),
+  })
+  choreographPuck(carrier, target, at, 560, 0.86)
+}
+
+function ghostScreen(engine: Engine, carrier: Puck, at: number) {
+  const screener = targetByZone(engine, carrier, ["slot-left", "slot-right", "elbow-left", "elbow-right"])
+  if (!screener) return
+
+  const side = screener.x < 0.5 ? -1 : 1
+  const target = constrainToLiveCourt({
+    x: clamp(screener.x + side * 0.12, 0.16, 0.84),
+    y: clamp(screener.y + 0.08, 0.32, 0.78),
+  })
+  choreographPuck(screener, target, at, 620, 1.1)
+  engine.advantageFlash = { t: performance.now(), x: target.x, y: target.y }
+}
+
+function liftWeakside(engine: Engine, carrier: Puck, at: number) {
+  const target = weaksideTarget(engine, carrier)
+  if (!target) return
+
+  const lifted = constrainToLiveCourt({
+    x: target.x < 0.5 ? 0.22 : 0.78,
+    y: clamp(target.y - 0.18, 0.28, 0.62),
+  })
+  choreographPuck(target, lifted, at, 580, 0.72)
+  engine.advantageFlash = { t: performance.now(), x: lifted.x, y: lifted.y }
+}
+
 function resetPossession(engine: Engine, carrier: Puck, at: number) {
   setBallOwned(engine, carrier.id, at)
   const target = constrainToLiveCourt({ x: 0.5, y: 0.25 })
-  carrier.choreography = {
-    arc: movementArcFor(carrier, target) * 0.46,
+  choreographPuck(carrier, target, at, 540, 0.46)
+}
+
+function choreographPuck(puck: Puck, target: { x: number; y: number }, at: number, duration: number, arcScale = 1) {
+  puck.choreography = {
+    arc: movementArcFor(puck, target) * arcScale,
     delay: 0,
-    duration: 540,
-    from: { pressure: 0.5, t: at, x: carrier.x, y: carrier.y },
+    duration,
+    from: { pressure: 0.5, t: at, x: puck.x, y: puck.y },
     startedAt: performance.now(),
     to: { pressure: 0.5, t: at, x: target.x, y: target.y },
   }
-  carrier.targetX = target.x
-  carrier.targetY = target.y
+  puck.targetX = target.x
+  puck.targetY = target.y
 }
 
 function passTargetScore(ball: Ball, carrier: Puck, target: Puck) {
