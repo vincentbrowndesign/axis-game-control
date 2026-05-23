@@ -1,5 +1,6 @@
 "use client"
 
+import { buildAbstractReplayFrame, createAbstractReplayState, type AbstractReplayFrame, type AbstractReplayState } from "@/lib/axis/abstractReplay"
 import { Eraser, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
@@ -90,10 +91,13 @@ type ContinuityCell = {
 type Engine = {
   activePointerId: number | null
   activePointerType: string | null
+  abstractReplayFrames: AbstractReplayFrame[]
+  abstractReplayState: AbstractReplayState
   advantageFlash: TrailPoint | null
   draggingPuckId: string | null
   drawing: boolean
   eraseCursor: Point | null
+  lastAbstractReplayAt: number
   moved: boolean
   penActiveUntil: number
   pendingMovementStrokeId: string | null
@@ -233,10 +237,13 @@ export function ContinuityPrototype() {
     const engine: Engine = {
       activePointerId: null,
       activePointerType: null,
+      abstractReplayFrames: [],
+      abstractReplayState: createAbstractReplayState(),
       advantageFlash: null,
       draggingPuckId: null,
       drawing: false,
       eraseCursor: null,
+      lastAbstractReplayAt: 0,
       moved: false,
       penActiveUntil: 0,
       pendingMovementStrokeId: null,
@@ -955,6 +962,8 @@ function updatePhysics(engine: Engine) {
     puck.targetY = clamp(puck.targetY, 0.06, 0.94)
     captureTrailPoint(puck, previousX, previousY)
   }
+
+  captureAbstractReplay(engine)
 }
 
 function updateChoreography(engine: Engine) {
@@ -1019,6 +1028,29 @@ function captureTrailPoint(puck: Puck, previousX: number, previousY: number) {
   puck.trail.push({ t: now, x: puck.x, y: puck.y })
   if (puck.trail.length > 32) {
     puck.trail.shift()
+  }
+}
+
+function captureAbstractReplay(engine: Engine) {
+  const now = performance.now()
+  if (now - engine.lastAbstractReplayAt < 180) return
+
+  engine.lastAbstractReplayAt = now
+  engine.abstractReplayState.tracks = engine.pucks.map((puck) => ({
+    confidence: 1,
+    id: puck.id,
+    lastSeenAt: now,
+    misses: 0,
+    symbol: puck.symbol,
+    vx: puck.vx,
+    vy: puck.vy,
+    x: puck.x,
+    y: puck.y,
+  }))
+  engine.abstractReplayFrames.push(buildAbstractReplayFrame(engine.abstractReplayState, now, "surface"))
+
+  if (engine.abstractReplayFrames.length > 360) {
+    engine.abstractReplayFrames.splice(0, engine.abstractReplayFrames.length - 360)
   }
 }
 
