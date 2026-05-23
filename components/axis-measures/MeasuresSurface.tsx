@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 
 type Action = "make2" | "make3" | "miss" | "foul" | "rebound" | "assist" | "turnover" | "timeout" | "sub"
 type EventTone = "make" | "miss" | "neutral" | "pressure"
+type ShotSpot = "rim" | "paint" | "left" | "slot" | "right" | "corner"
 
 type Player = {
   assists: number
@@ -25,7 +26,10 @@ type TimelineEvent = {
   detail: string
   id: string
   playerId: string | null
+  possession: number
+  quarter: number
   score: string
+  shotSpot?: ShotSpot
   teamDelta: number
   time: string
   tone: EventTone
@@ -38,6 +42,7 @@ type Session = {
   lineupStartedAt: number
   players: Player[]
   possessionCount: number
+  quarter: number
   timeline: TimelineEvent[]
 }
 
@@ -52,12 +57,12 @@ const initialPlayers: Player[] = [
 ]
 
 const initialTimeline: TimelineEvent[] = [
-  makeEvent(1, "make2", "nae", "Corner touch pulled low help", "43-38", 2, "6:42", "make"),
-  makeEvent(2, "sub", null, "Dead ball reset, same five stay", "43-38", 0, "6:18", "neutral"),
-  makeEvent(3, "foul", "myles", "Slot drive, weak-side foul", "43-39", 0, "5:54", "pressure"),
-  makeEvent(4, "miss", "scoota", "Early push after miss", "43-39", 0, "5:31", "miss"),
-  makeEvent(5, "make2", "aj", "Second-side touch, paint collapse", "45-39", 2, "5:02", "make"),
-  makeEvent(6, "timeout", null, "Timeout before run extends", "45-39", 0, "4:47", "neutral"),
+  makeEvent(1, "make2", "nae", "Corner touch pulled low help", "43-38", 2, "6:42", "make", 3, 1, "corner"),
+  makeEvent(2, "sub", null, "Dead ball reset, same five stay", "43-38", 0, "6:18", "neutral", 3, 1),
+  makeEvent(3, "foul", "myles", "Slot drive, weak-side foul", "43-39", 0, "5:54", "pressure", 3, 2),
+  makeEvent(4, "miss", "scoota", "Early push after miss", "43-39", 0, "5:31", "miss", 3, 3, "slot"),
+  makeEvent(5, "make2", "aj", "Second-side touch, paint collapse", "45-39", 2, "5:02", "make", 3, 4, "paint"),
+  makeEvent(6, "timeout", null, "Timeout, rhythm held before run extends", "45-39", 0, "4:47", "neutral", 3, 4),
 ]
 
 const actionLabels: Array<{ action: Action; label: string }> = [
@@ -72,8 +77,18 @@ const actionLabels: Array<{ action: Action; label: string }> = [
   { action: "sub", label: "Sub" },
 ]
 
+const shotSpots: Array<{ label: string; spot: ShotSpot }> = [
+  { label: "Rim", spot: "rim" },
+  { label: "Paint", spot: "paint" },
+  { label: "Left", spot: "left" },
+  { label: "Slot", spot: "slot" },
+  { label: "Right", spot: "right" },
+  { label: "Corner", spot: "corner" },
+]
+
 export function MeasuresSurface() {
   const [activePlayerId, setActivePlayerId] = useState("nae")
+  const [activeShotSpot, setActiveShotSpot] = useState<ShotSpot>("slot")
   const [session, setSession] = useState<Session>({
     awayScore: 39,
     eventIndex: initialTimeline.length,
@@ -81,6 +96,7 @@ export function MeasuresSurface() {
     lineupStartedAt: 0,
     players: initialPlayers,
     possessionCount: 6,
+    quarter: 3,
     timeline: initialTimeline,
   })
 
@@ -100,7 +116,9 @@ export function MeasuresSurface() {
       const awayScore = action === "foul" && eventIndex % 3 === 0 ? current.awayScore + 1 : current.awayScore
       const time = clockForEvent(eventIndex)
       const tone = toneForAction(action)
-      const detail = detailForAction(action, selected.name)
+      const nextPossession = actionCountsPossession(action) ? current.possessionCount + 1 : current.possessionCount
+      const shotSpot = actionTracksShot(action) ? activeShotSpot : undefined
+      const detail = detailForAction(action, selected.name, activeShotSpot)
 
       const players = applyActionToPlayers(current.players, action, activePlayerId, teamDelta)
       const nextSession: Session = {
@@ -108,12 +126,13 @@ export function MeasuresSurface() {
         awayScore,
         eventIndex,
         homeScore,
+        lineupStartedAt: action === "sub" ? eventIndex : current.lineupStartedAt,
         players: action === "sub" ? rotateLineup(players, activePlayerId) : players,
-        possessionCount: actionCountsPossession(action) ? current.possessionCount + 1 : current.possessionCount,
+        possessionCount: nextPossession,
         timeline: [
-          makeEvent(eventIndex, action, playerId, detail, `${homeScore}-${awayScore}`, teamDelta, time, tone),
+          makeEvent(eventIndex, action, playerId, detail, `${homeScore}-${awayScore}`, teamDelta, time, tone, current.quarter, nextPossession, shotSpot),
           ...current.timeline,
-        ].slice(0, 18),
+        ].slice(0, 24),
       }
 
       return nextSession
@@ -135,7 +154,7 @@ export function MeasuresSurface() {
               {session.homeScore}-{session.awayScore}
             </p>
             <p className="mt-1 text-[0.65rem] font-medium uppercase tracking-[0.24em] text-white/34">
-              {clockForEvent(session.eventIndex)} third
+              {clockForEvent(session.eventIndex)} Q{session.quarter}
             </p>
           </div>
         </header>
@@ -145,7 +164,7 @@ export function MeasuresSurface() {
             <section className="rounded-[1.7rem] border border-white/8 bg-white/[0.035] p-4 shadow-[0_22px_90px_rgba(0,0,0,0.34)] backdrop-blur-2xl">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[0.62rem] font-medium uppercase tracking-[0.24em] text-white/32">on floor</p>
-                <p className="font-mono text-xs text-white/38">{formatMinutes(lineupMinutes(activeLineup))}</p>
+                <p className="font-mono text-xs text-white/38">{lineupAge(session)} live</p>
               </div>
               <div className="mt-5 space-y-2">
                 {activeLineup.map((player) => (
@@ -171,7 +190,26 @@ export function MeasuresSurface() {
             </section>
 
             <section className="min-h-0 flex-1 rounded-[1.7rem] border border-white/8 bg-white/[0.026] p-4 shadow-[0_22px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
-              <p className="text-[0.62rem] font-medium uppercase tracking-[0.24em] text-white/32">{activePlayer.name}</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[0.62rem] font-medium uppercase tracking-[0.24em] text-white/32">{activePlayer.name}</p>
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/28">{spotLabel(activeShotSpot)}</p>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-[1.25rem] border border-white/7 bg-black/18 p-2">
+                {shotSpots.map(({ label, spot }) => (
+                  <button
+                    aria-pressed={activeShotSpot === spot}
+                    className={[
+                      "rounded-full px-3 py-2 text-[0.62rem] font-semibold uppercase tracking-[0.12em] transition-colors",
+                      activeShotSpot === spot ? "bg-[#f4f0e7] text-black" : "text-white/38 hover:bg-white/[0.06] hover:text-white/68",
+                    ].join(" ")}
+                    key={spot}
+                    onClick={() => setActiveShotSpot(spot)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {actionLabels.map(({ action, label }) => (
                   <button
@@ -258,7 +296,10 @@ export function MeasuresSurface() {
                       <p className="min-w-0 truncate text-sm text-white/76">{event.detail}</p>
                     </div>
                     {index === 0 ? (
-                      <p className="mt-1 text-xs text-white/30">latest possession written into the game rail</p>
+                      <p className="mt-1 text-xs text-white/30">
+                        Q{event.quarter} / possession {event.possession}
+                        {event.shotSpot ? ` / ${spotLabel(event.shotSpot)}` : ""}
+                      </p>
                     ) : null}
                   </div>
                   <span className="font-mono text-sm text-white/46">{event.score}</span>
@@ -335,9 +376,12 @@ function makeEvent(
   score: string,
   teamDelta: number,
   time: string,
-  tone: EventTone
+  tone: EventTone,
+  quarter: number,
+  possession: number,
+  shotSpot?: ShotSpot
 ): TimelineEvent {
-  return { action, detail, id: `event-${index}`, playerId, score, teamDelta, time, tone }
+  return { action, detail, id: `event-${index}`, playerId, possession, quarter, score, shotSpot, teamDelta, time, tone }
 }
 
 function applyActionToPlayers(players: Player[], action: Action, activePlayerId: string, teamDelta: number) {
@@ -396,7 +440,7 @@ function readGameFlow(events: TimelineEvent[]) {
   }
 
   return {
-    droughtLabel: emptyPossessions > 0 ? `${emptyPossessions} empty` : "clean trip",
+    droughtLabel: emptyPossessions > 0 ? `${emptyPossessions} empty trip${emptyPossessions === 1 ? "" : "s"}` : "clean trip",
     runLabel: runValue > 0 ? `${runValue}-0 run` : "level",
     runValue,
   }
@@ -417,10 +461,10 @@ function buildRhythmMarkers(events: TimelineEvent[]) {
   })
 }
 
-function detailForAction(action: Action, playerName: string) {
-  if (action === "make2") return `${playerName} two points`
-  if (action === "make3") return `${playerName} corner three`
-  if (action === "miss") return `${playerName} miss, possession ends`
+function detailForAction(action: Action, playerName: string, shotSpot: ShotSpot) {
+  if (action === "make2") return `${playerName} ${spotLabel(shotSpot)} make`
+  if (action === "make3") return `${playerName} ${spotLabel(shotSpot)} three`
+  if (action === "miss") return `${playerName} ${spotLabel(shotSpot)} miss`
   if (action === "foul") return `${playerName} foul`
   if (action === "rebound") return `${playerName} rebound`
   if (action === "assist") return `${playerName} assist`
@@ -448,14 +492,26 @@ function actionCountsPossession(action: Action) {
   return action === "make2" || action === "make3" || action === "miss" || action === "turnover"
 }
 
-function lineupMinutes(players: Player[]) {
-  if (players.length === 0) return 0
-  return players.reduce((sum, player) => sum + player.minutes, 0) / players.length
+function actionTracksShot(action: Action) {
+  return action === "make2" || action === "make3" || action === "miss"
+}
+
+function spotLabel(spot: ShotSpot) {
+  if (spot === "rim") return "rim"
+  if (spot === "paint") return "paint"
+  if (spot === "left") return "left wing"
+  if (spot === "right") return "right wing"
+  if (spot === "corner") return "corner"
+  return "slot"
 }
 
 function lineupPlusMinus(players: Player[]) {
   const value = players.reduce((sum, player) => sum + player.plusMinus, 0)
   return formatPlusMinus(value)
+}
+
+function lineupAge(session: Session) {
+  return `${Math.max(1, session.eventIndex - session.lineupStartedAt)} trips`
 }
 
 function clockForEvent(eventIndex: number) {
