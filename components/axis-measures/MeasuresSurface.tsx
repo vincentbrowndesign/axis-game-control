@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 
 type Action = "make2" | "make3" | "miss" | "foul" | "rebound" | "assist" | "turnover" | "timeout" | "sub"
 type EventTone = "make" | "miss" | "neutral" | "pressure"
 type ShotSpot = "rim" | "paint" | "left" | "slot" | "right" | "corner"
+type CheckpointStatus = "idle" | "camera" | "reading" | "suggestion" | "error"
 
 type Player = {
   assists: number
@@ -37,6 +38,7 @@ type TimelineEvent = {
 
 type Session = {
   awayScore: number
+  checkpointClock: string | null
   eventIndex: number
   homeScore: number
   lineupStartedAt: number
@@ -44,6 +46,19 @@ type Session = {
   possessionCount: number
   quarter: number
   timeline: TimelineEvent[]
+}
+
+type CheckpointResult = {
+  clock: string | null
+  period: number | null
+  scoreAway: number | null
+  scoreHome: number | null
+}
+
+type CheckpointState = {
+  message: string | null
+  result: CheckpointResult | null
+  status: CheckpointStatus
 }
 
 const initialPlayers: Player[] = [
@@ -89,8 +104,16 @@ const shotSpots: Array<{ label: string; spot: ShotSpot }> = [
 export function MeasuresSurface() {
   const [activePlayerId, setActivePlayerId] = useState("nae")
   const [activeShotSpot, setActiveShotSpot] = useState<ShotSpot>("slot")
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [checkpoint, setCheckpoint] = useState<CheckpointState>({
+    message: null,
+    result: null,
+    status: "idle",
+  })
   const [session, setSession] = useState<Session>({
     awayScore: 39,
+    checkpointClock: null,
     eventIndex: initialTimeline.length,
     homeScore: 45,
     lineupStartedAt: 0,
@@ -105,6 +128,141 @@ export function MeasuresSurface() {
   const bench = session.players.filter((player) => !player.onFloor)
   const flow = useMemo(() => readGameFlow(session.timeline), [session.timeline])
   const rhythm = useMemo(() => buildRhythmMarkers(session.timeline), [session.timeline])
+
+  async function startCheckpoint() {
+    stopCheckpointCamera()
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCheckpoint({ message: "Camera unavailable.", result: null, status: "error" })
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: "environment",
+        },
+      })
+      streamRef.current = stream
+      setCheckpoint({ message: null, result: null, status: "camera" })
+
+      window.requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          void videoRef.current.play()
+        }
+      })
+    } catch {
+      setCheckpoint({ message: "Camera unavailable.", result: null, status: "error" })
+    }
+  }
+
+  async function captureCheckpoint() {
+    const video = videoRef.current
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+      setCheckpoint({ message: "Camera unavailable.", result: null, status: "error" })
+      return
+    }
+
+    const canvas = document.createElement("canvas")
+    const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight))
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+    const context = canvas.getContext("2d")
+    if (!context) {
+      setCheckpoint({ message: "Camera unavailable.", result: null, status: "error" })
+      return
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const image = canvas.toDataURL("image/jpeg", 0.76)
+    setCheckpoint({ message: null, result: null, status: "reading" })
+
+    try {
+      const response = await fetch("/api/measures/checkpoint", {
+        body: JSON.stringify({ image }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+      const payload = (await response.json()) as { error?: string; result?: CheckpointResult; status?: string }
+
+      if (payload.status === "not_configured") {
+        setCheckpoint({ message: "OCR checkpoint not configured.", result: null, status: "error" })
+        stopCheckpointCamera()
+        return
+      }
+
+      if (!payload.result || !hasCheckpointSignal(payload.result)) {
+        setCheckpoint({ message: payload.error || "Checkpoint unreadable.", result: null, status: "error" })
+        stopCheckpointCamera()
+        return
+      }
+
+      setCheckpoint({ message: null, result: payload.result, status: "suggestion" })
+      stopCheckpointCamera()
+    } catch {
+      setCheckpoint({ message: "Checkpoint unreadable.", result: null, status: "error" })
+      stopCheckpointCamera()
+    }
+  }
+
+  function confirmCheckpoint() {
+    const result = checkpoint.result
+    if (!result) return
+
+    setSession((current) => {
+      const eventIndex = current.eventIndex + 1
+      const homeScore = result.scoreHome ?? current.homeScore
+      const awayScore = result.scoreAway ?? current.awayScore
+      const quarter = result.period ?? current.quarter
+      const checkpointClock = result.clock ?? current.checkpointClock
+
+      return {
+        ...current,
+        awayScore,
+        checkpointClock,
+        eventIndex,
+        homeScore,
+        quarter,
+        timeline: [
+          makeEvent(eventIndex, "timeout", null, checkpointDetail(result), `${homeScore}-${awayScore}`, 0, checkpointClock ?? clockForEvent(eventIndex), "neutral", quarter, current.possessionCount),
+          ...current.timeline,
+        ].slice(0, 24),
+      }
+    })
+
+    setCheckpoint({ message: null, result: null, status: "idle" })
+  }
+
+  function updateCheckpointResult(field: keyof CheckpointResult, value: string) {
+    setCheckpoint((current) => {
+      const result = current.result ?? { clock: null, period: null, scoreAway: null, scoreHome: null }
+      const numericValue = Number(value)
+      const nextValue = field === "clock" ? value : value === "" || Number.isNaN(numericValue) ? null : numericValue
+      return {
+        ...current,
+        result: {
+          ...result,
+          [field]: nextValue,
+        },
+      }
+    })
+  }
+
+  function closeCheckpoint() {
+    stopCheckpointCamera()
+    setCheckpoint({ message: null, result: null, status: "idle" })
+  }
+
+  function stopCheckpointCamera() {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+  }
 
   function commit(action: Action) {
     setSession((current) => {
@@ -154,7 +312,7 @@ export function MeasuresSurface() {
               {session.homeScore}-{session.awayScore}
             </p>
             <p className="mt-1 text-[0.65rem] font-medium uppercase tracking-[0.24em] text-white/34">
-              {clockForEvent(session.eventIndex)} Q{session.quarter}
+              {session.checkpointClock ?? clockForEvent(session.eventIndex)} Q{session.quarter}
             </p>
           </div>
         </header>
@@ -255,6 +413,13 @@ export function MeasuresSurface() {
                     {value}
                   </span>
                 ))}
+                <button
+                  className="rounded-full border border-[#d8c49b]/16 bg-[#d8c49b]/8 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-[#d8c49b]/72 transition-colors hover:bg-[#f4f0e7] hover:text-black"
+                  onClick={startCheckpoint}
+                  type="button"
+                >
+                  checkpoint
+                </button>
               </div>
             </div>
 
@@ -347,7 +512,77 @@ export function MeasuresSurface() {
           </aside>
         </div>
       </section>
+
+      {checkpoint.status !== "idle" ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/58 px-4 backdrop-blur-md">
+          <section className="w-full max-w-[25rem] rounded-[1.75rem] border border-white/10 bg-[#070707]/88 p-4 shadow-[0_28px_110px_rgba(0,0,0,0.64)]">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-[0.62rem] font-medium uppercase tracking-[0.28em] text-white/34">checkpoint</p>
+              <button className="rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-white/38 hover:bg-white/8 hover:text-white/70" onClick={closeCheckpoint} type="button">
+                ignore
+              </button>
+            </div>
+
+            {checkpoint.status === "camera" ? (
+              <div className="mt-4">
+                <div className="overflow-hidden rounded-[1.25rem] border border-white/8 bg-black">
+                  <video className="aspect-video w-full object-cover opacity-82" muted playsInline ref={videoRef} />
+                </div>
+                <button className="mt-4 w-full rounded-full bg-[#f4f0e7] px-4 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-black" onClick={captureCheckpoint} type="button">
+                  capture
+                </button>
+              </div>
+            ) : null}
+
+            {checkpoint.status === "reading" ? (
+              <div className="mt-6 rounded-[1.25rem] border border-white/8 bg-white/[0.035] p-5 text-center">
+                <div className="mx-auto h-2 w-24 overflow-hidden rounded-full bg-white/8">
+                  <div className="h-full w-1/2 animate-pulse rounded-full bg-[#d8c49b]/70" />
+                </div>
+                <p className="mt-4 text-sm text-white/54">Reading scoreboard...</p>
+              </div>
+            ) : null}
+
+            {checkpoint.status === "suggestion" && checkpoint.result ? (
+              <div className="mt-5">
+                <p className="text-3xl font-semibold tracking-[-0.05em] text-[#fffaf0]">{checkpointLabel(checkpoint.result)}</p>
+                <p className="mt-2 text-sm text-white/38">Confirm this alignment, edit it, or ignore it.</p>
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  <CheckpointInput label="home" onChange={(value) => updateCheckpointResult("scoreHome", value)} value={checkpoint.result.scoreHome ?? ""} />
+                  <CheckpointInput label="away" onChange={(value) => updateCheckpointResult("scoreAway", value)} value={checkpoint.result.scoreAway ?? ""} />
+                  <CheckpointInput label="period" onChange={(value) => updateCheckpointResult("period", value)} value={checkpoint.result.period ?? ""} />
+                  <CheckpointInput label="clock" onChange={(value) => updateCheckpointResult("clock", value)} value={checkpoint.result.clock ?? ""} />
+                </div>
+                <button className="mt-4 w-full rounded-full bg-[#f4f0e7] px-4 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-black" onClick={confirmCheckpoint} type="button">
+                  confirm
+                </button>
+              </div>
+            ) : null}
+
+            {checkpoint.status === "error" ? (
+              <div className="mt-5 rounded-[1.25rem] border border-white/8 bg-white/[0.035] p-5">
+                <p className="text-lg font-semibold tracking-[-0.03em] text-[#fffaf0]">{checkpoint.message}</p>
+                <p className="mt-2 text-sm text-white/38">Session unchanged.</p>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </main>
+  )
+}
+
+function CheckpointInput({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: number | string }) {
+  return (
+    <label className="rounded-[1rem] border border-white/8 bg-black/20 px-3 py-2">
+      <span className="block text-[0.58rem] font-semibold uppercase tracking-[0.18em] text-white/30">{label}</span>
+      <input
+        className="mt-1 w-full bg-transparent font-mono text-lg text-[#fffaf0] outline-none"
+        inputMode={label === "clock" ? "text" : "numeric"}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
   )
 }
 
@@ -503,6 +738,22 @@ function spotLabel(spot: ShotSpot) {
   if (spot === "right") return "right wing"
   if (spot === "corner") return "corner"
   return "slot"
+}
+
+function hasCheckpointSignal(result: CheckpointResult) {
+  return result.scoreHome !== null || result.scoreAway !== null || result.period !== null || Boolean(result.clock)
+}
+
+function checkpointLabel(result: CheckpointResult) {
+  const scoreHome = result.scoreHome ?? "--"
+  const scoreAway = result.scoreAway ?? "--"
+  const period = result.period ? `Q${result.period}` : "Q-"
+  const clock = result.clock ?? "--:--"
+  return `${scoreHome}-${scoreAway} | ${period} | ${clock}`
+}
+
+function checkpointDetail(result: CheckpointResult) {
+  return `Checkpoint ${checkpointLabel(result)}`
 }
 
 function lineupPlusMinus(players: Player[]) {

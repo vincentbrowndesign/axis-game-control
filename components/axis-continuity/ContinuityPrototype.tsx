@@ -507,10 +507,6 @@ function tacticalTemplate(template: "5-Out" | "Flex" | "Motion" | "Shell" | "Spa
   return Object.fromEntries(Object.entries(base).map(([id, point]) => [id, { x: clamp(point.x + drift, 0.12, 0.88), y: clamp(point.y + lift, 0.16, 0.86) }]))
 }
 
-function stateKey(state: SpatialState) {
-  return state.id ?? `${state.category ?? "Offense"}:${state.name}`
-}
-
 const initialConditions: ActiveConditions = {
   Defense: "Shell",
   Emphasis: "Keep Width",
@@ -526,12 +522,23 @@ function isGlobalConditionState(state: SpatialState) {
   return category === "Offense" && !tacticalActionNames.has(state.name)
 }
 
+function nextConditionState(category: TacticalCategory, current?: string) {
+  const states = spatialStates.filter((state) => {
+    const stateCategory = state.category ?? "Offense"
+    return stateCategory === category && isGlobalConditionState(state)
+  })
+  if (states.length === 0) return null
+
+  const currentIndex = states.findIndex((state) => state.name === current)
+  return states[(currentIndex + 1) % states.length]
+}
+
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
   const [activeConditions, setActiveConditions] = useState<ActiveConditions>(initialConditions)
   const [activeBranchId, setActiveBranchId] = useState<string | null>(null)
-  const possessionBranches = useMemo(() => getPossessionBranches(activeConditions), [activeConditions])
+  const possessionBranches = useMemo(() => getPossessionBranches(activeConditions, activeBranchId), [activeConditions, activeBranchId])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -730,6 +737,14 @@ export function ContinuityPrototype() {
     setActiveBranchId(null)
   }
 
+  function handleConditionStep(category: TacticalCategory, at: number) {
+    const current = activeConditions[category]
+    const nextState = nextConditionState(category, current)
+    if (!nextState) return
+
+    handleSpatialStateRecall(nextState, at)
+  }
+
   function handlePossessionBranch(branch: PossessionBranch, at: number) {
     const engine = engineRef.current
     if (!engine) return
@@ -743,33 +758,25 @@ export function ContinuityPrototype() {
       <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(248,241,228,0.12),rgba(248,241,228,0)_18%),linear-gradient(135deg,rgba(216,176,96,0.08),rgba(0,0,0,0.12)_52%,rgba(0,0,0,0.62))] mix-blend-screen opacity-85" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-20 bg-gradient-to-b from-black/72 to-transparent" />
       <div className="pointer-events-none absolute inset-x-7 top-8 z-[1] h-[2px] bg-gradient-to-r from-transparent via-[#f6d68a]/50 to-transparent opacity-80" />
-      <nav
+      <div
         aria-label="Global basketball conditions"
-        className="absolute left-1/2 top-[max(0.82rem,env(safe-area-inset-top))] z-10 flex w-[min(44rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center gap-1.5 overflow-x-auto rounded-[1.35rem] border border-[#f8f1e4]/10 bg-[#080806]/48 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.5rem] [&::-webkit-scrollbar]:hidden"
+        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex w-[min(34rem,calc(100vw-1rem))] -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[#f8f1e4]/7 bg-[#080806]/36 px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_14px_48px_rgba(0,0,0,0.36)] backdrop-blur-2xl"
       >
-        {spatialStates.filter(isGlobalConditionState).map((state) => {
-          const active = activeConditions[state.category ?? "Offense"] === state.name
-          return (
-            <button
-              aria-pressed={active}
-              className={[
-                "snap-center shrink-0 touch-manipulation whitespace-nowrap rounded-[0.95rem] px-4 py-2 text-[0.66rem] font-bold uppercase tracking-[0.1em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.95]",
-                active
-                  ? "bg-[#f8f1e4] text-[#050505] opacity-100 shadow-[0_0_22px_rgba(246,214,138,0.2),inset_0_-1px_0_rgba(214,176,96,0.62)]"
-                  : "text-[#f8f1e4]/42 opacity-75 hover:bg-[#f8f1e4]/8 hover:text-[#f8f1e4]/74 focus-visible:bg-[#f8f1e4]/10 focus-visible:text-[#f8f1e4]",
-              ].join(" ")}
-              key={stateKey(state)}
-              onClick={(event) => handleSpatialStateRecall(state, event.timeStamp)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") handleSpatialStateRecall(state, event.timeStamp)
-              }}
-              type="button"
-            >
-              {state.name}
-            </button>
-          )
-        })}
-      </nav>
+        {(["Offense", "Defense", "Emphasis", "Tempo"] as TacticalCategory[]).map((category, index) => (
+          <button
+            className="shrink-0 touch-manipulation whitespace-nowrap rounded-full px-1.5 py-1 text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-[#f8f1e4]/48 outline-none transition-colors active:text-[#f8f1e4] hover:text-[#f8f1e4]/74 focus-visible:text-[#f8f1e4]"
+            key={category}
+            onClick={(event) => handleConditionStep(category, event.timeStamp)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") handleConditionStep(category, event.timeStamp)
+            }}
+            type="button"
+          >
+            {activeConditions[category]}
+            {index < 3 ? <span className="ml-2 text-[#f6d68a]/24">•</span> : null}
+          </button>
+        ))}
+      </div>
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -783,7 +790,7 @@ export function ContinuityPrototype() {
 
       <nav
         aria-label="Tactical actions"
-        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex w-[min(54rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center gap-2 overflow-x-auto rounded-[1.5rem] border border-[#f8f1e4]/13 bg-[#080806]/62 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_22px_72px_rgba(0,0,0,0.62)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.6rem] [&::-webkit-scrollbar]:hidden"
+        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex w-[min(36rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center justify-center gap-2 overflow-x-auto rounded-[1.35rem] border border-[#f8f1e4]/10 bg-[#080806]/48 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.11),0_18px_62px_rgba(0,0,0,0.54)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.55rem] [&::-webkit-scrollbar]:hidden"
       >
         {possessionBranches.map((branch) => {
           const active = activeBranchId === branch.id
@@ -793,8 +800,8 @@ export function ContinuityPrototype() {
               className={[
                 "snap-center shrink-0 touch-manipulation whitespace-nowrap rounded-[1.05rem] px-5 py-2.5 text-[0.72rem] font-extrabold uppercase tracking-[0.11em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.94]",
                 active
-                  ? "bg-[#f8f1e4] text-[#050505] opacity-100 shadow-[0_0_28px_rgba(246,214,138,0.25),inset_0_-2px_0_rgba(214,176,96,0.68)]"
-                  : "text-[#f8f1e4]/48 opacity-80 hover:bg-[#f8f1e4]/10 hover:text-[#f8f1e4]/82 focus-visible:bg-[#f8f1e4]/12 focus-visible:text-[#f8f1e4]",
+                  ? "bg-[#f8f1e4] text-[#050505] opacity-100 shadow-[0_0_24px_rgba(246,214,138,0.2),inset_0_-2px_0_rgba(214,176,96,0.62)]"
+                  : "text-[#f8f1e4]/46 opacity-75 hover:bg-[#f8f1e4]/9 hover:text-[#f8f1e4]/78 focus-visible:bg-[#f8f1e4]/12 focus-visible:text-[#f8f1e4]",
               ].join(" ")}
               key={branch.id}
               onClick={(event) => handlePossessionBranch(branch, event.timeStamp)}
@@ -1379,11 +1386,13 @@ function recallSpatialState(engine: Engine, state: SpatialState) {
   }
 }
 
-function getPossessionBranches(conditions: ActiveConditions): PossessionBranch[] {
+function getPossessionBranches(conditions: ActiveConditions, activeBranchId: string | null): PossessionBranch[] {
   const offense = conditions.Offense ?? "Horns"
   const defense = conditions.Defense ?? "Shell"
   const emphasis = conditions.Emphasis ?? "Keep Width"
   const tempo = conditions.Tempo ?? "Controlled"
+  const continuations = activeBranchId ? getContinuationBranches(activeBranchId, conditions) : null
+  if (continuations?.length) return continuations.slice(0, 4)
 
   if (offense === "Spain" && defense === "Drop") {
     return [
@@ -1465,6 +1474,35 @@ function getPossessionBranches(conditions: ActiveConditions): PossessionBranch[]
         ["o3", 0.62, 0.42, 0],
         ["o1", 0.56, 0.36, 180],
         ["x1", 0.54, 0.41, 300],
+      ]),
+    ]
+  }
+
+  if (offense === "5-Out" && defense === "Shell") {
+    return [
+      possessionBranch("fiveout-shell-corner-lift", "Corner Lift", [
+        ["o1", 0.52, 0.37, 0],
+        ["o4", 0.17, 0.7, 160],
+        ["o5", 0.85, 0.7, 210],
+        ["x4", 0.32, 0.69, 330],
+      ]),
+      possessionBranch("fiveout-shell-paint-touch", "Paint Touch", [
+        ["o1", 0.48, 0.5, 0],
+        ["o2", 0.2, 0.5, 180],
+        ["o3", 0.8, 0.5, 230],
+        ["x1", 0.5, 0.55, 350],
+      ]),
+      possessionBranch("fiveout-shell-empty-drift", "Empty Drift", [
+        ["o2", 0.14, 0.46, 0],
+        ["o4", 0.18, 0.74, 110],
+        ["o1", 0.62, 0.34, 240],
+        ["x2", 0.34, 0.52, 360],
+      ]),
+      possessionBranch("fiveout-shell-reset-angle", "Reset Angle", [
+        ["o1", 0.5, 0.3, 0],
+        ["o2", 0.28, 0.47, 210],
+        ["o3", 0.72, 0.47, 270],
+        ["x1", 0.5, 0.41, 390],
       ]),
     ]
   }
@@ -1582,7 +1620,112 @@ function getPossessionBranches(conditions: ActiveConditions): PossessionBranch[]
     )
   }
 
-  return branches.slice(0, 5)
+  return branches.slice(0, 4)
+}
+
+function getContinuationBranches(activeBranchId: string, conditions: ActiveConditions): PossessionBranch[] {
+  const defense = conditions.Defense ?? "Shell"
+  const tempo = conditions.Tempo ?? "Controlled"
+  const fast = ["Fast", "Push", "Early", "Transition"].includes(tempo)
+  const pressure = ["Switch", "Blitz", "Trap", "ICE"].includes(defense)
+
+  if (activeBranchId.includes("reject")) {
+    return [
+      possessionBranch("continue-reject-hammer", "Hammer", [
+        ["o1", 0.36, 0.5, 0],
+        ["o5", 0.84, 0.74, 170],
+        ["x5", 0.65, 0.68, 360],
+      ]),
+      possessionBranch("continue-reject-skip", "Skip", [
+        ["o1", 0.4, 0.45, 0],
+        ["o5", 0.82, 0.7, 130],
+        ["x4", 0.45, 0.68, 320],
+      ]),
+      possessionBranch("continue-reject-rescreen", "Re-screen", [
+        ["o3", 0.52, 0.48, 0],
+        ["o1", 0.58, 0.39, 180],
+        ["x1", 0.55, 0.45, 340],
+      ]),
+      possessionBranch("continue-reject-middle", "Attack Middle", [
+        ["o1", 0.52, 0.52, 0],
+        ["x1", 0.5, 0.57, 280],
+        ["o4", 0.16, 0.72, 360],
+      ]),
+    ]
+  }
+
+  if (activeBranchId.includes("paint") || activeBranchId.includes("pocket")) {
+    return [
+      possessionBranch("continue-paint-dunkspot", "Dunk Spot", [
+        ["o2", 0.5, 0.68, 0],
+        ["o4", 0.18, 0.74, 180],
+        ["x4", 0.39, 0.73, 340],
+      ]),
+      possessionBranch("continue-paint-kick", "Kick Corner", [
+        ["o1", 0.52, 0.56, 0],
+        ["o5", 0.86, 0.72, 150],
+        ["x5", 0.66, 0.68, 330],
+      ]),
+      possessionBranch("continue-paint-lift", "Slot Lift", [
+        ["o3", 0.7, 0.48, 0],
+        ["o1", 0.56, 0.46, 140],
+        ["x3", 0.64, 0.55, 320],
+      ]),
+      possessionBranch(fast ? "continue-paint-early" : "continue-paint-reset", fast ? "Early Swing" : "Reset", [
+        ["o1", fast ? 0.68 : 0.5, fast ? 0.36 : 0.3, 0],
+        ["o2", 0.28, 0.5, 180],
+        ["o3", 0.72, 0.5, 230],
+      ]),
+    ]
+  }
+
+  if (activeBranchId.includes("corner") || activeBranchId.includes("lift") || activeBranchId.includes("skip")) {
+    return [
+      possessionBranch("continue-lift-drive", "Baseline Drive", [
+        ["o5", 0.82, 0.62, 0],
+        ["x5", 0.72, 0.66, 260],
+        ["o3", 0.68, 0.49, 330],
+      ]),
+      possessionBranch("continue-lift-extra", "Extra Pass", [
+        ["o5", 0.86, 0.7, 0],
+        ["o3", 0.72, 0.5, 140],
+        ["x3", 0.64, 0.56, 320],
+      ]),
+      possessionBranch("continue-lift-drift", "Weakside Drift", [
+        ["o4", 0.14, 0.73, 0],
+        ["o1", 0.6, 0.36, 170],
+        ["x4", 0.32, 0.7, 310],
+      ]),
+      possessionBranch(pressure ? "continue-lift-slip" : "continue-lift-hold", pressure ? "Slip Behind" : "Hold Width", [
+        ["o2", pressure ? 0.5 : 0.22, pressure ? 0.63 : 0.48, 0],
+        ["x2", 0.42, 0.58, 260],
+        ["o5", 0.84, 0.72, 330],
+      ]),
+    ]
+  }
+
+  return [
+    possessionBranch("continue-read-swing", "Swing", [
+      ["o1", 0.62, 0.36, 0],
+      ["o3", 0.76, 0.52, 130],
+      ["x3", 0.67, 0.56, 310],
+    ]),
+    possessionBranch("continue-read-cut", "Cut", [
+      ["o2", 0.46, 0.64, 0],
+      ["x2", 0.44, 0.58, 260],
+      ["o4", 0.17, 0.73, 330],
+    ]),
+    possessionBranch("continue-read-reverse", "Reverse", [
+      ["o1", 0.44, 0.34, 0],
+      ["o2", 0.24, 0.5, 160],
+      ["o5", 0.82, 0.73, 260],
+    ]),
+    possessionBranch("continue-read-reset", "Reset", [
+      ["o1", 0.5, 0.28, 0],
+      ["x1", 0.5, 0.4, 300],
+      ["o3", 0.72, 0.48, 360],
+    ]),
+  ]
 }
 
 function possessionBranch(id: string, name: string, moves: Array<[string, number, number, number]>): PossessionBranch {
