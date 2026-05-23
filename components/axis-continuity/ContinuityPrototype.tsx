@@ -33,11 +33,23 @@ type Ball = {
   carrierId: string | null
   lastCarrierId: string | null
   passedAt: number
+  state: "loose" | "owned" | "passing" | "shot"
+  targetCarrierId: string | null
   targetX: number
   targetY: number
   trail: TrailPoint[]
   vx: number
   vy: number
+  x: number
+  y: number
+}
+
+type PossessionEvent = {
+  at: number
+  fromCarrierId: string | null
+  id: string
+  state: Ball["state"]
+  toCarrierId: string | null
   x: number
   y: number
 }
@@ -107,6 +119,8 @@ type Engine = {
   moved: boolean
   penActiveUntil: number
   pucks: Puck[]
+  possessionChangedAt: number
+  possessionEvents: PossessionEvent[]
   rafId: number
   rect: DOMRect | null
   continuityCells: ContinuityCell[]
@@ -131,6 +145,8 @@ const initialBall: Ball = {
   carrierId: "o1",
   lastCarrierId: "o1",
   passedAt: -10000,
+  state: "owned",
+  targetCarrierId: "o1",
   targetX: 0.5,
   targetY: 0.24,
   trail: [],
@@ -564,6 +580,8 @@ export function ContinuityPrototype() {
       moved: false,
       penActiveUntil: 0,
       pucks: clonePucks(initialPucks),
+      possessionChangedAt: -10000,
+      possessionEvents: [],
       rafId: 0,
       rect: null,
       continuityCells: [],
@@ -619,7 +637,7 @@ export function ContinuityPrototype() {
       engine.draggingBall = true
       engine.moved = false
       engine.touchStart = point
-      engine.ball.carrierId = null
+      setBallLoose(engine, point, event.timeStamp)
       engine.ball.targetX = point.x
       engine.ball.targetY = point.y
       engine.ball.x = point.x
@@ -680,7 +698,9 @@ export function ContinuityPrototype() {
     if (engine.draggingBall) {
       const point = eventPoint(event, engine)
       if (!point) return
-      engine.ball.carrierId = null
+      const nearest = nearestPuck(point, engine.pucks, "O")
+      engine.ball.state = "loose"
+      engine.ball.targetCarrierId = nearest && distance(point, nearest) < 0.24 ? nearest.id : null
       engine.ball.targetX = point.x
       engine.ball.targetY = point.y
       engine.ball.x = point.x
@@ -703,7 +723,7 @@ export function ContinuityPrototype() {
       if (puck && distance(engine.touchStart, puck) > 0.015) {
         rememberMove(engine, puck, engine.touchStart, { pressure: 0.5, t: event.timeStamp, x: puck.baseX, y: puck.baseY })
         if (engine.ball.carrierId === puck.id) {
-          passBallTo(engine, puck.id, event.timeStamp)
+          setBallOwned(engine, puck.id, event.timeStamp)
         }
       }
     }
@@ -712,6 +732,10 @@ export function ContinuityPrototype() {
       const nearest = nearestPuck(engine.ball, engine.pucks, "O")
       if (nearest && distance(engine.ball, nearest) < 0.18) {
         passBallTo(engine, nearest.id, event.timeStamp)
+      } else if (engine.ball.lastCarrierId) {
+        passBallTo(engine, engine.ball.lastCarrierId, event.timeStamp)
+      } else {
+        setBallLoose(engine, engine.ball, event.timeStamp)
       }
     }
 
@@ -849,9 +873,10 @@ function resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRect, dpr: number) {
 function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
   const pressure = Math.min(1, engine.pucks.length * 0.035)
   const formation = clamp(1 - (performance.now() - engine.formationPulseAt) / 900, 0, 1)
+  const possession = clamp(1 - (performance.now() - engine.possessionChangedAt) / 620, 0, 1)
   const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
-  gradient.addColorStop(0, `rgba(248,241,228,${0.085 + formation * 0.065 - pressure * 0.012})`)
-  gradient.addColorStop(0.4, `rgba(216,176,96,${0.035 + pressure * 0.018 + formation * 0.024})`)
+  gradient.addColorStop(0, `rgba(248,241,228,${0.085 + formation * 0.065 + possession * 0.024 - pressure * 0.012})`)
+  gradient.addColorStop(0.4, `rgba(216,176,96,${0.035 + pressure * 0.018 + formation * 0.024 + possession * 0.026})`)
   gradient.addColorStop(1, "rgba(0,0,0,0.82)")
   context.fillStyle = gradient
   context.fillRect(0, 0, width, height)
@@ -1189,7 +1214,7 @@ function drawBall(context: CanvasRenderingContext2D, width: number, height: numb
   const point = toPixels(ball, width, height)
   const radius = Math.max(5.5, Math.min(width, height) * 0.0085)
   const pulse = (Math.sin(performance.now() / 360) + 1) / 2
-  const passEnergy = clamp(1 - (performance.now() - ball.passedAt) / 520, 0, 1)
+  const passEnergy = ball.state === "passing" ? clamp(1 - (performance.now() - ball.passedAt) / 520, 0.28, 1) : clamp(1 - (performance.now() - ball.passedAt) / 520, 0, 1)
 
   context.save()
   context.lineCap = "round"
@@ -1224,7 +1249,7 @@ function drawBall(context: CanvasRenderingContext2D, width: number, height: numb
 
   context.shadowBlur = radius * (1.3 + passEnergy * 1.1)
   context.shadowColor = "rgba(246,214,138,0.52)"
-  context.fillStyle = "rgba(246,214,138,0.96)"
+  context.fillStyle = ball.state === "loose" ? "rgba(246,214,138,0.78)" : "rgba(246,214,138,0.96)"
   context.beginPath()
   context.arc(point.x, point.y, radius * (1 + passEnergy * 0.08), 0, Math.PI * 2)
   context.fill()
@@ -1333,11 +1358,34 @@ function updateBall(engine: Engine) {
   const previousX = engine.ball.x
   const previousY = engine.ball.y
 
-  if (engine.ball.carrierId && !engine.draggingBall) {
+  if (engine.ball.state === "owned" && engine.ball.carrierId && !engine.draggingBall) {
     const carrier = engine.pucks.find((puck) => puck.id === engine.ball.carrierId)
     if (carrier) {
-      engine.ball.targetX = carrier.x
-      engine.ball.targetY = carrier.y - 0.006
+      const offset = ballOwnershipOffset(carrier)
+      engine.ball.targetX = carrier.x + offset.x
+      engine.ball.targetY = carrier.y + offset.y
+    }
+  }
+
+  if (engine.ball.state === "passing" && engine.ball.targetCarrierId && !engine.draggingBall) {
+    const target = engine.pucks.find((puck) => puck.id === engine.ball.targetCarrierId)
+    if (target) {
+      const offset = ballOwnershipOffset(target)
+      engine.ball.targetX = target.x + offset.x
+      engine.ball.targetY = target.y + offset.y
+    }
+  }
+
+  if (engine.ball.state === "loose" && !engine.draggingBall) {
+    const nearest = nearestPuck(engine.ball, engine.pucks, "O")
+    if (nearest && distance(engine.ball, nearest) < 0.12) {
+      setBallOwned(engine, nearest.id, performance.now())
+    } else if (engine.ball.lastCarrierId) {
+      const fallback = engine.pucks.find((puck) => puck.id === engine.ball.lastCarrierId)
+      if (fallback) {
+        engine.ball.targetX = fallback.x
+        engine.ball.targetY = fallback.y
+      }
     }
   }
 
@@ -1354,6 +1402,13 @@ function updateBall(engine: Engine) {
   engine.ball.vy *= damping
   engine.ball.x = clamp(engine.ball.x + engine.ball.vx, 0.04, 0.96)
   engine.ball.y = clamp(engine.ball.y + engine.ball.vy, 0.06, 0.94)
+
+  if (engine.ball.state === "passing" && engine.ball.targetCarrierId && !engine.draggingBall) {
+    const target = engine.pucks.find((puck) => puck.id === engine.ball.targetCarrierId)
+    if (target && distance(engine.ball, target) < 0.035) {
+      setBallOwned(engine, target.id, performance.now())
+    }
+  }
 
   const moved = Math.hypot(engine.ball.x - previousX, engine.ball.y - previousY)
   if (moved > 0.0012) {
@@ -2137,13 +2192,74 @@ function passBallTo(engine: Engine, carrierId: string, at: number) {
   const carrier = engine.pucks.find((puck) => puck.id === carrierId && puck.symbol === "O")
   if (!carrier) return
 
-  engine.ball.lastCarrierId = engine.ball.carrierId
-  engine.ball.carrierId = carrier.id
+  const fromCarrierId = engine.ball.carrierId ?? engine.ball.lastCarrierId
+  engine.ball.lastCarrierId = fromCarrierId
+  engine.ball.carrierId = null
   engine.ball.passedAt = performance.now()
-  engine.ball.targetX = carrier.x
-  engine.ball.targetY = carrier.y - 0.006
+  engine.ball.state = "passing"
+  engine.ball.targetCarrierId = carrier.id
+  const offset = ballOwnershipOffset(carrier)
+  engine.ball.targetX = carrier.x + offset.x
+  engine.ball.targetY = carrier.y + offset.y
   engine.ball.trail.push({ t: at, x: engine.ball.x, y: engine.ball.y })
   if (engine.ball.trail.length > 24) engine.ball.trail.shift()
+  onPossessionChange(engine, fromCarrierId, null, "passing", at)
+}
+
+function setBallOwned(engine: Engine, carrierId: string, at: number) {
+  const carrier = engine.pucks.find((puck) => puck.id === carrierId && puck.symbol === "O")
+  if (!carrier) return
+
+  const fromCarrierId = engine.ball.carrierId ?? engine.ball.lastCarrierId
+  const offset = ballOwnershipOffset(carrier)
+  engine.ball.carrierId = carrier.id
+  engine.ball.lastCarrierId = carrier.id
+  engine.ball.state = "owned"
+  engine.ball.targetCarrierId = carrier.id
+  engine.ball.x = carrier.x + offset.x
+  engine.ball.y = carrier.y + offset.y
+  engine.ball.targetX = engine.ball.x
+  engine.ball.targetY = engine.ball.y
+  engine.ball.vx *= 0.18
+  engine.ball.vy *= 0.18
+  onPossessionChange(engine, fromCarrierId, carrier.id, "owned", at)
+}
+
+function setBallLoose(engine: Engine, point: { x: number; y: number }, at: number) {
+  const fromCarrierId = engine.ball.carrierId ?? engine.ball.lastCarrierId
+  engine.ball.lastCarrierId = fromCarrierId
+  engine.ball.carrierId = null
+  engine.ball.state = "loose"
+  engine.ball.targetCarrierId = null
+  engine.ball.targetX = point.x
+  engine.ball.targetY = point.y
+  onPossessionChange(engine, fromCarrierId, null, "loose", at)
+}
+
+function onPossessionChange(engine: Engine, fromCarrierId: string | null, toCarrierId: string | null, state: Ball["state"], at: number) {
+  if (fromCarrierId === toCarrierId && state === "owned" && performance.now() - engine.possessionChangedAt < 180) return
+
+  const now = performance.now()
+  engine.possessionChangedAt = now
+  engine.advantageFlash = { t: engine.possessionChangedAt, x: engine.ball.x, y: engine.ball.y }
+  engine.possessionEvents.push({
+    at,
+    fromCarrierId,
+    id: `possession-${engine.possessionEvents.length + 1}`,
+    state,
+    toCarrierId,
+    x: engine.ball.x,
+    y: engine.ball.y,
+  })
+  if (engine.possessionEvents.length > 48) engine.possessionEvents.shift()
+}
+
+function ballOwnershipOffset(carrier: { x: number; y: number }) {
+  const side = carrier.x < 0.5 ? 1 : -1
+  return {
+    x: side * 0.018,
+    y: -0.01,
+  }
 }
 
 function rememberMove(engine: Engine, puck: Puck, from: Point, to: Point) {
