@@ -25,6 +25,28 @@ type TrailPoint = {
   y: number
 }
 
+type MemoryEvent =
+  | {
+      at: number
+      id: string
+      kind: "stroke"
+      points: Point[]
+    }
+  | {
+      at: number
+      from: Point
+      id: string
+      kind: "move"
+      puckId: string
+      symbol: PuckSymbol
+      to: Point
+    }
+  | {
+      at: number
+      id: string
+      kind: "clear" | "undo"
+    }
+
 type Puck = {
   baseX: number
   baseY: number
@@ -43,6 +65,7 @@ type Puck = {
 type Engine = {
   activePointerId: number | null
   activePointerType: string | null
+  advantageFlash: TrailPoint | null
   draggingPuckId: string | null
   drawing: boolean
   eraseCursor: Point | null
@@ -51,9 +74,11 @@ type Engine = {
   pucks: Puck[]
   rafId: number
   rect: DOMRect | null
+  sessionMemory: MemoryEvent[]
   strokeSequence: number
   strokes: Stroke[]
   tool: Tool
+  touchStart: Point | null
   workingStroke: Stroke | null
 }
 
@@ -87,6 +112,7 @@ export function ContinuityPrototype() {
     const engine: Engine = {
       activePointerId: null,
       activePointerType: null,
+      advantageFlash: null,
       draggingPuckId: null,
       drawing: false,
       eraseCursor: null,
@@ -95,9 +121,11 @@ export function ContinuityPrototype() {
       pucks: clonePucks(initialPucks),
       rafId: 0,
       rect: null,
+      sessionMemory: [],
       strokeSequence: 0,
       strokes: [],
       tool: "pencil",
+      touchStart: null,
       workingStroke: null,
     }
     engineRef.current = engine
@@ -154,6 +182,7 @@ export function ContinuityPrototype() {
     engine.activePointerId = event.pointerId
     engine.activePointerType = event.pointerType
     engine.moved = false
+    engine.touchStart = point
     event.currentTarget.setPointerCapture(event.pointerId)
 
     if (puck) {
@@ -227,8 +256,16 @@ export function ContinuityPrototype() {
       if (engine.workingStroke.points.length > 2) {
         engine.strokeSequence += 1
         engine.strokes.push(engine.workingStroke)
+        rememberStroke(engine, engine.workingStroke)
       }
       engine.workingStroke = null
+    }
+
+    if (engine.draggingPuckId && engine.touchStart) {
+      const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
+      if (puck && distance(engine.touchStart, puck) > 0.015) {
+        rememberMove(engine, puck, engine.touchStart, { pressure: 0.5, t: event.timeStamp, x: puck.baseX, y: puck.baseY })
+      }
     }
 
     engine.activePointerId = null
@@ -236,6 +273,7 @@ export function ContinuityPrototype() {
     engine.draggingPuckId = null
     engine.drawing = false
     engine.eraseCursor = null
+    engine.touchStart = null
   }
 
   function undo() {
@@ -244,6 +282,7 @@ export function ContinuityPrototype() {
 
     if (engine.strokes.length > 0) {
       engine.strokes.pop()
+      rememberSystemEvent(engine, "undo")
     }
   }
 
@@ -253,6 +292,7 @@ export function ContinuityPrototype() {
 
     engine.strokes = []
     engine.workingStroke = null
+    rememberSystemEvent(engine, "clear")
   }
 
   return (
@@ -327,6 +367,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
   drawMovementIntent(context, width, height, engine)
   drawIntelligenceSurface(context, width, height, engine)
+  drawLiveResponse(context, width, height, engine)
   drawPuckInfluence(context, width, height, engine.pucks)
   drawPucks(context, width, height, engine.pucks)
   if (engine.eraseCursor) drawEraser(context, width, height, engine.eraseCursor)
@@ -540,6 +581,83 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
   context.restore()
 }
 
+function drawLiveResponse(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O")
+  const defense = engine.pucks.filter((puck) => puck.symbol === "X")
+  const rim = { x: 0.5, y: 0.78 }
+  const drivingO = offense
+    .map((puck) => ({ puck, speed: Math.hypot(puck.vx, puck.vy) }))
+    .sort((a, b) => b.speed - a.speed)[0]
+
+  context.save()
+  context.lineCap = "round"
+  context.lineJoin = "round"
+
+  if (drivingO && drivingO.speed > 0.004 && drivingO.puck.vy > 0.001) {
+    const start = toPixels(drivingO.puck, width, height)
+    const end = toPixels(rim, width, height)
+    const window = clamp(drivingO.speed / 0.018, 0, 1)
+    const recovery = nearestPuck(drivingO.puck, defense, "X")
+
+    context.strokeStyle = `rgba(8,8,7,${0.07 * window})`
+    context.lineWidth = Math.max(1, Math.min(width, height) * 0.0025 * window)
+    context.beginPath()
+    context.moveTo(start.x, start.y)
+    context.quadraticCurveTo((start.x + end.x) / 2, start.y + Math.min(width, height) * 0.08, end.x, end.y)
+    context.stroke()
+
+    if (recovery) {
+      const recoveryStart = toPixels(recovery, width, height)
+      const recoverTo = toPixels({ x: (drivingO.puck.x + rim.x) / 2, y: (drivingO.puck.y + rim.y) / 2 }, width, height)
+      context.strokeStyle = `rgba(8,8,7,${0.045 * window})`
+      context.setLineDash([Math.min(width, height) * 0.007, Math.min(width, height) * 0.012])
+      context.beginPath()
+      context.moveTo(recoveryStart.x, recoveryStart.y)
+      context.lineTo(recoverTo.x, recoverTo.y)
+      context.stroke()
+      context.setLineDash([])
+    }
+  }
+
+  const spacing = spacingStress(offense)
+  if (spacing > 0) {
+    for (const puck of offense) {
+      const nearest = nearestPuck(puck, offense, "O")
+      if (!nearest) continue
+      const gap = distance(puck, nearest)
+      if (gap > 0.16) continue
+
+      const midpoint = toPixels({ x: (puck.x + nearest.x) / 2, y: (puck.y + nearest.y) / 2 }, width, height)
+      const radius = Math.min(width, height) * (0.055 + spacing * 0.025)
+      const haze = context.createRadialGradient(midpoint.x, midpoint.y, radius * 0.1, midpoint.x, midpoint.y, radius)
+      haze.addColorStop(0, `rgba(8,8,7,${0.03 * spacing})`)
+      haze.addColorStop(1, "rgba(8,8,7,0)")
+      context.fillStyle = haze
+      context.beginPath()
+      context.arc(midpoint.x, midpoint.y, radius, 0, Math.PI * 2)
+      context.fill()
+    }
+  }
+
+  if (engine.advantageFlash) {
+    const age = performance.now() - engine.advantageFlash.t
+    const alpha = clamp(1 - age / 900, 0, 1)
+    if (alpha > 0) {
+      const point = toPixels(engine.advantageFlash, width, height)
+      const radius = Math.min(width, height) * (0.07 + (1 - alpha) * 0.04)
+      const flash = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius)
+      flash.addColorStop(0, `rgba(8,8,7,${0.045 * alpha})`)
+      flash.addColorStop(1, "rgba(8,8,7,0)")
+      context.fillStyle = flash
+      context.beginPath()
+      context.arc(point.x, point.y, radius, 0, Math.PI * 2)
+      context.fill()
+    }
+  }
+
+  context.restore()
+}
+
 function drawPuckInfluence(context: CanvasRenderingContext2D, width: number, height: number, pucks: Puck[]) {
   context.save()
   for (const puck of pucks) {
@@ -636,6 +754,7 @@ function updatePhysics(engine: Engine) {
   const settle = 0.00006
 
   pruneTemporalMemory(engine)
+  updateLiveResponse(engine)
   applyBasketballRelationships(engine)
 
   for (const puck of engine.pucks) {
@@ -680,6 +799,27 @@ function captureTrailPoint(puck: Puck, previousX: number, previousY: number) {
   }
 }
 
+function updateLiveResponse(engine: Engine) {
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O")
+  const defense = engine.pucks.filter((puck) => puck.symbol === "X")
+
+  if (engine.advantageFlash && performance.now() - engine.advantageFlash.t > 900) {
+    engine.advantageFlash = null
+  }
+
+  for (const puck of offense) {
+    const speed = Math.hypot(puck.vx, puck.vy)
+    if (speed < 0.006 || puck.vy <= 0.001) continue
+
+    const nearestX = nearestPuck(puck, defense, "X")
+    const pressure = nearestX ? clamp(1 - distance(puck, nearestX) / 0.24, 0, 1) : 0
+    const gapWindow = clamp(speed / 0.018, 0, 1) * (1 - pressure * 0.65)
+    if (gapWindow > 0.42) {
+      engine.advantageFlash = { t: performance.now(), x: puck.x, y: puck.y }
+    }
+  }
+}
+
 function applyBasketballRelationships(engine: Engine) {
   const latestStroke = engine.workingStroke ?? engine.strokes.at(-1) ?? null
   const ballSide = averagePuck(engine.pucks, "O")
@@ -714,6 +854,7 @@ function applyBasketballRelationships(engine: Engine) {
         }
       }
     } else {
+      const driveSpeed = Math.hypot(puck.vx, puck.vy)
       for (const teammate of engine.pucks) {
         if (teammate.id === puck.id || teammate.symbol !== "O") continue
         const gap = distance(puck, teammate)
@@ -728,6 +869,12 @@ function applyBasketballRelationships(engine: Engine) {
         const pressure = clamp(1 - distance(puck, nearestX) / 0.22, 0, 1)
         desiredX += (puck.x - nearestX.x) * 0.055 * pressure
         desiredY += (puck.y - nearestX.y) * 0.055 * pressure
+      }
+
+      if (driveSpeed > 0.004 && puck.vy > 0.001) {
+        const cornerX = puck.x < 0.5 ? 0.18 : 0.82
+        desiredX += (cornerX - puck.baseX) * 0.04
+        desiredY += (0.72 - puck.baseY) * 0.02
       }
 
       const strokeIntent = strokeVectorInfluence(puck, latestStroke)
@@ -766,6 +913,19 @@ function averagePuck(pucks: Puck[], symbol: PuckSymbol) {
     x: matching.reduce((sum, puck) => sum + puck.x, 0) / matching.length,
     y: matching.reduce((sum, puck) => sum + puck.y, 0) / matching.length,
   }
+}
+
+function spacingStress(pucks: Puck[]) {
+  if (pucks.length < 2) return 0
+
+  let stress = 0
+  for (const puck of pucks) {
+    const nearest = nearestPuck(puck, pucks, "O")
+    if (!nearest) continue
+    stress += clamp((0.16 - distance(puck, nearest)) / 0.16, 0, 1)
+  }
+
+  return clamp(stress / pucks.length, 0, 1)
 }
 
 function strokeVectorInfluence(puck: Puck, stroke: Stroke | null) {
@@ -815,6 +975,42 @@ function eraseAt(engine: Engine, point: Point) {
       points: stroke.points.filter((strokePoint) => distance(strokePoint, point) > threshold),
     }))
     .filter((stroke) => stroke.points.length > 1)
+}
+
+function rememberStroke(engine: Engine, stroke: Stroke) {
+  appendMemory(engine, {
+    at: performance.now(),
+    id: `memory-${engine.sessionMemory.length + 1}`,
+    kind: "stroke",
+    points: stroke.points.map((point) => ({ ...point })),
+  })
+}
+
+function rememberMove(engine: Engine, puck: Puck, from: Point, to: Point) {
+  appendMemory(engine, {
+    at: performance.now(),
+    from,
+    id: `memory-${engine.sessionMemory.length + 1}`,
+    kind: "move",
+    puckId: puck.id,
+    symbol: puck.symbol,
+    to,
+  })
+}
+
+function rememberSystemEvent(engine: Engine, kind: "clear" | "undo") {
+  appendMemory(engine, {
+    at: performance.now(),
+    id: `memory-${engine.sessionMemory.length + 1}`,
+    kind,
+  })
+}
+
+function appendMemory(engine: Engine, event: MemoryEvent) {
+  engine.sessionMemory.push(event)
+  if (engine.sessionMemory.length > 160) {
+    engine.sessionMemory.shift()
+  }
 }
 
 function canCreateStroke(pointerType: string) {
