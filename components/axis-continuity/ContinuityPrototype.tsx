@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 
 type Tool = "pencil" | "eraser"
 type PuckSymbol = "O" | "X"
+type SpatialStateName = "Horns" | "5-Out" | "Delay" | "Spain" | "Box" | "Shell"
 
 type Point = {
   pressure: number
@@ -23,6 +24,13 @@ type TrailPoint = {
   t: number
   x: number
   y: number
+}
+
+type Choreography = {
+  delay: number
+  duration: number
+  path: Point[]
+  startedAt: number
 }
 
 type MemoryEvent =
@@ -51,6 +59,7 @@ type Puck = {
   baseX: number
   baseY: number
   bornAt: number
+  choreography: Choreography | null
   id: string
   symbol: PuckSymbol
   targetX: number
@@ -60,6 +69,11 @@ type Puck = {
   vy: number
   x: number
   y: number
+}
+
+type SpatialState = {
+  name: SpatialStateName
+  pucks: Record<string, { x: number; y: number }>
 }
 
 type ContinuityCell = {
@@ -94,21 +108,115 @@ type Engine = {
 }
 
 const initialPucks: Puck[] = [
-  makePuck("o1", "O", 0.5, 0.2),
-  makePuck("o2", "O", 0.28, 0.4),
-  makePuck("o3", "O", 0.72, 0.4),
-  makePuck("o4", "O", 0.38, 0.68),
-  makePuck("o5", "O", 0.62, 0.68),
-  makePuck("x1", "X", 0.5, 0.31),
-  makePuck("x2", "X", 0.32, 0.5),
-  makePuck("x3", "X", 0.68, 0.5),
-  makePuck("x4", "X", 0.42, 0.78),
-  makePuck("x5", "X", 0.58, 0.78),
+  makePuck("o1", "O", 0.5, 0.24),
+  makePuck("o2", "O", 0.37, 0.48),
+  makePuck("o3", "O", 0.63, 0.48),
+  makePuck("o4", "O", 0.18, 0.78),
+  makePuck("o5", "O", 0.82, 0.78),
+  makePuck("x1", "X", 0.5, 0.34),
+  makePuck("x2", "X", 0.39, 0.56),
+  makePuck("x3", "X", 0.61, 0.56),
+  makePuck("x4", "X", 0.24, 0.8),
+  makePuck("x5", "X", 0.76, 0.8),
+]
+
+const spatialStates: SpatialState[] = [
+  {
+    name: "Horns",
+    pucks: {
+      o1: { x: 0.5, y: 0.24 },
+      o2: { x: 0.37, y: 0.48 },
+      o3: { x: 0.63, y: 0.48 },
+      o4: { x: 0.18, y: 0.78 },
+      o5: { x: 0.82, y: 0.78 },
+      x1: { x: 0.5, y: 0.34 },
+      x2: { x: 0.39, y: 0.56 },
+      x3: { x: 0.61, y: 0.56 },
+      x4: { x: 0.24, y: 0.8 },
+      x5: { x: 0.76, y: 0.8 },
+    },
+  },
+  {
+    name: "5-Out",
+    pucks: {
+      o1: { x: 0.5, y: 0.22 },
+      o2: { x: 0.24, y: 0.42 },
+      o3: { x: 0.76, y: 0.42 },
+      o4: { x: 0.16, y: 0.78 },
+      o5: { x: 0.84, y: 0.78 },
+      x1: { x: 0.5, y: 0.34 },
+      x2: { x: 0.29, y: 0.5 },
+      x3: { x: 0.71, y: 0.5 },
+      x4: { x: 0.23, y: 0.74 },
+      x5: { x: 0.77, y: 0.74 },
+    },
+  },
+  {
+    name: "Delay",
+    pucks: {
+      o1: { x: 0.5, y: 0.3 },
+      o2: { x: 0.24, y: 0.48 },
+      o3: { x: 0.76, y: 0.48 },
+      o4: { x: 0.34, y: 0.74 },
+      o5: { x: 0.66, y: 0.74 },
+      x1: { x: 0.5, y: 0.4 },
+      x2: { x: 0.31, y: 0.54 },
+      x3: { x: 0.69, y: 0.54 },
+      x4: { x: 0.39, y: 0.76 },
+      x5: { x: 0.61, y: 0.76 },
+    },
+  },
+  {
+    name: "Spain",
+    pucks: {
+      o1: { x: 0.5, y: 0.25 },
+      o2: { x: 0.5, y: 0.52 },
+      o3: { x: 0.5, y: 0.66 },
+      o4: { x: 0.17, y: 0.78 },
+      o5: { x: 0.83, y: 0.78 },
+      x1: { x: 0.5, y: 0.35 },
+      x2: { x: 0.48, y: 0.58 },
+      x3: { x: 0.54, y: 0.72 },
+      x4: { x: 0.24, y: 0.76 },
+      x5: { x: 0.76, y: 0.76 },
+    },
+  },
+  {
+    name: "Box",
+    pucks: {
+      o1: { x: 0.36, y: 0.48 },
+      o2: { x: 0.64, y: 0.48 },
+      o3: { x: 0.36, y: 0.72 },
+      o4: { x: 0.64, y: 0.72 },
+      o5: { x: 0.5, y: 0.24 },
+      x1: { x: 0.38, y: 0.54 },
+      x2: { x: 0.62, y: 0.54 },
+      x3: { x: 0.38, y: 0.76 },
+      x4: { x: 0.62, y: 0.76 },
+      x5: { x: 0.5, y: 0.34 },
+    },
+  },
+  {
+    name: "Shell",
+    pucks: {
+      o1: { x: 0.5, y: 0.28 },
+      o2: { x: 0.27, y: 0.48 },
+      o3: { x: 0.73, y: 0.48 },
+      o4: { x: 0.28, y: 0.76 },
+      o5: { x: 0.72, y: 0.76 },
+      x1: { x: 0.5, y: 0.4 },
+      x2: { x: 0.35, y: 0.55 },
+      x3: { x: 0.65, y: 0.55 },
+      x4: { x: 0.39, y: 0.73 },
+      x5: { x: 0.61, y: 0.73 },
+    },
+  },
 ]
 
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
+  const [activeSpatialState, setActiveSpatialState] = useState<SpatialStateName>("Horns")
   const [tool, setTool] = useState<Tool>("pencil")
 
   useEffect(() => {
@@ -199,6 +307,7 @@ export function ContinuityPrototype() {
 
     if (puck) {
       engine.draggingPuckId = puck.id
+      puck.choreography = null
       puck.targetX = point.x
       puck.targetY = point.y
       return
@@ -269,6 +378,7 @@ export function ContinuityPrototype() {
         engine.strokeSequence += 1
         engine.strokes.push(engine.workingStroke)
         rememberStroke(engine, engine.workingStroke)
+        cueChoreographyFromStroke(engine, engine.workingStroke)
       }
       engine.workingStroke = null
     }
@@ -307,6 +417,14 @@ export function ContinuityPrototype() {
     rememberSystemEvent(engine, "clear")
   }
 
+  function handleSpatialStateRecall(state: SpatialState) {
+    const engine = engineRef.current
+    if (!engine) return
+
+    recallSpatialState(engine, state)
+    setActiveSpatialState(state.name)
+  }
+
   return (
     <main className="fixed inset-0 isolate overflow-hidden bg-[#f8f5ec] text-black selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
       <canvas
@@ -319,6 +437,26 @@ export function ContinuityPrototype() {
         onPointerUp={handlePointerUp}
         ref={canvasRef}
       />
+
+      <nav
+        aria-label="Spatial states"
+        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-black/8 bg-white/32 p-1 shadow-[0_14px_38px_rgba(41,32,18,0.08)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {spatialStates.map((state) => (
+          <button
+            aria-pressed={activeSpatialState === state.name}
+            className={[
+              "shrink-0 rounded-full px-3.5 py-2 text-[0.68rem] font-medium tracking-[0.08em] transition-colors",
+              activeSpatialState === state.name ? "bg-black text-[#f8f5ec]" : "text-black/46 hover:bg-black/5 hover:text-black/70",
+            ].join(" ")}
+            key={state.name}
+            onClick={() => handleSpatialStateRecall(state)}
+            type="button"
+          >
+            {state.name}
+          </button>
+        ))}
+      </nav>
 
       <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-black/10 bg-white/45 p-1.5 shadow-[0_16px_42px_rgba(41,32,18,0.12)] backdrop-blur-2xl">
         <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
@@ -782,6 +920,7 @@ function updatePhysics(engine: Engine) {
   pruneTemporalMemory(engine)
   updateLiveResponse(engine)
   applyBasketballRelationships(engine)
+  updateChoreography(engine)
   updateContinuityEngine(engine)
 
   for (const puck of engine.pucks) {
@@ -800,6 +939,49 @@ function updatePhysics(engine: Engine) {
     puck.targetX = clamp(puck.targetX, 0.04, 0.96)
     puck.targetY = clamp(puck.targetY, 0.06, 0.94)
     captureTrailPoint(puck, previousX, previousY)
+  }
+}
+
+function updateChoreography(engine: Engine) {
+  const now = performance.now()
+
+  for (const puck of engine.pucks) {
+    const choreography = puck.choreography
+    if (!choreography || puck.id === engine.draggingPuckId) continue
+
+    const elapsed = now - choreography.startedAt - choreography.delay
+    if (elapsed < 0) continue
+
+    const progress = clamp(elapsed / choreography.duration, 0, 1)
+    const point = pointOnPath(choreography.path, easeInOutCubic(progress))
+    if (!point) continue
+
+    puck.baseX = point.x
+    puck.baseY = point.y
+    puck.targetX = point.x
+    puck.targetY = point.y
+
+    if (progress >= 1) {
+      puck.choreography = null
+    }
+  }
+}
+
+function recallSpatialState(engine: Engine, state: SpatialState) {
+  const now = performance.now()
+  for (const puck of engine.pucks) {
+    const next = state.pucks[puck.id]
+    if (!next) continue
+
+    puck.baseX = next.x
+    puck.baseY = next.y
+    puck.targetX = next.x
+    puck.targetY = next.y
+    puck.vx *= 0.3
+    puck.vy *= 0.3
+    puck.choreography = null
+    puck.bornAt = now - 190
+    puck.trail = puck.trail.slice(-8)
   }
 }
 
@@ -823,6 +1005,41 @@ function captureTrailPoint(puck: Puck, previousX: number, previousY: number) {
   puck.trail.push({ t: now, x: puck.x, y: puck.y })
   if (puck.trail.length > 32) {
     puck.trail.shift()
+  }
+}
+
+function cueChoreographyFromStroke(engine: Engine, stroke: Stroke) {
+  if (stroke.points.length < 6) return
+
+  const path = reducePath(stroke.points)
+  const start = path[0]
+  const end = path[path.length - 1]
+  const travel = pathLength(path)
+  if (travel < 0.055) return
+
+  const primary = nearestAvailablePuck(engine.pucks, start, null)
+  if (!primary || distance(primary, start) > 0.18) return
+
+  const now = performance.now()
+  primary.choreography = {
+    delay: 90,
+    duration: clamp(travel * 5200, 860, 2100),
+    path,
+    startedAt: now,
+  }
+
+  const reaction = nearestAvailablePuck(engine.pucks, primary, primary.symbol === "O" ? "X" : "O")
+  if (!reaction || distance(reaction, primary) > 0.3) return
+
+  const reactionTarget = blendPoint(reaction, end, 0.38)
+  reaction.choreography = {
+    delay: 420,
+    duration: clamp(distance(reaction, reactionTarget) * 5000, 620, 1250),
+    path: [
+      { pressure: 0.5, t: now, x: reaction.baseX, y: reaction.baseY },
+      { pressure: 0.5, t: now + 1, x: reactionTarget.x, y: reactionTarget.y },
+    ],
+    startedAt: now,
   }
 }
 
@@ -987,6 +1204,22 @@ function nearestPuck(origin: Puck, pucks: Puck[], symbol: PuckSymbol) {
   return nearest
 }
 
+function nearestAvailablePuck(pucks: Puck[], origin: { x: number; y: number }, symbol: PuckSymbol | null) {
+  let nearest: Puck | null = null
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  for (const puck of pucks) {
+    if (symbol && puck.symbol !== symbol) continue
+    const gap = distance(origin, puck)
+    if (gap < nearestDistance) {
+      nearest = puck
+      nearestDistance = gap
+    }
+  }
+
+  return nearest
+}
+
 function averagePuck(pucks: Puck[], symbol: PuckSymbol) {
   const matching = pucks.filter((puck) => puck.symbol === symbol)
   if (matching.length === 0) return null
@@ -1100,11 +1333,11 @@ function canCreateStroke(pointerType: string) {
 }
 
 function makePuck(id: string, symbol: PuckSymbol, x: number, y: number): Puck {
-  return { baseX: x, baseY: y, bornAt: -10000, id, symbol, targetX: x, targetY: y, trail: [], vx: 0, vy: 0, x, y }
+  return { baseX: x, baseY: y, bornAt: -10000, choreography: null, id, symbol, targetX: x, targetY: y, trail: [], vx: 0, vy: 0, x, y }
 }
 
 function clonePucks(pucks: Puck[]) {
-  return pucks.map((puck) => ({ ...puck, trail: [] }))
+  return pucks.map((puck) => ({ ...puck, choreography: null, trail: [] }))
 }
 
 function toPixels(point: { x: number; y: number }, width: number, height: number) {
@@ -1147,6 +1380,66 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
+function pathLength(points: Point[]) {
+  let length = 0
+  for (let index = 1; index < points.length; index += 1) {
+    length += distance(points[index - 1], points[index])
+  }
+  return length
+}
+
+function reducePath(points: Point[]) {
+  const reduced: Point[] = []
+  for (const point of points) {
+    const previous = reduced.at(-1)
+    if (!previous || distance(previous, point) > 0.012) {
+      reduced.push({ ...point })
+    }
+  }
+
+  if (reduced.length < 2) {
+    return points.map((point) => ({ ...point }))
+  }
+
+  return reduced
+}
+
+function pointOnPath(points: Point[], progress: number) {
+  if (points.length === 0) return null
+  if (points.length === 1) return points[0]
+
+  const target = pathLength(points) * progress
+  let travelled = 0
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]
+    const current = points[index]
+    const segment = distance(previous, current)
+    if (segment <= 0) continue
+
+    if (travelled + segment >= target) {
+      const local = clamp((target - travelled) / segment, 0, 1)
+      return {
+        pressure: current.pressure,
+        t: current.t,
+        x: previous.x + (current.x - previous.x) * local,
+        y: previous.y + (current.y - previous.y) * local,
+      }
+    }
+
+    travelled += segment
+  }
+
+  return points.at(-1) ?? null
+}
+
+function blendPoint(from: { x: number; y: number }, to: { x: number; y: number }, amount: number) {
+  return {
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  }
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
@@ -1162,6 +1455,10 @@ function strokeFade(age: number) {
 
 function easeOutCubic(value: number) {
   return 1 - (1 - value) ** 3
+}
+
+function easeInOutCubic(value: number) {
+  return value < 0.5 ? 4 * value * value * value : 1 - (-2 * value + 2) ** 3 / 2
 }
 
 function symbolGlow(symbol: PuckSymbol, alpha: number) {
