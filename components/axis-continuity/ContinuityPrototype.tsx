@@ -22,6 +22,7 @@ type TrailPoint = {
 }
 
 type Choreography = {
+  arc: number
   delay: number
   duration: number
   from: Point
@@ -104,6 +105,13 @@ type ContinuityCell = {
   y: number
 }
 
+type CourtZone = {
+  id: string
+  radius: number
+  x: number
+  y: number
+}
+
 type Engine = {
   activePointerId: number | null
   activePointerType: string | null
@@ -155,6 +163,31 @@ const initialBall: Ball = {
   x: 0.5,
   y: 0.24,
 }
+
+const LIVE_COURT = {
+  bottom: 0.89,
+  left: 0.08,
+  right: 0.92,
+  top: 0.13,
+}
+
+const courtZones: CourtZone[] = [
+  { id: "top", radius: 0.16, x: 0.5, y: 0.25 },
+  { id: "slot-left", radius: 0.13, x: 0.34, y: 0.38 },
+  { id: "slot-right", radius: 0.13, x: 0.66, y: 0.38 },
+  { id: "wing-left", radius: 0.14, x: 0.22, y: 0.52 },
+  { id: "wing-right", radius: 0.14, x: 0.78, y: 0.52 },
+  { id: "corner-left", radius: 0.13, x: 0.16, y: 0.77 },
+  { id: "corner-right", radius: 0.13, x: 0.84, y: 0.77 },
+  { id: "elbow-left", radius: 0.1, x: 0.38, y: 0.58 },
+  { id: "elbow-right", radius: 0.1, x: 0.62, y: 0.58 },
+  { id: "nail", radius: 0.12, x: 0.5, y: 0.52 },
+  { id: "paint", radius: 0.16, x: 0.5, y: 0.69 },
+  { id: "dunker-left", radius: 0.1, x: 0.34, y: 0.8 },
+  { id: "dunker-right", radius: 0.1, x: 0.66, y: 0.8 },
+  { id: "short-left", radius: 0.1, x: 0.22, y: 0.71 },
+  { id: "short-right", radius: 0.1, x: 0.78, y: 0.71 },
+]
 
 const spatialStates: SpatialState[] = [
   {
@@ -660,10 +693,11 @@ export function ContinuityPrototype() {
     if (puck) {
       engine.draggingPuckId = puck.id
       puck.choreography = null
-      puck.targetX = point.x
-      puck.targetY = point.y
-      puck.x = point.x
-      puck.y = point.y
+      const constrained = constrainToLiveCourt(point)
+      puck.targetX = constrained.x
+      puck.targetY = constrained.y
+      puck.x = constrained.x
+      puck.y = constrained.y
       puck.vx = 0
       puck.vy = 0
       return
@@ -683,12 +717,13 @@ export function ContinuityPrototype() {
       engine.moved = true
       const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
       if (puck) {
-        puck.baseX = point.x
-        puck.baseY = point.y
-        puck.targetX = point.x
-        puck.targetY = point.y
-        puck.x = point.x
-        puck.y = point.y
+        const constrained = constrainToLiveCourt(point)
+        puck.baseX = constrained.x
+        puck.baseY = constrained.y
+        puck.targetX = constrained.x
+        puck.targetY = constrained.y
+        puck.x = constrained.x
+        puck.y = constrained.y
         puck.vx = 0
         puck.vy = 0
       }
@@ -1302,6 +1337,7 @@ function updatePhysics(engine: Engine) {
   updateBall(engine)
   updateLiveResponse(engine)
   applyBasketballRelationships(engine)
+  applyCourtPhysics(engine)
   updateContinuityEngine(engine)
 
   for (const puck of engine.pucks) {
@@ -1319,10 +1355,12 @@ function updatePhysics(engine: Engine) {
     puck.y += puck.vy
     if (Math.abs(puck.vx) < settle) puck.vx = 0
     if (Math.abs(puck.vy) < settle) puck.vy = 0
-    puck.x = clamp(puck.x, 0.04, 0.96)
-    puck.y = clamp(puck.y, 0.06, 0.94)
-    puck.targetX = clamp(puck.targetX, 0.04, 0.96)
-    puck.targetY = clamp(puck.targetY, 0.06, 0.94)
+    const constrained = constrainToLiveCourt(puck)
+    puck.x = constrained.x
+    puck.y = constrained.y
+    const constrainedTarget = constrainToLiveCourt({ x: puck.targetX, y: puck.targetY })
+    puck.targetX = constrainedTarget.x
+    puck.targetY = constrainedTarget.y
     captureTrailPoint(puck, previousX, previousY)
   }
 
@@ -1342,9 +1380,18 @@ function updateChoreography(engine: Engine) {
     const progress = clamp(elapsed / choreography.duration, 0, 1)
     const eased = easeInOutCubic(progress)
     const settle = Math.sin(progress * Math.PI) * 0.006
+    const dx = choreography.to.x - choreography.from.x
+    const dy = choreography.to.y - choreography.from.y
+    const length = Math.max(0.001, Math.hypot(dx, dy))
+    const arcX = (-dy / length) * choreography.arc * Math.sin(progress * Math.PI)
+    const arcY = (dx / length) * choreography.arc * Math.sin(progress * Math.PI) * 0.65
 
-    puck.baseX = choreography.from.x + (choreography.to.x - choreography.from.x) * eased + settle * Math.sign(choreography.to.x - choreography.from.x)
-    puck.baseY = choreography.from.y + (choreography.to.y - choreography.from.y) * eased + settle * 0.45
+    const next = constrainToLiveCourt({
+      x: choreography.from.x + dx * eased + settle * Math.sign(dx) + arcX,
+      y: choreography.from.y + dy * eased + settle * 0.45 + arcY,
+    })
+    puck.baseX = next.x
+    puck.baseY = next.y
     puck.targetX = puck.baseX
     puck.targetY = puck.baseY
 
@@ -1419,6 +1466,27 @@ function updateBall(engine: Engine) {
       if (engine.ball.trail.length > 24) engine.ball.trail.shift()
     }
   }
+}
+
+function applyCourtPhysics(engine: Engine) {
+  const ball = engine.ball
+
+  for (const puck of engine.pucks) {
+    if (puck.id === engine.draggingPuckId) continue
+
+    const bounded = softBoundaryTarget(puck)
+    puck.targetX = bounded.x
+    puck.targetY = bounded.y
+
+    const zone = preferredZoneForPuck(puck, ball)
+    if (zone) {
+      const zonePull = zoneInfluence(puck, zone) * (puck.symbol === "O" ? 0.032 : 0.025)
+      puck.targetX += (zone.x - puck.targetX) * zonePull
+      puck.targetY += (zone.y - puck.targetY) * zonePull
+    }
+  }
+
+  softenCollisions(engine.pucks)
 }
 
 function recallSpatialState(engine: Engine, state: SpatialState) {
@@ -1790,8 +1858,7 @@ function possessionBranch(id: string, name: string, moves: Array<[string, number
       delay,
       duration: 680 + index * 42,
       id: moveId,
-      x,
-      y,
+      ...constrainToLiveCourt({ x, y }),
     })),
     name,
   }
@@ -1807,6 +1874,7 @@ function applyPossessionBranch(engine: Engine, branch: PossessionBranch, at: num
 
     const to = { pressure: 0.5, t: at + move.delay, x: move.x, y: move.y }
     puck.choreography = {
+      arc: movementArcFor(puck, to),
       delay: move.delay,
       duration: move.duration,
       from: { pressure: 0.5, t: at, x: puck.x, y: puck.y },
@@ -2260,6 +2328,82 @@ function ballOwnershipOffset(carrier: { x: number; y: number }) {
     x: side * 0.018,
     y: -0.01,
   }
+}
+
+function constrainToLiveCourt(point: { x: number; y: number }) {
+  return {
+    x: clamp(point.x, LIVE_COURT.left, LIVE_COURT.right),
+    y: clamp(point.y, LIVE_COURT.top, LIVE_COURT.bottom),
+  }
+}
+
+function softBoundaryTarget(point: { x: number; y: number; targetX: number; targetY: number }) {
+  let x = point.targetX
+  let y = point.targetY
+  const edge = 0.055
+
+  if (x < LIVE_COURT.left + edge) x += (LIVE_COURT.left + edge - x) * 0.2
+  if (x > LIVE_COURT.right - edge) x -= (x - (LIVE_COURT.right - edge)) * 0.2
+  if (y < LIVE_COURT.top + edge) y += (LIVE_COURT.top + edge - y) * 0.18
+  if (y > LIVE_COURT.bottom - edge) y -= (y - (LIVE_COURT.bottom - edge)) * 0.2
+
+  return constrainToLiveCourt({ x, y })
+}
+
+function preferredZoneForPuck(puck: Puck, ball: Ball) {
+  const side = ball.x < 0.5 ? "left" : "right"
+  const weak = side === "left" ? "right" : "left"
+
+  if (puck.symbol === "X") {
+    if (puck.id === "x1") return zoneById(ball.y > 0.48 ? "nail" : "top")
+    if (puck.id === "x2") return zoneById(side === "left" ? "wing-left" : "slot-left")
+    if (puck.id === "x3") return zoneById(side === "right" ? "wing-right" : "slot-right")
+    if (puck.id === "x4") return zoneById(weak === "left" ? "short-left" : "dunker-left")
+    return zoneById(weak === "right" ? "short-right" : "dunker-right")
+  }
+
+  if (puck.id === "o1") return zoneById(ball.carrierId === puck.id ? "top" : ball.x < 0.5 ? "slot-left" : "slot-right")
+  if (puck.id === "o2") return zoneById("wing-left")
+  if (puck.id === "o3") return zoneById("wing-right")
+  if (puck.id === "o4") return zoneById(ball.y > 0.58 ? "dunker-left" : "corner-left")
+  if (puck.id === "o5") return zoneById(ball.y > 0.58 ? "dunker-right" : "corner-right")
+  return null
+}
+
+function zoneById(id: string) {
+  return courtZones.find((zone) => zone.id === id) ?? null
+}
+
+function zoneInfluence(puck: Puck, zone: CourtZone) {
+  const gap = distance(puck, zone)
+  return clamp(gap / zone.radius, 0, 1)
+}
+
+function softenCollisions(pucks: Puck[]) {
+  for (let outer = 0; outer < pucks.length; outer += 1) {
+    for (let inner = outer + 1; inner < pucks.length; inner += 1) {
+      const first = pucks[outer]
+      const second = pucks[inner]
+      const minimum = first.symbol === second.symbol ? 0.105 : 0.082
+      const gap = distance(first, second)
+      if (gap <= 0.001 || gap >= minimum) continue
+
+      const push = (minimum - gap) * 0.42
+      const dx = (first.x - second.x) / gap
+      const dy = (first.y - second.y) / gap
+      first.targetX += dx * push
+      first.targetY += dy * push
+      second.targetX -= dx * push
+      second.targetY -= dy * push
+    }
+  }
+}
+
+function movementArcFor(puck: Puck, to: { x: number; y: number }) {
+  const phase = idPhase(puck.id)
+  const traffic = puck.symbol === "O" ? 0.018 : 0.013
+  const side = to.x > puck.x ? 1 : -1
+  return (Math.sin(phase) > 0 ? 1 : -1) * side * traffic
 }
 
 function rememberMove(engine: Engine, puck: Puck, from: Point, to: Point) {
