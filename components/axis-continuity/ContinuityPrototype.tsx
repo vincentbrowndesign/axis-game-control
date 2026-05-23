@@ -1,12 +1,18 @@
 "use client"
 
 import { buildAbstractReplayFrame, createAbstractReplayState, type AbstractReplayFrame, type AbstractReplayState } from "@/lib/axis/abstractReplay"
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 type PuckSymbol = "O" | "X"
 type SpatialStateName = string
 type TacticalCategory = "Offense" | "Defense" | "SLOB" | "ATO" | "Tempo" | "Emphasis"
 type ActiveConditions = Partial<Record<TacticalCategory, string>>
+type DecisionStage = "owned" | "afterPass" | "afterDrive"
+type PossessionAction = "pass" | "drive" | "shoot" | "wing" | "corner" | "slot" | "shortRoll" | "kick" | "finish" | "dumpOff" | "reset"
+type PossessionDecision = {
+  action: PossessionAction
+  label: string
+}
 
 type Point = {
   pressure: number
@@ -111,6 +117,8 @@ type CourtZone = {
   x: number
   y: number
 }
+
+const ENABLE_REACTION_ECOLOGY = false
 
 type Engine = {
   activePointerId: number | null
@@ -563,31 +571,31 @@ const initialConditions: ActiveConditions = {
   Tempo: "Controlled",
 }
 
-const tacticalActionNames = new Set(["Ghost", "Chicago", "Hammer", "Drag", "UCLA", "Iverson", "Zoom", "Split", "Pistol", "DHO", "Iso", "Post Split", "High-Low"])
-
-function isGlobalConditionState(state: SpatialState) {
-  const category = state.category ?? "Offense"
-  if (category === "Defense" || category === "Tempo" || category === "Emphasis") return true
-  return category === "Offense" && !tacticalActionNames.has(state.name)
-}
-
-function nextConditionState(category: TacticalCategory, current?: string) {
-  const states = spatialStates.filter((state) => {
-    const stateCategory = state.category ?? "Offense"
-    return stateCategory === category && isGlobalConditionState(state)
-  })
-  if (states.length === 0) return null
-
-  const currentIndex = states.findIndex((state) => state.name === current)
-  return states[(currentIndex + 1) % states.length]
+const possessionDecisionTree: Record<DecisionStage, PossessionDecision[]> = {
+  afterDrive: [
+    { action: "kick", label: "Kick" },
+    { action: "finish", label: "Finish" },
+    { action: "dumpOff", label: "Dump Off" },
+    { action: "reset", label: "Reset" },
+  ],
+  afterPass: [
+    { action: "wing", label: "Wing" },
+    { action: "corner", label: "Corner" },
+    { action: "slot", label: "Slot" },
+    { action: "shortRoll", label: "Short Roll" },
+  ],
+  owned: [
+    { action: "pass", label: "Pass" },
+    { action: "drive", label: "Drive" },
+    { action: "shoot", label: "Shoot" },
+  ],
 }
 
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
-  const [activeConditions, setActiveConditions] = useState<ActiveConditions>(initialConditions)
-  const [activeBranchId, setActiveBranchId] = useState<string | null>(null)
-  const possessionBranches = useMemo(() => getPossessionBranches(activeConditions, activeBranchId), [activeConditions, activeBranchId])
+  const [activeAction, setActiveAction] = useState<PossessionAction | null>(null)
+  const [decisionStage, setDecisionStage] = useState<DecisionStage>("owned")
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -622,6 +630,12 @@ export function ContinuityPrototype() {
       touchStart: null,
     }
     engineRef.current = engine
+    if (ENABLE_REACTION_ECOLOGY && spatialStates.length > 0) {
+      const dormantBranches = getPossessionBranches(initialConditions, null)
+      const dormantState = spatialStates[0]
+      if (dormantState) recallSpatialState(engine, dormantState)
+      if (dormantBranches[0]) applyPossessionBranch(engine, dormantBranches[0], 0)
+    }
 
     function resize() {
       const rect = canvasElement.getBoundingClientRect()
@@ -781,61 +795,23 @@ export function ContinuityPrototype() {
     engine.touchStart = null
   }
 
-  function handleSpatialStateRecall(state: SpatialState, at: number) {
+  function handlePossessionAction(action: PossessionAction, at: number) {
     const engine = engineRef.current
     if (!engine) return
 
-    const category = state.category ?? "Offense"
-    recallSpatialState(engine, state)
-    engine.conditions = {
-      ...engine.conditions,
-      [category]: state.name,
-    }
-    engine.formationPulseAt = at
-    setActiveConditions(engine.conditions)
-    setActiveBranchId(null)
+    applyPossessionAction(engine, action, at)
+    setDecisionStage(nextDecisionStage(action))
+    setActiveAction(action)
+    window.setTimeout(() => setActiveAction((current) => (current === action ? null : current)), 520)
   }
 
-  function handleConditionStep(category: TacticalCategory, at: number) {
-    const current = activeConditions[category]
-    const nextState = nextConditionState(category, current)
-    if (!nextState) return
-
-    handleSpatialStateRecall(nextState, at)
-  }
-
-  function handlePossessionBranch(branch: PossessionBranch, at: number) {
-    const engine = engineRef.current
-    if (!engine) return
-
-    applyPossessionBranch(engine, branch, at)
-    setActiveBranchId(branch.id)
-  }
+  const possessionActions = possessionDecisionTree[decisionStage].slice(0, 4)
 
   return (
     <main className="fixed inset-0 isolate overflow-hidden bg-[#030303] text-[#f8f1e4] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
       <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(248,241,228,0.12),rgba(248,241,228,0)_18%),linear-gradient(135deg,rgba(216,176,96,0.08),rgba(0,0,0,0.12)_52%,rgba(0,0,0,0.62))] mix-blend-screen opacity-85" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-20 bg-gradient-to-b from-black/72 to-transparent" />
       <div className="pointer-events-none absolute inset-x-7 top-8 z-[1] h-[2px] bg-gradient-to-r from-transparent via-[#f6d68a]/50 to-transparent opacity-80" />
-      <div
-        aria-label="Global basketball conditions"
-        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex w-[min(34rem,calc(100vw-1rem))] -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[#f8f1e4]/7 bg-[#080806]/36 px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_14px_48px_rgba(0,0,0,0.36)] backdrop-blur-2xl"
-      >
-        {(["Offense", "Defense", "Emphasis", "Tempo"] as TacticalCategory[]).map((category, index) => (
-          <button
-            className="shrink-0 touch-manipulation whitespace-nowrap rounded-full px-1.5 py-1 text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-[#f8f1e4]/48 outline-none transition-colors active:text-[#f8f1e4] hover:text-[#f8f1e4]/74 focus-visible:text-[#f8f1e4]"
-            key={category}
-            onClick={(event) => handleConditionStep(category, event.timeStamp)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") handleConditionStep(category, event.timeStamp)
-            }}
-            type="button"
-          >
-            {activeConditions[category]}
-            {index < 3 ? <span className="ml-2 text-[#f6d68a]/24">•</span> : null}
-          </button>
-        ))}
-      </div>
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -848,11 +824,11 @@ export function ContinuityPrototype() {
       />
 
       <nav
-        aria-label="Tactical actions"
-        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex w-[min(36rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center justify-center gap-2 overflow-x-auto rounded-[1.35rem] border border-[#f8f1e4]/10 bg-[#080806]/48 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.11),0_18px_62px_rgba(0,0,0,0.54)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.55rem] [&::-webkit-scrollbar]:hidden"
+        aria-label="Possession decisions"
+        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center justify-center gap-2 rounded-[1.35rem] border border-[#f8f1e4]/10 bg-[#080806]/44 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_18px_62px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
       >
-        {possessionBranches.map((branch) => {
-          const active = activeBranchId === branch.id
+        {possessionActions.map(({ action, label }) => {
+          const active = activeAction === action
           return (
             <button
               aria-pressed={active}
@@ -862,14 +838,14 @@ export function ContinuityPrototype() {
                   ? "bg-[#f8f1e4] text-[#050505] opacity-100 shadow-[0_0_24px_rgba(246,214,138,0.2),inset_0_-2px_0_rgba(214,176,96,0.62)]"
                   : "text-[#f8f1e4]/46 opacity-75 hover:bg-[#f8f1e4]/9 hover:text-[#f8f1e4]/78 focus-visible:bg-[#f8f1e4]/12 focus-visible:text-[#f8f1e4]",
               ].join(" ")}
-              key={branch.id}
-              onClick={(event) => handlePossessionBranch(branch, event.timeStamp)}
+              key={action}
+              onClick={(event) => handlePossessionAction(action, event.timeStamp)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") handlePossessionBranch(branch, event.timeStamp)
+                if (event.key === "Enter" || event.key === " ") handlePossessionAction(action, event.timeStamp)
               }}
               type="button"
             >
-              {branch.name}
+              {label}
             </button>
           )
         })}
@@ -891,8 +867,10 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawContinuityResidue(context, width, height, engine)
   drawTemporalTrails(context, width, height, engine.pucks)
   drawMovementIntent(context, width, height, engine)
-  drawIntelligenceSurface(context, width, height, engine)
-  drawLiveResponse(context, width, height, engine)
+  if (ENABLE_REACTION_ECOLOGY) {
+    drawIntelligenceSurface(context, width, height, engine)
+    drawLiveResponse(context, width, height, engine)
+  }
   drawPuckInfluence(context, width, height, engine.pucks)
   drawPucks(context, width, height, engine.pucks)
   drawBall(context, width, height, engine.ball)
@@ -1249,7 +1227,7 @@ function drawBall(context: CanvasRenderingContext2D, width: number, height: numb
   const point = toPixels(ball, width, height)
   const radius = Math.max(5.5, Math.min(width, height) * 0.0085)
   const pulse = (Math.sin(performance.now() / 360) + 1) / 2
-  const passEnergy = ball.state === "passing" ? clamp(1 - (performance.now() - ball.passedAt) / 520, 0.28, 1) : clamp(1 - (performance.now() - ball.passedAt) / 520, 0, 1)
+  const passEnergy = ball.state === "passing" || ball.state === "shot" ? clamp(1 - (performance.now() - ball.passedAt) / 520, 0.28, 1) : clamp(1 - (performance.now() - ball.passedAt) / 520, 0, 1)
 
   context.save()
   context.lineCap = "round"
@@ -1335,8 +1313,10 @@ function updatePhysics(engine: Engine) {
   pruneTemporalMemory(engine)
   updateChoreography(engine)
   updateBall(engine)
-  updateLiveResponse(engine)
-  applyBasketballRelationships(engine)
+  if (ENABLE_REACTION_ECOLOGY) {
+    updateLiveResponse(engine)
+    applyBasketballRelationships(engine)
+  }
   applyCourtPhysics(engine)
   updateContinuityEngine(engine)
 
@@ -1457,6 +1437,10 @@ function updateBall(engine: Engine) {
     }
   }
 
+  if (engine.ball.state === "shot" && !engine.draggingBall && Math.hypot(engine.ball.targetX - engine.ball.x, engine.ball.targetY - engine.ball.y) < 0.04) {
+    setBallLoose(engine, engine.ball, performance.now())
+  }
+
   const moved = Math.hypot(engine.ball.x - previousX, engine.ball.y - previousY)
   if (moved > 0.0012) {
     const last = engine.ball.trail.at(-1)
@@ -1466,6 +1450,131 @@ function updateBall(engine: Engine) {
       if (engine.ball.trail.length > 24) engine.ball.trail.shift()
     }
   }
+}
+
+function nextDecisionStage(action: PossessionAction): DecisionStage {
+  if (action === "pass") return "afterPass"
+  if (action === "drive") return "afterDrive"
+  return "owned"
+}
+
+function applyPossessionAction(engine: Engine, action: PossessionAction, at: number) {
+  const carrier = currentCarrier(engine) ?? nearestPuck(engine.ball, engine.pucks, "O")
+  if (!carrier) return
+
+  if (action === "pass") {
+    engine.advantageFlash = { t: performance.now(), x: engine.ball.x, y: engine.ball.y }
+    return
+  }
+
+  if (action === "drive") {
+    driveCarrier(engine, carrier, at)
+    return
+  }
+
+  if (action === "shoot" || action === "finish") {
+    setBallShot(engine, at)
+    return
+  }
+
+  if (action === "reset") {
+    resetPossession(engine, carrier, at)
+    return
+  }
+
+  const target = decisionPassTarget(engine, carrier, action)
+  if (target) passBallTo(engine, target.id, at)
+}
+
+function currentCarrier(engine: Engine) {
+  if (!engine.ball.carrierId) return null
+  return engine.pucks.find((puck) => puck.id === engine.ball.carrierId && puck.symbol === "O") ?? null
+}
+
+function nextPassTarget(engine: Engine, carrier: Puck) {
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O" && puck.id !== carrier.id)
+  if (!offense.length) return null
+
+  return offense.sort((first, second) => {
+    const firstScore = passTargetScore(engine.ball, carrier, first)
+    const secondScore = passTargetScore(engine.ball, carrier, second)
+    return secondScore - firstScore
+  })[0]
+}
+
+function decisionPassTarget(engine: Engine, carrier: Puck, action: PossessionAction) {
+  if (action === "wing") return targetByZone(engine, carrier, ["wing-left", "wing-right"])
+  if (action === "corner") return targetByZone(engine, carrier, ["corner-left", "corner-right"])
+  if (action === "slot") return targetByZone(engine, carrier, ["slot-left", "slot-right", "top"])
+  if (action === "shortRoll" || action === "dumpOff") return targetByZone(engine, carrier, ["paint", "dunker-left", "dunker-right", "short-left", "short-right"])
+  if (action === "kick") return weaksideTarget(engine, carrier) ?? targetByZone(engine, carrier, ["corner-left", "corner-right", "wing-left", "wing-right"])
+  return nextPassTarget(engine, carrier)
+}
+
+function targetByZone(engine: Engine, carrier: Puck, zoneIds: string[]) {
+  const zones = zoneIds.map((zoneId) => courtZones.find((zone) => zone.id === zoneId)).filter((zone): zone is CourtZone => Boolean(zone))
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O" && puck.id !== carrier.id)
+  if (!offense.length || !zones.length) return nextPassTarget(engine, carrier)
+
+  return offense.sort((first, second) => {
+    const firstScore = zoneTargetScore(first, zones, carrier)
+    const secondScore = zoneTargetScore(second, zones, carrier)
+    return secondScore - firstScore
+  })[0]
+}
+
+function zoneTargetScore(puck: Puck, zones: CourtZone[], carrier: Puck) {
+  const nearestZoneDistance = Math.min(...zones.map((zone) => distance(puck, zone)))
+  const separation = distance(puck, carrier)
+  return 1 - nearestZoneDistance + separation * 0.18
+}
+
+function weaksideTarget(engine: Engine, carrier: Puck) {
+  const ballSide = engine.ball.x < 0.5 ? -1 : 1
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O" && puck.id !== carrier.id)
+  const weakside = offense.filter((puck) => (ballSide < 0 ? puck.x > 0.5 : puck.x < 0.5))
+  return (weakside.length ? weakside : offense).sort((first, second) => distance(second, carrier) - distance(first, carrier))[0] ?? null
+}
+
+function driveCarrier(engine: Engine, carrier: Puck, at: number) {
+  setBallOwned(engine, carrier.id, at)
+  const side = carrier.x < 0.5 ? -1 : 1
+  const target = constrainToLiveCourt({
+    x: clamp(carrier.x + side * 0.055, 0.28, 0.72),
+    y: Math.max(carrier.y + 0.18, 0.61),
+  })
+  carrier.choreography = {
+    arc: movementArcFor(carrier, target) * 0.7,
+    delay: 0,
+    duration: 620,
+    from: { pressure: 0.5, t: at, x: carrier.x, y: carrier.y },
+    startedAt: performance.now(),
+    to: { pressure: 0.5, t: at, x: target.x, y: target.y },
+  }
+  carrier.targetX = target.x
+  carrier.targetY = target.y
+}
+
+function resetPossession(engine: Engine, carrier: Puck, at: number) {
+  setBallOwned(engine, carrier.id, at)
+  const target = constrainToLiveCourt({ x: 0.5, y: 0.25 })
+  carrier.choreography = {
+    arc: movementArcFor(carrier, target) * 0.46,
+    delay: 0,
+    duration: 540,
+    from: { pressure: 0.5, t: at, x: carrier.x, y: carrier.y },
+    startedAt: performance.now(),
+    to: { pressure: 0.5, t: at, x: target.x, y: target.y },
+  }
+  carrier.targetX = target.x
+  carrier.targetY = target.y
+}
+
+function passTargetScore(ball: Ball, carrier: Puck, target: Puck) {
+  const width = Math.abs(target.x - carrier.x)
+  const forward = target.y >= carrier.y ? 0.08 : 0
+  const weakside = ball.x < 0.5 ? target.x > carrier.x : target.x < carrier.x
+  return width + forward + (weakside ? 0.12 : 0)
 }
 
 function applyCourtPhysics(engine: Engine) {
@@ -2302,6 +2411,22 @@ function setBallLoose(engine: Engine, point: { x: number; y: number }, at: numbe
   engine.ball.targetX = point.x
   engine.ball.targetY = point.y
   onPossessionChange(engine, fromCarrierId, null, "loose", at)
+}
+
+function setBallShot(engine: Engine, at: number) {
+  const fromCarrierId = engine.ball.carrierId ?? engine.ball.lastCarrierId
+  engine.ball.lastCarrierId = fromCarrierId
+  engine.ball.carrierId = null
+  engine.ball.passedAt = performance.now()
+  engine.ball.state = "shot"
+  engine.ball.targetCarrierId = null
+  engine.ball.targetX = 0.5
+  engine.ball.targetY = 0.78
+  engine.ball.vx += (engine.ball.targetX - engine.ball.x) * 0.12
+  engine.ball.vy += (engine.ball.targetY - engine.ball.y) * 0.12
+  engine.ball.trail.push({ t: at, x: engine.ball.x, y: engine.ball.y })
+  if (engine.ball.trail.length > 24) engine.ball.trail.shift()
+  onPossessionChange(engine, fromCarrierId, null, "shot", at)
 }
 
 function onPossessionChange(engine: Engine, fromCarrierId: string | null, toCarrierId: string | null, state: Ball["state"], at: number) {
