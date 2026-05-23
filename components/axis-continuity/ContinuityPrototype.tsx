@@ -21,10 +21,6 @@ type Stroke = {
   points: Point[]
 }
 
-type PredictivePointerEvent = PointerEvent & {
-  getPredictedEvents?: () => PointerEvent[]
-}
-
 type TrailPoint = {
   t: number
   x: number
@@ -105,9 +101,9 @@ type Engine = {
   moved: boolean
   penActiveUntil: number
   pendingMovementStrokeId: string | null
-  predictedStroke: Stroke | null
   pucks: Puck[]
   rafId: number
+  rawInkCursor: Point | null
   rect: DOMRect | null
   continuityCells: ContinuityCell[]
   sessionMemory: MemoryEvent[]
@@ -258,9 +254,9 @@ export function ContinuityPrototype() {
       moved: false,
       penActiveUntil: 0,
       pendingMovementStrokeId: null,
-      predictedStroke: null,
       pucks: clonePucks(initialPucks),
       rafId: 0,
+      rawInkCursor: null,
       rect: null,
       continuityCells: [],
       sessionMemory: [],
@@ -355,8 +351,8 @@ export function ContinuityPrototype() {
       id: `stroke-${engine.strokeSequence + 1}`,
       points: [point],
     }
-    engine.predictedStroke = null
-    renderRawInk(rawInkCanvasRef.current, engine)
+    engine.rawInkCursor = point
+    clearRawInk(rawInkCanvasRef.current)
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -391,10 +387,13 @@ export function ContinuityPrototype() {
     if (engine.drawing && engine.workingStroke) {
       const coalesced = coalescedEventPoints(event.nativeEvent, engine)
       for (const point of coalesced) {
-        appendStrokePoint(engine.workingStroke, point, 0.0018)
+        const previous = engine.workingStroke.points.at(-1) ?? engine.rawInkCursor
+        const appended = appendStrokePoint(engine.workingStroke, point, 0.0009)
+        if (appended && previous) {
+          drawRawInkSegment(rawInkCanvasRef.current, previous, point)
+          engine.rawInkCursor = point
+        }
       }
-      engine.predictedStroke = predictedStrokeForEvent(event.nativeEvent, engine, engine.workingStroke)
-      renderRawInk(rawInkCanvasRef.current, engine)
     }
   }
 
@@ -417,7 +416,7 @@ export function ContinuityPrototype() {
       }
       engine.workingStroke = null
     }
-    engine.predictedStroke = null
+    engine.rawInkCursor = null
     clearRawInk(rawInkCanvasRef.current)
 
     if (engine.draggingPuckId && engine.touchStart) {
@@ -432,7 +431,7 @@ export function ContinuityPrototype() {
     engine.draggingPuckId = null
     engine.drawing = false
     engine.eraseCursor = null
-    engine.predictedStroke = null
+    engine.rawInkCursor = null
     clearRawInk(rawInkCanvasRef.current)
     engine.touchStart = null
   }
@@ -456,7 +455,7 @@ export function ContinuityPrototype() {
 
     engine.strokes = []
     engine.workingStroke = null
-    engine.predictedStroke = null
+    engine.rawInkCursor = null
     clearRawInk(rawInkCanvasRef.current)
     engine.pendingMovementStrokeId = null
     rememberSystemEvent(engine, "clear")
@@ -577,21 +576,6 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   canvas.style.cursor = engine.tool === "eraser" ? "none" : "crosshair"
 }
 
-function renderRawInk(canvas: HTMLCanvasElement | null, engine: Engine) {
-  const rect = engine.rect
-  if (!canvas || !rect) return
-
-  const context = canvas.getContext("2d")
-  if (!context) return
-
-  const dpr = Math.max(1, window.devicePixelRatio || 1)
-  context.setTransform(dpr, 0, 0, dpr, 0, 0)
-  context.clearRect(0, 0, rect.width, rect.height)
-
-  if (engine.workingStroke) drawStrokes(context, rect.width, rect.height, [engine.workingStroke], true)
-  if (engine.predictedStroke) drawStrokes(context, rect.width, rect.height, [engine.predictedStroke], "predicted")
-}
-
 function clearRawInk(canvas: HTMLCanvasElement | null) {
   if (!canvas) return
 
@@ -602,6 +586,32 @@ function clearRawInk(canvas: HTMLCanvasElement | null) {
   const dpr = Math.max(1, window.devicePixelRatio || 1)
   context.setTransform(dpr, 0, 0, dpr, 0, 0)
   context.clearRect(0, 0, rect.width, rect.height)
+}
+
+function drawRawInkSegment(canvas: HTMLCanvasElement | null, from: Point, to: Point) {
+  if (!canvas) return
+
+  const context = canvas.getContext("2d")
+  if (!context) return
+
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1)
+  const start = toPixels(from, rect.width, rect.height)
+  const end = toPixels(to, rect.width, rect.height)
+
+  context.save()
+  context.setTransform(dpr, 0, 0, dpr, 0, 0)
+  context.lineCap = "round"
+  context.lineJoin = "round"
+  context.strokeStyle = "rgba(8,8,7,0.72)"
+  context.lineWidth = strokeWidth(from, to)
+  context.beginPath()
+  context.moveTo(start.x, start.y)
+  context.lineTo(end.x, end.y)
+  context.stroke()
+  context.restore()
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRect, dpr: number) {
@@ -699,7 +709,7 @@ function drawContinuityResidue(context: CanvasRenderingContext2D, width: number,
   context.restore()
 }
 
-function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], active: boolean | "predicted") {
+function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], active: boolean) {
   context.save()
   context.lineCap = "round"
   context.lineJoin = "round"
@@ -707,7 +717,7 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
   for (const stroke of strokes) {
     if (stroke.points.length < 2) continue
     const age = performance.now() - stroke.createdAt
-    const alpha = active === "predicted" ? 0.22 : active ? 0.76 : 0.56 * strokeFade(age)
+    const alpha = active ? 0.76 : 0.56 * strokeFade(age)
     if (alpha <= 0.01) continue
 
     context.beginPath()
@@ -733,7 +743,7 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
       const widthValue = strokeWidth(previousSource, source)
       context.lineWidth = widthValue
       context.quadraticCurveTo(current.x, current.y, midX, midY)
-      if (index % 2 === 0 && active !== "predicted") {
+      if (index % 2 === 0) {
         drawDryMarkerTexture(context, current, { x: midX, y: midY }, widthValue, alpha, index)
       }
     }
@@ -1506,27 +1516,13 @@ function coalescedEventPoints(event: PointerEvent, engine: Engine) {
   return events.map((item) => nativeEventPoint(item, engine)).filter((point): point is Point => Boolean(point))
 }
 
-function predictedStrokeForEvent(event: PointerEvent, engine: Engine, stroke: Stroke) {
-  const predictiveEvent = event as PredictivePointerEvent
-  const predictedEvents = predictiveEvent.getPredictedEvents?.() ?? []
-  const last = stroke.points.at(-1)
-  if (!last || predictedEvents.length === 0) return null
-
-  const points = predictedEvents.map((item) => nativeEventPoint(item, engine)).filter((point): point is Point => Boolean(point))
-  if (points.length === 0) return null
-
-  return {
-    createdAt: performance.now(),
-    id: `${stroke.id}-predicted`,
-    points: [last, ...points.slice(0, 5)],
-  }
-}
-
 function appendStrokePoint(stroke: Stroke, point: Point, threshold: number) {
   const previous = stroke.points.at(-1)
   if (!previous || distance(previous, point) > threshold) {
     stroke.points.push(point)
+    return true
   }
+  return false
 }
 
 function findPuckAt(engine: Engine, point: Point) {
