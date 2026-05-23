@@ -411,7 +411,7 @@ export function ContinuityPrototype() {
         }
         engine.strokeSequence += 1
         engine.strokes.push(engine.workingStroke)
-        engine.pendingMovementStrokeId = engine.workingStroke.id
+        engine.pendingMovementStrokeId = null
         rememberStroke(engine, engine.workingStroke)
       }
       engine.workingStroke = null
@@ -491,7 +491,7 @@ export function ContinuityPrototype() {
 
       <nav
         aria-label="Spatial states"
-        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/45 bg-[#f8f2e7]/28 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_18px_54px_rgba(32,26,17,0.12)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="pointer-events-none absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/45 bg-[#f8f2e7]/28 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_18px_54px_rgba(32,26,17,0.12)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {spatialStates.map((state) => (
           <button
