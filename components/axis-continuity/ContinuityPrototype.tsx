@@ -62,6 +62,16 @@ type Puck = {
   y: number
 }
 
+type ContinuityCell = {
+  key: string
+  lastSeen: number
+  pressure: number
+  symbol: PuckSymbol | "pressure"
+  visits: number
+  x: number
+  y: number
+}
+
 type Engine = {
   activePointerId: number | null
   activePointerType: string | null
@@ -74,6 +84,7 @@ type Engine = {
   pucks: Puck[]
   rafId: number
   rect: DOMRect | null
+  continuityCells: ContinuityCell[]
   sessionMemory: MemoryEvent[]
   strokeSequence: number
   strokes: Stroke[]
@@ -121,6 +132,7 @@ export function ContinuityPrototype() {
       pucks: clonePucks(initialPucks),
       rafId: 0,
       rect: null,
+      continuityCells: [],
       sessionMemory: [],
       strokeSequence: 0,
       strokes: [],
@@ -362,6 +374,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   context.fillRect(0, 0, width, height)
   drawAtmosphere(context, width, height, engine)
   drawCourt(context, width, height)
+  drawContinuityResidue(context, width, height, engine)
   drawTemporalTrails(context, width, height, engine.pucks)
   drawStrokes(context, width, height, engine.strokes, false)
   if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
@@ -427,6 +440,34 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   context.lineWidth = Math.max(1, line * 0.9)
   arc(context, centerX, hoopY, courtWidth * 0.43, Math.PI * 1.08, Math.PI * 1.92)
   arc(context, centerX, hoopY, courtWidth * 0.16, Math.PI * 1.08, Math.PI * 1.92)
+  context.restore()
+}
+
+function drawContinuityResidue(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
+  const now = performance.now()
+  context.save()
+
+  for (const cell of engine.continuityCells) {
+    if (cell.visits < 5) continue
+
+    const age = now - cell.lastSeen
+    const memory = clamp(cell.visits / 26, 0, 1)
+    const recency = clamp(1 - age / 16000, 0, 1)
+    const alpha = (0.006 + memory * 0.022) * (0.35 + recency * 0.65)
+    if (alpha <= 0.004) continue
+
+    const point = toPixels(cell, width, height)
+    const radius = Math.min(width, height) * (0.052 + memory * 0.045)
+    const gradient = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius)
+    gradient.addColorStop(0, continuityColor(cell.symbol, alpha))
+    gradient.addColorStop(0.68, continuityColor(cell.symbol, alpha * 0.32))
+    gradient.addColorStop(1, continuityColor(cell.symbol, 0))
+    context.fillStyle = gradient
+    context.beginPath()
+    context.arc(point.x, point.y, radius, 0, Math.PI * 2)
+    context.fill()
+  }
+
   context.restore()
 }
 
@@ -756,6 +797,7 @@ function updatePhysics(engine: Engine) {
   pruneTemporalMemory(engine)
   updateLiveResponse(engine)
   applyBasketballRelationships(engine)
+  updateContinuityEngine(engine)
 
   for (const puck of engine.pucks) {
     const previousX = puck.x
@@ -818,6 +860,61 @@ function updateLiveResponse(engine: Engine) {
       engine.advantageFlash = { t: performance.now(), x: puck.x, y: puck.y }
     }
   }
+}
+
+function updateContinuityEngine(engine: Engine) {
+  const now = performance.now()
+
+  for (const puck of engine.pucks) {
+    const speed = Math.hypot(puck.vx, puck.vy)
+    const pressure = puck.symbol === "X" ? 0.7 : 0.48 + clamp(speed / 0.012, 0, 1) * 0.28
+    reinforceContinuityCell(engine, puck.x, puck.y, puck.symbol, pressure)
+  }
+
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O")
+  const defense = engine.pucks.filter((puck) => puck.symbol === "X")
+  for (const puck of offense) {
+    const nearestX = nearestPuck(puck, defense, "X")
+    if (!nearestX) continue
+
+    const pressure = clamp(1 - distance(puck, nearestX) / 0.22, 0, 1)
+    if (pressure > 0.2) {
+      reinforceContinuityCell(engine, (puck.x + nearestX.x) / 2, (puck.y + nearestX.y) / 2, "pressure", pressure)
+    }
+  }
+
+  engine.continuityCells = engine.continuityCells
+    .map((cell) => ({
+      ...cell,
+      pressure: cell.pressure * 0.996,
+    }))
+    .filter((cell) => cell.visits > 1 && (now - cell.lastSeen < 45000 || cell.pressure > 0.12))
+    .slice(-96)
+}
+
+function reinforceContinuityCell(engine: Engine, x: number, y: number, symbol: ContinuityCell["symbol"], pressure: number) {
+  const key = `${symbol}:${Math.round(x * 12)}:${Math.round(y * 12)}`
+  const existing = engine.continuityCells.find((cell) => cell.key === key)
+  const now = performance.now()
+
+  if (existing) {
+    existing.lastSeen = now
+    existing.pressure = clamp(existing.pressure + pressure * 0.05, 0, 1)
+    existing.visits += 1
+    existing.x = existing.x * 0.92 + x * 0.08
+    existing.y = existing.y * 0.92 + y * 0.08
+    return
+  }
+
+  engine.continuityCells.push({
+    key,
+    lastSeen: now,
+    pressure: clamp(pressure * 0.08, 0, 1),
+    symbol,
+    visits: 1,
+    x,
+    y,
+  })
 }
 
 function applyBasketballRelationships(engine: Engine) {
@@ -1105,4 +1202,10 @@ function symbolStroke(symbol: PuckSymbol) {
 function symbolGlow(symbol: PuckSymbol, alpha: number) {
   if (symbol === "O") return `rgba(48,42,31,${alpha * 0.46})`
   return `rgba(0,0,0,${alpha * 0.58})`
+}
+
+function continuityColor(symbol: ContinuityCell["symbol"], alpha: number) {
+  if (symbol === "O") return `rgba(8,8,7,${alpha})`
+  if (symbol === "X") return `rgba(8,8,7,${alpha * 0.72})`
+  return `rgba(8,8,7,${alpha * 1.15})`
 }
