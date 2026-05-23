@@ -88,6 +88,7 @@ export function MeasuresSurface() {
   const activeLineup = session.players.filter((player) => player.onFloor)
   const bench = session.players.filter((player) => !player.onFloor)
   const flow = useMemo(() => readGameFlow(session.timeline), [session.timeline])
+  const rhythm = useMemo(() => buildRhythmMarkers(session.timeline), [session.timeline])
 
   function commit(action: Action) {
     setSession((current) => {
@@ -201,7 +202,8 @@ export function MeasuresSurface() {
           </aside>
 
           <section className="relative min-h-0 overflow-hidden rounded-[2rem] border border-white/8 bg-white/[0.032] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.46)] backdrop-blur-2xl">
-            <div className="pointer-events-none absolute inset-y-16 left-[4.85rem] w-px bg-gradient-to-b from-transparent via-white/18 to-transparent" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(244,240,231,0.07),rgba(244,240,231,0)_34%)]" />
+            <div className="pointer-events-none absolute inset-y-24 left-[4.85rem] w-px bg-gradient-to-b from-transparent via-white/18 to-transparent" />
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[0.62rem] font-medium uppercase tracking-[0.26em] text-white/32">possession spine</p>
@@ -218,12 +220,33 @@ export function MeasuresSurface() {
               </div>
             </div>
 
-            <div className="mt-6 h-[calc(100%-5.8rem)] min-h-0 space-y-2 overflow-y-auto pr-1">
+            <div className="relative mt-6 rounded-[1.35rem] border border-white/7 bg-black/16 px-4 py-3">
+              <div className="flex h-12 items-end gap-1.5">
+                {rhythm.map((marker) => (
+                  <div className="flex flex-1 items-end" key={marker.id}>
+                    <div
+                      className={[
+                        "w-full rounded-full transition-all duration-500",
+                        markerClass(marker.tone),
+                      ].join(" ")}
+                      style={{ height: `${marker.height}%` }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between font-mono text-[0.64rem] uppercase tracking-[0.18em] text-white/28">
+                <span>earlier</span>
+                <span>rhythm</span>
+                <span>now</span>
+              </div>
+            </div>
+
+            <div className="mt-5 h-[calc(100%-11.4rem)] min-h-0 space-y-1.5 overflow-y-auto pr-1">
               {session.timeline.map((event, index) => (
                 <article
                   className={[
-                    "relative grid grid-cols-[3.6rem_1fr_auto] items-center gap-4 rounded-[1.15rem] border px-4 py-3 transition-colors",
-                    index === 0 ? "border-white/14 bg-white/[0.07]" : "border-white/0 bg-transparent hover:bg-white/[0.035]",
+                    "relative grid grid-cols-[3.6rem_1fr_auto] items-center gap-4 rounded-[1.15rem] border px-4 py-3.5 transition-colors",
+                    index === 0 ? "border-white/14 bg-white/[0.075] shadow-[0_18px_70px_rgba(0,0,0,0.22)]" : "border-white/0 bg-transparent hover:bg-white/[0.035]",
                   ].join(" ")}
                   key={event.id}
                 >
@@ -234,6 +257,9 @@ export function MeasuresSurface() {
                       <span className={["font-mono text-xs tracking-[0.18em]", toneClass(event.tone)].join(" ")}>{labelForAction(event.action)}</span>
                       <p className="min-w-0 truncate text-sm text-white/76">{event.detail}</p>
                     </div>
+                    {index === 0 ? (
+                      <p className="mt-1 text-xs text-white/30">latest possession written into the game rail</p>
+                    ) : null}
                   </div>
                   <span className="font-mono text-sm text-white/46">{event.score}</span>
                 </article>
@@ -376,6 +402,21 @@ function readGameFlow(events: TimelineEvent[]) {
   }
 }
 
+function buildRhythmMarkers(events: TimelineEvent[]) {
+  const ordered = events.slice(0, 12).reverse()
+
+  return ordered.map((event, index) => {
+    const weight = event.action === "make3" ? 100 : event.action === "make2" ? 84 : event.action === "foul" ? 64 : event.action === "miss" ? 38 : 50
+    const recencyLift = index / Math.max(1, ordered.length - 1)
+
+    return {
+      height: Math.min(100, weight * (0.72 + recencyLift * 0.28)),
+      id: event.id,
+      tone: event.tone,
+    }
+  })
+}
+
 function detailForAction(action: Action, playerName: string) {
   if (action === "make2") return `${playerName} two points`
   if (action === "make3") return `${playerName} corner three`
@@ -436,6 +477,13 @@ function dotClass(tone: EventTone) {
   if (tone === "miss") return "bg-white/22 ring-white/5"
   if (tone === "pressure") return "bg-[#d8c49b] ring-[#d8c49b]/10"
   return "bg-white/34 ring-white/6"
+}
+
+function markerClass(tone: EventTone) {
+  if (tone === "make") return "bg-[#f4f0e7]/72 shadow-[0_0_28px_rgba(244,240,231,0.16)]"
+  if (tone === "miss") return "bg-white/18"
+  if (tone === "pressure") return "bg-[#d8c49b]/58 shadow-[0_0_24px_rgba(216,196,155,0.12)]"
+  return "bg-white/30"
 }
 
 function formatMinutes(value: number) {
