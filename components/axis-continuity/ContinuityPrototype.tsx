@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 
 type Tool = "pencil" | "eraser"
 type PuckSymbol = "O" | "X"
-type SpatialStateName = "Horns" | "5-Out" | "Delay" | "Spain" | "Box" | "Shell"
+type SpatialStateName = "Horns" | "5-Out" | "Delay" | "Spain" | "Shell"
 
 type Point = {
   pressure: number
@@ -97,6 +97,7 @@ type Engine = {
   draggingPuckId: string | null
   drawing: boolean
   eraseCursor: Point | null
+  formationPulseAt: number
   lastAbstractReplayAt: number
   moved: boolean
   penActiveUntil: number
@@ -189,21 +190,6 @@ const spatialStates: SpatialState[] = [
     },
   },
   {
-    name: "Box",
-    pucks: {
-      o1: { x: 0.36, y: 0.48 },
-      o2: { x: 0.64, y: 0.48 },
-      o3: { x: 0.36, y: 0.72 },
-      o4: { x: 0.64, y: 0.72 },
-      o5: { x: 0.5, y: 0.24 },
-      x1: { x: 0.38, y: 0.54 },
-      x2: { x: 0.62, y: 0.54 },
-      x3: { x: 0.38, y: 0.76 },
-      x4: { x: 0.62, y: 0.76 },
-      x5: { x: 0.5, y: 0.34 },
-    },
-  },
-  {
     name: "Shell",
     pucks: {
       o1: { x: 0.5, y: 0.28 },
@@ -250,6 +236,7 @@ export function ContinuityPrototype() {
       draggingPuckId: null,
       drawing: false,
       eraseCursor: null,
+      formationPulseAt: -10000,
       lastAbstractReplayAt: 0,
       moved: false,
       penActiveUntil: 0,
@@ -461,18 +448,19 @@ export function ContinuityPrototype() {
     rememberSystemEvent(engine, "clear")
   }
 
-  function handleSpatialStateRecall(state: SpatialState) {
+  function handleSpatialStateRecall(state: SpatialState, at: number) {
     const engine = engineRef.current
     if (!engine) return
 
     recallSpatialState(engine, state)
+    engine.formationPulseAt = at
     setActiveSpatialState(state.name)
   }
 
   return (
-    <main className="fixed inset-0 isolate overflow-hidden bg-[#ede7da] text-black selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.42),rgba(255,255,255,0)_36%),linear-gradient(135deg,rgba(255,255,255,0.18),rgba(0,0,0,0.06)_58%,rgba(0,0,0,0.12))] mix-blend-soft-light" />
-      <div className="pointer-events-none absolute inset-x-8 top-8 z-[1] h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-70" />
+    <main className="fixed inset-0 isolate overflow-hidden bg-[#060606] text-[#f5f1e8] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_18%,rgba(255,246,226,0.1),rgba(255,255,255,0)_34%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(0,0,0,0.1)_58%,rgba(0,0,0,0.48))] mix-blend-screen opacity-80" />
+      <div className="pointer-events-none absolute inset-x-8 top-8 z-[1] h-px bg-gradient-to-r from-transparent via-[#f2e5c8]/24 to-transparent opacity-70" />
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -491,17 +479,26 @@ export function ContinuityPrototype() {
 
       <nav
         aria-label="Spatial states"
-        className="pointer-events-none absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/45 bg-[#f8f2e7]/28 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_18px_54px_rgba(32,26,17,0.12)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/10 bg-black/34 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_20px_70px_rgba(0,0,0,0.5)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {spatialStates.map((state) => (
           <button
             aria-pressed={activeSpatialState === state.name}
             className={[
-              "shrink-0 rounded-full px-3.5 py-2 text-[0.68rem] font-medium tracking-[0.08em] transition-colors",
-              activeSpatialState === state.name ? "bg-[#12100c] text-[#f8f1e4] shadow-[0_8px_24px_rgba(20,16,10,0.2)]" : "text-black/42 hover:bg-white/24 hover:text-black/70",
+              "shrink-0 rounded-full px-3.5 py-2 text-[0.68rem] font-medium tracking-[0.08em] outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-95",
+              activeSpatialState === state.name
+                ? "bg-[#f3ead8] text-[#060606] shadow-[0_0_26px_rgba(243,234,216,0.18),inset_0_1px_0_rgba(255,255,255,0.72)]"
+                : "text-[#f3ead8]/48 hover:bg-white/8 hover:text-[#f3ead8]/82 focus-visible:bg-white/10 focus-visible:text-[#f3ead8]",
             ].join(" ")}
             key={state.name}
-            onClick={() => handleSpatialStateRecall(state)}
+            onClick={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") handleSpatialStateRecall(state, event.timeStamp)
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault()
+              handleSpatialStateRecall(state, event.timeStamp)
+            }}
             type="button"
           >
             {state.name}
@@ -509,7 +506,7 @@ export function ContinuityPrototype() {
         ))}
       </nav>
 
-      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/45 bg-[#f8f2e7]/34 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.64),0_20px_64px_rgba(32,26,17,0.14)] backdrop-blur-2xl">
+      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/10 bg-black/36 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_24px_76px_rgba(0,0,0,0.58)] backdrop-blur-2xl">
         <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
           <Pencil aria-hidden="true" />
         </ToolbarButton>
@@ -542,10 +539,19 @@ function ToolbarButton({
     <button
       aria-label={label}
       className={[
-        "grid h-11 w-11 place-items-center rounded-full border transition-colors",
-        active ? "border-black/20 bg-[#12100c] text-[#f8f1e4] shadow-[0_10px_28px_rgba(18,16,12,0.22)]" : "border-transparent bg-transparent text-black/38 hover:bg-white/24 hover:text-black/62",
+        "grid h-11 w-11 place-items-center rounded-full border outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.92]",
+        active
+          ? "border-white/14 bg-[#f3ead8] text-[#060606] shadow-[0_0_28px_rgba(243,234,216,0.2),inset_0_1px_0_rgba(255,255,255,0.76)]"
+          : "border-transparent bg-transparent text-[#f3ead8]/44 hover:bg-white/8 hover:text-[#f3ead8]/80 focus-visible:bg-white/10 focus-visible:text-[#f3ead8]",
       ].join(" ")}
-      onClick={onClick}
+      onClick={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onClick()
+      }}
+      onPointerDown={(event) => {
+        event.preventDefault()
+        onClick()
+      }}
       type="button"
     >
       <span className="[&_svg]:h-4 [&_svg]:w-4 [&_svg]:stroke-[1.8]">{children}</span>
@@ -559,7 +565,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
 
   const width = rect.width
   const height = rect.height
-  context.fillStyle = "#ede7da"
+  context.fillStyle = "#060606"
   context.fillRect(0, 0, width, height)
   drawAtmosphere(context, width, height, engine)
   drawCourt(context, width, height)
@@ -605,7 +611,7 @@ function drawRawInkSegment(canvas: HTMLCanvasElement | null, from: Point, to: Po
   context.setTransform(dpr, 0, 0, dpr, 0, 0)
   context.lineCap = "round"
   context.lineJoin = "round"
-  context.strokeStyle = "rgba(8,8,7,0.72)"
+  context.strokeStyle = "rgba(244,237,222,0.82)"
   context.lineWidth = strokeWidth(from, to)
   context.beginPath()
   context.moveTo(start.x, start.y)
@@ -621,17 +627,18 @@ function resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRect, dpr: number) {
 
 function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
   const pressure = Math.min(1, engine.strokes.length * 0.025 + engine.pucks.length * 0.035)
+  const formation = clamp(1 - (performance.now() - engine.formationPulseAt) / 900, 0, 1)
   const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
-  gradient.addColorStop(0, `rgba(255,255,255,${0.2 - pressure * 0.04})`)
-  gradient.addColorStop(0.42, `rgba(45,35,20,${0.018 + pressure * 0.014})`)
-  gradient.addColorStop(1, "rgba(32,25,15,0.12)")
+  gradient.addColorStop(0, `rgba(244,237,222,${0.06 + formation * 0.05 - pressure * 0.012})`)
+  gradient.addColorStop(0.42, `rgba(108,88,58,${0.025 + pressure * 0.018 + formation * 0.015})`)
+  gradient.addColorStop(1, "rgba(0,0,0,0.72)")
   context.fillStyle = gradient
   context.fillRect(0, 0, width, height)
 
   const glass = context.createLinearGradient(0, 0, width, height)
-  glass.addColorStop(0, "rgba(255,255,255,0.16)")
+  glass.addColorStop(0, "rgba(255,255,255,0.055)")
   glass.addColorStop(0.5, "rgba(255,255,255,0)")
-  glass.addColorStop(1, "rgba(0,0,0,0.075)")
+  glass.addColorStop(1, "rgba(0,0,0,0.5)")
   context.fillStyle = glass
   context.fillRect(0, 0, width, height)
 }
@@ -648,7 +655,7 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   const line = Math.max(1, Math.round(Math.min(width, height) * 0.00125))
 
   context.save()
-  context.strokeStyle = "rgba(8,8,7,0.145)"
+  context.strokeStyle = "rgba(244,237,222,0.105)"
   context.lineWidth = Math.max(1, line)
   context.lineCap = "round"
   context.lineJoin = "round"
@@ -674,7 +681,7 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   ])
   circle(context, centerX, hoopY, hoopRadius)
 
-  context.strokeStyle = "rgba(8,8,7,0.075)"
+  context.strokeStyle = "rgba(244,237,222,0.055)"
   context.lineWidth = Math.max(1, line * 0.9)
   arc(context, centerX, hoopY, courtWidth * 0.43, Math.PI * 1.08, Math.PI * 1.92)
   arc(context, centerX, hoopY, courtWidth * 0.16, Math.PI * 1.08, Math.PI * 1.92)
@@ -721,7 +728,7 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
     if (alpha <= 0.01) continue
 
     context.beginPath()
-    context.strokeStyle = `rgba(8,8,7,${alpha * 0.92})`
+    context.strokeStyle = `rgba(244,237,222,${alpha * 0.94})`
     const first = toPixels(stroke.points[0], width, height)
     context.moveTo(first.x, first.y)
     if (stroke.points.length === 2) {
@@ -768,7 +775,7 @@ function drawTemporalTrails(context: CanvasRenderingContext2D, width: number, he
 
       const start = toPixels(previous, width, height)
       const end = toPixels(current, width, height)
-      context.strokeStyle = puck.symbol === "O" ? `rgba(8,8,7,${alpha})` : `rgba(8,8,7,${alpha * 0.72})`
+      context.strokeStyle = puck.symbol === "O" ? `rgba(244,237,222,${alpha})` : `rgba(172,178,178,${alpha * 0.86})`
       context.lineWidth = Math.max(1, Math.min(width, height) * 0.0022 * alpha * 8)
       context.lineCap = "round"
       context.beginPath()
@@ -800,7 +807,7 @@ function drawDryMarkerTexture(context: CanvasRenderingContext2D, start: { x: num
 
   context.save()
   context.globalAlpha = Math.min(0.18, alpha * 0.22)
-  context.strokeStyle = "rgba(237,231,218,0.72)"
+  context.strokeStyle = "rgba(6,6,6,0.32)"
   context.lineWidth = Math.max(0.45, width * 0.16)
   context.beginPath()
   context.moveTo(start.x + normalX * offset, start.y + normalY * offset)
@@ -824,7 +831,7 @@ function drawMovementIntent(context: CanvasRenderingContext2D, width: number, he
     const controlX = (start.x + end.x) / 2
     const controlY = (start.y + end.y) / 2 - lift
 
-    context.strokeStyle = puck.symbol === "O" ? "rgba(8,8,7,0.13)" : "rgba(8,8,7,0.08)"
+    context.strokeStyle = puck.symbol === "O" ? "rgba(244,237,222,0.16)" : "rgba(172,178,178,0.11)"
     context.lineWidth = Math.max(1, Math.min(width, height) * 0.0014)
     context.beginPath()
     context.moveTo(start.x, start.y)
@@ -854,9 +861,9 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
     const hazeCenter = toPixels({ x: laneX, y: 0.56 }, width, height)
     const hazeRadius = Math.min(width, height) * (0.18 + sidePressure * 0.08)
     const haze = context.createRadialGradient(hazeCenter.x, hazeCenter.y, hazeRadius * 0.1, hazeCenter.x, hazeCenter.y, hazeRadius)
-    haze.addColorStop(0, `rgba(8,8,7,${0.026 * sidePressure})`)
-    haze.addColorStop(0.58, `rgba(8,8,7,${0.01 * sidePressure})`)
-    haze.addColorStop(1, "rgba(8,8,7,0)")
+    haze.addColorStop(0, `rgba(244,237,222,${0.04 * sidePressure})`)
+    haze.addColorStop(0.58, `rgba(244,237,222,${0.012 * sidePressure})`)
+    haze.addColorStop(1, "rgba(244,237,222,0)")
     context.fillStyle = haze
     context.beginPath()
     context.arc(hazeCenter.x, hazeCenter.y, hazeRadius, 0, Math.PI * 2)
@@ -870,7 +877,7 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
       const start = toPixels(weakside, width, height)
       const ghost = toPixels({ x: sideLoad > 0 ? 0.2 : 0.8, y: clamp(weakside.y - 0.035, 0.16, 0.84) }, width, height)
       const control = { x: (start.x + ghost.x) / 2, y: Math.min(start.y, ghost.y) - Math.min(width, height) * 0.035 }
-      context.strokeStyle = `rgba(8,8,7,${0.07 * sidePressure})`
+      context.strokeStyle = `rgba(244,237,222,${0.08 * sidePressure})`
       context.lineWidth = Math.max(1, Math.min(width, height) * 0.0015)
       context.setLineDash([Math.min(width, height) * 0.01, Math.min(width, height) * 0.012])
       context.beginPath()
@@ -887,8 +894,8 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
       const start = toPixels(drive, width, height)
       const end = toPixels(rim, width, height)
       const laneGradient = context.createLinearGradient(start.x, start.y, end.x, end.y)
-      laneGradient.addColorStop(0, `rgba(8,8,7,${0.08 * pressure})`)
-      laneGradient.addColorStop(1, "rgba(8,8,7,0)")
+      laneGradient.addColorStop(0, `rgba(244,237,222,${0.08 * pressure})`)
+      laneGradient.addColorStop(1, "rgba(244,237,222,0)")
       context.strokeStyle = laneGradient
       context.lineWidth = Math.max(2, Math.min(width, height) * 0.012 * pressure)
       context.lineCap = "round"
@@ -920,7 +927,7 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
     const window = clamp(drivingO.speed / 0.018, 0, 1)
     const recovery = nearestPuck(drivingO.puck, defense, "X")
 
-    context.strokeStyle = `rgba(8,8,7,${0.07 * window})`
+    context.strokeStyle = `rgba(244,237,222,${0.08 * window})`
     context.lineWidth = Math.max(1, Math.min(width, height) * 0.0025 * window)
     context.beginPath()
     context.moveTo(start.x, start.y)
@@ -930,7 +937,7 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
     if (recovery) {
       const recoveryStart = toPixels(recovery, width, height)
       const recoverTo = toPixels({ x: (drivingO.puck.x + rim.x) / 2, y: (drivingO.puck.y + rim.y) / 2 }, width, height)
-      context.strokeStyle = `rgba(8,8,7,${0.045 * window})`
+      context.strokeStyle = `rgba(172,178,178,${0.06 * window})`
       context.setLineDash([Math.min(width, height) * 0.007, Math.min(width, height) * 0.012])
       context.beginPath()
       context.moveTo(recoveryStart.x, recoveryStart.y)
@@ -951,8 +958,8 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
       const midpoint = toPixels({ x: (puck.x + nearest.x) / 2, y: (puck.y + nearest.y) / 2 }, width, height)
       const radius = Math.min(width, height) * (0.055 + spacing * 0.025)
       const haze = context.createRadialGradient(midpoint.x, midpoint.y, radius * 0.1, midpoint.x, midpoint.y, radius)
-      haze.addColorStop(0, `rgba(8,8,7,${0.03 * spacing})`)
-      haze.addColorStop(1, "rgba(8,8,7,0)")
+      haze.addColorStop(0, `rgba(244,237,222,${0.04 * spacing})`)
+      haze.addColorStop(1, "rgba(244,237,222,0)")
       context.fillStyle = haze
       context.beginPath()
       context.arc(midpoint.x, midpoint.y, radius, 0, Math.PI * 2)
@@ -967,8 +974,8 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
       const point = toPixels(engine.advantageFlash, width, height)
       const radius = Math.min(width, height) * (0.07 + (1 - alpha) * 0.04)
       const flash = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius)
-      flash.addColorStop(0, `rgba(8,8,7,${0.045 * alpha})`)
-      flash.addColorStop(1, "rgba(8,8,7,0)")
+      flash.addColorStop(0, `rgba(244,237,222,${0.07 * alpha})`)
+      flash.addColorStop(1, "rgba(244,237,222,0)")
       context.fillStyle = flash
       context.beginPath()
       context.arc(point.x, point.y, radius, 0, Math.PI * 2)
@@ -1020,16 +1027,16 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
   context.lineCap = "round"
   context.lineJoin = "round"
   context.shadowBlur = Math.max(7, radius * 0.24)
-  context.shadowColor = "rgba(8,8,7,0.18)"
+  context.shadowColor = symbol === "O" ? "rgba(244,237,222,0.28)" : "rgba(172,178,178,0.22)"
 
   if (symbol === "O") {
-    context.strokeStyle = "rgba(8,8,7,0.76)"
+    context.strokeStyle = "rgba(244,237,222,0.88)"
     context.lineWidth = Math.max(2.2, radius * 0.14)
     context.beginPath()
     context.arc(x, y, radius * 0.48, 0, Math.PI * 2)
     context.stroke()
   } else {
-    context.strokeStyle = "rgba(8,8,7,0.72)"
+    context.strokeStyle = "rgba(172,178,178,0.82)"
     context.lineWidth = Math.max(2.2, radius * 0.14)
     const inset = radius * 0.44
     context.beginPath()
@@ -1046,7 +1053,7 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
 function drawEraser(context: CanvasRenderingContext2D, width: number, height: number, point: Point) {
   const pixel = toPixels(point, width, height)
   context.save()
-  context.strokeStyle = "rgba(8,8,7,0.26)"
+  context.strokeStyle = "rgba(244,237,222,0.34)"
   context.lineWidth = 1
   context.shadowBlur = Math.min(width, height) * 0.018
   context.shadowColor = "rgba(255,255,255,0.28)"
@@ -1667,12 +1674,12 @@ function easeInOutCubic(value: number) {
 }
 
 function symbolGlow(symbol: PuckSymbol, alpha: number) {
-  if (symbol === "O") return `rgba(8,8,7,${alpha * 0.62})`
-  return `rgba(8,8,7,${alpha * 0.52})`
+  if (symbol === "O") return `rgba(244,237,222,${alpha * 0.78})`
+  return `rgba(172,178,178,${alpha * 0.66})`
 }
 
 function continuityColor(symbol: ContinuityCell["symbol"], alpha: number) {
-  if (symbol === "O") return `rgba(8,8,7,${alpha})`
-  if (symbol === "X") return `rgba(8,8,7,${alpha * 0.72})`
-  return `rgba(8,8,7,${alpha * 1.15})`
+  if (symbol === "O") return `rgba(244,237,222,${alpha})`
+  if (symbol === "X") return `rgba(172,178,178,${alpha * 0.82})`
+  return `rgba(214,194,148,${alpha * 1.08})`
 }
