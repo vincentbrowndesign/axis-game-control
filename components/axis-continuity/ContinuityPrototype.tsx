@@ -227,17 +227,23 @@ const spatialStates: SpatialState[] = [
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
+  const rawInkCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const [activeSpatialState, setActiveSpatialState] = useState<SpatialStateName>("Horns")
   const [tool, setTool] = useState<Tool>("pencil")
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    const rawInkCanvas = rawInkCanvasRef.current
+    if (!canvas || !rawInkCanvas) return
     const canvasElement: HTMLCanvasElement = canvas
+    const rawInkCanvasElement: HTMLCanvasElement = rawInkCanvas
 
     const canvasContext = canvasElement.getContext("2d", { alpha: false })
     if (!canvasContext) return
     const context: CanvasRenderingContext2D = canvasContext
+    const rawInkContext = rawInkCanvasElement.getContext("2d")
+    if (!rawInkContext) return
+    const rawContext: CanvasRenderingContext2D = rawInkContext
 
     const engine: Engine = {
       activePointerId: null,
@@ -270,9 +276,10 @@ export function ContinuityPrototype() {
       const rect = canvasElement.getBoundingClientRect()
       const dpr = Math.max(1, window.devicePixelRatio || 1)
       engine.rect = rect
-      canvasElement.width = Math.round(rect.width * dpr)
-      canvasElement.height = Math.round(rect.height * dpr)
+      resizeCanvas(canvasElement, rect, dpr)
+      resizeCanvas(rawInkCanvasElement, rect, dpr)
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
+      rawContext.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
     function frame() {
@@ -349,6 +356,7 @@ export function ContinuityPrototype() {
       points: [point],
     }
     engine.predictedStroke = null
+    renderRawInk(rawInkCanvasRef.current, engine)
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -386,7 +394,7 @@ export function ContinuityPrototype() {
         appendStrokePoint(engine.workingStroke, point, 0.0018)
       }
       engine.predictedStroke = predictedStrokeForEvent(event.nativeEvent, engine, engine.workingStroke)
-      renderImmediately(event.currentTarget, engine)
+      renderRawInk(rawInkCanvasRef.current, engine)
     }
   }
 
@@ -410,6 +418,7 @@ export function ContinuityPrototype() {
       engine.workingStroke = null
     }
     engine.predictedStroke = null
+    clearRawInk(rawInkCanvasRef.current)
 
     if (engine.draggingPuckId && engine.touchStart) {
       const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
@@ -424,6 +433,7 @@ export function ContinuityPrototype() {
     engine.drawing = false
     engine.eraseCursor = null
     engine.predictedStroke = null
+    clearRawInk(rawInkCanvasRef.current)
     engine.touchStart = null
   }
 
@@ -447,6 +457,7 @@ export function ContinuityPrototype() {
     engine.strokes = []
     engine.workingStroke = null
     engine.predictedStroke = null
+    clearRawInk(rawInkCanvasRef.current)
     engine.pendingMovementStrokeId = null
     rememberSystemEvent(engine, "clear")
   }
@@ -466,12 +477,17 @@ export function ContinuityPrototype() {
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
+        ref={canvasRef}
+      />
+      <canvas
+        aria-label="Axis pencil surface"
+        className="absolute inset-0 z-[2] h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
         onContextMenu={(event) => event.preventDefault()}
         onPointerCancel={handlePointerUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        ref={canvasRef}
+        ref={rawInkCanvasRef}
       />
 
       <nav
@@ -551,8 +567,6 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawContinuityResidue(context, width, height, engine)
   drawTemporalTrails(context, width, height, engine.pucks)
   drawStrokes(context, width, height, engine.strokes, false)
-  if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
-  if (engine.predictedStroke) drawStrokes(context, width, height, [engine.predictedStroke], "predicted")
   drawMovementIntent(context, width, height, engine)
   drawIntelligenceSurface(context, width, height, engine)
   drawLiveResponse(context, width, height, engine)
@@ -561,6 +575,38 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   if (engine.eraseCursor) drawEraser(context, width, height, engine.eraseCursor)
 
   canvas.style.cursor = engine.tool === "eraser" ? "none" : "crosshair"
+}
+
+function renderRawInk(canvas: HTMLCanvasElement | null, engine: Engine) {
+  const rect = engine.rect
+  if (!canvas || !rect) return
+
+  const context = canvas.getContext("2d")
+  if (!context) return
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1)
+  context.setTransform(dpr, 0, 0, dpr, 0, 0)
+  context.clearRect(0, 0, rect.width, rect.height)
+
+  if (engine.workingStroke) drawStrokes(context, rect.width, rect.height, [engine.workingStroke], true)
+  if (engine.predictedStroke) drawStrokes(context, rect.width, rect.height, [engine.predictedStroke], "predicted")
+}
+
+function clearRawInk(canvas: HTMLCanvasElement | null) {
+  if (!canvas) return
+
+  const context = canvas.getContext("2d")
+  if (!context) return
+
+  const rect = canvas.getBoundingClientRect()
+  const dpr = Math.max(1, window.devicePixelRatio || 1)
+  context.setTransform(dpr, 0, 0, dpr, 0, 0)
+  context.clearRect(0, 0, rect.width, rect.height)
+}
+
+function resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRect, dpr: number) {
+  canvas.width = Math.round(rect.width * dpr)
+  canvas.height = Math.round(rect.height * dpr)
 }
 
 function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
@@ -1481,15 +1527,6 @@ function appendStrokePoint(stroke: Stroke, point: Point, threshold: number) {
   if (!previous || distance(previous, point) > threshold) {
     stroke.points.push(point)
   }
-}
-
-function renderImmediately(canvas: HTMLCanvasElement, engine: Engine) {
-  const context = canvas.getContext("2d", { alpha: false })
-  if (!context) return
-
-  const dpr = Math.max(1, window.devicePixelRatio || 1)
-  context.setTransform(dpr, 0, 0, dpr, 0, 0)
-  render(context, engine, canvas)
 }
 
 function findPuckAt(engine: Engine, point: Point) {
