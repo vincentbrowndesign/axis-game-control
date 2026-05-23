@@ -120,133 +120,151 @@ export function MeasuresSurface() {
   }
 
   return (
-    <main className="fixed inset-0 overflow-hidden bg-[#050505] text-[#f4f0e7]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.08),rgba(255,255,255,0)_34%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0)_42%)]" />
-      <section className="relative z-10 flex h-full flex-col px-4 py-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-8">
-        <header className="flex shrink-0 items-start justify-between gap-5">
+    <main className="fixed inset-0 overflow-hidden bg-[#030303] text-[#f4f0e7]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-8%,rgba(244,240,231,0.12),rgba(244,240,231,0.035)_30%,rgba(0,0,0,0)_58%),linear-gradient(115deg,rgba(216,196,155,0.06),rgba(0,0,0,0)_42%)]" />
+      <div className="absolute inset-x-10 top-20 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent" />
+      <section className="relative z-10 flex h-full flex-col gap-5 px-4 py-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-8">
+        <header className="grid shrink-0 grid-cols-[1fr_auto] items-start gap-6">
           <div>
-            <p className="text-[0.66rem] font-medium uppercase tracking-[0.26em] text-white/38">Axis Measures</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.03em] text-[#fffaf0] sm:text-5xl">Q3 rhythm</h1>
+            <p className="text-[0.62rem] font-medium uppercase tracking-[0.32em] text-white/30">Axis Measures</p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-[#fffaf0] sm:text-6xl">Q3 rhythm</h1>
           </div>
-          <div className="text-right">
-            <p className="font-mono text-3xl tracking-[-0.08em] text-[#fffaf0] sm:text-5xl">
+          <div className="rounded-[1.65rem] border border-white/8 bg-white/[0.045] px-5 py-4 text-right shadow-[0_24px_90px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
+            <p className="font-mono text-4xl tracking-[-0.09em] text-[#fffaf0] sm:text-6xl">
               {session.homeScore}-{session.awayScore}
             </p>
-            <p className="mt-1 text-[0.66rem] font-medium uppercase tracking-[0.22em] text-white/36">
+            <p className="mt-1 text-[0.65rem] font-medium uppercase tracking-[0.24em] text-white/34">
               {clockForEvent(session.eventIndex)} third
             </p>
           </div>
         </header>
 
-        <div className="mt-5 grid min-h-0 flex-1 grid-rows-[auto_1fr_auto] gap-4 lg:grid-cols-[0.9fr_1.45fr] lg:grid-rows-[auto_1fr]">
-          <section className="rounded-[1.35rem] border border-white/8 bg-white/[0.035] p-4 shadow-[0_22px_80px_rgba(0,0,0,0.35)]">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[0.66rem] font-medium uppercase tracking-[0.22em] text-white/38">on floor</p>
-              <p className="font-mono text-xs text-white/42">{formatMinutes(lineupMinutes(activeLineup))} together</p>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {activeLineup.map((player) => (
-                <button
-                  className={[
-                    "rounded-full border px-4 py-2 text-sm font-semibold shadow-[0_10px_30px_rgba(0,0,0,0.2)] transition-colors",
-                    player.id === activePlayerId
-                      ? "border-[#f4f0e7] bg-[#f4f0e7] text-black"
-                      : "border-white/10 bg-white/[0.06] text-white/66 hover:bg-white/[0.1]",
-                  ].join(" ")}
-                  key={player.id}
-                  onClick={() => setActivePlayerId(player.id)}
-                  type="button"
-                >
-                  {player.name}
-                </button>
-              ))}
-            </div>
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/8">
-              <div className="h-full rounded-full bg-[#f4f0e7]/78" style={{ width: `${Math.min(86, 38 + flow.runValue * 6)}%` }} />
-            </div>
-          </section>
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[0.78fr_1.44fr_0.78fr]">
+          <aside className="flex min-h-0 flex-col gap-4">
+            <section className="rounded-[1.7rem] border border-white/8 bg-white/[0.035] p-4 shadow-[0_22px_90px_rgba(0,0,0,0.34)] backdrop-blur-2xl">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[0.62rem] font-medium uppercase tracking-[0.24em] text-white/32">on floor</p>
+                <p className="font-mono text-xs text-white/38">{formatMinutes(lineupMinutes(activeLineup))}</p>
+              </div>
+              <div className="mt-5 space-y-2">
+                {activeLineup.map((player) => (
+                  <button
+                    className={[
+                      "flex w-full items-center justify-between rounded-full border px-4 py-3 text-left transition-colors",
+                      player.id === activePlayerId
+                        ? "border-[#f4f0e7]/70 bg-[#f4f0e7] text-black"
+                        : "border-white/8 bg-white/[0.035] text-white/62 hover:bg-white/[0.07]",
+                    ].join(" ")}
+                    key={player.id}
+                    onClick={() => setActivePlayerId(player.id)}
+                    type="button"
+                  >
+                    <span className="text-sm font-semibold">{player.name}</span>
+                    <span className="font-mono text-xs opacity-55">{formatPlusMinus(player.plusMinus)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/7">
+                <div className="h-full rounded-full bg-[#f4f0e7]/70" style={{ width: `${Math.min(86, 38 + flow.runValue * 6)}%` }} />
+              </div>
+            </section>
 
-          <section className="rounded-[1.35rem] border border-white/8 bg-white/[0.035] p-4 shadow-[0_22px_80px_rgba(0,0,0,0.35)] lg:row-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[0.66rem] font-medium uppercase tracking-[0.22em] text-white/38">possession flow</p>
-              <div className="flex gap-2">
-                {[flow.runLabel, flow.droughtLabel, `${session.possessionCount} poss`, `lineup ${lineupPlusMinus(activeLineup)}`].map((value) => (
-                  <span className="rounded-full bg-white/[0.055] px-3 py-1 font-mono text-[0.68rem] text-white/54" key={value}>
+            <section className="min-h-0 flex-1 rounded-[1.7rem] border border-white/8 bg-white/[0.026] p-4 shadow-[0_22px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
+              <p className="text-[0.62rem] font-medium uppercase tracking-[0.24em] text-white/32">{activePlayer.name}</p>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {actionLabels.map(({ action, label }) => (
+                  <button
+                    className="rounded-full border border-white/8 bg-white/[0.035] px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-white/58 transition-colors hover:bg-[#f4f0e7] hover:text-black"
+                    key={action}
+                    onClick={() => commit(action)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {bench.length > 0 ? (
+                <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+                  {bench.map((player) => (
+                    <button
+                      className="shrink-0 rounded-full border border-white/7 px-3 py-2 text-xs font-medium text-white/38 transition-colors hover:text-white/70"
+                      key={player.id}
+                      onClick={() => setActivePlayerId(player.id)}
+                      type="button"
+                    >
+                      {player.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          </aside>
+
+          <section className="relative min-h-0 overflow-hidden rounded-[2rem] border border-white/8 bg-white/[0.032] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.46)] backdrop-blur-2xl">
+            <div className="pointer-events-none absolute inset-y-16 left-[4.85rem] w-px bg-gradient-to-b from-transparent via-white/18 to-transparent" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[0.62rem] font-medium uppercase tracking-[0.26em] text-white/32">possession spine</p>
+                <p className="mt-2 max-w-lg text-2xl font-medium tracking-[-0.035em] text-[#fffaf0]">
+                  {flow.runLabel} / {flow.droughtLabel}
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                {[`${session.possessionCount} poss`, `lineup ${lineupPlusMinus(activeLineup)}`, "live"].map((value) => (
+                  <span className="rounded-full bg-white/[0.055] px-3 py-1.5 font-mono text-[0.68rem] text-white/48" key={value}>
                     {value}
                   </span>
                 ))}
               </div>
             </div>
 
-            <div className="mt-5 min-h-0 space-y-3 overflow-y-auto pr-1">
-              {session.timeline.map((event) => (
+            <div className="mt-6 h-[calc(100%-5.8rem)] min-h-0 space-y-2 overflow-y-auto pr-1">
+              {session.timeline.map((event, index) => (
                 <article
-                  className="grid grid-cols-[3.4rem_4.7rem_1fr_auto] items-center gap-3 border-b border-white/7 pb-3 last:border-b-0"
+                  className={[
+                    "relative grid grid-cols-[3.6rem_1fr_auto] items-center gap-4 rounded-[1.15rem] border px-4 py-3 transition-colors",
+                    index === 0 ? "border-white/14 bg-white/[0.07]" : "border-white/0 bg-transparent hover:bg-white/[0.035]",
+                  ].join(" ")}
                   key={event.id}
                 >
+                  <div className={["absolute left-[3.45rem] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full ring-4", dotClass(event.tone)].join(" ")} />
                   <time className="font-mono text-sm text-white/42">{event.time}</time>
-                  <span className={["font-mono text-xs tracking-[0.16em]", toneClass(event.tone)].join(" ")}>{labelForAction(event.action)}</span>
-                  <p className="min-w-0 truncate text-sm text-white/78">{event.detail}</p>
-                  <span className="font-mono text-sm text-white/48">{event.score}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3">
+                      <span className={["font-mono text-xs tracking-[0.18em]", toneClass(event.tone)].join(" ")}>{labelForAction(event.action)}</span>
+                      <p className="min-w-0 truncate text-sm text-white/76">{event.detail}</p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-sm text-white/46">{event.score}</span>
                 </article>
               ))}
             </div>
           </section>
 
-          <section className="rounded-[1.35rem] border border-white/8 bg-white/[0.035] p-4 shadow-[0_22px_80px_rgba(0,0,0,0.35)]">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[0.66rem] font-medium uppercase tracking-[0.22em] text-white/38">{activePlayer.name}</p>
-              <p className="font-mono text-xs text-white/34">1 tap</p>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {actionLabels.map(({ action, label }) => (
-                <button
-                  className="rounded-full border border-white/9 bg-white/[0.04] px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-white/64 transition-colors hover:bg-white/[0.08] hover:text-white"
-                  key={action}
-                  onClick={() => commit(action)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {bench.length > 0 ? (
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                {bench.map((player) => (
-                  <button
-                    className="shrink-0 rounded-full border border-white/7 px-3 py-2 text-xs font-medium text-white/44 hover:text-white/70"
-                    key={player.id}
-                    onClick={() => setActivePlayerId(player.id)}
-                    type="button"
-                  >
-                    {player.name}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </section>
-
-          <section className="min-h-0 rounded-[1.35rem] border border-white/8 bg-white/[0.035] p-4 shadow-[0_22px_80px_rgba(0,0,0,0.35)] lg:col-span-2">
+          <aside className="min-h-0 rounded-[1.7rem] border border-white/8 bg-white/[0.026] p-4 shadow-[0_22px_90px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
             <div className="flex items-center justify-between">
-              <p className="text-[0.66rem] font-medium uppercase tracking-[0.22em] text-white/38">player line</p>
-              <p className="text-[0.66rem] font-medium uppercase tracking-[0.22em] text-white/28">min / pf / +/- / pts / reb / ast</p>
+              <p className="text-[0.62rem] font-medium uppercase tracking-[0.24em] text-white/32">player line</p>
+              <p className="font-mono text-xs text-white/28">min pf +/-</p>
             </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-5">
+            <div className="mt-4 h-[calc(100%-2rem)] space-y-2 overflow-y-auto pr-1">
               {session.players.map((player) => (
                 <button
                   className={[
-                    "rounded-[1rem] border p-3 text-left transition-colors",
-                    player.id === activePlayerId ? "border-[#f4f0e7]/50 bg-white/[0.09]" : "border-white/7 bg-black/18 hover:bg-white/[0.045]",
+                    "w-full rounded-[1.05rem] border p-3 text-left transition-colors",
+                    player.id === activePlayerId ? "border-[#f4f0e7]/36 bg-white/[0.075]" : "border-white/6 bg-black/14 hover:bg-white/[0.04]",
                   ].join(" ")}
                   key={player.id}
                   onClick={() => setActivePlayerId(player.id)}
                   type="button"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-base font-semibold tracking-[-0.02em] text-[#fffaf0]">{player.name}</h2>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-semibold tracking-[-0.02em] text-[#fffaf0]">{player.name}</h2>
+                      <p className="mt-1 font-mono text-[0.68rem] text-white/30">#{player.number}</p>
+                    </div>
                     <span className="font-mono text-sm text-white/44">{formatPlusMinus(player.plusMinus)}</span>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-y-2 font-mono text-sm text-white/68">
+                  <div className="mt-4 grid grid-cols-3 gap-y-2 font-mono text-xs text-white/58">
                     <span>{formatMinutes(player.minutes)}</span>
                     <span>{player.fouls}f</span>
                     <span>{player.points}p</span>
@@ -259,7 +277,7 @@ export function MeasuresSurface() {
                 </button>
               ))}
             </div>
-          </section>
+          </aside>
         </div>
       </section>
     </main>
@@ -411,6 +429,13 @@ function toneClass(tone: EventTone) {
   if (tone === "miss") return "text-white/36"
   if (tone === "pressure") return "text-[#d8c49b]"
   return "text-white/46"
+}
+
+function dotClass(tone: EventTone) {
+  if (tone === "make") return "bg-[#f4f0e7] ring-[#f4f0e7]/10"
+  if (tone === "miss") return "bg-white/22 ring-white/5"
+  if (tone === "pressure") return "bg-[#d8c49b] ring-[#d8c49b]/10"
+  return "bg-white/34 ring-white/6"
 }
 
 function formatMinutes(value: number) {
