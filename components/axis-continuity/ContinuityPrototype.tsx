@@ -4,23 +4,9 @@ import { buildAbstractReplayFrame, createAbstractReplayState, type AbstractRepla
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 type PuckSymbol = "O" | "X"
-type SpatialStateName =
-  | "Horns"
-  | "5-Out"
-  | "Delay"
-  | "Spain"
-  | "Shell"
-  | "Princeton"
-  | "Flex"
-  | "Zoom"
-  | "Pistol"
-  | "Chin"
-  | "Split"
-  | "Motion"
-  | "UCLA"
-  | "Ghost"
-  | "Chicago"
-  | "Hammer"
+type SpatialStateName = string
+type TacticalCategory = "Offense" | "Defense" | "SLOB" | "ATO" | "Tempo" | "Emphasis"
+type ActiveConditions = Partial<Record<TacticalCategory, string>>
 
 type Point = {
   pressure: number
@@ -71,6 +57,8 @@ type Puck = {
 }
 
 type SpatialState = {
+  category?: TacticalCategory
+  id?: string
   name: SpatialStateName
   pucks: Record<string, { x: number; y: number }>
 }
@@ -91,6 +79,7 @@ type Engine = {
   abstractReplayFrames: AbstractReplayFrame[]
   abstractReplayState: AbstractReplayState
   advantageFlash: TrailPoint | null
+  conditions: ActiveConditions
   draggingPuckId: string | null
   formationPulseAt: number
   lastAbstractReplayAt: number
@@ -179,6 +168,7 @@ const spatialStates: SpatialState[] = [
     },
   },
   {
+    category: "Defense",
     name: "Shell",
     pucks: {
       o1: { x: 0.5, y: 0.28 },
@@ -358,12 +348,152 @@ const spatialStates: SpatialState[] = [
       x5: { x: 0.48, y: 0.77 },
     },
   },
+  ...buildGlossaryStates("Offense", ["Drag", "Elbow", "Empty", "Iverson", "Stagger", "Stack", "Wide", "Flow", "DHO", "Iso", "Post Split", "High-Low"], "Motion"),
+  ...buildGlossaryStates(
+    "Defense",
+    [
+      "Switch",
+      "ICE",
+      "Drop",
+      "Hedge",
+      "Blitz",
+      "Show",
+      "Gap",
+      "Weak",
+      "Strong",
+      "Deny",
+      "Pack",
+      "Zone",
+      "Matchup",
+      "Press",
+      "Full Court",
+      "Half Court",
+      "Trap",
+      "Scramble",
+      "Recover",
+      "Nail Help",
+      "Shrink",
+      "Peel",
+      "X-Out",
+    ],
+    "Shell",
+  ),
+  ...buildGlossaryStates("SLOB", ["Box", "Stack", "Elevator", "Screen-The-Screener", "Hammer", "Lob", "Slip", "Decoy", "Quick", "Safety", "BLOB Flow", "Wide Entry"], "Flex"),
+  ...buildGlossaryStates(
+    "ATO",
+    ["Quick Hit", "Misdirection", "Delay Counter", "Empty Action", "Spain Counter", "Ghost Counter", "Late Clock", "Need 3", "Advance", "Last Shot", "Foul Up 3", "Kill Momentum", "Two-for-One"],
+    "Spain",
+  ),
+  ...buildGlossaryStates("Tempo", ["Fast", "Controlled", "Flowing", "Patient", "Push", "Early", "Delay", "Organized", "Scramble", "Halfcourt", "Transition"], "5-Out"),
+  ...buildGlossaryStates(
+    "Emphasis",
+    ["Keep Width", "Touch Paint", "Sprint Lanes", "Protect Nail", "Stay Connected", "Early Help", "Shrink Gaps", "Push Pace", "Win Glass", "No Empty Trips", "Paint Collapse", "Weakside Ready", "Shot Discipline", "Kill Middle"],
+    "Shell",
+  ),
 ]
+
+function buildGlossaryStates(category: TacticalCategory, names: string[], template: "5-Out" | "Flex" | "Motion" | "Shell" | "Spain"): SpatialState[] {
+  return names.map((name, index) => ({
+    category,
+    id: `${category}:${name}`,
+    name,
+    pucks: tacticalTemplate(template, index),
+  }))
+}
+
+function tacticalTemplate(template: "5-Out" | "Flex" | "Motion" | "Shell" | "Spain", index: number) {
+  const drift = ((index % 5) - 2) * 0.012
+  const lift = ((index % 3) - 1) * 0.01
+  const base =
+    template === "5-Out"
+      ? {
+          o1: { x: 0.5, y: 0.22 },
+          o2: { x: 0.24, y: 0.42 },
+          o3: { x: 0.76, y: 0.42 },
+          o4: { x: 0.16, y: 0.78 },
+          o5: { x: 0.84, y: 0.78 },
+          x1: { x: 0.5, y: 0.34 },
+          x2: { x: 0.29, y: 0.5 },
+          x3: { x: 0.71, y: 0.5 },
+          x4: { x: 0.23, y: 0.74 },
+          x5: { x: 0.77, y: 0.74 },
+        }
+      : template === "Flex"
+        ? {
+            o1: { x: 0.5, y: 0.24 },
+            o2: { x: 0.18, y: 0.58 },
+            o3: { x: 0.82, y: 0.58 },
+            o4: { x: 0.36, y: 0.78 },
+            o5: { x: 0.64, y: 0.78 },
+            x1: { x: 0.5, y: 0.34 },
+            x2: { x: 0.27, y: 0.62 },
+            x3: { x: 0.73, y: 0.62 },
+            x4: { x: 0.4, y: 0.8 },
+            x5: { x: 0.6, y: 0.8 },
+          }
+        : template === "Spain"
+          ? {
+              o1: { x: 0.5, y: 0.25 },
+              o2: { x: 0.5, y: 0.52 },
+              o3: { x: 0.5, y: 0.66 },
+              o4: { x: 0.17, y: 0.78 },
+              o5: { x: 0.83, y: 0.78 },
+              x1: { x: 0.5, y: 0.35 },
+              x2: { x: 0.48, y: 0.58 },
+              x3: { x: 0.54, y: 0.72 },
+              x4: { x: 0.24, y: 0.76 },
+              x5: { x: 0.76, y: 0.76 },
+            }
+          : template === "Motion"
+            ? {
+                o1: { x: 0.5, y: 0.24 },
+                o2: { x: 0.26, y: 0.44 },
+                o3: { x: 0.74, y: 0.44 },
+                o4: { x: 0.3, y: 0.78 },
+                o5: { x: 0.7, y: 0.78 },
+                x1: { x: 0.5, y: 0.36 },
+                x2: { x: 0.34, y: 0.51 },
+                x3: { x: 0.66, y: 0.51 },
+                x4: { x: 0.38, y: 0.76 },
+                x5: { x: 0.62, y: 0.76 },
+              }
+            : {
+                o1: { x: 0.5, y: 0.28 },
+                o2: { x: 0.27, y: 0.48 },
+                o3: { x: 0.73, y: 0.48 },
+                o4: { x: 0.28, y: 0.76 },
+                o5: { x: 0.72, y: 0.76 },
+                x1: { x: 0.5, y: 0.4 },
+                x2: { x: 0.35, y: 0.55 },
+                x3: { x: 0.65, y: 0.55 },
+                x4: { x: 0.39, y: 0.73 },
+                x5: { x: 0.61, y: 0.73 },
+              }
+
+  return Object.fromEntries(Object.entries(base).map(([id, point]) => [id, { x: clamp(point.x + drift, 0.12, 0.88), y: clamp(point.y + lift, 0.16, 0.86) }]))
+}
+
+function stateKey(state: SpatialState) {
+  return state.id ?? `${state.category ?? "Offense"}:${state.name}`
+}
+
+const initialConditions: ActiveConditions = {
+  Defense: "Shell",
+  Emphasis: "Keep Width",
+  Offense: "Horns",
+  Tempo: "Controlled",
+}
+
+function conditionSummary(conditions: ActiveConditions): Array<[TacticalCategory, string]> {
+  return (["Offense", "Defense", "Emphasis", "Tempo"] as TacticalCategory[])
+    .map((category) => [category, conditions[category]] as [TacticalCategory, string | undefined])
+    .filter((item): item is [TacticalCategory, string] => Boolean(item[1]))
+}
 
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
-  const [activeSpatialState, setActiveSpatialState] = useState<SpatialStateName>("Horns")
+  const [activeConditions, setActiveConditions] = useState<ActiveConditions>(initialConditions)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -380,6 +510,7 @@ export function ContinuityPrototype() {
       abstractReplayFrames: [],
       abstractReplayState: createAbstractReplayState(),
       advantageFlash: null,
+      conditions: initialConditions,
       draggingPuckId: null,
       formationPulseAt: -10000,
       lastAbstractReplayAt: 0,
@@ -508,9 +639,14 @@ export function ContinuityPrototype() {
     const engine = engineRef.current
     if (!engine) return
 
+    const category = state.category ?? "Offense"
     recallSpatialState(engine, state)
+    engine.conditions = {
+      ...engine.conditions,
+      [category]: state.name,
+    }
     engine.formationPulseAt = at
-    setActiveSpatialState(state.name)
+    setActiveConditions(engine.conditions)
   }
 
   return (
@@ -518,6 +654,14 @@ export function ContinuityPrototype() {
       <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(248,241,228,0.12),rgba(248,241,228,0)_18%),linear-gradient(135deg,rgba(216,176,96,0.08),rgba(0,0,0,0.12)_52%,rgba(0,0,0,0.62))] mix-blend-screen opacity-85" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-20 bg-gradient-to-b from-black/72 to-transparent" />
       <div className="pointer-events-none absolute inset-x-7 top-8 z-[1] h-[2px] bg-gradient-to-r from-transparent via-[#f6d68a]/50 to-transparent opacity-80" />
+      <div className="pointer-events-none absolute left-5 top-[max(1.1rem,env(safe-area-inset-top))] z-10 hidden max-w-[calc(100vw-2.5rem)] gap-2 md:flex">
+        {conditionSummary(activeConditions).map(([category, value]) => (
+          <div className="rounded-full border border-[#f8f1e4]/10 bg-black/24 px-3 py-1.5 text-[0.58rem] font-black uppercase tracking-[0.14em] text-[#f8f1e4]/44 backdrop-blur-xl" key={category}>
+            <span className="text-[#f6d68a]/52">{category}</span>
+            <span className="ml-2 text-[#f8f1e4]/64">{value}</span>
+          </div>
+        ))}
+      </div>
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -535,21 +679,22 @@ export function ContinuityPrototype() {
       >
         {spatialStates.map((state) => (
           <button
-            aria-pressed={activeSpatialState === state.name}
+            aria-pressed={activeConditions[state.category ?? "Offense"] === state.name}
             className={[
               "snap-center shrink-0 touch-manipulation rounded-[1.08rem] px-[1.125rem] py-3 text-[0.74rem] font-black uppercase tracking-[0.14em] outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.94]",
-              activeSpatialState === state.name
+              activeConditions[state.category ?? "Offense"] === state.name
                 ? "bg-[#f8f1e4] text-[#050505] shadow-[0_0_34px_rgba(246,214,138,0.3),inset_0_-2px_0_rgba(214,176,96,0.72),inset_0_1px_0_rgba(255,255,255,0.82)]"
                 : "text-[#f8f1e4]/55 hover:bg-[#f8f1e4]/12 hover:text-[#f8f1e4] focus-visible:bg-[#f8f1e4]/14 focus-visible:text-[#f8f1e4]",
             ].join(" ")}
-            key={state.name}
+            key={stateKey(state)}
             onClick={(event) => handleSpatialStateRecall(state, event.timeStamp)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") handleSpatialStateRecall(state, event.timeStamp)
             }}
             type="button"
           >
-            {state.name}
+            <span className="block text-[0.52rem] font-black leading-none tracking-[0.18em] text-current/42">{state.category ?? "Offense"}</span>
+            <span className="mt-1 block leading-none">{state.name}</span>
           </button>
         ))}
       </nav>
@@ -938,8 +1083,9 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
 }
 
 function updatePhysics(engine: Engine) {
-  const spring = 0.145
-  const damping = 0.805
+  const tempo = tempoProfile(engine.conditions.Tempo)
+  const spring = 0.145 * tempo.spring
+  const damping = 0.805 * tempo.damping
   const settle = 0.000045
 
   pruneTemporalMemory(engine)
@@ -1000,14 +1146,16 @@ function updateChoreography(engine: Engine) {
 
 function recallSpatialState(engine: Engine, state: SpatialState) {
   const now = performance.now()
+  const category = state.category ?? "Offense"
   for (const puck of engine.pucks) {
     const next = state.pucks[puck.id]
     if (!next) continue
 
-    puck.baseX = next.x
-    puck.baseY = next.y
-    puck.targetX = next.x
-    puck.targetY = next.y
+    const weight = category === "Offense" ? 1 : category === "Defense" ? 0.74 : category === "Tempo" ? 0.38 : category === "Emphasis" ? 0.48 : 0.56
+    puck.baseX = puck.baseX + (next.x - puck.baseX) * weight
+    puck.baseY = puck.baseY + (next.y - puck.baseY) * weight
+    puck.targetX = puck.baseX
+    puck.targetY = puck.baseY
     puck.vx *= 0.3
     puck.vy *= 0.3
     puck.choreography = null
@@ -1142,6 +1290,9 @@ function applyBasketballRelationships(engine: Engine) {
   const sideLoad = ballSide ? ballSide.x - 0.5 : 0
   const sidePressure = clamp(Math.abs(sideLoad) / 0.2, 0, 1)
   const rim = { x: 0.5, y: 0.78 }
+  const defense = defenseProfile(engine.conditions.Defense)
+  const emphasis = emphasisProfile(engine.conditions.Emphasis)
+  const offense = offenseProfile(engine.conditions.Offense)
 
   for (const puck of engine.pucks) {
     if (puck.id === engine.draggingPuckId) continue
@@ -1153,31 +1304,31 @@ function applyBasketballRelationships(engine: Engine) {
       const nearestO = nearestPuck(puck, engine.pucks, "O")
       if (nearestO) {
         const proximity = clamp(1 - distance(puck, nearestO) / 0.34, 0, 1)
-        desiredX += (nearestO.x - puck.baseX) * 0.1 * proximity
-        desiredY += (nearestO.y - puck.baseY) * 0.1 * proximity
+        desiredX += (nearestO.x - puck.baseX) * 0.1 * proximity * defense.pressure
+        desiredY += (nearestO.y - puck.baseY) * 0.1 * proximity * defense.pressure
       }
 
       if (ballSide) {
-        desiredX += (ballSide.x - 0.5) * 0.035
-        desiredY += (ballSide.y - puck.baseY) * 0.025
+        desiredX += (ballSide.x - 0.5) * 0.035 * defense.shell
+        desiredY += (ballSide.y - puck.baseY) * 0.025 * defense.shell
       }
 
       if (sidePressure > 0.05 && sideLoad !== 0) {
         const weakside = sideLoad > 0 ? puck.baseX < 0.5 : puck.baseX > 0.5
         if (weakside) {
-          desiredX += (0.5 - puck.baseX) * 0.055 * sidePressure
-          desiredY += (rim.y - puck.baseY) * 0.035 * sidePressure
+          desiredX += (0.5 - puck.baseX) * 0.055 * sidePressure * defense.weakside
+          desiredY += (rim.y - puck.baseY) * 0.035 * sidePressure * defense.weakside
         }
       }
 
       if (activeMovement && activeMovement.puck.symbol === "O" && activeMovement.puck.id !== puck.id) {
         const reaction = delayedReaction(puck, activeMovement.puck, activeMovement.pressure)
         const gap = distance(puck, activeMovement.puck)
-        const lanePull = clamp(1 - gap / 0.42, 0, 1) * reaction
+        const lanePull = clamp(1 - gap / 0.42, 0, 1) * reaction * defense.help
         desiredX += (activeMovement.puck.x - puck.baseX) * 0.07 * lanePull
         desiredY += (activeMovement.puck.y - puck.baseY) * 0.055 * lanePull
 
-        const cutPressure = clamp((activeMovement.puck.y - 0.48) / 0.28, 0, 1) * reaction
+        const cutPressure = clamp((activeMovement.puck.y - 0.48) / 0.28, 0, 1) * reaction * defense.help
         if (cutPressure > 0) {
           const weakside = activeMovement.puck.x > 0.5 ? puck.baseX < activeMovement.puck.x : puck.baseX > activeMovement.puck.x
           desiredX += (weakside ? 0.5 - puck.baseX : rim.x - puck.baseX) * 0.034 * cutPressure
@@ -1190,22 +1341,22 @@ function applyBasketballRelationships(engine: Engine) {
         if (teammate.id === puck.id || teammate.symbol !== "O") continue
         const gap = distance(puck, teammate)
         if (gap > 0 && gap < 0.18) {
-          desiredX += ((puck.x - teammate.x) / gap) * (0.18 - gap) * 0.09
-          desiredY += ((puck.y - teammate.y) / gap) * (0.18 - gap) * 0.09
+          desiredX += ((puck.x - teammate.x) / gap) * (0.18 - gap) * 0.09 * emphasis.width
+          desiredY += ((puck.y - teammate.y) / gap) * (0.18 - gap) * 0.09 * emphasis.width
         }
       }
 
       const nearestX = nearestPuck(puck, engine.pucks, "X")
       if (nearestX) {
         const pressure = clamp(1 - distance(puck, nearestX) / 0.22, 0, 1)
-        desiredX += (puck.x - nearestX.x) * 0.055 * pressure
-        desiredY += (puck.y - nearestX.y) * 0.055 * pressure
+        desiredX += (puck.x - nearestX.x) * 0.055 * pressure * offense.space
+        desiredY += (puck.y - nearestX.y) * 0.055 * pressure * offense.space
       }
 
       if (driveSpeed > 0.004 && puck.vy > 0.001) {
         const cornerX = puck.x < 0.5 ? 0.18 : 0.82
-        desiredX += (cornerX - puck.baseX) * 0.04
-        desiredY += (0.72 - puck.baseY) * 0.02
+        desiredX += (cornerX - puck.baseX) * 0.04 * offense.lift * emphasis.width
+        desiredY += (0.72 - puck.baseY) * 0.02 * offense.lift
       }
 
       if (activeMovement && activeMovement.puck.symbol === "O" && activeMovement.puck.id !== puck.id) {
@@ -1220,8 +1371,8 @@ function applyBasketballRelationships(engine: Engine) {
         const cornerX = activeMovement.puck.x < 0.5 ? 0.82 : 0.18
         const weakside = activeMovement.puck.x < 0.5 ? puck.baseX > 0.5 : puck.baseX < 0.5
         if (weakside) {
-          desiredX += (cornerX - puck.baseX) * 0.026 * reaction
-          desiredY += (0.74 - puck.baseY) * 0.018 * reaction
+          desiredX += (cornerX - puck.baseX) * 0.026 * reaction * offense.lift * emphasis.weakside
+          desiredY += (0.74 - puck.baseY) * 0.018 * reaction * offense.lift
         }
       }
 
@@ -1230,8 +1381,8 @@ function applyBasketballRelationships(engine: Engine) {
         const gap = distance(puck, activeMovement.puck)
         const pressureRelease = clamp(1 - gap / 0.28, 0, 1) * reaction
         if (gap > 0) {
-          desiredX += ((puck.x - activeMovement.puck.x) / gap) * 0.03 * pressureRelease
-          desiredY += ((puck.y - activeMovement.puck.y) / gap) * 0.022 * pressureRelease
+          desiredX += ((puck.x - activeMovement.puck.x) / gap) * 0.03 * pressureRelease * offense.space
+          desiredY += ((puck.y - activeMovement.puck.y) / gap) * 0.022 * pressureRelease * offense.space
         }
       }
     }
@@ -1239,6 +1390,36 @@ function applyBasketballRelationships(engine: Engine) {
     puck.targetX = clamp(desiredX, 0.04, 0.96)
     puck.targetY = clamp(desiredY, 0.06, 0.94)
   }
+}
+
+function defenseProfile(condition = "Shell") {
+  return {
+    help: ["ICE", "Drop", "Pack", "Zone", "Shrink", "Nail Help"].includes(condition) ? 1.28 : ["Blitz", "Trap", "Press", "Deny"].includes(condition) ? 0.86 : 1,
+    pressure: ["Blitz", "Trap", "Press", "Deny", "Full Court"].includes(condition) ? 1.32 : ["Drop", "Pack", "Zone"].includes(condition) ? 0.84 : 1,
+    shell: ["Shell", "Matchup", "Recover", "Scramble", "X-Out"].includes(condition) ? 1.22 : 1,
+    weakside: ["ICE", "Weak", "Shrink", "Nail Help", "X-Out"].includes(condition) ? 1.34 : ["Strong", "Deny"].includes(condition) ? 0.82 : 1,
+  }
+}
+
+function emphasisProfile(condition = "Keep Width") {
+  return {
+    weakside: ["Weakside Ready", "Early Help", "Stay Connected", "Protect Nail"].includes(condition) ? 1.3 : 1,
+    width: ["Keep Width", "Sprint Lanes", "Push Pace", "Shot Discipline"].includes(condition) ? 1.34 : ["Touch Paint", "Paint Collapse", "Kill Middle"].includes(condition) ? 0.88 : 1,
+  }
+}
+
+function offenseProfile(condition = "Horns") {
+  return {
+    lift: ["Spain", "Ghost", "Chicago", "Hammer", "Zoom"].includes(condition) ? 1.32 : ["Iso", "Post Split", "High-Low"].includes(condition) ? 0.88 : 1,
+    space: ["5-Out", "Wide", "Flow", "DHO", "Motion", "Delay"].includes(condition) ? 1.26 : ["Horns", "Post Split", "High-Low"].includes(condition) ? 0.92 : 1,
+  }
+}
+
+function tempoProfile(condition = "Controlled") {
+  if (["Fast", "Push", "Early", "Transition", "Scramble"].includes(condition)) return { damping: 0.96, spring: 1.18 }
+  if (["Controlled", "Patient", "Organized", "Halfcourt"].includes(condition)) return { damping: 1.03, spring: 0.88 }
+  if (condition === "Flowing") return { damping: 1, spring: 1.05 }
+  return { damping: 1, spring: 1 }
 }
 
 function nearestPuck(origin: Puck, pucks: Puck[], symbol: PuckSymbol) {
