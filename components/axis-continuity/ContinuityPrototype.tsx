@@ -1,7 +1,7 @@
 "use client"
 
 import { buildAbstractReplayFrame, createAbstractReplayState, type AbstractReplayFrame, type AbstractReplayState } from "@/lib/axis/abstractReplay"
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 type PuckSymbol = "O" | "X"
 type SpatialStateName = string
@@ -61,6 +61,12 @@ type SpatialState = {
   id?: string
   name: SpatialStateName
   pucks: Record<string, { x: number; y: number }>
+}
+
+type PossessionBranch = {
+  id: string
+  moves: Array<{ delay: number; duration: number; id: string; x: number; y: number }>
+  name: string
 }
 
 type ContinuityCell = {
@@ -484,16 +490,20 @@ const initialConditions: ActiveConditions = {
   Tempo: "Controlled",
 }
 
-function conditionSummary(conditions: ActiveConditions): Array<[TacticalCategory, string]> {
-  return (["Offense", "Defense", "Emphasis", "Tempo"] as TacticalCategory[])
-    .map((category) => [category, conditions[category]] as [TacticalCategory, string | undefined])
-    .filter((item): item is [TacticalCategory, string] => Boolean(item[1]))
+const tacticalActionNames = new Set(["Ghost", "Chicago", "Hammer", "Drag", "UCLA", "Iverson", "Zoom", "Split", "Pistol", "DHO", "Iso", "Post Split", "High-Low"])
+
+function isGlobalConditionState(state: SpatialState) {
+  const category = state.category ?? "Offense"
+  if (category === "Defense" || category === "Tempo" || category === "Emphasis") return true
+  return category === "Offense" && !tacticalActionNames.has(state.name)
 }
 
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
   const [activeConditions, setActiveConditions] = useState<ActiveConditions>(initialConditions)
+  const [activeBranchId, setActiveBranchId] = useState<string | null>(null)
+  const possessionBranches = useMemo(() => getPossessionBranches(activeConditions), [activeConditions])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -647,6 +657,15 @@ export function ContinuityPrototype() {
     }
     engine.formationPulseAt = at
     setActiveConditions(engine.conditions)
+    setActiveBranchId(null)
+  }
+
+  function handlePossessionBranch(branch: PossessionBranch, at: number) {
+    const engine = engineRef.current
+    if (!engine) return
+
+    applyPossessionBranch(engine, branch, at)
+    setActiveBranchId(branch.id)
   }
 
   return (
@@ -654,14 +673,33 @@ export function ContinuityPrototype() {
       <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(248,241,228,0.12),rgba(248,241,228,0)_18%),linear-gradient(135deg,rgba(216,176,96,0.08),rgba(0,0,0,0.12)_52%,rgba(0,0,0,0.62))] mix-blend-screen opacity-85" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-20 bg-gradient-to-b from-black/72 to-transparent" />
       <div className="pointer-events-none absolute inset-x-7 top-8 z-[1] h-[2px] bg-gradient-to-r from-transparent via-[#f6d68a]/50 to-transparent opacity-80" />
-      <div className="pointer-events-none absolute left-5 top-[max(1.1rem,env(safe-area-inset-top))] z-10 hidden max-w-[calc(100vw-2.5rem)] gap-2 md:flex">
-        {conditionSummary(activeConditions).map(([category, value]) => (
-          <div className="rounded-full border border-[#f8f1e4]/10 bg-black/24 px-3 py-1.5 text-[0.58rem] font-black uppercase tracking-[0.14em] text-[#f8f1e4]/44 backdrop-blur-xl" key={category}>
-            <span className="text-[#f6d68a]/52">{category}</span>
-            <span className="ml-2 text-[#f8f1e4]/64">{value}</span>
-          </div>
-        ))}
-      </div>
+      <nav
+        aria-label="Global basketball conditions"
+        className="absolute left-1/2 top-[max(0.82rem,env(safe-area-inset-top))] z-10 flex w-[min(44rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center gap-1.5 overflow-x-auto rounded-[1.35rem] border border-[#f8f1e4]/10 bg-[#080806]/48 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.5rem] [&::-webkit-scrollbar]:hidden"
+      >
+        {spatialStates.filter(isGlobalConditionState).map((state) => {
+          const active = activeConditions[state.category ?? "Offense"] === state.name
+          return (
+            <button
+              aria-pressed={active}
+              className={[
+                "snap-center shrink-0 touch-manipulation whitespace-nowrap rounded-[0.95rem] px-4 py-2 text-[0.66rem] font-bold uppercase tracking-[0.1em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.95]",
+                active
+                  ? "bg-[#f8f1e4] text-[#050505] opacity-100 shadow-[0_0_22px_rgba(246,214,138,0.2),inset_0_-1px_0_rgba(214,176,96,0.62)]"
+                  : "text-[#f8f1e4]/42 opacity-75 hover:bg-[#f8f1e4]/8 hover:text-[#f8f1e4]/74 focus-visible:bg-[#f8f1e4]/10 focus-visible:text-[#f8f1e4]",
+              ].join(" ")}
+              key={stateKey(state)}
+              onClick={(event) => handleSpatialStateRecall(state, event.timeStamp)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") handleSpatialStateRecall(state, event.timeStamp)
+              }}
+              type="button"
+            >
+              {state.name}
+            </button>
+          )
+        })}
+      </nav>
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -674,29 +712,31 @@ export function ContinuityPrototype() {
       />
 
       <nav
-        aria-label="Spatial states"
-        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex w-[min(58rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center gap-2 overflow-x-auto rounded-[1.6rem] border border-[#f8f1e4]/18 bg-[#080806]/78 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_26px_86px_rgba(0,0,0,0.7)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.5rem] [&::-webkit-scrollbar]:hidden"
+        aria-label="Tactical actions"
+        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex w-[min(54rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center gap-2 overflow-x-auto rounded-[1.5rem] border border-[#f8f1e4]/13 bg-[#080806]/62 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_22px_72px_rgba(0,0,0,0.62)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.6rem] [&::-webkit-scrollbar]:hidden"
       >
-        {spatialStates.map((state) => (
-          <button
-            aria-pressed={activeConditions[state.category ?? "Offense"] === state.name}
-            className={[
-              "snap-center shrink-0 touch-manipulation rounded-[1.08rem] px-[1.125rem] py-3 text-[0.74rem] font-black uppercase tracking-[0.14em] outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.94]",
-              activeConditions[state.category ?? "Offense"] === state.name
-                ? "bg-[#f8f1e4] text-[#050505] shadow-[0_0_34px_rgba(246,214,138,0.3),inset_0_-2px_0_rgba(214,176,96,0.72),inset_0_1px_0_rgba(255,255,255,0.82)]"
-                : "text-[#f8f1e4]/55 hover:bg-[#f8f1e4]/12 hover:text-[#f8f1e4] focus-visible:bg-[#f8f1e4]/14 focus-visible:text-[#f8f1e4]",
-            ].join(" ")}
-            key={stateKey(state)}
-            onClick={(event) => handleSpatialStateRecall(state, event.timeStamp)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") handleSpatialStateRecall(state, event.timeStamp)
-            }}
-            type="button"
-          >
-            <span className="block text-[0.52rem] font-black leading-none tracking-[0.18em] text-current/42">{state.category ?? "Offense"}</span>
-            <span className="mt-1 block leading-none">{state.name}</span>
-          </button>
-        ))}
+        {possessionBranches.map((branch) => {
+          const active = activeBranchId === branch.id
+          return (
+            <button
+              aria-pressed={active}
+              className={[
+                "snap-center shrink-0 touch-manipulation whitespace-nowrap rounded-[1.05rem] px-5 py-2.5 text-[0.72rem] font-extrabold uppercase tracking-[0.11em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.94]",
+                active
+                  ? "bg-[#f8f1e4] text-[#050505] opacity-100 shadow-[0_0_28px_rgba(246,214,138,0.25),inset_0_-2px_0_rgba(214,176,96,0.68)]"
+                  : "text-[#f8f1e4]/48 opacity-80 hover:bg-[#f8f1e4]/10 hover:text-[#f8f1e4]/82 focus-visible:bg-[#f8f1e4]/12 focus-visible:text-[#f8f1e4]",
+              ].join(" ")}
+              key={branch.id}
+              onClick={(event) => handlePossessionBranch(branch, event.timeStamp)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") handlePossessionBranch(branch, event.timeStamp)
+              }}
+              type="button"
+            >
+              {branch.name}
+            </button>
+          )
+        })}
       </nav>
     </main>
   )
@@ -1162,6 +1202,252 @@ function recallSpatialState(engine: Engine, state: SpatialState) {
     puck.bornAt = now - 190
     puck.trail = puck.trail.slice(-8)
   }
+}
+
+function getPossessionBranches(conditions: ActiveConditions): PossessionBranch[] {
+  const offense = conditions.Offense ?? "Horns"
+  const defense = conditions.Defense ?? "Shell"
+  const emphasis = conditions.Emphasis ?? "Keep Width"
+  const tempo = conditions.Tempo ?? "Controlled"
+
+  if (offense === "Spain" && defense === "Drop") {
+    return [
+      possessionBranch("spain-drop-pocket", "Pocket Pass", [
+        ["o1", 0.5, 0.39, 0],
+        ["o2", 0.5, 0.63, 120],
+        ["o4", 0.16, 0.72, 240],
+        ["o5", 0.84, 0.72, 300],
+        ["x1", 0.5, 0.48, 220],
+        ["x3", 0.52, 0.72, 360],
+      ]),
+      possessionBranch("spain-drop-lift", "Weakside Lift", [
+        ["o1", 0.5, 0.36, 0],
+        ["o5", 0.78, 0.56, 180],
+        ["o4", 0.17, 0.74, 260],
+        ["x4", 0.36, 0.7, 360],
+        ["x5", 0.68, 0.67, 420],
+      ]),
+      possessionBranch("spain-drop-reject", "Ghost Reject", [
+        ["o1", 0.37, 0.43, 0],
+        ["o3", 0.6, 0.48, 160],
+        ["x1", 0.46, 0.43, 260],
+        ["x2", 0.42, 0.58, 390],
+      ]),
+      possessionBranch("spain-drop-roll", "Short Roll", [
+        ["o2", 0.5, 0.59, 0],
+        ["o3", 0.52, 0.72, 160],
+        ["o5", 0.82, 0.69, 260],
+        ["x3", 0.54, 0.67, 340],
+      ]),
+    ]
+  }
+
+  if (offense === "Spain" && defense === "Switch") {
+    return [
+      possessionBranch("spain-switch-slip", "Slip", [
+        ["o2", 0.46, 0.63, 0],
+        ["o1", 0.55, 0.36, 130],
+        ["x2", 0.49, 0.57, 260],
+      ]),
+      possessionBranch("spain-switch-seal", "Seal Mismatch", [
+        ["o3", 0.5, 0.74, 0],
+        ["o1", 0.42, 0.38, 170],
+        ["x3", 0.53, 0.69, 300],
+      ]),
+      possessionBranch("spain-switch-empty", "Empty Drift", [
+        ["o4", 0.12, 0.72, 0],
+        ["o5", 0.88, 0.72, 60],
+        ["o1", 0.65, 0.36, 220],
+        ["x5", 0.72, 0.66, 360],
+      ]),
+      possessionBranch("spain-switch-post", "Post Punish", [
+        ["o2", 0.42, 0.71, 0],
+        ["o3", 0.58, 0.54, 180],
+        ["x2", 0.46, 0.67, 340],
+      ]),
+    ]
+  }
+
+  if (offense === "Horns" && defense === "ICE") {
+    return [
+      possessionBranch("horns-ice-reject", "Reject", [
+        ["o1", 0.38, 0.42, 0],
+        ["o2", 0.42, 0.51, 160],
+        ["x1", 0.45, 0.42, 280],
+        ["x2", 0.43, 0.59, 420],
+      ]),
+      possessionBranch("horns-ice-middle", "Middle Attack", [
+        ["o1", 0.52, 0.45, 0],
+        ["o3", 0.59, 0.52, 150],
+        ["x3", 0.58, 0.59, 300],
+      ]),
+      possessionBranch("horns-ice-skip", "Weakside Skip", [
+        ["o1", 0.41, 0.44, 0],
+        ["o5", 0.82, 0.7, 180],
+        ["x5", 0.63, 0.68, 360],
+      ]),
+      possessionBranch("horns-ice-ghost", "Ghost Counter", [
+        ["o3", 0.62, 0.42, 0],
+        ["o1", 0.56, 0.36, 180],
+        ["x1", 0.54, 0.41, 300],
+      ]),
+    ]
+  }
+
+  const branches: PossessionBranch[] = []
+
+  if (offense === "Horns") {
+    branches.push(
+      possessionBranch("horns-default-elbow", "Elbow Touch", [
+        ["o1", 0.5, 0.38, 0],
+        ["o2", 0.42, 0.5, 160],
+        ["o3", 0.58, 0.5, 220],
+      ]),
+      possessionBranch("horns-default-corner", "Corner Lift", [
+        ["o4", 0.2, 0.7, 0],
+        ["o5", 0.8, 0.7, 80],
+        ["x4", 0.33, 0.69, 300],
+      ]),
+    )
+  } else if (offense === "5-Out") {
+    branches.push(
+      possessionBranch("fiveout-default-drive", "Paint Touch", [
+        ["o1", 0.48, 0.46, 0],
+        ["o2", 0.19, 0.48, 180],
+        ["o3", 0.81, 0.48, 220],
+        ["x1", 0.5, 0.52, 340],
+      ]),
+      possessionBranch("fiveout-default-swing", "Second Side", [
+        ["o1", 0.64, 0.34, 0],
+        ["o3", 0.77, 0.54, 150],
+        ["o5", 0.84, 0.74, 280],
+      ]),
+    )
+  } else if (offense === "Delay") {
+    branches.push(
+      possessionBranch("delay-default-dho", "DHO Keep", [
+        ["o1", 0.42, 0.4, 0],
+        ["o2", 0.35, 0.46, 140],
+        ["x2", 0.39, 0.54, 300],
+      ]),
+      possessionBranch("delay-default-backcut", "Back Cut", [
+        ["o3", 0.68, 0.68, 0],
+        ["o1", 0.55, 0.36, 180],
+        ["x3", 0.63, 0.6, 340],
+      ]),
+    )
+  } else {
+    branches.push(
+      possessionBranch("default-space", "Spacing Read", [
+        ["o1", 0.5, 0.34, 0],
+        ["o4", 0.18, 0.74, 170],
+        ["o5", 0.82, 0.74, 220],
+      ]),
+      possessionBranch("default-pressure", "Pressure Release", [
+        ["o2", 0.28, 0.52, 0],
+        ["o3", 0.72, 0.52, 90],
+        ["x1", 0.5, 0.45, 280],
+      ]),
+    )
+  }
+
+  if (["Fast", "Push", "Early", "Transition"].includes(tempo)) {
+    branches.push(
+      possessionBranch("tempo-early-drag", "Early Drag", [
+        ["o1", 0.42, 0.3, 0],
+        ["o5", 0.58, 0.43, 110],
+        ["x1", 0.46, 0.38, 300],
+      ]),
+    )
+  } else if (["Controlled", "Patient", "Organized", "Halfcourt"].includes(tempo)) {
+    branches.push(
+      possessionBranch("tempo-controlled-reset", "Reset Angle", [
+        ["o1", 0.5, 0.3, 0],
+        ["o2", 0.33, 0.5, 220],
+        ["o3", 0.67, 0.5, 280],
+      ]),
+    )
+  }
+
+  if (["Touch Paint", "Paint Collapse", "Kill Middle"].includes(emphasis)) {
+    branches.push(
+      possessionBranch("emphasis-touch-paint", "Touch Paint", [
+        ["o1", 0.5, 0.53, 0],
+        ["x1", 0.5, 0.58, 240],
+        ["x4", 0.42, 0.72, 360],
+        ["x5", 0.58, 0.72, 390],
+      ]),
+    )
+  } else if (["Keep Width", "Sprint Lanes", "Weakside Ready"].includes(emphasis)) {
+    branches.push(
+      possessionBranch("emphasis-width", "Hold Width", [
+        ["o4", 0.14, 0.75, 0],
+        ["o5", 0.86, 0.75, 60],
+        ["x4", 0.32, 0.72, 300],
+        ["x5", 0.68, 0.72, 320],
+      ]),
+    )
+  }
+
+  if (["Drop", "Pack", "Zone"].includes(defense)) {
+    branches.push(
+      possessionBranch("defense-drop-window", "Pocket Window", [
+        ["o2", 0.5, 0.58, 0],
+        ["x1", 0.5, 0.5, 220],
+        ["x3", 0.54, 0.68, 360],
+      ]),
+    )
+  } else if (["Switch", "Blitz", "Trap"].includes(defense)) {
+    branches.push(
+      possessionBranch("defense-pressure-slip", "Pressure Slip", [
+        ["o5", 0.57, 0.57, 0],
+        ["o1", 0.37, 0.42, 160],
+        ["x5", 0.53, 0.55, 320],
+      ]),
+    )
+  }
+
+  return branches.slice(0, 5)
+}
+
+function possessionBranch(id: string, name: string, moves: Array<[string, number, number, number]>): PossessionBranch {
+  return {
+    id,
+    moves: moves.map(([moveId, x, y, delay], index) => ({
+      delay,
+      duration: 680 + index * 42,
+      id: moveId,
+      x,
+      y,
+    })),
+    name,
+  }
+}
+
+function applyPossessionBranch(engine: Engine, branch: PossessionBranch, at: number) {
+  const now = performance.now()
+
+  for (const move of branch.moves) {
+    const puck = engine.pucks.find((item) => item.id === move.id)
+    if (!puck || puck.id === engine.draggingPuckId) continue
+
+    const to = { pressure: 0.5, t: at + move.delay, x: move.x, y: move.y }
+    puck.choreography = {
+      delay: move.delay,
+      duration: move.duration,
+      from: { pressure: 0.5, t: at, x: puck.x, y: puck.y },
+      startedAt: now,
+      to,
+    }
+    puck.targetX = move.x
+    puck.targetY = move.y
+    puck.vx *= 0.18
+    puck.vy *= 0.18
+    rememberMove(engine, puck, { pressure: 0.5, t: at, x: puck.x, y: puck.y }, to)
+  }
+
+  engine.advantageFlash = { t: now, x: branch.moves[0]?.x ?? 0.5, y: branch.moves[0]?.y ?? 0.5 }
+  engine.formationPulseAt = at
 }
 
 function pruneTemporalMemory(engine: Engine) {
