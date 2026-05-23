@@ -458,9 +458,10 @@ export function ContinuityPrototype() {
   }
 
   return (
-    <main className="fixed inset-0 isolate overflow-hidden bg-[#060606] text-[#f5f1e8] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_18%,rgba(255,246,226,0.1),rgba(255,255,255,0)_34%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(0,0,0,0.1)_58%,rgba(0,0,0,0.48))] mix-blend-screen opacity-80" />
-      <div className="pointer-events-none absolute inset-x-8 top-8 z-[1] h-px bg-gradient-to-r from-transparent via-[#f2e5c8]/24 to-transparent opacity-70" />
+    <main className="fixed inset-0 isolate overflow-hidden bg-[#030303] text-[#f8f1e4] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(248,241,228,0.12),rgba(248,241,228,0)_18%),linear-gradient(135deg,rgba(216,176,96,0.08),rgba(0,0,0,0.12)_52%,rgba(0,0,0,0.62))] mix-blend-screen opacity-85" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-20 bg-gradient-to-b from-black/72 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-7 top-8 z-[1] h-[2px] bg-gradient-to-r from-transparent via-[#f6d68a]/50 to-transparent opacity-80" />
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -479,16 +480,16 @@ export function ContinuityPrototype() {
 
       <nav
         aria-label="Spatial states"
-        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/10 bg-black/34 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_20px_70px_rgba(0,0,0,0.5)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="absolute left-1/2 top-[max(0.82rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1.5 overflow-x-auto rounded-[1.35rem] border border-[#f8f1e4]/18 bg-[#080806]/72 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_24px_80px_rgba(0,0,0,0.66)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {spatialStates.map((state) => (
           <button
             aria-pressed={activeSpatialState === state.name}
             className={[
-              "shrink-0 rounded-full px-3.5 py-2 text-[0.68rem] font-medium tracking-[0.08em] outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-95",
+              "shrink-0 rounded-[1rem] px-4 py-2.5 text-[0.72rem] font-black uppercase tracking-[0.14em] outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.94]",
               activeSpatialState === state.name
-                ? "bg-[#f3ead8] text-[#060606] shadow-[0_0_26px_rgba(243,234,216,0.18),inset_0_1px_0_rgba(255,255,255,0.72)]"
-                : "text-[#f3ead8]/48 hover:bg-white/8 hover:text-[#f3ead8]/82 focus-visible:bg-white/10 focus-visible:text-[#f3ead8]",
+                ? "bg-[#f8f1e4] text-[#050505] shadow-[0_0_34px_rgba(246,214,138,0.3),inset_0_-2px_0_rgba(214,176,96,0.72),inset_0_1px_0_rgba(255,255,255,0.82)]"
+                : "text-[#f8f1e4]/55 hover:bg-[#f8f1e4]/12 hover:text-[#f8f1e4] focus-visible:bg-[#f8f1e4]/14 focus-visible:text-[#f8f1e4]",
             ].join(" ")}
             key={state.name}
             onClick={(event) => event.preventDefault()}
@@ -506,7 +507,7 @@ export function ContinuityPrototype() {
         ))}
       </nav>
 
-      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/10 bg-black/36 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_24px_76px_rgba(0,0,0,0.58)] backdrop-blur-2xl">
+      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-[1.6rem] border border-[#f8f1e4]/18 bg-[#080806]/76 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_26px_86px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
         <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
           <Pencil aria-hidden="true" />
         </ToolbarButton>
@@ -539,10 +540,10 @@ function ToolbarButton({
     <button
       aria-label={label}
       className={[
-        "grid h-11 w-11 place-items-center rounded-full border outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.92]",
+        "grid h-12 w-12 place-items-center rounded-[1.05rem] border outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.9]",
         active
-          ? "border-white/14 bg-[#f3ead8] text-[#060606] shadow-[0_0_28px_rgba(243,234,216,0.2),inset_0_1px_0_rgba(255,255,255,0.76)]"
-          : "border-transparent bg-transparent text-[#f3ead8]/44 hover:bg-white/8 hover:text-[#f3ead8]/80 focus-visible:bg-white/10 focus-visible:text-[#f3ead8]",
+          ? "border-[#f8f1e4]/24 bg-[#f8f1e4] text-[#050505] shadow-[0_0_34px_rgba(246,214,138,0.28),inset_0_-2px_0_rgba(214,176,96,0.72),inset_0_1px_0_rgba(255,255,255,0.82)]"
+          : "border-[#f8f1e4]/8 bg-[#f8f1e4]/5 text-[#f8f1e4]/52 hover:bg-[#f8f1e4]/12 hover:text-[#f8f1e4] focus-visible:bg-[#f8f1e4]/14 focus-visible:text-[#f8f1e4]",
       ].join(" ")}
       onClick={(event) => event.preventDefault()}
       onKeyDown={(event) => {
@@ -554,7 +555,7 @@ function ToolbarButton({
       }}
       type="button"
     >
-      <span className="[&_svg]:h-4 [&_svg]:w-4 [&_svg]:stroke-[1.8]">{children}</span>
+      <span className="[&_svg]:h-4.5 [&_svg]:w-4.5 [&_svg]:stroke-[2.2]">{children}</span>
     </button>
   )
 }
@@ -611,7 +612,7 @@ function drawRawInkSegment(canvas: HTMLCanvasElement | null, from: Point, to: Po
   context.setTransform(dpr, 0, 0, dpr, 0, 0)
   context.lineCap = "round"
   context.lineJoin = "round"
-  context.strokeStyle = "rgba(244,237,222,0.82)"
+  context.strokeStyle = "rgba(248,241,228,0.9)"
   context.lineWidth = strokeWidth(from, to)
   context.beginPath()
   context.moveTo(start.x, start.y)
@@ -629,16 +630,16 @@ function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height
   const pressure = Math.min(1, engine.strokes.length * 0.025 + engine.pucks.length * 0.035)
   const formation = clamp(1 - (performance.now() - engine.formationPulseAt) / 900, 0, 1)
   const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
-  gradient.addColorStop(0, `rgba(244,237,222,${0.06 + formation * 0.05 - pressure * 0.012})`)
-  gradient.addColorStop(0.42, `rgba(108,88,58,${0.025 + pressure * 0.018 + formation * 0.015})`)
-  gradient.addColorStop(1, "rgba(0,0,0,0.72)")
+  gradient.addColorStop(0, `rgba(248,241,228,${0.085 + formation * 0.065 - pressure * 0.012})`)
+  gradient.addColorStop(0.4, `rgba(216,176,96,${0.035 + pressure * 0.018 + formation * 0.024})`)
+  gradient.addColorStop(1, "rgba(0,0,0,0.82)")
   context.fillStyle = gradient
   context.fillRect(0, 0, width, height)
 
   const glass = context.createLinearGradient(0, 0, width, height)
-  glass.addColorStop(0, "rgba(255,255,255,0.055)")
+  glass.addColorStop(0, "rgba(255,255,255,0.075)")
   glass.addColorStop(0.5, "rgba(255,255,255,0)")
-  glass.addColorStop(1, "rgba(0,0,0,0.5)")
+  glass.addColorStop(1, "rgba(0,0,0,0.58)")
   context.fillStyle = glass
   context.fillRect(0, 0, width, height)
 }
@@ -652,10 +653,10 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   const centerX = x + courtWidth / 2
   const baselineY = y + courtHeight
   const hoopY = y + courtHeight * 0.78
-  const line = Math.max(1, Math.round(Math.min(width, height) * 0.00125))
+  const line = Math.max(2, Math.round(Math.min(width, height) * 0.00225))
 
   context.save()
-  context.strokeStyle = "rgba(244,237,222,0.105)"
+  context.strokeStyle = "rgba(248,241,228,0.2)"
   context.lineWidth = Math.max(1, line)
   context.lineCap = "round"
   context.lineJoin = "round"
@@ -681,7 +682,7 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   ])
   circle(context, centerX, hoopY, hoopRadius)
 
-  context.strokeStyle = "rgba(244,237,222,0.055)"
+  context.strokeStyle = "rgba(248,241,228,0.105)"
   context.lineWidth = Math.max(1, line * 0.9)
   arc(context, centerX, hoopY, courtWidth * 0.43, Math.PI * 1.08, Math.PI * 1.92)
   arc(context, centerX, hoopY, courtWidth * 0.16, Math.PI * 1.08, Math.PI * 1.92)
@@ -724,11 +725,11 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
   for (const stroke of strokes) {
     if (stroke.points.length < 2) continue
     const age = performance.now() - stroke.createdAt
-    const alpha = active ? 0.76 : 0.56 * strokeFade(age)
+    const alpha = active ? 0.9 : 0.78 * strokeFade(age)
     if (alpha <= 0.01) continue
 
     context.beginPath()
-    context.strokeStyle = `rgba(244,237,222,${alpha * 0.94})`
+    context.strokeStyle = `rgba(248,241,228,${alpha * 0.96})`
     const first = toPixels(stroke.points[0], width, height)
     context.moveTo(first.x, first.y)
     if (stroke.points.length === 2) {
@@ -790,9 +791,9 @@ function drawTemporalTrails(context: CanvasRenderingContext2D, width: number, he
 
 function strokeWidth(previous: Point, current: Point) {
   const velocity = distance(previous, current) / Math.max(1, current.t - previous.t)
-  const velocityTaper = clamp(1 - velocity * 72, 0.46, 1)
+  const velocityTaper = clamp(1 - velocity * 66, 0.52, 1)
   const pressure = current.pressure || 0.5
-  return Math.max(1.15, 4.8 * (0.38 + pressure * 0.62) * velocityTaper)
+  return Math.max(1.35, 5.6 * (0.38 + pressure * 0.62) * velocityTaper)
 }
 
 function drawDryMarkerTexture(context: CanvasRenderingContext2D, start: { x: number; y: number }, end: { x: number; y: number }, width: number, alpha: number, seed: number) {
@@ -1026,18 +1027,18 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
   context.save()
   context.lineCap = "round"
   context.lineJoin = "round"
-  context.shadowBlur = Math.max(7, radius * 0.24)
-  context.shadowColor = symbol === "O" ? "rgba(244,237,222,0.28)" : "rgba(172,178,178,0.22)"
+  context.shadowBlur = Math.max(9, radius * 0.36)
+  context.shadowColor = symbol === "O" ? "rgba(248,241,228,0.36)" : "rgba(185,190,188,0.3)"
 
   if (symbol === "O") {
-    context.strokeStyle = "rgba(244,237,222,0.88)"
-    context.lineWidth = Math.max(2.2, radius * 0.14)
+    context.strokeStyle = "rgba(248,241,228,0.94)"
+    context.lineWidth = Math.max(2.8, radius * 0.19)
     context.beginPath()
     context.arc(x, y, radius * 0.48, 0, Math.PI * 2)
     context.stroke()
   } else {
-    context.strokeStyle = "rgba(172,178,178,0.82)"
-    context.lineWidth = Math.max(2.2, radius * 0.14)
+    context.strokeStyle = "rgba(185,190,188,0.9)"
+    context.lineWidth = Math.max(2.8, radius * 0.19)
     const inset = radius * 0.44
     context.beginPath()
     context.moveTo(x - inset, y - inset)
@@ -1144,7 +1145,7 @@ function recallSpatialState(engine: Engine, state: SpatialState) {
 
 function pruneTemporalMemory(engine: Engine) {
   const now = performance.now()
-  engine.strokes = engine.strokes.filter((stroke) => now - stroke.createdAt < 120000)
+  engine.strokes = engine.strokes.filter((stroke) => now - stroke.createdAt < 1800000)
 
   for (const puck of engine.pucks) {
     puck.trail = puck.trail.filter((point) => now - point.t < 2200)
@@ -1660,9 +1661,7 @@ function puckBirthProgress(puck: Puck) {
 }
 
 function strokeFade(age: number) {
-  if (age < 45000) return 1
-
-  return clamp(1 - (age - 45000) / 75000, 0, 1) ** 1.25
+  return age < 1800000 ? 1 : 0
 }
 
 function easeOutCubic(value: number) {
