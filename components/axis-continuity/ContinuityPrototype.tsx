@@ -1,24 +1,32 @@
 "use client"
 
 import { buildAbstractReplayFrame, createAbstractReplayState, type AbstractReplayFrame, type AbstractReplayState } from "@/lib/axis/abstractReplay"
-import { Eraser, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
-type Tool = "pencil" | "eraser"
 type PuckSymbol = "O" | "X"
-type SpatialStateName = "Horns" | "5-Out" | "Delay" | "Spain" | "Shell"
+type SpatialStateName =
+  | "Horns"
+  | "5-Out"
+  | "Delay"
+  | "Spain"
+  | "Shell"
+  | "Princeton"
+  | "Flex"
+  | "Zoom"
+  | "Pistol"
+  | "Chin"
+  | "Split"
+  | "Motion"
+  | "UCLA"
+  | "Ghost"
+  | "Chicago"
+  | "Hammer"
 
 type Point = {
   pressure: number
   t: number
   x: number
   y: number
-}
-
-type Stroke = {
-  createdAt: number
-  id: string
-  points: Point[]
 }
 
 type TrailPoint = {
@@ -38,23 +46,12 @@ type Choreography = {
 type MemoryEvent =
   | {
       at: number
-      id: string
-      kind: "stroke"
-      points: Point[]
-    }
-  | {
-      at: number
       from: Point
       id: string
       kind: "move"
       puckId: string
       symbol: PuckSymbol
       to: Point
-    }
-  | {
-      at: number
-      id: string
-      kind: "clear" | "undo"
     }
 
 type Puck = {
@@ -95,26 +92,16 @@ type Engine = {
   abstractReplayState: AbstractReplayState
   advantageFlash: TrailPoint | null
   draggingPuckId: string | null
-  drawing: boolean
-  eraseCursor: Point | null
   formationPulseAt: number
   lastAbstractReplayAt: number
   moved: boolean
   penActiveUntil: number
-  pendingMovementStrokeId: string | null
   pucks: Puck[]
   rafId: number
-  rawInkCursor: Point | null
-  rawInkPoints: Point[]
-  rawInkRafId: number
   rect: DOMRect | null
   continuityCells: ContinuityCell[]
   sessionMemory: MemoryEvent[]
-  strokeSequence: number
-  strokes: Stroke[]
-  tool: Tool
   touchStart: Point | null
-  workingStroke: Stroke | null
 }
 
 const initialPucks: Puck[] = [
@@ -206,28 +193,186 @@ const spatialStates: SpatialState[] = [
       x5: { x: 0.61, y: 0.73 },
     },
   },
+  {
+    name: "Princeton",
+    pucks: {
+      o1: { x: 0.5, y: 0.3 },
+      o2: { x: 0.24, y: 0.48 },
+      o3: { x: 0.76, y: 0.48 },
+      o4: { x: 0.38, y: 0.72 },
+      o5: { x: 0.62, y: 0.72 },
+      x1: { x: 0.5, y: 0.39 },
+      x2: { x: 0.32, y: 0.54 },
+      x3: { x: 0.68, y: 0.54 },
+      x4: { x: 0.42, y: 0.75 },
+      x5: { x: 0.58, y: 0.75 },
+    },
+  },
+  {
+    name: "Flex",
+    pucks: {
+      o1: { x: 0.5, y: 0.24 },
+      o2: { x: 0.18, y: 0.58 },
+      o3: { x: 0.82, y: 0.58 },
+      o4: { x: 0.36, y: 0.78 },
+      o5: { x: 0.64, y: 0.78 },
+      x1: { x: 0.5, y: 0.34 },
+      x2: { x: 0.27, y: 0.62 },
+      x3: { x: 0.73, y: 0.62 },
+      x4: { x: 0.4, y: 0.8 },
+      x5: { x: 0.6, y: 0.8 },
+    },
+  },
+  {
+    name: "Zoom",
+    pucks: {
+      o1: { x: 0.66, y: 0.28 },
+      o2: { x: 0.34, y: 0.42 },
+      o3: { x: 0.82, y: 0.72 },
+      o4: { x: 0.2, y: 0.78 },
+      o5: { x: 0.56, y: 0.58 },
+      x1: { x: 0.64, y: 0.38 },
+      x2: { x: 0.38, y: 0.5 },
+      x3: { x: 0.76, y: 0.72 },
+      x4: { x: 0.26, y: 0.76 },
+      x5: { x: 0.55, y: 0.66 },
+    },
+  },
+  {
+    name: "Pistol",
+    pucks: {
+      o1: { x: 0.34, y: 0.28 },
+      o2: { x: 0.22, y: 0.48 },
+      o3: { x: 0.76, y: 0.44 },
+      o4: { x: 0.18, y: 0.78 },
+      o5: { x: 0.68, y: 0.76 },
+      x1: { x: 0.38, y: 0.38 },
+      x2: { x: 0.29, y: 0.53 },
+      x3: { x: 0.71, y: 0.5 },
+      x4: { x: 0.24, y: 0.77 },
+      x5: { x: 0.64, y: 0.74 },
+    },
+  },
+  {
+    name: "Chin",
+    pucks: {
+      o1: { x: 0.5, y: 0.28 },
+      o2: { x: 0.25, y: 0.54 },
+      o3: { x: 0.75, y: 0.54 },
+      o4: { x: 0.38, y: 0.74 },
+      o5: { x: 0.62, y: 0.74 },
+      x1: { x: 0.5, y: 0.38 },
+      x2: { x: 0.32, y: 0.58 },
+      x3: { x: 0.68, y: 0.58 },
+      x4: { x: 0.42, y: 0.76 },
+      x5: { x: 0.58, y: 0.76 },
+    },
+  },
+  {
+    name: "Split",
+    pucks: {
+      o1: { x: 0.42, y: 0.3 },
+      o2: { x: 0.22, y: 0.58 },
+      o3: { x: 0.78, y: 0.58 },
+      o4: { x: 0.48, y: 0.76 },
+      o5: { x: 0.62, y: 0.46 },
+      x1: { x: 0.44, y: 0.4 },
+      x2: { x: 0.3, y: 0.62 },
+      x3: { x: 0.7, y: 0.62 },
+      x4: { x: 0.5, y: 0.78 },
+      x5: { x: 0.61, y: 0.54 },
+    },
+  },
+  {
+    name: "Motion",
+    pucks: {
+      o1: { x: 0.5, y: 0.24 },
+      o2: { x: 0.26, y: 0.44 },
+      o3: { x: 0.74, y: 0.44 },
+      o4: { x: 0.3, y: 0.78 },
+      o5: { x: 0.7, y: 0.78 },
+      x1: { x: 0.5, y: 0.36 },
+      x2: { x: 0.34, y: 0.51 },
+      x3: { x: 0.66, y: 0.51 },
+      x4: { x: 0.38, y: 0.76 },
+      x5: { x: 0.62, y: 0.76 },
+    },
+  },
+  {
+    name: "UCLA",
+    pucks: {
+      o1: { x: 0.42, y: 0.26 },
+      o2: { x: 0.23, y: 0.52 },
+      o3: { x: 0.77, y: 0.52 },
+      o4: { x: 0.5, y: 0.74 },
+      o5: { x: 0.62, y: 0.44 },
+      x1: { x: 0.44, y: 0.36 },
+      x2: { x: 0.31, y: 0.57 },
+      x3: { x: 0.69, y: 0.57 },
+      x4: { x: 0.5, y: 0.76 },
+      x5: { x: 0.59, y: 0.52 },
+    },
+  },
+  {
+    name: "Ghost",
+    pucks: {
+      o1: { x: 0.53, y: 0.24 },
+      o2: { x: 0.36, y: 0.5 },
+      o3: { x: 0.78, y: 0.48 },
+      o4: { x: 0.18, y: 0.78 },
+      o5: { x: 0.58, y: 0.56 },
+      x1: { x: 0.52, y: 0.35 },
+      x2: { x: 0.39, y: 0.56 },
+      x3: { x: 0.72, y: 0.54 },
+      x4: { x: 0.25, y: 0.76 },
+      x5: { x: 0.57, y: 0.64 },
+    },
+  },
+  {
+    name: "Chicago",
+    pucks: {
+      o1: { x: 0.58, y: 0.28 },
+      o2: { x: 0.24, y: 0.45 },
+      o3: { x: 0.72, y: 0.48 },
+      o4: { x: 0.2, y: 0.78 },
+      o5: { x: 0.44, y: 0.58 },
+      x1: { x: 0.58, y: 0.38 },
+      x2: { x: 0.31, y: 0.52 },
+      x3: { x: 0.68, y: 0.55 },
+      x4: { x: 0.27, y: 0.77 },
+      x5: { x: 0.45, y: 0.66 },
+    },
+  },
+  {
+    name: "Hammer",
+    pucks: {
+      o1: { x: 0.3, y: 0.32 },
+      o2: { x: 0.16, y: 0.62 },
+      o3: { x: 0.84, y: 0.78 },
+      o4: { x: 0.72, y: 0.5 },
+      o5: { x: 0.46, y: 0.74 },
+      x1: { x: 0.34, y: 0.42 },
+      x2: { x: 0.25, y: 0.63 },
+      x3: { x: 0.78, y: 0.75 },
+      x4: { x: 0.67, y: 0.56 },
+      x5: { x: 0.48, y: 0.77 },
+    },
+  },
 ]
 
 export function ContinuityPrototype() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
-  const rawInkCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const [activeSpatialState, setActiveSpatialState] = useState<SpatialStateName>("Horns")
-  const [tool, setTool] = useState<Tool>("pencil")
 
   useEffect(() => {
     const canvas = canvasRef.current
-    const rawInkCanvas = rawInkCanvasRef.current
-    if (!canvas || !rawInkCanvas) return
+    if (!canvas) return
     const canvasElement: HTMLCanvasElement = canvas
-    const rawInkCanvasElement: HTMLCanvasElement = rawInkCanvas
 
     const canvasContext = canvasElement.getContext("2d", { alpha: false })
     if (!canvasContext) return
     const context: CanvasRenderingContext2D = canvasContext
-    const rawInkContext = rawInkCanvasElement.getContext("2d")
-    if (!rawInkContext) return
-    const rawContext: CanvasRenderingContext2D = rawInkContext
 
     const engine: Engine = {
       activePointerId: null,
@@ -236,26 +381,16 @@ export function ContinuityPrototype() {
       abstractReplayState: createAbstractReplayState(),
       advantageFlash: null,
       draggingPuckId: null,
-      drawing: false,
-      eraseCursor: null,
       formationPulseAt: -10000,
       lastAbstractReplayAt: 0,
       moved: false,
       penActiveUntil: 0,
-      pendingMovementStrokeId: null,
       pucks: clonePucks(initialPucks),
       rafId: 0,
-      rawInkCursor: null,
-      rawInkPoints: [],
-      rawInkRafId: 0,
       rect: null,
       continuityCells: [],
       sessionMemory: [],
-      strokeSequence: 0,
-      strokes: [],
-      tool: "pencil",
       touchStart: null,
-      workingStroke: null,
     }
     engineRef.current = engine
 
@@ -264,9 +399,7 @@ export function ContinuityPrototype() {
       const dpr = Math.max(1, window.devicePixelRatio || 1)
       engine.rect = rect
       resizeCanvas(canvasElement, rect, dpr)
-      resizeCanvas(rawInkCanvasElement, rect, dpr)
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      rawContext.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
     function frame() {
@@ -283,16 +416,9 @@ export function ContinuityPrototype() {
     return () => {
       observer.disconnect()
       window.cancelAnimationFrame(engine.rafId)
-      if (engine.rawInkRafId) window.cancelAnimationFrame(engine.rawInkRafId)
       engineRef.current = null
     }
   }, [])
-
-  useEffect(() => {
-    if (engineRef.current) {
-      engineRef.current.tool = tool
-    }
-  }, [tool])
 
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     const engine = engineRef.current
@@ -310,10 +436,7 @@ export function ContinuityPrototype() {
     if (!point) return
 
     const puck = findPuckAt(engine, point)
-    if (event.pointerType === "pen" && puck && assignPendingMovement(engine, puck)) {
-      return
-    }
-    if (event.pointerType === "pen" && puck) return
+    if (!puck) return
 
     engine.activePointerId = event.pointerId
     engine.activePointerType = event.pointerType
@@ -326,26 +449,12 @@ export function ContinuityPrototype() {
       puck.choreography = null
       puck.targetX = point.x
       puck.targetY = point.y
+      puck.x = point.x
+      puck.y = point.y
+      puck.vx = 0
+      puck.vy = 0
       return
     }
-
-    if (engine.tool === "eraser") {
-      engine.eraseCursor = point
-      eraseAt(engine, point)
-      return
-    }
-
-    if (!canCreateStroke(event.pointerType)) return
-
-    engine.drawing = true
-    engine.workingStroke = {
-      createdAt: performance.now(),
-      id: `stroke-${engine.strokeSequence + 1}`,
-      points: [point],
-    }
-    engine.rawInkCursor = point
-    engine.rawInkPoints = [point]
-    clearRawInk(rawInkCanvasRef.current)
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -365,29 +474,14 @@ export function ContinuityPrototype() {
         puck.baseY = point.y
         puck.targetX = point.x
         puck.targetY = point.y
+        puck.x = point.x
+        puck.y = point.y
+        puck.vx = 0
+        puck.vy = 0
       }
       return
     }
 
-    if (engine.tool === "eraser") {
-      const point = eventPoint(event, engine)
-      if (!point) return
-      engine.eraseCursor = point
-      eraseAt(engine, point)
-      return
-    }
-
-    if (engine.drawing && engine.workingStroke) {
-      const coalesced = coalescedEventPoints(event.nativeEvent, engine)
-      for (const point of coalesced) {
-        const appended = appendStrokePoint(engine.workingStroke, point, 0.0009)
-        if (appended) {
-          engine.rawInkPoints.push(point)
-          engine.rawInkCursor = point
-        }
-      }
-      scheduleRawInkFlush(rawInkCanvasRef.current, engine)
-    }
   }
 
   function handlePointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -396,23 +490,6 @@ export function ContinuityPrototype() {
     event.preventDefault()
 
     event.currentTarget.releasePointerCapture(event.pointerId)
-
-    if (engine.drawing && engine.workingStroke) {
-      if (engine.workingStroke.points.length > 2) {
-        if (engine.pendingMovementStrokeId) {
-          engine.strokes = engine.strokes.filter((stroke) => stroke.id !== engine.pendingMovementStrokeId)
-        }
-        engine.strokeSequence += 1
-        engine.strokes.push(engine.workingStroke)
-        engine.pendingMovementStrokeId = null
-        rememberStroke(engine, engine.workingStroke)
-      }
-      engine.workingStroke = null
-    }
-    flushRawInk(rawInkCanvasRef.current, engine, true)
-    engine.rawInkCursor = null
-    engine.rawInkPoints = []
-    clearRawInk(rawInkCanvasRef.current)
 
     if (engine.draggingPuckId && engine.touchStart) {
       const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
@@ -424,38 +501,7 @@ export function ContinuityPrototype() {
     engine.activePointerId = null
     engine.activePointerType = null
     engine.draggingPuckId = null
-    engine.drawing = false
-    engine.eraseCursor = null
-    engine.rawInkCursor = null
-    engine.rawInkPoints = []
-    clearRawInk(rawInkCanvasRef.current)
     engine.touchStart = null
-  }
-
-  function undo() {
-    const engine = engineRef.current
-    if (!engine) return
-
-    if (engine.strokes.length > 0) {
-      const stroke = engine.strokes.pop()
-      if (stroke?.id === engine.pendingMovementStrokeId) {
-        engine.pendingMovementStrokeId = null
-      }
-      rememberSystemEvent(engine, "undo")
-    }
-  }
-
-  function clear() {
-    const engine = engineRef.current
-    if (!engine) return
-
-    engine.strokes = []
-    engine.workingStroke = null
-    engine.rawInkCursor = null
-    engine.rawInkPoints = []
-    clearRawInk(rawInkCanvasRef.current)
-    engine.pendingMovementStrokeId = null
-    rememberSystemEvent(engine, "clear")
   }
 
   function handleSpatialStateRecall(state: SpatialState, at: number) {
@@ -475,40 +521,31 @@ export function ContinuityPrototype() {
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
-        ref={canvasRef}
-      />
-      <canvas
-        aria-label="Axis pencil surface"
-        className="absolute inset-0 z-[2] h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
         onContextMenu={(event) => event.preventDefault()}
         onPointerCancel={handlePointerUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        ref={rawInkCanvasRef}
+        ref={canvasRef}
       />
 
       <nav
         aria-label="Spatial states"
-        className="absolute left-1/2 top-[max(0.82rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1.5 overflow-x-auto rounded-[1.35rem] border border-[#f8f1e4]/18 bg-[#080806]/72 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_24px_80px_rgba(0,0,0,0.66)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex w-[min(58rem,calc(100vw-1rem))] -translate-x-1/2 snap-x snap-mandatory touch-pan-x items-center gap-2 overflow-x-auto rounded-[1.6rem] border border-[#f8f1e4]/18 bg-[#080806]/78 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_26px_86px_rgba(0,0,0,0.7)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.5rem] [&::-webkit-scrollbar]:hidden"
       >
         {spatialStates.map((state) => (
           <button
             aria-pressed={activeSpatialState === state.name}
             className={[
-              "shrink-0 rounded-[1rem] px-4 py-2.5 text-[0.72rem] font-black uppercase tracking-[0.14em] outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.94]",
+              "snap-center shrink-0 touch-manipulation rounded-[1.08rem] px-[1.125rem] py-3 text-[0.74rem] font-black uppercase tracking-[0.14em] outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.94]",
               activeSpatialState === state.name
                 ? "bg-[#f8f1e4] text-[#050505] shadow-[0_0_34px_rgba(246,214,138,0.3),inset_0_-2px_0_rgba(214,176,96,0.72),inset_0_1px_0_rgba(255,255,255,0.82)]"
                 : "text-[#f8f1e4]/55 hover:bg-[#f8f1e4]/12 hover:text-[#f8f1e4] focus-visible:bg-[#f8f1e4]/14 focus-visible:text-[#f8f1e4]",
             ].join(" ")}
             key={state.name}
-            onClick={(event) => event.preventDefault()}
+            onClick={(event) => handleSpatialStateRecall(state, event.timeStamp)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") handleSpatialStateRecall(state, event.timeStamp)
-            }}
-            onPointerDown={(event) => {
-              event.preventDefault()
-              handleSpatialStateRecall(state, event.timeStamp)
             }}
             type="button"
           >
@@ -516,57 +553,7 @@ export function ContinuityPrototype() {
           </button>
         ))}
       </nav>
-
-      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-[1.6rem] border border-[#f8f1e4]/18 bg-[#080806]/76 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_26px_86px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
-        <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
-          <Pencil aria-hidden="true" />
-        </ToolbarButton>
-        <ToolbarButton active={tool === "eraser"} label="Eraser" onClick={() => setTool("eraser")}>
-          <Eraser aria-hidden="true" />
-        </ToolbarButton>
-        <ToolbarButton label="Undo" onClick={undo}>
-          <RotateCcw aria-hidden="true" />
-        </ToolbarButton>
-        <ToolbarButton label="Clear" onClick={clear}>
-          <Trash2 aria-hidden="true" />
-        </ToolbarButton>
-      </nav>
     </main>
-  )
-}
-
-function ToolbarButton({
-  active = false,
-  children,
-  label,
-  onClick,
-}: {
-  active?: boolean
-  children: React.ReactNode
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      aria-label={label}
-      className={[
-        "grid h-12 w-12 place-items-center rounded-[1.05rem] border outline-none transition-[background,color,box-shadow,transform] duration-150 active:scale-[0.9]",
-        active
-          ? "border-[#f8f1e4]/24 bg-[#f8f1e4] text-[#050505] shadow-[0_0_34px_rgba(246,214,138,0.28),inset_0_-2px_0_rgba(214,176,96,0.72),inset_0_1px_0_rgba(255,255,255,0.82)]"
-          : "border-[#f8f1e4]/8 bg-[#f8f1e4]/5 text-[#f8f1e4]/52 hover:bg-[#f8f1e4]/12 hover:text-[#f8f1e4] focus-visible:bg-[#f8f1e4]/14 focus-visible:text-[#f8f1e4]",
-      ].join(" ")}
-      onClick={(event) => event.preventDefault()}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onClick()
-      }}
-      onPointerDown={(event) => {
-        event.preventDefault()
-        onClick()
-      }}
-      type="button"
-    >
-      <span className="[&_svg]:h-4.5 [&_svg]:w-4.5 [&_svg]:stroke-[2.2]">{children}</span>
-    </button>
   )
 }
 
@@ -582,115 +569,13 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawCourt(context, width, height)
   drawContinuityResidue(context, width, height, engine)
   drawTemporalTrails(context, width, height, engine.pucks)
-  drawStrokes(context, width, height, engine.strokes, false)
   drawMovementIntent(context, width, height, engine)
   drawIntelligenceSurface(context, width, height, engine)
   drawLiveResponse(context, width, height, engine)
   drawPuckInfluence(context, width, height, engine.pucks)
   drawPucks(context, width, height, engine.pucks)
-  if (engine.eraseCursor) drawEraser(context, width, height, engine.eraseCursor)
 
-  canvas.style.cursor = engine.tool === "eraser" ? "none" : "crosshair"
-}
-
-function clearRawInk(canvas: HTMLCanvasElement | null) {
-  if (!canvas) return
-
-  const context = canvas.getContext("2d")
-  if (!context) return
-
-  const rect = canvas.getBoundingClientRect()
-  const dpr = Math.max(1, window.devicePixelRatio || 1)
-  context.setTransform(dpr, 0, 0, dpr, 0, 0)
-  context.clearRect(0, 0, rect.width, rect.height)
-}
-
-function scheduleRawInkFlush(canvas: HTMLCanvasElement | null, engine: Engine) {
-  if (engine.rawInkRafId) return
-
-  engine.rawInkRafId = window.requestAnimationFrame(() => {
-    engine.rawInkRafId = 0
-    flushRawInk(canvas, engine, false)
-  })
-}
-
-function flushRawInk(canvas: HTMLCanvasElement | null, engine: Engine, finish: boolean) {
-  if (engine.rawInkRafId) {
-    window.cancelAnimationFrame(engine.rawInkRafId)
-    engine.rawInkRafId = 0
-  }
-
-  const points = engine.rawInkPoints
-  if (points.length < 2) return
-
-  while (points.length >= 3) {
-    const first = points[0]
-    const control = points[1]
-    const third = points[2]
-    drawRawInkCurve(canvas, first, control, third)
-    points.shift()
-  }
-
-  if (finish && points.length === 2) {
-    drawRawInkSegment(canvas, points[0], points[1])
-    points.splice(0, points.length)
-  }
-}
-
-function drawRawInkCurve(canvas: HTMLCanvasElement | null, from: Point, control: Point, to: Point) {
-  if (!canvas) return
-
-  const context = canvas.getContext("2d")
-  if (!context) return
-
-  const rect = canvas.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return
-
-  const dpr = Math.max(1, window.devicePixelRatio || 1)
-  const startPoint = midpoint(from, control)
-  const endPoint = midpoint(control, to)
-  const start = toPixels(startPoint, rect.width, rect.height)
-  const bend = toPixels(control, rect.width, rect.height)
-  const end = toPixels(endPoint, rect.width, rect.height)
-  const widthValue = (strokeWidth(from, control) + strokeWidth(control, to)) / 2
-
-  context.save()
-  context.setTransform(dpr, 0, 0, dpr, 0, 0)
-  context.lineCap = "round"
-  context.lineJoin = "round"
-  context.strokeStyle = "rgba(248,241,228,0.9)"
-  context.lineWidth = widthValue
-  context.beginPath()
-  context.moveTo(start.x, start.y)
-  context.quadraticCurveTo(bend.x, bend.y, end.x, end.y)
-  context.stroke()
-  context.restore()
-}
-
-function drawRawInkSegment(canvas: HTMLCanvasElement | null, from: Point, to: Point) {
-  if (!canvas) return
-
-  const context = canvas.getContext("2d")
-  if (!context) return
-
-  const rect = canvas.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return
-
-  const dpr = Math.max(1, window.devicePixelRatio || 1)
-  const start = toPixels(from, rect.width, rect.height)
-  const end = toPixels(to, rect.width, rect.height)
-
-  context.save()
-  context.setTransform(dpr, 0, 0, dpr, 0, 0)
-  context.lineCap = "round"
-  context.lineJoin = "round"
-  context.strokeStyle = "rgba(248,241,228,0.9)"
-  context.lineWidth = strokeWidth(from, to)
-  context.beginPath()
-  context.moveTo(start.x, start.y)
-  context.lineTo(end.x, end.y)
-  context.stroke()
-  context.restore()
+  canvas.style.cursor = "grab"
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRect, dpr: number) {
@@ -699,7 +584,7 @@ function resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRect, dpr: number) {
 }
 
 function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
-  const pressure = Math.min(1, engine.strokes.length * 0.025 + engine.pucks.length * 0.035)
+  const pressure = Math.min(1, engine.pucks.length * 0.035)
   const formation = clamp(1 - (performance.now() - engine.formationPulseAt) / 900, 0, 1)
   const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
   gradient.addColorStop(0, `rgba(248,241,228,${0.085 + formation * 0.065 - pressure * 0.012})`)
@@ -789,49 +674,6 @@ function drawContinuityResidue(context: CanvasRenderingContext2D, width: number,
   context.restore()
 }
 
-function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], active: boolean) {
-  context.save()
-  context.lineCap = "round"
-  context.lineJoin = "round"
-
-  for (const stroke of strokes) {
-    if (stroke.points.length < 2) continue
-    const age = performance.now() - stroke.createdAt
-    const alpha = active ? 0.9 : 0.78 * strokeFade(age)
-    if (alpha <= 0.01) continue
-
-    context.beginPath()
-    context.strokeStyle = `rgba(248,241,228,${alpha * 0.96})`
-    const first = toPixels(stroke.points[0], width, height)
-    context.moveTo(first.x, first.y)
-    if (stroke.points.length === 2) {
-      const next = toPixels(stroke.points[1], width, height)
-      const widthValue = strokeWidth(stroke.points[0], stroke.points[1])
-      context.lineWidth = widthValue
-      context.lineTo(next.x, next.y)
-      context.stroke()
-      drawDryMarkerTexture(context, first, next, widthValue, alpha, 0)
-      continue
-    }
-    for (let index = 1; index < stroke.points.length - 1; index += 1) {
-      const source = stroke.points[index]
-      const previousSource = stroke.points[index - 1]
-      const current = toPixels(stroke.points[index], width, height)
-      const next = toPixels(stroke.points[index + 1], width, height)
-      const midX = (current.x + next.x) / 2
-      const midY = (current.y + next.y) / 2
-      const widthValue = strokeWidth(previousSource, source)
-      context.lineWidth = widthValue
-      context.quadraticCurveTo(current.x, current.y, midX, midY)
-      if (index % 2 === 0) {
-        drawDryMarkerTexture(context, current, { x: midX, y: midY }, widthValue, alpha, index)
-      }
-    }
-    context.stroke()
-  }
-  context.restore()
-}
-
 function drawTemporalTrails(context: CanvasRenderingContext2D, width: number, height: number, pucks: Puck[]) {
   const now = performance.now()
   context.save()
@@ -858,34 +700,6 @@ function drawTemporalTrails(context: CanvasRenderingContext2D, width: number, he
     }
   }
 
-  context.restore()
-}
-
-function strokeWidth(previous: Point, current: Point) {
-  const velocity = distance(previous, current) / Math.max(1, current.t - previous.t)
-  const velocityTaper = clamp(1 - velocity * 66, 0.52, 1)
-  const pressure = current.pressure || 0.5
-  return Math.max(1.35, 5.6 * (0.38 + pressure * 0.62) * velocityTaper)
-}
-
-function drawDryMarkerTexture(context: CanvasRenderingContext2D, start: { x: number; y: number }, end: { x: number; y: number }, width: number, alpha: number, seed: number) {
-  const dx = end.x - start.x
-  const dy = end.y - start.y
-  const length = Math.hypot(dx, dy)
-  if (length < 2) return
-
-  const normalX = -dy / length
-  const normalY = dx / length
-  const offset = Math.sin(seed * 12.9898) * width * 0.18
-
-  context.save()
-  context.globalAlpha = Math.min(0.18, alpha * 0.22)
-  context.strokeStyle = "rgba(6,6,6,0.32)"
-  context.lineWidth = Math.max(0.45, width * 0.16)
-  context.beginPath()
-  context.moveTo(start.x + normalX * offset, start.y + normalY * offset)
-  context.lineTo(end.x + normalX * offset + dx * 0.08, end.y + normalY * offset + dy * 0.08)
-  context.stroke()
   context.restore()
 }
 
@@ -1123,19 +937,6 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
   context.restore()
 }
 
-function drawEraser(context: CanvasRenderingContext2D, width: number, height: number, point: Point) {
-  const pixel = toPixels(point, width, height)
-  context.save()
-  context.strokeStyle = "rgba(244,237,222,0.34)"
-  context.lineWidth = 1
-  context.shadowBlur = Math.min(width, height) * 0.018
-  context.shadowColor = "rgba(255,255,255,0.28)"
-  context.beginPath()
-  context.arc(pixel.x, pixel.y, Math.min(width, height) * 0.036, 0, Math.PI * 2)
-  context.stroke()
-  context.restore()
-}
-
 function updatePhysics(engine: Engine) {
   const spring = 0.145
   const damping = 0.805
@@ -1217,8 +1018,6 @@ function recallSpatialState(engine: Engine, state: SpatialState) {
 
 function pruneTemporalMemory(engine: Engine) {
   const now = performance.now()
-  engine.strokes = engine.strokes.filter((stroke) => now - stroke.createdAt < 1800000)
-
   for (const puck of engine.pucks) {
     puck.trail = puck.trail.filter((point) => now - point.t < 2200)
   }
@@ -1259,39 +1058,6 @@ function captureAbstractReplay(engine: Engine) {
   if (engine.abstractReplayFrames.length > 360) {
     engine.abstractReplayFrames.splice(0, engine.abstractReplayFrames.length - 360)
   }
-}
-
-function assignPendingMovement(engine: Engine, puck: Puck) {
-  if (!engine.pendingMovementStrokeId) return false
-
-  const stroke = engine.strokes.find((item) => item.id === engine.pendingMovementStrokeId)
-  if (!stroke || stroke.points.length < 2 || pathLength(stroke.points) < 0.035) {
-    engine.pendingMovementStrokeId = null
-    return false
-  }
-
-  const now = performance.now()
-  const destination = stroke.points.at(-1)
-  if (!destination) return false
-
-  const from = { pressure: 0.5, t: now, x: puck.baseX, y: puck.baseY }
-  const to = { pressure: destination.pressure, t: now + 1, x: destination.x, y: destination.y }
-  const travel = distance(from, to)
-
-  puck.choreography = {
-    delay: 70,
-    duration: clamp(travel * 4200, 520, 1500),
-    from,
-    startedAt: now,
-    to,
-  }
-  puck.vx *= 0.45
-  puck.vy *= 0.45
-
-  engine.strokes = engine.strokes.filter((item) => item.id !== stroke.id)
-  engine.pendingMovementStrokeId = null
-  rememberMove(engine, puck, from, to)
-  return true
 }
 
 function updateLiveResponse(engine: Engine) {
@@ -1371,7 +1137,6 @@ function reinforceContinuityCell(engine: Engine, x: number, y: number, symbol: C
 }
 
 function applyBasketballRelationships(engine: Engine) {
-  const latestStroke = engine.workingStroke ?? engine.strokes.at(-1) ?? null
   const activeMovement = strongestMovement(engine.pucks)
   const ballSide = averagePuck(engine.pucks, "O")
   const sideLoad = ballSide ? ballSide.x - 0.5 : 0
@@ -1441,12 +1206,6 @@ function applyBasketballRelationships(engine: Engine) {
         const cornerX = puck.x < 0.5 ? 0.18 : 0.82
         desiredX += (cornerX - puck.baseX) * 0.04
         desiredY += (0.72 - puck.baseY) * 0.02
-      }
-
-      const strokeIntent = strokeVectorInfluence(puck, latestStroke)
-      if (strokeIntent) {
-        desiredX += strokeIntent.x
-        desiredY += strokeIntent.y
       }
 
       if (activeMovement && activeMovement.puck.symbol === "O" && activeMovement.puck.id !== puck.id) {
@@ -1552,21 +1311,6 @@ function spacingStress(pucks: Puck[]) {
   return clamp(stress / pucks.length, 0, 1)
 }
 
-function strokeVectorInfluence(puck: Puck, stroke: Stroke | null) {
-  if (!stroke || stroke.points.length < 6) return null
-
-  const start = stroke.points[0]
-  const end = stroke.points[stroke.points.length - 1]
-  const distanceToStart = distance(puck, start)
-  const weight = clamp(1 - distanceToStart / 0.2, 0, 1)
-  if (weight <= 0) return null
-
-  return {
-    x: (end.x - start.x) * 0.08 * weight,
-    y: (end.y - start.y) * 0.08 * weight,
-  }
-}
-
 function eventPoint(event: ReactPointerEvent<HTMLCanvasElement>, engine: Engine): Point | null {
   const rect = engine.rect
   if (!rect) return null
@@ -1577,32 +1321,6 @@ function eventPoint(event: ReactPointerEvent<HTMLCanvasElement>, engine: Engine)
     x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
     y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
   }
-}
-
-function nativeEventPoint(event: PointerEvent, engine: Engine): Point | null {
-  const rect = engine.rect
-  if (!rect) return null
-
-  return {
-    pressure: event.pressure || 0.5,
-    t: event.timeStamp,
-    x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
-    y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
-  }
-}
-
-function coalescedEventPoints(event: PointerEvent, engine: Engine) {
-  const events = event.getCoalescedEvents?.() ?? [event]
-  return events.map((item) => nativeEventPoint(item, engine)).filter((point): point is Point => Boolean(point))
-}
-
-function appendStrokePoint(stroke: Stroke, point: Point, threshold: number) {
-  const previous = stroke.points.at(-1)
-  if (!previous || distance(previous, point) > threshold) {
-    stroke.points.push(point)
-    return true
-  }
-  return false
 }
 
 function findPuckAt(engine: Engine, point: Point) {
@@ -1617,25 +1335,6 @@ function findPuckAt(engine: Engine, point: Point) {
   return null
 }
 
-function eraseAt(engine: Engine, point: Point) {
-  const threshold = 0.035
-  engine.strokes = engine.strokes
-    .map((stroke) => ({
-      ...stroke,
-      points: stroke.points.filter((strokePoint) => distance(strokePoint, point) > threshold),
-    }))
-    .filter((stroke) => stroke.points.length > 1)
-}
-
-function rememberStroke(engine: Engine, stroke: Stroke) {
-  appendMemory(engine, {
-    at: performance.now(),
-    id: `memory-${engine.sessionMemory.length + 1}`,
-    kind: "stroke",
-    points: stroke.points.map((point) => ({ ...point })),
-  })
-}
-
 function rememberMove(engine: Engine, puck: Puck, from: Point, to: Point) {
   appendMemory(engine, {
     at: performance.now(),
@@ -1648,23 +1347,11 @@ function rememberMove(engine: Engine, puck: Puck, from: Point, to: Point) {
   })
 }
 
-function rememberSystemEvent(engine: Engine, kind: "clear" | "undo") {
-  appendMemory(engine, {
-    at: performance.now(),
-    id: `memory-${engine.sessionMemory.length + 1}`,
-    kind,
-  })
-}
-
 function appendMemory(engine: Engine, event: MemoryEvent) {
   engine.sessionMemory.push(event)
   if (engine.sessionMemory.length > 160) {
     engine.sessionMemory.shift()
   }
-}
-
-function canCreateStroke(pointerType: string) {
-  return pointerType === "pen" || pointerType === "mouse"
 }
 
 function makePuck(id: string, symbol: PuckSymbol, x: number, y: number): Puck {
@@ -1715,23 +1402,6 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
-function midpoint(a: Point, b: Point): Point {
-  return {
-    pressure: (a.pressure + b.pressure) / 2,
-    t: (a.t + b.t) / 2,
-    x: (a.x + b.x) / 2,
-    y: (a.y + b.y) / 2,
-  }
-}
-
-function pathLength(points: Point[]) {
-  let length = 0
-  for (let index = 1; index < points.length; index += 1) {
-    length += distance(points[index - 1], points[index])
-  }
-  return length
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
@@ -1739,10 +1409,6 @@ function clamp(value: number, min: number, max: number) {
 function puckBirthProgress(puck: Puck) {
   if (puck.bornAt < 0) return 1
   return easeOutCubic(clamp((performance.now() - puck.bornAt) / 320, 0, 1))
-}
-
-function strokeFade(age: number) {
-  return age < 1800000 ? 1 : 0
 }
 
 function easeOutCubic(value: number) {
