@@ -21,6 +21,10 @@ type Stroke = {
   points: Point[]
 }
 
+type PredictivePointerEvent = PointerEvent & {
+  getPredictedEvents?: () => PointerEvent[]
+}
+
 type TrailPoint = {
   t: number
   x: number
@@ -101,6 +105,7 @@ type Engine = {
   moved: boolean
   penActiveUntil: number
   pendingMovementStrokeId: string | null
+  predictedStroke: Stroke | null
   pucks: Puck[]
   rafId: number
   rect: DOMRect | null
@@ -247,6 +252,7 @@ export function ContinuityPrototype() {
       moved: false,
       penActiveUntil: 0,
       pendingMovementStrokeId: null,
+      predictedStroke: null,
       pucks: clonePucks(initialPucks),
       rafId: 0,
       rect: null,
@@ -342,6 +348,7 @@ export function ContinuityPrototype() {
       id: `stroke-${engine.strokeSequence + 1}`,
       points: [point],
     }
+    engine.predictedStroke = null
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -349,12 +356,11 @@ export function ContinuityPrototype() {
     if (!engine || engine.activePointerId !== event.pointerId) return
     event.preventDefault()
 
-    const point = eventPoint(event, engine)
-    if (!point) return
-
     engine.moved = true
 
     if (engine.draggingPuckId) {
+      const point = eventPoint(event, engine)
+      if (!point) return
       engine.moved = true
       const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
       if (puck) {
@@ -367,17 +373,20 @@ export function ContinuityPrototype() {
     }
 
     if (engine.tool === "eraser") {
+      const point = eventPoint(event, engine)
+      if (!point) return
       engine.eraseCursor = point
       eraseAt(engine, point)
       return
     }
 
     if (engine.drawing && engine.workingStroke) {
-      const previous = engine.workingStroke.points.at(-1)
-      if (!previous || distance(previous, point) > 0.003) {
-        engine.moved = true
-        engine.workingStroke.points.push(point)
+      const coalesced = coalescedEventPoints(event.nativeEvent, engine)
+      for (const point of coalesced) {
+        appendStrokePoint(engine.workingStroke, point, 0.0018)
       }
+      engine.predictedStroke = predictedStrokeForEvent(event.nativeEvent, engine, engine.workingStroke)
+      renderImmediately(event.currentTarget, engine)
     }
   }
 
@@ -400,6 +409,7 @@ export function ContinuityPrototype() {
       }
       engine.workingStroke = null
     }
+    engine.predictedStroke = null
 
     if (engine.draggingPuckId && engine.touchStart) {
       const puck = engine.pucks.find((item) => item.id === engine.draggingPuckId)
@@ -413,6 +423,7 @@ export function ContinuityPrototype() {
     engine.draggingPuckId = null
     engine.drawing = false
     engine.eraseCursor = null
+    engine.predictedStroke = null
     engine.touchStart = null
   }
 
@@ -435,6 +446,7 @@ export function ContinuityPrototype() {
 
     engine.strokes = []
     engine.workingStroke = null
+    engine.predictedStroke = null
     engine.pendingMovementStrokeId = null
     rememberSystemEvent(engine, "clear")
   }
@@ -448,7 +460,9 @@ export function ContinuityPrototype() {
   }
 
   return (
-    <main className="fixed inset-0 isolate overflow-hidden bg-[#f8f5ec] text-black selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
+    <main className="fixed inset-0 isolate overflow-hidden bg-[#ede7da] text-black selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.42),rgba(255,255,255,0)_36%),linear-gradient(135deg,rgba(255,255,255,0.18),rgba(0,0,0,0.06)_58%,rgba(0,0,0,0.12))] mix-blend-soft-light" />
+      <div className="pointer-events-none absolute inset-x-8 top-8 z-[1] h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-70" />
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -462,14 +476,14 @@ export function ContinuityPrototype() {
 
       <nav
         aria-label="Spatial states"
-        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-black/8 bg-white/32 p-1 shadow-[0_14px_38px_rgba(41,32,18,0.08)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="absolute left-1/2 top-[max(0.8rem,env(safe-area-inset-top))] z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/45 bg-[#f8f2e7]/28 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_18px_54px_rgba(32,26,17,0.12)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {spatialStates.map((state) => (
           <button
             aria-pressed={activeSpatialState === state.name}
             className={[
               "shrink-0 rounded-full px-3.5 py-2 text-[0.68rem] font-medium tracking-[0.08em] transition-colors",
-              activeSpatialState === state.name ? "bg-black text-[#f8f5ec]" : "text-black/46 hover:bg-black/5 hover:text-black/70",
+              activeSpatialState === state.name ? "bg-[#12100c] text-[#f8f1e4] shadow-[0_8px_24px_rgba(20,16,10,0.2)]" : "text-black/42 hover:bg-white/24 hover:text-black/70",
             ].join(" ")}
             key={state.name}
             onClick={() => handleSpatialStateRecall(state)}
@@ -480,7 +494,7 @@ export function ContinuityPrototype() {
         ))}
       </nav>
 
-      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-black/10 bg-white/45 p-1.5 shadow-[0_16px_42px_rgba(41,32,18,0.12)] backdrop-blur-2xl">
+      <nav className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/45 bg-[#f8f2e7]/34 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.64),0_20px_64px_rgba(32,26,17,0.14)] backdrop-blur-2xl">
         <ToolbarButton active={tool === "pencil"} label="Pencil" onClick={() => setTool("pencil")}>
           <Pencil aria-hidden="true" />
         </ToolbarButton>
@@ -514,7 +528,7 @@ function ToolbarButton({
       aria-label={label}
       className={[
         "grid h-11 w-11 place-items-center rounded-full border transition-colors",
-        active ? "border-black/14 bg-black text-[#f8f5ec]" : "border-transparent bg-transparent text-black/44",
+        active ? "border-black/20 bg-[#12100c] text-[#f8f1e4] shadow-[0_10px_28px_rgba(18,16,12,0.22)]" : "border-transparent bg-transparent text-black/38 hover:bg-white/24 hover:text-black/62",
       ].join(" ")}
       onClick={onClick}
       type="button"
@@ -530,7 +544,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
 
   const width = rect.width
   const height = rect.height
-  context.fillStyle = "#f8f5ec"
+  context.fillStyle = "#ede7da"
   context.fillRect(0, 0, width, height)
   drawAtmosphere(context, width, height, engine)
   drawCourt(context, width, height)
@@ -538,6 +552,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawTemporalTrails(context, width, height, engine.pucks)
   drawStrokes(context, width, height, engine.strokes, false)
   if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
+  if (engine.predictedStroke) drawStrokes(context, width, height, [engine.predictedStroke], "predicted")
   drawMovementIntent(context, width, height, engine)
   drawIntelligenceSurface(context, width, height, engine)
   drawLiveResponse(context, width, height, engine)
@@ -551,10 +566,17 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
 function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
   const pressure = Math.min(1, engine.strokes.length * 0.025 + engine.pucks.length * 0.035)
   const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
-  gradient.addColorStop(0, `rgba(0,0,0,${0.018 + pressure * 0.012})`)
-  gradient.addColorStop(0.58, "rgba(82,67,42,0.012)")
-  gradient.addColorStop(1, "rgba(255,255,255,0)")
+  gradient.addColorStop(0, `rgba(255,255,255,${0.2 - pressure * 0.04})`)
+  gradient.addColorStop(0.42, `rgba(45,35,20,${0.018 + pressure * 0.014})`)
+  gradient.addColorStop(1, "rgba(32,25,15,0.12)")
   context.fillStyle = gradient
+  context.fillRect(0, 0, width, height)
+
+  const glass = context.createLinearGradient(0, 0, width, height)
+  glass.addColorStop(0, "rgba(255,255,255,0.16)")
+  glass.addColorStop(0.5, "rgba(255,255,255,0)")
+  glass.addColorStop(1, "rgba(0,0,0,0.075)")
+  context.fillStyle = glass
   context.fillRect(0, 0, width, height)
 }
 
@@ -570,7 +592,7 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   const line = Math.max(1, Math.round(Math.min(width, height) * 0.00125))
 
   context.save()
-  context.strokeStyle = "rgba(8,8,7,0.18)"
+  context.strokeStyle = "rgba(8,8,7,0.145)"
   context.lineWidth = Math.max(1, line)
   context.lineCap = "round"
   context.lineJoin = "round"
@@ -596,7 +618,7 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   ])
   circle(context, centerX, hoopY, hoopRadius)
 
-  context.strokeStyle = "rgba(8,8,7,0.1)"
+  context.strokeStyle = "rgba(8,8,7,0.075)"
   context.lineWidth = Math.max(1, line * 0.9)
   arc(context, centerX, hoopY, courtWidth * 0.43, Math.PI * 1.08, Math.PI * 1.92)
   arc(context, centerX, hoopY, courtWidth * 0.16, Math.PI * 1.08, Math.PI * 1.92)
@@ -631,7 +653,7 @@ function drawContinuityResidue(context: CanvasRenderingContext2D, width: number,
   context.restore()
 }
 
-function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], active: boolean) {
+function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number, strokes: Stroke[], active: boolean | "predicted") {
   context.save()
   context.lineCap = "round"
   context.lineJoin = "round"
@@ -639,21 +661,35 @@ function drawStrokes(context: CanvasRenderingContext2D, width: number, height: n
   for (const stroke of strokes) {
     if (stroke.points.length < 2) continue
     const age = performance.now() - stroke.createdAt
-    const alpha = active ? 0.72 : 0.56 * strokeFade(age)
+    const alpha = active === "predicted" ? 0.22 : active ? 0.76 : 0.56 * strokeFade(age)
     if (alpha <= 0.01) continue
 
     context.beginPath()
-    context.strokeStyle = `rgba(8,8,7,${alpha})`
+    context.strokeStyle = `rgba(8,8,7,${alpha * 0.92})`
     const first = toPixels(stroke.points[0], width, height)
     context.moveTo(first.x, first.y)
+    if (stroke.points.length === 2) {
+      const next = toPixels(stroke.points[1], width, height)
+      const widthValue = strokeWidth(stroke.points[0], stroke.points[1])
+      context.lineWidth = widthValue
+      context.lineTo(next.x, next.y)
+      context.stroke()
+      drawDryMarkerTexture(context, first, next, widthValue, alpha, 0)
+      continue
+    }
     for (let index = 1; index < stroke.points.length - 1; index += 1) {
       const source = stroke.points[index]
+      const previousSource = stroke.points[index - 1]
       const current = toPixels(stroke.points[index], width, height)
       const next = toPixels(stroke.points[index + 1], width, height)
       const midX = (current.x + next.x) / 2
       const midY = (current.y + next.y) / 2
-      context.lineWidth = Math.max(1.5, 4.2 * (0.46 + source.pressure * 0.54))
+      const widthValue = strokeWidth(previousSource, source)
+      context.lineWidth = widthValue
       context.quadraticCurveTo(current.x, current.y, midX, midY)
+      if (index % 2 === 0 && active !== "predicted") {
+        drawDryMarkerTexture(context, current, { x: midX, y: midY }, widthValue, alpha, index)
+      }
     }
     context.stroke()
   }
@@ -686,6 +722,34 @@ function drawTemporalTrails(context: CanvasRenderingContext2D, width: number, he
     }
   }
 
+  context.restore()
+}
+
+function strokeWidth(previous: Point, current: Point) {
+  const velocity = distance(previous, current) / Math.max(1, current.t - previous.t)
+  const velocityTaper = clamp(1 - velocity * 72, 0.46, 1)
+  const pressure = current.pressure || 0.5
+  return Math.max(1.15, 4.8 * (0.38 + pressure * 0.62) * velocityTaper)
+}
+
+function drawDryMarkerTexture(context: CanvasRenderingContext2D, start: { x: number; y: number }, end: { x: number; y: number }, width: number, alpha: number, seed: number) {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  if (length < 2) return
+
+  const normalX = -dy / length
+  const normalY = dx / length
+  const offset = Math.sin(seed * 12.9898) * width * 0.18
+
+  context.save()
+  context.globalAlpha = Math.min(0.18, alpha * 0.22)
+  context.strokeStyle = "rgba(237,231,218,0.72)"
+  context.lineWidth = Math.max(0.45, width * 0.16)
+  context.beginPath()
+  context.moveTo(start.x + normalX * offset, start.y + normalY * offset)
+  context.lineTo(end.x + normalX * offset + dx * 0.08, end.y + normalY * offset + dy * 0.08)
+  context.stroke()
   context.restore()
 }
 
@@ -899,17 +963,17 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
   context.save()
   context.lineCap = "round"
   context.lineJoin = "round"
-  context.shadowBlur = Math.max(5, radius * 0.18)
-  context.shadowColor = "rgba(8,8,7,0.14)"
+  context.shadowBlur = Math.max(7, radius * 0.24)
+  context.shadowColor = "rgba(8,8,7,0.18)"
 
   if (symbol === "O") {
-    context.strokeStyle = "rgba(8,8,7,0.72)"
+    context.strokeStyle = "rgba(8,8,7,0.76)"
     context.lineWidth = Math.max(2.2, radius * 0.14)
     context.beginPath()
     context.arc(x, y, radius * 0.48, 0, Math.PI * 2)
     context.stroke()
   } else {
-    context.strokeStyle = "rgba(8,8,7,0.68)"
+    context.strokeStyle = "rgba(8,8,7,0.72)"
     context.lineWidth = Math.max(2.2, radius * 0.14)
     const inset = radius * 0.44
     context.beginPath()
@@ -926,8 +990,10 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
 function drawEraser(context: CanvasRenderingContext2D, width: number, height: number, point: Point) {
   const pixel = toPixels(point, width, height)
   context.save()
-  context.strokeStyle = "rgba(8,8,7,0.34)"
+  context.strokeStyle = "rgba(8,8,7,0.26)"
   context.lineWidth = 1
+  context.shadowBlur = Math.min(width, height) * 0.018
+  context.shadowColor = "rgba(255,255,255,0.28)"
   context.beginPath()
   context.arc(pixel.x, pixel.y, Math.min(width, height) * 0.036, 0, Math.PI * 2)
   context.stroke()
@@ -935,9 +1001,9 @@ function drawEraser(context: CanvasRenderingContext2D, width: number, height: nu
 }
 
 function updatePhysics(engine: Engine) {
-  const spring = 0.18
-  const damping = 0.76
-  const settle = 0.00006
+  const spring = 0.145
+  const damping = 0.805
+  const settle = 0.000045
 
   pruneTemporalMemory(engine)
   updateLiveResponse(engine)
@@ -948,8 +1014,12 @@ function updatePhysics(engine: Engine) {
   for (const puck of engine.pucks) {
     const previousX = puck.x
     const previousY = puck.y
-    puck.vx += (puck.targetX - puck.x) * spring
-    puck.vy += (puck.targetY - puck.y) * spring
+    const pullX = puck.targetX - puck.x
+    const pullY = puck.targetY - puck.y
+    const pull = Math.hypot(pullX, pullY)
+    const magneticSpring = spring + clamp(pull / 0.28, 0, 1) * 0.035
+    puck.vx += pullX * magneticSpring
+    puck.vy += pullY * magneticSpring
     puck.vx *= damping
     puck.vy *= damping
     puck.x += puck.vx
@@ -978,9 +1048,10 @@ function updateChoreography(engine: Engine) {
 
     const progress = clamp(elapsed / choreography.duration, 0, 1)
     const eased = easeInOutCubic(progress)
+    const settle = Math.sin(progress * Math.PI) * 0.006
 
-    puck.baseX = choreography.from.x + (choreography.to.x - choreography.from.x) * eased
-    puck.baseY = choreography.from.y + (choreography.to.y - choreography.from.y) * eased
+    puck.baseX = choreography.from.x + (choreography.to.x - choreography.from.x) * eased + settle * Math.sign(choreography.to.x - choreography.from.x)
+    puck.baseY = choreography.from.y + (choreography.to.y - choreography.from.y) * eased + settle * 0.45
     puck.targetX = puck.baseX
     puck.targetY = puck.baseY
 
@@ -1370,6 +1441,55 @@ function eventPoint(event: ReactPointerEvent<HTMLCanvasElement>, engine: Engine)
     x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
     y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
   }
+}
+
+function nativeEventPoint(event: PointerEvent, engine: Engine): Point | null {
+  const rect = engine.rect
+  if (!rect) return null
+
+  return {
+    pressure: event.pressure || 0.5,
+    t: event.timeStamp,
+    x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+    y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+  }
+}
+
+function coalescedEventPoints(event: PointerEvent, engine: Engine) {
+  const events = event.getCoalescedEvents?.() ?? [event]
+  return events.map((item) => nativeEventPoint(item, engine)).filter((point): point is Point => Boolean(point))
+}
+
+function predictedStrokeForEvent(event: PointerEvent, engine: Engine, stroke: Stroke) {
+  const predictiveEvent = event as PredictivePointerEvent
+  const predictedEvents = predictiveEvent.getPredictedEvents?.() ?? []
+  const last = stroke.points.at(-1)
+  if (!last || predictedEvents.length === 0) return null
+
+  const points = predictedEvents.map((item) => nativeEventPoint(item, engine)).filter((point): point is Point => Boolean(point))
+  if (points.length === 0) return null
+
+  return {
+    createdAt: performance.now(),
+    id: `${stroke.id}-predicted`,
+    points: [last, ...points.slice(0, 5)],
+  }
+}
+
+function appendStrokePoint(stroke: Stroke, point: Point, threshold: number) {
+  const previous = stroke.points.at(-1)
+  if (!previous || distance(previous, point) > threshold) {
+    stroke.points.push(point)
+  }
+}
+
+function renderImmediately(canvas: HTMLCanvasElement, engine: Engine) {
+  const context = canvas.getContext("2d", { alpha: false })
+  if (!context) return
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1)
+  context.setTransform(dpr, 0, 0, dpr, 0, 0)
+  render(context, engine, canvas)
 }
 
 function findPuckAt(engine: Engine, point: Point) {
