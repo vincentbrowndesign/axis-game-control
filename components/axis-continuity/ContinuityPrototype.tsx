@@ -1137,7 +1137,7 @@ function recallSpatialState(engine: Engine, state: SpatialState) {
 
 function pruneTemporalMemory(engine: Engine) {
   const now = performance.now()
-  engine.strokes = engine.strokes.filter((stroke) => strokeFade(now - stroke.createdAt) > 0.015)
+  engine.strokes = engine.strokes.filter((stroke) => now - stroke.createdAt < 120000)
 
   for (const puck of engine.pucks) {
     puck.trail = puck.trail.filter((point) => now - point.t < 2200)
@@ -1653,7 +1653,9 @@ function puckBirthProgress(puck: Puck) {
 }
 
 function strokeFade(age: number) {
-  return clamp(1 - age / 7200, 0, 1) ** 1.7
+  if (age < 45000) return 1
+
+  return clamp(1 - (age - 45000) / 75000, 0, 1) ** 1.25
 }
 
 function easeOutCubic(value: number) {
