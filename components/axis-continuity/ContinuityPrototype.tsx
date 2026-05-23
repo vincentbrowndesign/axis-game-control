@@ -8,7 +8,33 @@ type SpatialStateName = string
 type TacticalCategory = "Offense" | "Defense" | "SLOB" | "ATO" | "Tempo" | "Emphasis"
 type ActiveConditions = Partial<Record<TacticalCategory, string>>
 type DecisionStage = "owned" | "afterPass" | "afterDrive"
-type PossessionAction = "pass" | "drive" | "shoot" | "wing" | "corner" | "slot" | "shortRoll" | "kick" | "finish" | "dumpOff" | "reset" | "ghost" | "reject" | "lift" | "hammer" | "dho" | "lob" | "quickHit" | "misdirection"
+type PossessionAction =
+  | "pass"
+  | "drive"
+  | "shoot"
+  | "wing"
+  | "corner"
+  | "slot"
+  | "shortRoll"
+  | "kick"
+  | "finish"
+  | "dumpOff"
+  | "reset"
+  | "ghost"
+  | "reject"
+  | "lift"
+  | "hammer"
+  | "dho"
+  | "lob"
+  | "quickHit"
+  | "misdirection"
+  | "topReset"
+  | "slotSkip"
+  | "cornerDrift"
+  | "dunker"
+  | "reversal"
+  | "skip"
+  | "weaksideLift"
 type PossessionDecision = {
   action: PossessionAction
   label: string
@@ -613,6 +639,14 @@ const basePossessionDecisionTree: Record<DecisionStage, PossessionDecision[]> = 
   ],
 }
 
+const defaultPassDecisions: PossessionDecision[] = [
+  { action: "topReset", label: "Top Reset" },
+  { action: "slotSkip", label: "Weak Slot Skip" },
+  { action: "cornerDrift", label: "Corner Drift" },
+  { action: "shortRoll", label: "Short Roll Pocket" },
+  { action: "weaksideLift", label: "Weakside Lift" },
+]
+
 const environmentDecisionTree: Record<string, PossessionDecision[]> = {
   "5-Out": [
     { action: "pass", label: "Pass" },
@@ -703,6 +737,7 @@ export function ContinuityPrototype() {
   const [activeAction, setActiveAction] = useState<PossessionAction | null>(null)
   const [decisionStage, setDecisionStage] = useState<DecisionStage>("owned")
   const [activeEnvironment, setActiveEnvironment] = useState<TacticalEnvironment>({ category: "Offense", name: "Horns" })
+  const [passDecisions, setPassDecisions] = useState<PossessionDecision[]>(defaultPassDecisions)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -906,6 +941,9 @@ export function ContinuityPrototype() {
     const engine = engineRef.current
     if (!engine) return
 
+    if (action === "pass") {
+      setPassDecisions(buildPassDecisions(engine))
+    }
     applyPossessionAction(engine, action, at)
     setDecisionStage(nextDecisionStage(action))
     setActiveAction(action)
@@ -926,9 +964,10 @@ export function ContinuityPrototype() {
     engine.formationPulseAt = at
     setActiveEnvironment(environment)
     setDecisionStage("owned")
+    setPassDecisions(defaultPassDecisions)
   }
 
-  const possessionActions = decisionsForEnvironment(activeEnvironment, decisionStage).slice(0, 4)
+  const possessionActions = decisionStage === "afterPass" ? passDecisions.slice(0, 5) : decisionsForEnvironment(activeEnvironment, decisionStage).slice(0, 4)
 
   return (
     <main className="fixed inset-0 isolate overflow-hidden bg-[#eee6d7] text-[#26231f] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
@@ -1655,6 +1694,72 @@ function decisionsForEnvironment(environment: TacticalEnvironment, stage: Decisi
   return environmentDecisionTree[environment.name] ?? basePossessionDecisionTree.owned
 }
 
+function buildPassDecisions(engine: Engine): PossessionDecision[] {
+  const carrier = currentCarrier(engine) ?? nearestPuck(engine.ball, engine.pucks, "O")
+  if (!carrier) return defaultPassDecisions
+
+  const ballSide = engine.ball.x < 0.5 ? -1 : 1
+  const strongSide = sideName(ballSide)
+  const weakSide = sideName(-ballSide)
+  const deepTouch = engine.ball.y > 0.55
+  const centered = Math.abs(engine.ball.x - 0.5) < 0.14
+  const spacing = spacingStress(engine.pucks.filter((puck) => puck.symbol === "O"))
+  const offense = engine.conditions.Offense ?? "Horns"
+  const defense = engine.conditions.Defense ?? "Shell"
+  const candidates: Array<PossessionDecision & { score: number }> = [
+    { action: "topReset", label: centered ? "Top Reset" : "Top Release", score: passLaneScore(engine, carrier, ["top"], 0.58 + (deepTouch ? 0.28 : 0.08) + conditionPassBonus("topReset", offense, defense)) },
+    { action: "wing", label: `${strongSide} Wing Swing`, score: passLaneScore(engine, carrier, ballSide < 0 ? ["wing-left", "slot-left"] : ["wing-right", "slot-right"], 0.46 + (centered ? 0.11 : 0.03) + conditionPassBonus("wing", offense, defense)) },
+    { action: "slotSkip", label: `${weakSide} Slot Skip`, score: passLaneScore(engine, carrier, ballSide < 0 ? ["slot-right", "wing-right"] : ["slot-left", "wing-left"], 0.52 + Math.abs(engine.ball.x - 0.5) * 0.34 + conditionPassBonus("slotSkip", offense, defense)) },
+    { action: "cornerDrift", label: `${strongSide} Corner Drift`, score: passLaneScore(engine, carrier, ballSide < 0 ? ["corner-left", "corner-right"] : ["corner-right", "corner-left"], 0.44 + (deepTouch ? 0.2 : 0.05) + conditionPassBonus("cornerDrift", offense, defense)) },
+    { action: "shortRoll", label: "Short Roll Pocket", score: passLaneScore(engine, carrier, ["paint", "short-left", "short-right"], 0.44 + (engine.ball.y < 0.48 ? 0.18 : 0.06) + conditionPassBonus("shortRoll", offense, defense)) },
+    { action: "weaksideLift", label: `${weakSide} Wing Lift`, score: passLaneScore(engine, carrier, ballSide < 0 ? ["wing-right", "slot-right"] : ["wing-left", "slot-left"], 0.43 + (spacing > 0.18 ? 0.18 : 0.06) + conditionPassBonus("weaksideLift", offense, defense)) },
+    { action: "reversal", label: `${weakSide} Slot Reverse`, score: passLaneScore(engine, carrier, ballSide < 0 ? ["slot-right", "top"] : ["slot-left", "top"], 0.42 + (centered ? 0.05 : 0.15) + conditionPassBonus("reversal", offense, defense)) },
+    { action: "skip", label: `Weakside Corner Skip`, score: passLaneScore(engine, carrier, ballSide < 0 ? ["corner-right", "wing-right"] : ["corner-left", "wing-left"], 0.4 + Math.abs(engine.ball.x - 0.5) * 0.28 + conditionPassBonus("skip", offense, defense)) },
+    { action: "dunker", label: `${strongSide} Dunker Drop`, score: passLaneScore(engine, carrier, ballSide < 0 ? ["dunker-left", "dunker-right"] : ["dunker-right", "dunker-left"], 0.36 + (deepTouch ? 0.2 : 0) + conditionPassBonus("dunker", offense, defense)) },
+  ]
+
+  return candidates
+    .filter((candidate) => candidate.score > 0.12)
+    .sort((first, second) => second.score - first.score)
+    .slice(0, 5)
+    .map(({ action, label }) => ({ action, label }))
+}
+
+function sideName(side: number) {
+  return side < 0 ? "Left" : "Right"
+}
+
+function conditionPassBonus(action: PossessionAction, offense: string, defense: string) {
+  let bonus = 0
+  if (["5-Out", "Motion", "Empty"].includes(offense) && ["slotSkip", "skip", "weaksideLift", "reversal"].includes(action)) bonus += 0.1
+  if (["Spain", "Delay", "Pistol"].includes(offense) && ["shortRoll", "dunker", "wing"].includes(action)) bonus += 0.1
+  if (["Horns", "Princeton"].includes(offense) && ["topReset", "reversal", "shortRoll"].includes(action)) bonus += 0.08
+  if (["Shell", "Pack", "Gap"].includes(defense) && ["skip", "slotSkip", "weaksideLift"].includes(action)) bonus += 0.08
+  if (["Switch", "ICE", "Drop"].includes(defense) && ["shortRoll", "cornerDrift", "dunker"].includes(action)) bonus += 0.07
+  return bonus
+}
+
+function passLaneScore(engine: Engine, carrier: Puck, zoneIds: string[], baseScore: number) {
+  const target = targetByZone(engine, carrier, zoneIds)
+  if (!target) return 0
+
+  const laneDistance = distance(carrier, target)
+  const width = Math.abs(target.x - carrier.x)
+  const forward = target.y > carrier.y ? 0.08 : 0
+  const weakside = engine.ball.x < 0.5 ? target.x > 0.5 : target.x < 0.5
+  const angle = passingAngleScore(carrier, target)
+  const defenderPressure = nearestPuck(target, engine.pucks, "X")
+  const pressurePenalty = defenderPressure ? clamp((0.14 - distance(target, defenderPressure)) / 0.14, 0, 1) * 0.2 : 0
+
+  return baseScore + width * 0.28 + laneDistance * 0.12 + forward + (weakside ? 0.14 : 0) + angle * 0.08 - pressurePenalty
+}
+
+function passingAngleScore(carrier: Puck, target: Puck) {
+  const dx = Math.abs(target.x - carrier.x)
+  const dy = Math.abs(target.y - carrier.y)
+  return clamp((dx + dy * 0.42) / 0.46, 0, 1)
+}
+
 function stateForEnvironment(environment: TacticalEnvironment) {
   return (
     spatialStates.find((state) => state.name === environment.name && (state.category ?? "Offense") === environment.category) ??
@@ -1687,7 +1792,7 @@ function applyPossessionAction(engine: Engine, action: PossessionAction, at: num
     return
   }
 
-  if (action === "lift") {
+  if (action === "lift" || action === "weaksideLift") {
     liftWeakside(engine, carrier, at)
     return
   }
@@ -1726,6 +1831,12 @@ function decisionPassTarget(engine: Engine, carrier: Puck, action: PossessionAct
   if (action === "wing") return targetByZone(engine, carrier, ["wing-left", "wing-right"])
   if (action === "corner") return targetByZone(engine, carrier, ["corner-left", "corner-right"])
   if (action === "slot") return targetByZone(engine, carrier, ["slot-left", "slot-right", "top"])
+  if (action === "topReset") return targetByZone(engine, carrier, ["top"])
+  if (action === "slotSkip") return targetByZone(engine, carrier, engine.ball.x < 0.5 ? ["slot-right", "wing-right"] : ["slot-left", "wing-left"])
+  if (action === "cornerDrift") return targetByZone(engine, carrier, engine.ball.x < 0.5 ? ["corner-right", "corner-left"] : ["corner-left", "corner-right"])
+  if (action === "dunker") return targetByZone(engine, carrier, ["dunker-left", "dunker-right", "paint"])
+  if (action === "reversal") return targetByZone(engine, carrier, engine.ball.x < 0.5 ? ["slot-right", "top"] : ["slot-left", "top"])
+  if (action === "skip") return targetByZone(engine, carrier, engine.ball.x < 0.5 ? ["corner-right", "wing-right"] : ["corner-left", "wing-left"])
   if (action === "dho") return targetByZone(engine, carrier, ["wing-left", "wing-right", "slot-left", "slot-right"])
   if (action === "hammer") return weaksideTarget(engine, carrier) ?? targetByZone(engine, carrier, ["corner-left", "corner-right"])
   if (action === "lob") return targetByZone(engine, carrier, ["dunker-left", "dunker-right", "paint"])
