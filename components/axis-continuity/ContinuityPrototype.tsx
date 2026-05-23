@@ -105,6 +105,8 @@ type Engine = {
   pucks: Puck[]
   rafId: number
   rawInkCursor: Point | null
+  rawInkPoints: Point[]
+  rawInkRafId: number
   rect: DOMRect | null
   continuityCells: ContinuityCell[]
   sessionMemory: MemoryEvent[]
@@ -244,6 +246,8 @@ export function ContinuityPrototype() {
       pucks: clonePucks(initialPucks),
       rafId: 0,
       rawInkCursor: null,
+      rawInkPoints: [],
+      rawInkRafId: 0,
       rect: null,
       continuityCells: [],
       sessionMemory: [],
@@ -279,6 +283,7 @@ export function ContinuityPrototype() {
     return () => {
       observer.disconnect()
       window.cancelAnimationFrame(engine.rafId)
+      if (engine.rawInkRafId) window.cancelAnimationFrame(engine.rawInkRafId)
       engineRef.current = null
     }
   }, [])
@@ -339,6 +344,7 @@ export function ContinuityPrototype() {
       points: [point],
     }
     engine.rawInkCursor = point
+    engine.rawInkPoints = [point]
     clearRawInk(rawInkCanvasRef.current)
   }
 
@@ -374,13 +380,13 @@ export function ContinuityPrototype() {
     if (engine.drawing && engine.workingStroke) {
       const coalesced = coalescedEventPoints(event.nativeEvent, engine)
       for (const point of coalesced) {
-        const previous = engine.workingStroke.points.at(-1) ?? engine.rawInkCursor
         const appended = appendStrokePoint(engine.workingStroke, point, 0.0009)
-        if (appended && previous) {
-          drawRawInkSegment(rawInkCanvasRef.current, previous, point)
+        if (appended) {
+          engine.rawInkPoints.push(point)
           engine.rawInkCursor = point
         }
       }
+      scheduleRawInkFlush(rawInkCanvasRef.current, engine)
     }
   }
 
@@ -403,7 +409,9 @@ export function ContinuityPrototype() {
       }
       engine.workingStroke = null
     }
+    flushRawInk(rawInkCanvasRef.current, engine, true)
     engine.rawInkCursor = null
+    engine.rawInkPoints = []
     clearRawInk(rawInkCanvasRef.current)
 
     if (engine.draggingPuckId && engine.touchStart) {
@@ -419,6 +427,7 @@ export function ContinuityPrototype() {
     engine.drawing = false
     engine.eraseCursor = null
     engine.rawInkCursor = null
+    engine.rawInkPoints = []
     clearRawInk(rawInkCanvasRef.current)
     engine.touchStart = null
   }
@@ -443,6 +452,7 @@ export function ContinuityPrototype() {
     engine.strokes = []
     engine.workingStroke = null
     engine.rawInkCursor = null
+    engine.rawInkPoints = []
     clearRawInk(rawInkCanvasRef.current)
     engine.pendingMovementStrokeId = null
     rememberSystemEvent(engine, "clear")
@@ -593,6 +603,68 @@ function clearRawInk(canvas: HTMLCanvasElement | null) {
   const dpr = Math.max(1, window.devicePixelRatio || 1)
   context.setTransform(dpr, 0, 0, dpr, 0, 0)
   context.clearRect(0, 0, rect.width, rect.height)
+}
+
+function scheduleRawInkFlush(canvas: HTMLCanvasElement | null, engine: Engine) {
+  if (engine.rawInkRafId) return
+
+  engine.rawInkRafId = window.requestAnimationFrame(() => {
+    engine.rawInkRafId = 0
+    flushRawInk(canvas, engine, false)
+  })
+}
+
+function flushRawInk(canvas: HTMLCanvasElement | null, engine: Engine, finish: boolean) {
+  if (engine.rawInkRafId) {
+    window.cancelAnimationFrame(engine.rawInkRafId)
+    engine.rawInkRafId = 0
+  }
+
+  const points = engine.rawInkPoints
+  if (points.length < 2) return
+
+  while (points.length >= 3) {
+    const first = points[0]
+    const control = points[1]
+    const third = points[2]
+    drawRawInkCurve(canvas, first, control, third)
+    points.shift()
+  }
+
+  if (finish && points.length === 2) {
+    drawRawInkSegment(canvas, points[0], points[1])
+    points.splice(0, points.length)
+  }
+}
+
+function drawRawInkCurve(canvas: HTMLCanvasElement | null, from: Point, control: Point, to: Point) {
+  if (!canvas) return
+
+  const context = canvas.getContext("2d")
+  if (!context) return
+
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1)
+  const startPoint = midpoint(from, control)
+  const endPoint = midpoint(control, to)
+  const start = toPixels(startPoint, rect.width, rect.height)
+  const bend = toPixels(control, rect.width, rect.height)
+  const end = toPixels(endPoint, rect.width, rect.height)
+  const widthValue = (strokeWidth(from, control) + strokeWidth(control, to)) / 2
+
+  context.save()
+  context.setTransform(dpr, 0, 0, dpr, 0, 0)
+  context.lineCap = "round"
+  context.lineJoin = "round"
+  context.strokeStyle = "rgba(248,241,228,0.9)"
+  context.lineWidth = widthValue
+  context.beginPath()
+  context.moveTo(start.x, start.y)
+  context.quadraticCurveTo(bend.x, bend.y, end.x, end.y)
+  context.stroke()
+  context.restore()
 }
 
 function drawRawInkSegment(canvas: HTMLCanvasElement | null, from: Point, to: Point) {
@@ -1641,6 +1713,15 @@ function round(value: number) {
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+function midpoint(a: Point, b: Point): Point {
+  return {
+    pressure: (a.pressure + b.pressure) / 2,
+    t: (a.t + b.t) / 2,
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2,
+  }
 }
 
 function pathLength(points: Point[]) {
