@@ -39,6 +39,7 @@ type Choreography = {
 type Ball = {
   carrierId: string | null
   lastCarrierId: string | null
+  passArc: number
   passedAt: number
   state: "loose" | "owned" | "passing" | "shot"
   targetCarrierId: string | null
@@ -160,6 +161,7 @@ const initialPucks: Puck[] = [
 const initialBall: Ball = {
   carrierId: "o1",
   lastCarrierId: "o1",
+  passArc: 0,
   passedAt: -10000,
   state: "owned",
   targetCarrierId: "o1",
@@ -808,10 +810,10 @@ export function ContinuityPrototype() {
   const possessionActions = possessionDecisionTree[decisionStage].slice(0, 4)
 
   return (
-    <main className="fixed inset-0 isolate overflow-hidden bg-[#030303] text-[#f8f1e4] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(248,241,228,0.12),rgba(248,241,228,0)_18%),linear-gradient(135deg,rgba(216,176,96,0.08),rgba(0,0,0,0.12)_52%,rgba(0,0,0,0.62))] mix-blend-screen opacity-85" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-20 bg-gradient-to-b from-black/72 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-7 top-8 z-[1] h-[2px] bg-gradient-to-r from-transparent via-[#f6d68a]/50 to-transparent opacity-80" />
+    <main className="fixed inset-0 isolate overflow-hidden bg-[#eee6d7] text-[#26231f] selection:bg-transparent touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]">
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_22%,rgba(255,252,244,0.82),rgba(255,252,244,0)_34%),linear-gradient(135deg,rgba(116,103,83,0.06),rgba(255,255,255,0.1)_42%,rgba(73,64,50,0.12))] opacity-80" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-20 bg-gradient-to-b from-[#f8f1e4]/70 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-7 top-8 z-[1] h-px bg-gradient-to-r from-transparent via-[#6f6659]/22 to-transparent opacity-80" />
       <canvas
         aria-label="Axis tactical canvas"
         className="absolute inset-0 h-full w-full touch-none select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]"
@@ -825,7 +827,7 @@ export function ContinuityPrototype() {
 
       <nav
         aria-label="Possession decisions"
-        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center justify-center gap-2 rounded-[1.35rem] border border-[#f8f1e4]/10 bg-[#080806]/44 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_18px_62px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
+        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100vw-1.25rem)] -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[#4e473d]/8 bg-[#fff8ea]/42 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.78),0_12px_34px_rgba(68,58,43,0.11)] backdrop-blur-2xl"
       >
         {possessionActions.map(({ action, label }) => {
           const active = activeAction === action
@@ -833,10 +835,10 @@ export function ContinuityPrototype() {
             <button
               aria-pressed={active}
               className={[
-                "snap-center shrink-0 touch-manipulation whitespace-nowrap rounded-[1.05rem] px-5 py-2.5 text-[0.72rem] font-extrabold uppercase tracking-[0.11em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.94]",
+                "snap-center shrink-0 touch-manipulation whitespace-nowrap rounded-full px-4 py-2 text-[0.65rem] font-medium uppercase leading-none tracking-[0.14em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.96]",
                 active
-                  ? "bg-[#f8f1e4] text-[#050505] opacity-100 shadow-[0_0_24px_rgba(246,214,138,0.2),inset_0_-2px_0_rgba(214,176,96,0.62)]"
-                  : "text-[#f8f1e4]/46 opacity-75 hover:bg-[#f8f1e4]/9 hover:text-[#f8f1e4]/78 focus-visible:bg-[#f8f1e4]/12 focus-visible:text-[#f8f1e4]",
+                  ? "bg-[#2c2924]/88 text-[#fff8ea] opacity-100 shadow-[0_7px_18px_rgba(70,58,42,0.14),inset_0_-1px_0_rgba(0,0,0,0.22)]"
+                  : "bg-[#fffdf7]/24 text-[#3b352d]/50 opacity-85 shadow-[inset_0_0_0_1px_rgba(76,68,55,0.045)] hover:bg-[#fffdf7]/44 hover:text-[#2c2924]/78 focus-visible:bg-[#fffdf7]/58 focus-visible:text-[#2c2924]",
               ].join(" ")}
               key={action}
               onClick={(event) => handlePossessionAction(action, event.timeStamp)}
@@ -860,7 +862,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
 
   const width = rect.width
   const height = rect.height
-  context.fillStyle = "#060606"
+  context.fillStyle = "#eee6d7"
   context.fillRect(0, 0, width, height)
   drawAtmosphere(context, width, height, engine)
   drawCourt(context, width, height)
@@ -888,18 +890,38 @@ function drawAtmosphere(context: CanvasRenderingContext2D, width: number, height
   const formation = clamp(1 - (performance.now() - engine.formationPulseAt) / 900, 0, 1)
   const possession = clamp(1 - (performance.now() - engine.possessionChangedAt) / 620, 0, 1)
   const gradient = context.createRadialGradient(width * 0.54, height * 0.45, 0, width * 0.54, height * 0.45, Math.max(width, height) * 0.72)
-  gradient.addColorStop(0, `rgba(248,241,228,${0.085 + formation * 0.065 + possession * 0.024 - pressure * 0.012})`)
-  gradient.addColorStop(0.4, `rgba(216,176,96,${0.035 + pressure * 0.018 + formation * 0.024 + possession * 0.026})`)
-  gradient.addColorStop(1, "rgba(0,0,0,0.82)")
+  gradient.addColorStop(0, `rgba(255,252,244,${0.52 + formation * 0.08 + possession * 0.035 - pressure * 0.018})`)
+  gradient.addColorStop(0.46, `rgba(226,214,192,${0.18 + pressure * 0.025 + formation * 0.03 + possession * 0.024})`)
+  gradient.addColorStop(1, "rgba(202,190,169,0.36)")
   context.fillStyle = gradient
   context.fillRect(0, 0, width, height)
 
-  const glass = context.createLinearGradient(0, 0, width, height)
-  glass.addColorStop(0, "rgba(255,255,255,0.075)")
-  glass.addColorStop(0.5, "rgba(255,255,255,0)")
-  glass.addColorStop(1, "rgba(0,0,0,0.58)")
-  context.fillStyle = glass
+  const paper = context.createLinearGradient(0, 0, width, height)
+  paper.addColorStop(0, "rgba(255,255,255,0.3)")
+  paper.addColorStop(0.52, "rgba(255,255,255,0.04)")
+  paper.addColorStop(1, "rgba(86,75,60,0.08)")
+  context.fillStyle = paper
   context.fillRect(0, 0, width, height)
+
+  context.save()
+  context.globalAlpha = 0.18
+  context.strokeStyle = "rgba(95,82,64,0.055)"
+  context.lineWidth = 1
+  const fiberGap = Math.max(18, Math.min(width, height) * 0.038)
+  for (let x = -fiberGap; x < width + fiberGap; x += fiberGap) {
+    context.beginPath()
+    context.moveTo(x, 0)
+    context.lineTo(x + height * 0.08, height)
+    context.stroke()
+  }
+  context.globalAlpha = 0.11
+  for (let y = fiberGap * 0.6; y < height; y += fiberGap * 1.35) {
+    context.beginPath()
+    context.moveTo(0, y)
+    context.lineTo(width, y + width * 0.01)
+    context.stroke()
+  }
+  context.restore()
 }
 
 function drawCourt(context: CanvasRenderingContext2D, width: number, height: number) {
@@ -914,7 +936,7 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   const line = Math.max(2, Math.round(Math.min(width, height) * 0.00225))
 
   context.save()
-  context.strokeStyle = "rgba(248,241,228,0.2)"
+  context.strokeStyle = "rgba(61,56,49,0.24)"
   context.lineWidth = Math.max(1, line)
   context.lineCap = "round"
   context.lineJoin = "round"
@@ -940,7 +962,7 @@ function drawCourt(context: CanvasRenderingContext2D, width: number, height: num
   ])
   circle(context, centerX, hoopY, hoopRadius)
 
-  context.strokeStyle = "rgba(248,241,228,0.105)"
+  context.strokeStyle = "rgba(61,56,49,0.13)"
   context.lineWidth = Math.max(1, line * 0.9)
   arc(context, centerX, hoopY, courtWidth * 0.43, Math.PI * 1.08, Math.PI * 1.92)
   arc(context, centerX, hoopY, courtWidth * 0.16, Math.PI * 1.08, Math.PI * 1.92)
@@ -991,7 +1013,7 @@ function drawTemporalTrails(context: CanvasRenderingContext2D, width: number, he
 
       const start = toPixels(previous, width, height)
       const end = toPixels(current, width, height)
-      context.strokeStyle = puck.symbol === "O" ? `rgba(244,237,222,${alpha})` : `rgba(172,178,178,${alpha * 0.86})`
+      context.strokeStyle = puck.symbol === "O" ? `rgba(45,40,34,${alpha * 1.05})` : `rgba(96,91,83,${alpha * 0.9})`
       context.lineWidth = Math.max(1, Math.min(width, height) * 0.0022 * alpha * 8)
       context.lineCap = "round"
       context.beginPath()
@@ -1019,7 +1041,7 @@ function drawMovementIntent(context: CanvasRenderingContext2D, width: number, he
     const controlX = (start.x + end.x) / 2
     const controlY = (start.y + end.y) / 2 - lift
 
-    context.strokeStyle = puck.symbol === "O" ? "rgba(244,237,222,0.16)" : "rgba(172,178,178,0.11)"
+    context.strokeStyle = puck.symbol === "O" ? "rgba(45,40,34,0.15)" : "rgba(96,91,83,0.11)"
     context.lineWidth = Math.max(1, Math.min(width, height) * 0.0014)
     context.beginPath()
     context.moveTo(start.x, start.y)
@@ -1047,9 +1069,9 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
     const hazeCenter = toPixels({ x: laneX, y: 0.56 }, width, height)
     const hazeRadius = Math.min(width, height) * (0.18 + sidePressure * 0.08)
     const haze = context.createRadialGradient(hazeCenter.x, hazeCenter.y, hazeRadius * 0.1, hazeCenter.x, hazeCenter.y, hazeRadius)
-    haze.addColorStop(0, `rgba(244,237,222,${0.04 * sidePressure})`)
-    haze.addColorStop(0.58, `rgba(244,237,222,${0.012 * sidePressure})`)
-    haze.addColorStop(1, "rgba(244,237,222,0)")
+    haze.addColorStop(0, `rgba(65,56,44,${0.028 * sidePressure})`)
+    haze.addColorStop(0.58, `rgba(65,56,44,${0.009 * sidePressure})`)
+    haze.addColorStop(1, "rgba(65,56,44,0)")
     context.fillStyle = haze
     context.beginPath()
     context.arc(hazeCenter.x, hazeCenter.y, hazeRadius, 0, Math.PI * 2)
@@ -1063,7 +1085,7 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
       const start = toPixels(weakside, width, height)
       const ghost = toPixels({ x: sideLoad > 0 ? 0.2 : 0.8, y: clamp(weakside.y - 0.035, 0.16, 0.84) }, width, height)
       const control = { x: (start.x + ghost.x) / 2, y: Math.min(start.y, ghost.y) - Math.min(width, height) * 0.035 }
-      context.strokeStyle = `rgba(244,237,222,${0.08 * sidePressure})`
+      context.strokeStyle = `rgba(65,56,44,${0.06 * sidePressure})`
       context.lineWidth = Math.max(1, Math.min(width, height) * 0.0015)
       context.setLineDash([Math.min(width, height) * 0.01, Math.min(width, height) * 0.012])
       context.beginPath()
@@ -1080,8 +1102,8 @@ function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: numbe
       const start = toPixels(drive, width, height)
       const end = toPixels(rim, width, height)
       const laneGradient = context.createLinearGradient(start.x, start.y, end.x, end.y)
-      laneGradient.addColorStop(0, `rgba(244,237,222,${0.08 * pressure})`)
-      laneGradient.addColorStop(1, "rgba(244,237,222,0)")
+      laneGradient.addColorStop(0, `rgba(65,56,44,${0.055 * pressure})`)
+      laneGradient.addColorStop(1, "rgba(65,56,44,0)")
       context.strokeStyle = laneGradient
       context.lineWidth = Math.max(2, Math.min(width, height) * 0.012 * pressure)
       context.lineCap = "round"
@@ -1114,7 +1136,7 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
     const window = clamp(drivingO.speed / 0.018, 0, 1)
     const recovery = nearestPuck(drivingO.puck, defense, "X")
 
-    context.strokeStyle = `rgba(244,237,222,${0.08 * window})`
+    context.strokeStyle = `rgba(65,56,44,${0.06 * window})`
     context.lineWidth = Math.max(1, Math.min(width, height) * 0.0025 * window)
     context.beginPath()
     context.moveTo(start.x, start.y)
@@ -1124,7 +1146,7 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
     if (recovery) {
       const recoveryStart = toPixels(recovery, width, height)
       const recoverTo = toPixels({ x: (drivingO.puck.x + rim.x) / 2, y: (drivingO.puck.y + rim.y) / 2 }, width, height)
-      context.strokeStyle = `rgba(172,178,178,${0.06 * window})`
+      context.strokeStyle = `rgba(96,91,83,${0.052 * window})`
       context.setLineDash([Math.min(width, height) * 0.007, Math.min(width, height) * 0.012])
       context.beginPath()
       context.moveTo(recoveryStart.x, recoveryStart.y)
@@ -1139,9 +1161,9 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
     const point = toPixels(ball, width, height)
     const radius = Math.min(width, height) * (0.1 + ballDepth * 0.12)
     const collapse = context.createRadialGradient(point.x, point.y, radius * 0.12, point.x, point.y, radius)
-    collapse.addColorStop(0, `rgba(246,214,138,${0.045 * ballDepth})`)
-    collapse.addColorStop(0.6, `rgba(244,237,222,${0.015 * ballDepth})`)
-    collapse.addColorStop(1, "rgba(246,214,138,0)")
+    collapse.addColorStop(0, `rgba(171,111,42,${0.035 * ballDepth})`)
+    collapse.addColorStop(0.6, `rgba(65,56,44,${0.01 * ballDepth})`)
+    collapse.addColorStop(1, "rgba(171,111,42,0)")
     context.fillStyle = collapse
     context.beginPath()
     context.arc(point.x, point.y, radius, 0, Math.PI * 2)
@@ -1159,8 +1181,8 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
       const midpoint = toPixels({ x: (puck.x + nearest.x) / 2, y: (puck.y + nearest.y) / 2 }, width, height)
       const radius = Math.min(width, height) * (0.055 + spacing * 0.025)
       const haze = context.createRadialGradient(midpoint.x, midpoint.y, radius * 0.1, midpoint.x, midpoint.y, radius)
-      haze.addColorStop(0, `rgba(244,237,222,${0.04 * spacing})`)
-      haze.addColorStop(1, "rgba(244,237,222,0)")
+      haze.addColorStop(0, `rgba(65,56,44,${0.028 * spacing})`)
+      haze.addColorStop(1, "rgba(65,56,44,0)")
       context.fillStyle = haze
       context.beginPath()
       context.arc(midpoint.x, midpoint.y, radius, 0, Math.PI * 2)
@@ -1175,8 +1197,8 @@ function drawLiveResponse(context: CanvasRenderingContext2D, width: number, heig
       const point = toPixels(engine.advantageFlash, width, height)
       const radius = Math.min(width, height) * (0.07 + (1 - alpha) * 0.04)
       const flash = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius)
-      flash.addColorStop(0, `rgba(244,237,222,${0.07 * alpha})`)
-      flash.addColorStop(1, "rgba(244,237,222,0)")
+      flash.addColorStop(0, `rgba(65,56,44,${0.052 * alpha})`)
+      flash.addColorStop(1, "rgba(65,56,44,0)")
       context.fillStyle = flash
       context.beginPath()
       context.arc(point.x, point.y, radius, 0, Math.PI * 2)
@@ -1242,7 +1264,7 @@ function drawBall(context: CanvasRenderingContext2D, width: number, height: numb
 
     const start = toPixels(previous, width, height)
     const end = toPixels(current, width, height)
-    context.strokeStyle = `rgba(246,214,138,${alpha})`
+      context.strokeStyle = `rgba(171,111,42,${alpha * 0.78})`
     context.lineWidth = Math.max(1, radius * 0.34)
     context.beginPath()
     context.moveTo(start.x, start.y)
@@ -1252,23 +1274,23 @@ function drawBall(context: CanvasRenderingContext2D, width: number, height: numb
 
   const glowRadius = radius * (4.6 + pulse * 0.8 + passEnergy * 2.2)
   const glow = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, glowRadius)
-  glow.addColorStop(0, `rgba(246,214,138,${0.2 + passEnergy * 0.12})`)
-  glow.addColorStop(0.46, `rgba(246,214,138,${0.05 + passEnergy * 0.04})`)
-  glow.addColorStop(1, "rgba(246,214,138,0)")
+  glow.addColorStop(0, `rgba(171,111,42,${0.14 + passEnergy * 0.1})`)
+  glow.addColorStop(0.46, `rgba(171,111,42,${0.035 + passEnergy * 0.035})`)
+  glow.addColorStop(1, "rgba(171,111,42,0)")
   context.fillStyle = glow
   context.beginPath()
   context.arc(point.x, point.y, glowRadius, 0, Math.PI * 2)
   context.fill()
 
   context.shadowBlur = radius * (1.3 + passEnergy * 1.1)
-  context.shadowColor = "rgba(246,214,138,0.52)"
-  context.fillStyle = ball.state === "loose" ? "rgba(246,214,138,0.78)" : "rgba(246,214,138,0.96)"
+  context.shadowColor = "rgba(143,88,28,0.34)"
+  context.fillStyle = ball.state === "loose" ? "rgba(171,111,42,0.72)" : "rgba(171,111,42,0.9)"
   context.beginPath()
   context.arc(point.x, point.y, radius * (1 + passEnergy * 0.08), 0, Math.PI * 2)
   context.fill()
 
   context.shadowBlur = 0
-  context.fillStyle = "rgba(255,249,230,0.62)"
+  context.fillStyle = "rgba(255,246,222,0.54)"
   context.beginPath()
   context.arc(point.x - radius * 0.28, point.y - radius * 0.32, radius * 0.24, 0, Math.PI * 2)
   context.fill()
@@ -1281,16 +1303,16 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
   context.lineCap = "round"
   context.lineJoin = "round"
   context.shadowBlur = Math.max(9, radius * 0.36)
-  context.shadowColor = symbol === "O" ? "rgba(248,241,228,0.36)" : "rgba(185,190,188,0.3)"
+  context.shadowColor = symbol === "O" ? "rgba(48,42,34,0.16)" : "rgba(90,84,76,0.14)"
 
   if (symbol === "O") {
-    context.strokeStyle = "rgba(248,241,228,0.94)"
+    context.strokeStyle = "rgba(42,38,33,0.92)"
     context.lineWidth = Math.max(2.8, radius * 0.19)
     context.beginPath()
     context.arc(x, y, radius * 0.48, 0, Math.PI * 2)
     context.stroke()
   } else {
-    context.strokeStyle = "rgba(185,190,188,0.9)"
+    context.strokeStyle = "rgba(88,82,74,0.86)"
     context.lineWidth = Math.max(2.8, radius * 0.19)
     const inset = radius * 0.44
     context.beginPath()
@@ -1306,9 +1328,9 @@ function drawSymbolMark(context: CanvasRenderingContext2D, symbol: PuckSymbol, x
 
 function updatePhysics(engine: Engine) {
   const tempo = tempoProfile(engine.conditions.Tempo)
-  const spring = 0.145 * tempo.spring
-  const damping = 0.805 * tempo.damping
-  const settle = 0.000045
+  const spring = 0.158 * tempo.spring
+  const damping = 0.828 * tempo.damping
+  const settle = 0.000038
 
   pruneTemporalMemory(engine)
   updateChoreography(engine)
@@ -1326,9 +1348,16 @@ function updatePhysics(engine: Engine) {
     const pullX = puck.targetX - puck.x
     const pullY = puck.targetY - puck.y
     const pull = Math.hypot(pullX, pullY)
-    const magneticSpring = spring + clamp(pull / 0.28, 0, 1) * 0.035
+    const arrival = clamp(1 - pull / 0.11, 0, 1)
+    const speed = Math.hypot(puck.vx, puck.vy)
+    const magneticSpring = spring + clamp(pull / 0.26, 0, 1) * 0.047
+    const settleBounce = arrival * clamp(speed / 0.022, 0, 1) * 0.018
     puck.vx += pullX * magneticSpring
     puck.vy += pullY * magneticSpring
+    if (pull > 0.001 && settleBounce > 0) {
+      puck.vx -= (pullX / pull) * settleBounce
+      puck.vy -= (pullY / pull) * settleBounce
+    }
     puck.vx *= damping
     puck.vy *= damping
     puck.x += puck.vx
@@ -1358,8 +1387,8 @@ function updateChoreography(engine: Engine) {
     if (elapsed < 0) continue
 
     const progress = clamp(elapsed / choreography.duration, 0, 1)
-    const eased = easeInOutCubic(progress)
-    const settle = Math.sin(progress * Math.PI) * 0.006
+    const eased = easeOutBack(progress)
+    const settle = Math.sin(progress * Math.PI) * 0.0045
     const dx = choreography.to.x - choreography.from.x
     const dy = choreography.to.y - choreography.from.y
     const length = Math.max(0.001, Math.hypot(dx, dy))
@@ -1367,8 +1396,8 @@ function updateChoreography(engine: Engine) {
     const arcY = (dx / length) * choreography.arc * Math.sin(progress * Math.PI) * 0.65
 
     const next = constrainToLiveCourt({
-      x: choreography.from.x + dx * eased + settle * Math.sign(dx) + arcX,
-      y: choreography.from.y + dy * eased + settle * 0.45 + arcY,
+      x: choreography.from.x + dx * eased + settle * Math.sign(dx || 1) + arcX,
+      y: choreography.from.y + dy * eased + settle * 0.32 + arcY,
     })
     puck.baseX = next.x
     puck.baseY = next.y
@@ -1419,12 +1448,25 @@ function updateBall(engine: Engine) {
   const pullX = engine.ball.targetX - engine.ball.x
   const pullY = engine.ball.targetY - engine.ball.y
   const pull = Math.hypot(pullX, pullY)
-  const passEnergy = clamp(1 - (performance.now() - engine.ball.passedAt) / 520, 0, 1) * 0.04
-  const spring = 0.23 + clamp(pull / 0.28, 0, 1) * 0.08 + passEnergy
-  const damping = 0.74
+  const passProgress = clamp((performance.now() - engine.ball.passedAt) / 520, 0, 1)
+  const passEnergy = (1 - passProgress) * (engine.ball.state === "passing" ? 0.075 : 0.035)
+  const arrival = clamp(1 - pull / 0.08, 0, 1)
+  const speed = Math.hypot(engine.ball.vx, engine.ball.vy)
+  const spring = 0.255 + clamp(pull / 0.26, 0, 1) * 0.105 + passEnergy
+  const damping = engine.ball.state === "passing" ? 0.785 : 0.755
+  const settleBounce = arrival * clamp(speed / 0.038, 0, 1) * 0.012
 
   engine.ball.vx += pullX * spring
   engine.ball.vy += pullY * spring
+  if (engine.ball.state === "passing" && pull > 0.001) {
+    const arcEnergy = Math.sin(passProgress * Math.PI) * engine.ball.passArc
+    engine.ball.vx += (-pullY / pull) * arcEnergy
+    engine.ball.vy += (pullX / pull) * arcEnergy * 0.55
+  }
+  if (pull > 0.001 && settleBounce > 0) {
+    engine.ball.vx -= (pullX / pull) * settleBounce
+    engine.ball.vy -= (pullY / pull) * settleBounce
+  }
   engine.ball.vx *= damping
   engine.ball.vy *= damping
   engine.ball.x = clamp(engine.ball.x + engine.ball.vx, 0.04, 0.96)
@@ -2370,6 +2412,8 @@ function passBallTo(engine: Engine, carrierId: string, at: number) {
   if (!carrier) return
 
   const fromCarrierId = engine.ball.carrierId ?? engine.ball.lastCarrierId
+  const startX = engine.ball.x
+  const startY = engine.ball.y
   engine.ball.lastCarrierId = fromCarrierId
   engine.ball.carrierId = null
   engine.ball.passedAt = performance.now()
@@ -2378,6 +2422,13 @@ function passBallTo(engine: Engine, carrierId: string, at: number) {
   const offset = ballOwnershipOffset(carrier)
   engine.ball.targetX = carrier.x + offset.x
   engine.ball.targetY = carrier.y + offset.y
+  const dx = engine.ball.targetX - startX
+  const dy = engine.ball.targetY - startY
+  const passLength = Math.max(0.001, Math.hypot(dx, dy))
+  const arcDirection = carrier.x >= startX ? 1 : -1
+  engine.ball.passArc = arcDirection * clamp(passLength / 0.56, 0.35, 1) * 0.0034
+  engine.ball.vx += (dx / passLength) * 0.016
+  engine.ball.vy += (dy / passLength) * 0.016
   engine.ball.trail.push({ t: at, x: engine.ball.x, y: engine.ball.y })
   if (engine.ball.trail.length > 24) engine.ball.trail.shift()
   onPossessionChange(engine, fromCarrierId, null, "passing", at)
@@ -2391,6 +2442,7 @@ function setBallOwned(engine: Engine, carrierId: string, at: number) {
   const offset = ballOwnershipOffset(carrier)
   engine.ball.carrierId = carrier.id
   engine.ball.lastCarrierId = carrier.id
+  engine.ball.passArc = 0
   engine.ball.state = "owned"
   engine.ball.targetCarrierId = carrier.id
   engine.ball.x = carrier.x + offset.x
@@ -2406,6 +2458,7 @@ function setBallLoose(engine: Engine, point: { x: number; y: number }, at: numbe
   const fromCarrierId = engine.ball.carrierId ?? engine.ball.lastCarrierId
   engine.ball.lastCarrierId = fromCarrierId
   engine.ball.carrierId = null
+  engine.ball.passArc = 0
   engine.ball.state = "loose"
   engine.ball.targetCarrierId = null
   engine.ball.targetX = point.x
@@ -2418,6 +2471,7 @@ function setBallShot(engine: Engine, at: number) {
   engine.ball.lastCarrierId = fromCarrierId
   engine.ball.carrierId = null
   engine.ball.passedAt = performance.now()
+  engine.ball.passArc = 0.0022
   engine.ball.state = "shot"
   engine.ball.targetCarrierId = null
   engine.ball.targetX = 0.5
@@ -2619,17 +2673,18 @@ function easeOutCubic(value: number) {
   return 1 - (1 - value) ** 3
 }
 
-function easeInOutCubic(value: number) {
-  return value < 0.5 ? 4 * value * value * value : 1 - (-2 * value + 2) ** 3 / 2
+function easeOutBack(value: number) {
+  const tension = 1.18
+  return 1 + (tension + 1) * (value - 1) ** 3 + tension * (value - 1) ** 2
 }
 
 function symbolGlow(symbol: PuckSymbol, alpha: number) {
-  if (symbol === "O") return `rgba(244,237,222,${alpha * 0.78})`
-  return `rgba(172,178,178,${alpha * 0.66})`
+  if (symbol === "O") return `rgba(45,40,34,${alpha * 0.62})`
+  return `rgba(96,91,83,${alpha * 0.52})`
 }
 
 function continuityColor(symbol: ContinuityCell["symbol"], alpha: number) {
-  if (symbol === "O") return `rgba(244,237,222,${alpha})`
-  if (symbol === "X") return `rgba(172,178,178,${alpha * 0.82})`
-  return `rgba(214,194,148,${alpha * 1.08})`
+  if (symbol === "O") return `rgba(45,40,34,${alpha * 0.72})`
+  if (symbol === "X") return `rgba(96,91,83,${alpha * 0.64})`
+  return `rgba(171,111,42,${alpha * 0.72})`
 }
