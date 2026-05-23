@@ -326,6 +326,7 @@ function render(context: CanvasRenderingContext2D, engine: Engine, canvas: HTMLC
   drawStrokes(context, width, height, engine.strokes, false)
   if (engine.workingStroke) drawStrokes(context, width, height, [engine.workingStroke], true)
   drawMovementIntent(context, width, height, engine)
+  drawIntelligenceSurface(context, width, height, engine)
   drawPuckInfluence(context, width, height, engine.pucks)
   drawPucks(context, width, height, engine.pucks)
   if (engine.eraseCursor) drawEraser(context, width, height, engine.eraseCursor)
@@ -467,6 +468,73 @@ function drawMovementIntent(context: CanvasRenderingContext2D, width: number, he
     context.moveTo(start.x, start.y)
     context.quadraticCurveTo(controlX, controlY, end.x, end.y)
     context.stroke()
+  }
+
+  context.restore()
+}
+
+function drawIntelligenceSurface(context: CanvasRenderingContext2D, width: number, height: number, engine: Engine) {
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O")
+  const defense = engine.pucks.filter((puck) => puck.symbol === "X")
+  const offensiveCenter = averagePuck(engine.pucks, "O")
+  if (!offensiveCenter) return
+
+  const sideLoad = offensiveCenter.x - 0.5
+  const sidePressure = clamp(Math.abs(sideLoad) / 0.2, 0, 1)
+  const rim = { x: 0.5, y: 0.78 }
+  const drive = offense.reduce((deepest, puck) => (puck.y > deepest.y ? puck : deepest), offense[0])
+  const driveDefender = drive ? nearestPuck(drive, defense, "X") : null
+
+  context.save()
+
+  if (sidePressure > 0.05) {
+    const laneX = sideLoad > 0 ? 0.74 : 0.26
+    const hazeCenter = toPixels({ x: laneX, y: 0.56 }, width, height)
+    const hazeRadius = Math.min(width, height) * (0.18 + sidePressure * 0.08)
+    const haze = context.createRadialGradient(hazeCenter.x, hazeCenter.y, hazeRadius * 0.1, hazeCenter.x, hazeCenter.y, hazeRadius)
+    haze.addColorStop(0, `rgba(8,8,7,${0.026 * sidePressure})`)
+    haze.addColorStop(0.58, `rgba(8,8,7,${0.01 * sidePressure})`)
+    haze.addColorStop(1, "rgba(8,8,7,0)")
+    context.fillStyle = haze
+    context.beginPath()
+    context.arc(hazeCenter.x, hazeCenter.y, hazeRadius, 0, Math.PI * 2)
+    context.fill()
+
+    const weakside = offense
+      .filter((puck) => (sideLoad > 0 ? puck.x < offensiveCenter.x : puck.x > offensiveCenter.x))
+      .sort((a, b) => Math.abs(b.x - offensiveCenter.x) - Math.abs(a.x - offensiveCenter.x))[0]
+
+    if (weakside) {
+      const start = toPixels(weakside, width, height)
+      const ghost = toPixels({ x: sideLoad > 0 ? 0.2 : 0.8, y: clamp(weakside.y - 0.035, 0.16, 0.84) }, width, height)
+      const control = { x: (start.x + ghost.x) / 2, y: Math.min(start.y, ghost.y) - Math.min(width, height) * 0.035 }
+      context.strokeStyle = `rgba(8,8,7,${0.07 * sidePressure})`
+      context.lineWidth = Math.max(1, Math.min(width, height) * 0.0015)
+      context.setLineDash([Math.min(width, height) * 0.01, Math.min(width, height) * 0.012])
+      context.beginPath()
+      context.moveTo(start.x, start.y)
+      context.quadraticCurveTo(control.x, control.y, ghost.x, ghost.y)
+      context.stroke()
+      context.setLineDash([])
+    }
+  }
+
+  if (drive && driveDefender) {
+    const pressure = clamp(1 - distance(drive, driveDefender) / 0.24, 0, 1)
+    if (pressure > 0.08) {
+      const start = toPixels(drive, width, height)
+      const end = toPixels(rim, width, height)
+      const laneGradient = context.createLinearGradient(start.x, start.y, end.x, end.y)
+      laneGradient.addColorStop(0, `rgba(8,8,7,${0.08 * pressure})`)
+      laneGradient.addColorStop(1, "rgba(8,8,7,0)")
+      context.strokeStyle = laneGradient
+      context.lineWidth = Math.max(2, Math.min(width, height) * 0.012 * pressure)
+      context.lineCap = "round"
+      context.beginPath()
+      context.moveTo(start.x, start.y)
+      context.quadraticCurveTo((start.x + end.x) / 2, (start.y + end.y) / 2 + Math.min(width, height) * 0.03, end.x, end.y)
+      context.stroke()
+    }
   }
 
   context.restore()
@@ -614,6 +682,10 @@ function captureTrailPoint(puck: Puck, previousX: number, previousY: number) {
 
 function applyBasketballRelationships(engine: Engine) {
   const latestStroke = engine.workingStroke ?? engine.strokes.at(-1) ?? null
+  const ballSide = averagePuck(engine.pucks, "O")
+  const sideLoad = ballSide ? ballSide.x - 0.5 : 0
+  const sidePressure = clamp(Math.abs(sideLoad) / 0.2, 0, 1)
+  const rim = { x: 0.5, y: 0.78 }
 
   for (const puck of engine.pucks) {
     if (puck.id === engine.draggingPuckId) continue
@@ -629,10 +701,17 @@ function applyBasketballRelationships(engine: Engine) {
         desiredY += (nearestO.y - puck.baseY) * 0.1 * proximity
       }
 
-      const ballSide = averagePuck(engine.pucks, "O")
       if (ballSide) {
         desiredX += (ballSide.x - 0.5) * 0.035
         desiredY += (ballSide.y - puck.baseY) * 0.025
+      }
+
+      if (sidePressure > 0.05 && sideLoad !== 0) {
+        const weakside = sideLoad > 0 ? puck.baseX < 0.5 : puck.baseX > 0.5
+        if (weakside) {
+          desiredX += (0.5 - puck.baseX) * 0.055 * sidePressure
+          desiredY += (rim.y - puck.baseY) * 0.035 * sidePressure
+        }
       }
     } else {
       for (const teammate of engine.pucks) {
