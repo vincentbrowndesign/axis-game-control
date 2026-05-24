@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server"
 import { readProcessingSnapshot } from "@/lib/axis-processing/state"
-import { readJobManifest, summarizeJobs } from "@/lib/axis-processing/jobs"
+import {
+  deriveProcessingFromJobs,
+  readJobManifest,
+  summarizeJobs,
+  type AxisProcessingJobManifest,
+} from "@/lib/axis-processing/jobs"
+import {
+  jobRowToManifestJob,
+  type AxisProcessingJobRow,
+} from "@/lib/axis-processing/queue"
 import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
@@ -53,8 +62,27 @@ export async function GET(request: Request) {
   }
 
   const metadata = asRecord(session.data.metadata)
-  const processing = readProcessingSnapshot(metadata.processing)
-  const jobs = readJobManifest(metadata.processingJobs)
+  const jobRows = await supabase
+    .from("axis_processing_jobs")
+    .select("*")
+    .eq("session_id", sessionId)
+    .eq("user_id", user.id)
+    .order("queued_at", { ascending: true })
+    .returns<AxisProcessingJobRow[]>()
+
+  if (jobRows.error) {
+    return NextResponse.json(
+      { error: "PROCESSING STATE UNAVAILABLE" },
+      { status: 500 }
+    )
+  }
+
+  const jobs = !jobRows.data?.length
+    ? readJobManifest(metadata.processingJobs)
+    : manifestFromRows(jobRows.data)
+  const processing = jobRows.data?.length
+    ? deriveProcessingFromJobs(jobs)
+    : readProcessingSnapshot(metadata.processing)
   const archive = asRecord(metadata.archive)
   const outputs = asRecord(metadata.outputs)
 
@@ -70,4 +98,21 @@ export async function GET(request: Request) {
     },
     summary: summarizeJobs(jobs),
   })
+}
+
+function manifestFromRows(rows: AxisProcessingJobRow[]): AxisProcessingJobManifest {
+  const now = new Date().toISOString()
+
+  return {
+    createdAt: rows[0]?.created_at || now,
+    jobs: rows.map(jobRowToManifestJob),
+    updatedAt: rows.reduce(
+      (latest, row) =>
+        new Date(row.updated_at).getTime() > new Date(latest).getTime()
+          ? row.updated_at
+          : latest,
+      rows[0]?.updated_at || now
+    ),
+    version: 1,
+  }
 }

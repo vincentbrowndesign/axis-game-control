@@ -607,17 +607,6 @@ export function GameCaptureFlow() {
 
       await attachTelemetry(completed.replayId)
 
-      void fetch("/api/session/jobs", {
-        body: JSON.stringify({
-          action: "run",
-          sessionId: completed.replayId,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      }).catch(() => undefined)
-
       const next = await fetchProcessingStatus(completed.replayId).catch(() => null)
       if (next?.processing) {
         applyProcessingSnapshot(next.processing, next.summary)

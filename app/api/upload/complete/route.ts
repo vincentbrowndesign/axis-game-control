@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
+import { after } from "next/server"
 import {
   cleanText,
   normalizeEnvironment,
@@ -16,6 +17,8 @@ import {
   readJobManifest,
 } from "@/lib/axis-processing/jobs"
 import { applySessionArchiveManifest } from "@/lib/axis-processing/archive"
+import { enqueueProcessingJobs } from "@/lib/axis-processing/queue"
+import { drainProcessingJobsForSession } from "@/lib/axis-processing/worker"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
@@ -186,6 +189,11 @@ export async function POST(request: Request) {
         .eq("id", existing.data.id)
         .eq("user_id", user.id)
 
+      await enqueueAndStartProcessing({
+        sessionId: existing.data.id,
+        userId: user.id,
+      })
+
       revalidatePath("/games")
 
       return safeJson({
@@ -313,6 +321,11 @@ export async function POST(request: Request) {
       replayId: inserted.data.id,
     })
 
+    await enqueueAndStartProcessing({
+      sessionId: inserted.data.id,
+      userId: user.id,
+    })
+
     revalidatePath("/games")
 
     return safeJson({
@@ -342,4 +355,25 @@ export async function POST(request: Request) {
       500
     )
   }
+}
+
+async function enqueueAndStartProcessing({
+  sessionId,
+  userId,
+}: {
+  sessionId: string
+  userId: string
+}) {
+  await enqueueProcessingJobs({
+    sessionId,
+    userId,
+  })
+
+  after(async () => {
+    await drainProcessingJobsForSession({
+      maxJobs: 7,
+      sessionId,
+      userId,
+    })
+  })
 }
