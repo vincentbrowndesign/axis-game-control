@@ -1,18 +1,16 @@
 "use client"
 
-import { createClient } from "@/lib/supabase/client"
 import {
   processingLabel,
   processingProgress,
   type AxisProcessingSnapshot,
   type AxisProcessingState,
 } from "@/lib/axis-processing/state"
-import { createStoragePath, isSupportedReplayFile } from "@/lib/replayStorage"
+import { isSupportedReplayFile } from "@/lib/replayStorage"
 import { normalizeUploadResponse, parseUploadResponseText } from "@/lib/uploadResponse"
 import { createRecorder, type AxisRecorder } from "@/lib/video/createRecorder"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { Upload, isSupported as tusIsSupported } from "tus-js-client"
 import styles from "./GameCaptureFlow.module.css"
 
 type CaptureStage =
@@ -25,32 +23,6 @@ type CaptureStage =
   | "complete"
   | "error"
 
-type RecoveryPayload = {
-  sessionId: string
-  traceId: string
-  filePath: string
-  fileName: string
-  contentType: string
-  sizeBytes: number
-  durationSeconds: number
-  source: "camera" | "upload"
-  environment: "game"
-  mission: string
-  player: string
-  client: Record<string, unknown>
-}
-
-type UploadDraft = {
-  sessionId: string
-  traceId: string
-  filePath: string
-  fileName: string
-  contentType: string
-  sizeBytes: number
-}
-
-const RECOVERY_KEY = "axis.game-day.pending-session"
-const UPLOAD_DRAFT_KEY = "axis.game-day.pending-upload"
 const PROCESSING_STEPS = [
   "QUEUED",
   "PROCESSING",
@@ -62,16 +34,6 @@ const PROCESSING_STEPS = [
   "COMPLETE",
 ] satisfies AxisProcessingState[]
 
-type ProcessingStatusResponse = {
-  ok?: boolean
-  processing?: AxisProcessingSnapshot
-  session?: {
-    id: string
-    status: string
-  }
-  summary?: ProcessingSummary
-}
-
 type ProcessingSummary = {
   complete: number
   failed: number
@@ -80,7 +42,7 @@ type ProcessingSummary = {
   total: number
 }
 
-const PROCESSING_STORAGE_KEY = "axis.game-day.processing-session"
+const DEBUG_PREFIX = "[Axis Game Day Upload]"
 
 const PROCESSING_DISPLAY: Record<AxisProcessingState, string> = {
   COMPLETE: "Broadcast ready.",
@@ -96,49 +58,8 @@ const PROCESSING_DISPLAY: Record<AxisProcessingState, string> = {
   UPLOADING: "Uploading game...",
 }
 
-const UI_STAGE_BY_PROCESSING: Partial<Record<AxisProcessingState, CaptureStage>> = {
-  COMPLETE: "complete",
-  FAILED: "error",
-  GENERATING_BROADCAST: "processing",
-  GENERATING_CLIPS: "processing",
-  GENERATING_REPLAY: "processing",
-  GENERATING_STATS: "processing",
-  PROCESSING: "processing",
-  QUEUED: "processing",
-  TRACKING: "processing",
-  UPLOADING: "uploading",
-}
-
 function processingText(state: AxisProcessingState) {
   return PROCESSING_DISPLAY[state] || processingLabel(state)
-}
-
-function isProcessingTerminal(state: AxisProcessingState) {
-  return state === "COMPLETE" || state === "FAILED"
-}
-
-function isVisibleProcessingState(state: AxisProcessingState) {
-  return state !== "IDLE" && state !== "FAILED"
-}
-
-function readStoredProcessingSession() {
-  try {
-    return localStorage.getItem(PROCESSING_STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeStoredProcessingSession(sessionId: string | null) {
-  try {
-    if (sessionId) {
-      localStorage.setItem(PROCESSING_STORAGE_KEY, sessionId)
-    } else {
-      localStorage.removeItem(PROCESSING_STORAGE_KEY)
-    }
-  } catch {
-    // Local recovery is helpful, not required.
-  }
 }
 
 function initialProcessingSnapshot(state: AxisProcessingState): AxisProcessingSnapshot {
@@ -150,9 +71,12 @@ function initialProcessingSnapshot(state: AxisProcessingState): AxisProcessingSn
   }
 }
 
+function debugUploadStep(step: string, details?: Record<string, unknown>) {
+  console.log(DEBUG_PREFIX, step, details || {})
+}
+
 export function GameCaptureFlow() {
   const router = useRouter()
-  const supabaseRef = useRef(createClient())
   const previewRef = useRef<HTMLVideoElement | null>(null)
   const recorderRef = useRef<AxisRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -168,7 +92,6 @@ export function GameCaptureFlow() {
   const [fileName, setFileName] = useState("No video selected")
   const [telemetryName, setTelemetryName] = useState("Optional memory file")
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [recovery, setRecovery] = useState<RecoveryPayload | null>(null)
   const [recordingReady, setRecordingReady] = useState(false)
   const [hasSelectedFile, setHasSelectedFile] = useState(false)
   const [processing, setProcessing] = useState<AxisProcessingSnapshot>(
@@ -183,18 +106,6 @@ export function GameCaptureFlow() {
           typeof MediaRecorder !== "undefined"
       )
 
-      const stored = readRecovery()
-      if (stored) {
-        setRecovery(stored)
-        setStatus("A saved game is ready to continue.")
-      }
-
-      const storedProcessingSession = readStoredProcessingSession()
-      if (storedProcessingSession) {
-        setSessionId(storedProcessingSession)
-        setStage("processing")
-        setStatus("Checking game processing.")
-      }
     }, 0)
 
     return () => {
@@ -203,28 +114,6 @@ export function GameCaptureFlow() {
       stopStream()
     }
   }, [])
-
-  useEffect(() => {
-    if (!sessionId) return
-    if (isProcessingTerminal(processing.state)) return
-
-    let cancelled = false
-
-    const refresh = async () => {
-      const next = await fetchProcessingStatus(sessionId).catch(() => null)
-      if (cancelled || !next) return
-
-      applyProcessingSnapshot(next.processing, next.summary)
-    }
-
-    void refresh()
-    const interval = window.setInterval(() => void refresh(), 2400)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(interval)
-    }
-  }, [processing.state, sessionId])
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -238,8 +127,20 @@ export function GameCaptureFlow() {
   }, [])
 
   const chooseFile = (file: File | null) => {
+    debugUploadStep("1:file-select", {
+      hasFile: Boolean(file),
+      name: file?.name,
+      size: file?.size,
+      type: file?.type,
+    })
+
     if (!file) return
     if (!isSupportedReplayFile(file)) {
+      debugUploadStep("1:file-select-rejected", {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      })
       setStage("error")
       setStatus("Choose a video file recorded from the game.")
       return
@@ -322,6 +223,13 @@ export function GameCaptureFlow() {
 
   const uploadSelectedFile = async () => {
     const file = fileRef.current
+    debugUploadStep("3:upload-click", {
+      hasFile: Boolean(file),
+      name: file?.name,
+      size: file?.size,
+      source: sourceRef.current,
+    })
+
     if (!file) {
       setStage("error")
       setStatus("Choose or record a video first.")
@@ -338,15 +246,6 @@ export function GameCaptureFlow() {
     setStatus("Memory file added.")
   }
 
-  const retrySessionSave = async () => {
-    if (!recovery) return
-
-    setStage("saving")
-    setProgress(86)
-    setStatus("Continuing game upload.")
-    await completeAndProcess(recovery)
-  }
-
   const openReplay = () => {
     if (!sessionId) return
     router.push(`/replay-native?session=${encodeURIComponent(sessionId)}`)
@@ -356,9 +255,7 @@ export function GameCaptureFlow() {
   const isBusy = stage === "uploading" || stage === "saving" || stage === "processing"
   const showProcessing =
     stage === "saving" ||
-    stage === "processing" ||
-    stage === "complete" ||
-    isVisibleProcessingState(processing.state)
+    stage === "processing"
   const processingIndex = getProcessingIndex(processing.state)
   const visibleProgress = Math.max(
     0,
@@ -493,12 +390,6 @@ export function GameCaptureFlow() {
             Upload Game
           </button>
 
-          {recovery ? (
-            <button className={styles.actionButton} disabled={isBusy} type="button" onClick={() => void retrySessionSave()}>
-              Resume Game
-            </button>
-          ) : null}
-
           {sessionId ? (
             <button className={styles.primaryButton} type="button" onClick={openReplay}>
               Open Replay
@@ -516,122 +407,88 @@ export function GameCaptureFlow() {
       setProcessing(initialProcessingSnapshot("UPLOADING"))
       setProcessingSummary(null)
       setProgress(8)
-      setStatus(processingText("UPLOADING"))
-
-      const { data, error } = await supabaseRef.current.auth.getSession()
-      const session = data.session
-      if (error || !session?.user || !session.access_token) {
-        throw new Error("Sign in before uploading a game.")
-      }
+      setStatus("Uploading game.")
 
       setProgress(18)
       setStatus("Preparing game upload.")
 
       const durationSeconds = await readVideoDuration(file).catch(() => 0)
-      const draft = getUploadDraft(file, session.user.id)
+      const clientTraceId = crypto.randomUUID()
+      const form = new FormData()
+      form.set("file", file)
+      form.set("duration", String(durationSeconds))
+      form.set("source", source)
+      form.set("environment", "game")
+      form.set("mission", "Game replay")
+      form.set("player", "Unassigned")
+      form.set("clientTraceId", clientTraceId)
+      form.set("clientName", file.name)
+      form.set("clientType", file.type || "video/mp4")
+      form.set("clientSize", String(file.size))
+      form.set("clientLastModified", String(file.lastModified || 0))
+      form.set("clientUserAgent", navigator.userAgent)
+      form.set("clientIsMobile", String(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)))
+      form.set("clientIsIOS", String(/iPhone|iPad|iPod/i.test(navigator.userAgent)))
+      form.set("clientIsSafari", String(/^((?!chrome|android).)*safari/i.test(navigator.userAgent)))
+      form.set("clientViewport", `${window.innerWidth}x${window.innerHeight}`)
 
-      const payload: RecoveryPayload = {
-        sessionId: draft.sessionId,
-        traceId: draft.traceId,
-        filePath: draft.filePath,
-        fileName: file.name,
+      debugUploadStep("3:upload-payload-ready", {
+        clientTraceId,
         contentType: file.type || "video/mp4",
-        sizeBytes: file.size,
         durationSeconds,
-        source,
-        environment: "game",
-        mission: "Game replay",
-        player: "Unassigned",
-        client: {
-          surface: "game-day",
-          userAgent: navigator.userAgent,
-          connection: getConnectionLabel(),
-        },
-      }
-
-      localStorage.setItem(UPLOAD_DRAFT_KEY, JSON.stringify(draft))
-
-      setProgress(28)
-      setStatus(processingText("UPLOADING"))
-
-      await uploadWithResume({
-        accessToken: session.access_token,
-        file,
-        onProgress: (percent) => setProgress(Math.min(78, 28 + percent * 0.5)),
-        payload,
+        sizeBytes: file.size,
       })
 
-      localStorage.removeItem(UPLOAD_DRAFT_KEY)
-      localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload))
-      setRecovery(payload)
-      setProgress(78)
-      setProcessing(initialProcessingSnapshot("QUEUED"))
-      setStatus("Upload complete. Axis is starting.")
+      setProgress(28)
+      setStatus("Uploading game.")
 
-      await completeAndProcess(payload)
-    } catch (error) {
-      setStage("error")
-      setStatus(error instanceof Error ? error.message : "Upload paused. Keep this tab open and retry.")
-    } finally {
-      uploadActiveRef.current = false
-    }
-  }
+      debugUploadStep("4:upload-route-request", {
+        clientTraceId,
+        fileName: file.name,
+        sizeBytes: file.size,
+      })
 
-  async function completeAndProcess(payload: RecoveryPayload) {
-    try {
-      setStage("saving")
-      setProgress(88)
-
-      const response = await fetch("/api/upload/complete", {
-        body: JSON.stringify(payload),
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const response = await fetch("/api/upload", {
+        body: form,
         method: "POST",
       })
       const text = await response.text()
       const completed = normalizeUploadResponse(parseUploadResponseText(text))
 
-      if (!completed.ok || !completed.replayId) {
-        throw new Error(completed.recovery || completed.error || "Session save needs another try.")
+      debugUploadStep("4:upload-route-response", {
+        filePath: completed.filePath,
+        ok: response.ok,
+        replayId: completed.replayId,
+        status: response.status,
+        stored: completed.stored,
+        text,
+      })
+
+      if (!response.ok || !completed.ok || !completed.stored || !completed.replayId) {
+        throw new Error(completed.recovery || completed.error || "Upload save needs another try.")
       }
 
-      localStorage.removeItem(RECOVERY_KEY)
-      setRecovery(null)
       setSessionId(completed.replayId)
-      writeStoredProcessingSession(completed.replayId)
-      setStage("processing")
-      setProcessing(initialProcessingSnapshot("QUEUED"))
-      setProgress(processingProgress("QUEUED"))
-      setStatus(processingText("QUEUED"))
-
-      await attachTelemetry(completed.replayId)
-
-      const next = await fetchProcessingStatus(completed.replayId).catch(() => null)
-      if (next?.processing) {
-        applyProcessingSnapshot(next.processing, next.summary)
-      }
+      debugUploadStep("6:session-created", {
+        createdAt: completed.createdAt,
+        fileName: completed.fileName,
+        filePath: completed.filePath,
+        replayId: completed.replayId,
+        stage: completed.stage,
+        status: completed.status,
+        traceId: completed.traceId,
+      })
+      setStage("complete")
+      setProcessing(initialProcessingSnapshot("IDLE"))
+      setProcessingSummary(null)
+      setProgress(100)
+      setStatus("Upload saved.")
     } catch (error) {
       setStage("error")
-      setStatus(error instanceof Error ? error.message : "Session save needs another try.")
-    }
-  }
-
-  async function attachTelemetry(replayId: string) {
-    const file = telemetryFileRef.current
-    if (!file) return
-
-    const form = new FormData()
-    form.set("sessionId", replayId)
-    form.set("telemetry", file)
-
-    const response = await fetch("/api/session/telemetry", {
-      body: form,
-      method: "POST",
-    })
-
-    if (!response.ok) {
-      throw new Error("Memory file attachment needs another try.")
+      setProcessing(initialProcessingSnapshot("IDLE"))
+      setStatus(error instanceof Error ? error.message : "Upload paused. Keep this tab open and retry.")
+    } finally {
+      uploadActiveRef.current = false
     }
   }
 
@@ -650,6 +507,24 @@ export function GameCaptureFlow() {
       video.srcObject = null
       video.src = url
       video.currentTime = 0
+      video.onloadedmetadata = () => {
+        debugUploadStep("2:preview-metadata-loaded", {
+          duration: video.duration,
+          height: video.videoHeight,
+          name: file.name,
+          width: video.videoWidth,
+        })
+      }
+      video.oncanplay = () => {
+        debugUploadStep("2:preview-can-play", {
+          name: file.name,
+        })
+      }
+      video.onerror = () => {
+        debugUploadStep("2:preview-error", {
+          name: file.name,
+        })
+      }
       void video.play().catch(() => undefined)
     }
   }
@@ -666,143 +541,6 @@ export function GameCaptureFlow() {
     streamRef.current = null
   }
 
-  function applyProcessingSnapshot(next: AxisProcessingSnapshot, summary?: ProcessingSummary | null) {
-    setProcessing(next)
-    setProcessingSummary(summary || null)
-    setProgress(Math.max(next.progress, summary?.progress ?? 0))
-    setStatus(processingText(next.state))
-
-    const nextStage = UI_STAGE_BY_PROCESSING[next.state]
-    if (nextStage) setStage(nextStage)
-    if (next.state === "COMPLETE" || next.state === "FAILED") {
-      writeStoredProcessingSession(null)
-    }
-  }
-}
-
-async function fetchProcessingStatus(
-  sessionId: string
-): Promise<(ProcessingStatusResponse & { processing: AxisProcessingSnapshot }) | null> {
-  const response = await fetch(
-    `/api/session/status?sessionId=${encodeURIComponent(sessionId)}`,
-    {
-      cache: "no-store",
-    }
-  )
-
-  if (!response.ok) return null
-
-  const data = (await response.json()) as ProcessingStatusResponse
-  if (!data.processing) return null
-
-  return {
-    ...data,
-    processing: data.processing,
-  }
-}
-
-function uploadWithResume({
-  accessToken,
-  file,
-  onProgress,
-  payload,
-}: {
-  accessToken: string
-  file: File
-  onProgress: (percent: number) => void
-  payload: RecoveryPayload
-}) {
-  if (!tusIsSupported) {
-    return Promise.reject(new Error("Resumable upload is unavailable in this browser."))
-  }
-
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!anonKey) {
-    return Promise.reject(new Error("Upload configuration unavailable."))
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const upload = new Upload(file, {
-      chunkSize: 6 * 1024 * 1024,
-      endpoint: getTusEndpoint(),
-      headers: {
-        apikey: anonKey,
-        authorization: `Bearer ${accessToken}`,
-      },
-      metadata: {
-        bucketName: "axis-replays",
-        cacheControl: "3600",
-        contentType: payload.contentType,
-        objectName: payload.filePath,
-      },
-      onError: (error) => reject(error),
-      onProgress: (bytesUploaded, bytesTotal) => {
-        if (!bytesTotal) return
-        onProgress((bytesUploaded / bytesTotal) * 100)
-      },
-      onSuccess: () => resolve(),
-      removeFingerprintOnSuccess: true,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      uploadDataDuringCreation: true,
-    })
-
-    upload
-      .findPreviousUploads()
-      .then((previousUploads) => {
-        const previous = previousUploads[0]
-        if (previous) upload.resumeFromPreviousUpload(previous)
-        upload.start()
-      })
-      .catch(reject)
-  })
-}
-
-function readRecovery() {
-  try {
-    const raw = localStorage.getItem(RECOVERY_KEY)
-    if (!raw) return null
-    return JSON.parse(raw) as RecoveryPayload
-  } catch {
-    localStorage.removeItem(RECOVERY_KEY)
-    return null
-  }
-}
-
-function getUploadDraft(file: File, userId: string): UploadDraft {
-  const existing = readUploadDraft()
-
-  if (
-    existing &&
-    existing.fileName === file.name &&
-    existing.sizeBytes === file.size &&
-    existing.contentType === (file.type || "video/mp4")
-  ) {
-    return existing
-  }
-
-  return {
-    sessionId: crypto.randomUUID(),
-    traceId: crypto.randomUUID(),
-    filePath: createStoragePath({
-      userId,
-      fileName: file.name,
-      type: file.type,
-    }),
-    fileName: file.name,
-    contentType: file.type || "video/mp4",
-    sizeBytes: file.size,
-  }
-}
-
-function readUploadDraft() {
-  try {
-    const raw = localStorage.getItem(UPLOAD_DRAFT_KEY)
-    if (!raw) return null
-    return JSON.parse(raw) as UploadDraft
-  } catch {
-    localStorage.removeItem(UPLOAD_DRAFT_KEY)
-    return null
-  }
 }
 
 function readVideoDuration(file: File) {
@@ -822,26 +560,6 @@ function readVideoDuration(file: File) {
     }
     video.src = url
   })
-}
-
-function getConnectionLabel() {
-  const nav = navigator as Navigator & {
-    connection?: { effectiveType?: string }
-  }
-
-  return nav.connection?.effectiveType || "unknown"
-}
-
-function getTusEndpoint() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!supabaseUrl) return "/storage/v1/upload/resumable"
-
-  const url = new URL(supabaseUrl)
-  const projectId = url.hostname.split(".")[0]
-
-  if (!projectId) return `${url.origin}/storage/v1/upload/resumable`
-
-  return `https://${projectId}.storage.supabase.co/storage/v1/upload/resumable`
 }
 
 function formatBytes(bytes: number) {

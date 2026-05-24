@@ -38,17 +38,32 @@ export default async function GamesPage() {
   const games = (result.data || []).map((session) => {
     const replay = normalizeReplay(session)
     const metadata = asRecord(session.metadata)
+    const gameSession = asRecord(metadata.gameSession)
     const telemetry = asRecord(metadata.telemetry)
     const processing = readProcessingSnapshot(metadata.processing)
+    const originalFilename =
+      typeof gameSession.originalFilename === "string"
+        ? gameSession.originalFilename
+        : replay.fileName || "Game film"
+    const fileSize =
+      typeof gameSession.fileSize === "number"
+        ? gameSession.fileSize
+        : typeof metadata.originalSize === "number"
+          ? metadata.originalSize
+          : 0
 
     return {
       id: replay.id,
-      title: replay.title || replay.fileName || "Game film",
+      title: originalFilename,
       createdAt: replay.createdAt,
       duration: replay.duration || 0,
-      status: replay.status || "stored",
+      status:
+        typeof gameSession.status === "string"
+          ? gameSession.status
+          : replay.status || "uploaded",
       processing,
       player: replay.player,
+      fileSize,
       hasTelemetry: Boolean(telemetry.path),
       telemetryFrames:
         typeof telemetry.frameCount === "number"
@@ -82,7 +97,7 @@ export default async function GamesPage() {
               <span className={styles.date}>{formatDate(game.createdAt)}</span>
               <span className={styles.name}>{game.title}</span>
               <span className={styles.meta}>
-                {formatDuration(game.duration)} / {game.player}
+                {formatDuration(game.duration)} / {formatBytes(game.fileSize)}
               </span>
               <span className={styles.state}>
                 {game.processing.state !== "IDLE"
@@ -111,4 +126,11 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60)
   const rest = Math.floor(seconds % 60)
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return "0 MB"
+  const megabytes = bytes / 1024 / 1024
+  if (megabytes < 1024) return `${megabytes.toFixed(1)} MB`
+  return `${(megabytes / 1024).toFixed(2)} GB`
 }

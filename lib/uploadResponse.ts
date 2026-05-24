@@ -2,7 +2,14 @@ export type AxisUploadResponse = {
   ok: boolean
   replayId?: string
   videoUrl?: string
+  filePath?: string
+  fileName?: string
+  originalFilename?: string
+  sizeBytes?: number
+  fileSize?: number
+  status?: string
   createdAt?: number
+  updatedAt?: number
   error?: string
   detail?: string
   stage?: string
@@ -41,7 +48,14 @@ export function normalizeUploadResponse(
     ok: record.ok === true,
     replayId: asString(record.replayId),
     videoUrl: asString(record.videoUrl),
+    filePath: asString(record.filePath),
+    fileName: asString(record.fileName),
+    originalFilename: asString(record.originalFilename),
+    sizeBytes: asNumber(record.sizeBytes),
+    fileSize: asNumber(record.fileSize),
+    status: asString(record.status),
     createdAt: asNumber(record.createdAt),
+    updatedAt: asNumber(record.updatedAt),
     error: asString(record.error),
     detail: asString(record.detail),
     stage: asString(record.stage),

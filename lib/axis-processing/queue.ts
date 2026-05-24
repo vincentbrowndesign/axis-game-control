@@ -43,14 +43,16 @@ export function jobRowToManifestJob(row: AxisProcessingJobRow): AxisProcessingJo
 }
 
 export async function enqueueProcessingJobs({
+  jobTypes = AXIS_PROCESSING_JOB_TYPES,
   sessionId,
   userId,
 }: {
+  jobTypes?: readonly AxisProcessingJobType[]
   sessionId: string
   userId: string
 }) {
   const now = new Date().toISOString()
-  const rows = AXIS_PROCESSING_JOB_TYPES.map((type) => ({
+  const rows = jobTypes.map((type) => ({
     payload: {},
     progress: 0,
     queued_at: now,
@@ -122,10 +124,10 @@ export async function claimNextProcessingJob({
     .from("axis_processing_jobs")
     .update({
       attempts: next.data.attempts + 1,
-      detail: `Running ${next.data.type}.`,
+      detail: `Processing ${next.data.type}.`,
       progress: 50,
       started_at: now,
-      status: "running",
+      status: "processing",
       updated_at: now,
     })
     .eq("id", next.data.id)

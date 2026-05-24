@@ -7,9 +7,12 @@ import {
   normalizeReplayFile,
   normalizeSource,
 } from "@/lib/replayStorage"
+import { after } from "next/server"
 import { makeTimelineEvent } from "@/lib/axis/reinforcement"
 import { extractReplayLandmarks } from "@/lib/axis-ai/extractReplayLandmarks"
 import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
+import { enqueueProcessingJobs } from "@/lib/axis-processing/queue"
+import { drainProcessingJobsForSession } from "@/lib/axis-processing/worker"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
@@ -84,45 +87,6 @@ function axisError({
   }
 
   return safeJson(body, status)
-}
-
-function recoverableUploadResponse({
-  traceId,
-  stage,
-  replayId,
-  videoUrl,
-  recovery,
-  detail,
-}: {
-  traceId: string
-  stage: string
-  replayId?: string
-  videoUrl?: string | null
-  recovery: string
-  detail?: unknown
-}) {
-  logUploadFailure(traceId, stage, {
-    stored: true,
-    recovery,
-    detail:
-      detail instanceof Error
-        ? detail.message
-        : detail ?? null,
-  })
-
-  const body: AxisUploadResponse = {
-    ok: true,
-    replayId,
-    videoUrl: videoUrl || "",
-    createdAt: Date.now(),
-    stage,
-    traceId,
-    stored: true,
-    fallback: true,
-    recovery,
-  }
-
-  return safeJson(body, 202)
 }
 
 async function createSignedReplayUrl(filePath: string, ttl: number) {
@@ -415,16 +379,19 @@ export async function POST(request: Request) {
     const signedUrl = await createSignedReplayUrl(filePath, signedUrlTtl)
 
     if (signedUrl.error) {
-      return recoverableUploadResponse({
+      return axisError({
         traceId,
         stage: "signed-url",
-        recovery: "Video uploaded, rebuilding anchors.",
+        error: "UPLOAD STILL PROCESSING",
+        status: 500,
+        stored: true,
         detail: signedUrl.error.message,
       })
     }
 
     logUploadStage(traceId, "signed-url-complete")
     logUploadStage(traceId, "session-create-start")
+    const nowIso = new Date().toISOString()
     const playerName = cleanText(
       formData.get("player"),
       "Unassigned"
@@ -456,9 +423,9 @@ export async function POST(request: Request) {
       .insert({
         id: sessionId,
         user_id: user.id,
-        title: normalized.finalName || "Axis Session",
+        title: normalized.originalName || normalized.finalName || "Axis Session",
         video_url: signedUrl.data?.signedUrl || null,
-        file_name: normalized.finalName,
+        file_name: normalized.originalName,
         file_path: filePath,
         source: normalizeSource(formData.get("source")),
         mission: cleanText(formData.get("mission"), "None"),
@@ -469,7 +436,7 @@ export async function POST(request: Request) {
           formData.get("environment")
         ),
         duration_seconds: safeDuration,
-        status: "stored",
+        status: "uploaded",
         tags: [],
         transcript_text: candidateLandmarks
           .map((landmark) => `[${landmark.timestamp}] ${landmark.title}`)
@@ -484,9 +451,22 @@ export async function POST(request: Request) {
             stored: true,
             client: clientMetadata,
           },
+          gameSession: {
+            id: sessionId,
+            videoUrl: signedUrl.data?.signedUrl || "",
+            originalFilename: normalized.originalName,
+            fileSize: file.size,
+            status: "uploaded",
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
           originalName: normalized.originalName,
+          originalFilename: normalized.originalName,
           originalType: normalized.mime || null,
           originalSize: file.size,
+          fileSize: file.size,
+          uploadedAt: nowIso,
+          uploadStatus: "uploaded",
           signedUrlExpiresIn: signedUrlTtl,
           posterUrl: null,
           posterPath: null,
@@ -511,7 +491,7 @@ export async function POST(request: Request) {
           ],
         },
       })
-      .select("id, video_url")
+      .select("id, video_url, created_at, updated_at")
       .single()
 
     if (inserted.error) {
@@ -519,7 +499,7 @@ export async function POST(request: Request) {
         user_id: user.id,
         bucket_id: "axis-replays",
         file_path: filePath,
-        file_name: normalized.finalName,
+        file_name: normalized.originalName,
         content_type: contentType,
         size_bytes: file.size,
       })
@@ -530,11 +510,12 @@ export async function POST(request: Request) {
         })
       }
 
-      return recoverableUploadResponse({
+      return axisError({
         traceId,
         stage: "db-session-create",
-        videoUrl: signedUrl.data?.signedUrl || "",
-        recovery: "Video uploaded, rebuilding anchors.",
+        error: "SESSION SAVE FAILED",
+        status: 500,
+        stored: true,
         detail: inserted.error.message,
       })
     }
@@ -550,7 +531,7 @@ export async function POST(request: Request) {
       session_id: inserted.data.id,
       bucket_id: "axis-replays",
       file_path: filePath,
-      file_name: normalized.finalName,
+      file_name: normalized.originalName,
       content_type: contentType,
       size_bytes: file.size,
     })
@@ -563,20 +544,62 @@ export async function POST(request: Request) {
       logUploadStage(traceId, "upload-record-create-complete")
     }
 
-    const createdAt = Date.now()
+    logUploadStage(traceId, "processing-job-create-start", {
+      sessionId: inserted.data.id,
+    })
+    await enqueueProcessingJobs({
+      jobTypes: ["replay_generation"],
+      sessionId: inserted.data.id,
+      userId: user.id,
+    })
+    logUploadStage(traceId, "processing-job-create-complete", {
+      sessionId: inserted.data.id,
+      status: "queued",
+    })
+
+    after(async () => {
+      const result = await drainProcessingJobsForSession({
+        maxJobs: 1,
+        sessionId: inserted.data.id,
+        userId: user.id,
+      })
+
+      if (!result.ok) {
+        logUploadFailure(traceId, "processing-job", {
+          detail: result.failedJob || "cv processor failed",
+          sessionId: inserted.data.id,
+        })
+      }
+    })
+
+    const createdAt = inserted.data.created_at
+      ? new Date(inserted.data.created_at).getTime()
+      : Date.now()
+    const updatedAt = inserted.data.updated_at
+      ? new Date(inserted.data.updated_at).getTime()
+      : createdAt
 
     logUploadStage(traceId, "final-completion", {
       replayId: inserted.data.id,
       hasVideoUrl: Boolean(inserted.data.video_url),
       createdAt,
+      processingStatus: "queued",
+      updatedAt,
     })
 
     const body: AxisUploadResponse = {
       ok: true,
       replayId: inserted.data.id,
       videoUrl: inserted.data.video_url || "",
+      filePath,
+      fileName: normalized.finalName,
+      originalFilename: normalized.originalName,
+      sizeBytes: file.size,
+      fileSize: file.size,
       createdAt,
+      updatedAt,
       stage: "complete",
+      status: "uploaded",
       traceId,
       stored: true,
       extractionStatus,

@@ -28,7 +28,7 @@ create table if not exists public.axis_processing_jobs (
     )
   ),
   constraint axis_processing_jobs_status_check check (
-    status in ('queued', 'running', 'complete', 'failed', 'waiting')
+    status in ('queued', 'processing', 'complete', 'failed', 'waiting')
   ),
   constraint axis_processing_jobs_session_type_unique unique (session_id, type)
 );

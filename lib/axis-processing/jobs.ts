@@ -1,6 +1,6 @@
 import { createProcessingSnapshot, type AxisProcessingState } from "@/lib/axis-processing/state"
 import { buildOutputBundle } from "@/lib/axis-processing/outputs"
-import { exportSessionClips } from "@/lib/replay/exportClips"
+import { runAxisCvProcessor } from "@/lib/axis-processing/cvProcessor"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export const AXIS_PROCESSING_JOB_TYPES = [
@@ -14,7 +14,7 @@ export const AXIS_PROCESSING_JOB_TYPES = [
 ] as const
 
 export type AxisProcessingJobType = (typeof AXIS_PROCESSING_JOB_TYPES)[number]
-export type AxisProcessingJobStatus = "queued" | "running" | "complete" | "failed" | "waiting"
+export type AxisProcessingJobStatus = "queued" | "processing" | "complete" | "failed" | "waiting"
 
 export type AxisProcessingJob = {
   attempts: number
@@ -137,7 +137,7 @@ export function summarizeJobs(manifest: AxisProcessingJobManifest) {
   const total = manifest.jobs.length || 1
   const complete = manifest.jobs.filter((job) => job.status === "complete").length
   const failed = manifest.jobs.filter((job) => job.status === "failed").length
-  const running = manifest.jobs.find((job) => job.status === "running")
+  const running = manifest.jobs.find((job) => job.status === "processing")
   const next = manifest.jobs.find((job) => job.status === "queued" || job.status === "waiting")
 
   return {
@@ -170,7 +170,7 @@ export function deriveProcessingFromJobs(manifest: AxisProcessingJobManifest, tr
   }
 
   const active =
-    manifest.jobs.find((job) => job.status === "running") ||
+    manifest.jobs.find((job) => job.status === "processing") ||
     manifest.jobs.find((job) => job.status === "queued") ||
     manifest.jobs.find((job) => job.status === "waiting")
 
@@ -200,7 +200,7 @@ export async function runProcessingJob({
 }
 
 function isJobStatus(value: unknown): value is AxisProcessingJobStatus {
-  return value === "queued" || value === "running" || value === "complete" || value === "failed" || value === "waiting"
+  return value === "queued" || value === "processing" || value === "complete" || value === "failed" || value === "waiting"
 }
 
 function markJob(
@@ -219,12 +219,12 @@ function markJob(
 
       return {
         ...job,
-        attempts: status === "running" ? job.attempts + 1 : job.attempts,
+        attempts: status === "processing" ? job.attempts + 1 : job.attempts,
         completedAt: status === "complete" ? now : job.completedAt,
         detail,
         error,
-        progress: status === "complete" ? 100 : status === "running" ? 50 : job.progress,
-        startedAt: status === "running" ? now : job.startedAt,
+        progress: status === "complete" ? 100 : status === "processing" ? 50 : job.progress,
+        startedAt: status === "processing" ? now : job.startedAt,
         status,
         updatedAt: now,
       }
@@ -324,43 +324,76 @@ async function completeReplayJob({ metadata, session, traceId }: JobRunnerContex
   const existingPath = typeof timeline.path === "string" ? timeline.path : ""
 
   if (!existingPath) {
-    const durationMs = Math.max(1000, Number(session.duration_seconds || 0) * 1000)
-    const clipWindows = buildBaselineClipWindows(durationMs)
-    const path = `${session.user_id}/timelines/${session.id}-axis-timeline.json`
-    const payload = {
-      clipWindows,
-      events: [],
-      possessions: [],
-      quality: {
-        source: "baseline",
-        warnings: ["Tracking detections were not attached yet."],
-      },
-      stats: baselineStats(),
-    }
-    const body = JSON.stringify(payload, null, 2)
-    const upload = await supabaseAdmin.storage
-      .from("axis-replays")
-      .upload(path, body, {
-        cacheControl: "3600",
-        contentType: "application/json",
-        upsert: true,
-      })
-
-    if (upload.error) throw new Error(upload.error.message)
+    const output = await runAxisCvProcessor({
+      session,
+      traceId,
+    })
+    const timelinePayload = asRecord(output.timeline)
+    const clipsPayload = asRecord(output.clips)
+    const statsPayload = asRecord(output.stats)
+    const clipWindows = Array.isArray(timelinePayload.clipWindows)
+      ? timelinePayload.clipWindows
+      : []
+    const events = Array.isArray(timelinePayload.events)
+      ? timelinePayload.events
+      : []
+    const possessions = Array.isArray(timelinePayload.possessions)
+      ? timelinePayload.possessions
+      : []
+    const clipValues = Array.isArray(clipsPayload.clips)
+      ? clipsPayload.clips
+      : []
+    const players = asRecord(statsPayload.players)
+    const teams = asRecord(statsPayload.teams)
+    const statTimeline = Array.isArray(statsPayload.timeline)
+      ? statsPayload.timeline
+      : []
 
     metadata.timeline = {
       clipWindowCount: clipWindows.length,
-      eventCount: 0,
-      path,
-      possessionCount: 0,
+      eventCount: events.length,
+      path: output.paths.timeline,
+      possessionCount: possessions.length,
       traceId,
     }
+    metadata.topology = {
+      path: output.paths.topology,
+      source: "roboflow",
+      traceId,
+    }
+    metadata.telemetry = {
+      contentType: "application/x-ndjson",
+      fileName: "telemetry.ndjson",
+      path: output.paths.telemetry,
+      sizeBytes: output.telemetryNdjson.length,
+      traceId,
+    }
+    metadata.clips = {
+      count: clipValues.length,
+      generatedAt:
+        typeof clipsPayload.generatedAt === "string"
+          ? clipsPayload.generatedAt
+          : new Date().toISOString(),
+      path: output.paths.clips,
+      status: "ready",
+      traceId,
+      values: clipValues,
+    }
     metadata.stats = {
-      path,
-      playerCount: 0,
-      possessionCount: 0,
-      teamCount: 0,
-      timelineCount: 0,
+      path: output.paths.stats,
+      playerCount: Object.keys(players).length,
+      possessionCount:
+        typeof statsPayload.possessions === "number"
+          ? statsPayload.possessions
+          : possessions.length,
+      teamCount: Object.keys(teams).length,
+      timelineCount: statTimeline.length,
+      traceId,
+      updatedAt: new Date().toISOString(),
+    }
+    metadata.cv = {
+      quality: output.quality,
+      source: "roboflow",
       traceId,
       updatedAt: new Date().toISOString(),
     }
@@ -376,23 +409,18 @@ async function completeReplayJob({ metadata, session, traceId }: JobRunnerContex
   return setManifest(metadata, manifest, traceId)
 }
 
-async function completeClipJob({ metadata, session, traceId }: JobRunnerContext) {
-  const result = await exportSessionClips({
-    maxClips: 5,
-    session: {
-      ...session,
-      metadata,
-    },
-  })
-
+async function completeClipJob({ metadata, traceId }: JobRunnerContext) {
+  const clips = asRecord(metadata.clips)
   metadata.clips = {
-    count: result.clips.length,
-    errors: result.errors,
-    generatedAt: new Date().toISOString(),
-    plannedCount: result.plan.length,
-    status: result.clips.length > 0 ? "ready" : "empty",
+    count: typeof clips.count === "number" ? clips.count : 0,
+    generatedAt:
+      typeof clips.generatedAt === "string"
+        ? clips.generatedAt
+        : new Date().toISOString(),
+    path: typeof clips.path === "string" ? clips.path : "",
+    status: typeof clips.status === "string" ? clips.status : "ready",
     traceId,
-    values: result.clips,
+    values: Array.isArray(clips.values) ? clips.values : [],
   }
 
   const manifest = markJob(
@@ -479,33 +507,4 @@ function buildBaselineTelemetry(durationMs: number) {
       },
     }
   })
-}
-
-function buildBaselineClipWindows(durationMs: number) {
-  const safeDuration = Math.max(1000, durationMs)
-  const anchors = [0.25, 0.5, 0.75]
-
-  return anchors.map((anchor, index) => {
-    const center = safeDuration * anchor
-    const startMs = Math.max(0, Math.round(center - 5000))
-    const endMs = Math.min(safeDuration, Math.round(center + 7000))
-
-    return {
-      endMs,
-      id: `baseline-window-${index + 1}`,
-      label: "Game moment",
-      reason: "game_memory",
-      startMs,
-      weight: 0.35,
-    }
-  })
-}
-
-function baselineStats() {
-  return {
-    players: {},
-    possessions: 0,
-    teams: {},
-    timeline: [],
-  }
 }

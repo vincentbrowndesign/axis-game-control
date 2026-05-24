@@ -54,17 +54,41 @@ export async function GET() {
     const stats = asRecord(metadata.stats)
     const archive = asRecord(metadata.archive)
     const outputs = asRecord(metadata.outputs)
+    const gameSession = asRecord(metadata.gameSession)
     const processing = readProcessingSnapshot(metadata.processing)
+    const originalFilename =
+      typeof gameSession.originalFilename === "string"
+        ? gameSession.originalFilename
+        : normalized.fileName || ""
+    const fileSize =
+      typeof gameSession.fileSize === "number"
+        ? gameSession.fileSize
+        : typeof metadata.originalSize === "number"
+          ? metadata.originalSize
+          : 0
 
     return {
       id: normalized.id,
-      title: normalized.title,
+      videoUrl:
+        typeof gameSession.videoUrl === "string"
+          ? gameSession.videoUrl
+          : normalized.videoUrl,
+      originalFilename,
+      fileSize,
+      title: originalFilename || normalized.title,
       createdAt: normalized.createdAt,
+      updatedAt:
+        typeof gameSession.updatedAt === "string"
+          ? new Date(gameSession.updatedAt).getTime()
+          : normalized.createdAt,
       duration: normalized.duration || 0,
       source: normalized.source,
       environment: normalized.environment,
       player: normalized.player,
-      status: normalized.status || "stored",
+      status:
+        typeof gameSession.status === "string"
+          ? gameSession.status
+          : normalized.status || "uploaded",
       processing,
       fileName: normalized.fileName || "",
       replayHref: `/replay-native?session=${encodeURIComponent(normalized.id)}`,
