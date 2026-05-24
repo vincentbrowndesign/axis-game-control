@@ -62,9 +62,7 @@
 
 .videoShell {
   aspect-ratio: 16 / 9;
-  background:
-    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.035), transparent 42%),
-    #050505;
+  background: #050505;
   inline-size: min(100%, 1120px);
   max-block-size: 68dvh;
   overflow: hidden;
@@ -73,8 +71,8 @@
 
 .videoShell::after {
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.28), transparent 28%, transparent 74%, rgba(0, 0, 0, 0.48)),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.32), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.32));
+    linear-gradient(180deg, rgba(0, 0, 0, 0.18), transparent 30%, transparent 76%, rgba(0, 0, 0, 0.34)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.2), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.2));
   content: "";
   inset: 0;
   pointer-events: none;
@@ -160,8 +158,8 @@
 .chooseFile {
   appearance: none;
   background: transparent;
-  border: 1px solid rgba(245, 245, 240, 0.14);
-  color: rgba(245, 245, 240, 0.66);
+  border: 1px solid rgba(245, 245, 240, 0.11);
+  color: rgba(245, 245, 240, 0.58);
   cursor: pointer;
   display: inline-grid;
   min-height: 2.15rem;
@@ -170,8 +168,8 @@
 }
 
 .chooseFile:hover {
-  border-color: rgba(245, 245, 240, 0.22);
-  color: rgba(245, 245, 240, 0.82);
+  border-color: rgba(245, 245, 240, 0.16);
+  color: rgba(245, 245, 240, 0.7);
 }
 
 .fileInput {
