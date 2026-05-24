@@ -39,8 +39,9 @@ type PossessionDecision = {
   action: PossessionAction
   label: string
 }
+type TacticalRailCategory = "SETS" | "DEFENSE" | "SLOB" | "ATO"
 type TacticalEnvironment = {
-  category: "Offense" | "SLOB" | "ATO"
+  category: "Offense" | "Defense" | "SLOB" | "ATO"
   name: string
 }
 
@@ -610,21 +611,45 @@ const initialConditions: ActiveConditions = {
   Tempo: "Controlled",
 }
 
-const tacticalEnvironments: TacticalEnvironment[] = [
-  { category: "Offense", name: "5-Out" },
-  { category: "Offense", name: "Horns" },
-  { category: "Offense", name: "Spain" },
-  { category: "Offense", name: "Delay" },
-  { category: "Offense", name: "Motion" },
-  { category: "Offense", name: "Princeton" },
-  { category: "Offense", name: "Empty" },
-  { category: "Offense", name: "Pistol" },
-  { category: "SLOB", name: "Box" },
-  { category: "SLOB", name: "Stack" },
-  { category: "SLOB", name: "Elevator" },
-  { category: "ATO", name: "Quick Hit" },
-  { category: "ATO", name: "Misdirection" },
-]
+const tacticalCategories: TacticalRailCategory[] = ["SETS", "DEFENSE", "SLOB", "ATO"]
+
+const tacticalEnvironmentsByCategory: Record<TacticalRailCategory, TacticalEnvironment[]> = {
+  ATO: [
+    { category: "ATO", name: "Quick Hit" },
+    { category: "ATO", name: "Hammer" },
+    { category: "ATO", name: "Ghost Counter" },
+    { category: "ATO", name: "Last Shot" },
+    { category: "ATO", name: "Need 3" },
+  ],
+  DEFENSE: [
+    { category: "Defense", name: "Shell" },
+    { category: "Defense", name: "ICE" },
+    { category: "Defense", name: "Switch" },
+    { category: "Defense", name: "Drop" },
+    { category: "Defense", name: "Hedge" },
+    { category: "Defense", name: "Blitz" },
+    { category: "Defense", name: "Press" },
+    { category: "Defense", name: "Shrink" },
+    { category: "Defense", name: "Recover" },
+  ],
+  SETS: [
+    { category: "Offense", name: "Horns" },
+    { category: "Offense", name: "5-Out" },
+    { category: "Offense", name: "Spain" },
+    { category: "Offense", name: "Delay" },
+    { category: "Offense", name: "Motion" },
+    { category: "Offense", name: "Princeton" },
+    { category: "Offense", name: "Empty" },
+    { category: "Offense", name: "Pistol" },
+  ],
+  SLOB: [
+    { category: "SLOB", name: "Box" },
+    { category: "SLOB", name: "Stack" },
+    { category: "SLOB", name: "Elevator" },
+    { category: "SLOB", name: "Lob" },
+    { category: "SLOB", name: "Quick" },
+  ],
+}
 
 const basePossessionDecisionTree: Record<DecisionStage, PossessionDecision[]> = {
   afterDrive: [
@@ -718,6 +743,30 @@ const specialSituationDecisionTree: Record<string, PossessionDecision[]> = {
     { action: "dho", label: "DHO" },
     { action: "reset", label: "Reset" },
   ],
+  "Ghost Counter": [
+    { action: "ghost", label: "Ghost" },
+    { action: "reject", label: "Reject" },
+    { action: "hammer", label: "Hammer" },
+    { action: "reset", label: "Reset" },
+  ],
+  Hammer: [
+    { action: "hammer", label: "Hammer" },
+    { action: "skip", label: "Skip" },
+    { action: "drive", label: "Drive" },
+    { action: "reset", label: "Reset" },
+  ],
+  "Last Shot": [
+    { action: "quickHit", label: "Quick Hit" },
+    { action: "shoot", label: "Shoot" },
+    { action: "misdirection", label: "Misdir" },
+    { action: "reset", label: "Reset" },
+  ],
+  Lob: [
+    { action: "lob", label: "Lob" },
+    { action: "quickHit", label: "Quick" },
+    { action: "hammer", label: "Hammer" },
+    { action: "reset", label: "Reset" },
+  ],
   Misdirection: [
     { action: "misdirection", label: "Misdir" },
     { action: "reject", label: "Reject" },
@@ -730,10 +779,22 @@ const specialSituationDecisionTree: Record<string, PossessionDecision[]> = {
     { action: "drive", label: "Drive" },
     { action: "reset", label: "Reset" },
   ],
+  Quick: [
+    { action: "quickHit", label: "Quick" },
+    { action: "lob", label: "Lob" },
+    { action: "dho", label: "DHO" },
+    { action: "reset", label: "Reset" },
+  ],
   Stack: [
     { action: "lob", label: "Lob" },
     { action: "dho", label: "DHO" },
     { action: "hammer", label: "Hammer" },
+    { action: "reset", label: "Reset" },
+  ],
+  "Need 3": [
+    { action: "hammer", label: "Hammer" },
+    { action: "quickHit", label: "Quick 3" },
+    { action: "skip", label: "Skip" },
     { action: "reset", label: "Reset" },
   ],
 }
@@ -743,6 +804,7 @@ export function ContinuityPrototype() {
   const engineRef = useRef<Engine | null>(null)
   const [activeAction, setActiveAction] = useState<PossessionAction | null>(null)
   const [decisionStage, setDecisionStage] = useState<DecisionStage>("owned")
+  const [activeCategory, setActiveCategory] = useState<TacticalRailCategory>("SETS")
   const [activeEnvironment, setActiveEnvironment] = useState<TacticalEnvironment>({ category: "Offense", name: "Horns" })
   const [passDecisions, setPassDecisions] = useState<PossessionDecision[]>(defaultPassDecisions)
 
@@ -957,6 +1019,10 @@ export function ContinuityPrototype() {
     window.setTimeout(() => setActiveAction((current) => (current === action ? null : current)), 520)
   }
 
+  function handleCategorySelect(category: TacticalRailCategory) {
+    setActiveCategory(category)
+  }
+
   function handleEnvironmentSelect(environment: TacticalEnvironment, at: number) {
     const engine = engineRef.current
     if (!engine) return
@@ -974,6 +1040,7 @@ export function ContinuityPrototype() {
     setPassDecisions(defaultPassDecisions)
   }
 
+  const tacticalEnvironments = tacticalEnvironmentsByCategory[activeCategory]
   const possessionActions = decisionStage === "afterPass" ? passDecisions.slice(0, 5) : decisionsForEnvironment(activeEnvironment, decisionStage).slice(0, 4)
 
   return (
@@ -993,8 +1060,36 @@ export function ContinuityPrototype() {
       />
 
       <nav
+        aria-label="Tactical categories"
+        className="absolute left-1/2 top-[max(0.7rem,env(safe-area-inset-top))] z-10 flex -translate-x-1/2 items-center justify-center gap-1 rounded-full border border-[#4e473d]/7 bg-[#fff8ea]/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_8px_24px_rgba(68,58,43,0.07)] backdrop-blur-2xl"
+      >
+        {tacticalCategories.map((category) => {
+          const active = activeCategory === category
+          return (
+            <button
+              aria-pressed={active}
+              className={[
+                "shrink-0 touch-manipulation whitespace-nowrap rounded-full px-3 py-1.5 text-[0.54rem] font-medium uppercase leading-none tracking-[0.16em] outline-none transition-[background,color,box-shadow,opacity,transform] duration-150 active:scale-[0.96]",
+                active
+                  ? "bg-[#2c2924]/82 text-[#fff8ea] opacity-100 shadow-[0_5px_14px_rgba(70,58,42,0.1)]"
+                  : "text-[#3b352d]/38 opacity-80 hover:bg-[#fffdf7]/34 hover:text-[#2c2924]/68 focus-visible:bg-[#fffdf7]/48 focus-visible:text-[#2c2924]",
+              ].join(" ")}
+              key={category}
+              onClick={() => handleCategorySelect(category)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") handleCategorySelect(category)
+              }}
+              type="button"
+            >
+              {category}
+            </button>
+          )
+        })}
+      </nav>
+
+      <nav
         aria-label="Tactical environments"
-        className="absolute left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex w-[min(48rem,calc(100vw-1.25rem))] -translate-x-1/2 snap-x snap-mandatory items-center gap-1.5 overflow-x-auto rounded-full border border-[#4e473d]/7 bg-[#fff8ea]/34 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.74),0_10px_30px_rgba(68,58,43,0.08)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.5rem] [&::-webkit-scrollbar]:hidden"
+        className="absolute left-1/2 top-[calc(max(0.7rem,env(safe-area-inset-top))+2.55rem)] z-10 flex w-[min(42rem,calc(100vw-1.25rem))] -translate-x-1/2 snap-x snap-mandatory items-center gap-1.5 overflow-x-auto rounded-full border border-[#4e473d]/6 bg-[#fff8ea]/24 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_8px_24px_rgba(68,58,43,0.06)] backdrop-blur-2xl [-ms-overflow-style:none] [scrollbar-width:none] [scroll-padding:0.5rem] [&::-webkit-scrollbar]:hidden"
       >
         {tacticalEnvironments.map((environment) => {
           const active = activeEnvironment.category === environment.category && activeEnvironment.name === environment.name
@@ -1534,6 +1629,7 @@ function updatePhysics(engine: Engine) {
     updateLiveResponse(engine)
     applyBasketballRelationships(engine)
   }
+  applyReactiveDefense(engine)
   applyCourtPhysics(engine)
   updateContinuityEngine(engine)
 
@@ -1959,6 +2055,117 @@ function passTargetScore(ball: Ball, carrier: Puck, target: Puck) {
   const forward = target.y >= carrier.y ? 0.08 : 0
   const weakside = ball.x < 0.5 ? target.x > carrier.x : target.x < carrier.x
   return width + forward + (weakside ? 0.12 : 0)
+}
+
+function applyReactiveDefense(engine: Engine) {
+  const defense = engine.pucks.filter((puck) => puck.symbol === "X")
+  const offense = engine.pucks.filter((puck) => puck.symbol === "O")
+  const profile = reactiveDefenseProfile(engine.conditions.Defense)
+  const ball = engine.ball
+  const carrier = currentCarrier(engine)
+  const ballSide = ball.x < 0.5 ? -1 : 1
+  const ballDepth = clamp((ball.y - 0.34) / 0.38, 0, 1)
+  const ballSpeed = Math.hypot(ball.vx, ball.vy)
+  const activeDrive = carrier && (carrier.vy > 0.0015 || ballDepth > 0.48)
+
+  for (const defender of defense) {
+    if (defender.id === engine.draggingPuckId) continue
+
+    const mark = offensiveMatchForDefender(defender, offense)
+    const nearestO = nearestPuck(defender, engine.pucks, "O") ?? mark
+    const strongSide = ballSide < 0 ? defender.x < 0.54 : defender.x > 0.46
+    const weakSide = !strongSide
+    let desiredX = defender.targetX
+    let desiredY = defender.targetY
+
+    if (mark) {
+      const markGap = distance(defender, mark)
+      const matchupPull = clamp(1 - markGap / 0.34, 0.12, 1) * profile.matchup
+      desiredX += (mark.x - desiredX) * 0.028 * matchupPull
+      desiredY += (mark.y - desiredY) * 0.022 * matchupPull
+    }
+
+    const shellX = strongSide ? ball.x + (defender.x < ball.x ? -0.08 : 0.08) : 0.5 + (defender.x < 0.5 ? -0.075 : 0.075)
+    const shellY = strongSide ? ball.y + (ballDepth > 0.45 ? 0.045 : 0.015) : 0.58 + ballDepth * 0.11
+    desiredX += (shellX - desiredX) * 0.024 * profile.shell
+    desiredY += (shellY - desiredY) * 0.02 * profile.shell
+
+    if (weakSide) {
+      desiredX += (0.5 - desiredX) * 0.035 * profile.weakside * (0.5 + ballDepth)
+      desiredY += (0.7 - desiredY) * 0.024 * profile.weakside * (0.45 + ballDepth)
+    }
+
+    if (nearestO && activeDrive) {
+      const gap = distance(defender, nearestO)
+      const helpWindow = clamp(1 - gap / 0.42, 0, 1) * profile.help
+      desiredX += (nearestO.x - desiredX) * 0.036 * helpWindow
+      desiredY += (nearestO.y - desiredY) * 0.032 * helpWindow
+    }
+
+    if (engine.conditions.Defense === "ICE") {
+      const sideline = ball.x < 0.5 ? PLAYABLE_COURT.left + 0.075 : PLAYABLE_COURT.right - 0.075
+      desiredX += (sideline - desiredX) * 0.035
+      desiredY += (ball.y + 0.035 - desiredY) * 0.018
+    }
+
+    if (engine.conditions.Defense === "Drop") {
+      desiredX += (0.5 - desiredX) * 0.022
+      desiredY += (0.66 - desiredY) * 0.032
+    }
+
+    if (engine.conditions.Defense === "Hedge" && carrier && nearestO?.id === carrier.id) {
+      desiredX += (ball.x - desiredX) * 0.045
+      desiredY += (ball.y - 0.06 - desiredY) * 0.03
+    }
+
+    if (engine.conditions.Defense === "Blitz" && carrier) {
+      const nearestToBall = nearestPuck(ball, defense, "X")
+      const pressureMultiplier = nearestToBall?.id === defender.id || nearestO?.id === carrier.id ? 1 : 0.42
+      desiredX += (ball.x - desiredX) * 0.052 * pressureMultiplier
+      desiredY += (ball.y - desiredY) * 0.046 * pressureMultiplier
+    }
+
+    if (engine.conditions.Defense === "Press") {
+      const pressureTarget = nearestO ?? ball
+      desiredX += (pressureTarget.x - desiredX) * 0.038
+      desiredY += (Math.min(pressureTarget.y, 0.48) - desiredY) * 0.028
+    }
+
+    if (engine.conditions.Defense === "Shrink") {
+      desiredX += (0.5 - desiredX) * 0.04
+      desiredY += (0.62 + ballDepth * 0.09 - desiredY) * 0.036
+    }
+
+    if (engine.conditions.Defense === "Recover") {
+      const zone = preferredZoneForPuck(defender, ball)
+      if (zone) {
+        desiredX += (zone.x - desiredX) * 0.034
+        desiredY += (zone.y - desiredY) * 0.034
+      }
+    }
+
+    const reaction = profile.reaction * (engine.ball.state === "passing" ? 1.12 : 1) * (1 + clamp(ballSpeed / 0.04, 0, 0.28))
+    const safe = constrainToPlayableCourt({ x: desiredX, y: desiredY })
+    defender.targetX += (safe.x - defender.targetX) * reaction
+    defender.targetY += (safe.y - defender.targetY) * reaction
+  }
+}
+
+function offensiveMatchForDefender(defender: Puck, offense: Puck[]) {
+  const defenderNumber = defender.id.replace("x", "")
+  return offense.find((puck) => puck.id === `o${defenderNumber}`) ?? null
+}
+
+function reactiveDefenseProfile(condition = "Shell") {
+  if (condition === "ICE") return { help: 1.12, matchup: 0.78, reaction: 0.18, shell: 1.16, weakside: 1.28 }
+  if (condition === "Switch") return { help: 0.86, matchup: 1.18, reaction: 0.21, shell: 0.92, weakside: 0.94 }
+  if (condition === "Drop") return { help: 1.36, matchup: 0.72, reaction: 0.15, shell: 1.08, weakside: 1.14 }
+  if (condition === "Hedge") return { help: 1.1, matchup: 0.92, reaction: 0.2, shell: 0.98, weakside: 1 }
+  if (condition === "Blitz") return { help: 0.92, matchup: 1.28, reaction: 0.24, shell: 0.82, weakside: 0.9 }
+  if (condition === "Press") return { help: 0.72, matchup: 1.36, reaction: 0.23, shell: 0.72, weakside: 0.74 }
+  if (condition === "Shrink") return { help: 1.46, matchup: 0.68, reaction: 0.17, shell: 1.24, weakside: 1.42 }
+  if (condition === "Recover") return { help: 0.98, matchup: 0.92, reaction: 0.16, shell: 1.34, weakside: 1.12 }
+  return { help: 1, matchup: 0.9, reaction: 0.17, shell: 1.18, weakside: 1.12 }
 }
 
 function applyCourtPhysics(engine: Engine) {
