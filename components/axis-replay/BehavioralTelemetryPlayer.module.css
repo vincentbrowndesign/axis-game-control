@@ -1,0 +1,200 @@
+.surface {
+  background: #020202;
+  color: rgba(245, 245, 240, 0.88);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  overflow: hidden;
+  position: relative;
+}
+
+.topTelemetry {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 4.6rem;
+  padding: max(1rem, env(safe-area-inset-top)) clamp(1rem, 4vw, 2.4rem) 0.7rem;
+  pointer-events: none;
+  position: relative;
+  z-index: 2;
+}
+
+.identity {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.eyebrow,
+.timecode,
+.fileLabel,
+.chooseFile {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.eyebrow,
+.fileLabel {
+  color: rgba(245, 245, 240, 0.44);
+}
+
+.title {
+  color: rgba(245, 245, 240, 0.9);
+  font-size: clamp(1rem, 2vw, 1.38rem);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.timecode {
+  color: rgba(245, 245, 240, 0.62);
+  min-width: 4.8rem;
+  text-align: right;
+}
+
+.world {
+  display: grid;
+  min-height: 0;
+  padding: 0 clamp(0.75rem, 3vw, 2rem);
+  place-items: center;
+  position: relative;
+}
+
+.videoShell {
+  aspect-ratio: 16 / 9;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.035), transparent 42%),
+    #050505;
+  inline-size: min(100%, 1120px);
+  max-block-size: 68dvh;
+  overflow: hidden;
+  position: relative;
+}
+
+.videoShell::after {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.28), transparent 28%, transparent 74%, rgba(0, 0, 0, 0.48)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.32), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.32));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.video {
+  background: #050505;
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.video::-webkit-media-controls,
+.video::-webkit-media-controls-enclosure,
+.video::-webkit-media-controls-panel,
+.video::-webkit-media-controls-play-button,
+.video::-webkit-media-controls-timeline,
+.video::-webkit-media-controls-current-time-display,
+.video::-webkit-media-controls-time-remaining-display {
+  display: none !important;
+}
+
+.emptySignal {
+  color: rgba(245, 245, 240, 0.34);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  inset: 0;
+  letter-spacing: 0.03em;
+  place-items: center;
+  position: absolute;
+  display: grid;
+  text-align: center;
+}
+
+.railZone {
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.8rem clamp(0.75rem, 3vw, 2rem) max(0.9rem, env(safe-area-inset-bottom));
+  position: relative;
+  z-index: 3;
+}
+
+.railStack {
+  height: clamp(8.5rem, 22dvh, 13.5rem);
+  margin: 0 auto;
+  max-width: 1120px;
+  position: relative;
+  width: min(100%, 1120px);
+}
+
+.topologyRail,
+.atmosphereLayer {
+  display: block;
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  touch-action: none;
+  width: 100%;
+}
+
+.topologyRail {
+  cursor: crosshair;
+  z-index: 1;
+}
+
+.atmosphereLayer {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.bottomControls {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 1120px;
+  width: min(100%, 1120px);
+}
+
+.chooseFile {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(245, 245, 240, 0.18);
+  color: rgba(245, 245, 240, 0.78);
+  cursor: pointer;
+  display: inline-grid;
+  min-height: 2.15rem;
+  padding: 0 0.78rem;
+  place-items: center;
+}
+
+.chooseFile:hover {
+  border-color: rgba(245, 245, 240, 0.3);
+  color: rgba(245, 245, 240, 0.94);
+}
+
+.fileInput {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+
+@media (max-width: 720px) {
+  .topTelemetry {
+    min-height: 4.2rem;
+  }
+
+  .bottomControls {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fileLabel {
+    align-self: center;
+    text-align: right;
+  }
+}
