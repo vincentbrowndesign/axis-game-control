@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
-import { after } from "next/server"
 import {
   cleanText,
   normalizeEnvironment,
@@ -17,8 +16,8 @@ import {
   readJobManifest,
 } from "@/lib/axis-processing/jobs"
 import { applySessionArchiveManifest } from "@/lib/axis-processing/archive"
-import { enqueueProcessingJobs } from "@/lib/axis-processing/queue"
-import { drainProcessingJobsForSession } from "@/lib/axis-processing/worker"
+import { triggerProcessGameUpload } from "@/lib/axis-processing/triggerClient"
+import { startTriggerGameUploadProcessing } from "@/lib/axis-processing/triggerStatus"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
@@ -191,6 +190,7 @@ export async function POST(request: Request) {
 
       await enqueueAndStartProcessing({
         sessionId: existing.data.id,
+        traceId,
         userId: user.id,
       })
 
@@ -323,6 +323,7 @@ export async function POST(request: Request) {
 
     await enqueueAndStartProcessing({
       sessionId: inserted.data.id,
+      traceId,
       userId: user.id,
     })
 
@@ -359,21 +360,30 @@ export async function POST(request: Request) {
 
 async function enqueueAndStartProcessing({
   sessionId,
+  traceId,
   userId,
 }: {
   sessionId: string
+  traceId?: string
   userId: string
 }) {
-  await enqueueProcessingJobs({
+  await startTriggerGameUploadProcessing({
     sessionId,
+    traceId,
     userId,
   })
 
-  after(async () => {
-    await drainProcessingJobsForSession({
-      maxJobs: 7,
+  try {
+    await triggerProcessGameUpload({
       sessionId,
+      traceId,
       userId,
     })
-  })
+  } catch (error) {
+    console.error("AXIS TRIGGER PIPELINE FAILURE", {
+      error: error instanceof Error ? error.message : "Trigger job failed.",
+      sessionId,
+      traceId,
+    })
+  }
 }

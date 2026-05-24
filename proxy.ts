@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { clerkMiddleware } from "@clerk/nextjs/server"
 import { createServerClient } from "@supabase/ssr"
 
-export async function proxy(request: NextRequest) {
+async function axisProxy(request: NextRequest) {
   let response = NextResponse.next({
     request,
   })
@@ -36,8 +37,14 @@ export async function proxy(request: NextRequest) {
   return response
 }
 
+export default clerkMiddleware(async (_auth, request: NextRequest) =>
+  axisProxy(request)
+)
+
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/__clerk/(.*)",
+    "/(api|trpc)(.*)",
   ],
 }

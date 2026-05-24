@@ -7,12 +7,11 @@ import {
   normalizeReplayFile,
   normalizeSource,
 } from "@/lib/replayStorage"
-import { after } from "next/server"
 import { makeTimelineEvent } from "@/lib/axis/reinforcement"
 import { extractReplayLandmarks } from "@/lib/axis-ai/extractReplayLandmarks"
 import { mapWorkflowStage } from "@/lib/axis-ai/mapWorkflowStage"
-import { enqueueProcessingJobs } from "@/lib/axis-processing/queue"
-import { drainProcessingJobsForSession } from "@/lib/axis-processing/worker"
+import { triggerProcessGameUpload } from "@/lib/axis-processing/triggerClient"
+import { startTriggerGameUploadProcessing } from "@/lib/axis-processing/triggerStatus"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
@@ -547,9 +546,9 @@ export async function POST(request: Request) {
     logUploadStage(traceId, "processing-job-create-start", {
       sessionId: inserted.data.id,
     })
-    await enqueueProcessingJobs({
-      jobTypes: ["replay_generation"],
+    await startTriggerGameUploadProcessing({
       sessionId: inserted.data.id,
+      traceId,
       userId: user.id,
     })
     logUploadStage(traceId, "processing-job-create-complete", {
@@ -557,20 +556,23 @@ export async function POST(request: Request) {
       status: "queued",
     })
 
-    after(async () => {
-      const result = await drainProcessingJobsForSession({
-        maxJobs: 1,
+    try {
+      const run = await triggerProcessGameUpload({
         sessionId: inserted.data.id,
+        traceId,
         userId: user.id,
       })
 
-      if (!result.ok) {
-        logUploadFailure(traceId, "processing-job", {
-          detail: result.failedJob || "cv processor failed",
-          sessionId: inserted.data.id,
-        })
-      }
-    })
+      logUploadStage(traceId, "trigger-job-created", {
+        runId: run.id,
+        sessionId: inserted.data.id,
+      })
+    } catch (error) {
+      logUploadFailure(traceId, "trigger-job-create", {
+        detail: detailFromError(error),
+        sessionId: inserted.data.id,
+      })
+    }
 
     const createdAt = inserted.data.created_at
       ? new Date(inserted.data.created_at).getTime()

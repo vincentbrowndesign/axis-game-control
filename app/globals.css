@@ -45,3 +45,29 @@ textarea {
 .axis-organism-root {
   min-height: 100%;
 }
+
+.axis-auth-presence {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 12px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 50;
+}
+
+.axis-auth-action {
+  background: rgba(5, 5, 5, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 8px 10px;
+}
+
+.axis-auth-action-primary {
+  color: rgba(255, 255, 255, 0.9);
+}

@@ -1,4 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import {
+  ClerkProvider,
+  Show,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -38,7 +45,28 @@ export default function RootLayout({
       lang="en"
       className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
-      <body className="axis-organism-root min-h-full flex flex-col">{children}</body>
+      <body className="axis-organism-root min-h-full flex flex-col">
+        <ClerkProvider>
+          <header className="axis-auth-presence" aria-label="Axis account">
+            <Show when="signed-out">
+              <SignInButton>
+                <button className="axis-auth-action" type="button">
+                  Sign in
+                </button>
+              </SignInButton>
+              <SignUpButton>
+                <button className="axis-auth-action axis-auth-action-primary" type="button">
+                  Sign up
+                </button>
+              </SignUpButton>
+            </Show>
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
+          </header>
+          {children}
+        </ClerkProvider>
+      </body>
     </html>
   );
 }
