@@ -113,14 +113,14 @@
 
 .railZone {
   display: grid;
-  gap: 0.62rem;
-  padding: 0.55rem clamp(0.75rem, 3vw, 2rem) max(0.75rem, env(safe-area-inset-bottom));
+  gap: 0.5rem;
+  padding: 0.42rem clamp(0.75rem, 3vw, 2rem) max(0.72rem, env(safe-area-inset-bottom));
   position: relative;
   z-index: 3;
 }
 
 .railStack {
-  height: clamp(5.6rem, 14dvh, 8rem);
+  height: clamp(3.8rem, 9dvh, 5.6rem);
   margin: 0 auto;
   max-width: 1120px;
   position: relative;
