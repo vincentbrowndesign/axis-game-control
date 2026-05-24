@@ -81,6 +81,63 @@
   text-align: center;
 }
 
+.processingLayer {
+  align-items: flex-end;
+  background:
+    linear-gradient(180deg, rgba(2, 2, 2, 0.02), rgba(2, 2, 2, 0.72)),
+    linear-gradient(90deg, rgba(2, 2, 2, 0.58), rgba(2, 2, 2, 0.04) 48%, rgba(2, 2, 2, 0.5));
+  display: flex;
+  inset: 0;
+  padding: clamp(1rem, 3vw, 2rem);
+  position: absolute;
+}
+
+.processingPanel {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 28rem;
+}
+
+.processingEyebrow,
+.processingStep {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+}
+
+.processingEyebrow {
+  color: rgba(245, 245, 240, 0.42);
+  margin: 0;
+}
+
+.processingTitle {
+  color: rgba(245, 245, 240, 0.9);
+  font-size: clamp(1rem, 2.4vw, 1.6rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.12;
+  margin: 0;
+}
+
+.processingSteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+}
+
+.processingStep {
+  color: rgba(245, 245, 240, 0.28);
+  transition: color 260ms ease;
+}
+
+.processingStepActive {
+  color: rgba(245, 245, 240, 0.72);
+}
+
+.processingStepDone {
+  color: rgba(245, 245, 240, 0.48);
+}
+
 .controlRail {
   display: grid;
   gap: 0.7rem;

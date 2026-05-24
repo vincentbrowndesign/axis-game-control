@@ -45,6 +45,13 @@ type UploadDraft = {
 
 const RECOVERY_KEY = "axis.game-day.pending-session"
 const UPLOAD_DRAFT_KEY = "axis.game-day.pending-upload"
+const PROCESSING_STEPS = [
+  "Processing game...",
+  "Detecting moments...",
+  "Building replay memory...",
+  "Generating clips...",
+  "Creating broadcast...",
+]
 
 export function GameCaptureFlow() {
   const router = useRouter()
@@ -60,9 +67,9 @@ export function GameCaptureFlow() {
 
   const [stage, setStage] = useState<CaptureStage>("idle")
   const [progress, setProgress] = useState(0)
-  const [status, setStatus] = useState("Choose or record game film.")
+  const [status, setStatus] = useState("Choose or record a game.")
   const [fileName, setFileName] = useState("No video selected")
-  const [telemetryName, setTelemetryName] = useState("No telemetry attached")
+  const [telemetryName, setTelemetryName] = useState("Optional memory file")
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [recovery, setRecovery] = useState<RecoveryPayload | null>(null)
   const [recordingReady, setRecordingReady] = useState(false)
@@ -78,7 +85,7 @@ export function GameCaptureFlow() {
       const stored = readRecovery()
       if (stored) {
         setRecovery(stored)
-        setStatus("A saved upload is waiting to finish its session.")
+        setStatus("A saved game is ready to continue.")
       }
     }, 0)
 
@@ -111,7 +118,7 @@ export function GameCaptureFlow() {
     setSelectedFile(file, "upload")
     setStage("ready")
     setProgress(0)
-    setStatus("Video ready. Upload when the connection is steady.")
+    setStatus("Game ready. Upload when the connection is steady.")
   }
 
   const startRecording = async () => {
@@ -142,7 +149,7 @@ export function GameCaptureFlow() {
       recorderRef.current.start()
       setStage("recording")
       setProgress(0)
-      setStatus("Recording game film.")
+      setStatus("Recording game.")
     } catch {
       setStage("error")
       setStatus("Camera unavailable. Choose a recorded video instead.")
@@ -167,7 +174,7 @@ export function GameCaptureFlow() {
 
       setSelectedFile(recordedFile, "camera")
       setStage("ready")
-      setStatus("Recording ready. Upload when the connection is steady.")
+      setStatus("Game ready. Upload when the connection is steady.")
     } catch {
       setStage("error")
       setStatus("Recording stopped before it could be saved.")
@@ -180,7 +187,7 @@ export function GameCaptureFlow() {
     recorderRef.current = null
     stopStream()
     setStage("idle")
-    setStatus("Choose or record game film.")
+    setStatus("Choose or record a game.")
   }
 
   const uploadSelectedFile = async () => {
@@ -198,7 +205,7 @@ export function GameCaptureFlow() {
     if (!file) return
     telemetryFileRef.current = file
     setTelemetryName(file.name)
-    setStatus("Telemetry ready for this game.")
+    setStatus("Memory file added.")
   }
 
   const retrySessionSave = async () => {
@@ -206,7 +213,7 @@ export function GameCaptureFlow() {
 
     setStage("saving")
     setProgress(86)
-    setStatus("Finishing saved session.")
+    setStatus("Continuing game upload.")
     await completeAndProcess(recovery)
   }
 
@@ -217,13 +224,15 @@ export function GameCaptureFlow() {
 
   const canUpload = stage === "ready" || stage === "error"
   const isBusy = stage === "uploading" || stage === "saving" || stage === "processing"
+  const showProcessing = stage === "saving" || stage === "processing" || stage === "complete"
+  const processingIndex = getProcessingIndex(stage, progress)
 
   return (
     <main className={styles.surface}>
       <header className={styles.telemetry}>
         <div>
-          <p className={styles.eyebrow}>AXIS GAME CAPTURE</p>
-          <h1 className={styles.title}>Game film</h1>
+          <p className={styles.eyebrow}>AXIS GAME DAY</p>
+          <h1 className={styles.title}>Game media</h1>
         </div>
         <span className={styles.stage}>{stageLabel(stage)}</span>
       </header>
@@ -239,7 +248,31 @@ export function GameCaptureFlow() {
             preload="metadata"
           />
           {!hasSelectedFile && stage !== "recording" ? (
-            <div className={styles.emptySignal}>choose or record game film</div>
+            <div className={styles.emptySignal}>choose or record a game</div>
+          ) : null}
+          {showProcessing ? (
+            <div className={styles.processingLayer} aria-live="polite">
+              <div className={styles.processingPanel}>
+                <p className={styles.processingEyebrow}>AXIS PROCESSING</p>
+                <h2 className={styles.processingTitle}>
+                  {stage === "complete" ? "Replay ready" : "Turning game film into media"}
+                </h2>
+                <div className={styles.processingSteps}>
+                  {PROCESSING_STEPS.map((step, index) => (
+                    <span
+                      className={[
+                        styles.processingStep,
+                        index === processingIndex ? styles.processingStepActive : "",
+                        index < processingIndex || stage === "complete" ? styles.processingStepDone : "",
+                      ].filter(Boolean).join(" ")}
+                      key={step}
+                    >
+                      {step}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : null}
         </div>
       </section>
@@ -256,7 +289,7 @@ export function GameCaptureFlow() {
 
         <div className={styles.actions}>
           <label className={styles.actionButton} aria-disabled={isBusy || stage === "recording"}>
-            Choose File
+            Choose Game
             <input
               className={styles.fileInput}
               type="file"
@@ -267,7 +300,7 @@ export function GameCaptureFlow() {
           </label>
 
           <label className={styles.actionButton} aria-disabled={isBusy || stage === "recording"}>
-            Telemetry
+            Add Memory
             <input
               className={styles.fileInput}
               type="file"
@@ -308,7 +341,7 @@ export function GameCaptureFlow() {
 
           {recovery ? (
             <button className={styles.actionButton} disabled={isBusy} type="button" onClick={() => void retrySessionSave()}>
-              Resume Save
+              Resume Game
             </button>
           ) : null}
 
@@ -327,16 +360,16 @@ export function GameCaptureFlow() {
       uploadActiveRef.current = true
       setStage("uploading")
       setProgress(8)
-      setStatus("Checking session.")
+      setStatus("Getting game ready.")
 
       const { data, error } = await supabaseRef.current.auth.getSession()
       const session = data.session
       if (error || !session?.user || !session.access_token) {
-        throw new Error("Sign in before uploading game film.")
+        throw new Error("Sign in before uploading a game.")
       }
 
       setProgress(18)
-      setStatus("Preparing upload.")
+      setStatus("Preparing game upload.")
 
       const durationSeconds = await readVideoDuration(file).catch(() => 0)
       const draft = getUploadDraft(file, session.user.id)
@@ -363,7 +396,7 @@ export function GameCaptureFlow() {
       localStorage.setItem(UPLOAD_DRAFT_KEY, JSON.stringify(draft))
 
       setProgress(28)
-      setStatus("Uploading game film.")
+      setStatus("Uploading game.")
 
       await uploadWithResume({
         accessToken: session.access_token,
@@ -376,12 +409,12 @@ export function GameCaptureFlow() {
       localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload))
       setRecovery(payload)
       setProgress(78)
-      setStatus("Upload stored. Saving session.")
+      setStatus("Upload complete. Axis is starting.")
 
       await completeAndProcess(payload)
     } catch (error) {
       setStage("error")
-      setStatus(error instanceof Error ? error.message : "Upload interrupted. Keep this tab open and retry.")
+      setStatus(error instanceof Error ? error.message : "Upload paused. Keep this tab open and retry.")
     } finally {
       uploadActiveRef.current = false
     }
@@ -411,17 +444,18 @@ export function GameCaptureFlow() {
       setSessionId(completed.replayId)
       setStage("processing")
       setProgress(96)
-      setStatus("Session saved. Processing started.")
+      setStatus("Processing game...")
 
       await attachTelemetry(completed.replayId)
 
+      setStatus("Building replay memory...")
       void fetch(`/api/upload/extract/${completed.replayId}`, {
         method: "POST",
       }).catch(() => undefined)
 
       setStage("complete")
       setProgress(100)
-      setStatus("Replay ready.")
+      setStatus("Replay, clips, and moments are being prepared.")
     } catch (error) {
       setStage("error")
       setStatus(error instanceof Error ? error.message : "Session save needs another try.")
@@ -442,7 +476,7 @@ export function GameCaptureFlow() {
     })
 
     if (!response.ok) {
-      throw new Error("Telemetry attachment needs another try.")
+      throw new Error("Memory file attachment needs another try.")
     }
   }
 
@@ -631,10 +665,17 @@ function formatBytes(bytes: number) {
 function stageLabel(stage: CaptureStage) {
   if (stage === "recording") return "Recording"
   if (stage === "uploading") return "Uploading"
-  if (stage === "saving") return "Saving"
+  if (stage === "saving") return "Processing"
   if (stage === "processing") return "Processing"
   if (stage === "complete") return "Ready"
   if (stage === "error") return "Check"
   if (stage === "ready") return "Ready"
   return "Waiting"
+}
+
+function getProcessingIndex(stage: CaptureStage, progress: number) {
+  if (stage === "complete") return PROCESSING_STEPS.length - 1
+  if (stage === "processing") return 2
+  if (progress >= 92) return 1
+  return 0
 }
