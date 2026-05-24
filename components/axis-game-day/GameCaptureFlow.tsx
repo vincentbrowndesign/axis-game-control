@@ -1,0 +1,640 @@
+"use client"
+
+import { createClient } from "@/lib/supabase/client"
+import { createStoragePath, isSupportedReplayFile } from "@/lib/replayStorage"
+import { normalizeUploadResponse, parseUploadResponseText } from "@/lib/uploadResponse"
+import { createRecorder, type AxisRecorder } from "@/lib/video/createRecorder"
+import { useRouter } from "next/navigation"
+import { useEffect, useRef, useState } from "react"
+import { Upload, isSupported as tusIsSupported } from "tus-js-client"
+import styles from "./GameCaptureFlow.module.css"
+
+type CaptureStage =
+  | "idle"
+  | "recording"
+  | "ready"
+  | "uploading"
+  | "saving"
+  | "processing"
+  | "complete"
+  | "error"
+
+type RecoveryPayload = {
+  sessionId: string
+  traceId: string
+  filePath: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  durationSeconds: number
+  source: "camera" | "upload"
+  environment: "game"
+  mission: string
+  player: string
+  client: Record<string, unknown>
+}
+
+type UploadDraft = {
+  sessionId: string
+  traceId: string
+  filePath: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+}
+
+const RECOVERY_KEY = "axis.game-day.pending-session"
+const UPLOAD_DRAFT_KEY = "axis.game-day.pending-upload"
+
+export function GameCaptureFlow() {
+  const router = useRouter()
+  const supabaseRef = useRef(createClient())
+  const previewRef = useRef<HTMLVideoElement | null>(null)
+  const recorderRef = useRef<AxisRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const fileRef = useRef<File | null>(null)
+  const telemetryFileRef = useRef<File | null>(null)
+  const sourceRef = useRef<"camera" | "upload">("upload")
+  const objectUrlRef = useRef<string | null>(null)
+  const uploadActiveRef = useRef(false)
+
+  const [stage, setStage] = useState<CaptureStage>("idle")
+  const [progress, setProgress] = useState(0)
+  const [status, setStatus] = useState("Choose or record game film.")
+  const [fileName, setFileName] = useState("No video selected")
+  const [telemetryName, setTelemetryName] = useState("No telemetry attached")
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [recovery, setRecovery] = useState<RecoveryPayload | null>(null)
+  const [recordingReady, setRecordingReady] = useState(false)
+  const [hasSelectedFile, setHasSelectedFile] = useState(false)
+
+  useEffect(() => {
+    const initializeClientState = window.setTimeout(() => {
+      setRecordingReady(
+        Boolean(navigator.mediaDevices?.getUserMedia) &&
+          typeof MediaRecorder !== "undefined"
+      )
+
+      const stored = readRecovery()
+      if (stored) {
+        setRecovery(stored)
+        setStatus("A saved upload is waiting to finish its session.")
+      }
+    }, 0)
+
+    return () => {
+      window.clearTimeout(initializeClientState)
+      clearPreviewUrl()
+      stopStream()
+    }
+  }, [])
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!uploadActiveRef.current) return
+      event.preventDefault()
+      event.returnValue = ""
+    }
+
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [])
+
+  const chooseFile = (file: File | null) => {
+    if (!file) return
+    if (!isSupportedReplayFile(file)) {
+      setStage("error")
+      setStatus("Choose a video file recorded from the game.")
+      return
+    }
+
+    setSelectedFile(file, "upload")
+    setStage("ready")
+    setProgress(0)
+    setStatus("Video ready. Upload when the connection is steady.")
+  }
+
+  const startRecording = async () => {
+    try {
+      setStage("idle")
+      setStatus("Opening camera.")
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          facingMode: { ideal: "environment" },
+          height: { ideal: 1080 },
+          width: { ideal: 1920 },
+        },
+      })
+
+      stopStream()
+      streamRef.current = stream
+
+      const video = previewRef.current
+      if (video) {
+        video.srcObject = stream
+        video.muted = true
+        await video.play().catch(() => undefined)
+      }
+
+      recorderRef.current = createRecorder({ stream, timeslice: 4000 })
+      recorderRef.current.start()
+      setStage("recording")
+      setProgress(0)
+      setStatus("Recording game film.")
+    } catch {
+      setStage("error")
+      setStatus("Camera unavailable. Choose a recorded video instead.")
+      stopStream()
+    }
+  }
+
+  const stopRecording = async () => {
+    const recorder = recorderRef.current
+    if (!recorder) return
+
+    try {
+      setStatus("Saving recording on this device.")
+      const blob = await recorder.stop()
+      stopStream()
+
+      const extension = blob.type.includes("mp4") ? "mp4" : "webm"
+      const recordedFile = new File([blob], `axis-game-${Date.now()}.${extension}`, {
+        lastModified: Date.now(),
+        type: blob.type || "video/webm",
+      })
+
+      setSelectedFile(recordedFile, "camera")
+      setStage("ready")
+      setStatus("Recording ready. Upload when the connection is steady.")
+    } catch {
+      setStage("error")
+      setStatus("Recording stopped before it could be saved.")
+      stopStream()
+    }
+  }
+
+  const cancelRecording = () => {
+    recorderRef.current?.cancel()
+    recorderRef.current = null
+    stopStream()
+    setStage("idle")
+    setStatus("Choose or record game film.")
+  }
+
+  const uploadSelectedFile = async () => {
+    const file = fileRef.current
+    if (!file) {
+      setStage("error")
+      setStatus("Choose or record a video first.")
+      return
+    }
+
+    await runUpload(file, sourceRef.current)
+  }
+
+  const chooseTelemetryFile = (file: File | null) => {
+    if (!file) return
+    telemetryFileRef.current = file
+    setTelemetryName(file.name)
+    setStatus("Telemetry ready for this game.")
+  }
+
+  const retrySessionSave = async () => {
+    if (!recovery) return
+
+    setStage("saving")
+    setProgress(86)
+    setStatus("Finishing saved session.")
+    await completeAndProcess(recovery)
+  }
+
+  const openReplay = () => {
+    if (!sessionId) return
+    router.push(`/replay-native?session=${encodeURIComponent(sessionId)}`)
+  }
+
+  const canUpload = stage === "ready" || stage === "error"
+  const isBusy = stage === "uploading" || stage === "saving" || stage === "processing"
+
+  return (
+    <main className={styles.surface}>
+      <header className={styles.telemetry}>
+        <div>
+          <p className={styles.eyebrow}>AXIS GAME CAPTURE</p>
+          <h1 className={styles.title}>Game film</h1>
+        </div>
+        <span className={styles.stage}>{stageLabel(stage)}</span>
+      </header>
+
+      <section className={styles.world} aria-label="Game video capture">
+        <div className={styles.videoShell}>
+          <video
+            ref={previewRef}
+            className={styles.video}
+            controls={stage === "ready" || stage === "complete"}
+            muted={stage === "recording"}
+            playsInline
+            preload="metadata"
+          />
+          {!hasSelectedFile && stage !== "recording" ? (
+            <div className={styles.emptySignal}>choose or record game film</div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className={styles.controlRail} aria-label="Upload session controls">
+        <div className={styles.progressTrack}>
+          <span className={styles.progressFill} style={{ width: `${progress}%` }} />
+        </div>
+
+        <div className={styles.statusRow}>
+          <span>{status}</span>
+          <span>{fileName} / {telemetryName}</span>
+        </div>
+
+        <div className={styles.actions}>
+          <label className={styles.actionButton} aria-disabled={isBusy || stage === "recording"}>
+            Choose File
+            <input
+              className={styles.fileInput}
+              type="file"
+              accept="video/*"
+              disabled={isBusy || stage === "recording"}
+              onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+
+          <label className={styles.actionButton} aria-disabled={isBusy || stage === "recording"}>
+            Telemetry
+            <input
+              className={styles.fileInput}
+              type="file"
+              accept=".ndjson,.json,application/json"
+              disabled={isBusy || stage === "recording"}
+              onChange={(event) => chooseTelemetryFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+
+          {stage === "recording" ? (
+            <>
+              <button className={styles.actionButton} type="button" onClick={() => void stopRecording()}>
+                Stop
+              </button>
+              <button className={styles.quietButton} type="button" onClick={cancelRecording}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              className={styles.actionButton}
+              disabled={!recordingReady || isBusy}
+              type="button"
+              onClick={() => void startRecording()}
+            >
+              Record
+            </button>
+          )}
+
+          <button
+            className={styles.primaryButton}
+            disabled={!canUpload || isBusy || !hasSelectedFile}
+            type="button"
+            onClick={() => void uploadSelectedFile()}
+          >
+            Upload Game
+          </button>
+
+          {recovery ? (
+            <button className={styles.actionButton} disabled={isBusy} type="button" onClick={() => void retrySessionSave()}>
+              Resume Save
+            </button>
+          ) : null}
+
+          {sessionId ? (
+            <button className={styles.primaryButton} type="button" onClick={openReplay}>
+              Open Replay
+            </button>
+          ) : null}
+        </div>
+      </section>
+    </main>
+  )
+
+  async function runUpload(file: File, source: "camera" | "upload") {
+    try {
+      uploadActiveRef.current = true
+      setStage("uploading")
+      setProgress(8)
+      setStatus("Checking session.")
+
+      const { data, error } = await supabaseRef.current.auth.getSession()
+      const session = data.session
+      if (error || !session?.user || !session.access_token) {
+        throw new Error("Sign in before uploading game film.")
+      }
+
+      setProgress(18)
+      setStatus("Preparing upload.")
+
+      const durationSeconds = await readVideoDuration(file).catch(() => 0)
+      const draft = getUploadDraft(file, session.user.id)
+
+      const payload: RecoveryPayload = {
+        sessionId: draft.sessionId,
+        traceId: draft.traceId,
+        filePath: draft.filePath,
+        fileName: file.name,
+        contentType: file.type || "video/mp4",
+        sizeBytes: file.size,
+        durationSeconds,
+        source,
+        environment: "game",
+        mission: "Game replay",
+        player: "Unassigned",
+        client: {
+          surface: "game-day",
+          userAgent: navigator.userAgent,
+          connection: getConnectionLabel(),
+        },
+      }
+
+      localStorage.setItem(UPLOAD_DRAFT_KEY, JSON.stringify(draft))
+
+      setProgress(28)
+      setStatus("Uploading game film.")
+
+      await uploadWithResume({
+        accessToken: session.access_token,
+        file,
+        onProgress: (percent) => setProgress(Math.min(78, 28 + percent * 0.5)),
+        payload,
+      })
+
+      localStorage.removeItem(UPLOAD_DRAFT_KEY)
+      localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload))
+      setRecovery(payload)
+      setProgress(78)
+      setStatus("Upload stored. Saving session.")
+
+      await completeAndProcess(payload)
+    } catch (error) {
+      setStage("error")
+      setStatus(error instanceof Error ? error.message : "Upload interrupted. Keep this tab open and retry.")
+    } finally {
+      uploadActiveRef.current = false
+    }
+  }
+
+  async function completeAndProcess(payload: RecoveryPayload) {
+    try {
+      setStage("saving")
+      setProgress(88)
+
+      const response = await fetch("/api/upload/complete", {
+        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+      const text = await response.text()
+      const completed = normalizeUploadResponse(parseUploadResponseText(text))
+
+      if (!completed.ok || !completed.replayId) {
+        throw new Error(completed.recovery || completed.error || "Session save needs another try.")
+      }
+
+      localStorage.removeItem(RECOVERY_KEY)
+      setRecovery(null)
+      setSessionId(completed.replayId)
+      setStage("processing")
+      setProgress(96)
+      setStatus("Session saved. Processing started.")
+
+      await attachTelemetry(completed.replayId)
+
+      void fetch(`/api/upload/extract/${completed.replayId}`, {
+        method: "POST",
+      }).catch(() => undefined)
+
+      setStage("complete")
+      setProgress(100)
+      setStatus("Replay ready.")
+    } catch (error) {
+      setStage("error")
+      setStatus(error instanceof Error ? error.message : "Session save needs another try.")
+    }
+  }
+
+  async function attachTelemetry(replayId: string) {
+    const file = telemetryFileRef.current
+    if (!file) return
+
+    const form = new FormData()
+    form.set("sessionId", replayId)
+    form.set("telemetry", file)
+
+    const response = await fetch("/api/session/telemetry", {
+      body: form,
+      method: "POST",
+    })
+
+    if (!response.ok) {
+      throw new Error("Telemetry attachment needs another try.")
+    }
+  }
+
+  function setSelectedFile(file: File, source: "camera" | "upload") {
+    fileRef.current = file
+    sourceRef.current = source
+    setHasSelectedFile(true)
+    setFileName(`${file.name} - ${formatBytes(file.size)}`)
+    clearPreviewUrl()
+
+    const url = URL.createObjectURL(file)
+    objectUrlRef.current = url
+
+    const video = previewRef.current
+    if (video) {
+      video.srcObject = null
+      video.src = url
+      video.currentTime = 0
+      void video.play().catch(() => undefined)
+    }
+  }
+
+  function clearPreviewUrl() {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
+    }
+  }
+
+  function stopStream() {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+  }
+}
+
+function uploadWithResume({
+  accessToken,
+  file,
+  onProgress,
+  payload,
+}: {
+  accessToken: string
+  file: File
+  onProgress: (percent: number) => void
+  payload: RecoveryPayload
+}) {
+  if (!tusIsSupported) {
+    return Promise.reject(new Error("Resumable upload is unavailable in this browser."))
+  }
+
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!anonKey) {
+    return Promise.reject(new Error("Upload configuration unavailable."))
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const upload = new Upload(file, {
+      chunkSize: 6 * 1024 * 1024,
+      endpoint: getTusEndpoint(),
+      headers: {
+        apikey: anonKey,
+        authorization: `Bearer ${accessToken}`,
+      },
+      metadata: {
+        bucketName: "axis-replays",
+        cacheControl: "3600",
+        contentType: payload.contentType,
+        objectName: payload.filePath,
+      },
+      onError: (error) => reject(error),
+      onProgress: (bytesUploaded, bytesTotal) => {
+        if (!bytesTotal) return
+        onProgress((bytesUploaded / bytesTotal) * 100)
+      },
+      onSuccess: () => resolve(),
+      removeFingerprintOnSuccess: true,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      uploadDataDuringCreation: true,
+    })
+
+    upload
+      .findPreviousUploads()
+      .then((previousUploads) => {
+        const previous = previousUploads[0]
+        if (previous) upload.resumeFromPreviousUpload(previous)
+        upload.start()
+      })
+      .catch(reject)
+  })
+}
+
+function readRecovery() {
+  try {
+    const raw = localStorage.getItem(RECOVERY_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as RecoveryPayload
+  } catch {
+    localStorage.removeItem(RECOVERY_KEY)
+    return null
+  }
+}
+
+function getUploadDraft(file: File, userId: string): UploadDraft {
+  const existing = readUploadDraft()
+
+  if (
+    existing &&
+    existing.fileName === file.name &&
+    existing.sizeBytes === file.size &&
+    existing.contentType === (file.type || "video/mp4")
+  ) {
+    return existing
+  }
+
+  return {
+    sessionId: crypto.randomUUID(),
+    traceId: crypto.randomUUID(),
+    filePath: createStoragePath({
+      userId,
+      fileName: file.name,
+      type: file.type,
+    }),
+    fileName: file.name,
+    contentType: file.type || "video/mp4",
+    sizeBytes: file.size,
+  }
+}
+
+function readUploadDraft() {
+  try {
+    const raw = localStorage.getItem(UPLOAD_DRAFT_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as UploadDraft
+  } catch {
+    localStorage.removeItem(UPLOAD_DRAFT_KEY)
+    return null
+  }
+}
+
+function readVideoDuration(file: File) {
+  return new Promise<number>((resolve, reject) => {
+    const video = document.createElement("video")
+    const url = URL.createObjectURL(file)
+
+    video.preload = "metadata"
+    video.onloadedmetadata = () => {
+      const duration = Number.isFinite(video.duration) ? video.duration : 0
+      URL.revokeObjectURL(url)
+      resolve(duration)
+    }
+    video.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error("Video metadata unavailable."))
+    }
+    video.src = url
+  })
+}
+
+function getConnectionLabel() {
+  const nav = navigator as Navigator & {
+    connection?: { effectiveType?: string }
+  }
+
+  return nav.connection?.effectiveType || "unknown"
+}
+
+function getTusEndpoint() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!supabaseUrl) return "/storage/v1/upload/resumable"
+
+  const url = new URL(supabaseUrl)
+  const projectId = url.hostname.split(".")[0]
+
+  if (!projectId) return `${url.origin}/storage/v1/upload/resumable`
+
+  return `https://${projectId}.storage.supabase.co/storage/v1/upload/resumable`
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return "0 MB"
+  const megabytes = bytes / 1024 / 1024
+  if (megabytes < 1024) return `${megabytes.toFixed(1)} MB`
+  return `${(megabytes / 1024).toFixed(2)} GB`
+}
+
+function stageLabel(stage: CaptureStage) {
+  if (stage === "recording") return "Recording"
+  if (stage === "uploading") return "Uploading"
+  if (stage === "saving") return "Saving"
+  if (stage === "processing") return "Processing"
+  if (stage === "complete") return "Ready"
+  if (stage === "error") return "Check"
+  if (stage === "ready") return "Ready"
+  return "Waiting"
+}

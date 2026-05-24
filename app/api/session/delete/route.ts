@@ -46,10 +46,10 @@ export async function POST(req: Request) {
 
     const existing = await supabase
       .from("axis_sessions")
-      .select("file_path")
+      .select("file_path, metadata")
       .eq("id", sessionId)
       .eq("user_id", user.id)
-      .single<{ file_path: string | null }>()
+      .single<{ file_path: string | null; metadata: Record<string, unknown> | null }>()
 
     if (existing.error) {
       return NextResponse.json(
@@ -85,13 +85,46 @@ export async function POST(req: Request) {
       )
     }
 
-    if (existing.data.file_path) {
+    const metadata =
+      existing.data.metadata && typeof existing.data.metadata === "object"
+        ? existing.data.metadata
+        : {}
+    const telemetry =
+      metadata.telemetry && typeof metadata.telemetry === "object"
+        ? (metadata.telemetry as Record<string, unknown>)
+        : {}
+    const timeline =
+      metadata.timeline && typeof metadata.timeline === "object"
+        ? (metadata.timeline as Record<string, unknown>)
+        : {}
+    const clips =
+      metadata.clips && typeof metadata.clips === "object"
+        ? (metadata.clips as Record<string, unknown>)
+        : {}
+    const telemetryPath =
+      typeof telemetry.path === "string" ? telemetry.path : ""
+    const timelinePath =
+      typeof timeline.path === "string" ? timeline.path : ""
+    const clipPaths = Array.isArray(clips.values)
+      ? clips.values
+          .filter((clip): clip is Record<string, unknown> =>
+            Boolean(clip) && typeof clip === "object"
+          )
+          .map((clip) => clip.path)
+          .filter((path): path is string => typeof path === "string" && path.length > 0)
+      : []
+    const paths = [existing.data.file_path, telemetryPath, timelinePath, ...clipPaths].filter(
+      (path): path is string => Boolean(path)
+    )
+
+    if (paths.length > 0) {
       await supabaseAdmin.storage
         .from("axis-replays")
-        .remove([existing.data.file_path])
+        .remove(paths)
     }
 
     revalidatePath("/")
+    revalidatePath("/games")
     revalidatePath("/sessions")
     revalidatePath("/team/local")
 

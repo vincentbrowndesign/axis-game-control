@@ -32,6 +32,37 @@ export function enterReplayWindow(machine: ReplayMachine, knotMs: number, frames
   machine.windowEndMs = end
 }
 
+export function replayWindowFor(knotMs: number, frames: TelemetrySample[]) {
+  const source = findWindow(knotMs, frames)
+  const startMs = source?.start_ms ?? Math.max(0, knotMs - 2400)
+  const endMs = source?.end_ms ?? knotMs + 3200
+
+  return {
+    endMs,
+    startMs,
+    weight: source?.weight ?? 0.5,
+  }
+}
+
+export function nearestReplayKnot(
+  frames: TelemetrySample[],
+  currentMs: number,
+  direction: -1 | 1
+) {
+  const knots = frames
+    .flatMap((frame) => frame.topology.knots)
+    .filter((knot, index, source) => source.indexOf(knot) === index)
+    .sort((first, second) => first - second)
+
+  if (knots.length === 0) return null
+
+  if (direction > 0) {
+    return knots.find((knot) => knot > currentMs + 500) ?? knots[0]
+  }
+
+  return [...knots].reverse().find((knot) => knot < currentMs - 500) ?? knots.at(-1) ?? null
+}
+
 export function seekWithInertia(machine: ReplayMachine, targetMs: number, push = 0) {
   machine.mode = "drifting"
   machine.targetMs = Math.max(0, targetMs)
@@ -44,12 +75,12 @@ export function updateReplayMachine(machine: ReplayMachine, video: HTMLVideoElem
   if (machine.mode === "idle" || !Number.isFinite(video.duration)) return
 
   const currentMs = video.currentTime * 1000
-  const pull = (machine.targetMs - currentMs) * 0.062
-  machine.velocityMs = (machine.velocityMs + pull) * Math.pow(0.82, deltaSeconds * 60)
+  const pull = (machine.targetMs - currentMs) * 0.085
+  machine.velocityMs = (machine.velocityMs + pull) * Math.pow(0.76, deltaSeconds * 60)
   const nextMs = currentMs + machine.velocityMs * deltaSeconds
   const clamped = clamp(nextMs, 0, video.duration * 1000)
 
-  if (Math.abs(clamped - currentMs) > 14) {
+  if (Math.abs(clamped - currentMs) > 10) {
     video.currentTime = clamped / 1000
   }
 

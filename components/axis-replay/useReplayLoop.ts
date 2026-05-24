@@ -1,10 +1,16 @@
 "use client"
 
 import { createAtmosphericState, setAtmosphereHover, updateAtmosphere } from "@/lib/axis-replay/atmosphere"
-import { createReplayMachine, enterReplayWindow, seekWithInertia, updateReplayMachine } from "@/lib/axis-replay/replayState"
+import {
+  createReplayMachine,
+  enterReplayWindow,
+  nearestReplayKnot,
+  seekWithInertia,
+  updateReplayMachine,
+} from "@/lib/axis-replay/replayState"
 import { nearestKnot, renderAtmosphereLayer, renderTopologyRail, timeFromRailX } from "@/lib/axis-replay/renderers"
 import { sampleAt, telemetryDuration, type TelemetrySample } from "@/lib/axis-replay/telemetry"
-import { useEffect, useRef, type RefObject } from "react"
+import { useCallback, useEffect, useRef, type RefObject } from "react"
 
 type ReplayLoopInput = {
   atmosphereCanvasRef: RefObject<HTMLCanvasElement | null>
@@ -17,6 +23,27 @@ export function useReplayLoop({ atmosphereCanvasRef, railCanvasRef, telemetryRef
   const atmosphereRef = useRef(createAtmosphericState())
   const replayRef = useRef(createReplayMachine())
   const pointerRef = useRef({ active: false, lastX: 0, lastTime: 0, velocity: 0 })
+
+  const enterWindowAt = useCallback((timestampMs: number) => {
+    const video = videoRef.current
+    enterReplayWindow(replayRef.current, Math.max(0, timestampMs), telemetryRef.current)
+    if (video) void video.play().catch(() => undefined)
+  }, [telemetryRef, videoRef])
+
+  const seekToMs = useCallback((timestampMs: number, push = 0) => {
+    const video = videoRef.current
+    const durationMs = currentDuration(video, telemetryRef.current)
+    seekWithInertia(replayRef.current, clamp(timestampMs, 0, durationMs), push)
+    if (video) void video.play().catch(() => undefined)
+  }, [telemetryRef, videoRef])
+
+  const seekToKnot = useCallback((direction: -1 | 1) => {
+    const video = videoRef.current
+    const currentMs = (video?.currentTime ?? 0) * 1000
+    const knot = nearestReplayKnot(telemetryRef.current, currentMs, direction)
+    if (knot === null) return
+    enterWindowAt(knot)
+  }, [enterWindowAt, telemetryRef, videoRef])
 
   useEffect(() => {
     const railCanvas = railCanvasRef.current
@@ -74,9 +101,11 @@ export function useReplayLoop({ atmosphereCanvasRef, railCanvasRef, telemetryRef
 
       if (knot !== null) {
         enterReplayWindow(replayRef.current, knot, frames)
+        void videoRef.current?.play().catch(() => undefined)
       } else {
         const push = pointerRef.current.velocity * 9000
         seekWithInertia(replayRef.current, timeFromRailX(x, rect.width, durationMs), push)
+        void videoRef.current?.play().catch(() => undefined)
       }
     }
 
@@ -129,6 +158,12 @@ export function useReplayLoop({ atmosphereCanvasRef, railCanvasRef, telemetryRef
       railCanvas.removeEventListener("pointerdown", onPointerDown)
     }
   }, [atmosphereCanvasRef, railCanvasRef, telemetryRef, videoRef])
+
+  return {
+    enterWindowAt,
+    seekToKnot,
+    seekToMs,
+  }
 }
 
 function syncCanvas(canvas: HTMLCanvasElement, width: number, height: number, dpr: number) {

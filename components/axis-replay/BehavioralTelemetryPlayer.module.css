@@ -27,7 +27,9 @@
 .eyebrow,
 .timecode,
 .fileLabel,
-.chooseFile {
+.chooseFile,
+.transportButton,
+.primaryTransport {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
   font-size: 0.64rem;
   letter-spacing: 0.04em;
@@ -155,7 +157,9 @@
   width: min(100%, 1120px);
 }
 
-.chooseFile {
+.chooseFile,
+.transportButton,
+.primaryTransport {
   appearance: none;
   background: transparent;
   border: 1px solid rgba(245, 245, 240, 0.11);
@@ -167,9 +171,27 @@
   place-items: center;
 }
 
+.primaryTransport {
+  background: rgba(245, 245, 240, 0.9);
+  border-color: rgba(245, 245, 240, 0.9);
+  color: #050505;
+}
+
+.transportButton:hover,
 .chooseFile:hover {
   border-color: rgba(245, 245, 240, 0.16);
   color: rgba(245, 245, 240, 0.7);
+}
+
+.primaryTransport:hover {
+  border-color: rgba(245, 245, 240, 0.9);
+  color: #050505;
+}
+
+.transportButton:disabled,
+.primaryTransport:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .fileInput {
@@ -188,11 +210,12 @@
   .bottomControls {
     align-items: stretch;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .fileLabel {
     align-self: center;
+    grid-column: span 2;
     text-align: right;
   }
 }

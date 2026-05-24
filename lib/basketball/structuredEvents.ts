@@ -67,14 +67,35 @@ export type PossessionSegment = {
 export type TraditionalStatsLine = {
   assists: number
   blocks: number
+  fieldGoalPercentage: number
   points: number
   possessions: number
   rebounds: number
   shotAttempts: number
   shotMakes: number
+  shotMisses: number
   steals: number
   touches: number
   turnovers: number
+}
+
+export type StatTimelineEntry = {
+  id: string
+  label: string
+  playerId?: string
+  possessionId?: string
+  teamId?: string
+  time: string
+  timestampMs: number
+  type:
+    | "assist"
+    | "make"
+    | "miss"
+    | "possession"
+    | "rebound"
+    | "steal"
+    | "touch"
+    | "turnover"
 }
 
 export type StructuredBasketballOutput = {
@@ -84,6 +105,7 @@ export type StructuredBasketballOutput = {
   stats: {
     possessions: number
     players: Record<string, TraditionalStatsLine>
+    timeline: StatTimelineEntry[]
     teams: Record<string, TraditionalStatsLine>
   }
 }
@@ -212,6 +234,7 @@ function detectShots(context: DetectionContext): StructuredBasketballEvent[] {
       metadata: {
         likelyMake: makeConfidence > 0.62,
         makeConfidence,
+        outcome: makeConfidence > 0.62 ? "make" : "miss",
       },
     })
   }
@@ -350,7 +373,10 @@ function buildTraditionalStats(events: StructuredBasketballEvent[], possessions:
   const teams: Record<string, TraditionalStatsLine> = {}
 
   for (const possession of possessions) {
-    if (possession.playerId) line(players, possession.playerId).touches += possession.touches.length || 1
+    for (const touch of possession.touches) {
+      line(players, touch).touches += 1
+    }
+    if (possession.playerId) line(players, possession.playerId).possessions += 1
     if (possession.teamId) line(teams, possession.teamId).possessions += 1
   }
 
@@ -374,6 +400,8 @@ function buildTraditionalStats(events: StructuredBasketballEvent[], possessions:
         const assisterId = assistCandidate(event, possessions)
         if (assisterId) line(players, assisterId).assists += 1
       } else {
+        if (player) player.shotMisses += 1
+        if (team) team.shotMisses += 1
         const blockTeamId = blockRecoveryTeam(event, events, possessions)
         if (blockTeamId) line(teams, blockTeamId).blocks += 1
       }
@@ -392,11 +420,107 @@ function buildTraditionalStats(events: StructuredBasketballEvent[], possessions:
     }
   }
 
+  finalizePercentages(players)
+  finalizePercentages(teams)
+
   return {
     possessions: possessions.length,
     players,
+    timeline: buildStatTimeline(events, possessions),
     teams,
   }
+}
+
+function buildStatTimeline(events: StructuredBasketballEvent[], possessions: PossessionSegment[]): StatTimelineEntry[] {
+  const possessionEntries = possessions.map((possession) => ({
+    id: `${possession.id}-stat`,
+    label: possession.teamId
+      ? `${possession.teamId} possession`
+      : "possession",
+    playerId: possession.playerId ?? undefined,
+    possessionId: possession.id,
+    teamId: possession.teamId ?? undefined,
+    time: formatClock(possession.startMs),
+    timestampMs: possession.startMs,
+    type: "possession" as const,
+  }))
+
+  const eventEntries = events.flatMap<StatTimelineEntry>((event) => {
+    if (event.type === "shot_attempt") {
+      const make = event.metadata?.likelyMake === true
+      const entries: StatTimelineEntry[] = [
+        {
+          id: `${event.id}-${make ? "make" : "miss"}`,
+          label: make ? "made shot" : "missed shot",
+          playerId: event.playerId,
+          possessionId: event.possessionId,
+          teamId: event.teamId,
+          time: formatClock(event.timestampMs),
+          timestampMs: event.timestampMs,
+          type: make ? "make" : "miss",
+        },
+      ]
+      const assisterId = make ? assistCandidate(event, possessions) : null
+      if (assisterId) {
+        entries.push({
+          id: `${event.id}-assist`,
+          label: "assist",
+          playerId: assisterId,
+          possessionId: event.possessionId,
+          teamId: event.teamId,
+          time: formatClock(event.timestampMs),
+          timestampMs: event.timestampMs,
+          type: "assist",
+        })
+      }
+      return entries
+    }
+
+    if (event.type === "rebound") {
+      return [{
+        id: `${event.id}-stat`,
+        label: "rebound",
+        playerId: event.playerId,
+        possessionId: event.possessionId,
+        teamId: event.teamId,
+        time: formatClock(event.timestampMs),
+        timestampMs: event.timestampMs,
+        type: "rebound",
+      }]
+    }
+
+    if (event.type === "turnover") {
+      const entries: StatTimelineEntry[] = [{
+        id: `${event.id}-stat`,
+        label: "turnover",
+        playerId: event.playerId,
+        possessionId: event.possessionId,
+        teamId: event.teamId,
+        time: formatClock(event.timestampMs),
+        timestampMs: event.timestampMs,
+        type: "turnover",
+      }]
+      const recoveryPlayerId = text(event.metadata?.recoveryPlayerId)
+      const recoveryTeamId = text(event.metadata?.recoveryTeamId)
+      if (recoveryPlayerId) {
+        entries.push({
+          id: `${event.id}-steal`,
+          label: "steal",
+          playerId: recoveryPlayerId,
+          possessionId: event.possessionId,
+          teamId: recoveryTeamId ?? undefined,
+          time: formatClock(event.timestampMs),
+          timestampMs: event.timestampMs,
+          type: "steal",
+        })
+      }
+      return entries
+    }
+
+    return []
+  })
+
+  return chronologicalStats([...possessionEntries, ...eventEntries])
 }
 
 function estimateHolder(frame: BasketballTrackingFrame, previous: HolderEstimate): HolderEstimate {
@@ -548,16 +672,26 @@ function line(target: Record<string, TraditionalStatsLine>, id: string) {
   target[id] ??= {
     assists: 0,
     blocks: 0,
+    fieldGoalPercentage: 0,
     points: 0,
     possessions: 0,
     rebounds: 0,
     shotAttempts: 0,
     shotMakes: 0,
+    shotMisses: 0,
     steals: 0,
     touches: 0,
     turnovers: 0,
   }
   return target[id]
+}
+
+function finalizePercentages(lines: Record<string, TraditionalStatsLine>) {
+  for (const item of Object.values(lines)) {
+    item.fieldGoalPercentage = item.shotAttempts
+      ? Number((item.shotMakes / item.shotAttempts).toFixed(3))
+      : 0
+  }
 }
 
 function assistCandidate(event: StructuredBasketballEvent, possessions: PossessionSegment[]) {
@@ -580,6 +714,17 @@ function blockRecoveryTeam(event: StructuredBasketballEvent, events: StructuredB
 
 function eventId(prefix: string, index: number) {
   return `${prefix}-${index}`
+}
+
+function chronologicalStats(events: StatTimelineEntry[]) {
+  return [...events].sort((first, second) => first.timestampMs - second.timestampMs || first.type.localeCompare(second.type))
+}
+
+function formatClock(timestampMs: number) {
+  const totalSeconds = Math.max(0, Math.floor(timestampMs / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
 }
 
 function distance(a: CourtPoint, b: CourtPoint) {

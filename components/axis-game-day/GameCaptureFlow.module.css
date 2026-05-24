@@ -1,0 +1,213 @@
+.surface {
+  background: #020202;
+  color: rgba(245, 245, 240, 0.9);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+.telemetry {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 4.5rem;
+  padding: max(1rem, env(safe-area-inset-top)) clamp(1rem, 4vw, 2.4rem) 0.7rem;
+}
+
+.eyebrow,
+.stage,
+.statusRow,
+.actionButton,
+.primaryButton,
+.quietButton {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+
+.eyebrow {
+  color: rgba(245, 245, 240, 0.42);
+  margin: 0 0 0.2rem;
+}
+
+.title {
+  color: rgba(245, 245, 240, 0.92);
+  font-size: clamp(1.06rem, 2vw, 1.45rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.stage {
+  color: rgba(245, 245, 240, 0.58);
+  text-align: right;
+}
+
+.world {
+  display: grid;
+  min-height: 0;
+  padding: 0 clamp(0.75rem, 3vw, 2rem);
+  place-items: center;
+}
+
+.videoShell {
+  aspect-ratio: 16 / 9;
+  background: #050505;
+  inline-size: min(100%, 1120px);
+  max-block-size: 68dvh;
+  overflow: hidden;
+  position: relative;
+}
+
+.video {
+  background: #050505;
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.emptySignal {
+  color: rgba(245, 245, 240, 0.32);
+  display: grid;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  inset: 0;
+  letter-spacing: 0.03em;
+  place-items: center;
+  position: absolute;
+  text-align: center;
+}
+
+.controlRail {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.6rem clamp(0.75rem, 3vw, 2rem) max(0.9rem, env(safe-area-inset-bottom));
+}
+
+.progressTrack {
+  background: rgba(245, 245, 240, 0.08);
+  height: 2px;
+  margin: 0 auto;
+  max-width: 1120px;
+  overflow: hidden;
+  width: min(100%, 1120px);
+}
+
+.progressFill {
+  background: rgba(245, 245, 240, 0.66);
+  display: block;
+  height: 100%;
+  transition: width 240ms ease;
+}
+
+.statusRow {
+  align-items: center;
+  color: rgba(245, 245, 240, 0.5);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 1120px;
+  width: min(100%, 1120px);
+}
+
+.statusRow span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusRow span:last-child {
+  color: rgba(245, 245, 240, 0.38);
+  text-align: right;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 0 auto;
+  max-width: 1120px;
+  width: min(100%, 1120px);
+}
+
+.actionButton,
+.primaryButton,
+.quietButton {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(245, 245, 240, 0.12);
+  color: rgba(245, 245, 240, 0.62);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2.35rem;
+  padding: 0 0.85rem;
+}
+
+.primaryButton {
+  background: rgba(245, 245, 240, 0.9);
+  border-color: rgba(245, 245, 240, 0.9);
+  color: #050505;
+}
+
+.quietButton {
+  border-color: transparent;
+  color: rgba(245, 245, 240, 0.44);
+}
+
+.actionButton:hover,
+.primaryButton:hover,
+.quietButton:hover {
+  border-color: rgba(245, 245, 240, 0.22);
+}
+
+.actionButton:disabled,
+.primaryButton:disabled,
+.quietButton:disabled,
+.actionButton[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.fileInput {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+
+@media (max-width: 720px) {
+  .surface {
+    grid-template-rows: auto minmax(16rem, 1fr) auto;
+  }
+
+  .telemetry {
+    min-height: 4.1rem;
+  }
+
+  .statusRow {
+    align-items: stretch;
+    display: grid;
+    gap: 0.28rem;
+  }
+
+  .statusRow span:last-child {
+    text-align: left;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .primaryButton {
+    grid-column: span 2;
+  }
+}

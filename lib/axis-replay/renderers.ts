@@ -34,7 +34,8 @@ export function renderAtmosphereLayer(context: CanvasRenderingContext2D, input: 
 }
 
 export function nearestKnot(frames: TelemetrySample[], durationMs: number, x: number, width: number) {
-  const timestamp = (x / Math.max(1, width)) * durationMs
+  const { left, railWidth } = railBounds(width)
+  const timestamp = timeFromRailX(x, width, durationMs)
   let nearest: { distance: number; timestampMs: number } | null = null
 
   for (const frame of frames) {
@@ -44,12 +45,38 @@ export function nearestKnot(frames: TelemetrySample[], durationMs: number, x: nu
     }
   }
 
-  if (!nearest || nearest.distance > durationMs * 0.035) return null
+  const hitWindowMs = Math.max(1200, durationMs * 0.025)
+  const hitWidth = Math.max(12, width * 0.018)
+  const nearestX = nearest
+    ? timeToX(nearest.timestampMs, durationMs, left, railWidth)
+    : 0
+
+  if (
+    !nearest ||
+    (nearest.distance > hitWindowMs && Math.abs(nearestX - x) > hitWidth)
+  ) {
+    return null
+  }
+
   return nearest.timestampMs
 }
 
 export function timeFromRailX(x: number, width: number, durationMs: number) {
-  return Math.max(0, Math.min(durationMs, (x / Math.max(1, width)) * durationMs))
+  const { left, railWidth } = railBounds(width)
+  return Math.max(0, Math.min(durationMs, ((x - left) / Math.max(1, railWidth)) * durationMs))
+}
+
+export function railXFromTime(timestampMs: number, durationMs: number, width: number) {
+  const { left, railWidth } = railBounds(width)
+  return timeToX(timestampMs, durationMs, left, railWidth)
+}
+
+function railBounds(width: number) {
+  const left = Math.max(18, width * 0.035)
+  return {
+    left,
+    railWidth: Math.max(1, width - left * 2),
+  }
 }
 
 function drawReplayFoundation(context: CanvasRenderingContext2D, readMs: number, durationMs: number, left: number, railWidth: number, baseline: number) {

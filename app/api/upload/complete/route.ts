@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { revalidatePath } from "next/cache"
 import {
   cleanText,
   normalizeEnvironment,
@@ -10,6 +11,7 @@ import type { AxisUploadResponse } from "@/lib/uploadResponse"
 export const runtime = "nodejs"
 
 type CompleteUploadBody = {
+  sessionId?: string
   traceId?: string
   filePath?: string
   fileName?: string
@@ -39,6 +41,15 @@ function playerIdFromName(value: string) {
 
 function detailFromError(error: unknown) {
   return error instanceof Error ? error.message : "UNKNOWN FAILURE"
+}
+
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    )
+  )
 }
 
 export async function POST(request: Request) {
@@ -111,11 +122,34 @@ export async function POST(request: Request) {
       )
     }
 
-    const sessionId = crypto.randomUUID()
+    const sessionId = isUuid(body.sessionId)
+      ? body.sessionId
+      : crypto.randomUUID()
     const playerName = body.player?.trim() || "Unassigned"
     const durationSeconds = Number.isFinite(body.durationSeconds)
       ? Number(body.durationSeconds)
       : 0
+
+    const existing = await supabaseAdmin
+      .from("axis_sessions")
+      .select("id, video_url, metadata")
+      .eq("id", sessionId)
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    if (existing.data) {
+      revalidatePath("/games")
+
+      return safeJson({
+        ok: true,
+        replayId: existing.data.id,
+        videoUrl: existing.data.video_url || signedUrl.data.signedUrl,
+        createdAt: Date.now(),
+        stage: "complete",
+        traceId,
+        stored: true,
+      })
+    }
 
     const inserted = await supabaseAdmin
       .from("axis_sessions")
@@ -140,7 +174,20 @@ export async function POST(request: Request) {
         embedding_status: "pending",
         semantic_tags: [],
         metadata: {
+          sessionId,
           traceId,
+          archive: {
+            id: sessionId,
+            kind: "game",
+            status: "ready",
+            createdAt: new Date().toISOString(),
+            video: {
+              bucket: "axis-replays",
+              path: filePath,
+              contentType: body.contentType || "video/mp4",
+              sizeBytes: body.sizeBytes || 0,
+            },
+          },
           originalName: body.fileName || null,
           originalType: body.contentType || null,
           originalSize: body.sizeBytes || 0,
@@ -200,6 +247,8 @@ export async function POST(request: Request) {
       stage: "complete",
       replayId: inserted.data.id,
     })
+
+    revalidatePath("/games")
 
     return safeJson({
       ok: true,
