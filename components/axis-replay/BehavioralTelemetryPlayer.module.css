@@ -113,14 +113,14 @@
 
 .railZone {
   display: grid;
-  gap: 0.72rem;
-  padding: 0.8rem clamp(0.75rem, 3vw, 2rem) max(0.9rem, env(safe-area-inset-bottom));
+  gap: 0.62rem;
+  padding: 0.55rem clamp(0.75rem, 3vw, 2rem) max(0.75rem, env(safe-area-inset-bottom));
   position: relative;
   z-index: 3;
 }
 
 .railStack {
-  height: clamp(8.5rem, 22dvh, 13.5rem);
+  height: clamp(5.6rem, 14dvh, 8rem);
   margin: 0 auto;
   max-width: 1120px;
   position: relative;
@@ -160,8 +160,8 @@
 .chooseFile {
   appearance: none;
   background: transparent;
-  border: 1px solid rgba(245, 245, 240, 0.18);
-  color: rgba(245, 245, 240, 0.78);
+  border: 1px solid rgba(245, 245, 240, 0.14);
+  color: rgba(245, 245, 240, 0.66);
   cursor: pointer;
   display: inline-grid;
   min-height: 2.15rem;
@@ -170,8 +170,8 @@
 }
 
 .chooseFile:hover {
-  border-color: rgba(245, 245, 240, 0.3);
-  color: rgba(245, 245, 240, 0.94);
+  border-color: rgba(245, 245, 240, 0.22);
+  color: rgba(245, 245, 240, 0.82);
 }
 
 .fileInput {
