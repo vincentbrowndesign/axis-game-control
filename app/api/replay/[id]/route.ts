@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { buildMemoryState } from "@/lib/memoryInference"
 import { normalizeReplay } from "@/lib/normalizeReplay"
+import { readProcessingSnapshot } from "@/lib/axis-processing/state"
 import {
   type AxisReplaySession,
 } from "@/types/memory"
@@ -69,6 +70,10 @@ export async function GET(_req: Request, context: Context) {
   const timeline = asRecord(metadata.timeline)
   const clips = asRecord(metadata.clips)
   const stats = asRecord(metadata.stats)
+  const archive = asRecord(metadata.archive)
+  const broadcast = asRecord(metadata.broadcast)
+  const outputs = asRecord(metadata.outputs)
+  const processing = readProcessingSnapshot(metadata.processing)
   const telemetryPath =
     typeof telemetry.path === "string" ? telemetry.path : ""
   const timelinePath =
@@ -154,6 +159,10 @@ export async function GET(_req: Request, context: Context) {
       })),
       ambientLine: memoryState.ambientLine,
       memoryState,
+      archive,
+      broadcast,
+      outputs,
+      processing,
       telemetry: telemetryPath
         ? {
             path: telemetryPath,

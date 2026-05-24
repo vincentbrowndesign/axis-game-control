@@ -5,6 +5,11 @@ import {
   type PlayableArea,
   type RawRfDetectionFrame,
 } from "@/lib/basketball/trackingPipeline"
+import {
+  createProcessingSnapshot,
+  type AxisProcessingState,
+} from "@/lib/axis-processing/state"
+import { applySessionArchiveManifest } from "@/lib/axis-processing/archive"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { exportSessionClips } from "@/lib/replay/exportClips"
@@ -24,8 +29,46 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {}
 }
 
+async function writeProcessingState({
+  detail,
+  metadata,
+  sessionId,
+  state,
+  traceId,
+  userId,
+}: {
+  detail?: string
+  metadata: Record<string, unknown>
+  sessionId: string
+  state: AxisProcessingState
+  traceId: string
+  userId: string
+}) {
+  const processing = createProcessingSnapshot({
+    detail,
+    previous: asRecord(metadata.processing),
+    state,
+    traceId,
+  })
+
+  metadata.processing = processing
+
+  await supabaseAdmin
+    .from("axis_sessions")
+    .update({
+      metadata,
+      status: state.toLowerCase(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+}
+
 export async function POST(request: Request) {
   const traceId = crypto.randomUUID()
+  let activeMetadata: Record<string, unknown> | null = null
+  let activeSessionId = ""
+  let activeUserId = ""
 
   try {
     const supabase = await createClient()
@@ -44,6 +87,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as ProcessBody
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : ""
     const detections = Array.isArray(body.detections) ? body.detections : []
+    activeSessionId = sessionId
 
     if (!sessionId) {
       return NextResponse.json(
@@ -73,12 +117,41 @@ export async function POST(request: Request) {
       )
     }
 
+    const metadata = asRecord(session.data.metadata)
+    activeMetadata = metadata
+    activeUserId = user.id
+    await writeProcessingState({
+      metadata,
+      sessionId,
+      state: "PROCESSING",
+      traceId,
+      userId: user.id,
+    })
+
+    await writeProcessingState({
+      detail: `${detections.length} detection frames received.`,
+      metadata,
+      sessionId,
+      state: "TRACKING",
+      traceId,
+      userId: user.id,
+    })
+
     const output = buildReplayTrackingPipeline({
       frames: detections,
       playableArea: body.playableArea,
     })
     const telemetryPath = `${user.id}/telemetry/${sessionId}-axis-telemetry.ndjson`
     const timelinePath = `${user.id}/timelines/${sessionId}-axis-timeline.json`
+
+    await writeProcessingState({
+      detail: `${output.telemetry.length} telemetry frames prepared.`,
+      metadata,
+      sessionId,
+      state: "GENERATING_REPLAY",
+      traceId,
+      userId: user.id,
+    })
 
     const telemetryUpload = await supabaseAdmin.storage
       .from("axis-replays")
@@ -121,7 +194,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const metadata = asRecord(session.data.metadata)
     const archive = asRecord(metadata.archive)
 
     const nextMetadata = {
@@ -137,13 +209,12 @@ export async function POST(request: Request) {
           updatedAt: new Date().toISOString(),
         },
       },
-      processing: {
-        quality: output.quality,
-        status: "ready",
-        timelinePath,
+      processing: createProcessingSnapshot({
+        detail: "Replay memory prepared.",
+        previous: asRecord(metadata.processing),
+        state: "GENERATING_STATS",
         traceId,
-        updatedAt: new Date().toISOString(),
-      },
+      }),
       telemetry: {
         contentType: "application/x-ndjson",
         durationMs: output.telemetry.at(-1)?.timestamp_ms ?? 0,
@@ -170,6 +241,15 @@ export async function POST(request: Request) {
         updatedAt: new Date().toISOString(),
       },
     }
+
+    await writeProcessingState({
+      detail: "Traditional stats prepared.",
+      metadata: nextMetadata,
+      sessionId,
+      state: "GENERATING_STATS",
+      traceId,
+      userId: user.id,
+    })
 
     const updated = await supabaseAdmin
       .from("axis_sessions")
@@ -201,6 +281,15 @@ export async function POST(request: Request) {
         user_id: string
       }>()
 
+    await writeProcessingState({
+      detail: "Finding clip windows.",
+      metadata: nextMetadata,
+      sessionId,
+      state: "GENERATING_CLIPS",
+      traceId,
+      userId: user.id,
+    })
+
     const finalClipResult = sourceSession.data
       ? await exportSessionClips({
           maxClips: 5,
@@ -211,21 +300,50 @@ export async function POST(request: Request) {
         })
       : { clips: [], errors: [], plan: [] }
 
+    const finalMetadata = {
+      ...nextMetadata,
+      clips: {
+        count: finalClipResult.clips.length,
+        errors: finalClipResult.errors,
+        generatedAt: new Date().toISOString(),
+        plannedCount: finalClipResult.plan.length,
+        status: finalClipResult.clips.length > 0 ? "ready" : "empty",
+        traceId,
+        values: finalClipResult.clips,
+      },
+    }
+
+    await writeProcessingState({
+      detail: "Preparing recap output.",
+      metadata: finalMetadata,
+      sessionId,
+      state: "GENERATING_BROADCAST",
+      traceId,
+      userId: user.id,
+    })
+
+    finalMetadata.processing = createProcessingSnapshot({
+      detail: "Replay, clips, stats, and recap output are ready.",
+      previous: asRecord(finalMetadata.processing),
+      state: "COMPLETE",
+      traceId,
+    })
+
+    const archivedFinalMetadata = applySessionArchiveManifest({
+      durationSeconds: sourceSession.data?.duration_seconds ?? null,
+      filePath: sourceSession.data?.file_path ?? null,
+      id: sessionId,
+      metadata: finalMetadata,
+      status: "complete",
+      title: sourceSession.data?.title || "Game media",
+      updatedAt: new Date().toISOString(),
+    })
+
     await supabaseAdmin
       .from("axis_sessions")
       .update({
-        metadata: {
-          ...nextMetadata,
-          clips: {
-            count: finalClipResult.clips.length,
-            errors: finalClipResult.errors,
-            generatedAt: new Date().toISOString(),
-            plannedCount: finalClipResult.plan.length,
-            status: finalClipResult.clips.length > 0 ? "ready" : "empty",
-            traceId,
-            values: finalClipResult.clips,
-          },
-        },
+        metadata: archivedFinalMetadata,
+        status: "complete",
         updated_at: new Date().toISOString(),
       })
       .eq("id", sessionId)
@@ -261,6 +379,17 @@ export async function POST(request: Request) {
       traceId,
     })
   } catch (error) {
+    if (activeMetadata && activeSessionId && activeUserId) {
+      await writeProcessingState({
+        detail: error instanceof Error ? error.message : "Processing failed.",
+        metadata: activeMetadata,
+        sessionId: activeSessionId,
+        state: "FAILED",
+        traceId,
+        userId: activeUserId,
+      }).catch(() => undefined)
+    }
+
     return NextResponse.json(
       {
         ok: false,

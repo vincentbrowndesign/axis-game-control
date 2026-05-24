@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import {
+  createProcessingSnapshot,
+  type AxisProcessingState,
+} from "@/lib/axis-processing/state"
+import { applySessionArchiveManifest } from "@/lib/axis-processing/archive"
 import { extractPosterFrame } from "@/lib/video/extractPosterFrame"
 
 type Context = {
@@ -21,11 +26,46 @@ function fileExtension(filePath: string) {
     : "mov"
 }
 
+async function writeProcessingState({
+  detail,
+  id,
+  metadata,
+  state,
+  traceId,
+}: {
+  detail?: string
+  id: string
+  metadata: Record<string, unknown>
+  state: AxisProcessingState
+  traceId: string
+}) {
+  const processing = createProcessingSnapshot({
+    detail,
+    previous: asRecord(metadata.processing),
+    state,
+    traceId,
+  })
+
+  metadata.processing = processing
+
+  await supabaseAdmin
+    .from("axis_sessions")
+    .update({
+      metadata,
+      status: state.toLowerCase(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+}
+
 export async function POST(_request: Request, context: Context) {
   const traceId = crypto.randomUUID()
+  let activeId = ""
+  let activeMetadata: Record<string, unknown> | null = null
 
   try {
     const { id } = await context.params
+    activeId = id
     const supabase = await createClient()
     const {
       data: { user },
@@ -75,28 +115,35 @@ export async function POST(_request: Request, context: Context) {
     }
 
     const metadata = asRecord(session.data.metadata)
+    activeMetadata = metadata
     const extractionQueue = asRecord(metadata.extractionQueue)
     const attempts =
       typeof extractionQueue.attempts === "number"
         ? extractionQueue.attempts + 1
         : 1
 
-    await supabaseAdmin
-      .from("axis_sessions")
-      .update({
-        metadata: {
-          ...metadata,
-          memoryExtractionStatus: "poster-retry-running",
-          extractionQueue: {
-            ...extractionQueue,
-            status: "running",
-            attempts,
-            traceId,
-          },
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
+    metadata.memoryExtractionStatus = "poster-retry-running"
+    metadata.extractionQueue = {
+      ...extractionQueue,
+      status: "running",
+      attempts,
+      traceId,
+    }
+
+    await writeProcessingState({
+      id,
+      metadata,
+      state: "PROCESSING",
+      traceId,
+    })
+
+    await writeProcessingState({
+      detail: "Preparing replay preview.",
+      id,
+      metadata,
+      state: "GENERATING_REPLAY",
+      traceId,
+    })
 
     const downloaded = await supabaseAdmin.storage
       .from("axis-replays")
@@ -115,25 +162,24 @@ export async function POST(_request: Request, context: Context) {
     })
 
     if (!poster.ok || !poster.buffer) {
-      await supabaseAdmin
-        .from("axis_sessions")
-        .update({
-          metadata: {
-            ...metadata,
-            memoryExtractionStatus: "queued-for-retry",
-            extractionQueue: {
-              ...extractionQueue,
-              status: "queued",
-              attempts,
-              nextStage: "poster-frame-retry",
-              reason: poster.error || "poster extraction failed",
-              attemptedAtSeconds: poster.attemptedAtSeconds,
-              traceId,
-            },
-          },
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
+      metadata.memoryExtractionStatus = "queued-for-retry"
+      metadata.extractionQueue = {
+        ...extractionQueue,
+        status: "queued",
+        attempts,
+        nextStage: "poster-frame-retry",
+        reason: poster.error || "poster extraction failed",
+        attemptedAtSeconds: poster.attemptedAtSeconds,
+        traceId,
+      }
+
+      await writeProcessingState({
+        detail: "Replay preview queued for another attempt.",
+        id,
+        metadata,
+        state: "QUEUED",
+        traceId,
+      })
 
       return NextResponse.json({
         ok: true,
@@ -162,24 +208,45 @@ export async function POST(_request: Request, context: Context) {
       throw new Error(signedPoster.error.message)
     }
 
+    metadata.posterPath = posterPath
+    metadata.posterUrl = signedPoster.data.signedUrl
+    metadata.memoryExtractionStatus = "poster-ready"
+    metadata.extractionQueue = {
+      ...extractionQueue,
+      status: "complete",
+      attempts,
+      nextStage: null,
+      reason: null,
+      attemptedAtSeconds: poster.attemptedAtSeconds,
+      traceId,
+    }
+    metadata.broadcast = {
+      status: "prepared",
+      type: "game-recap-shell",
+      updatedAt: new Date().toISOString(),
+    }
+    metadata.processing = createProcessingSnapshot({
+      detail: "Replay media is ready.",
+      previous: asRecord(metadata.processing),
+      state: "COMPLETE",
+      traceId,
+    })
+
+    const archivedMetadata = applySessionArchiveManifest({
+      durationSeconds: Number(session.data.duration_seconds || 0),
+      filePath: session.data.file_path,
+      id,
+      metadata,
+      status: "complete",
+      title: "Game media",
+      updatedAt: new Date().toISOString(),
+    })
+
     await supabaseAdmin
       .from("axis_sessions")
       .update({
-        metadata: {
-          ...metadata,
-          posterPath,
-          posterUrl: signedPoster.data.signedUrl,
-          memoryExtractionStatus: "poster-ready",
-          extractionQueue: {
-            ...extractionQueue,
-            status: "complete",
-            attempts,
-            nextStage: null,
-            reason: null,
-            attemptedAtSeconds: poster.attemptedAtSeconds,
-            traceId,
-          },
-        },
+        metadata: archivedMetadata,
+        status: "complete",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
@@ -198,6 +265,16 @@ export async function POST(_request: Request, context: Context) {
       posterUrl: signedPoster.data.signedUrl,
     })
   } catch (error) {
+    if (activeId && activeMetadata) {
+      await writeProcessingState({
+        detail: error instanceof Error ? error.message : "Processing failed.",
+        id: activeId,
+        metadata: activeMetadata,
+        state: "FAILED",
+        traceId,
+      }).catch(() => undefined)
+    }
+
     console.error("AXIS DELAYED EXTRACTION FAILURE", {
       traceId,
       stage: "unhandled",

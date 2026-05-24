@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { retrieveSessionMemory } from "@/lib/mcp/supabaseMemory"
 import { normalizeReplay } from "@/lib/normalizeReplay"
+import { readProcessingSnapshot } from "@/lib/axis-processing/state"
 import { createClient } from "@/lib/supabase/server"
 import styles from "./page.module.css"
 
@@ -38,6 +39,7 @@ export default async function GamesPage() {
     const replay = normalizeReplay(session)
     const metadata = asRecord(session.metadata)
     const telemetry = asRecord(metadata.telemetry)
+    const processing = readProcessingSnapshot(metadata.processing)
 
     return {
       id: replay.id,
@@ -45,6 +47,7 @@ export default async function GamesPage() {
       createdAt: replay.createdAt,
       duration: replay.duration || 0,
       status: replay.status || "stored",
+      processing,
       player: replay.player,
       hasTelemetry: Boolean(telemetry.path),
       telemetryFrames:
@@ -82,7 +85,9 @@ export default async function GamesPage() {
                 {formatDuration(game.duration)} / {game.player}
               </span>
               <span className={styles.state}>
-                {game.hasTelemetry
+                {game.processing.state !== "IDLE"
+                  ? game.processing.label
+                  : game.hasTelemetry
                   ? `${game.telemetryFrames} frames`
                   : game.status}
               </span>

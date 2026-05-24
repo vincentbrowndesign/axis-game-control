@@ -101,10 +101,39 @@ export async function POST(req: Request) {
       metadata.clips && typeof metadata.clips === "object"
         ? (metadata.clips as Record<string, unknown>)
         : {}
+    const archive =
+      metadata.archive && typeof metadata.archive === "object"
+        ? (metadata.archive as Record<string, unknown>)
+        : {}
+    const archiveAssets =
+      archive.assets && typeof archive.assets === "object"
+        ? (archive.assets as Record<string, unknown>)
+        : {}
+    const archiveTelemetry =
+      archiveAssets.telemetry && typeof archiveAssets.telemetry === "object"
+        ? (archiveAssets.telemetry as Record<string, unknown>)
+        : {}
+    const archiveTopology =
+      archiveAssets.replayTopology && typeof archiveAssets.replayTopology === "object"
+        ? (archiveAssets.replayTopology as Record<string, unknown>)
+        : {}
+    const archiveClips =
+      archiveAssets.clips && typeof archiveAssets.clips === "object"
+        ? (archiveAssets.clips as Record<string, unknown>)
+        : {}
     const telemetryPath =
       typeof telemetry.path === "string" ? telemetry.path : ""
     const timelinePath =
       typeof timeline.path === "string" ? timeline.path : ""
+    const archiveTelemetryPath =
+      typeof archiveTelemetry.path === "string" ? archiveTelemetry.path : ""
+    const archiveTopologyPath =
+      typeof archiveTopology.path === "string" ? archiveTopology.path : ""
+    const archiveClipPaths = Array.isArray(archiveClips.paths)
+      ? archiveClips.paths.filter(
+          (path): path is string => typeof path === "string" && path.length > 0
+        )
+      : []
     const clipPaths = Array.isArray(clips.values)
       ? clips.values
           .filter((clip): clip is Record<string, unknown> =>
@@ -113,9 +142,15 @@ export async function POST(req: Request) {
           .map((clip) => clip.path)
           .filter((path): path is string => typeof path === "string" && path.length > 0)
       : []
-    const paths = [existing.data.file_path, telemetryPath, timelinePath, ...clipPaths].filter(
-      (path): path is string => Boolean(path)
-    )
+    const paths = [
+      existing.data.file_path,
+      telemetryPath,
+      timelinePath,
+      archiveTelemetryPath,
+      archiveTopologyPath,
+      ...clipPaths,
+      ...archiveClipPaths,
+    ].filter((path): path is string => Boolean(path))
 
     if (paths.length > 0) {
       await supabaseAdmin.storage

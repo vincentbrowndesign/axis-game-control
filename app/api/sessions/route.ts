@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { retrieveSessionMemory } from "@/lib/mcp/supabaseMemory"
 import { normalizeReplay } from "@/lib/normalizeReplay"
+import { readProcessingSnapshot } from "@/lib/axis-processing/state"
 import { createClient } from "@/lib/supabase/server"
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -52,6 +53,8 @@ export async function GET() {
     const clips = asRecord(metadata.clips)
     const stats = asRecord(metadata.stats)
     const archive = asRecord(metadata.archive)
+    const outputs = asRecord(metadata.outputs)
+    const processing = readProcessingSnapshot(metadata.processing)
 
     return {
       id: normalized.id,
@@ -62,9 +65,12 @@ export async function GET() {
       environment: normalized.environment,
       player: normalized.player,
       status: normalized.status || "stored",
+      processing,
       fileName: normalized.fileName || "",
       replayHref: `/replay-native?session=${encodeURIComponent(normalized.id)}`,
       archive: {
+        manifest: archive,
+        outputs,
         id:
           typeof archive.id === "string"
             ? archive.id

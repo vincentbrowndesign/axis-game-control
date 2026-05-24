@@ -1,6 +1,12 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
+import {
+  processingLabel,
+  processingProgress,
+  type AxisProcessingSnapshot,
+  type AxisProcessingState,
+} from "@/lib/axis-processing/state"
 import { createStoragePath, isSupportedReplayFile } from "@/lib/replayStorage"
 import { normalizeUploadResponse, parseUploadResponseText } from "@/lib/uploadResponse"
 import { createRecorder, type AxisRecorder } from "@/lib/video/createRecorder"
@@ -46,12 +52,103 @@ type UploadDraft = {
 const RECOVERY_KEY = "axis.game-day.pending-session"
 const UPLOAD_DRAFT_KEY = "axis.game-day.pending-upload"
 const PROCESSING_STEPS = [
-  "Processing game...",
-  "Detecting moments...",
-  "Building replay memory...",
-  "Generating clips...",
-  "Creating broadcast...",
-]
+  "QUEUED",
+  "PROCESSING",
+  "TRACKING",
+  "GENERATING_REPLAY",
+  "GENERATING_CLIPS",
+  "GENERATING_STATS",
+  "GENERATING_BROADCAST",
+  "COMPLETE",
+] satisfies AxisProcessingState[]
+
+type ProcessingStatusResponse = {
+  ok?: boolean
+  processing?: AxisProcessingSnapshot
+  session?: {
+    id: string
+    status: string
+  }
+  summary?: ProcessingSummary
+}
+
+type ProcessingSummary = {
+  complete: number
+  failed: number
+  nextType: string | null
+  progress: number
+  total: number
+}
+
+const PROCESSING_STORAGE_KEY = "axis.game-day.processing-session"
+
+const PROCESSING_DISPLAY: Record<AxisProcessingState, string> = {
+  COMPLETE: "Broadcast ready.",
+  FAILED: "Processing needs another try.",
+  GENERATING_BROADCAST: "Creating broadcast...",
+  GENERATING_CLIPS: "Generating clips...",
+  GENERATING_REPLAY: "Building replay memory...",
+  GENERATING_STATS: "Generating stats...",
+  IDLE: "Ready for game film.",
+  PROCESSING: "Processing game...",
+  QUEUED: "Processing game...",
+  TRACKING: "Detecting moments...",
+  UPLOADING: "Uploading game...",
+}
+
+const UI_STAGE_BY_PROCESSING: Partial<Record<AxisProcessingState, CaptureStage>> = {
+  COMPLETE: "complete",
+  FAILED: "error",
+  GENERATING_BROADCAST: "processing",
+  GENERATING_CLIPS: "processing",
+  GENERATING_REPLAY: "processing",
+  GENERATING_STATS: "processing",
+  PROCESSING: "processing",
+  QUEUED: "processing",
+  TRACKING: "processing",
+  UPLOADING: "uploading",
+}
+
+function processingText(state: AxisProcessingState) {
+  return PROCESSING_DISPLAY[state] || processingLabel(state)
+}
+
+function isProcessingTerminal(state: AxisProcessingState) {
+  return state === "COMPLETE" || state === "FAILED"
+}
+
+function isVisibleProcessingState(state: AxisProcessingState) {
+  return state !== "IDLE" && state !== "FAILED"
+}
+
+function readStoredProcessingSession() {
+  try {
+    return localStorage.getItem(PROCESSING_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredProcessingSession(sessionId: string | null) {
+  try {
+    if (sessionId) {
+      localStorage.setItem(PROCESSING_STORAGE_KEY, sessionId)
+    } else {
+      localStorage.removeItem(PROCESSING_STORAGE_KEY)
+    }
+  } catch {
+    // Local recovery is helpful, not required.
+  }
+}
+
+function initialProcessingSnapshot(state: AxisProcessingState): AxisProcessingSnapshot {
+  return {
+    label: processingLabel(state),
+    progress: processingProgress(state),
+    state,
+    updatedAt: new Date().toISOString(),
+  }
+}
 
 export function GameCaptureFlow() {
   const router = useRouter()
@@ -74,6 +171,10 @@ export function GameCaptureFlow() {
   const [recovery, setRecovery] = useState<RecoveryPayload | null>(null)
   const [recordingReady, setRecordingReady] = useState(false)
   const [hasSelectedFile, setHasSelectedFile] = useState(false)
+  const [processing, setProcessing] = useState<AxisProcessingSnapshot>(
+    initialProcessingSnapshot("IDLE")
+  )
+  const [processingSummary, setProcessingSummary] = useState<ProcessingSummary | null>(null)
 
   useEffect(() => {
     const initializeClientState = window.setTimeout(() => {
@@ -87,6 +188,13 @@ export function GameCaptureFlow() {
         setRecovery(stored)
         setStatus("A saved game is ready to continue.")
       }
+
+      const storedProcessingSession = readStoredProcessingSession()
+      if (storedProcessingSession) {
+        setSessionId(storedProcessingSession)
+        setStage("processing")
+        setStatus("Checking game processing.")
+      }
     }, 0)
 
     return () => {
@@ -95,6 +203,28 @@ export function GameCaptureFlow() {
       stopStream()
     }
   }, [])
+
+  useEffect(() => {
+    if (!sessionId) return
+    if (isProcessingTerminal(processing.state)) return
+
+    let cancelled = false
+
+    const refresh = async () => {
+      const next = await fetchProcessingStatus(sessionId).catch(() => null)
+      if (cancelled || !next) return
+
+      applyProcessingSnapshot(next.processing, next.summary)
+    }
+
+    void refresh()
+    const interval = window.setInterval(() => void refresh(), 2400)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [processing.state, sessionId])
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -224,8 +354,18 @@ export function GameCaptureFlow() {
 
   const canUpload = stage === "ready" || stage === "error"
   const isBusy = stage === "uploading" || stage === "saving" || stage === "processing"
-  const showProcessing = stage === "saving" || stage === "processing" || stage === "complete"
-  const processingIndex = getProcessingIndex(stage, progress)
+  const showProcessing =
+    stage === "saving" ||
+    stage === "processing" ||
+    stage === "complete" ||
+    isVisibleProcessingState(processing.state)
+  const processingIndex = getProcessingIndex(processing.state)
+  const visibleProgress = Math.max(
+    0,
+    Math.min(100, processingSummary?.progress ?? progress)
+  )
+  const completedSteps = processingSummary?.complete ?? Math.max(0, processingIndex)
+  const totalSteps = processingSummary?.total ?? PROCESSING_STEPS.length
 
   return (
     <main className={styles.surface}>
@@ -255,19 +395,33 @@ export function GameCaptureFlow() {
               <div className={styles.processingPanel}>
                 <p className={styles.processingEyebrow}>AXIS PROCESSING</p>
                 <h2 className={styles.processingTitle}>
-                  {stage === "complete" ? "Replay ready" : "Turning game film into media"}
+                  {processingText(processing.state)}
                 </h2>
+                <div className={styles.processingMeter} aria-hidden="true">
+                  <span
+                    className={styles.processingMeterFill}
+                    style={{ width: `${visibleProgress}%` }}
+                  />
+                </div>
+                <div className={styles.processingMeta}>
+                  <span>
+                    {processing.state === "COMPLETE"
+                      ? "Replay, clips, stats, and broadcast are ready."
+                      : "Axis is turning this game into media."}
+                  </span>
+                  <span>{completedSteps}/{totalSteps}</span>
+                </div>
                 <div className={styles.processingSteps}>
                   {PROCESSING_STEPS.map((step, index) => (
                     <span
                       className={[
                         styles.processingStep,
                         index === processingIndex ? styles.processingStepActive : "",
-                        index < processingIndex || stage === "complete" ? styles.processingStepDone : "",
+                        index < processingIndex || processing.state === "COMPLETE" ? styles.processingStepDone : "",
                       ].filter(Boolean).join(" ")}
                       key={step}
                     >
-                      {step}
+                      {processingText(step)}
                     </span>
                   ))}
                 </div>
@@ -277,7 +431,7 @@ export function GameCaptureFlow() {
         </div>
       </section>
 
-      <section className={styles.controlRail} aria-label="Upload session controls">
+      <section className={styles.controlRail} aria-label="Game media controls">
         <div className={styles.progressTrack}>
           <span className={styles.progressFill} style={{ width: `${progress}%` }} />
         </div>
@@ -359,8 +513,10 @@ export function GameCaptureFlow() {
     try {
       uploadActiveRef.current = true
       setStage("uploading")
+      setProcessing(initialProcessingSnapshot("UPLOADING"))
+      setProcessingSummary(null)
       setProgress(8)
-      setStatus("Getting game ready.")
+      setStatus(processingText("UPLOADING"))
 
       const { data, error } = await supabaseRef.current.auth.getSession()
       const session = data.session
@@ -396,7 +552,7 @@ export function GameCaptureFlow() {
       localStorage.setItem(UPLOAD_DRAFT_KEY, JSON.stringify(draft))
 
       setProgress(28)
-      setStatus("Uploading game.")
+      setStatus(processingText("UPLOADING"))
 
       await uploadWithResume({
         accessToken: session.access_token,
@@ -409,6 +565,7 @@ export function GameCaptureFlow() {
       localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload))
       setRecovery(payload)
       setProgress(78)
+      setProcessing(initialProcessingSnapshot("QUEUED"))
       setStatus("Upload complete. Axis is starting.")
 
       await completeAndProcess(payload)
@@ -442,20 +599,29 @@ export function GameCaptureFlow() {
       localStorage.removeItem(RECOVERY_KEY)
       setRecovery(null)
       setSessionId(completed.replayId)
+      writeStoredProcessingSession(completed.replayId)
       setStage("processing")
-      setProgress(96)
-      setStatus("Processing game...")
+      setProcessing(initialProcessingSnapshot("QUEUED"))
+      setProgress(processingProgress("QUEUED"))
+      setStatus(processingText("QUEUED"))
 
       await attachTelemetry(completed.replayId)
 
-      setStatus("Building replay memory...")
-      void fetch(`/api/upload/extract/${completed.replayId}`, {
+      void fetch("/api/session/jobs", {
+        body: JSON.stringify({
+          action: "run",
+          sessionId: completed.replayId,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
         method: "POST",
       }).catch(() => undefined)
 
-      setStage("complete")
-      setProgress(100)
-      setStatus("Replay, clips, and moments are being prepared.")
+      const next = await fetchProcessingStatus(completed.replayId).catch(() => null)
+      if (next?.processing) {
+        applyProcessingSnapshot(next.processing, next.summary)
+      }
     } catch (error) {
       setStage("error")
       setStatus(error instanceof Error ? error.message : "Session save needs another try.")
@@ -509,6 +675,40 @@ export function GameCaptureFlow() {
   function stopStream() {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
+  }
+
+  function applyProcessingSnapshot(next: AxisProcessingSnapshot, summary?: ProcessingSummary | null) {
+    setProcessing(next)
+    setProcessingSummary(summary || null)
+    setProgress(Math.max(next.progress, summary?.progress ?? 0))
+    setStatus(processingText(next.state))
+
+    const nextStage = UI_STAGE_BY_PROCESSING[next.state]
+    if (nextStage) setStage(nextStage)
+    if (next.state === "COMPLETE" || next.state === "FAILED") {
+      writeStoredProcessingSession(null)
+    }
+  }
+}
+
+async function fetchProcessingStatus(
+  sessionId: string
+): Promise<(ProcessingStatusResponse & { processing: AxisProcessingSnapshot }) | null> {
+  const response = await fetch(
+    `/api/session/status?sessionId=${encodeURIComponent(sessionId)}`,
+    {
+      cache: "no-store",
+    }
+  )
+
+  if (!response.ok) return null
+
+  const data = (await response.json()) as ProcessingStatusResponse
+  if (!data.processing) return null
+
+  return {
+    ...data,
+    processing: data.processing,
   }
 }
 
@@ -673,9 +873,7 @@ function stageLabel(stage: CaptureStage) {
   return "Waiting"
 }
 
-function getProcessingIndex(stage: CaptureStage, progress: number) {
-  if (stage === "complete") return PROCESSING_STEPS.length - 1
-  if (stage === "processing") return 2
-  if (progress >= 92) return 1
-  return 0
+function getProcessingIndex(state: AxisProcessingState) {
+  const index = (PROCESSING_STEPS as readonly AxisProcessingState[]).indexOf(state)
+  return index >= 0 ? index : 0
 }

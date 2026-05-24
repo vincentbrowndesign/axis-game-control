@@ -6,6 +6,16 @@ import {
   normalizeEnvironment,
   normalizeSource,
 } from "@/lib/replayStorage"
+import {
+  createProcessingSnapshot,
+  readProcessingSnapshot,
+} from "@/lib/axis-processing/state"
+import {
+  deriveProcessingFromJobs,
+  ensureJobManifest,
+  readJobManifest,
+} from "@/lib/axis-processing/jobs"
+import { applySessionArchiveManifest } from "@/lib/axis-processing/archive"
 import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
@@ -138,6 +148,44 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (existing.data) {
+      const metadata =
+        existing.data.metadata && typeof existing.data.metadata === "object"
+          ? existing.data.metadata
+          : {}
+      const currentProcessing = readProcessingSnapshot(metadata.processing)
+      const processingJobs = ensureJobManifest(readJobManifest(metadata.processingJobs))
+      const processing =
+        currentProcessing.state === "COMPLETE"
+          ? currentProcessing
+          : deriveProcessingFromJobs(processingJobs, traceId)
+
+      await supabaseAdmin
+        .from("axis_sessions")
+        .update({
+          metadata: applySessionArchiveManifest({
+            createdAt: Date.now(),
+            durationSeconds:
+              typeof body.durationSeconds === "number"
+                ? body.durationSeconds
+                : null,
+            fileName: body.fileName || existing.data.id,
+            filePath,
+            id: existing.data.id,
+            metadata: {
+            ...metadata,
+            processing,
+            processingJobs,
+          },
+            status: processing.state.toLowerCase(),
+            title: body.fileName || "Game media",
+            updatedAt: new Date().toISOString(),
+          }),
+          status: processing.state.toLowerCase(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.data.id)
+        .eq("user_id", user.id)
+
       revalidatePath("/games")
 
       return safeJson({
@@ -149,6 +197,37 @@ export async function POST(request: Request) {
         traceId,
         stored: true,
       })
+    }
+
+    const baseMetadata = {
+      sessionId,
+      traceId,
+      archive: {
+        id: sessionId,
+        kind: "game",
+        status: "queued",
+        createdAt: new Date().toISOString(),
+        video: {
+          bucket: "axis-replays",
+          path: filePath,
+          contentType: body.contentType || "video/mp4",
+          sizeBytes: body.sizeBytes || 0,
+        },
+      },
+      originalName: body.fileName || null,
+      originalType: body.contentType || null,
+      originalSize: body.sizeBytes || 0,
+      playbackFallback: {
+        status: "ready",
+        source: "direct-storage-upload",
+        reason: "browser-uploaded-video",
+      },
+      processing: createProcessingSnapshot({
+        state: "QUEUED",
+        traceId,
+      }),
+      processingJobs: ensureJobManifest(),
+      client: body.client || {},
     }
 
     const inserted = await supabaseAdmin
@@ -167,37 +246,23 @@ export async function POST(request: Request) {
         workflow_stage: "practice",
         environment: normalizeEnvironment(body.environment || "practice"),
         duration_seconds: durationSeconds,
-        status: "stored",
+        status: "queued",
         tags: [],
         transcript_text: "",
         ai_summary: "Playback saved.",
         embedding_status: "pending",
         semantic_tags: [],
-        metadata: {
-          sessionId,
-          traceId,
-          archive: {
-            id: sessionId,
-            kind: "game",
-            status: "ready",
-            createdAt: new Date().toISOString(),
-            video: {
-              bucket: "axis-replays",
-              path: filePath,
-              contentType: body.contentType || "video/mp4",
-              sizeBytes: body.sizeBytes || 0,
-            },
-          },
-          originalName: body.fileName || null,
-          originalType: body.contentType || null,
-          originalSize: body.sizeBytes || 0,
-          playbackFallback: {
-            status: "ready",
-            source: "direct-storage-upload",
-            reason: "browser-uploaded-video",
-          },
-          client: body.client || {},
-        },
+        metadata: applySessionArchiveManifest({
+          createdAt: Date.now(),
+          durationSeconds,
+          fileName: body.fileName || "Axis video",
+          filePath,
+          id: sessionId,
+          metadata: baseMetadata,
+          status: "queued",
+          title: body.fileName || "Axis video",
+          updatedAt: new Date().toISOString(),
+        }),
       })
       .select("id, video_url")
       .single()
