@@ -31,6 +31,7 @@ Status: in progress
 - Palette direction now favors living gym energy: warm charcoal surfaces, scoreboard amber, electric green, and active athletic participation over cold replay-era voids.
 - V1 check-in no longer asks for browser location or blocks on gym-boundary verification; organization verification remains a future optional layer.
 - Supabase schema audit completed; no destructive cleanup performed. Current data model should be stabilized around check-ins, history, leaderboard, and preserved future media foundations.
+- Axis design system scaffold added so future screens inherit shared tokens, soft athletic surfaces, progression primitives, and the visual constitution instead of ad hoc styling.
 
 LEADERBOARD
 

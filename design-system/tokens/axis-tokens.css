@@ -1,0 +1,60 @@
+:root {
+  --axis-color-graphite-950: #11100e;
+  --axis-color-graphite-900: #171513;
+  --axis-color-graphite-850: #1f1b17;
+  --axis-color-graphite-800: #29241f;
+  --axis-color-graphite-700: #37312a;
+
+  --axis-color-ink: #f7f4eb;
+  --axis-color-ink-soft: rgba(247, 244, 235, 0.74);
+  --axis-color-ink-muted: rgba(247, 244, 235, 0.5);
+  --axis-color-ink-faint: rgba(247, 244, 235, 0.34);
+
+  --axis-surface: #171513;
+  --axis-surface-soft: rgba(31, 27, 23, 0.72);
+  --axis-surface-raised: rgba(41, 36, 31, 0.78);
+  --axis-surface-active: rgba(244, 176, 75, 0.1);
+  --axis-surface-live: rgba(110, 255, 156, 0.1);
+
+  --axis-border: rgba(247, 244, 235, 0.1);
+  --axis-border-strong: rgba(244, 176, 75, 0.22);
+  --axis-border-live: rgba(110, 255, 156, 0.28);
+
+  --axis-signal-amber: #f4b04b;
+  --axis-signal-green: #6eff9c;
+  --axis-signal-orange: #ff8a3d;
+  --axis-signal-blue: #76b7ff;
+  --axis-signal-white: #fff8e8;
+
+  --axis-glow: 0 0 28px rgba(244, 176, 75, 0.08);
+  --axis-glow-live: 0 0 30px rgba(110, 255, 156, 0.08);
+  --axis-shadow-soft: 0 24px 80px rgba(0, 0, 0, 0.26);
+
+  --axis-radius-xs: 0.55rem;
+  --axis-radius-sm: 0.8rem;
+  --axis-radius: 1.25rem;
+  --axis-radius-lg: 1.75rem;
+  --axis-radius-xl: 2.25rem;
+
+  --axis-spacing-1: 0.25rem;
+  --axis-spacing-2: 0.5rem;
+  --axis-spacing-3: 0.75rem;
+  --axis-spacing-4: 1rem;
+  --axis-spacing-5: 1.5rem;
+  --axis-spacing-6: 2rem;
+  --axis-spacing-7: 3rem;
+  --axis-spacing-8: 4rem;
+
+  --axis-type-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --axis-type-meta: var(--font-ibm-plex-mono), ui-monospace, monospace;
+
+  --axis-type-hero: clamp(4.4rem, 12vw, 9.4rem);
+  --axis-type-title: clamp(2.6rem, 6vw, 5.2rem);
+  --axis-type-body: clamp(1rem, 1.35vw, 1.2rem);
+  --axis-type-meta-size: 0.68rem;
+
+  --axis-motion-fast: 140ms ease;
+  --axis-motion: 220ms ease;
+  --axis-motion-slow: 420ms ease;
+}
+
