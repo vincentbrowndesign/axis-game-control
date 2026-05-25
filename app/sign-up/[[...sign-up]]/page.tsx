@@ -1,9 +1,9 @@
 import { SignUp } from "@clerk/nextjs"
-import { hasValidClerkPublishableKey } from "@/lib/axis-auth/clerkConfig"
+import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig"
 import Link from "next/link"
 
 export default function SignUpPage() {
-  const clerkConfigured = hasValidClerkPublishableKey()
+  const clerkConfigured = hasValidClerkServerConfig()
 
   return (
     <main style={styles.main}>

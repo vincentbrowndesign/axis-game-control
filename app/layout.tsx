@@ -6,7 +6,7 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
-import { hasValidClerkPublishableKey } from "@/lib/axis-auth/clerkConfig";
+import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -41,7 +41,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const clerkEnabled = hasValidClerkPublishableKey();
+  const clerkEnabled = hasValidClerkServerConfig();
+  const clerkPublishableKey =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
 
   return (
     <html
@@ -50,25 +52,28 @@ export default function RootLayout({
     >
       <body className="axis-organism-root min-h-full flex flex-col">
         {clerkEnabled ? (
-          <ClerkProvider>
-          <header className="axis-auth-presence" aria-label="Axis account">
-            <Show when="signed-out">
-              <SignInButton>
-                <button className="axis-auth-action" type="button">
-                  Sign in
-                </button>
-              </SignInButton>
-              <SignUpButton>
-                <button className="axis-auth-action axis-auth-action-primary" type="button">
-                  Sign up
-                </button>
-              </SignUpButton>
-            </Show>
-            <Show when="signed-in">
-              <UserButton />
-            </Show>
-          </header>
-          {children}
+          <ClerkProvider publishableKey={clerkPublishableKey}>
+            <header className="axis-auth-presence" aria-label="Axis account">
+              <Show when="signed-out">
+                <SignInButton mode="redirect">
+                  <button className="axis-auth-action" type="button">
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="redirect">
+                  <button
+                    className="axis-auth-action axis-auth-action-primary"
+                    type="button"
+                  >
+                    Sign up
+                  </button>
+                </SignUpButton>
+              </Show>
+              <Show when="signed-in">
+                <UserButton />
+              </Show>
+            </header>
+            {children}
           </ClerkProvider>
         ) : (
           children

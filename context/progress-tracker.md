@@ -1,1 +1,1 @@
-
+2026-05-24 — Hardened Clerk identity continuity so Axis auth only boots with a full Clerk server config, homepage auth actions redirect into Axis-native auth routes, and local auth/upload smoke checks pass.
