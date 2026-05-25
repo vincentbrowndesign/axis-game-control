@@ -1,59 +1,86 @@
-import { SignUp } from "@clerk/nextjs"
 import Link from "next/link"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
-import { getAxisHomeUrl, getAxisSignInUrl } from "@/lib/axis-auth/authUrls"
-import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig"
+import { getAttendanceSummary } from "@/lib/axis-daily/attendance"
 import styles from "./page.module.css"
 
 export default async function HomePage() {
   const identity = await getAxisRequestIdentity()
-  const clerkConfigured = hasValidClerkServerConfig()
-  const homeUrl = getAxisHomeUrl()
-  const signInUrl = getAxisSignInUrl()
+  const summary = identity ? await getAttendanceSummary(identity, 12) : null
+  const lastCheckIn = summary?.checkIns[0]
+
+  if (!identity) {
+    return (
+      <main className={styles.surface}>
+        <section className={styles.entryShell}>
+          <div className={styles.entryCopy}>
+            <p className={styles.brand}>Axis</p>
+            <p className={styles.kicker}>Membership memory</p>
+            <h1 className={styles.heading}>Enter Axis.</h1>
+            <p className={styles.text}>
+              A private member presence for showing up, staying connected,
+              and returning with memory intact.
+            </p>
+            <div className={styles.entryActions}>
+              <Link className={styles.action} href="/sign-in">
+                Sign in
+              </Link>
+              <Link className={styles.action} href="/sign-up">
+                Sign up
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className={styles.surface}>
-      <section className={styles.shell}>
-        <div className={styles.copy}>
+      <section className={styles.memberShell}>
+        <div className={styles.entryCopy}>
           <p className={styles.brand}>Axis</p>
-          <p className={styles.kicker}>Game memory</p>
-          <h1 className={styles.heading}>Create your Axis account.</h1>
+          <p className={styles.kicker}>Axis History</p>
+          <h1 className={styles.heading}>Welcome back.</h1>
           <p className={styles.text}>
-            Save game sessions and keep replay memory available after the gym.
+            Check in, log the work, and keep your Axis History moving.
           </p>
         </div>
 
-        <div className={styles.authPanel}>
-          {identity ? (
-            <div className={styles.signedIn}>
-              <p className={styles.kicker}>Signed in</p>
-              <h2 className={styles.panelTitle}>Your Axis account is active.</h2>
-              <div className={styles.actions}>
-                <Link className={styles.action} href="/check-in">
-                  Check in
-                </Link>
-                <Link className={styles.action} href="/memory">
-                  Memory
-                </Link>
-              </div>
+        <section className={styles.memberPanel} aria-label="Axis History">
+          <div className={styles.stats}>
+            <div className={styles.stat}>
+              <span className={styles.statValue}>
+                {summary?.streakDays || 0}
+              </span>
+              <span className={styles.statLabel}>day streak</span>
             </div>
-          ) : clerkConfigured ? (
-            <SignUp
-              appearance={{
-                elements: {
-                  cardBox: "axis-clerk-card",
-                  footerActionLink: "axis-clerk-link",
-                  formButtonPrimary: "axis-clerk-button",
-                },
-              }}
-              forceRedirectUrl={homeUrl}
-              routing="hash"
-              signInUrl={signInUrl}
-            />
-          ) : (
-            <div className={styles.notice}>Add Clerk keys to enable sign up.</div>
-          )}
-        </div>
+            <div className={styles.stat}>
+              <span className={styles.statValue}>
+                {summary?.checkIns.length || 0}
+              </span>
+              <span className={styles.statLabel}>check-ins</span>
+            </div>
+            <div className={styles.stat}>
+              <span className={styles.statValue}>
+                {summary?.totalMinutes || 0}
+              </span>
+              <span className={styles.statLabel}>minutes</span>
+            </div>
+          </div>
+          <p className={styles.status}>
+            {lastCheckIn
+              ? `Last entry: ${lastCheckIn.workout_type}`
+              : "No training days saved yet."}
+          </p>
+          <div className={styles.entryActions}>
+            <Link className={styles.action} href="/check-in">
+              Check in
+            </Link>
+            <Link className={styles.action} href="/memory">
+              Axis History
+            </Link>
+          </div>
+        </section>
       </section>
     </main>
   )

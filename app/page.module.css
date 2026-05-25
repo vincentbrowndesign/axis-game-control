@@ -7,26 +7,41 @@
   padding: clamp(1.5rem, 4vw, 4rem);
 }
 
-.shell {
+.entryShell,
+.memberShell {
   align-items: center;
   display: grid;
-  gap: clamp(2rem, 7vw, 8rem);
-  grid-template-columns: minmax(18rem, 0.8fr) minmax(20rem, 0.92fr);
   margin: 0 auto;
-  max-width: 1280px;
+  max-width: 1180px;
   width: 100%;
 }
 
-.copy {
-  justify-self: end;
-  max-width: 34rem;
-  width: 100%;
+.entryShell {
+  min-height: 68dvh;
+}
+
+.memberShell {
+  gap: clamp(2rem, 7vw, 7rem);
+  grid-template-columns: minmax(18rem, 0.78fr) minmax(20rem, 0.72fr);
+}
+
+.entryCopy {
+  max-width: 44rem;
 }
 
 .brand,
-.kicker {
+.kicker,
+.action,
+.statLabel,
+.status {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
+}
+
+.brand,
+.kicker,
+.action,
+.statLabel {
   text-transform: uppercase;
 }
 
@@ -44,7 +59,7 @@
 
 .heading {
   color: rgba(244, 244, 242, 0.96);
-  font-size: clamp(4.8rem, 8vw, 7.2rem);
+  font-size: clamp(4.9rem, 9vw, 8.2rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.96;
@@ -56,48 +71,68 @@
   font-size: clamp(1.05rem, 1.45vw, 1.35rem);
   line-height: 1.45;
   margin: 2.2rem 0 0;
-  max-width: 34rem;
+  max-width: 36rem;
 }
 
-.authPanel {
-  align-items: center;
+.entryActions {
   display: flex;
-  justify-content: center;
-  min-width: 0;
-}
-
-.notice,
-.signedIn {
-  border: 1px solid rgba(244, 244, 242, 0.12);
-  color: rgba(244, 244, 242, 0.7);
-  padding: 1.25rem;
-  width: min(100%, 27rem);
-}
-
-.panelTitle {
-  color: rgba(244, 244, 242, 0.92);
-  font-size: 1.8rem;
-  font-weight: 500;
-  line-height: 1.1;
-  margin: 0;
-}
-
-.actions {
-  display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
-  margin-top: 1.25rem;
+  margin-top: 2rem;
 }
 
 .action {
-  border: 1px solid rgba(244, 244, 242, 0.12);
-  color: rgba(244, 244, 242, 0.78);
-  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  align-items: center;
+  background: rgba(244, 244, 242, 0.025);
+  border: 1px solid rgba(244, 244, 242, 0.13);
+  color: rgba(244, 244, 242, 0.76);
+  display: inline-flex;
   font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  min-height: 2.4rem;
-  padding: 0.75rem 0.9rem 0;
+  justify-content: center;
+  min-height: 2.55rem;
+  min-width: 6.4rem;
+  padding: 0 1rem;
   text-decoration: none;
-  text-transform: uppercase;
+}
+
+.action:hover {
+  background: rgba(244, 244, 242, 0.055);
+}
+
+.memberPanel {
+  border-top: 1px solid rgba(244, 244, 242, 0.12);
+  display: grid;
+  gap: 1.3rem;
+  padding-top: 1.2rem;
+}
+
+.stats {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stat {
+  border-top: 1px solid rgba(244, 244, 242, 0.08);
+  padding-top: 0.7rem;
+}
+
+.statValue {
+  color: rgba(244, 244, 242, 0.92);
+  display: block;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.statLabel,
+.status {
+  color: rgba(244, 244, 242, 0.46);
+  font-size: 0.72rem;
+}
+
+.status {
+  line-height: 1.5;
+  margin: 0;
 }
 
 @media (max-width: 900px) {
@@ -107,14 +142,13 @@
     padding: 6rem 1rem 2rem;
   }
 
-  .shell {
-    gap: 2rem;
-    grid-template-columns: 1fr;
+  .entryShell {
+    min-height: auto;
   }
 
-  .copy {
-    justify-self: start;
-    max-width: 100%;
+  .memberShell {
+    gap: 2.5rem;
+    grid-template-columns: 1fr;
   }
 
   .brand {
@@ -122,10 +156,10 @@
   }
 
   .heading {
-    font-size: clamp(3.8rem, 17vw, 5.2rem);
+    font-size: clamp(4rem, 18vw, 5.6rem);
   }
 
-  .authPanel {
-    justify-content: flex-start;
+  .stats {
+    grid-template-columns: 1fr;
   }
 }

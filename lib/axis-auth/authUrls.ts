@@ -12,7 +12,7 @@ export function getAxisSignInUrl() {
 }
 
 export function getAxisSignUpUrl() {
-  return `${getAxisAuthOrigin()}/`
+  return `${getAxisAuthOrigin()}/sign-up`
 }
 
 export function getAxisHomeUrl() {

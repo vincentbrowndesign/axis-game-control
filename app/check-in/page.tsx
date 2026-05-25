@@ -14,7 +14,7 @@ export default async function CheckInPage() {
           <h1 className={styles.title}>Training day</h1>
         </div>
         <Link className={styles.link} href="/memory">
-          Memory
+          Axis History
         </Link>
       </header>
 
@@ -24,7 +24,7 @@ export default async function CheckInPage() {
           <h2 className={styles.title}>Confirm the day before the work disappears.</h2>
           <p className={styles.statement}>
             Axis checks that you are at the gym, then saves a short training
-            record to your memory.
+            record to your Axis History.
           </p>
         </div>
 

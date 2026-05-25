@@ -15,8 +15,8 @@ export default async function MemoryPage() {
     <main className={styles.surface}>
       <header className={styles.telemetry}>
         <div>
-          <p className={styles.eyebrow}>Axis Memory</p>
-          <h1 className={styles.title}>Attendance continuity</h1>
+          <p className={styles.eyebrow}>Axis History</p>
+          <h1 className={styles.title}>Axis History</h1>
         </div>
         <Link className={styles.link} href="/check-in">
           Check in
@@ -28,16 +28,16 @@ export default async function MemoryPage() {
           <p className={styles.eyebrow}>Return tomorrow</p>
           <h2 className={styles.title}>The work stays attached to the player.</h2>
           <p className={styles.statement}>
-            Recent training days, streak, and notes stay in one continuous
-            memory.
+            Recent training days, streaks, notes, and sessions stay inside
+            your Axis History.
           </p>
         </div>
 
-        <section className={styles.panel} aria-label="Attendance memory">
+        <section className={styles.panel} aria-label="Axis History">
           {!identity ? (
             <>
               <p className={styles.status}>
-                Sign in to see training memory.
+                Sign in to see Axis History.
               </p>
               <Link className={styles.button} href="/sign-in">
                 Sign in
@@ -65,7 +65,7 @@ export default async function MemoryPage() {
               </div>
               <div className={styles.history}>
                 {checkIns.length === 0 ? (
-                  <div className={styles.empty}>No training days yet.</div>
+                  <div className={styles.empty}>No history yet.</div>
                 ) : (
                   checkIns.map((checkIn) => (
                     <div className={styles.row} key={checkIn.id}>
