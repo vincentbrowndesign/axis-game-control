@@ -32,6 +32,9 @@ Status: in progress
 - V1 check-in no longer asks for browser location or blocks on gym-boundary verification; organization verification remains a future optional layer.
 - Supabase schema audit completed; no destructive cleanup performed. Current data model should be stabilized around check-ins, history, leaderboard, and preserved future media foundations.
 - Axis design system scaffold added so future screens inherit shared tokens, soft athletic surfaces, progression primitives, and the visual constitution instead of ad hoc styling.
+- Athletic energy pass added a restrained live-gym signal rail, subtle activity meter, and recent-history pulse from real participation data without adding feeds or social mechanics.
+- Visual history system added a streak calendar, accumulation grid, completed-day nodes, and active-day marker so history feels tangible without analytics UI.
+- Sports rhythm pass grouped the check-in ritual with continuity anchor cards and a compact activity band so the interface has stronger athletic structure without dashboard clutter.
 
 LEADERBOARD
 

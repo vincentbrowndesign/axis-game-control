@@ -37,6 +37,9 @@
 .ritualAction,
 .historySignal,
 .topSignal,
+.activitySignal,
+.continuityHeader,
+.rhythmCard,
 .inlineStatus,
 .historyNode,
 .emptyHistory,
@@ -50,6 +53,9 @@
 .action,
 .historySignal span,
 .topSignal span,
+.activitySignal,
+.continuityHeader,
+.rhythmCard,
 .historyNode span {
   text-transform: uppercase;
 }
@@ -166,12 +172,115 @@
   white-space: nowrap;
 }
 
+.activityRail {
+  align-items: center;
+  border-block: 1px solid rgba(var(--axis-accent), 0.12);
+  display: grid;
+  gap: clamp(0.8rem, 2vw, 1.4rem);
+  grid-template-columns: minmax(10rem, 0.28fr) minmax(14rem, 1fr) minmax(10rem, 0.28fr);
+  padding-block: 0.9rem;
+}
+
+.activitySignal {
+  align-items: center;
+  color: rgba(var(--axis-ink), 0.52);
+  display: grid;
+  gap: 0.38rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.activitySignal strong {
+  color: rgba(var(--axis-ink), 0.78);
+  font-size: 0.68rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activitySignal em {
+  color: rgba(var(--axis-ink), 0.34);
+  font-size: 0.58rem;
+  font-style: normal;
+  grid-column: 2;
+  letter-spacing: 0.04em;
+}
+
+.liveDot,
+.boardDot {
+  background: rgba(var(--axis-live), 0.74);
+  border-radius: 999px;
+  box-shadow: 0 0 16px rgba(var(--axis-live), 0.14);
+  display: inline-block;
+  height: 0.52rem;
+  width: 0.52rem;
+}
+
+.boardDot {
+  background: rgba(var(--axis-accent), 0.74);
+  box-shadow: 0 0 16px rgba(var(--axis-accent), 0.14);
+}
+
+.activityMeter {
+  align-items: end;
+  display: grid;
+  gap: clamp(0.28rem, 0.8vw, 0.65rem);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  height: 2.3rem;
+}
+
+.activityMeter span {
+  background: rgba(var(--axis-ink), 0.08);
+  border-radius: 999px;
+  height: 28%;
+  transition:
+    background 220ms ease,
+    box-shadow 220ms ease,
+    height 220ms ease;
+}
+
+.activityMeter span:nth-child(3n + 1) {
+  height: 42%;
+}
+
+.activityMeter span:nth-child(4n + 2) {
+  height: 68%;
+}
+
+.activityMeter span:nth-child(5n) {
+  height: 52%;
+}
+
+.activityBarLive {
+  animation: axisSignalBreathe 3.4s ease-in-out infinite;
+  background: linear-gradient(
+    180deg,
+    rgba(var(--axis-live), 0.7),
+    rgba(var(--axis-accent), 0.38)
+  ) !important;
+  box-shadow: 0 0 14px rgba(var(--axis-live), 0.08);
+}
+
+.centerStage {
+  align-items: stretch;
+  display: grid;
+  gap: clamp(1rem, 2.8vw, 2rem);
+  grid-template-columns: minmax(0, 1fr) minmax(13rem, 0.26fr);
+}
+
 .ritualCenter {
   align-items: stretch;
+  background:
+    radial-gradient(circle at 52% 44%, rgba(var(--axis-accent), 0.08), transparent 20rem),
+    rgba(31, 27, 23, 0.34);
+  border: 1px solid rgba(var(--axis-accent), 0.1);
+  border-radius: 1.75rem;
   display: grid;
   gap: clamp(1.6rem, 4vw, 2.8rem);
   justify-items: center;
-  min-height: clamp(18rem, 38vw, 25rem);
+  min-height: clamp(17rem, 34vw, 24rem);
+  padding: clamp(1.5rem, 4vw, 3rem);
   place-content: center;
 }
 
@@ -258,15 +367,163 @@
   text-transform: uppercase;
 }
 
+.rhythmCluster {
+  align-content: stretch;
+  display: grid;
+  gap: 0.72rem;
+}
+
+.rhythmCard {
+  background: rgba(31, 27, 23, 0.52);
+  border: 1px solid rgba(var(--axis-accent), 0.12);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.55rem;
+  min-height: 5rem;
+  padding: 0.9rem;
+}
+
+.rhythmCard span {
+  color: rgba(var(--axis-ink), 0.36);
+  font-size: 0.58rem;
+}
+
+.rhythmCard strong {
+  color: rgba(var(--axis-ink), 0.82);
+  font-size: 0.78rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rhythmBand {
+  align-items: end;
+  background: rgba(31, 27, 23, 0.36);
+  border: 1px solid rgba(var(--axis-accent), 0.1);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.32rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-height: 5.6rem;
+  padding: 0.9rem;
+}
+
+.rhythmBandNode,
+.rhythmBandNodeComplete {
+  aspect-ratio: 1;
+  background: rgba(var(--axis-ink), 0.055);
+  border: 1px solid rgba(var(--axis-ink), 0.07);
+  border-radius: 999px;
+}
+
+.rhythmBandNodeComplete {
+  background: rgba(var(--axis-live), 0.42);
+  border-color: rgba(var(--axis-live), 0.24);
+  box-shadow: 0 0 14px rgba(var(--axis-live), 0.07);
+}
+
 .continuityBed {
   border-top: 1px solid rgba(var(--axis-accent), 0.16);
+  display: grid;
+  gap: 0.9rem;
   padding-top: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.continuityHeader {
+  align-items: center;
+  color: rgba(var(--axis-ink), 0.42);
+  display: flex;
+  font-size: 0.62rem;
+  justify-content: space-between;
+  letter-spacing: 0.04em;
+}
+
+.continuityHeader strong {
+  color: rgba(var(--axis-live), 0.58);
+  font-weight: 500;
+}
+
+.continuitySurface {
+  background: rgba(31, 27, 23, 0.44);
+  border: 1px solid rgba(var(--axis-accent), 0.12);
+  border-radius: 1.45rem;
+  display: grid;
+  gap: clamp(1rem, 2.5vw, 1.8rem);
+  grid-template-columns: minmax(18rem, 0.58fr) minmax(18rem, 1fr);
+  padding: clamp(1rem, 2.6vw, 1.45rem);
+}
+
+.streakCalendar {
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendarDay {
+  align-items: center;
+  aspect-ratio: 1;
+  background: rgba(var(--axis-ink), 0.04);
+  border: 1px solid rgba(var(--axis-ink), 0.06);
+  border-radius: 0.7rem;
+  color: rgba(var(--axis-ink), 0.28);
+  display: grid;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: clamp(0.52rem, 1.2vw, 0.66rem);
+  justify-items: center;
+}
+
+.calendarDayComplete {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(var(--axis-live), 0.28), transparent 62%),
+    rgba(var(--axis-live), 0.09);
+  border-color: rgba(var(--axis-live), 0.24);
+  box-shadow: 0 0 18px rgba(var(--axis-live), 0.05);
+  color: rgba(216, 255, 226, 0.78);
+}
+
+.calendarDayActive {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(var(--axis-accent), 0.24), transparent 62%),
+    rgba(var(--axis-accent), 0.08);
+  border-color: rgba(var(--axis-accent), 0.28);
+  color: rgba(255, 236, 196, 0.8);
+}
+
+.progressionSurface {
+  align-content: space-between;
+  display: grid;
+  gap: clamp(1rem, 2vw, 1.4rem);
+}
+
+.progressionGrid {
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+}
+
+.progressionCell,
+.progressionCellComplete {
+  aspect-ratio: 1;
+  background: rgba(var(--axis-ink), 0.045);
+  border: 1px solid rgba(var(--axis-ink), 0.065);
+  border-radius: 999px;
+}
+
+.progressionCellComplete {
+  background: linear-gradient(
+    145deg,
+    rgba(var(--axis-accent), 0.44),
+    rgba(var(--axis-live), 0.22)
+  );
+  border-color: rgba(var(--axis-accent), 0.24);
+  box-shadow: 0 0 16px rgba(var(--axis-accent), 0.06);
 }
 
 .historyGrid {
   display: grid;
   gap: 0.7rem;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .historyNode,
@@ -279,6 +536,7 @@
 .historyNode {
   display: grid;
   gap: 0.55rem;
+  position: relative;
 }
 
 .historyNode span,
@@ -294,6 +552,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.historyNodeActive::before {
+  background: rgba(var(--axis-live), 0.64);
+  border-radius: 999px;
+  box-shadow: 0 0 16px rgba(var(--axis-live), 0.12);
+  content: "";
+  height: 0.38rem;
+  position: absolute;
+  right: 0;
+  top: 0.7rem;
+  width: 0.38rem;
 }
 
 .historyStrip {
@@ -349,7 +619,10 @@
   }
 
   .ritualCenter,
+  .centerStage,
   .historyStrip,
+  .activityRail,
+  .continuitySurface,
   .operatingHeader,
   .historyGrid {
     grid-template-columns: 1fr;
@@ -359,4 +632,27 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .progressionGrid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+}
+
+@keyframes axisSignalBreathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scaleY(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activityBarLive {
+    animation: none;
+  }
 }

@@ -25,11 +25,31 @@ export default async function HomePage() {
     leaderboard,
     identity?.clerkUserId || identity?.supabaseUserId || ""
   )
-  const history = (summary?.checkIns || []).slice(0, 8).map((checkIn) => ({
+  const weeklyActiveCount =
+    leaderboard.find((category) => category.id === "hours-this-week")?.entries
+      .length || 0
+  const leaderboardSignal =
+    leaderboardPlacement !== "unranked"
+      ? `${leaderboardPlacement} in motion`
+      : weeklyActiveCount
+        ? `${weeklyActiveCount} active files`
+        : "board open"
+  const participationSignal = weeklyActiveCount
+    ? `${weeklyActiveCount} active this week`
+    : checkedInToday
+      ? "history live"
+      : "first mark waiting"
+  const checkIns = summary?.checkIns || []
+  const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
     id: checkIn.id,
     title: checkIn.workout_type,
   }))
+  const completedDays = new Set(
+    checkIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+  )
+  const continuityDays = buildContinuityDays(completedDays)
+  const accumulation = buildAccumulationGrid(checkIns.length)
 
   if (!identity) {
     return (
@@ -60,9 +80,13 @@ export default async function HomePage() {
   return (
     <ContinuousAxisHome
       checkedInToday={checkedInToday}
+      continuityDays={continuityDays}
       history={history}
       lastCheckInLabel={lastCheckInLabel}
+      leaderboardSignal={leaderboardSignal}
       leaderboardPlacement={leaderboardPlacement}
+      participationSignal={participationSignal}
+      progressionCells={accumulation}
       ritualLabel={ritualLabel}
       streakLabel={streakLabel}
     />
@@ -126,4 +150,36 @@ function isYesterday(value: string) {
     date.getMonth() === yesterday.getMonth() &&
     date.getDate() === yesterday.getDate()
   )
+}
+
+function buildContinuityDays(completedDays: Set<string>) {
+  const today = new Date()
+
+  return Array.from({ length: 35 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (34 - index))
+    const key = toDateKey(date)
+    const isCurrentDay = isToday(date.toISOString())
+
+    return {
+      id: key,
+      label: String(date.getDate()).padStart(2, "0"),
+      state: completedDays.has(key)
+        ? ("complete" as const)
+        : isCurrentDay
+          ? ("active" as const)
+          : ("empty" as const),
+    }
+  })
+}
+
+function buildAccumulationGrid(count: number) {
+  return Array.from({ length: 28 }, (_, index) => ({
+    id: `cell-${index}`,
+    state: index < count ? ("complete" as const) : ("empty" as const),
+  }))
+}
+
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10)
 }

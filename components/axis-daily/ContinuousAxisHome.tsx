@@ -22,20 +22,39 @@ type HistoryNode = {
   title: string
 }
 
+type ContinuityDay = {
+  id: string
+  label: string
+  state: "active" | "complete" | "empty"
+}
+
+type ProgressionCell = {
+  id: string
+  state: "complete" | "empty"
+}
+
 type ContinuousAxisHomeProps = {
   checkedInToday: boolean
+  continuityDays: ContinuityDay[]
   history: HistoryNode[]
   lastCheckInLabel: string
+  leaderboardSignal: string
   leaderboardPlacement: string
+  participationSignal: string
+  progressionCells: ProgressionCell[]
   ritualLabel: string
   streakLabel: string
 }
 
 export function ContinuousAxisHome({
   checkedInToday,
+  continuityDays,
   history,
   lastCheckInLabel,
+  leaderboardSignal,
   leaderboardPlacement,
+  participationSignal,
+  progressionCells,
   ritualLabel,
   streakLabel,
 }: ContinuousAxisHomeProps) {
@@ -55,6 +74,10 @@ export function ContinuousAxisHome({
     return "Check in"
   }, [completedAt, ritualLabel, status])
   const busy = status === "saving"
+  const pulseCount = Math.min(
+    12,
+    Math.max(3, history.length + (checkedInToday ? 2 : 1))
+  )
 
   async function submitCheckIn() {
     if (busy || status === "saved") return
@@ -129,36 +152,129 @@ export function ContinuousAxisHome({
           </div>
         </header>
 
-        <section className={styles.ritualCenter} aria-label="Daily check in">
-          <div className={styles.ritualCopy}>
-            <button
-              aria-label={actionLabel}
-              className={`${styles.ritualAction} ${
-                status === "saved" ? styles.ritualActionComplete : ""
-              }`}
-              disabled={busy || status === "saved"}
-              onClick={submitCheckIn}
-              type="button"
-            >
-              {actionLabel}
-            </button>
-            <p className={styles.ritualWhisper}>Write your story.</p>
-            <p className={styles.inlineStatus}>{message}</p>
+        <section className={styles.activityRail} aria-label="Gym activity">
+          <div className={styles.activitySignal}>
+            <span className={styles.liveDot} aria-hidden="true" />
+            <strong>{participationSignal}</strong>
+            <em>gym signal</em>
+          </div>
+          <div className={styles.activityMeter} aria-hidden="true">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <span
+                className={index < pulseCount ? styles.activityBarLive : ""}
+                key={index}
+              />
+            ))}
+          </div>
+          <div className={styles.activitySignal}>
+            <span className={styles.boardDot} aria-hidden="true" />
+            <strong>{leaderboardSignal}</strong>
+            <em>effort board</em>
+          </div>
+        </section>
+
+        <section className={styles.centerStage} aria-label="Axis daily rhythm">
+          <div className={styles.ritualCenter} aria-label="Daily check in">
+            <div className={styles.ritualCopy}>
+              <button
+                aria-label={actionLabel}
+                className={`${styles.ritualAction} ${
+                  status === "saved" ? styles.ritualActionComplete : ""
+                }`}
+                disabled={busy || status === "saved"}
+                onClick={submitCheckIn}
+                type="button"
+              >
+                {actionLabel}
+              </button>
+              <p className={styles.ritualWhisper}>Write your story.</p>
+              <p className={styles.inlineStatus}>{message}</p>
+            </div>
+          </div>
+
+          <div className={styles.rhythmCluster} aria-label="Continuity anchors">
+            <div className={styles.rhythmCard}>
+              <span>today</span>
+              <strong>{status === "saved" ? "marked" : "open"}</strong>
+            </div>
+            <div className={styles.rhythmCard}>
+              <span>chain</span>
+              <strong>{streakLabel}</strong>
+            </div>
+            <div className={styles.rhythmCard}>
+              <span>board</span>
+              <strong>{leaderboardPlacement}</strong>
+            </div>
+            <div className={styles.rhythmBand} aria-hidden="true">
+              {progressionCells.slice(0, 14).map((cell) => (
+                <span
+                  className={
+                    cell.state === "complete"
+                      ? styles.rhythmBandNodeComplete
+                      : styles.rhythmBandNode
+                  }
+                  key={cell.id}
+                />
+              ))}
+            </div>
           </div>
         </section>
 
         <section className={styles.continuityBed} aria-label="Axis continuity">
-          <div className={styles.historyGrid}>
-            {history.length ? (
-              history.map((item) => (
-                <div className={styles.historyNode} key={item.id}>
-                  <span>{item.dateLabel}</span>
-                  <strong>{item.title}</strong>
-                </div>
-              ))
-            ) : (
-              <div className={styles.emptyHistory}>No history yet.</div>
-            )}
+          <div className={styles.continuityHeader}>
+            <span>Axis History</span>
+            <strong>{history.length ? "building" : "ready"}</strong>
+          </div>
+
+          <div className={styles.continuitySurface}>
+            <div className={styles.streakCalendar} aria-label="Streak calendar">
+              {continuityDays.map((day) => (
+                <span
+                  className={`${styles.calendarDay} ${
+                    day.state === "complete"
+                      ? styles.calendarDayComplete
+                      : day.state === "active"
+                        ? styles.calendarDayActive
+                        : ""
+                  }`}
+                  key={day.id}
+                >
+                  {day.label}
+                </span>
+              ))}
+            </div>
+
+            <div className={styles.progressionSurface}>
+              <div className={styles.progressionGrid} aria-label="Progression grid">
+                {progressionCells.map((cell) => (
+                  <span
+                    className={
+                      cell.state === "complete"
+                        ? styles.progressionCellComplete
+                        : styles.progressionCell
+                    }
+                    key={cell.id}
+                  />
+                ))}
+              </div>
+              <div className={styles.historyGrid}>
+                {history.length ? (
+                  history.slice(0, 4).map((item, index) => (
+                    <div
+                      className={`${styles.historyNode} ${
+                        index === 0 ? styles.historyNodeActive : ""
+                      }`}
+                      key={item.id}
+                    >
+                      <span>{item.dateLabel}</span>
+                      <strong>{item.title}</strong>
+                    </div>
+                  ))
+                ) : (
+                  <div className={styles.emptyHistory}>No history yet.</div>
+                )}
+              </div>
+            </div>
           </div>
         </section>
       </section>
