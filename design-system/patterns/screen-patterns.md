@@ -20,6 +20,23 @@ Purpose: show up and keep the chain alive.
 
 Center the check-in state. Keep streak, last check-in, and leaderboard placement visible but quiet.
 
+Template to use: member profile home + activity ring + contribution calendar.
+
+Concrete references:
+
+- Apple Fitness summary
+- Oura readiness/activity home
+- Xbox profile activity cards
+- GitHub contribution calendar, translated into athletic history
+
+Required structure:
+
+- Top: member identity, streak, last check-in, rank
+- Center: check-in state with concrete continuity modules beside it
+- Bottom: streak calendar and accumulation grid
+
+Avoid abstract hero composition. If the layout starts feeling like a poster, return to the member-profile/activity-template.
+
 ## Axis History
 
 Purpose: prove time accumulated.
@@ -31,4 +48,3 @@ Use calendar/grid/node patterns over paragraphs. Show records like save data.
 Purpose: quiet social tension.
 
 Rank effort continuity only. No popularity, talent scoring, feeds, or engagement mechanics.
-

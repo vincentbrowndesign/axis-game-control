@@ -2,15 +2,16 @@
   --axis-accent: 244, 176, 75;
   --axis-live: 110, 255, 156;
   --axis-ink: 247, 244, 235;
-  align-items: center;
+  align-items: flex-start;
   background:
     radial-gradient(circle at 78% 18%, rgba(var(--axis-accent), 0.09), transparent 28rem),
     linear-gradient(180deg, rgba(38, 34, 29, 0.72), rgba(16, 15, 14, 0.95) 42%),
     linear-gradient(90deg, #171513 0%, #1f1b17 48%, #121110 100%);
   color: rgb(var(--axis-ink));
   display: flex;
-  min-height: 100dvh;
-  padding: clamp(1.5rem, 4vw, 4rem);
+  height: 100dvh;
+  overflow: auto;
+  padding: clamp(5rem, 7vw, 6rem) clamp(1.5rem, 4vw, 4rem) clamp(2rem, 4vw, 4rem);
 }
 
 .entryShell,
@@ -298,7 +299,7 @@
     0 0 0 1px rgba(255, 255, 255, 0.025);
   color: rgba(var(--axis-ink), 0.94);
   display: inline-block;
-  font-size: clamp(4.4rem, 12vw, 9.4rem);
+  font-size: clamp(3.8rem, 9.5vw, 7.8rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.92;
