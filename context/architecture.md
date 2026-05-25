@@ -2,24 +2,36 @@
 
 Existing Axis stack only:
 
-- Next.js App Router: routes, server components, API routes, upload UI, replay UI.
-- Clerk: authentication, user identity, session persistence.
-- Supabase: structured persistence, storage, sessions, uploads, processing jobs, output JSON files.
-- Trigger.dev: background orchestration for processing jobs.
-- Roboflow/CV later: tracking and event extraction behind the same processing contract.
+- Next.js App Router: routes, server components, API routes, public entry, check-in, Axis History, and future replay surfaces.
+- Clerk: identity continuity, sign in, sign up, session persistence, and user ownership.
+- Supabase: persistent history layer for check-ins, streaks, sessions, training logs, uploads, and future replay objects.
+- Trigger.dev: progression and background processing for durable work that should survive refreshes and reconnects.
+- Mux: future replay/media layer for video delivery, playback, and stream sessions.
+- Roboflow/CV: future intelligence layer for visual understanding and replay telemetry.
+
+Current continuity seam:
+
+identity -> physical presence -> history persistence
 
 Current persistence objects:
 
-- Game session: stored in `axis_sessions`.
-- Upload record: stored in `axis_uploads`.
-- Processing job: stored in `axis_processing_jobs`.
-- Placeholder outputs: stored in Supabase Storage under the session output path.
+- Clerk user identity.
+- Supabase attendance/check-in records.
+- Supabase training log metadata.
+- Streak and history summaries derived from persisted records.
+
+Future media objects:
+
+- Game sessions.
+- Replay assets.
+- Clips.
+- Stats.
+- Broadcast assets.
 
 Invariants:
 
 - Do not add Prisma, Redis, Vercel Blob, or extra databases.
-- API routes stay thin: authenticate, validate, persist, enqueue Trigger task, return.
-- Trigger tasks own background status transitions.
-- Frontend reads real backend session/job state.
-- Upload/replay routes and UI are preserved unless the current unit explicitly requires a small seam fix.
-- Roboflow/CV must write into the same output contract later.
+- API routes stay thin: authenticate, validate, persist, enqueue background work when needed, return.
+- Frontend reads real backend state for identity and history.
+- Replay is future infrastructure until the identity, presence, and history loop is stable.
+- Roboflow/CV must remain hidden infrastructure behind stable product loops later.

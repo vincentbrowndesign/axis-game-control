@@ -1,28 +1,37 @@
 # Project Overview
 
-Axis is AI-native sports media infrastructure for basketball game memory.
+Axis is identity and history infrastructure for basketball presence.
 
-The current core loop is:
+The product has shifted from AI replay/media first to a calmer daily loop:
 
-Upload Game -> Create Session -> Process Game -> Generate Replay -> Generate Clips -> Generate Stats -> Generate Broadcast -> Archive Game
+show up -> check in -> history grows -> return tomorrow
 
-Current unit:
+Core purpose:
 
-Upload Game -> Saved Session -> Processing Job -> Complete
+- Give each member a persistent Axis identity.
+- Confirm physical presence through check-in.
+- Accumulate attendance, streaks, sessions, and training logs into Axis History.
+- Make progression feel earned because it is attached to repeated presence.
 
-Goals:
+Emotional primitive:
 
-- Persist every uploaded game as a real Axis session.
-- Track backend processing state in real Supabase records.
-- Trigger background processing through Trigger.dev.
-- Generate placeholder output files only when they are stored in the real session/job structure.
-- Keep the UI familiar, restrained, and upload-first.
+Axis should feel like belonging that compounds. A member returns, checks in, and sees that the work did not disappear.
 
-Out of scope until the current seam is stable:
+Current product direction:
 
+- Public entry is identity, membership, and presence.
+- Authenticated experience is check-in, Axis History, streaks, and daily return.
+- The system should feel restrained, grounded, and persistent.
+
+Future layers:
+
+Replay, clips, AI, broadcasts, and computer vision are future layers built on top of persistent presence continuity. They are not the current core loop.
+
+Out of scope until the current loop is stable:
+
+- Replay-first product work.
 - Clips UI.
 - Broadcast UI.
-- Overlays.
 - AI commentary.
 - Roboflow/CV processing.
 - New databases or storage systems.
