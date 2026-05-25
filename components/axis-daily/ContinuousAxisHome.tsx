@@ -1,0 +1,223 @@
+"use client"
+
+import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import styles from "@/app/page.module.css"
+
+type CheckInStatus = "idle" | "locating" | "saving" | "saved" | "denied"
+
+type CheckInResponse = {
+  checkIn?: {
+    id: string
+    occurred_at: string
+  }
+  denied?: boolean
+  error?: string
+  ok?: boolean
+}
+
+type HistoryNode = {
+  dateLabel: string
+  id: string
+  title: string
+}
+
+type ContinuousAxisHomeProps = {
+  checkedInToday: boolean
+  history: HistoryNode[]
+  lastCheckInLabel: string
+  leaderboardPlacement: string
+  ritualLabel: string
+  streakLabel: string
+}
+
+const sessionNodes = ["Warmup", "Station 1", "Station 2", "Scrimmage"]
+
+export function ContinuousAxisHome({
+  checkedInToday,
+  history,
+  lastCheckInLabel,
+  leaderboardPlacement,
+  ritualLabel,
+  streakLabel,
+}: ContinuousAxisHomeProps) {
+  const router = useRouter()
+  const [status, setStatus] = useState<CheckInStatus>(
+    checkedInToday ? "saved" : "idle"
+  )
+  const [message, setMessage] = useState("")
+  const [completedAt, setCompletedAt] = useState(
+    checkedInToday ? ritualLabel : ""
+  )
+  const [activeNodeCount, setActiveNodeCount] = useState(
+    checkedInToday ? sessionNodes.length : 0
+  )
+
+  const actionLabel = useMemo(() => {
+    if (status === "locating") return "Locating"
+    if (status === "saving") return "Saving"
+    if (status === "saved") return completedAt || ritualLabel
+
+    return "Check in"
+  }, [completedAt, ritualLabel, status])
+  const busy = status === "locating" || status === "saving"
+  const sessionVisible = status === "saved" || activeNodeCount > 0
+
+  async function submitCheckIn() {
+    if (busy || status === "saved") return
+
+    setStatus("locating")
+    setMessage("Confirming presence")
+
+    try {
+      const position = await readCurrentPosition()
+      setActiveNodeCount(1)
+      setStatus("saving")
+      setMessage("Writing today")
+
+      const response = await fetch("/api/check-in", {
+        body: JSON.stringify({
+          durationMinutes: 60,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          notes: null,
+          workoutType: "Training",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+      const data = (await response.json().catch(() => ({}))) as CheckInResponse
+
+      if (!response.ok || !data.ok || !data.checkIn) {
+        setStatus(data.denied ? "denied" : "idle")
+        setActiveNodeCount(0)
+        setMessage(data.error || "Check-in could not be saved.")
+        return
+      }
+
+      const savedLabel = `Checked in - ${formatAttendanceTime(
+        data.checkIn.occurred_at
+      )}`
+      setCompletedAt(savedLabel)
+      setActiveNodeCount(sessionNodes.length)
+      setStatus("saved")
+      setMessage("History updated")
+      router.refresh()
+    } catch (error) {
+      setStatus("idle")
+      setActiveNodeCount(0)
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Location was not available."
+      )
+    }
+  }
+
+  return (
+    <main className={styles.surface}>
+      <section className={styles.operatingShell}>
+        <header className={styles.operatingHeader}>
+          <div>
+            <p className={styles.brand}>Axis</p>
+            <h1 className={styles.memberTitle}>Welcome back.</h1>
+          </div>
+          <div className={styles.topSignals} aria-label="Continuity state">
+            <div className={styles.topSignal}>
+              <span>streak</span>
+              <strong>{streakLabel}</strong>
+            </div>
+            <div className={styles.topSignal}>
+              <span>last</span>
+              <strong>{lastCheckInLabel}</strong>
+            </div>
+            <div className={styles.topSignal}>
+              <span>rank</span>
+              <strong>{leaderboardPlacement}</strong>
+            </div>
+          </div>
+        </header>
+
+        <section className={styles.ritualCenter} aria-label="Daily check in">
+          <div className={styles.ritualCopy}>
+            <button
+              aria-label={actionLabel}
+              className={`${styles.ritualAction} ${
+                status === "saved" ? styles.ritualActionComplete : ""
+              }`}
+              disabled={busy || status === "saved"}
+              onClick={submitCheckIn}
+              type="button"
+            >
+              {actionLabel}
+            </button>
+            <p className={styles.ritualWhisper}>Write your story.</p>
+            <p
+              className={`${styles.inlineStatus} ${
+                status === "denied" ? styles.inlineStatusDenied : ""
+              }`}
+            >
+              {message}
+            </p>
+          </div>
+
+          {sessionVisible ? (
+            <div className={styles.sessionProgression} aria-label="Today session">
+              {sessionNodes.map((node, index) => (
+                <div className={styles.sessionNode} key={node}>
+                  <span
+                    className={
+                      index < activeNodeCount
+                        ? styles.sessionDotComplete
+                        : styles.sessionDot
+                    }
+                    aria-hidden="true"
+                  />
+                  <span>{node}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        <section className={styles.continuityBed} aria-label="Axis continuity">
+          <div className={styles.historyGrid}>
+            {history.length ? (
+              history.map((item) => (
+                <div className={styles.historyNode} key={item.id}>
+                  <span>{item.dateLabel}</span>
+                  <strong>{item.title}</strong>
+                </div>
+              ))
+            ) : (
+              <div className={styles.emptyHistory}>No history yet.</div>
+            )}
+          </div>
+        </section>
+      </section>
+    </main>
+  )
+}
+
+function readCurrentPosition() {
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error("Location is not available on this device."))
+  }
+
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 30000,
+      timeout: 12000,
+    })
+  })
+}
+
+function formatAttendanceTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value))
+}

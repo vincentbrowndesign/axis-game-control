@@ -4,11 +4,14 @@ import {
   formatAttendanceDate,
   getAttendanceSummary,
 } from "@/lib/axis-daily/attendance"
+import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
+import { ContinuousAxisHome } from "@/components/axis-daily/ContinuousAxisHome"
 import styles from "./page.module.css"
 
 export default async function HomePage() {
   const identity = await getAxisRequestIdentity()
   const summary = identity ? await getAttendanceSummary(identity, 12) : null
+  const leaderboard = identity ? await getAxisLeaderboard() : []
   const lastCheckIn = summary?.checkIns[0]
   const checkedInToday = lastCheckIn ? isToday(lastCheckIn.occurred_at) : false
   const lastCheckInLabel = lastCheckIn
@@ -18,7 +21,15 @@ export default async function HomePage() {
   const ritualLabel = checkedInToday && lastCheckIn
     ? `Checked in \u2014 ${formatAttendanceTime(lastCheckIn.occurred_at)}`
     : "Check in"
-  const historyLine = "Write your story."
+  const leaderboardPlacement = getLeaderboardPlacement(
+    leaderboard,
+    identity?.clerkUserId || identity?.supabaseUserId || ""
+  )
+  const history = (summary?.checkIns || []).slice(0, 8).map((checkIn) => ({
+    dateLabel: formatAttendanceDate(checkIn.occurred_at),
+    id: checkIn.id,
+    title: checkIn.workout_type,
+  }))
 
   if (!identity) {
     return (
@@ -47,41 +58,32 @@ export default async function HomePage() {
   }
 
   return (
-    <main className={styles.surface}>
-      <section className={styles.memberRitualShell}>
-        <header className={styles.memberHeader}>
-          <p className={styles.brand}>Axis</p>
-          <h1 className={styles.memberTitle}>Welcome back.</h1>
-        </header>
-
-        <section className={styles.ritualCenter} aria-label="Daily check in">
-          <div className={styles.ritualCopy}>
-            <Link
-              aria-label={ritualLabel}
-              className={`${styles.ritualAction} ${
-                checkedInToday ? styles.ritualActionComplete : ""
-              }`}
-              href="/check-in"
-            >
-              {ritualLabel}
-            </Link>
-            <p className={styles.ritualWhisper}>{historyLine}</p>
-          </div>
-        </section>
-
-        <section className={styles.historyStrip} aria-label="Axis History">
-          <div className={styles.historySignal}>
-            <span>streak</span>
-            <strong>{streakLabel}</strong>
-          </div>
-          <div className={styles.historySignal}>
-            <span>last check-in</span>
-            <strong>{lastCheckInLabel}</strong>
-          </div>
-        </section>
-      </section>
-    </main>
+    <ContinuousAxisHome
+      checkedInToday={checkedInToday}
+      history={history}
+      lastCheckInLabel={lastCheckInLabel}
+      leaderboardPlacement={leaderboardPlacement}
+      ritualLabel={ritualLabel}
+      streakLabel={streakLabel}
+    />
   )
+}
+
+function getLeaderboardPlacement(
+  categories: Awaited<ReturnType<typeof getAxisLeaderboard>>,
+  memberId: string
+) {
+  if (!memberId) return "unranked"
+
+  for (const category of categories) {
+    const entry = category.entries.find((candidate) => candidate.id === memberId)
+
+    if (entry) {
+      return `#${entry.rank}`
+    }
+  }
+
+  return "unranked"
 }
 
 function formatAttendanceTime(value: string) {

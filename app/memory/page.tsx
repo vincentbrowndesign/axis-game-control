@@ -18,7 +18,7 @@ export default async function MemoryPage() {
           <p className={styles.eyebrow}>Axis History</p>
           <h1 className={styles.title}>Axis History</h1>
         </div>
-        <Link className={styles.link} href="/check-in">
+        <Link className={styles.link} href="/">
           Check in
         </Link>
       </header>

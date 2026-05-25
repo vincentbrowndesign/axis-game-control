@@ -26,6 +26,8 @@ Status: in progress
 - Authenticated member home uses one ritual interaction: Check In.
 - The large Check In typography is the action itself.
 - Streak and last check-in are treated as archival save data.
+- Check In now saves in place on the home surface instead of routing through separate ritual pages.
+- Today's session progression and recent history live on the same continuous screen.
 
 LEADERBOARD
 
