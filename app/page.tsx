@@ -80,9 +80,6 @@ export default async function HomePage() {
             <span>last check-in</span>
             <strong>{lastCheckInLabel}</strong>
           </div>
-          <Link className={styles.smallLink} href="/memory">
-            View Axis History
-          </Link>
         </section>
       </section>
     </main>

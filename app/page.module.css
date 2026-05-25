@@ -1,6 +1,8 @@
 .surface {
   align-items: center;
-  background: #000;
+  background:
+    linear-gradient(180deg, rgba(9, 16, 17, 0.32), rgba(0, 0, 0, 0) 36%),
+    linear-gradient(90deg, #000 0%, #050505 44%, #0b0b0b 100%);
   color: #f4f4f2;
   display: flex;
   min-height: 100dvh;
@@ -28,7 +30,6 @@
 .kicker,
 .action,
 .primaryAction,
-.smallLink,
 .historySignal,
 .ritualWhisper {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
@@ -39,13 +40,12 @@
 .kicker,
 .action,
 .primaryAction,
-.smallLink,
 .historySignal span {
   text-transform: uppercase;
 }
 
 .brand {
-  color: rgba(244, 244, 242, 0.9);
+  color: rgba(166, 221, 218, 0.56);
   font-size: 0.72rem;
   margin: 0;
 }
@@ -80,11 +80,10 @@
   margin-top: 2rem;
 }
 
-.action,
-.smallLink {
+.action {
   align-items: center;
-  background: rgba(244, 244, 242, 0.025);
-  border: 1px solid rgba(244, 244, 242, 0.13);
+  background: rgba(5, 5, 5, 0.72);
+  border: 1px solid rgba(166, 221, 218, 0.16);
   color: rgba(244, 244, 242, 0.76);
   display: inline-flex;
   font-size: 0.72rem;
@@ -95,9 +94,8 @@
 }
 
 .action:hover,
-.smallLink:hover,
 .primaryAction:hover {
-  background: rgba(244, 244, 242, 0.06);
+  background: rgba(166, 221, 218, 0.065);
 }
 
 .memberRitualShell {
@@ -111,7 +109,7 @@
 }
 
 .memberTitle {
-  color: rgba(244, 244, 242, 0.46);
+  color: rgba(244, 244, 242, 0.34);
   font-size: clamp(1.35rem, 3vw, 2.2rem);
   font-weight: 500;
   letter-spacing: 0;
@@ -133,7 +131,7 @@
 }
 
 .ritualTitle {
-  color: rgba(244, 244, 242, 0.94);
+  color: rgba(244, 244, 242, 0.91);
   font-size: clamp(4.4rem, 12vw, 9.4rem);
   font-weight: 500;
   letter-spacing: 0;
@@ -142,16 +140,20 @@
 }
 
 .ritualWhisper {
-  color: rgba(244, 244, 242, 0.38);
+  color: rgba(244, 244, 242, 0.32);
   font-size: 0.76rem;
-  margin: 1.1rem 0 0;
+  margin: 1.25rem 0 0;
 }
 
 .primaryAction {
   align-items: center;
-  background: rgba(244, 244, 242, 0.9);
-  border: 1px solid rgba(244, 244, 242, 0.9);
-  color: #040404;
+  background: linear-gradient(180deg, #161616, #050505);
+  border: 1px solid rgba(166, 221, 218, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(244, 244, 242, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.92),
+    0 0 0 1px rgba(0, 0, 0, 0.74);
+  color: rgba(244, 244, 242, 0.86);
   display: inline-flex;
   font-size: 0.82rem;
   justify-content: center;
@@ -162,31 +164,37 @@
 }
 
 .primaryActionComplete {
-  background: rgba(244, 244, 242, 0.08);
-  border-color: rgba(244, 244, 242, 0.22);
-  color: rgba(244, 244, 242, 0.84);
+  background: linear-gradient(180deg, rgba(13, 33, 32, 0.72), #050505);
+  border-color: rgba(166, 221, 218, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(166, 221, 218, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.92),
+    0 0 18px rgba(88, 207, 201, 0.055);
+  color: rgba(182, 232, 228, 0.88);
 }
 
 .primaryActionComplete:hover {
-  background: rgba(244, 244, 242, 0.1);
+  background: linear-gradient(180deg, rgba(15, 38, 37, 0.76), #050505);
 }
 
 .primaryAction:active {
-  background: rgba(244, 244, 242, 0.74);
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.86),
+    0 0 0 1px rgba(166, 221, 218, 0.12);
   transform: translateY(1px);
 }
 
 .historyStrip {
   align-items: end;
-  border-top: 1px solid rgba(244, 244, 242, 0.08);
+  border-top: 1px solid rgba(166, 221, 218, 0.1);
   display: grid;
   gap: clamp(0.9rem, 3vw, 2rem);
-  grid-template-columns: minmax(7rem, 0.22fr) minmax(13rem, 0.4fr) auto;
+  grid-template-columns: minmax(7rem, 0.22fr) minmax(13rem, 0.4fr);
   padding-top: clamp(1rem, 2.5vw, 1.5rem);
 }
 
 .historySignal {
-  border-top: 1px solid rgba(244, 244, 242, 0.07);
+  border-top: 1px solid rgba(166, 221, 218, 0.08);
   display: grid;
   gap: 0.55rem;
   padding-top: 0.75rem;
@@ -194,19 +202,14 @@
 
 .historySignal span,
 .ritualWhisper {
-  color: rgba(244, 244, 242, 0.43);
+  color: rgba(244, 244, 242, 0.38);
   font-size: 0.68rem;
 }
 
 .historySignal strong {
-  color: rgba(244, 244, 242, 0.82);
+  color: rgba(244, 244, 242, 0.74);
   font-size: 0.82rem;
   font-weight: 500;
-}
-
-.smallLink {
-  min-height: 2.25rem;
-  white-space: nowrap;
 }
 
 @media (max-width: 900px) {

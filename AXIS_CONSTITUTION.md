@@ -33,7 +33,20 @@ Replay behavior teaches Axis what should resurface.
 
 Axis is a calm live operating environment for memory, perception, replay, and intelligence.
 
-Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, or floating overlay system.
+Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, or analytics tool.
+
+Axis should feel like a personal sports device, save file system, membership terminal, persistent identity machine, and late-90s/early-2000s electronics experience.
+
+Reference emotional hardware:
+
+- PS2 operating system.
+- Original Xbox dashboard.
+- Dreamcast VMU.
+- Sony MiniDisc interfaces.
+- TiVo and old DVR systems.
+- Panasonic portable electronics.
+- Arcade terminal menus.
+- Winamp, early iTunes, AIM, CRT diagnostics, early ESPN overlays, and old sports broadcast terminals.
 
 Every UI generation must feel:
 
@@ -56,9 +69,13 @@ Every Axis screen follows the same structure:
 
 Axis is structural UI, not overlay UI. Interfaces must feel built into the screen itself, preserve screen integrity, and avoid random floating cards, stacked panels, disconnected widgets, viewport collisions, and keyboard instability.
 
-Use black, charcoal, smoke gray, white, subtle transparency, soft blur, and restrained glow. Avoid bright startup gradients, excessive color, loud shadows, thick borders, giant cards, and unnecessary framing.
+Use layered blacks, not flat black: #000000, #050505, #0b0b0b, #111111, and #161616. Darkness should feel physical and electronic.
 
-Typography carries hierarchy through spacing, rhythm, scale, alignment, and restraint. Avoid repeated state language, excessive labels, giant explanation, and visual shouting.
+Use one restrained accent system only. Prefer muted cyan, pale phosphor blue, faded amber, or soft CRT green. Accent appears only in active states, focus states, successful ritual completion, and subtle signal moments.
+
+Avoid rainbow UI, startup gradients, excessive color, loud shadows, thick borders, giant cards, and unnecessary framing.
+
+Typography carries hierarchy through oversized clean display type and tiny monospace metadata. The contrast between huge emotional typography and small system records is critical. Avoid repeated state language, excessive labels, giant explanation, and visual shouting.
 
 The universal memory rail is the primary interaction surface for live statting, memory creation, replay retrieval, questions, perception requests, semantic tagging, system control, and future AI interactions. It should feel continuous, native, fluid, and conversational, not like a form field. Enter submits, focus remains active, the keyboard remains open, and duplicate submit controls stay out of the operator flow.
 
