@@ -22,6 +22,7 @@ Status: in progress
 
 - Supabase persistence and streak summaries are the active history seam.
 - Axis History should accumulate check-ins, training logs, streaks, sessions, and future replay history.
+- Authenticated member home now presents Axis History, daily check-in, recent activity, and gym presence as one restrained personal history surface.
 
 REPLAY
 

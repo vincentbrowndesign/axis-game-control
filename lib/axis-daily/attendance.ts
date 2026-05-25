@@ -17,6 +17,19 @@ export type AxisAttendanceSummary = {
   totalMinutes: number
 }
 
+export type AxisPresenceCheckIn = {
+  id: string
+  clerk_user_id: string | null
+  user_id: string | null
+  workout_type: string
+  occurred_at: string
+}
+
+export type AxisPresenceSummary = {
+  checkedInToday: number
+  recent: AxisPresenceCheckIn[]
+}
+
 export async function getAttendanceSummary(
   identity: AxisRequestIdentity,
   limit = 30
@@ -59,6 +72,51 @@ export async function getAttendanceSummary(
   }
 }
 
+export async function getPresenceSummary(limit = 5): Promise<AxisPresenceSummary> {
+  const emptySummary = {
+    checkedInToday: 0,
+    recent: [],
+  }
+  const dayStart = new Date()
+  dayStart.setHours(0, 0, 0, 0)
+
+  const result = await Promise.race([
+    loadPresenceSince(dayStart.toISOString(), limit),
+    presenceTimeoutResult(3200),
+  ])
+
+  if (result.error) {
+    return emptySummary
+  }
+
+  return {
+    checkedInToday: result.count || 0,
+    recent: result.data || [],
+  }
+}
+
+async function loadPresenceSince(since: string, limit: number) {
+  const [recentResult, countResult] = await Promise.all([
+    supabaseAdmin
+      .from("axis_training_check_ins")
+      .select("id, clerk_user_id, user_id, workout_type, occurred_at")
+      .gte("occurred_at", since)
+      .order("occurred_at", { ascending: false })
+      .limit(limit)
+      .returns<AxisPresenceCheckIn[]>(),
+    supabaseAdmin
+      .from("axis_training_check_ins")
+      .select("id", { count: "exact", head: true })
+      .gte("occurred_at", since),
+  ])
+
+  return {
+    data: recentResult.data,
+    count: countResult.count,
+    error: recentResult.error || countResult.error,
+  }
+}
+
 function timeoutResult(milliseconds: number) {
   return new Promise<{
     data: AxisTrainingCheckIn[] | null
@@ -69,6 +127,24 @@ function timeoutResult(milliseconds: number) {
         resolve({
           data: null,
           error: new Error("Attendance memory timed out"),
+        }),
+      milliseconds
+    )
+  })
+}
+
+function presenceTimeoutResult(milliseconds: number) {
+  return new Promise<{
+    data: AxisPresenceCheckIn[] | null
+    count: number | null
+    error: Error
+  }>((resolve) => {
+    setTimeout(
+      () =>
+        resolve({
+          data: null,
+          count: null,
+          error: new Error("Presence summary timed out"),
         }),
       milliseconds
     )
