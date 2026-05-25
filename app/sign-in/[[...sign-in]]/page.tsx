@@ -1,8 +1,9 @@
 import { SignIn } from "@clerk/nextjs"
+import { hasValidClerkPublishableKey } from "@/lib/axis-auth/clerkConfig"
 import Link from "next/link"
 
 export default function SignInPage() {
-  const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+  const clerkConfigured = hasValidClerkPublishableKey()
 
   return (
     <main style={styles.main}>

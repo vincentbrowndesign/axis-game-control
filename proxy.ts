@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { clerkMiddleware } from "@clerk/nextjs/server"
 import { createServerClient } from "@supabase/ssr"
+import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig"
 
 async function axisProxy(request: NextRequest) {
   let response = NextResponse.next({
@@ -37,9 +38,9 @@ async function axisProxy(request: NextRequest) {
   return response
 }
 
-export default clerkMiddleware(async (_auth, request: NextRequest) =>
-  axisProxy(request)
-)
+export default hasValidClerkServerConfig()
+  ? clerkMiddleware(async (_auth, request: NextRequest) => axisProxy(request))
+  : axisProxy
 
 export const config = {
   matcher: [

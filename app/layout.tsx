@@ -6,6 +6,7 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
+import { hasValidClerkPublishableKey } from "@/lib/axis-auth/clerkConfig";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -40,13 +41,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const clerkEnabled = hasValidClerkPublishableKey();
+
   return (
     <html
       lang="en"
       className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       <body className="axis-organism-root min-h-full flex flex-col">
-        <ClerkProvider>
+        {clerkEnabled ? (
+          <ClerkProvider>
           <header className="axis-auth-presence" aria-label="Axis account">
             <Show when="signed-out">
               <SignInButton>
@@ -65,7 +69,10 @@ export default function RootLayout({
             </Show>
           </header>
           {children}
-        </ClerkProvider>
+          </ClerkProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );
