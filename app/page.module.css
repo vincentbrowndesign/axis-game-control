@@ -37,7 +37,6 @@
 .ritualAction,
 .historySignal,
 .topSignal,
-.sessionNode,
 .inlineStatus,
 .historyNode,
 .emptyHistory,
@@ -51,7 +50,6 @@
 .action,
 .historySignal span,
 .topSignal span,
-.sessionNode,
 .historyNode span {
   text-transform: uppercase;
 }
@@ -260,41 +258,6 @@
   text-transform: uppercase;
 }
 
-.sessionProgression {
-  border-top: 1px solid rgba(var(--axis-accent), 0.16);
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: clamp(0.2rem, 1vw, 0.8rem) auto 0;
-  max-width: 620px;
-  padding-top: 1rem;
-  width: 100%;
-}
-
-.sessionNode {
-  align-items: center;
-  color: rgba(var(--axis-ink), 0.52);
-  display: flex;
-  font-size: 0.65rem;
-  gap: 0.55rem;
-  min-width: 0;
-}
-
-.sessionDot,
-.sessionDotComplete {
-  border: 1px solid rgba(244, 244, 242, 0.18);
-  display: inline-block;
-  flex: 0 0 auto;
-  height: 0.58rem;
-  width: 0.58rem;
-}
-
-.sessionDotComplete {
-  background: rgba(var(--axis-live), 0.68);
-  border-color: rgba(var(--axis-live), 0.72);
-  box-shadow: 0 0 12px rgba(var(--axis-live), 0.1);
-}
-
 .continuityBed {
   border-top: 1px solid rgba(var(--axis-accent), 0.16);
   padding-top: clamp(1rem, 2.5vw, 1.5rem);
@@ -392,8 +355,7 @@
     grid-template-columns: 1fr;
   }
 
-  .topSignals,
-  .sessionProgression {
+  .topSignals {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

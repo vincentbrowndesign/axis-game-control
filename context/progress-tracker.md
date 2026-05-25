@@ -27,7 +27,7 @@ Status: in progress
 - The large Check In typography is the action itself.
 - Streak and last check-in are treated as archival save data.
 - Check In now saves in place on the home surface instead of routing through separate ritual pages.
-- Today's session progression and recent history live on the same continuous screen.
+- Visible station/session-step progression is hidden for V1 so the post-check-in moment can stay focused on history, streak, and leaderboard continuity.
 - Palette direction now favors living gym energy: warm charcoal surfaces, scoreboard amber, electric green, and active athletic participation over cold replay-era voids.
 - V1 check-in no longer asks for browser location or blocks on gym-boundary verification; organization verification remains a future optional layer.
 - Supabase schema audit completed; no destructive cleanup performed. Current data model should be stabilized around check-ins, history, leaderboard, and preserved future media foundations.

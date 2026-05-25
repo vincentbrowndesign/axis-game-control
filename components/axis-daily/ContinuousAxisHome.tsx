@@ -31,8 +31,6 @@ type ContinuousAxisHomeProps = {
   streakLabel: string
 }
 
-const sessionNodes = ["Warmup", "Station 1", "Station 2", "Scrimmage"]
-
 export function ContinuousAxisHome({
   checkedInToday,
   history,
@@ -49,9 +47,6 @@ export function ContinuousAxisHome({
   const [completedAt, setCompletedAt] = useState(
     checkedInToday ? ritualLabel : ""
   )
-  const [activeNodeCount, setActiveNodeCount] = useState(
-    checkedInToday ? sessionNodes.length : 0
-  )
 
   const actionLabel = useMemo(() => {
     if (status === "saving") return "Saving"
@@ -60,14 +55,12 @@ export function ContinuousAxisHome({
     return "Check in"
   }, [completedAt, ritualLabel, status])
   const busy = status === "saving"
-  const sessionVisible = status === "saved" || activeNodeCount > 0
 
   async function submitCheckIn() {
     if (busy || status === "saved") return
 
     setStatus("saving")
     setMessage("Writing today")
-    setActiveNodeCount(1)
 
     try {
       const response = await fetch("/api/check-in", {
@@ -91,7 +84,6 @@ export function ContinuousAxisHome({
 
       if (!response.ok || !data.ok || !data.checkIn) {
         setStatus("idle")
-        setActiveNodeCount(0)
         setMessage(data.error || "Check-in could not be saved.")
         return
       }
@@ -100,13 +92,11 @@ export function ContinuousAxisHome({
         data.checkIn.occurred_at
       )}`
       setCompletedAt(savedLabel)
-      setActiveNodeCount(sessionNodes.length)
       setStatus("saved")
       setMessage("History updated")
       router.refresh()
     } catch (error) {
       setStatus("idle")
-      setActiveNodeCount(0)
       setMessage(
         error instanceof Error
           ? error.message
@@ -155,24 +145,6 @@ export function ContinuousAxisHome({
             <p className={styles.ritualWhisper}>Write your story.</p>
             <p className={styles.inlineStatus}>{message}</p>
           </div>
-
-          {sessionVisible ? (
-            <div className={styles.sessionProgression} aria-label="Today session">
-              {sessionNodes.map((node, index) => (
-                <div className={styles.sessionNode} key={node}>
-                  <span
-                    className={
-                      index < activeNodeCount
-                        ? styles.sessionDotComplete
-                        : styles.sessionDot
-                    }
-                    aria-hidden="true"
-                  />
-                  <span>{node}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </section>
 
         <section className={styles.continuityBed} aria-label="Axis continuity">
