@@ -7,13 +7,17 @@
   padding: clamp(1.5rem, 4vw, 4rem);
 }
 
-.entryShell {
-  align-items: center;
+.entryShell,
+.memberRitualShell {
   display: grid;
   margin: 0 auto;
   max-width: 1180px;
-  min-height: 68dvh;
   width: 100%;
+}
+
+.entryShell {
+  align-items: center;
+  min-height: 68dvh;
 }
 
 .entryCopy {
@@ -24,14 +28,9 @@
 .kicker,
 .action,
 .primaryAction,
-.secondaryAction,
 .smallLink,
-.statLabel,
-.signal,
-.sessionDate,
-.sessionMeta,
-.emptyState,
-.presenceRow {
+.historySignal,
+.historyLine {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
   letter-spacing: 0.03em;
 }
@@ -40,12 +39,8 @@
 .kicker,
 .action,
 .primaryAction,
-.secondaryAction,
 .smallLink,
-.statLabel,
-.signal span,
-.sessionDate,
-.sessionMeta {
+.historySignal span {
   text-transform: uppercase;
 }
 
@@ -86,8 +81,7 @@
 }
 
 .action,
-.smallLink,
-.secondaryAction {
+.smallLink {
   align-items: center;
   background: rgba(244, 244, 242, 0.025);
   border: 1px solid rgba(244, 244, 242, 0.13);
@@ -102,92 +96,46 @@
 
 .action:hover,
 .smallLink:hover,
-.secondaryAction:hover,
 .primaryAction:hover {
   background: rgba(244, 244, 242, 0.06);
 }
 
-.memberHomeShell {
-  display: grid;
-  gap: clamp(1rem, 2.4vw, 1.8rem);
-  margin: 0 auto;
-  max-width: 1220px;
-  width: 100%;
+.memberRitualShell {
+  gap: clamp(1.8rem, 4vw, 3.6rem);
 }
 
 .memberHeader {
-  align-items: end;
-  border-bottom: 1px solid rgba(244, 244, 242, 0.09);
-  display: grid;
-  gap: 1.4rem;
-  grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.7fr);
-  padding-bottom: 1.35rem;
+  border-bottom: 1px solid rgba(244, 244, 242, 0.08);
+  padding-bottom: clamp(1.2rem, 3vw, 2.2rem);
 }
 
 .memberHeader .brand {
-  margin-bottom: 2.7rem;
+  margin-bottom: clamp(2rem, 5vw, 4rem);
 }
 
 .memberTitle {
   color: rgba(244, 244, 242, 0.96);
-  font-size: clamp(2.6rem, 6vw, 5.35rem);
+  font-size: clamp(4rem, 9vw, 8rem);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 0.96;
+  line-height: 0.94;
   margin: 0;
-  max-width: 48rem;
 }
 
-.headerSignals {
-  display: grid;
-  gap: 0.7rem;
-}
-
-.signal {
+.ritualCenter {
   align-items: center;
-  border-top: 1px solid rgba(244, 244, 242, 0.08);
   display: grid;
-  gap: 0.8rem;
-  grid-template-columns: 8rem minmax(0, 1fr);
-  min-height: 2.7rem;
-  padding-top: 0.7rem;
+  gap: clamp(1.6rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.32fr);
+  min-height: clamp(14rem, 30vw, 22rem);
 }
 
-.signal span,
-.sessionDate,
-.sessionMeta,
-.emptyState,
-.presenceRow {
-  color: rgba(244, 244, 242, 0.43);
-  font-size: 0.68rem;
-}
-
-.signal strong {
-  color: rgba(244, 244, 242, 0.82);
-  font-size: 0.78rem;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ritualBand {
-  align-items: center;
-  border-bottom: 1px solid rgba(244, 244, 242, 0.09);
-  display: grid;
-  gap: 1.4rem;
-  grid-template-columns: minmax(0, 1fr) minmax(11rem, 0.28fr);
-  min-height: clamp(11rem, 24vw, 17rem);
-  padding: clamp(1.4rem, 3vw, 2rem) 0;
-}
-
-.ritualTitle,
-.sectionTitle {
-  color: rgba(244, 244, 242, 0.92);
-  font-size: clamp(1.4rem, 3vw, 2.65rem);
+.ritualTitle {
+  color: rgba(244, 244, 242, 0.94);
+  font-size: clamp(3.6rem, 9vw, 7.5rem);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 0.92;
   margin: 0;
 }
 
@@ -199,138 +147,49 @@
   display: inline-flex;
   font-size: 0.86rem;
   justify-content: center;
-  min-height: 5.1rem;
+  min-height: 6rem;
   padding: 0 1.4rem;
   text-decoration: none;
   width: 100%;
 }
 
-.memberGrid {
+.historyStrip {
+  align-items: end;
+  border-top: 1px solid rgba(244, 244, 242, 0.08);
   display: grid;
-  gap: clamp(1.4rem, 4vw, 4rem);
-  grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.42fr);
+  gap: 0.9rem;
+  grid-template-columns: minmax(8rem, 0.22fr) minmax(12rem, 0.34fr) minmax(0, 1fr) auto;
+  padding-top: clamp(1rem, 2.5vw, 1.5rem);
 }
 
-.historyPanel,
-.presencePanel {
-  border-top: 1px solid rgba(244, 244, 242, 0.1);
+.historySignal {
+  border-top: 1px solid rgba(244, 244, 242, 0.07);
   display: grid;
-  gap: 1.25rem;
-  padding-top: 1.1rem;
+  gap: 0.55rem;
+  padding-top: 0.75rem;
 }
 
-.sectionHeader {
-  align-items: start;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
+.historySignal span,
+.historyLine {
+  color: rgba(244, 244, 242, 0.43);
+  font-size: 0.68rem;
+}
+
+.historySignal strong {
+  color: rgba(244, 244, 242, 0.82);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.historyLine {
+  line-height: 1.5;
+  margin: 0;
+  max-width: 34rem;
 }
 
 .smallLink {
-  min-height: 2.2rem;
+  min-height: 2.25rem;
   white-space: nowrap;
-}
-
-.stats {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.stat {
-  border-top: 1px solid rgba(244, 244, 242, 0.08);
-  padding-top: 0.7rem;
-}
-
-.statValue {
-  color: rgba(244, 244, 242, 0.92);
-  display: block;
-  font-size: clamp(1.8rem, 4vw, 3rem);
-  line-height: 1;
-}
-
-.statLabel {
-  color: rgba(244, 244, 242, 0.46);
-  font-size: 0.68rem;
-}
-
-.sessionList,
-.presenceList {
-  display: grid;
-}
-
-.sessionRow,
-.presenceRow {
-  align-items: center;
-  border-top: 1px solid rgba(244, 244, 242, 0.075);
-  display: grid;
-  gap: 1rem;
-  min-height: 3.4rem;
-}
-
-.sessionRow {
-  grid-template-columns: 5.5rem minmax(0, 1fr) 4.5rem;
-}
-
-.sessionRow:last-child,
-.presenceRow:last-child {
-  border-bottom: 1px solid rgba(244, 244, 242, 0.075);
-}
-
-.sessionName {
-  color: rgba(244, 244, 242, 0.82);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sessionMeta {
-  text-align: right;
-}
-
-.emptyState {
-  border-top: 1px solid rgba(244, 244, 242, 0.075);
-  line-height: 1.5;
-  margin: 0;
-  min-height: 5rem;
-  padding-top: 1rem;
-}
-
-.presenceCount {
-  border-top: 1px solid rgba(244, 244, 242, 0.08);
-  padding-top: 0.8rem;
-}
-
-.presenceCount span {
-  color: rgba(244, 244, 242, 0.92);
-  display: block;
-  font-size: clamp(3.5rem, 8vw, 6rem);
-  line-height: 0.9;
-}
-
-.presenceCount p {
-  color: rgba(244, 244, 242, 0.45);
-  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
-  font-size: 0.68rem;
-  letter-spacing: 0.03em;
-  margin: 0.75rem 0 0;
-  text-transform: uppercase;
-}
-
-.presenceRow {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.presenceRow span:first-child,
-.presenceRow span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.secondaryAction {
-  margin-top: 0.25rem;
-  width: fit-content;
 }
 
 @media (max-width: 900px) {
@@ -348,40 +207,17 @@
     margin-bottom: 3rem;
   }
 
-  .heading {
+  .heading,
+  .memberTitle {
     font-size: clamp(4rem, 18vw, 5.6rem);
   }
 
-  .memberHeader,
-  .ritualBand,
-  .memberGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .memberHeader {
-    align-items: start;
-  }
-
-  .signal {
+  .ritualCenter,
+  .historyStrip {
     grid-template-columns: 1fr;
   }
 
   .primaryAction {
-    min-height: 4.4rem;
-  }
-
-  .stats {
-    grid-template-columns: 1fr;
-  }
-
-  .sessionRow {
-    gap: 0.45rem;
-    grid-template-columns: 4.5rem minmax(0, 1fr);
-    padding: 0.75rem 0;
-  }
-
-  .sessionMeta {
-    grid-column: 2;
-    text-align: left;
+    min-height: 4.8rem;
   }
 }
