@@ -49,7 +49,8 @@ export default function SignUpPage() {
 const styles = {
   main: {
     alignItems: "center",
-    background: "#030303",
+    background:
+      "radial-gradient(circle at 78% 18%, rgba(244, 176, 75, 0.1), transparent 440px), linear-gradient(90deg, #171513 0%, #1f1b17 48%, #121110 100%)",
     color: "#f4f4f2",
     display: "flex",
     minHeight: "100dvh",
@@ -69,7 +70,7 @@ const styles = {
     maxWidth: "420px",
   },
   brand: {
-    color: "#f4f4f2",
+    color: "rgba(244, 176, 75, 0.74)",
     fontSize: "13px",
     letterSpacing: "0",
     textDecoration: "none",
@@ -95,7 +96,7 @@ const styles = {
     margin: "22px 0 0",
   },
   systemLine: {
-    color: "rgba(178, 232, 238, 0.52)",
+    color: "rgba(110, 255, 156, 0.54)",
     fontSize: "11px",
     letterSpacing: "0",
     margin: "34px 0 0",

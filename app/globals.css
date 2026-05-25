@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #efefeb;
+  --background: #171513;
   --foreground: #242424;
   --axis-surface: #f8f8f5;
   --axis-muted: rgba(36, 36, 36, 0.48);
@@ -59,9 +59,9 @@ textarea {
 }
 
 .axis-auth-action {
-  background: rgba(5, 5, 5, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.72);
+  background: rgba(31, 27, 23, 0.68);
+  border: 1px solid rgba(244, 176, 75, 0.18);
+  color: rgba(247, 244, 235, 0.74);
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
@@ -69,5 +69,5 @@ textarea {
 }
 
 .axis-auth-action-primary {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(247, 244, 235, 0.92);
 }

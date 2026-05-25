@@ -1,6 +1,6 @@
 # Interaction Philosophy
 
-Axis interactions should feel like activating a personal device, not clicking a website.
+Axis interactions should feel like entering a live athletic system, not clicking through disconnected webpages.
 
 ## Ritual Rule
 
@@ -11,12 +11,17 @@ The action should feel:
 - Physical.
 - Intentional.
 - Ceremonial.
-- Terminal-like.
+- Athletic.
+- Live.
 - Earned.
 
 The user should feel:
 
 "I kept the chain alive."
+
+The surrounding system should also imply:
+
+"We are building together."
 
 ## Active Ritual State
 
@@ -38,7 +43,7 @@ They should feel like:
 
 - Save data.
 - Profile continuity.
-- Terminal records.
+- Athletic records.
 - Persistent identity state.
 
 They should not feel like analytics or dashboard metrics.
@@ -67,5 +72,8 @@ Never rank talent, points, popularity, likes, comments, or attention.
 - Admin panels.
 - Productivity workflows.
 - Explanatory product copy.
+- Dystopian performance tracking.
+- Cold hacker terminal energy.
+- Lonely cinematic voids.
 
 Subtraction is the default refinement move.

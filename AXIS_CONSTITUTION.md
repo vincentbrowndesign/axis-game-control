@@ -34,14 +34,17 @@ show up
 
 ## Universal Design Chain
 
-Axis is a personal sports device, save file system, membership terminal, persistent identity machine, and late-90s/early-2000s electronics experience.
+Axis is a living athletic continuity system, personal sports device, membership world, persistent identity machine, and save-file style progression system.
 
-Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, analytics tool, or marketing website.
+Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, analytics tool, marketing website, cold hacker terminal, dystopian tracker, or lonely cinematic replay surface.
 
 Reference emotional hardware:
 
-- PS2 operating system.
-- Original Xbox dashboard focus states.
+- Apple Fitness and Nike Run Club energy.
+- Modern arena systems and gym scoreboards.
+- Sports tunnel graphics and athletic LED systems.
+- Active sports environments where people are participating together.
+- PS2 operating system and original Xbox dashboard focus states.
 - Dreamcast VMU.
 - Sony MiniDisc interfaces.
 - TiVo and old DVR systems.
@@ -53,8 +56,12 @@ Every UI generation must feel:
 
 - Calm.
 - Ritualistic.
+- Alive.
+- Athletic.
+- Warm.
 - Electronic.
 - Persistent.
+- Communal.
 - Embedded.
 - Structurally stable.
 - Low-friction.
@@ -69,11 +76,11 @@ Every Axis screen follows the same structure:
 
 Axis is structural UI, not overlay UI. Interfaces must feel built into the screen itself, preserve screen integrity, and avoid random floating cards, stacked panels, disconnected widgets, viewport collisions, and keyboard instability.
 
-Use layered blacks, not flat black: #000000, #050505, #0b0b0b, #111111, and #161616. Darkness should feel physical and electronic.
+Use premium athletic dark surfaces, not empty black voids: graphite, warm charcoal, smoked gray, soft arena black, and polished dark surfaces. Darkness should feel like an active gym or arena system with people inside it.
 
-Use one restrained accent system only. Prefer muted cyan, pale phosphor blue, faded amber, or soft CRT green. Accent appears only in active states, focus states, successful ritual completion, and subtle signal moments.
+Use a restrained warm signal accent system. Prefer scoreboard amber, electric green, active white, tunnel blue, and movement orange. Accent appears only in active states, focus states, successful ritual completion, community/progression signals, and subtle live-gym moments.
 
-Avoid rainbow UI, startup gradients, excessive color, loud shadows, thick borders, giant cards, and unnecessary framing.
+Avoid rainbow UI, startup gradients, excessive color, loud shadows, thick borders, giant cards, unnecessary framing, cyberpunk glow, dead minimalism, and isolated black voids.
 
 Typography carries hierarchy through oversized clean display type and tiny monospace metadata. The contrast between huge emotional typography and small system records is critical. Avoid repeated state language, excessive labels, giant explanation, and visual shouting.
 

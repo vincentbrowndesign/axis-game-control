@@ -1,27 +1,26 @@
 # UI Direction
 
-Axis should feel like a personal sports device and save file system.
+Axis should feel like a living athletic continuity system, personal sports device, and save-file progression system.
 
-The visual language is a restrained 90s/2000s electronics identity:
+The visual language is premium athletic infrastructure with restrained electronics underneath:
 
-- PS2 operating system.
-- Original Xbox dashboard focus states.
-- Dreamcast VMU.
-- Sony MiniDisc interfaces.
-- TiVo and old DVR systems.
-- Arcade terminal menus.
-- CRT diagnostics.
-- Early sports broadcast terminals.
+- Apple Fitness and Nike Run Club energy.
+- Modern arena systems.
+- Gym scoreboards.
+- Sports tunnel graphics.
+- Athletic LED systems.
+- Active team environments.
+- PS2 and Xbox focus-state clarity.
 
 ## Visual Rules
 
-- Use layered blacks: #000000, #050505, #0b0b0b, #111111, #161616.
-- Use one muted terminal accent only.
-- Prefer pale phosphor cyan/blue or soft CRT green.
-- Accent appears only in active, focus, completion, and subtle signal states.
+- Use graphite, warm charcoal, smoked gray, soft arena black, and polished dark surfaces.
+- Avoid empty black voids and lonely sci-fi atmosphere.
+- Use restrained athletic signal accents: scoreboard amber, electric green, active white, tunnel blue, and movement orange.
+- Accent appears only in active, focus, completion, social tension, and subtle live-gym states.
 - Use oversized clean display type for emotion.
 - Use tiny monospace metadata for records.
-- Keep black space and silence.
+- Keep calm structure, but let the system feel alive.
 
 ## Product Feeling
 
@@ -31,6 +30,10 @@ The interface should feel:
 - Ritualistic.
 - Persistent.
 - Calm.
+- Alive.
+- Athletic.
+- Warm.
+- Communal.
 - Electronic.
 - Save-state oriented.
 - Membership-based.
@@ -44,6 +47,9 @@ It should not feel like:
 - Productivity software.
 - Dashboard software.
 - A marketing website.
+- Dystopian terminals.
+- Hacker aesthetics.
+- Replay-era cinematic isolation.
 
 ## Current Surface
 
