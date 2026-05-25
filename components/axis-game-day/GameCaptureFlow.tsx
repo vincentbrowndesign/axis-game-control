@@ -456,6 +456,7 @@ export function GameCaptureFlow() {
         body: form,
         method: "POST",
       })
+      const responseContentType = response.headers.get("content-type") || ""
       const text = await response.text()
       const completed = normalizeUploadResponse(parseUploadResponseText(text))
 
@@ -463,6 +464,7 @@ export function GameCaptureFlow() {
         filePath: completed.filePath,
         ok: response.ok,
         replayId: completed.replayId,
+        responseContentType,
         status: response.status,
         stored: completed.stored,
         text,

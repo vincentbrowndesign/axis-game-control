@@ -69,5 +69,14 @@ export function normalizeUploadResponse(
 }
 
 export function parseUploadResponseText(text: string) {
-  return normalizeUploadResponse(JSON.parse(text))
+  try {
+    return normalizeUploadResponse(JSON.parse(text))
+  } catch {
+    return {
+      ok: false,
+      detail: text.slice(0, 500),
+      error: "UPLOAD RESPONSE WAS NOT JSON",
+      stage: "response-parse",
+    } satisfies AxisUploadResponse
+  }
 }
