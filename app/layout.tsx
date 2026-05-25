@@ -6,6 +6,7 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
+import { getAxisSignInUrl, getAxisSignUpUrl } from "@/lib/axis-auth/authUrls";
 import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
@@ -44,6 +45,8 @@ export default function RootLayout({
   const clerkEnabled = hasValidClerkServerConfig();
   const clerkPublishableKey =
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  const signInUrl = getAxisSignInUrl();
+  const signUpUrl = getAxisSignUpUrl();
 
   return (
     <html
@@ -52,7 +55,11 @@ export default function RootLayout({
     >
       <body className="axis-organism-root min-h-full flex flex-col">
         {clerkEnabled ? (
-          <ClerkProvider publishableKey={clerkPublishableKey}>
+          <ClerkProvider
+            publishableKey={clerkPublishableKey}
+            signInUrl={signInUrl}
+            signUpUrl={signUpUrl}
+          >
             <header className="axis-auth-presence" aria-label="Axis account">
               <Show when="signed-out">
                 <SignInButton mode="redirect">

@@ -1,9 +1,11 @@
 import { SignIn } from "@clerk/nextjs"
+import { getAxisSignUpUrl } from "@/lib/axis-auth/authUrls"
 import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig"
 import Link from "next/link"
 
 export default function SignInPage() {
   const clerkConfigured = hasValidClerkServerConfig()
+  const signUpUrl = getAxisSignUpUrl()
 
   return (
     <main style={styles.main}>
@@ -29,7 +31,7 @@ export default function SignInPage() {
             }}
             routing="path"
             path="/sign-in"
-            signUpUrl="/sign-up"
+            signUpUrl={signUpUrl}
           />
         ) : (
           <div style={styles.notice}>
