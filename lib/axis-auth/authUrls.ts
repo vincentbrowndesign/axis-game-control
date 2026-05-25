@@ -14,3 +14,7 @@ export function getAxisSignInUrl() {
 export function getAxisSignUpUrl() {
   return `${getAxisAuthOrigin()}/sign-up`
 }
+
+export function getAxisHomeUrl() {
+  return `${getAxisAuthOrigin()}/`
+}

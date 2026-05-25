@@ -1,10 +1,11 @@
 import { SignUp } from "@clerk/nextjs"
-import { getAxisSignInUrl } from "@/lib/axis-auth/authUrls"
+import { getAxisHomeUrl, getAxisSignInUrl } from "@/lib/axis-auth/authUrls"
 import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig"
 import Link from "next/link"
 
 export default function SignUpPage() {
   const clerkConfigured = hasValidClerkServerConfig()
+  const homeUrl = getAxisHomeUrl()
   const signInUrl = getAxisSignInUrl()
 
   return (
@@ -29,6 +30,7 @@ export default function SignUpPage() {
                 formButtonPrimary: "axis-clerk-button",
               },
             }}
+            forceRedirectUrl={homeUrl}
             routing="path"
             path="/sign-up"
             signInUrl={signInUrl}

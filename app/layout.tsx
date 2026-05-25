@@ -6,7 +6,11 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
-import { getAxisSignInUrl, getAxisSignUpUrl } from "@/lib/axis-auth/authUrls";
+import {
+  getAxisHomeUrl,
+  getAxisSignInUrl,
+  getAxisSignUpUrl,
+} from "@/lib/axis-auth/authUrls";
 import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
@@ -45,6 +49,7 @@ export default function RootLayout({
   const clerkEnabled = hasValidClerkServerConfig();
   const clerkPublishableKey =
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  const homeUrl = getAxisHomeUrl();
   const signInUrl = getAxisSignInUrl();
   const signUpUrl = getAxisSignUpUrl();
 
@@ -57,6 +62,7 @@ export default function RootLayout({
         {clerkEnabled ? (
           <ClerkProvider
             publishableKey={clerkPublishableKey}
+            signUpForceRedirectUrl={homeUrl}
             signInUrl={signInUrl}
             signUpUrl={signUpUrl}
           >
@@ -67,7 +73,7 @@ export default function RootLayout({
                     Sign in
                   </button>
                 </SignInButton>
-                <SignUpButton mode="redirect">
+                <SignUpButton forceRedirectUrl={homeUrl} mode="redirect">
                   <button
                     className="axis-auth-action axis-auth-action-primary"
                     type="button"
