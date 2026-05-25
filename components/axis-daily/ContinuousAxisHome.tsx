@@ -13,6 +13,7 @@ type CheckInResponse = {
   }
   error?: string
   ok?: boolean
+  traceId?: string
 }
 
 type HistoryNode = {
@@ -81,6 +82,12 @@ export function ContinuousAxisHome({
         method: "POST",
       })
       const data = (await response.json().catch(() => ({}))) as CheckInResponse
+
+      console.info("AXIS CHECK-IN", {
+        ok: response.ok && Boolean(data.ok),
+        status: response.status,
+        traceId: data.traceId,
+      })
 
       if (!response.ok || !data.ok || !data.checkIn) {
         setStatus("idle")

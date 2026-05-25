@@ -37,11 +37,18 @@ function requiresGymVerification() {
 }
 
 export async function POST(request: Request) {
+  const traceId = crypto.randomUUID()
   const identity = await getAxisRequestIdentity()
 
   if (!identity) {
+    console.warn("AXIS CHECK-IN", {
+      stage: "identity",
+      status: "missing",
+      traceId,
+    })
+
     return NextResponse.json(
-      { error: "SIGN IN REQUIRED" },
+      { error: "SIGN IN REQUIRED", traceId },
       { status: 401 }
     )
   }
@@ -64,14 +71,14 @@ export async function POST(request: Request) {
 
   if (gymVerificationRequired && !gym) {
     return NextResponse.json(
-      { error: "CHECK IN VERIFICATION UNAVAILABLE" },
+      { error: "CHECK IN VERIFICATION UNAVAILABLE", traceId },
       { status: 503 }
     )
   }
 
   if (gymVerificationRequired && !hasLocation) {
     return NextResponse.json(
-      { error: "CHECK IN VERIFICATION REQUIRED" },
+      { error: "CHECK IN VERIFICATION REQUIRED", traceId },
       { status: 400 }
     )
   }
@@ -90,6 +97,7 @@ export async function POST(request: Request) {
           denied: true,
           distanceMeters: Math.round(distanceMeters),
           error: "CHECK IN NOT VERIFIED",
+          traceId,
         },
         { status: 403 }
       )
@@ -105,33 +113,75 @@ export async function POST(request: Request) {
     typeof body.notes === "string" && body.notes.trim()
       ? body.notes.trim().slice(0, 600)
       : null
+  const insertPayload = {
+    clerk_user_id: identity.clerkUserId,
+    distance_meters: Math.round(distanceMeters),
+    duration_minutes: durationMinutes,
+    latitude: hasLocation ? latitude : 0,
+    longitude: hasLocation ? longitude : 0,
+    notes,
+    status: "checked_in",
+    user_id: identity.supabaseUserId,
+    workout_type: workoutType,
+  }
+
+  console.info("AXIS CHECK-IN", {
+    clerkUserId: identity.clerkUserId,
+    hasLocation,
+    hasSupabaseUserId: Boolean(identity.supabaseUserId),
+    insertPayload: {
+      clerk_user_id: insertPayload.clerk_user_id,
+      distance_meters: insertPayload.distance_meters,
+      duration_minutes: insertPayload.duration_minutes,
+      latitude: insertPayload.latitude,
+      longitude: insertPayload.longitude,
+      status: insertPayload.status,
+      user_id: insertPayload.user_id,
+      workout_type: insertPayload.workout_type,
+    },
+    stage: "insert-start",
+    table: "public.axis_training_check_ins",
+    traceId,
+    verification: gymVerificationRequired ? "gym_boundary" : "not_required",
+  })
 
   const inserted = await supabaseAdmin
     .from("axis_training_check_ins")
-    .insert({
-      clerk_user_id: identity.clerkUserId,
-      distance_meters: Math.round(distanceMeters),
-      duration_minutes: durationMinutes,
-      latitude: hasLocation ? latitude : 0,
-      longitude: hasLocation ? longitude : 0,
-      notes,
-      user_id: identity.supabaseUserId,
-      workout_type: workoutType,
-    })
+    .insert(insertPayload)
     .select("id, occurred_at")
     .single<{ id: string; occurred_at: string }>()
 
   if (inserted.error) {
+    console.error("AXIS CHECK-IN", {
+      code: inserted.error.code,
+      detail: inserted.error.details,
+      hint: inserted.error.hint,
+      message: inserted.error.message,
+      stage: "insert-failed",
+      traceId,
+    })
+
     return NextResponse.json(
-      { error: "CHECK IN NOT SAVED" },
+      {
+        detail: inserted.error.message,
+        error: "CHECK IN NOT SAVED",
+        traceId,
+      },
       { status: 500 }
     )
   }
+
+  console.info("AXIS CHECK-IN", {
+    checkInId: inserted.data.id,
+    stage: "insert-complete",
+    traceId,
+  })
 
   return NextResponse.json({
     checkIn: inserted.data,
     distanceMeters: Math.round(distanceMeters),
     ok: true,
+    traceId,
     verification: gymVerificationRequired ? "gym_boundary" : "not_required",
   })
 }
