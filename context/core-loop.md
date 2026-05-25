@@ -2,9 +2,14 @@
 
 show up
 -> check in
--> write your story
+-> history grows
+-> leaderboard updates
 -> return tomorrow
 
-Axis is building identity and history infrastructure first.
+Axis is building identity, presence, and history infrastructure first.
 
-Replay, clips, AI, and broadcasts are future layers built on top of persistent presence continuity.
+The ritual expands later, but the anchor does not change:
+
+identity -> presence -> history -> ritual continuity
+
+Future layers must inherit from this loop instead of replacing it.

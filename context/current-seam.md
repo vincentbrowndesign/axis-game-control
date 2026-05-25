@@ -1,25 +1,30 @@
 # Current Seam
 
-identity -> physical presence -> history persistence
+history -> leaderboard -> return tomorrow
 
-Focus:
+This is the only active continuity seam.
 
-- Sign in continuity.
-- Geofenced check-in.
-- Streak and history persistence.
+## Focus
+
+- Effort continuity.
+- Verified check-ins.
+- Streak and participation history.
+- Quiet social tension.
+- Return tomorrow behavior.
 - Daily return behavior.
 
-Current proof:
+## Proof
 
-A member signs in, checks in from the allowed physical location, saves a short training record, sees Axis History grow, and returns tomorrow with continuity intact.
+A member checks in, Axis History grows, the leaderboard updates from verified effort, and the member returns tomorrow to keep the chain alive.
 
-Do not drift into:
+## Do Not Drift Into
 
-- Replay.
-- Clips.
-- Broadcasts.
-- AI commentary.
-- Computer vision.
-- Dashboard analytics.
+- Media expansion.
+- Commentary.
+- Feeds.
+- Analytics.
+- Topology systems.
+- Runtime diagrams.
+- Dashboard surfaces.
 
-Those layers come later after the current seam is stable.
+Those layers remain archived or inactive until the seam is stable.

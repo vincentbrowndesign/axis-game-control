@@ -1,37 +1,44 @@
 # Project Overview
 
-Axis is identity and history infrastructure for basketball presence.
+Axis is a personal sports history system.
 
-The product has shifted from AI replay/media first to a calmer daily loop:
+The stabilized product direction is:
 
-show up -> check in -> history grows -> return tomorrow
+identity -> presence -> history -> ritual continuity
 
-Core purpose:
+Current core loop:
+
+show up -> check in -> history grows -> leaderboard updates -> return tomorrow
+
+Axis is not a media engine right now. Future layers can only sit on top of persistent identity and presence.
+
+## Core Purpose
 
 - Give each member a persistent Axis identity.
-- Confirm physical presence through check-in.
-- Accumulate attendance, streaks, sessions, and training logs into Axis History.
-- Make progression feel earned because it is attached to repeated presence.
+- Turn physical presence into a daily ritual.
+- Save check-ins, streaks, training logs, and sessions into Axis History.
+- Make consistency feel earned, remembered, and worth returning to.
 
-Emotional primitive:
+## Emotional Primitive
 
-Axis should feel like belonging that compounds. A member returns, checks in, and sees that the work did not disappear.
+Axis should feel like keeping a save file alive.
 
-Current product direction:
+A member shows up, checks in, writes part of their story, and returns tomorrow with continuity intact.
 
-- Public entry is identity, membership, and presence.
-- Authenticated experience is check-in, Axis History, streaks, and daily return.
-- The system should feel restrained, grounded, and persistent.
+## Current Product Direction
 
-Future layers:
+- Public entry is identity and membership.
+- Authenticated experience is the Check In ritual.
+- Axis History is the persistent record.
+- Leaderboard adds quiet social tension from effort continuity.
+- The product should feel like a personal sports device, not a website.
 
-Replay, clips, AI, broadcasts, and computer vision are future layers built on top of persistent presence continuity. They are not the current core loop.
+## Out Of Scope
 
-Out of scope until the current loop is stable:
+Until the current loop is stable, do not build:
 
-- Replay-first product work.
-- Clips UI.
-- Broadcast UI.
-- AI commentary.
-- Roboflow/CV processing.
-- New databases or storage systems.
+- Media expansion.
+- Commentary.
+- Feeds.
+- Analytics dashboards.
+- Speculative topology or runtime systems.

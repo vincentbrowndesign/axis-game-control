@@ -87,6 +87,12 @@ export default async function MemoryPage() {
           )}
         </section>
       </section>
+
+      <footer className={styles.footer}>
+        <Link className={styles.link} href="/leaderboard">
+          Leaderboard
+        </Link>
+      </footer>
     </main>
   )
 }

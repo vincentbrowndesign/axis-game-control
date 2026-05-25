@@ -1,46 +1,47 @@
 # AXIS CONSTITUTION
 
-Axis is AI-assisted coaching memory extraction for basketball.
+Axis is a personal sports history system.
+
+The stabilized product direction is:
+
+identity -> presence -> history -> ritual continuity
 
 ## Product Truth
 
-- Uploads are the primary entry point.
-- Landmarks are the primary memory object.
-- Playback is the product experience.
-- Captions are the reinforcement layer.
-- AI stays invisible and assistive.
+- Identity is the entry point.
+- Presence is the proof.
+- Check In is the ritual.
+- Axis History is the persistent record.
+- Streak and last check-in are save data.
+- Leaderboard is the first social tension layer for effort continuity.
+- Future media and intelligence layers must sit on top of presence continuity, not replace the current core loop.
 
 ## Core Loop
 
-Coach uploads basketball footage.
-
-Axis extracts candidate landmarks, timestamps, captions, and replay memory.
-
-Coach lightly reinforces the moments that matter.
-
-Players replay meaningful moments later.
-
-Replay behavior teaches Axis what should resurface.
+show up
+-> check in
+-> history grows
+-> leaderboard updates
+-> return tomorrow
 
 ## Hard Rules
 
-- Preserve auth, Supabase, uploads, Mux, replay routes, voice, and AI utility infrastructure.
-- Keep the app upload-first, media-first, adaptive, calm, and lightweight.
-- Show Choose File, keyframes, captions, timestamps, resurfaced sessions, and player mentions first.
-- Keep organization in the background.
+- Preserve auth, Supabase, check-in, upload, storage, replay, voice, and utility infrastructure.
+- Keep the app identity-first, ritual-first, history-first, adaptive, calm, and lightweight.
+- Show Check In, streak, last check-in, Axis History, and effort continuity first.
+- Keep intelligence and infrastructure underneath the surface.
+- Do not add future media or intelligence layers until the current seam is stable.
 
 ## Universal Design Chain
 
-Axis is a calm live operating environment for memory, perception, replay, and intelligence.
+Axis is a personal sports device, save file system, membership terminal, persistent identity machine, and late-90s/early-2000s electronics experience.
 
-Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, or analytics tool.
-
-Axis should feel like a personal sports device, save file system, membership terminal, persistent identity machine, and late-90s/early-2000s electronics experience.
+Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, analytics tool, or marketing website.
 
 Reference emotional hardware:
 
 - PS2 operating system.
-- Original Xbox dashboard.
+- Original Xbox dashboard focus states.
 - Dreamcast VMU.
 - Sony MiniDisc interfaces.
 - TiVo and old DVR systems.
@@ -51,21 +52,20 @@ Reference emotional hardware:
 Every UI generation must feel:
 
 - Calm.
-- Operational.
-- Cinematic.
+- Ritualistic.
+- Electronic.
+- Persistent.
 - Embedded.
-- Spatial.
-- Modern.
-- Alive underneath.
 - Structurally stable.
 - Low-friction.
+- Earned.
 - Inevitable.
 
 Every Axis screen follows the same structure:
 
-- Top: environmental telemetry.
-- Center: dominant world or content layer.
-- Bottom: interaction, memory, or navigation layer.
+- Top: identity/presence signal.
+- Center: dominant ritual or content layer.
+- Bottom: interaction, history, or continuity records.
 
 Axis is structural UI, not overlay UI. Interfaces must feel built into the screen itself, preserve screen integrity, and avoid random floating cards, stacked panels, disconnected widgets, viewport collisions, and keyboard instability.
 
@@ -77,11 +77,9 @@ Avoid rainbow UI, startup gradients, excessive color, loud shadows, thick border
 
 Typography carries hierarchy through oversized clean display type and tiny monospace metadata. The contrast between huge emotional typography and small system records is critical. Avoid repeated state language, excessive labels, giant explanation, and visual shouting.
 
-The universal memory rail is the primary interaction surface for live statting, memory creation, replay retrieval, questions, perception requests, semantic tagging, system control, and future AI interactions. It should feel continuous, native, fluid, and conversational, not like a form field. Enter submits, focus remains active, the keyboard remains open, and duplicate submit controls stay out of the operator flow.
+Intelligence stays ambient and underneath the system. The interface should not visually announce it; intelligence should feel invisible, attentive, and embedded into reality.
 
-AI stays ambient and underneath the system. The interface should not visually announce AI; intelligence should feel invisible, attentive, and embedded into reality.
-
-Future passes must evolve gradually without breaking continuity. Refine, compress, stabilize, and mature the same operating world instead of restarting the visual language.
+Future passes must evolve gradually without breaking continuity. Refine, compress, stabilize, and mature the same ritual environment instead of restarting the visual language.
 
 ## Do Not Add
 
@@ -92,6 +90,10 @@ Future passes must evolve gradually without breaking continuity. Refine, compres
 - Timeline editing tools.
 - Basketball IQ scores.
 - Scouting analytics.
-- AI assistant chat.
+- Assistant chat.
+- Commentary systems.
+- Feeds.
+- Broadcasts.
+- Replay-first surfaces.
 - Ontology-heavy screens.
 - Startup or platform language.

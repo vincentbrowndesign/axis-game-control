@@ -1,25 +1,28 @@
 # AXIS AGENT RULES
 
-Before making product changes, read `/AXIS_CONSTITUTION.md`.
+Before making product changes, read `/AXIS_CONSTITUTION.md` and `/context/core-loop.md`.
 
-Axis is AI-assisted coaching memory extraction for basketball.
+Axis is a personal sports history system.
 
 The active product loop is:
 
-Coach chooses a video -> Axis extracts candidate landmarks, timestamps, captions, and replay memory -> coach lightly reinforces meaningful moments -> players replay meaningful moments -> replay behavior helps the stream resurface what matters.
+show up -> check in -> history grows -> leaderboard updates -> return tomorrow
+
+The active product direction is:
+
+identity -> presence -> history -> ritual continuity
 
 Codex must:
 
-- Preserve working auth, Supabase, upload, storage, replay, voice, and AI utility infrastructure.
+- Preserve working auth, Supabase, check-in, upload, storage, replay, voice, and utility infrastructure.
 - Make small scoped changes.
-- Keep the frontend simple, adaptive, upload-first, media-first, and lightweight.
-- Prioritize Choose File, keyframes, landmarks, captions, replay, timestamps, Sessions, Players, coaching phrases, player mentions, and resurfacing.
-- Keep AI invisible and assistive.
-- Use basketball-first wording.
-- Hide video-first UX, systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.
-- Preserve the Axis universal design chain: calm, operational, cinematic, embedded, spatial, structurally stable, low-friction, and inevitable.
-- Use structural UI rather than floating overlay UI: top telemetry, center world/content, bottom interaction or memory rail.
-- Keep the memory rail continuous and native: Enter submits, focus remains active, keyboard stays open, and duplicate submit mechanics stay out of the operator flow.
+- Keep the frontend simple, calm, ritual-first, and lightweight.
+- Prioritize identity continuity, physical presence, Check In, Axis History, leaderboard, streak, last check-in, and return behavior.
+- Keep intelligence invisible and assistive.
+- Use basketball-first wording only when it supports the current ritual/history loop.
+- Hide systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.
+- Preserve the Axis electronics identity: layered blacks, one muted terminal accent, huge ritual typography, tiny archival metadata, and save-file atmosphere.
+- Use structural UI rather than floating overlay UI.
 - Evolve UI gradually without restarting the visual language.
 
 Do not:
@@ -28,13 +31,14 @@ Do not:
 - Add dashboards.
 - Add scouting analytics.
 - Add basketball IQ scores.
-- Add AI coaching claims.
-- Add AI assistant chat UI.
+- Add coaching claims.
+- Add assistant chat UI.
 - Add tactical software surfaces.
 - Add video breakdown software.
 - Add manual clipping or timeline editing tools.
 - Add startup, platform, neuroscience, or abstract product language.
 - Add widget stacks, random floating cards, dashboard-heavy surfaces, loud gradients, or web-form-based primary interaction.
+- Resume replay, clips, commentary, feeds, broadcasts, or computer vision work until the identity -> presence -> history seam is stable.
 
 Every task must identify:
 

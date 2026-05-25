@@ -1,37 +1,32 @@
 # Architecture
 
-Existing Axis stack only:
+Use the existing Axis stack only.
 
-- Next.js App Router: routes, server components, API routes, public entry, check-in, Axis History, and future replay surfaces.
-- Clerk: identity continuity, sign in, sign up, session persistence, and user ownership.
-- Supabase: persistent history layer for check-ins, streaks, sessions, training logs, uploads, and future replay objects.
-- Trigger.dev: progression and background processing for durable work that should survive refreshes and reconnects.
-- Mux: future replay/media layer for video delivery, playback, and stream sessions.
-- Roboflow/CV: future intelligence layer for visual understanding and replay telemetry.
+## Stack Roles
 
-Current continuity seam:
+- Next.js App Router: public entry, authenticated ritual surface, check-in, Axis History, and API routes.
+- Clerk: identity continuity.
+- Supabase: persistent history layer for check-ins, streaks, sessions, and future history objects.
+- Trigger.dev: future progression/background processing when work must survive refreshes or reconnects.
+- Mux: inactive future media boundary.
+- Roboflow/CV: inactive future vision boundary.
 
-identity -> physical presence -> history persistence
+## Active Data Flow
 
-Current persistence objects:
+sign in -> check in -> persist record -> derive streak/history -> return tomorrow
+
+## Current Persistence
 
 - Clerk user identity.
-- Supabase attendance/check-in records.
+- Supabase check-in records.
 - Supabase training log metadata.
-- Streak and history summaries derived from persisted records.
+- Derived streak and last check-in state.
 
-Future media objects:
-
-- Game sessions.
-- Replay assets.
-- Clips.
-- Stats.
-- Broadcast assets.
-
-Invariants:
+## Invariants
 
 - Do not add Prisma, Redis, Vercel Blob, or extra databases.
-- API routes stay thin: authenticate, validate, persist, enqueue background work when needed, return.
-- Frontend reads real backend state for identity and history.
-- Replay is future infrastructure until the identity, presence, and history loop is stable.
-- Roboflow/CV must remain hidden infrastructure behind stable product loops later.
+- Do not build new backend systems unless the current seam requires it.
+- API routes stay thin: authenticate, validate, persist, return.
+- The frontend reads real persisted state for identity and history.
+- Media delivery and vision work are inactive until the current loop is stable.
+- Intelligence remains hidden infrastructure, not visible product identity.

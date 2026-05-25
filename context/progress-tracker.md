@@ -7,26 +7,41 @@ IDENTITY
 Status: done
 
 - Clerk auth is installed and wired into the existing Axis app.
-- Sign in, sign up, session persistence, and UserButton continuity are the active identity seam.
+- Sign in, sign up, session persistence, and UserButton continuity support the identity seam.
 
 PRESENCE
 
 Status: in progress
 
 - Geofenced check-in is the active presence seam.
-- Check-in should prove that a member physically showed up before history grows.
+- Check In should prove a member physically showed up before history grows.
 
 HISTORY
 
 Status: in progress
 
 - Supabase persistence and streak summaries are the active history seam.
-- Axis History should accumulate check-ins, training logs, streaks, sessions, and future replay history.
-- Authenticated member home now makes the giant Check In typography the ritual interaction itself, with a thin electronics-style focus frame, no competing boxed CTA, "Write your story.", archival streak/last check-in records, and a calm checked-in timestamp state.
+- Axis History accumulates check-ins, training logs, streaks, and sessions.
+- Authenticated member home uses one ritual interaction: Check In.
+- The large Check In typography is the action itself.
+- Streak and last check-in are treated as archival save data.
 
-REPLAY
+LEADERBOARD
+
+Status: in progress
+
+- The first social tension layer is live at `/leaderboard`.
+- Rankings come only from verified check-ins and accumulated participation history.
+- Categories track effort continuity: weekly hours, active streak, monthly consistency, and sessions completed.
+- No talent, points, popularity, likes, comments, chat, or feed mechanics.
+
+FUTURE LAYERS
 
 Status: paused
 
-- Replay remains future infrastructure until identity, presence, and history stabilize.
-- Replay, clips, AI, and broadcasts must build on top of persistent presence continuity later.
+- Media, commentary, feeds, vision, and analytics remain paused until identity, presence, and history stabilize.
+- Future layers must inherit from the ritual continuity loop later.
+
+## Current Active Loop
+
+show up -> check in -> history grows -> return tomorrow
