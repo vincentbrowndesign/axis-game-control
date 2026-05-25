@@ -12,11 +12,17 @@ export default async function HomePage() {
   const lastCheckIn = summary?.checkIns[0]
   const checkedInToday = lastCheckIn ? isToday(lastCheckIn.occurred_at) : false
   const lastCheckInLabel = lastCheckIn
-    ? `${formatAttendanceDate(lastCheckIn.occurred_at)} / ${lastCheckIn.workout_type}`
+    ? formatLastCheckIn(lastCheckIn.occurred_at)
     : "No check-in yet"
+  const streakLabel = `${summary?.streakDays || 0} day ${
+    summary?.streakDays === 1 ? "streak" : "streak"
+  }`
+  const primaryActionLabel = checkedInToday && lastCheckIn
+    ? `Checked in - ${formatAttendanceTime(lastCheckIn.occurred_at)}`
+    : "Check In"
   const historyLine = checkedInToday
-    ? "Today is already part of your Axis History."
-    : "Check in to attach today to your Axis History."
+    ? "Chain kept alive."
+    : "History continues tonight."
 
   if (!identity) {
     return (
@@ -56,20 +62,25 @@ export default async function HomePage() {
         <section className={styles.ritualCenter} aria-label="Daily check in">
           <div>
             <p className={styles.kicker}>Daily ritual</p>
-            <h2 className={styles.ritualTitle}>Check In</h2>
-            <p className={styles.text}>
-              Show up, mark the day, and let the work keep its place.
-            </p>
+            <h2 className={styles.ritualTitle}>
+              {checkedInToday ? "Checked In" : "Check In"}
+            </h2>
+            <p className={styles.text}>{historyLine}</p>
           </div>
-          <Link className={styles.primaryAction} href="/check-in">
-            Check In
+          <Link
+            className={`${styles.primaryAction} ${
+              checkedInToday ? styles.primaryActionComplete : ""
+            }`}
+            href="/check-in"
+          >
+            {primaryActionLabel}
           </Link>
         </section>
 
         <section className={styles.historyStrip} aria-label="Axis History">
           <div className={styles.historySignal}>
-            <span>current streak</span>
-            <strong>{summary?.streakDays || 0} days</strong>
+            <span>streak</span>
+            <strong>{streakLabel}</strong>
           </div>
           <div className={styles.historySignal}>
             <span>last check-in</span>
@@ -85,6 +96,25 @@ export default async function HomePage() {
   )
 }
 
+function formatAttendanceTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value))
+}
+
+function formatLastCheckIn(value: string) {
+  if (isToday(value)) {
+    return `Today / ${formatAttendanceTime(value)}`
+  }
+
+  if (isYesterday(value)) {
+    return "Yesterday"
+  }
+
+  return formatAttendanceDate(value)
+}
+
 function isToday(value: string) {
   const date = new Date(value)
   const today = new Date()
@@ -93,5 +123,17 @@ function isToday(value: string) {
     date.getFullYear() === today.getFullYear() &&
     date.getMonth() === today.getMonth() &&
     date.getDate() === today.getDate()
+  )
+}
+
+function isYesterday(value: string) {
+  const date = new Date(value)
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  return (
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate()
   )
 }

@@ -153,6 +153,12 @@
   width: 100%;
 }
 
+.primaryActionComplete {
+  background: rgba(244, 244, 242, 0.08);
+  border-color: rgba(244, 244, 242, 0.22);
+  color: rgba(244, 244, 242, 0.84);
+}
+
 .historyStrip {
   align-items: end;
   border-top: 1px solid rgba(244, 244, 242, 0.08);
