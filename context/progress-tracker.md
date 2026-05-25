@@ -22,7 +22,7 @@ Status: in progress
 
 - Supabase persistence and streak summaries are the active history seam.
 - Axis History should accumulate check-ins, training logs, streaks, sessions, and future replay history.
-- Authenticated member home now makes the giant Check In typography the ritual interaction itself, with no competing boxed CTA, "Write your story.", archival streak/last check-in records, and a calm checked-in timestamp state.
+- Authenticated member home now makes the giant Check In typography the ritual interaction itself, with a thin electronics-style focus frame, no competing boxed CTA, "Write your story.", archival streak/last check-in records, and a calm checked-in timestamp state.
 
 REPLAY
 
