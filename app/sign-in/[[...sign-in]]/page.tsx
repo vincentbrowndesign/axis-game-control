@@ -14,11 +14,12 @@ export default function SignInPage() {
           <Link href="/" style={styles.brand}>
             Axis
           </Link>
-          <p style={styles.kicker}>Game memory</p>
-          <h1 style={styles.heading}>Sign in to continue.</h1>
+          <p style={styles.kicker}>Athletic identity</p>
+          <h1 style={styles.heading}>Build your history.</h1>
           <p style={styles.text}>
-            Keep uploads, sessions, and replay memory connected to one account.
+            Show up. Continue your story. Track effort through time.
           </p>
+          <p style={styles.systemLine}>Sign in to continue.</p>
         </div>
         {clerkConfigured ? (
           <SignIn
@@ -46,7 +47,7 @@ export default function SignInPage() {
 const styles = {
   main: {
     alignItems: "center",
-    background: "#050505",
+    background: "#030303",
     color: "#f4f4f2",
     display: "flex",
     minHeight: "100dvh",
@@ -56,10 +57,10 @@ const styles = {
     alignItems: "center",
     display: "flex",
     flexWrap: "wrap" as const,
-    gap: "32px",
+    gap: "56px",
     justifyContent: "center",
     margin: "0 auto",
-    maxWidth: "980px",
+    maxWidth: "1080px",
     width: "100%",
   },
   copy: {
@@ -75,7 +76,7 @@ const styles = {
   kicker: {
     color: "rgba(244, 244, 242, 0.48)",
     fontSize: "12px",
-    margin: "48px 0 12px",
+    margin: "56px 0 14px",
     textTransform: "uppercase" as const,
   },
   heading: {
@@ -86,10 +87,17 @@ const styles = {
     margin: 0,
   },
   text: {
-    color: "rgba(244, 244, 242, 0.6)",
-    fontSize: "15px",
+    color: "rgba(244, 244, 242, 0.68)",
+    fontSize: "16px",
     lineHeight: 1.6,
-    margin: "20px 0 0",
+    margin: "22px 0 0",
+  },
+  systemLine: {
+    color: "rgba(178, 232, 238, 0.52)",
+    fontSize: "11px",
+    letterSpacing: "0",
+    margin: "34px 0 0",
+    textTransform: "uppercase" as const,
   },
   notice: {
     border: "1px solid rgba(244, 244, 242, 0.14)",

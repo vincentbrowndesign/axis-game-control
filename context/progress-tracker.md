@@ -8,6 +8,7 @@ Status: done
 
 - Clerk auth is installed and wired into the existing Axis app.
 - Sign in, sign up, session persistence, and UserButton continuity support the identity seam.
+- The auth pages act as the Axis front door: system entry first, check-in ritual after authentication.
 
 PRESENCE
 
