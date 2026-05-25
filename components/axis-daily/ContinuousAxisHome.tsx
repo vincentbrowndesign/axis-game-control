@@ -199,6 +199,20 @@ export function ContinuousAxisHome({
               </button>
               <p className={styles.ritualWhisper}>Write your story.</p>
               <p className={styles.inlineStatus}>{message}</p>
+              <div className={styles.ritualMomentum} aria-hidden="true">
+                {progressionCells.slice(0, 9).map((cell) => (
+                  <span
+                    className={
+                      cell.state === "complete"
+                        ? styles.ritualMomentumComplete
+                        : cell.state === "active"
+                          ? styles.ritualMomentumActive
+                          : styles.ritualMomentumNode
+                    }
+                    key={cell.id}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 

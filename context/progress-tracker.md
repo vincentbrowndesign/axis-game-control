@@ -39,6 +39,9 @@ Status: in progress
 - Real continuity modules replaced placeholder side cards with a streak ring, mini history grid, rank object, and active-today participation count from check-in data.
 - Progression grid now extends into softer future days and marks the next accumulation node, making streak direction and momentum easier to read visually.
 - Home surface now scrolls from the top on desktop to prevent clipped content, and the design pattern is anchored to a concrete member-profile/activity-template.
+- Light surface athletic pass moved the member home away from heavy cinematic darkness toward warm concrete, soft graphite, daylight gym energy, and calmer active signals.
+- Glow refinement compressed broad haze into sharper signal edges, shorter shadows, and more readable athletic typography.
+- Athletic rhythm pass added a compact ritual momentum strip, more tactile completed-day states, stronger active-day emphasis, and clearer progression surfaces without adding new features.
 
 LEADERBOARD
 

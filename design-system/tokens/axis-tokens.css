@@ -4,15 +4,24 @@
   --axis-color-graphite-850: #1f1b17;
   --axis-color-graphite-800: #29241f;
   --axis-color-graphite-700: #37312a;
+  --axis-color-concrete-100: #eee7d9;
+  --axis-color-concrete-200: #ddd4c5;
+  --axis-color-concrete-300: #cec4b2;
+  --axis-color-arena-ink: #23201b;
 
   --axis-color-ink: #f7f4eb;
   --axis-color-ink-soft: rgba(247, 244, 235, 0.74);
   --axis-color-ink-muted: rgba(247, 244, 235, 0.5);
   --axis-color-ink-faint: rgba(247, 244, 235, 0.34);
+  --axis-color-ink-day: #23201b;
+  --axis-color-ink-day-muted: rgba(35, 32, 27, 0.58);
 
   --axis-surface: #171513;
   --axis-surface-soft: rgba(31, 27, 23, 0.72);
   --axis-surface-raised: rgba(41, 36, 31, 0.78);
+  --axis-surface-day: #ddd4c5;
+  --axis-surface-day-soft: rgba(242, 236, 223, 0.54);
+  --axis-surface-day-raised: rgba(255, 250, 238, 0.64);
   --axis-surface-active: rgba(244, 176, 75, 0.1);
   --axis-surface-live: rgba(110, 255, 156, 0.1);
 
@@ -57,4 +66,3 @@
   --axis-motion: 220ms ease;
   --axis-motion-slow: 420ms ease;
 }
-

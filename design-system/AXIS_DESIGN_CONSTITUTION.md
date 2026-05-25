@@ -47,19 +47,29 @@ The palette should feel warm, active, human, and electrical.
 
 Use:
 
+- warm light concrete
+- soft graphite
+- arena tunnel wall neutrals
+- premium wearable surfaces
 - warm graphite
 - smoked dark surfaces
 - active athletic signal colors
-- soft glows
+- sharp signal edges
 - alive energy
 
 Avoid:
 
+- black-hole darkness
+- heavy cinematic shadows
 - dead black voids
 - lonely cinematic darkness
 - cyberpunk neon overload
 - rainbow interfaces
 - generic startup gradients
+
+Axis can use darkness for contrast, but the default emotional temperature should feel like an active gym during the day: human, warm, and awake. Do not let the interface collapse back into a lonely replay-era void.
+
+Glow must support hierarchy, not replace it. Prefer crisp OLED-like edges, contained active states, and readable typography over broad bloom, blur spread, or foggy light spill.
 
 ## Motion Rules
 
@@ -125,4 +135,3 @@ Stable anchors:
 - save-state systems
 
 Future screens should feel like they were built from this same system automatically.
-
