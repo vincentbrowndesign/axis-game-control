@@ -36,6 +36,8 @@ Status: in progress
 - Visual history system added a streak calendar, accumulation grid, completed-day nodes, and active-day marker so history feels tangible without analytics UI.
 - Sports rhythm pass grouped the check-in ritual with continuity anchor cards and a compact activity band so the interface has stronger athletic structure without dashboard clutter.
 - Rhythm/progression refinement strengthened active-day treatment, softened future days, added a directional continuity line, and quieted ritual subcopy into metadata.
+- Real continuity modules replaced placeholder side cards with a streak ring, mini history grid, rank object, and active-today participation count from check-in data.
+- Progression grid now extends into softer future days and marks the next accumulation node, making streak direction and momentum easier to read visually.
 
 LEADERBOARD
 

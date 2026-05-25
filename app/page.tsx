@@ -2,6 +2,7 @@ import Link from "next/link"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import {
   formatAttendanceDate,
+  getActiveTodayCount,
   getAttendanceSummary,
 } from "@/lib/axis-daily/attendance"
 import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
@@ -12,6 +13,7 @@ export default async function HomePage() {
   const identity = await getAxisRequestIdentity()
   const summary = identity ? await getAttendanceSummary(identity, 12) : null
   const leaderboard = identity ? await getAxisLeaderboard() : []
+  const activeTodayCount = identity ? await getActiveTodayCount() : 0
   const lastCheckIn = summary?.checkIns[0]
   const checkedInToday = lastCheckIn ? isToday(lastCheckIn.occurred_at) : false
   const lastCheckInLabel = lastCheckIn
@@ -39,6 +41,9 @@ export default async function HomePage() {
     : checkedInToday
       ? "history live"
       : "first mark waiting"
+  const activeTodayLabel = activeTodayCount
+    ? `${activeTodayCount} active today`
+    : "floor opening"
   const checkIns = summary?.checkIns || []
   const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
@@ -80,6 +85,7 @@ export default async function HomePage() {
   return (
     <ContinuousAxisHome
       checkedInToday={checkedInToday}
+      activeTodayLabel={activeTodayLabel}
       continuityDays={continuityDays}
       history={history}
       lastCheckInLabel={lastCheckInLabel}
@@ -88,6 +94,7 @@ export default async function HomePage() {
       participationSignal={participationSignal}
       progressionCells={accumulation}
       ritualLabel={ritualLabel}
+      streakDays={summary?.streakDays || 0}
       streakLabel={streakLabel}
     />
   )
@@ -155,7 +162,7 @@ function isYesterday(value: string) {
 function buildContinuityDays(completedDays: Set<string>) {
   const today = new Date()
 
-  return Array.from({ length: 35 }, (_, index) => {
+  return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(today)
     date.setDate(today.getDate() - (34 - index))
     const key = toDateKey(date)
@@ -178,7 +185,12 @@ function buildContinuityDays(completedDays: Set<string>) {
 function buildAccumulationGrid(count: number) {
   return Array.from({ length: 28 }, (_, index) => ({
     id: `cell-${index}`,
-    state: index < count ? ("complete" as const) : ("empty" as const),
+    state:
+      index < count
+        ? ("complete" as const)
+        : index === Math.min(count, 27)
+          ? ("active" as const)
+          : ("empty" as const),
   }))
 }
 

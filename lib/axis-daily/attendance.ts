@@ -59,6 +59,30 @@ export async function getAttendanceSummary(
   }
 }
 
+export async function getActiveTodayCount() {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+
+  const result = await Promise.race([
+    supabaseAdmin
+      .from("axis_training_check_ins")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "checked_in")
+      .gte("occurred_at", today.toISOString())
+      .lt("occurred_at", tomorrow.toISOString()),
+    timeoutCountResult(4500),
+  ])
+
+  if (result.error) {
+    return 0
+  }
+
+  return result.count || 0
+}
+
 function timeoutResult(milliseconds: number) {
   return new Promise<{
     data: AxisTrainingCheckIn[] | null
@@ -69,6 +93,24 @@ function timeoutResult(milliseconds: number) {
         resolve({
           data: null,
           error: new Error("Attendance memory timed out"),
+        }),
+      milliseconds
+    )
+  })
+}
+
+function timeoutCountResult(milliseconds: number) {
+  return new Promise<{
+    count: null
+    data: null
+    error: Error
+  }>((resolve) => {
+    setTimeout(
+      () =>
+        resolve({
+          count: null,
+          data: null,
+          error: new Error("Attendance count timed out"),
         }),
       milliseconds
     )

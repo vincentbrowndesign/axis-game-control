@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import type { CSSProperties } from "react"
 import styles from "@/app/page.module.css"
 
 type CheckInStatus = "idle" | "saving" | "saved"
@@ -30,10 +31,11 @@ type ContinuityDay = {
 
 type ProgressionCell = {
   id: string
-  state: "complete" | "empty"
+  state: "active" | "complete" | "empty"
 }
 
 type ContinuousAxisHomeProps = {
+  activeTodayLabel: string
   checkedInToday: boolean
   continuityDays: ContinuityDay[]
   history: HistoryNode[]
@@ -43,10 +45,12 @@ type ContinuousAxisHomeProps = {
   participationSignal: string
   progressionCells: ProgressionCell[]
   ritualLabel: string
+  streakDays: number
   streakLabel: string
 }
 
 export function ContinuousAxisHome({
+  activeTodayLabel,
   checkedInToday,
   continuityDays,
   history,
@@ -56,6 +60,7 @@ export function ContinuousAxisHome({
   participationSignal,
   progressionCells,
   ritualLabel,
+  streakDays,
   streakLabel,
 }: ContinuousAxisHomeProps) {
   const router = useRouter()
@@ -78,6 +83,11 @@ export function ContinuousAxisHome({
     12,
     Math.max(3, history.length + (checkedInToday ? 2 : 1))
   )
+  const miniHistoryDays = continuityDays.slice(-14)
+  const ringProgress = Math.min(100, Math.max(8, (streakDays / 30) * 100))
+  const ringStyle = {
+    "--axis-ring-progress": `${ringProgress}%`,
+  } as CSSProperties
 
   async function submitCheckIn() {
     if (busy || status === "saved") return
@@ -192,25 +202,53 @@ export function ContinuousAxisHome({
             </div>
           </div>
 
-          <div className={styles.rhythmCluster} aria-label="Continuity anchors">
-            <div className={styles.rhythmCard}>
-              <span>today</span>
-              <strong>{status === "saved" ? "marked" : "open"}</strong>
+          <div className={styles.rhythmCluster} aria-label="Continuity objects">
+            <div className={`${styles.rhythmCard} ${styles.streakObject}`}>
+              <div className={styles.streakRing} style={ringStyle}>
+                <strong>{streakDays}</strong>
+              </div>
+              <div>
+                <span>streak</span>
+                <strong>{streakLabel}</strong>
+              </div>
             </div>
-            <div className={styles.rhythmCard}>
-              <span>chain</span>
-              <strong>{streakLabel}</strong>
+
+            <div className={`${styles.rhythmCard} ${styles.historyObject}`}>
+              <span>history</span>
+              <div className={styles.miniHistoryGrid} aria-hidden="true">
+                {miniHistoryDays.map((day) => (
+                  <i
+                    className={
+                      day.state === "complete"
+                        ? styles.miniHistoryComplete
+                        : day.state === "active"
+                          ? styles.miniHistoryActive
+                          : styles.miniHistoryEmpty
+                    }
+                    key={day.id}
+                  />
+                ))}
+              </div>
             </div>
+
             <div className={styles.rhythmCard}>
-              <span>board</span>
+              <span>rank</span>
               <strong>{leaderboardPlacement}</strong>
             </div>
+
+            <div className={styles.rhythmCard}>
+              <span>active today</span>
+              <strong>{activeTodayLabel}</strong>
+            </div>
+
             <div className={styles.rhythmBand} aria-hidden="true">
-              {progressionCells.slice(0, 14).map((cell) => (
+              {progressionCells.slice(0, 21).map((cell) => (
                 <span
                   className={
                     cell.state === "complete"
                       ? styles.rhythmBandNodeComplete
+                      : cell.state === "active"
+                        ? styles.rhythmBandNodeActive
                       : styles.rhythmBandNode
                   }
                   key={cell.id}
@@ -253,6 +291,8 @@ export function ContinuousAxisHome({
                     className={
                       cell.state === "complete"
                         ? styles.progressionCellComplete
+                        : cell.state === "active"
+                          ? styles.progressionCellActive
                         : styles.progressionCell
                     }
                     key={cell.id}
