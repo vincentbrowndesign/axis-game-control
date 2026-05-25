@@ -187,12 +187,6 @@
   font-weight: 500;
 }
 
-.historyLine {
-  line-height: 1.5;
-  margin: 0;
-  max-width: 34rem;
-}
-
 .smallLink {
   min-height: 2.25rem;
   white-space: nowrap;

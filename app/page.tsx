@@ -20,9 +20,7 @@ export default async function HomePage() {
   const primaryActionLabel = checkedInToday && lastCheckIn
     ? `Checked in - ${formatAttendanceTime(lastCheckIn.occurred_at)}`
     : "Check In"
-  const historyLine = checkedInToday
-    ? "Chain kept alive."
-    : "History continues tonight."
+  const historyLine = "Write your story."
 
   if (!identity) {
     return (
@@ -86,7 +84,6 @@ export default async function HomePage() {
             <span>last check-in</span>
             <strong>{lastCheckInLabel}</strong>
           </div>
-          <p className={styles.historyLine}>{historyLine}</p>
           <Link className={styles.smallLink} href="/memory">
             View Axis History
           </Link>

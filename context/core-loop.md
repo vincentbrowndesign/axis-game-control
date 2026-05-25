@@ -2,7 +2,7 @@
 
 show up
 -> check in
--> history grows
+-> write your story
 -> return tomorrow
 
 Axis is building identity and history infrastructure first.
