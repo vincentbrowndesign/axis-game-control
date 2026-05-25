@@ -168,7 +168,9 @@ function buildContinuityDays(completedDays: Set<string>) {
         ? ("complete" as const)
         : isCurrentDay
           ? ("active" as const)
-          : ("empty" as const),
+          : date > today
+            ? ("future" as const)
+            : ("empty" as const),
     }
   })
 }

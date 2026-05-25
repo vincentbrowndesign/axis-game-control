@@ -25,7 +25,7 @@ type HistoryNode = {
 type ContinuityDay = {
   id: string
   label: string
-  state: "active" | "complete" | "empty"
+  state: "active" | "complete" | "empty" | "future"
 }
 
 type ProgressionCell = {
@@ -235,7 +235,9 @@ export function ContinuousAxisHome({
                       ? styles.calendarDayComplete
                       : day.state === "active"
                         ? styles.calendarDayActive
-                        : ""
+                        : day.state === "future"
+                          ? styles.calendarDayFuture
+                          : ""
                   }`}
                   key={day.id}
                 >

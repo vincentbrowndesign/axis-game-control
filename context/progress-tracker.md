@@ -35,6 +35,7 @@ Status: in progress
 - Athletic energy pass added a restrained live-gym signal rail, subtle activity meter, and recent-history pulse from real participation data without adding feeds or social mechanics.
 - Visual history system added a streak calendar, accumulation grid, completed-day nodes, and active-day marker so history feels tangible without analytics UI.
 - Sports rhythm pass grouped the check-in ritual with continuity anchor cards and a compact activity band so the interface has stronger athletic structure without dashboard clutter.
+- Rhythm/progression refinement strengthened active-day treatment, softened future days, added a directional continuity line, and quieted ritual subcopy into metadata.
 
 LEADERBOARD
 
