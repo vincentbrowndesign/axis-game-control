@@ -75,6 +75,10 @@ function debugUploadStep(step: string, details?: Record<string, unknown>) {
   console.log(DEBUG_PREFIX, step, details || {})
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
 export function GameCaptureFlow() {
   const router = useRouter()
   const previewRef = useRef<HTMLVideoElement | null>(null)
@@ -478,11 +482,12 @@ export function GameCaptureFlow() {
         status: completed.status,
         traceId: completed.traceId,
       })
-      setStage("complete")
-      setProcessing(initialProcessingSnapshot("IDLE"))
-      setProcessingSummary(null)
-      setProgress(100)
-      setStatus("Upload saved.")
+      setStage("processing")
+      setProcessing(initialProcessingSnapshot("QUEUED"))
+      setProgress(42)
+      setStatus("Processing game.")
+
+      await pollProcessingStatus(completed.replayId)
     } catch (error) {
       setStage("error")
       setProcessing(initialProcessingSnapshot("IDLE"))
@@ -490,6 +495,51 @@ export function GameCaptureFlow() {
     } finally {
       uploadActiveRef.current = false
     }
+  }
+
+  async function pollProcessingStatus(replayId: string) {
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      const response = await fetch(
+        `/api/session/status?sessionId=${encodeURIComponent(replayId)}`,
+        { cache: "no-store" }
+      )
+
+      if (!response.ok) {
+        await delay(1500)
+        continue
+      }
+
+      const payload = await response.json() as {
+        processing?: AxisProcessingSnapshot
+        summary?: ProcessingSummary
+      }
+
+      if (payload.processing) {
+        setProcessing(payload.processing)
+        setProgress(payload.processing.progress)
+        setStatus(processingText(payload.processing.state))
+      }
+
+      if (payload.summary) {
+        setProcessingSummary(payload.summary)
+      }
+
+      if (payload.processing?.state === "COMPLETE") {
+        setStage("complete")
+        setProgress(100)
+        setStatus("Game media ready.")
+        return
+      }
+
+      if (payload.processing?.state === "FAILED") {
+        throw new Error("Processing needs another try.")
+      }
+
+      await delay(1500)
+    }
+
+    setStage("complete")
+    setStatus("Upload saved. Processing will continue.")
   }
 
   function setSelectedFile(file: File, source: "camera" | "upload") {

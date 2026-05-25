@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import {
@@ -68,13 +68,9 @@ export async function POST(request: Request) {
   const requestTraceId = crypto.randomUUID()
 
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    const identity = await getAxisRequestIdentity()
 
-    if (userError || !user) {
+    if (!identity) {
       return safeJson(
         {
           ok: false,
@@ -98,7 +94,7 @@ export async function POST(request: Request) {
       contentType: body.contentType || "unknown",
     })
 
-    if (!filePath || !filePath.startsWith(`${user.id}/`)) {
+    if (!filePath || !filePath.startsWith(`${identity.storageKey}/`)) {
       return safeJson(
         {
           ok: false,
@@ -142,17 +138,24 @@ export async function POST(request: Request) {
       ? Number(body.durationSeconds)
       : 0
 
-    const existing = await supabaseAdmin
+    const existing = supabaseAdmin
       .from("axis_sessions")
       .select("id, video_url, metadata")
       .eq("id", sessionId)
-      .eq("user_id", user.id)
-      .maybeSingle()
 
-    if (existing.data) {
+    const existingQuery = identity.supabaseUserId
+      ? existing.eq("user_id", identity.supabaseUserId)
+      : existing.eq("clerk_user_id", identity.clerkUserId || "")
+    const existingResult = await existingQuery.maybeSingle<{
+      id: string
+      metadata: Record<string, unknown> | null
+      video_url: string | null
+    }>()
+
+    if (existingResult.data) {
       const metadata =
-        existing.data.metadata && typeof existing.data.metadata === "object"
-          ? existing.data.metadata
+        existingResult.data.metadata && typeof existingResult.data.metadata === "object"
+          ? existingResult.data.metadata
           : {}
       const currentProcessing = readProcessingSnapshot(metadata.processing)
       const processingJobs = ensureJobManifest(readJobManifest(metadata.processingJobs))
@@ -161,7 +164,7 @@ export async function POST(request: Request) {
           ? currentProcessing
           : deriveProcessingFromJobs(processingJobs, traceId)
 
-      await supabaseAdmin
+      const updateExisting = supabaseAdmin
         .from("axis_sessions")
         .update({
           metadata: applySessionArchiveManifest({
@@ -170,9 +173,9 @@ export async function POST(request: Request) {
               typeof body.durationSeconds === "number"
                 ? body.durationSeconds
                 : null,
-            fileName: body.fileName || existing.data.id,
+            fileName: body.fileName || existingResult.data.id,
             filePath,
-            id: existing.data.id,
+            id: existingResult.data.id,
             metadata: {
             ...metadata,
             processing,
@@ -185,21 +188,26 @@ export async function POST(request: Request) {
           status: processing.state.toLowerCase(),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", existing.data.id)
-        .eq("user_id", user.id)
+        .eq("id", existingResult.data.id)
+
+      const scopedUpdate = identity.supabaseUserId
+        ? updateExisting.eq("user_id", identity.supabaseUserId)
+        : updateExisting.eq("clerk_user_id", identity.clerkUserId || "")
+      await scopedUpdate
 
       await enqueueAndStartProcessing({
-        sessionId: existing.data.id,
+        clerkUserId: identity.clerkUserId,
+        sessionId: existingResult.data.id,
         traceId,
-        userId: user.id,
+        userId: identity.supabaseUserId,
       })
 
       revalidatePath("/games")
 
       return safeJson({
         ok: true,
-        replayId: existing.data.id,
-        videoUrl: existing.data.video_url || signedUrl.data.signedUrl,
+        replayId: existingResult.data.id,
+        videoUrl: existingResult.data.video_url || signedUrl.data.signedUrl,
         createdAt: Date.now(),
         stage: "complete",
         traceId,
@@ -242,7 +250,8 @@ export async function POST(request: Request) {
       .from("axis_sessions")
       .insert({
         id: sessionId,
-        user_id: user.id,
+        clerk_user_id: identity.clerkUserId,
+        user_id: identity.supabaseUserId,
         title: body.fileName || "Axis video",
         video_url: signedUrl.data.signedUrl,
         file_name: body.fileName || "Axis video",
@@ -298,7 +307,8 @@ export async function POST(request: Request) {
     }
 
     const uploadRecord = await supabaseAdmin.from("axis_uploads").insert({
-      user_id: user.id,
+      clerk_user_id: identity.clerkUserId,
+      user_id: identity.supabaseUserId,
       session_id: inserted.data.id,
       bucket_id: "axis-replays",
       file_path: filePath,
@@ -322,9 +332,10 @@ export async function POST(request: Request) {
     })
 
     await enqueueAndStartProcessing({
+      clerkUserId: identity.clerkUserId,
       sessionId: inserted.data.id,
       traceId,
-      userId: user.id,
+      userId: identity.supabaseUserId,
     })
 
     revalidatePath("/games")
@@ -359,31 +370,27 @@ export async function POST(request: Request) {
 }
 
 async function enqueueAndStartProcessing({
+  clerkUserId,
   sessionId,
   traceId,
   userId,
 }: {
+  clerkUserId?: string | null
   sessionId: string
   traceId?: string
-  userId: string
+  userId?: string | null
 }) {
   await startTriggerGameUploadProcessing({
+    clerkUserId,
     sessionId,
     traceId,
     userId,
   })
 
-  try {
-    await triggerProcessGameUpload({
-      sessionId,
-      traceId,
-      userId,
-    })
-  } catch (error) {
-    console.error("AXIS TRIGGER PIPELINE FAILURE", {
-      error: error instanceof Error ? error.message : "Trigger job failed.",
-      sessionId,
-      traceId,
-    })
-  }
+  await triggerProcessGameUpload({
+    clerkUserId,
+    sessionId,
+    traceId,
+    userId,
+  })
 }

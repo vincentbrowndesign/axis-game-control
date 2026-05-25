@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import { readProcessingSnapshot } from "@/lib/axis-processing/state"
 import {
   deriveProcessingFromJobs,
@@ -10,7 +11,7 @@ import {
   jobRowToManifestJob,
   type AxisProcessingJobRow,
 } from "@/lib/axis-processing/queue"
-import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -23,13 +24,9 @@ function asRecord(value: unknown): Record<string, unknown> {
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const sessionId = url.searchParams.get("sessionId") || ""
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const identity = await getAxisRequestIdentity()
 
-  if (error || !user) {
+  if (!identity) {
     return NextResponse.json(
       { error: "MEMORY ACCESS REQUIRED" },
       { status: 401 }
@@ -43,11 +40,16 @@ export async function GET(request: Request) {
     )
   }
 
-  const session = await supabase
+  let sessionQuery = supabaseAdmin
     .from("axis_sessions")
     .select("id, status, metadata")
     .eq("id", sessionId)
-    .eq("user_id", user.id)
+
+  sessionQuery = identity.supabaseUserId
+    ? sessionQuery.eq("user_id", identity.supabaseUserId)
+    : sessionQuery.eq("clerk_user_id", identity.clerkUserId || "")
+
+  const session = await sessionQuery
     .maybeSingle<{
       id: string
       metadata: Record<string, unknown> | null
@@ -62,11 +64,16 @@ export async function GET(request: Request) {
   }
 
   const metadata = asRecord(session.data.metadata)
-  const jobRows = await supabase
+  let jobQuery = supabaseAdmin
     .from("axis_processing_jobs")
     .select("*")
     .eq("session_id", sessionId)
-    .eq("user_id", user.id)
+
+  jobQuery = identity.supabaseUserId
+    ? jobQuery.eq("user_id", identity.supabaseUserId)
+    : jobQuery.eq("clerk_user_id", identity.clerkUserId || "")
+
+  const jobRows = await jobQuery
     .order("queued_at", { ascending: true })
     .returns<AxisProcessingJobRow[]>()
 

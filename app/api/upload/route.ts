@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
   cleanText,
@@ -163,26 +163,20 @@ export async function POST(request: Request) {
 
     logUploadStage(traceId, "upload-start")
 
-    const supabase = await createClient()
-    logUploadStage(traceId, "supabase-client-created")
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    const identity = await getAxisRequestIdentity()
 
     logUploadStage(traceId, "auth-state", {
-      authenticated: Boolean(user),
-      userId: user?.id || null,
-      error: userError?.message || null,
+      authenticated: Boolean(identity),
+      clerkUserId: identity?.clerkUserId || null,
+      kind: identity?.kind || null,
+      supabaseUserId: identity?.supabaseUserId || null,
     })
 
-    if (userError || !user) {
+    if (!identity) {
       return axisError({
         stage: "auth",
         error: "AUTH REQUIRED",
         status: 401,
-        detail: userError?.message,
         traceId,
       })
     }
@@ -280,7 +274,7 @@ export async function POST(request: Request) {
     }
 
     const sessionId = crypto.randomUUID()
-    const filePath = `${user.id}/${normalized.finalName}`
+    const filePath = `${identity.storageKey}/${sessionId}/${normalized.finalName}`
 
     if (!filePath.includes("/")) {
       return axisError({
@@ -421,7 +415,8 @@ export async function POST(request: Request) {
       .from("axis_sessions")
       .insert({
         id: sessionId,
-        user_id: user.id,
+        clerk_user_id: identity.clerkUserId,
+        user_id: identity.supabaseUserId,
         title: normalized.originalName || normalized.finalName || "Axis Session",
         video_url: signedUrl.data?.signedUrl || null,
         file_name: normalized.originalName,
@@ -452,7 +447,9 @@ export async function POST(request: Request) {
           },
           gameSession: {
             id: sessionId,
+            userId: identity.clerkUserId || identity.supabaseUserId,
             videoUrl: signedUrl.data?.signedUrl || "",
+            uploadPath: filePath,
             originalFilename: normalized.originalName,
             fileSize: file.size,
             status: "uploaded",
@@ -495,7 +492,8 @@ export async function POST(request: Request) {
 
     if (inserted.error) {
       const orphanRecord = await supabaseAdmin.from("axis_uploads").insert({
-        user_id: user.id,
+        clerk_user_id: identity.clerkUserId,
+        user_id: identity.supabaseUserId,
         bucket_id: "axis-replays",
         file_path: filePath,
         file_name: normalized.originalName,
@@ -526,7 +524,8 @@ export async function POST(request: Request) {
     logUploadStage(traceId, "upload-record-create-start")
 
     const uploadRecord = await supabaseAdmin.from("axis_uploads").insert({
-      user_id: user.id,
+      clerk_user_id: identity.clerkUserId,
+      user_id: identity.supabaseUserId,
       session_id: inserted.data.id,
       bucket_id: "axis-replays",
       file_path: filePath,
@@ -547,9 +546,10 @@ export async function POST(request: Request) {
       sessionId: inserted.data.id,
     })
     await startTriggerGameUploadProcessing({
+      clerkUserId: identity.clerkUserId,
       sessionId: inserted.data.id,
       traceId,
-      userId: user.id,
+      userId: identity.supabaseUserId,
     })
     logUploadStage(traceId, "processing-job-create-complete", {
       sessionId: inserted.data.id,
@@ -558,9 +558,10 @@ export async function POST(request: Request) {
 
     try {
       const run = await triggerProcessGameUpload({
+        clerkUserId: identity.clerkUserId,
         sessionId: inserted.data.id,
         traceId,
-        userId: user.id,
+        userId: identity.supabaseUserId,
       })
 
       logUploadStage(traceId, "trigger-job-created", {
@@ -568,9 +569,14 @@ export async function POST(request: Request) {
         sessionId: inserted.data.id,
       })
     } catch (error) {
-      logUploadFailure(traceId, "trigger-job-create", {
+      return axisError({
         detail: detailFromError(error),
-        sessionId: inserted.data.id,
+        error: "PROCESSING DID NOT START",
+        recovery: "Game saved, but Axis could not start processing.",
+        stage: "trigger-job-create",
+        status: 500,
+        stored: true,
+        traceId,
       })
     }
 

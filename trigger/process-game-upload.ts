@@ -2,9 +2,10 @@ import { logger, task, wait } from "@trigger.dev/sdk"
 import { updateTriggerGameUploadStatus } from "@/lib/axis-processing/triggerStatus"
 
 type ProcessGameUploadPayload = {
+  clerkUserId?: string | null
   sessionId: string
   traceId?: string
-  userId: string
+  userId?: string | null
 }
 
 export const processGameUpload = task({
@@ -20,6 +21,7 @@ export const processGameUpload = task({
     await updateTriggerGameUploadStatus({
       detail: "Game queued.",
       jobStatus: "queued",
+      clerkUserId: payload.clerkUserId,
       sessionId: payload.sessionId,
       sessionStatus: "queued",
       traceId,
@@ -36,6 +38,7 @@ export const processGameUpload = task({
     await updateTriggerGameUploadStatus({
       detail: "Processing game.",
       jobStatus: "processing",
+      clerkUserId: payload.clerkUserId,
       sessionId: payload.sessionId,
       sessionStatus: "processing",
       traceId,
@@ -52,6 +55,7 @@ export const processGameUpload = task({
     await updateTriggerGameUploadStatus({
       detail: "Game processing complete.",
       jobStatus: "complete",
+      clerkUserId: payload.clerkUserId,
       result: {
         completedAt: new Date().toISOString(),
         source: "trigger.dev",

@@ -19,6 +19,7 @@ export type AxisProcessingJobStatus = "queued" | "processing" | "complete" | "fa
 export type AxisProcessingJob = {
   attempts: number
   completedAt?: string
+  currentStep?: string
   detail?: string
   error?: string
   id: string

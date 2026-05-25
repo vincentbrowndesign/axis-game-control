@@ -1,17 +1,20 @@
 import { tasks } from "@trigger.dev/sdk"
 
 export async function triggerProcessGameUpload({
+  clerkUserId,
   sessionId,
   traceId,
   userId,
 }: {
+  clerkUserId?: string | null
   sessionId: string
   traceId?: string
-  userId: string
+  userId?: string | null
 }) {
   const run = await tasks.trigger(
     "process-game-upload",
     {
+      clerkUserId,
       sessionId,
       traceId,
       userId,

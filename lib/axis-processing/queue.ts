@@ -8,8 +8,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export type AxisProcessingJobRow = {
   attempts: number
+  clerk_user_id: string | null
   completed_at: string | null
   created_at: string
+  current_step: string | null
   detail: string | null
   error: string | null
   failed_at: string | null
@@ -23,7 +25,7 @@ export type AxisProcessingJobRow = {
   status: AxisProcessingJobStatus
   type: AxisProcessingJobType
   updated_at: string
-  user_id: string
+  user_id: string | null
 }
 
 export function jobRowToManifestJob(row: AxisProcessingJobRow): AxisProcessingJob {
@@ -39,20 +41,25 @@ export function jobRowToManifestJob(row: AxisProcessingJobRow): AxisProcessingJo
     status: row.status,
     type: row.type,
     updatedAt: row.updated_at,
+    currentStep: row.current_step || row.type,
   }
 }
 
 export async function enqueueProcessingJobs({
+  clerkUserId,
   jobTypes = AXIS_PROCESSING_JOB_TYPES,
   sessionId,
   userId,
 }: {
+  clerkUserId?: string | null
   jobTypes?: readonly AxisProcessingJobType[]
   sessionId: string
-  userId: string
+  userId?: string | null
 }) {
   const now = new Date().toISOString()
   const rows = jobTypes.map((type) => ({
+    clerk_user_id: clerkUserId || null,
+    current_step: type,
     payload: {},
     progress: 0,
     queued_at: now,
@@ -60,7 +67,7 @@ export async function enqueueProcessingJobs({
     status: "queued",
     type,
     updated_at: now,
-    user_id: userId,
+    user_id: userId || null,
   }))
 
   const result = await supabaseAdmin
@@ -78,17 +85,24 @@ export async function enqueueProcessingJobs({
 }
 
 export async function listProcessingJobRows({
+  clerkUserId,
   sessionId,
   userId,
 }: {
+  clerkUserId?: string | null
   sessionId: string
-  userId: string
+  userId?: string | null
 }) {
-  const result = await supabaseAdmin
+  let query = supabaseAdmin
     .from("axis_processing_jobs")
     .select("*")
     .eq("session_id", sessionId)
-    .eq("user_id", userId)
+
+  query = userId
+    ? query.eq("user_id", userId)
+    : query.eq("clerk_user_id", clerkUserId || "")
+
+  const result = await query
     .order("queued_at", { ascending: true })
     .returns<AxisProcessingJobRow[]>()
 
@@ -98,18 +112,25 @@ export async function listProcessingJobRows({
 }
 
 export async function claimNextProcessingJob({
+  clerkUserId,
   sessionId,
   userId,
 }: {
+  clerkUserId?: string | null
   sessionId: string
-  userId: string
+  userId?: string | null
 }) {
-  const next = await supabaseAdmin
+  let nextQuery = supabaseAdmin
     .from("axis_processing_jobs")
     .select("*")
     .eq("session_id", sessionId)
-    .eq("user_id", userId)
     .in("status", ["queued", "waiting"])
+
+  nextQuery = userId
+    ? nextQuery.eq("user_id", userId)
+    : nextQuery.eq("clerk_user_id", clerkUserId || "")
+
+  const next = await nextQuery
     .order("queued_at", { ascending: true })
     .limit(1)
     .maybeSingle<AxisProcessingJobRow>()
@@ -124,6 +145,7 @@ export async function claimNextProcessingJob({
     .from("axis_processing_jobs")
     .update({
       attempts: next.data.attempts + 1,
+      current_step: next.data.type,
       detail: `Processing ${next.data.type}.`,
       progress: 50,
       started_at: now,
@@ -154,6 +176,7 @@ export async function completeProcessingJob({
     .from("axis_processing_jobs")
     .update({
       completed_at: now,
+      current_step: "complete",
       detail,
       error: null,
       progress: 100,
@@ -184,6 +207,7 @@ export async function failProcessingJob({
       error,
       failed_at: now,
       progress: 100,
+      current_step: "failed",
       status: "failed",
       updated_at: now,
     })

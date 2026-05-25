@@ -1,7 +1,9 @@
 import Link from "next/link"
+import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import { retrieveSessionMemory } from "@/lib/mcp/supabaseMemory"
 import { normalizeReplay } from "@/lib/normalizeReplay"
 import { readProcessingSnapshot } from "@/lib/axis-processing/state"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import styles from "./page.module.css"
 
@@ -12,12 +14,9 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 export default async function GamesPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const identity = await getAxisRequestIdentity()
 
-  if (!user) {
+  if (!identity) {
     return (
       <main className={styles.surface}>
         <header className={styles.telemetry}>
@@ -29,11 +28,18 @@ export default async function GamesPage() {
     )
   }
 
-  const result = await retrieveSessionMemory({
-    supabase,
-    userId: user.id,
-    limit: 120,
-  })
+  const result = identity.supabaseUserId
+    ? await retrieveSessionMemory({
+        supabase: await createClient(),
+        userId: identity.supabaseUserId,
+        limit: 120,
+      })
+    : await supabaseAdmin
+        .from("axis_sessions")
+        .select("*")
+        .eq("clerk_user_id", identity.clerkUserId || "")
+        .order("created_at", { ascending: false })
+        .limit(120)
 
   const games = (result.data || []).map((session) => {
     const replay = normalizeReplay(session)
