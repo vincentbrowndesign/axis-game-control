@@ -29,7 +29,7 @@
 .brand,
 .kicker,
 .action,
-.primaryAction,
+.ritualAction,
 .historySignal,
 .ritualWhisper {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
@@ -39,7 +39,6 @@
 .brand,
 .kicker,
 .action,
-.primaryAction,
 .historySignal span {
   text-transform: uppercase;
 }
@@ -93,8 +92,7 @@
   text-decoration: none;
 }
 
-.action:hover,
-.primaryAction:hover {
+.action:hover {
   background: rgba(166, 221, 218, 0.065);
 }
 
@@ -130,58 +128,44 @@
   text-align: center;
 }
 
-.ritualTitle {
+.ritualAction {
   color: rgba(244, 244, 242, 0.91);
+  display: inline-block;
   font-size: clamp(4.4rem, 12vw, 9.4rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.92;
   margin: 0;
+  outline: none;
+  padding: 0.18em 0.1em 0.22em;
+  text-decoration: none;
+  text-shadow: 0 0 18px rgba(166, 221, 218, 0.045);
+  transition:
+    color 160ms ease,
+    text-shadow 160ms ease,
+    transform 120ms ease;
+}
+
+.ritualAction:hover,
+.ritualAction:focus-visible {
+  color: rgba(182, 232, 228, 0.94);
+  text-shadow: 0 0 24px rgba(88, 207, 201, 0.11);
+}
+
+.ritualAction:active {
+  color: rgba(166, 221, 218, 0.82);
+  transform: translateY(1px) scale(0.995);
+}
+
+.ritualActionComplete {
+  color: rgba(182, 232, 228, 0.82);
+  text-shadow: 0 0 18px rgba(88, 207, 201, 0.07);
 }
 
 .ritualWhisper {
   color: rgba(244, 244, 242, 0.32);
   font-size: 0.76rem;
   margin: 1.25rem 0 0;
-}
-
-.primaryAction {
-  align-items: center;
-  background: linear-gradient(180deg, #161616, #050505);
-  border: 1px solid rgba(166, 221, 218, 0.28);
-  box-shadow:
-    inset 0 1px 0 rgba(244, 244, 242, 0.12),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.92),
-    0 0 0 1px rgba(0, 0, 0, 0.74);
-  color: rgba(244, 244, 242, 0.86);
-  display: inline-flex;
-  font-size: 0.82rem;
-  justify-content: center;
-  min-height: clamp(5.8rem, 12vw, 7.4rem);
-  padding: 0 2rem;
-  text-decoration: none;
-  width: min(100%, 24rem);
-}
-
-.primaryActionComplete {
-  background: linear-gradient(180deg, rgba(13, 33, 32, 0.72), #050505);
-  border-color: rgba(166, 221, 218, 0.38);
-  box-shadow:
-    inset 0 1px 0 rgba(166, 221, 218, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.92),
-    0 0 18px rgba(88, 207, 201, 0.055);
-  color: rgba(182, 232, 228, 0.88);
-}
-
-.primaryActionComplete:hover {
-  background: linear-gradient(180deg, rgba(15, 38, 37, 0.76), #050505);
-}
-
-.primaryAction:active {
-  box-shadow:
-    inset 0 2px 8px rgba(0, 0, 0, 0.86),
-    0 0 0 1px rgba(166, 221, 218, 0.12);
-  transform: translateY(1px);
 }
 
 .historyStrip {
@@ -241,7 +225,4 @@
     grid-template-columns: 1fr;
   }
 
-  .primaryAction {
-    min-height: 4.8rem;
-  }
 }

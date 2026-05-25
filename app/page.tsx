@@ -15,8 +15,8 @@ export default async function HomePage() {
     ? formatLastCheckIn(lastCheckIn.occurred_at)
     : "No check-in yet"
   const streakLabel = `${summary?.streakDays || 0} days`
-  const primaryActionLabel = checkedInToday && lastCheckIn
-    ? `Checked in — ${formatAttendanceTime(lastCheckIn.occurred_at)}`
+  const ritualLabel = checkedInToday && lastCheckIn
+    ? `Checked in \u2014 ${formatAttendanceTime(lastCheckIn.occurred_at)}`
     : "Check in"
   const historyLine = "Write your story."
 
@@ -56,19 +56,17 @@ export default async function HomePage() {
 
         <section className={styles.ritualCenter} aria-label="Daily check in">
           <div className={styles.ritualCopy}>
-            <h2 className={styles.ritualTitle}>
-              {checkedInToday ? "Checked in" : "Check in"}
-            </h2>
+            <Link
+              aria-label={ritualLabel}
+              className={`${styles.ritualAction} ${
+                checkedInToday ? styles.ritualActionComplete : ""
+              }`}
+              href="/check-in"
+            >
+              {ritualLabel}
+            </Link>
             <p className={styles.ritualWhisper}>{historyLine}</p>
           </div>
-          <Link
-            className={`${styles.primaryAction} ${
-              checkedInToday ? styles.primaryActionComplete : ""
-            }`}
-            href="/check-in"
-          >
-            {primaryActionLabel}
-          </Link>
         </section>
 
         <section className={styles.historyStrip} aria-label="Axis History">
@@ -95,11 +93,11 @@ function formatAttendanceTime(value: string) {
 
 function formatLastCheckIn(value: string) {
   if (isToday(value)) {
-    return `Today — ${formatAttendanceTime(value)}`
+    return `Today \u2014 ${formatAttendanceTime(value)}`
   }
 
   if (isYesterday(value)) {
-    return `Yesterday — ${formatAttendanceTime(value)}`
+    return `Yesterday \u2014 ${formatAttendanceTime(value)}`
   }
 
   return formatAttendanceDate(value)
