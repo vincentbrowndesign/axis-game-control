@@ -4,14 +4,13 @@ import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import styles from "@/app/page.module.css"
 
-type CheckInStatus = "idle" | "locating" | "saving" | "saved" | "denied"
+type CheckInStatus = "idle" | "saving" | "saved"
 
 type CheckInResponse = {
   checkIn?: {
     id: string
     occurred_at: string
   }
-  denied?: boolean
   error?: string
   ok?: boolean
 }
@@ -54,32 +53,25 @@ export function ContinuousAxisHome({
   )
 
   const actionLabel = useMemo(() => {
-    if (status === "locating") return "Locating"
     if (status === "saving") return "Saving"
     if (status === "saved") return completedAt || ritualLabel
 
     return "Check in"
   }, [completedAt, ritualLabel, status])
-  const busy = status === "locating" || status === "saving"
+  const busy = status === "saving"
   const sessionVisible = status === "saved" || activeNodeCount > 0
 
   async function submitCheckIn() {
     if (busy || status === "saved") return
 
-    setStatus("locating")
-    setMessage("Confirming presence")
+    setStatus("saving")
+    setMessage("Writing today")
+    setActiveNodeCount(1)
 
     try {
-      const position = await readCurrentPosition()
-      setActiveNodeCount(1)
-      setStatus("saving")
-      setMessage("Writing today")
-
       const response = await fetch("/api/check-in", {
         body: JSON.stringify({
           durationMinutes: 60,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
           notes: null,
           workoutType: "Training",
         }),
@@ -91,7 +83,7 @@ export function ContinuousAxisHome({
       const data = (await response.json().catch(() => ({}))) as CheckInResponse
 
       if (!response.ok || !data.ok || !data.checkIn) {
-        setStatus(data.denied ? "denied" : "idle")
+        setStatus("idle")
         setActiveNodeCount(0)
         setMessage(data.error || "Check-in could not be saved.")
         return
@@ -111,7 +103,7 @@ export function ContinuousAxisHome({
       setMessage(
         error instanceof Error
           ? error.message
-          : "Location was not available."
+          : "Check-in could not be saved."
       )
     }
   }
@@ -154,13 +146,7 @@ export function ContinuousAxisHome({
               {actionLabel}
             </button>
             <p className={styles.ritualWhisper}>Write your story.</p>
-            <p
-              className={`${styles.inlineStatus} ${
-                status === "denied" ? styles.inlineStatusDenied : ""
-              }`}
-            >
-              {message}
-            </p>
+            <p className={styles.inlineStatus}>{message}</p>
           </div>
 
           {sessionVisible ? (
@@ -199,20 +185,6 @@ export function ContinuousAxisHome({
       </section>
     </main>
   )
-}
-
-function readCurrentPosition() {
-  if (!navigator.geolocation) {
-    return Promise.reject(new Error("Location is not available on this device."))
-  }
-
-  return new Promise<GeolocationPosition>((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      maximumAge: 30000,
-      timeout: 12000,
-    })
-  })
 }
 
 function formatAttendanceTime(value: string) {

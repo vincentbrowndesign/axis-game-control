@@ -260,10 +260,6 @@
   text-transform: uppercase;
 }
 
-.inlineStatusDenied {
-  color: rgba(255, 160, 140, 0.72);
-}
-
 .sessionProgression {
   border-top: 1px solid rgba(var(--axis-accent), 0.16);
   display: grid;

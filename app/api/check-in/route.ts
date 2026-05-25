@@ -32,6 +32,10 @@ function readGymConfig() {
   }
 }
 
+function requiresGymVerification() {
+  return process.env.AXIS_REQUIRE_GYM_VERIFICATION === "true"
+}
+
 export async function POST(request: Request) {
   const identity = await getAxisRequestIdentity()
 
@@ -39,15 +43,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "SIGN IN REQUIRED" },
       { status: 401 }
-    )
-  }
-
-  const gym = readGymConfig()
-
-  if (!gym) {
-    return NextResponse.json(
-      { error: "GYM BOUNDARY NOT CONFIGURED" },
-      { status: 503 }
     )
   }
 
@@ -59,32 +54,46 @@ export async function POST(request: Request) {
     body = {}
   }
 
+  const gymVerificationRequired = requiresGymVerification()
+  const gym = gymVerificationRequired ? readGymConfig() : null
   const latitude = Number(body.latitude)
   const longitude = Number(body.longitude)
+  const hasLocation =
+    Number.isFinite(latitude) && Number.isFinite(longitude)
+  let distanceMeters = 0
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  if (gymVerificationRequired && !gym) {
     return NextResponse.json(
-      { error: "LOCATION REQUIRED" },
+      { error: "CHECK IN VERIFICATION UNAVAILABLE" },
+      { status: 503 }
+    )
+  }
+
+  if (gymVerificationRequired && !hasLocation) {
+    return NextResponse.json(
+      { error: "CHECK IN VERIFICATION REQUIRED" },
       { status: 400 }
     )
   }
 
-  const distanceMeters = distanceBetweenMeters(
-    latitude,
-    longitude,
-    gym.latitude,
-    gym.longitude
-  )
-
-  if (distanceMeters > gym.radiusMeters) {
-    return NextResponse.json(
-      {
-        denied: true,
-        distanceMeters: Math.round(distanceMeters),
-        error: "OUTSIDE GYM RANGE",
-      },
-      { status: 403 }
+  if (gymVerificationRequired && gym && hasLocation) {
+    distanceMeters = distanceBetweenMeters(
+      latitude,
+      longitude,
+      gym.latitude,
+      gym.longitude
     )
+
+    if (distanceMeters > gym.radiusMeters) {
+      return NextResponse.json(
+        {
+          denied: true,
+          distanceMeters: Math.round(distanceMeters),
+          error: "CHECK IN NOT VERIFIED",
+        },
+        { status: 403 }
+      )
+    }
   }
 
   const workoutType =
@@ -103,8 +112,8 @@ export async function POST(request: Request) {
       clerk_user_id: identity.clerkUserId,
       distance_meters: Math.round(distanceMeters),
       duration_minutes: durationMinutes,
-      latitude,
-      longitude,
+      latitude: hasLocation ? latitude : 0,
+      longitude: hasLocation ? longitude : 0,
       notes,
       user_id: identity.supabaseUserId,
       workout_type: workoutType,
@@ -123,6 +132,7 @@ export async function POST(request: Request) {
     checkIn: inserted.data,
     distanceMeters: Math.round(distanceMeters),
     ok: true,
+    verification: gymVerificationRequired ? "gym_boundary" : "not_required",
   })
 }
 

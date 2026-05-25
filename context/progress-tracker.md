@@ -29,6 +29,7 @@ Status: in progress
 - Check In now saves in place on the home surface instead of routing through separate ritual pages.
 - Today's session progression and recent history live on the same continuous screen.
 - Palette direction now favors living gym energy: warm charcoal surfaces, scoreboard amber, electric green, and active athletic participation over cold replay-era voids.
+- V1 check-in no longer asks for browser location or blocks on gym-boundary verification; organization verification remains a future optional layer.
 
 LEADERBOARD
 
