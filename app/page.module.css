@@ -30,7 +30,7 @@
 .primaryAction,
 .smallLink,
 .historySignal,
-.historyLine {
+.ritualWhisper {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
   letter-spacing: 0.03em;
 }
@@ -46,8 +46,8 @@
 
 .brand {
   color: rgba(244, 244, 242, 0.9);
-  font-size: 1rem;
-  margin: 0 0 5.1rem;
+  font-size: 0.72rem;
+  margin: 0;
 }
 
 .kicker {
@@ -101,42 +101,50 @@
 }
 
 .memberRitualShell {
-  gap: clamp(1.8rem, 4vw, 3.6rem);
+  gap: clamp(2.2rem, 6vw, 5.5rem);
+  max-width: 980px;
 }
 
 .memberHeader {
-  border-bottom: 1px solid rgba(244, 244, 242, 0.08);
-  padding-bottom: clamp(1.2rem, 3vw, 2.2rem);
-}
-
-.memberHeader .brand {
-  margin-bottom: clamp(2rem, 5vw, 4rem);
+  display: grid;
+  gap: 1.4rem;
 }
 
 .memberTitle {
-  color: rgba(244, 244, 242, 0.96);
-  font-size: clamp(4rem, 9vw, 8rem);
+  color: rgba(244, 244, 242, 0.46);
+  font-size: clamp(1.35rem, 3vw, 2.2rem);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 0.94;
+  line-height: 1;
   margin: 0;
 }
 
 .ritualCenter {
-  align-items: center;
+  align-items: stretch;
   display: grid;
-  gap: clamp(1.6rem, 5vw, 4rem);
-  grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.32fr);
-  min-height: clamp(14rem, 30vw, 22rem);
+  gap: clamp(1.6rem, 4vw, 2.8rem);
+  justify-items: center;
+  min-height: clamp(18rem, 38vw, 25rem);
+  place-content: center;
+}
+
+.ritualCopy {
+  text-align: center;
 }
 
 .ritualTitle {
   color: rgba(244, 244, 242, 0.94);
-  font-size: clamp(3.6rem, 9vw, 7.5rem);
+  font-size: clamp(4.4rem, 12vw, 9.4rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.92;
   margin: 0;
+}
+
+.ritualWhisper {
+  color: rgba(244, 244, 242, 0.38);
+  font-size: 0.76rem;
+  margin: 1.1rem 0 0;
 }
 
 .primaryAction {
@@ -145,12 +153,12 @@
   border: 1px solid rgba(244, 244, 242, 0.9);
   color: #040404;
   display: inline-flex;
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   justify-content: center;
-  min-height: 6rem;
-  padding: 0 1.4rem;
+  min-height: clamp(5.8rem, 12vw, 7.4rem);
+  padding: 0 2rem;
   text-decoration: none;
-  width: 100%;
+  width: min(100%, 24rem);
 }
 
 .primaryActionComplete {
@@ -159,12 +167,21 @@
   color: rgba(244, 244, 242, 0.84);
 }
 
+.primaryActionComplete:hover {
+  background: rgba(244, 244, 242, 0.1);
+}
+
+.primaryAction:active {
+  background: rgba(244, 244, 242, 0.74);
+  transform: translateY(1px);
+}
+
 .historyStrip {
   align-items: end;
   border-top: 1px solid rgba(244, 244, 242, 0.08);
   display: grid;
-  gap: 0.9rem;
-  grid-template-columns: minmax(8rem, 0.22fr) minmax(12rem, 0.34fr) minmax(0, 1fr) auto;
+  gap: clamp(0.9rem, 3vw, 2rem);
+  grid-template-columns: minmax(7rem, 0.22fr) minmax(13rem, 0.4fr) auto;
   padding-top: clamp(1rem, 2.5vw, 1.5rem);
 }
 
@@ -176,7 +193,7 @@
 }
 
 .historySignal span,
-.historyLine {
+.ritualWhisper {
   color: rgba(244, 244, 242, 0.43);
   font-size: 0.68rem;
 }
@@ -210,6 +227,10 @@
   .heading,
   .memberTitle {
     font-size: clamp(4rem, 18vw, 5.6rem);
+  }
+
+  .memberTitle {
+    font-size: 1.35rem;
   }
 
   .ritualCenter,
