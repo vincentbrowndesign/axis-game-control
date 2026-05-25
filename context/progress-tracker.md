@@ -14,8 +14,8 @@ PRESENCE
 
 Status: in progress
 
-- Geofenced check-in is the active presence seam.
-- Check In should prove a member physically showed up before history grows.
+- Frictionless V1 check-in is the active presence seam.
+- Check In should prove daily return behavior before optional organization verification returns later.
 
 HISTORY
 
@@ -30,6 +30,7 @@ Status: in progress
 - Today's session progression and recent history live on the same continuous screen.
 - Palette direction now favors living gym energy: warm charcoal surfaces, scoreboard amber, electric green, and active athletic participation over cold replay-era voids.
 - V1 check-in no longer asks for browser location or blocks on gym-boundary verification; organization verification remains a future optional layer.
+- Supabase schema audit completed; no destructive cleanup performed. Current data model should be stabilized around check-ins, history, leaderboard, and preserved future media foundations.
 
 LEADERBOARD
 
