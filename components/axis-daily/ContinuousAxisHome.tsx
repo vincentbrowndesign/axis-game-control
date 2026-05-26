@@ -34,6 +34,11 @@ type ProgressionCell = {
   state: "active" | "complete" | "empty"
 }
 
+type OrganizationSignal = {
+  label: string
+  value: string
+}
+
 type ContinuousAxisHomeProps = {
   activeTodayLabel: string
   checkedInToday: boolean
@@ -42,6 +47,7 @@ type ContinuousAxisHomeProps = {
   lastCheckInLabel: string
   leaderboardSignal: string
   organizationAvatar?: string
+  organizationSignals?: OrganizationSignal[]
   organizationName?: string
   organizationSlug?: string
   leaderboardPlacement: string
@@ -60,6 +66,7 @@ export function ContinuousAxisHome({
   lastCheckInLabel,
   leaderboardSignal,
   organizationAvatar,
+  organizationSignals = [],
   organizationName = "Axis",
   organizationSlug,
   leaderboardPlacement,
@@ -185,6 +192,17 @@ export function ContinuousAxisHome({
             </div>
           </div>
         </header>
+
+        {organizationSignals.length ? (
+          <section className={styles.worldSignals} aria-label="Organization activity">
+            {organizationSignals.map((signal) => (
+              <div className={styles.worldSignal} key={signal.label}>
+                <span>{signal.label}</span>
+                <strong>{signal.value}</strong>
+              </div>
+            ))}
+          </section>
+        ) : null}
 
         <section className={styles.activityRail} aria-label="Gym activity">
           <div className={styles.activitySignal}>

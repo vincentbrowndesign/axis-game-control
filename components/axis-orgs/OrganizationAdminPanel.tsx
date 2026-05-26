@@ -26,8 +26,7 @@ const ROLE_OPTIONS: AxisOrganizationRole[] = [
   "player",
   "coach",
   "admin",
-  "parent",
-  "owner",
+  "organization_owner",
 ]
 
 export function OrganizationAdminPanel({

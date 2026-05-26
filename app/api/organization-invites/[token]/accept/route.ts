@@ -35,6 +35,7 @@ export async function POST(_request: Request, context: AcceptInviteContext) {
   const role = isAxisOrganizationRole(invite.role) ? invite.role : "player"
   const membershipPayload = {
     clerk_user_id: identity.clerkUserId,
+    joined_at: new Date().toISOString(),
     organization_id: invite.organizationId,
     role,
     status: "active",

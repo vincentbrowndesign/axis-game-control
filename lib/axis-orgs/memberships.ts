@@ -5,6 +5,7 @@ export const AXIS_ORGANIZATION_ROLES = [
   "player",
   "coach",
   "admin",
+  "organization_owner",
   "parent",
   "owner",
 ] as const
@@ -15,6 +16,7 @@ export type AxisMembership = {
   clerkUserId: string | null
   createdAt: string
   id: string
+  joinedAt: string
   role: AxisOrganizationRole
   status: string
   userId: string | null
@@ -53,7 +55,12 @@ export type AxisOrganizationAdminModel = {
   streakLeaders: AxisMemberContinuity[]
 }
 
-const MANAGE_ROLES = new Set<AxisOrganizationRole>(["coach", "admin", "owner"])
+const MANAGE_ROLES = new Set<AxisOrganizationRole>([
+  "coach",
+  "admin",
+  "organization_owner",
+  "owner",
+])
 
 export function canManageOrganization(role?: string | null) {
   return MANAGE_ROLES.has(role as AxisOrganizationRole)
@@ -72,7 +79,7 @@ export async function getOrganizationMembership(
 ) {
   let query = supabaseAdmin
     .from("axis_organization_memberships")
-    .select("id, user_id, clerk_user_id, role, status, created_at")
+    .select("id, user_id, clerk_user_id, role, status, joined_at, created_at")
     .eq("organization_id", organizationId)
     .eq("status", "active")
     .limit(1)
@@ -86,6 +93,7 @@ export async function getOrganizationMembership(
       clerk_user_id: string | null
       created_at: string
       id: string
+      joined_at: string | null
       role: AxisOrganizationRole
       status: string
       user_id: string | null
@@ -160,7 +168,7 @@ async function readMemberships(organizationId: string) {
   const result = await Promise.race([
     supabaseAdmin
       .from("axis_organization_memberships")
-      .select("id, user_id, clerk_user_id, role, status, created_at")
+      .select("id, user_id, clerk_user_id, role, status, joined_at, created_at")
       .eq("organization_id", organizationId)
       .neq("status", "removed")
       .order("created_at", { ascending: true })
@@ -169,6 +177,7 @@ async function readMemberships(organizationId: string) {
           clerk_user_id: string | null
           created_at: string
           id: string
+          joined_at: string | null
           role: AxisOrganizationRole
           status: string
           user_id: string | null
@@ -220,13 +229,14 @@ export async function getOrganizationInviteByToken(token: string) {
     supabaseAdmin
       .from("axis_organization_invites")
       .select(
-        "id, invite_token, email, role, status, organization_id, axis_organizations(id, name, slug, avatar)"
+        "id, invite_token, email, role, status, organization_id, axis_organizations(id, name, slug, avatar, logo)"
       )
       .eq("invite_token", token)
       .maybeSingle<{
         axis_organizations: {
           avatar: string | null
           id: string
+          logo: string | null
           name: string
           slug: string
         } | null
@@ -250,6 +260,7 @@ export async function getOrganizationInviteByToken(token: string) {
     inviteToken: result.data.invite_token,
     organization: {
       avatar:
+        result.data.axis_organizations.logo ||
         result.data.axis_organizations.avatar ||
         result.data.axis_organizations.name.slice(0, 2).toUpperCase(),
       id: result.data.axis_organizations.id,
@@ -317,6 +328,7 @@ function normalizeMembership(value: {
   clerk_user_id: string | null
   created_at: string
   id: string
+  joined_at?: string | null
   role: AxisOrganizationRole
   status: string
   user_id: string | null
@@ -325,6 +337,7 @@ function normalizeMembership(value: {
     clerkUserId: value.clerk_user_id,
     createdAt: value.created_at,
     id: value.id,
+    joinedAt: value.joined_at || value.created_at,
     role: value.role,
     status: value.status,
     userId: value.user_id,

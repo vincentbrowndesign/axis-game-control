@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 export type AxisOrganization = {
   avatar: string
   id: string | null
+  logo: string
   name: string
   slug: string
 }
@@ -11,18 +12,21 @@ const STATIC_ORGANIZATIONS: AxisOrganization[] = [
   {
     avatar: "B",
     id: null,
+    logo: "B",
     name: "BTC",
     slug: "btc",
   },
   {
     avatar: "BR",
     id: null,
+    logo: "BR",
     name: "Bridge",
     slug: "bridge",
   },
   {
     avatar: "C2",
     id: null,
+    logo: "C2",
     name: "City 2 City",
     slug: "city2city",
   },
@@ -36,6 +40,7 @@ const RESERVED_SLUGS = new Set([
   "cv-demo",
   "game-day",
   "games",
+  "join",
   "leaderboard",
   "measures",
   "memory",
@@ -69,11 +74,12 @@ async function readOrganization(slug: string): Promise<AxisOrganization | null> 
   const result = await Promise.race([
     supabaseAdmin
       .from("axis_organizations")
-      .select("id, name, slug, avatar")
+      .select("id, name, slug, avatar, logo")
       .eq("slug", slug)
       .maybeSingle<{
         avatar: string | null
         id: string
+        logo: string | null
         name: string
         slug: string
       }>(),
@@ -83,8 +89,15 @@ async function readOrganization(slug: string): Promise<AxisOrganization | null> 
   if (result.error || !result.data) return null
 
   return {
-    avatar: result.data.avatar || result.data.name.slice(0, 2).toUpperCase(),
+    avatar:
+      result.data.logo ||
+      result.data.avatar ||
+      result.data.name.slice(0, 2).toUpperCase(),
     id: result.data.id,
+    logo:
+      result.data.logo ||
+      result.data.avatar ||
+      result.data.name.slice(0, 2).toUpperCase(),
     name: result.data.name,
     slug: result.data.slug,
   }

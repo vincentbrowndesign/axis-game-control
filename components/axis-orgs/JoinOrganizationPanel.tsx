@@ -48,8 +48,8 @@ export function JoinOrganizationPanel({
         <p className={styles.kicker}>Organization invite</p>
         <h1>Join {organizationName}.</h1>
         <p className={styles.copy}>
-          Enter the organization world as {role}. Your check-ins, streaks, and
-          history will build inside this group.
+          Enter the organization world as {role}. Your first check-in starts
+          the record here.
         </p>
         <button disabled={pending} onClick={acceptInvite} type="button">
           {pending ? "Joining" : "Join organization"}

@@ -77,7 +77,7 @@ export default async function OrganizationAdminPage({
             <p className={styles.kicker}>Organization control</p>
             <h1 className={styles.heading}>Coach access.</h1>
             <p className={styles.text}>
-              Ask an organization coach, admin, or owner to assign your role.
+              Ask an organization coach, admin, or organization owner to assign your role.
             </p>
           </div>
         </section>

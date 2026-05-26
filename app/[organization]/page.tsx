@@ -95,6 +95,11 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
   const activeTodayLabel = activeTodayCount
     ? `${activeTodayCount} active today`
     : "floor opening"
+  const organizationSignals = buildOrganizationSignals({
+    activeTodayCount,
+    leaderboard,
+    organizationName: organization.name,
+  })
   const checkIns = summary?.checkIns || []
   const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
@@ -118,6 +123,7 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
       leaderboardSignal={leaderboardSignal}
       organizationAvatar={organization.avatar}
       organizationName={organization.name}
+      organizationSignals={organizationSignals}
       organizationSlug={organization.slug}
       participationSignal={participationSignal}
       progressionCells={accumulation}
@@ -126,6 +132,44 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
       streakLabel={streakLabel}
     />
   )
+}
+
+function buildOrganizationSignals({
+  activeTodayCount,
+  leaderboard,
+  organizationName,
+}: {
+  activeTodayCount: number
+  leaderboard: Awaited<ReturnType<typeof getAxisLeaderboard>>
+  organizationName: string
+}) {
+  const mostActive = leaderboard.find(
+    (category) => category.id === "hours-this-week"
+  )?.entries[0]
+  const streakLeader = leaderboard.find(
+    (category) => category.id === "active-streak"
+  )?.entries[0]
+
+  return [
+    {
+      label: `${organizationName} today`,
+      value: activeTodayCount
+        ? `${activeTodayCount} checked in today`
+        : "floor opening",
+    },
+    {
+      label: "active streak leader",
+      value: streakLeader
+        ? `${streakLeader.label} - ${streakLeader.value}`
+        : "waiting for a streak",
+    },
+    {
+      label: "most active this week",
+      value: mostActive
+        ? `${mostActive.label} - ${mostActive.value}`
+        : "board open",
+    },
+  ]
 }
 
 function getLeaderboardStanding(

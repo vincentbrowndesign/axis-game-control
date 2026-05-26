@@ -67,6 +67,9 @@ Status: foundation
 - Organization admin route supports lightweight invites, member removal, role assignment, attendance continuity viewing, and optional feature toggles without introducing dashboard-heavy UI.
 - Operational maturity pass added tokenized organization invite links, a `/join/[token]` player onboarding route, invite acceptance into active memberships, organization attendance percentage, active-member count, participation continuity, and streak leaders.
 - Check-in persistence now treats an existing same-day saved check-in as a successful continuity state, reducing duplicate rows and protecting streak and leaderboard consistency.
+- Organization foundation stabilized around the canonical model: organizations expose `logo`, members expose `joined_at`, `/[organization]` remains an Axis world layer, and `organization_owner` is now a supported role without fragmenting Axis into white-label apps.
+- Organization onboarding now has a fast `/join` entry surface for signed-in users to paste invite codes or invite links, then continue into `/join/[token]`, accept membership, and land inside the organization world for first check-in.
+- Organization worlds now show quiet live context from real scoped data: checked-in today, active streak leader, and most active this week, helping the member surface feel like a training culture instead of a solo habit tracker.
 
 FUTURE LAYERS
 

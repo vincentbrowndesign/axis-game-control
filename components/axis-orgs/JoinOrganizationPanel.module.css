@@ -23,6 +23,8 @@
 .avatar,
 .kicker,
 .status,
+.joinForm,
+.worlds,
 .card button {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
   letter-spacing: 0.03em;
@@ -78,4 +80,45 @@
 .card button:disabled {
   cursor: default;
   opacity: 0.55;
+}
+
+.joinForm {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.joinForm input {
+  background: rgba(255, 250, 238, 0.42);
+  border: 1px solid rgba(91, 76, 56, 0.16);
+  border-radius: 0.85rem;
+  color: rgba(35, 32, 27, 0.84);
+  min-height: 3rem;
+  min-width: 0;
+  padding: 0 1rem;
+}
+
+.joinForm input::placeholder {
+  color: rgba(35, 32, 27, 0.36);
+}
+
+.worlds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.worlds span {
+  background: rgba(255, 250, 238, 0.24);
+  border: 1px solid rgba(91, 76, 56, 0.12);
+  border-radius: 999px;
+  color: rgba(35, 32, 27, 0.48);
+  font-size: 0.62rem;
+  padding: 0.45rem 0.65rem;
+}
+
+@media (max-width: 640px) {
+  .joinForm {
+    grid-template-columns: 1fr;
+  }
 }
