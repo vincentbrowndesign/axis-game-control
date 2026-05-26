@@ -119,6 +119,25 @@ export async function POST(request: Request) {
     typeof body.organizationSlug === "string" && body.organizationSlug.trim()
       ? await getAxisOrganizationBySlug(body.organizationSlug)
       : null
+  const requestedOrganization =
+    typeof body.organizationSlug === "string" && body.organizationSlug.trim()
+      ? body.organizationSlug.trim()
+      : ""
+
+  if (requestedOrganization && !organization) {
+    return NextResponse.json(
+      { error: "Organization not found", traceId },
+      { status: 404 }
+    )
+  }
+
+  if (requestedOrganization && !organization?.id) {
+    return NextResponse.json(
+      { error: "Organization is not ready yet", traceId },
+      { status: 409 }
+    )
+  }
+
   const insertPayload: Record<string, unknown> = {
     clerk_user_id: identity.clerkUserId,
     distance_meters: Math.round(distanceMeters),
@@ -158,6 +177,7 @@ export async function POST(request: Request) {
       checkIn: existingCheckIn,
       distanceMeters: Math.round(distanceMeters),
       duplicate: true,
+      message: "History updated",
       ok: true,
       organization: organization
         ? {
@@ -195,22 +215,11 @@ export async function POST(request: Request) {
     verification: gymVerificationRequired ? "gym_boundary" : "not_required",
   })
 
-  let inserted = await supabaseAdmin
+  const inserted = await supabaseAdmin
     .from("axis_training_check_ins")
     .insert(insertPayload)
     .select("id, occurred_at")
     .single<{ id: string; occurred_at: string }>()
-
-  if (inserted.error && organization?.id) {
-    const fallbackPayload = { ...insertPayload }
-    delete fallbackPayload.organization_id
-
-    inserted = await supabaseAdmin
-      .from("axis_training_check_ins")
-      .insert(fallbackPayload)
-      .select("id, occurred_at")
-      .single<{ id: string; occurred_at: string }>()
-  }
 
   if (inserted.error) {
     console.error("AXIS CHECK-IN", {
@@ -224,8 +233,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        detail: inserted.error.message,
-        error: "CHECK IN NOT SAVED",
+        error: "Check-in failed",
         traceId,
       },
       { status: 500 }
@@ -241,6 +249,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     checkIn: inserted.data,
     distanceMeters: Math.round(distanceMeters),
+    message: "History updated",
     ok: true,
     organization: organization
       ? {

@@ -70,6 +70,9 @@ Status: foundation
 - Organization foundation stabilized around the canonical model: organizations expose `logo`, members expose `joined_at`, `/[organization]` remains an Axis world layer, and `organization_owner` is now a supported role without fragmenting Axis into white-label apps.
 - Organization onboarding now has a fast `/join` entry surface for signed-in users to paste invite codes or invite links, then continue into `/join/[token]`, accept membership, and land inside the organization world for first check-in.
 - Organization worlds now show quiet live context from real scoped data: checked-in today, active streak leader, and most active this week, helping the member surface feel like a training culture instead of a solo habit tracker.
+- Check-in persistence stabilization removed silent organization fallback inserts, added explicit checking/history-updated client states, and keeps failed persistence visible with human operational errors.
+- Real history objects now drive the history surface: current-month days come from saved check-in dates, missed days are explicit, recent records show timestamp and organization context, and summary values come from persisted continuity data only.
+- Real leaderboard system now ranks only persisted check-in activity across most active today, weekly hours, active streaks, monthly consistency, and total sessions, with clearer earned placement labels like `#1 TODAY`.
 
 FUTURE LAYERS
 

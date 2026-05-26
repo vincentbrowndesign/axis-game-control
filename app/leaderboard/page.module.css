@@ -83,6 +83,13 @@
   padding-top: 0.9rem;
 }
 
+.categoryHeader {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
 .category h2 {
   color: rgba(var(--axis-ink), 0.82);
   font-size: clamp(1.1rem, 2vw, 1.5rem);
@@ -90,6 +97,15 @@
   letter-spacing: 0;
   line-height: 1;
   margin: 0;
+}
+
+.categoryHeader span {
+  color: rgba(var(--axis-ink), 0.38);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .rows {
@@ -115,6 +131,10 @@
 .emptyPanel {
   color: rgba(var(--axis-ink), 0.42);
   font-size: 0.68rem;
+}
+
+.rank {
+  color: rgba(var(--axis-accent), 0.72);
 }
 
 .identity {

@@ -788,6 +788,39 @@
   gap: clamp(0.9rem, 1.8vw, 1.2rem);
 }
 
+.historyStats {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.historyStat {
+  background: rgba(255, 250, 238, 0.24);
+  border: 1px solid rgba(var(--axis-ink), 0.055);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+  padding: 0.75rem;
+}
+
+.historyStat span {
+  color: rgba(var(--axis-ink), 0.38);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.historyStat strong {
+  color: rgba(var(--axis-ink), 0.76);
+  font-size: 0.72rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .progressionGrid {
   display: grid;
   gap: 0.38rem;
@@ -809,7 +842,9 @@
 
 .progressionCell,
 .progressionCellActive,
-.progressionCellComplete {
+.progressionCellComplete,
+.progressionCellFuture,
+.progressionCellMissed {
   aspect-ratio: 1;
   background: rgba(var(--axis-ink), 0.045);
   border: 1px solid rgba(var(--axis-ink), 0.065);
@@ -845,6 +880,16 @@
   transform: scale(1.1);
 }
 
+.progressionCellMissed {
+  background: rgba(var(--axis-ink), 0.035);
+  border-color: rgba(var(--axis-ink), 0.09);
+}
+
+.progressionCellFuture {
+  background: rgba(var(--axis-ink), 0.018);
+  border-color: rgba(var(--axis-ink), 0.025);
+}
+
 .historyGrid {
   display: grid;
   gap: 0.85rem;
@@ -876,6 +921,15 @@
   color: rgba(var(--axis-ink), 0.72);
   font-size: 0.72rem;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyNode em {
+  color: rgba(var(--axis-ink), 0.4);
+  font-size: 0.58rem;
+  font-style: normal;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -960,6 +1014,10 @@
   }
 
   .worldSignals {
+    grid-template-columns: 1fr;
+  }
+
+  .historyStats {
     grid-template-columns: 1fr;
   }
 

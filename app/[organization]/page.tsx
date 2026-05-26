@@ -58,7 +58,7 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
 
   const organizationId = organization.id
   const summary = identity
-    ? await getAttendanceSummary(identity, 12, organizationId)
+    ? await getAttendanceSummary(identity, 60, organizationId)
     : null
   const leaderboard = identity ? await getAxisLeaderboard(organizationId) : []
   const activeTodayCount = identity
@@ -104,13 +104,16 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
   const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
     id: checkIn.id,
+    organizationName: organization.name,
+    timeLabel: formatAttendanceTime(checkIn.occurred_at),
     title: checkIn.workout_type,
   }))
   const completedDays = new Set(
     checkIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
   )
   const continuityDays = buildContinuityDays(completedDays)
-  const accumulation = buildAccumulationGrid(checkIns.length)
+  const accumulation = buildCurrentMonthGrid(completedDays)
+  const historyStats = buildHistoryStats(checkIns)
 
   return (
     <ContinuousAxisHome
@@ -118,6 +121,7 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
       checkedInToday={checkedInToday}
       continuityDays={continuityDays}
       history={history}
+      historyStats={historyStats}
       lastCheckInLabel={lastCheckInLabel}
       leaderboardPlacement={leaderboardStanding.placement}
       leaderboardSignal={leaderboardSignal}
@@ -201,6 +205,7 @@ function getLeaderboardStanding(
 }
 
 function leaderboardContext(categoryId: string) {
+  if (categoryId === "active-today") return "MOST ACTIVE TODAY"
   if (categoryId === "active-streak") return "LONGEST STREAK"
   if (categoryId === "monthly-consistency") return "MOST CONSISTENT"
   if (categoryId === "sessions-completed") return "MOST SESSIONS"
@@ -209,6 +214,7 @@ function leaderboardContext(categoryId: string) {
 }
 
 function leaderboardScope(categoryId: string) {
+  if (categoryId === "active-today") return "TODAY"
   if (categoryId === "active-streak") return "STREAK"
   if (categoryId === "monthly-consistency") return "MONTH"
   if (categoryId === "sessions-completed") return "SESSIONS"
@@ -281,18 +287,64 @@ function buildContinuityDays(completedDays: Set<string>) {
   })
 }
 
-function buildAccumulationGrid(count: number) {
-  return Array.from({ length: 28 }, (_, index) => ({
-    id: `cell-${index}`,
-    state:
-      index < count
+function buildCurrentMonthGrid(completedDays: Set<string>) {
+  const today = new Date()
+  const daysInMonth = new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    0
+  ).getDate()
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(today.getFullYear(), today.getMonth(), index + 1)
+    const key = toDateKey(date)
+    const isCurrentDay = isToday(date.toISOString())
+
+    return {
+      id: key,
+      label: String(index + 1).padStart(2, "0"),
+      state: completedDays.has(key)
         ? ("complete" as const)
-        : index === Math.min(count, 27)
+        : isCurrentDay
           ? ("active" as const)
-          : ("empty" as const),
-  }))
+          : date > today
+            ? ("future" as const)
+            : ("missed" as const),
+    }
+  })
+}
+
+function buildHistoryStats(
+  checkIns: NonNullable<Awaited<ReturnType<typeof getAttendanceSummary>>>["checkIns"]
+) {
+  const today = new Date()
+  const currentMonth = toMonthKey(today)
+  const monthCheckIns = checkIns.filter(
+    (checkIn) => toMonthKey(new Date(checkIn.occurred_at)) === currentMonth
+  )
+  const completedDays = new Set(
+    monthCheckIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+  )
+  let missed = 0
+
+  for (let day = 1; day < today.getDate(); day += 1) {
+    const date = new Date(today.getFullYear(), today.getMonth(), day)
+    if (!completedDays.has(toDateKey(date))) missed += 1
+  }
+
+  return {
+    currentMonthParticipation: `${completedDays.size} active days`,
+    lastSession: checkIns[0] ? formatLastCheckIn(checkIns[0].occurred_at) : "None yet",
+    missedDays: `${missed} missed`,
+    totalSessions:
+      checkIns.length === 1 ? "1 total session" : `${checkIns.length} total sessions`,
+  }
 }
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10)
+}
+
+function toMonthKey(date: Date) {
+  return date.toISOString().slice(0, 7)
 }

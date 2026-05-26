@@ -16,7 +16,7 @@ export default async function LeaderboardPage() {
             <h1 className={styles.title}>Leaderboard</h1>
           </div>
           <p className={styles.statement}>
-            People are showing up. Where do you stand?
+            People are putting work in. Rankings come from saved check-ins only.
           </p>
         </header>
 
@@ -31,13 +31,16 @@ export default async function LeaderboardPage() {
           <section className={styles.boardGrid} aria-label="Axis leaderboard">
             {categories.map((category) => (
               <section className={styles.category} key={category.id}>
-                <h2>{category.title}</h2>
+                <header className={styles.categoryHeader}>
+                  <h2>{category.title}</h2>
+                  <span>{category.entries.length} ranked</span>
+                </header>
                 <div className={styles.rows}>
                   {category.entries.length ? (
                     category.entries.map((entry) => (
                       <div className={styles.row} key={`${category.id}-${entry.id}`}>
                         <span className={styles.rank}>
-                          {entry.rank.toString().padStart(2, "0")}
+                          #{entry.rank}
                         </span>
                         <span className={styles.identity}>{entry.label}</span>
                         <span className={styles.meta}>{entry.meta}</span>

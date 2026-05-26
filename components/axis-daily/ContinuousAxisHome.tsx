@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import type { CSSProperties } from "react"
 import styles from "@/app/page.module.css"
 
-type CheckInStatus = "idle" | "saving" | "saved"
+type CheckInStatus = "idle" | "checking" | "history-updated" | "failed"
 
 type CheckInResponse = {
   checkIn?: {
@@ -13,6 +13,7 @@ type CheckInResponse = {
     occurred_at: string
   }
   error?: string
+  message?: string
   ok?: boolean
   traceId?: string
 }
@@ -20,6 +21,8 @@ type CheckInResponse = {
 type HistoryNode = {
   dateLabel: string
   id: string
+  organizationName: string
+  timeLabel: string
   title: string
 }
 
@@ -31,7 +34,15 @@ type ContinuityDay = {
 
 type ProgressionCell = {
   id: string
-  state: "active" | "complete" | "empty"
+  label: string
+  state: "active" | "complete" | "future" | "missed"
+}
+
+type HistoryStats = {
+  currentMonthParticipation: string
+  lastSession: string
+  missedDays: string
+  totalSessions: string
 }
 
 type OrganizationSignal = {
@@ -44,6 +55,7 @@ type ContinuousAxisHomeProps = {
   checkedInToday: boolean
   continuityDays: ContinuityDay[]
   history: HistoryNode[]
+  historyStats: HistoryStats
   lastCheckInLabel: string
   leaderboardSignal: string
   organizationAvatar?: string
@@ -63,6 +75,7 @@ export function ContinuousAxisHome({
   checkedInToday,
   continuityDays,
   history,
+  historyStats,
   lastCheckInLabel,
   leaderboardSignal,
   organizationAvatar,
@@ -78,7 +91,7 @@ export function ContinuousAxisHome({
 }: ContinuousAxisHomeProps) {
   const router = useRouter()
   const [status, setStatus] = useState<CheckInStatus>(
-    checkedInToday ? "saved" : "idle"
+    checkedInToday ? "history-updated" : "idle"
   )
   const [message, setMessage] = useState("")
   const [completedAt, setCompletedAt] = useState(
@@ -86,12 +99,12 @@ export function ContinuousAxisHome({
   )
 
   const actionLabel = useMemo(() => {
-    if (status === "saving") return "Saving"
-    if (status === "saved") return completedAt || ritualLabel
+    if (status === "checking") return "Checking in"
+    if (status === "history-updated") return completedAt || ritualLabel
 
     return "Check in"
   }, [completedAt, ritualLabel, status])
-  const busy = status === "saving"
+  const busy = status === "checking"
   const pulseCount = Math.min(
     12,
     Math.max(3, history.length + (checkedInToday ? 2 : 1))
@@ -104,19 +117,25 @@ export function ContinuousAxisHome({
   const monthDays = savedDays.slice(-28)
   const miniHistoryDays = monthDays.slice(-14)
   const todayStateLabel =
-    status === "saved" ? "Checked in" : status === "saving" ? "Saving" : "Not yet"
+    status === "history-updated"
+      ? "Checked in"
+      : status === "checking"
+        ? "Checking in"
+        : status === "failed"
+          ? "Check-in failed"
+          : "Not yet"
   const weekLabel = `${weekCompleteCount}/7 days`
-  const monthLabel = history.length === 1 ? "1 session" : `${history.length} sessions`
+  const monthLabel = historyStats.currentMonthParticipation
   const ringProgress = Math.min(100, Math.max(8, (streakDays / 30) * 100))
   const ringStyle = {
     "--axis-ring-progress": `${ringProgress}%`,
   } as CSSProperties
 
   async function submitCheckIn() {
-    if (busy || status === "saved") return
+    if (busy || status === "history-updated") return
 
-    setStatus("saving")
-    setMessage("Writing today")
+    setStatus("checking")
+    setMessage("Checking in")
 
     try {
       const response = await fetch("/api/check-in", {
@@ -140,8 +159,8 @@ export function ContinuousAxisHome({
       })
 
       if (!response.ok || !data.ok || !data.checkIn) {
-        setStatus("idle")
-        setMessage(data.error || "Check-in could not be saved.")
+        setStatus("failed")
+        setMessage(humanCheckInError(data.error))
         return
       }
 
@@ -149,16 +168,16 @@ export function ContinuousAxisHome({
         data.checkIn.occurred_at
       )}`
       setCompletedAt(savedLabel)
-      setStatus("saved")
-      setMessage("History updated")
+      setStatus("history-updated")
+      setMessage(data.message || "History updated")
       router.refresh()
     } catch (error) {
-      setStatus("idle")
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Check-in could not be saved."
-      )
+      console.error("AXIS CHECK-IN", {
+        error,
+        stage: "client-check-in-failed",
+      })
+      setStatus("failed")
+      setMessage("Check-in failed")
     }
   }
 
@@ -231,9 +250,11 @@ export function ContinuousAxisHome({
               <button
                 aria-label={actionLabel}
                 className={`${styles.ritualAction} ${
-                  status === "saved" ? styles.ritualActionComplete : ""
+                  status === "history-updated"
+                    ? styles.ritualActionComplete
+                    : ""
                 }`}
-                disabled={busy || status === "saved"}
+                disabled={busy || status === "history-updated"}
                 onClick={submitCheckIn}
                 type="button"
               >
@@ -287,6 +308,7 @@ export function ContinuousAxisHome({
             <div className={`${styles.rhythmCard} ${styles.historyObject}`}>
               <span>history</span>
               <strong>{monthLabel}</strong>
+              <em>{historyStats.totalSessions}</em>
               <div className={styles.miniHistoryGrid} aria-hidden="true">
                 {miniHistoryDays.map((day) => (
                   <i
@@ -319,7 +341,7 @@ export function ContinuousAxisHome({
         <section className={styles.continuityBed} aria-label="Axis continuity">
           <div className={styles.continuityHeader}>
             <span>History</span>
-            <strong>{history.length ? "growing" : "ready"}</strong>
+            <strong>{history.length ? "saved" : "ready"}</strong>
           </div>
 
           <div className={styles.continuitySurface}>
@@ -343,15 +365,34 @@ export function ContinuousAxisHome({
             </div>
 
             <div className={styles.progressionSurface}>
+              <div className={styles.historyStats} aria-label="History records">
+                <div className={styles.historyStat}>
+                  <span>last session</span>
+                  <strong>{historyStats.lastSession}</strong>
+                </div>
+                <div className={styles.historyStat}>
+                  <span>this month</span>
+                  <strong>{historyStats.currentMonthParticipation}</strong>
+                </div>
+                <div className={styles.historyStat}>
+                  <span>missed days</span>
+                  <strong>{historyStats.missedDays}</strong>
+                </div>
+              </div>
               <div className={styles.progressionGrid} aria-label="Progression grid">
                 {progressionCells.map((cell) => (
                   <span
+                    aria-label={`${cell.label} ${cell.state}`}
                     className={
                       cell.state === "complete"
                         ? styles.progressionCellComplete
                         : cell.state === "active"
                           ? styles.progressionCellActive
-                        : styles.progressionCell
+                          : cell.state === "future"
+                            ? styles.progressionCellFuture
+                            : cell.state === "missed"
+                              ? styles.progressionCellMissed
+                              : styles.progressionCell
                     }
                     key={cell.id}
                   />
@@ -368,6 +409,9 @@ export function ContinuousAxisHome({
                     >
                       <span>{item.dateLabel}</span>
                       <strong>{item.title}</strong>
+                      <em>
+                        {item.organizationName} - {item.timeLabel}
+                      </em>
                     </div>
                   ))
                 ) : (
@@ -387,4 +431,18 @@ function formatAttendanceTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value))
+}
+
+function humanCheckInError(value?: string) {
+  if (!value) return "Check-in failed"
+
+  if (value.toLowerCase().includes("organization")) {
+    return "Organization not ready"
+  }
+
+  if (value.toLowerCase().includes("sign in")) {
+    return "Sign in required"
+  }
+
+  return "Check-in failed"
 }

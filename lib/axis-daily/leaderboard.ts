@@ -27,6 +27,7 @@ type MemberLedger = {
   dates: Set<string>
   monthlyDates: Set<string>
   sessions: number
+  sessionsToday: number
   totalMinutesThisWeek: number
 }
 
@@ -61,6 +62,14 @@ export async function getAxisLeaderboard(
 
   return [
     {
+      entries: rankedEntries(ledgers, (ledger) => ledger.sessionsToday, {
+        format: (value) => `${value} ${value === 1 ? "check-in" : "check-ins"}`,
+        meta: "checked in today",
+      }),
+      id: "active-today",
+      title: "Most Active Today",
+    },
+    {
       entries: rankedEntries(ledgers, (ledger) => ledger.totalMinutesThisWeek, {
         format: formatHours,
         meta: "verified hours this week",
@@ -79,7 +88,7 @@ export async function getAxisLeaderboard(
     {
       entries: rankedEntries(ledgers, (ledger) => ledger.monthlyDates.size, {
         format: (value) => `${value} ${value === 1 ? "day" : "days"}`,
-        meta: "check-in days this month",
+        meta: "active days this month",
       }),
       id: "monthly-consistency",
       title: "Most Consistent This Month",
@@ -87,7 +96,7 @@ export async function getAxisLeaderboard(
     {
       entries: rankedEntries(ledgers, (ledger) => ledger.sessions, {
         format: (value) => `${value} ${value === 1 ? "session" : "sessions"}`,
-        meta: "verified sessions completed",
+        meta: "all-time check-ins",
       }),
       id: "sessions-completed",
       title: "Most Sessions Completed",
@@ -97,6 +106,7 @@ export async function getAxisLeaderboard(
 
 function buildLedgers(rows: LeaderboardCheckInRow[]) {
   const ledgers = new Map<string, MemberLedger>()
+  const todayKey = toDateKey(new Date())
   const weekStart = startOfWeek(new Date())
   const monthKey = toMonthKey(new Date())
 
@@ -112,6 +122,7 @@ function buildLedgers(rows: LeaderboardCheckInRow[]) {
       id,
       monthlyDates: new Set<string>(),
       sessions: 0,
+      sessionsToday: 0,
       totalMinutesThisWeek: 0,
     }
     const dateKey = toDateKey(occurredAt)
@@ -121,6 +132,10 @@ function buildLedgers(rows: LeaderboardCheckInRow[]) {
 
     if (occurredAt >= weekStart) {
       ledger.totalMinutesThisWeek += Math.max(0, row.duration_minutes)
+    }
+
+    if (dateKey === todayKey) {
+      ledger.sessionsToday += 1
     }
 
     if (toMonthKey(occurredAt) === monthKey) {
@@ -188,6 +203,7 @@ function activeStreakDays(ledger: MemberLedger) {
 
 function emptyCategories(): AxisLeaderboardCategory[] {
   return [
+    { entries: [], id: "active-today", title: "Most Active Today" },
     { entries: [], id: "hours-this-week", title: "Most Hours This Week" },
     { entries: [], id: "active-streak", title: "Longest Active Streak" },
     { entries: [], id: "monthly-consistency", title: "Most Consistent This Month" },
