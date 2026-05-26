@@ -52,6 +52,21 @@ Reject template choices that bring startup gradients, corporate dashboard densit
 
 Every borrowed structure must answer: does this feel like athletic continuity?
 
+## Progression Shape Language
+
+Use rounded square tiles as the primary continuity object.
+
+Apply this language to:
+
+- active days
+- weekly activity
+- monthly history
+- streak state
+- progression grids
+- completed sessions
+
+Small circular dots may remain only as status signals, not as the main progression system. Do not mix rings, bars, circles, and tiles as equal continuity metaphors.
+
 ## Axis History
 
 Purpose: prove time accumulated.

@@ -23,7 +23,7 @@ export default async function HomePage() {
   const ritualLabel = checkedInToday && lastCheckIn
     ? `Checked in \u2014 ${formatAttendanceTime(lastCheckIn.occurred_at)}`
     : "Check in"
-  const leaderboardPlacement = getLeaderboardPlacement(
+  const leaderboardStanding = getLeaderboardStanding(
     leaderboard,
     identity?.clerkUserId || identity?.supabaseUserId || ""
   )
@@ -31,8 +31,8 @@ export default async function HomePage() {
     leaderboard.find((category) => category.id === "hours-this-week")?.entries
       .length || 0
   const leaderboardSignal =
-    leaderboardPlacement !== "unranked"
-      ? `${leaderboardPlacement} in motion`
+    leaderboardStanding.placement !== "unranked"
+      ? leaderboardStanding.context
       : weeklyActiveCount
         ? `${weeklyActiveCount} active files`
         : "board open"
@@ -90,7 +90,7 @@ export default async function HomePage() {
       history={history}
       lastCheckInLabel={lastCheckInLabel}
       leaderboardSignal={leaderboardSignal}
-      leaderboardPlacement={leaderboardPlacement}
+      leaderboardPlacement={leaderboardStanding.placement}
       participationSignal={participationSignal}
       progressionCells={accumulation}
       ritualLabel={ritualLabel}
@@ -100,21 +100,48 @@ export default async function HomePage() {
   )
 }
 
-function getLeaderboardPlacement(
+function getLeaderboardStanding(
   categories: Awaited<ReturnType<typeof getAxisLeaderboard>>,
   memberId: string
 ) {
-  if (!memberId) return "unranked"
+  if (!memberId) {
+    return {
+      context: "MOST ACTIVE",
+      placement: "unranked",
+    }
+  }
 
   for (const category of categories) {
     const entry = category.entries.find((candidate) => candidate.id === memberId)
 
     if (entry) {
-      return `#${entry.rank}`
+      return {
+        context: leaderboardContext(category.id),
+        placement: `#${entry.rank} ${leaderboardScope(category.id)}`,
+      }
     }
   }
 
-  return "unranked"
+  return {
+    context: "MOST ACTIVE",
+    placement: "unranked",
+  }
+}
+
+function leaderboardContext(categoryId: string) {
+  if (categoryId === "active-streak") return "LONGEST STREAK"
+  if (categoryId === "monthly-consistency") return "MOST CONSISTENT"
+  if (categoryId === "sessions-completed") return "MOST SESSIONS"
+
+  return "MOST ACTIVE"
+}
+
+function leaderboardScope(categoryId: string) {
+  if (categoryId === "active-streak") return "STREAK"
+  if (categoryId === "monthly-consistency") return "MONTH"
+  if (categoryId === "sessions-completed") return "SESSIONS"
+
+  return "THIS WEEK"
 }
 
 function formatAttendanceTime(value: string) {

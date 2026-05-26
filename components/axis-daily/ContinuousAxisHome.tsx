@@ -83,7 +83,17 @@ export function ContinuousAxisHome({
     12,
     Math.max(3, history.length + (checkedInToday ? 2 : 1))
   )
-  const miniHistoryDays = continuityDays.slice(-14)
+  const savedDays = continuityDays.filter((day) => day.state !== "future")
+  const weekDays = savedDays.slice(-7)
+  const weekCompleteCount = weekDays.filter(
+    (day) => day.state === "active" || day.state === "complete"
+  ).length
+  const monthDays = savedDays.slice(-28)
+  const miniHistoryDays = monthDays.slice(-14)
+  const todayStateLabel =
+    status === "saved" ? "Checked in" : status === "saving" ? "Saving" : "Not yet"
+  const weekLabel = `${weekCompleteCount}/7 days`
+  const monthLabel = history.length === 1 ? "1 session" : `${history.length} sessions`
   const ringProgress = Math.min(100, Math.max(8, (streakDays / 30) * 100))
   const ringStyle = {
     "--axis-ring-progress": `${ringProgress}%`,
@@ -148,15 +158,15 @@ export function ContinuousAxisHome({
           </div>
           <div className={styles.topSignals} aria-label="Continuity state">
             <div className={styles.topSignal}>
-              <span>streak</span>
-              <strong>{streakLabel}</strong>
+              <span>today</span>
+              <strong>{todayStateLabel}</strong>
             </div>
             <div className={styles.topSignal}>
-              <span>last</span>
-              <strong>{lastCheckInLabel}</strong>
+              <span>this week</span>
+              <strong>{weekLabel}</strong>
             </div>
             <div className={styles.topSignal}>
-              <span>rank</span>
+              <span>all time</span>
               <strong>{leaderboardPlacement}</strong>
             </div>
           </div>
@@ -166,7 +176,7 @@ export function ContinuousAxisHome({
           <div className={styles.activitySignal}>
             <span className={styles.liveDot} aria-hidden="true" />
             <strong>{participationSignal}</strong>
-            <em>gym signal</em>
+            <em>active today</em>
           </div>
           <div className={styles.activityMeter} aria-hidden="true">
             {Array.from({ length: 12 }).map((_, index) => (
@@ -179,7 +189,7 @@ export function ContinuousAxisHome({
           <div className={styles.activitySignal}>
             <span className={styles.boardDot} aria-hidden="true" />
             <strong>{leaderboardSignal}</strong>
-            <em>effort board</em>
+            <em>where you stand</em>
           </div>
         </section>
 
@@ -217,18 +227,34 @@ export function ContinuousAxisHome({
           </div>
 
           <div className={styles.rhythmCluster} aria-label="Continuity objects">
-            <div className={`${styles.rhythmCard} ${styles.streakObject}`}>
-              <div className={styles.streakRing} style={ringStyle}>
-                <strong>{streakDays}</strong>
-              </div>
-              <div>
-                <span>streak</span>
-                <strong>{streakLabel}</strong>
+            <div className={styles.rhythmCard}>
+              <span>active today</span>
+              <strong>{todayStateLabel}</strong>
+              <em>{activeTodayLabel}</em>
+            </div>
+
+            <div className={`${styles.rhythmCard} ${styles.weekObject}`}>
+              <span>this week</span>
+              <strong>{weekLabel}</strong>
+              <div className={styles.weekStrip} aria-hidden="true">
+                {weekDays.map((day) => (
+                  <i
+                    className={
+                      day.state === "complete"
+                        ? styles.rhythmBandNodeComplete
+                        : day.state === "active"
+                          ? styles.rhythmBandNodeActive
+                          : styles.rhythmBandNode
+                    }
+                    key={day.id}
+                  />
+                ))}
               </div>
             </div>
 
             <div className={`${styles.rhythmCard} ${styles.historyObject}`}>
               <span>history</span>
+              <strong>{monthLabel}</strong>
               <div className={styles.miniHistoryGrid} aria-hidden="true">
                 {miniHistoryDays.map((day) => (
                   <i
@@ -245,37 +271,23 @@ export function ContinuousAxisHome({
               </div>
             </div>
 
-            <div className={styles.rhythmCard}>
-              <span>rank</span>
-              <strong>{leaderboardPlacement}</strong>
-            </div>
-
-            <div className={styles.rhythmCard}>
-              <span>active today</span>
-              <strong>{activeTodayLabel}</strong>
-            </div>
-
-            <div className={styles.rhythmBand} aria-hidden="true">
-              {progressionCells.slice(0, 21).map((cell) => (
-                <span
-                  className={
-                    cell.state === "complete"
-                      ? styles.rhythmBandNodeComplete
-                      : cell.state === "active"
-                        ? styles.rhythmBandNodeActive
-                      : styles.rhythmBandNode
-                  }
-                  key={cell.id}
-                />
-              ))}
+            <div className={`${styles.rhythmCard} ${styles.streakObject}`}>
+              <div>
+                <span>current streak</span>
+                <strong>{streakLabel}</strong>
+                <em>{leaderboardPlacement}</em>
+              </div>
+              <div className={styles.streakRing} style={ringStyle}>
+                <strong>{streakDays}</strong>
+              </div>
             </div>
           </div>
         </section>
 
         <section className={styles.continuityBed} aria-label="Axis continuity">
           <div className={styles.continuityHeader}>
-            <span>Axis History</span>
-            <strong>{history.length ? "building" : "ready"}</strong>
+            <span>History</span>
+            <strong>{history.length ? "growing" : "ready"}</strong>
           </div>
 
           <div className={styles.continuitySurface}>

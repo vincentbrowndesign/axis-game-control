@@ -43,6 +43,9 @@ Status: in progress
 - Glow refinement compressed broad haze into sharper signal edges, shorter shadows, and more readable athletic typography.
 - Athletic rhythm pass added a compact ritual momentum strip, more tactile completed-day states, stronger active-day emphasis, and clearer progression surfaces without adding new features.
 - Template acceleration pass made structural rhythm more reusable: top records became soft modules, the activity rail became a contained participation band, and continuity/history surfaces gained clearer grouped cadence.
+- Semantic clarity pass reorganized member-home hierarchy around the first question, "Did I show up today?", then grouped support systems into Today, This Week, This Month, and All Time.
+- Progression language pass unified continuity visuals around rounded square tiles so history, streaks, weekly activity, active days, and progression grids feel like one system.
+- History and leaderboard refinement made the calendar the primary continuity object, softened the checked-in hero, and gave rank labels concrete meaning such as most active, longest streak, month, and sessions.
 
 LEADERBOARD
 
