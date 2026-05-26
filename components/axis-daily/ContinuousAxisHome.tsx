@@ -5,12 +5,20 @@ import { useRouter } from "next/navigation"
 import type { CSSProperties } from "react"
 import styles from "@/app/page.module.css"
 
-type CheckInStatus = "idle" | "checking" | "history-updated" | "failed"
+type CheckInStatus =
+  | "checked-out"
+  | "checking"
+  | "checking-out"
+  | "failed"
+  | "history-updated"
+  | "idle"
 
 type CheckInResponse = {
   checkIn?: {
+    checked_out_at?: string | null
     id: string
     occurred_at: string
+    reflection?: string | null
   }
   error?: string
   message?: string
@@ -52,7 +60,9 @@ type OrganizationSignal = {
 
 type ContinuousAxisHomeProps = {
   activeTodayLabel: string
+  checkedOutToday: boolean
   checkedInToday: boolean
+  checkoutLabel: string
   continuityDays: ContinuityDay[]
   history: HistoryNode[]
   historyStats: HistoryStats
@@ -72,7 +82,9 @@ type ContinuousAxisHomeProps = {
 
 export function ContinuousAxisHome({
   activeTodayLabel,
+  checkedOutToday,
   checkedInToday,
+  checkoutLabel,
   continuityDays,
   history,
   historyStats,
@@ -91,20 +103,23 @@ export function ContinuousAxisHome({
 }: ContinuousAxisHomeProps) {
   const router = useRouter()
   const [status, setStatus] = useState<CheckInStatus>(
-    checkedInToday ? "history-updated" : "idle"
+    checkedOutToday ? "checked-out" : checkedInToday ? "history-updated" : "idle"
   )
   const [message, setMessage] = useState("")
   const [completedAt, setCompletedAt] = useState(
-    checkedInToday ? ritualLabel : ""
+    checkedOutToday ? checkoutLabel : checkedInToday ? ritualLabel : ""
   )
+  const [reflection, setReflection] = useState("")
 
   const actionLabel = useMemo(() => {
     if (status === "checking") return "Checking in"
+    if (status === "checking-out") return "Checking out"
+    if (status === "checked-out") return completedAt || checkoutLabel
     if (status === "history-updated") return completedAt || ritualLabel
 
     return "Check in"
-  }, [completedAt, ritualLabel, status])
-  const busy = status === "checking"
+  }, [checkoutLabel, completedAt, ritualLabel, status])
+  const busy = status === "checking" || status === "checking-out"
   const pulseCount = Math.min(
     12,
     Math.max(3, history.length + (checkedInToday ? 2 : 1))
@@ -119,8 +134,12 @@ export function ContinuousAxisHome({
   const todayStateLabel =
     status === "history-updated"
       ? "Checked in"
+      : status === "checked-out"
+        ? "Checked out"
       : status === "checking"
         ? "Checking in"
+        : status === "checking-out"
+          ? "Checking out"
         : status === "failed"
           ? "Check-in failed"
           : "Not yet"
@@ -132,7 +151,12 @@ export function ContinuousAxisHome({
   } as CSSProperties
 
   async function submitCheckIn() {
-    if (busy || status === "history-updated") return
+    if (busy || status === "checked-out") return
+
+    if (status === "history-updated") {
+      await submitCheckOut()
+      return
+    }
 
     setStatus("checking")
     setMessage("Checking in")
@@ -178,6 +202,45 @@ export function ContinuousAxisHome({
       })
       setStatus("failed")
       setMessage("Check-in failed")
+    }
+  }
+
+  async function submitCheckOut() {
+    setStatus("checking-out")
+    setMessage("Checking out")
+
+    try {
+      const response = await fetch("/api/check-out", {
+        body: JSON.stringify({
+          organizationSlug,
+          reflection,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+      const data = (await response.json().catch(() => ({}))) as CheckInResponse
+
+      if (!response.ok || !data.ok || !data.checkIn?.checked_out_at) {
+        setStatus("history-updated")
+        setMessage(humanCheckInError(data.error || "Check-out failed"))
+        return
+      }
+
+      setCompletedAt(
+        `Checked out - ${formatAttendanceTime(data.checkIn.checked_out_at)}`
+      )
+      setStatus("checked-out")
+      setMessage(data.message || "History updated")
+      router.refresh()
+    } catch (error) {
+      console.error("AXIS CHECK-OUT", {
+        error,
+        stage: "client-check-out-failed",
+      })
+      setStatus("history-updated")
+      setMessage("Check-out failed")
     }
   }
 
@@ -250,17 +313,27 @@ export function ContinuousAxisHome({
               <button
                 aria-label={actionLabel}
                 className={`${styles.ritualAction} ${
-                  status === "history-updated"
+                  status === "checked-out" || status === "history-updated"
                     ? styles.ritualActionComplete
                     : ""
                 }`}
-                disabled={busy || status === "history-updated"}
+                disabled={busy || status === "checked-out"}
                 onClick={submitCheckIn}
                 type="button"
               >
                 {actionLabel}
               </button>
-              <p className={styles.ritualWhisper}>Write your story.</p>
+              {status === "history-updated" ? (
+                <input
+                  className={styles.reflectionInput}
+                  maxLength={160}
+                  onChange={(event) => setReflection(event.target.value)}
+                  placeholder="What did you work on?"
+                  value={reflection}
+                />
+              ) : (
+                <p className={styles.ritualWhisper}>Write your story.</p>
+              )}
               <p className={styles.inlineStatus}>{message}</p>
               <div className={styles.ritualMomentum} aria-hidden="true">
                 {progressionCells.slice(0, 9).map((cell) => (
@@ -438,6 +511,10 @@ function humanCheckInError(value?: string) {
 
   if (value.toLowerCase().includes("organization")) {
     return "Organization not ready"
+  }
+
+  if (value.toLowerCase().includes("check-out")) {
+    return "Check-out failed"
   }
 
   if (value.toLowerCase().includes("sign in")) {

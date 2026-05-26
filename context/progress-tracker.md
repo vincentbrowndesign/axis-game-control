@@ -73,6 +73,9 @@ Status: foundation
 - Check-in persistence stabilization removed silent organization fallback inserts, added explicit checking/history-updated client states, and keeps failed persistence visible with human operational errors.
 - Real history objects now drive the history surface: current-month days come from saved check-in dates, missed days are explicit, recent records show timestamp and organization context, and summary values come from persisted continuity data only.
 - Real leaderboard system now ranks only persisted check-in activity across most active today, weekly hours, active streaks, monthly consistency, and total sessions, with clearer earned placement labels like `#1 TODAY`.
+- Mobile-first athletic interaction pass moved the check-in ritual higher in the small-screen flow, enlarged touch targets, reduced mobile scan weight, hid nonessential activity meter detail, and improved safe-area spacing for one-handed gym use.
+- Session completion loop added checkout on the saved check-in record, optional one-line reflection, and the completed states `Checking out`, `Checked out`, and `History updated` so Axis can track completed effort cycles.
+- Admin visibility now gives coaches a calm daily summary from real organization check-ins: checked in, completed sessions, active today, top streak, and recent participation activity without adding surveillance or analytics-heavy UI.
 
 FUTURE LAYERS
 

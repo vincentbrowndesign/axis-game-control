@@ -2,7 +2,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 import type { AxisRequestIdentity } from "@/lib/axis-auth/identity"
 
 export type AxisTrainingCheckIn = {
+  checked_out_at: string | null
   id: string
+  reflection: string | null
   status: string
   workout_type: string
   duration_minutes: number
@@ -30,7 +32,7 @@ export async function getAttendanceSummary(
   let query = supabaseAdmin
     .from("axis_training_check_ins")
     .select(
-      "id, status, workout_type, duration_minutes, notes, distance_meters, occurred_at"
+      "id, status, workout_type, duration_minutes, notes, distance_meters, occurred_at, checked_out_at, reflection"
     )
     .order("occurred_at", { ascending: false })
     .limit(limit)

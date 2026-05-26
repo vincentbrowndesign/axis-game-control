@@ -45,12 +45,30 @@ export type AxisMemberContinuity = AxisMembership & {
   streakDays: number
 }
 
+export type AxisDailyVisibility = {
+  activeToday: number
+  checkedInToday: number
+  completedToday: number
+  mostActiveToday: string
+  topStreak: string
+}
+
+export type AxisOrganizationActivity = {
+  detail: string
+  id: string
+  label: string
+  occurredAt: string
+  status: string
+}
+
 export type AxisOrganizationAdminModel = {
   activeMembersThisWeek: number
   attendancePercent: number
+  dailyVisibility: AxisDailyVisibility
   invites: AxisInvite[]
   members: AxisMemberContinuity[]
   participationContinuity: string
+  recentActivity: AxisOrganizationActivity[]
   settings: AxisOrganizationSettings
   streakLeaders: AxisMemberContinuity[]
 }
@@ -115,8 +133,13 @@ export async function getOrganizationAdminModel(organizationId: string) {
   ])
 
   const checkInsByMember = new Map<string, string[]>()
+  const checkInsTodayByMember = new Map<string, number>()
   const activeThisWeek = new Set<string>()
+  const activeToday = new Set<string>()
   const weekStart = startOfWeek(new Date())
+  const todayKey = toDateKey(new Date())
+  let checkedInToday = 0
+  let completedToday = 0
 
   for (const checkIn of checkIns) {
     const key = checkIn.user_id || checkIn.clerk_user_id
@@ -128,6 +151,16 @@ export async function getOrganizationAdminModel(organizationId: string) {
 
     if (new Date(checkIn.occurred_at) >= weekStart) {
       activeThisWeek.add(key)
+    }
+
+    if (toDateKey(new Date(checkIn.occurred_at)) === todayKey) {
+      checkedInToday += 1
+      activeToday.add(key)
+      checkInsTodayByMember.set(key, (checkInsTodayByMember.get(key) || 0) + 1)
+
+      if (checkIn.checked_out_at) {
+        completedToday += 1
+      }
     }
   }
 
@@ -150,17 +183,45 @@ export async function getOrganizationAdminModel(organizationId: string) {
   const attendancePercent = members.length
     ? Math.round((activeMembersThisWeek / members.length) * 100)
     : 0
+  const streakLeaders = [...members]
+    .sort((a, b) => b.streakDays - a.streakDays || b.checkIns - a.checkIns)
+    .slice(0, 3)
+  const mostActiveToday = findMostActiveToday(members, checkInsTodayByMember)
 
   return {
     activeMembersThisWeek,
     attendancePercent,
+    dailyVisibility: {
+      activeToday: activeToday.size,
+      checkedInToday,
+      completedToday,
+      mostActiveToday,
+      topStreak: streakLeaders[0]
+        ? `${memberLabel(streakLeaders[0])} - ${streakLeaders[0].streakDays} days`
+        : "No streak yet",
+    },
     invites,
     members,
     participationContinuity: `${activeMembersThisWeek}/${members.length} active this week`,
+    recentActivity: checkIns.slice(0, 6).map((checkIn, index) => {
+      const member = members.find(
+        (value) =>
+          value.userId === checkIn.user_id ||
+          value.clerkUserId === checkIn.clerk_user_id
+      )
+
+      return {
+        detail: `${formatAdminTime(checkIn.occurred_at)}${
+          checkIn.checked_out_at ? ` - completed ${formatAdminTime(checkIn.checked_out_at)}` : ""
+        }`,
+        id: `${checkIn.id || checkIn.occurred_at}-${index}`,
+        label: member ? memberLabel(member) : fallbackMemberLabel(checkIn),
+        occurredAt: checkIn.occurred_at,
+        status: checkIn.checked_out_at ? "completed session" : "checked in",
+      }
+    }),
     settings,
-    streakLeaders: [...members]
-      .sort((a, b) => b.streakDays - a.streakDays || b.checkIns - a.checkIns)
-      .slice(0, 3),
+    streakLeaders,
   } satisfies AxisOrganizationAdminModel
 }
 
@@ -277,14 +338,16 @@ async function readCheckIns(organizationId: string) {
   const result = await Promise.race([
     supabaseAdmin
       .from("axis_training_check_ins")
-      .select("user_id, clerk_user_id, occurred_at")
+      .select("id, user_id, clerk_user_id, occurred_at, checked_out_at")
       .eq("organization_id", organizationId)
       .eq("status", "checked_in")
       .order("occurred_at", { ascending: false })
       .limit(3000)
       .returns<
         {
+          checked_out_at: string | null
           clerk_user_id: string | null
+          id: string
           occurred_at: string
           user_id: string | null
         }[]
@@ -355,6 +418,50 @@ function calculateStreak(values: string[]) {
   }
 
   return streak
+}
+
+function findMostActiveToday(
+  members: AxisMemberContinuity[],
+  checkInsTodayByMember: Map<string, number>
+) {
+  let activeMember: AxisMemberContinuity | null = null
+  let activeCount = 0
+
+  for (const member of members) {
+    const key = member.userId || member.clerkUserId || ""
+    const count = checkInsTodayByMember.get(key) || 0
+
+    if (count > activeCount) {
+      activeCount = count
+      activeMember = member
+    }
+  }
+
+  return activeMember ? `${memberLabel(activeMember)} - ${activeCount} today` : "No check-ins yet"
+}
+
+function memberLabel(member: AxisMembership) {
+  const value = member.clerkUserId || member.userId || "member"
+  const suffix = value.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()
+
+  return suffix ? `MEMBER ${suffix}` : "MEMBER"
+}
+
+function fallbackMemberLabel(checkIn: {
+  clerk_user_id: string | null
+  user_id: string | null
+}) {
+  const value = checkIn.clerk_user_id || checkIn.user_id || "member"
+  const suffix = value.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()
+
+  return suffix ? `MEMBER ${suffix}` : "MEMBER"
+}
+
+function formatAdminTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value))
 }
 
 function startOfWeek(date: Date) {

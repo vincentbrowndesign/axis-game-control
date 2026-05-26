@@ -75,6 +75,7 @@
   cursor: pointer;
   min-height: 3rem;
   padding: 0 1rem;
+  touch-action: manipulation;
 }
 
 .card button:disabled {
@@ -93,7 +94,8 @@
   border: 1px solid rgba(91, 76, 56, 0.16);
   border-radius: 0.85rem;
   color: rgba(35, 32, 27, 0.84);
-  min-height: 3rem;
+  font-size: 1rem;
+  min-height: 3.25rem;
   min-width: 0;
   padding: 0 1rem;
 }
@@ -118,7 +120,24 @@
 }
 
 @media (max-width: 640px) {
+  .surface {
+    align-items: end;
+    padding:
+      calc(1rem + env(safe-area-inset-top))
+      0.85rem
+      calc(1.25rem + env(safe-area-inset-bottom));
+  }
+
+  .card {
+    border-radius: 1.2rem;
+    width: 100%;
+  }
+
   .joinForm {
     grid-template-columns: 1fr;
+  }
+
+  .card button {
+    min-height: 3.5rem;
   }
 }

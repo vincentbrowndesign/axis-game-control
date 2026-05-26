@@ -218,8 +218,13 @@ export async function POST(request: Request) {
   const inserted = await supabaseAdmin
     .from("axis_training_check_ins")
     .insert(insertPayload)
-    .select("id, occurred_at")
-    .single<{ id: string; occurred_at: string }>()
+    .select("id, occurred_at, checked_out_at, reflection")
+    .single<{
+      checked_out_at: string | null
+      id: string
+      occurred_at: string
+      reflection: string | null
+    }>()
 
   if (inserted.error) {
     console.error("AXIS CHECK-IN", {
@@ -309,7 +314,7 @@ async function findExistingCheckIn({
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")
-    .select("id, occurred_at")
+    .select("id, occurred_at, checked_out_at, reflection")
     .eq("status", "checked_in")
     .gte("occurred_at", start.toISOString())
     .lt("occurred_at", end.toISOString())
@@ -325,7 +330,12 @@ async function findExistingCheckIn({
     : query.eq("clerk_user_id", clerkUserId || "")
 
   const result = await Promise.race([
-    query.maybeSingle<{ id: string; occurred_at: string }>(),
+    query.maybeSingle<{
+      checked_out_at: string | null
+      id: string
+      occurred_at: string
+      reflection: string | null
+    }>(),
     new Promise<{
       data: null
       error: Error

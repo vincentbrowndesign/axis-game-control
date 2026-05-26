@@ -129,6 +129,7 @@
   min-height: 2.55rem;
   padding: 0 1rem;
   text-decoration: none;
+  touch-action: manipulation;
 }
 
 .action:hover {
@@ -372,10 +373,12 @@
   letter-spacing: 0;
   line-height: 0.92;
   margin: 0;
+  min-height: 6rem;
   outline: none;
   padding: 0.18em 0.22em 0.22em;
   text-decoration: none;
   text-shadow: none;
+  touch-action: manipulation;
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -436,6 +439,26 @@
   margin: 0.8rem 0 0;
   min-height: 1rem;
   text-transform: uppercase;
+}
+
+.reflectionInput {
+  background: rgba(255, 250, 238, 0.36);
+  border: 1px solid rgba(85, 71, 52, 0.14);
+  border-radius: 0.85rem;
+  color: rgba(var(--axis-ink), 0.78);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+  margin-top: 0.8rem;
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  text-align: center;
+  text-transform: uppercase;
+  width: min(100%, 22rem);
+}
+
+.reflectionInput::placeholder {
+  color: rgba(var(--axis-ink), 0.34);
 }
 
 .ritualMomentum {
@@ -979,7 +1002,10 @@
   .surface {
     align-items: flex-start;
     overflow: auto;
-    padding: 6rem 1rem 2rem;
+    padding:
+      calc(1rem + env(safe-area-inset-top))
+      0.85rem
+      calc(1.25rem + env(safe-area-inset-bottom));
   }
 
   .entryShell {
@@ -987,7 +1013,7 @@
   }
 
   .brand {
-    margin-bottom: 3rem;
+    margin-bottom: 1.1rem;
   }
 
   .heading,
@@ -997,6 +1023,30 @@
 
   .memberTitle {
     font-size: 1.35rem;
+  }
+
+  .operatingShell {
+    gap: 0.85rem;
+  }
+
+  .operatingHeader {
+    order: 1;
+  }
+
+  .centerStage {
+    order: 2;
+  }
+
+  .worldSignals {
+    order: 3;
+  }
+
+  .activityRail {
+    order: 4;
+  }
+
+  .continuityBed {
+    order: 5;
   }
 
   .ritualCenter,
@@ -1013,8 +1063,52 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .topSignal,
+  .worldSignal,
+  .rhythmCard,
+  .historyStat,
+  .historyNode,
+  .action {
+    min-height: 3.25rem;
+  }
+
   .worldSignals {
     grid-template-columns: 1fr;
+  }
+
+  .activityRail {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .activityMeter {
+    display: none;
+  }
+
+  .ritualCenter {
+    border-radius: 1.35rem;
+    min-height: min(58dvh, 26rem);
+    padding: clamp(1rem, 5vw, 1.4rem);
+  }
+
+  .ritualAction {
+    border-radius: 1.05rem;
+    font-size: clamp(3.4rem, 17vw, 5.9rem);
+    min-height: 9.5rem;
+    width: min(100%, 24rem);
+  }
+
+  .ritualWhisper {
+    margin-top: 0.65rem;
+  }
+
+  .inlineStatus {
+    min-height: 1.15rem;
+  }
+
+  .reflectionInput {
+    min-height: 3.35rem;
+    width: min(100%, 24rem);
   }
 
   .historyStats {
@@ -1023,8 +1117,28 @@
 
   .progressionGrid {
     grid-template-columns: repeat(7, minmax(0, 1fr));
+    padding: 0.8rem;
   }
 
+}
+
+@media (max-width: 520px) {
+  .surface {
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+  }
+
+  .topSignals {
+    grid-template-columns: 1fr;
+  }
+
+  .ritualMomentum {
+    max-width: 14rem;
+  }
+
+  .historyGrid {
+    gap: 0.6rem;
+  }
 }
 
 @keyframes axisSignalBreathe {

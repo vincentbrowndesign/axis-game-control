@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation"
 import { useState, type FormEvent } from "react"
 import type {
+  AxisDailyVisibility,
   AxisInvite,
   AxisMemberContinuity,
+  AxisOrganizationActivity,
   AxisOrganizationRole,
   AxisOrganizationSettings,
 } from "@/lib/axis-orgs/memberships"
@@ -13,11 +15,13 @@ import styles from "./OrganizationAdminPanel.module.css"
 type OrganizationAdminPanelProps = {
   activeMembersThisWeek: number
   attendancePercent: number
+  dailyVisibility: AxisDailyVisibility
   invites: AxisInvite[]
   members: AxisMemberContinuity[]
   organizationName: string
   organizationSlug: string
   participationContinuity: string
+  recentActivity: AxisOrganizationActivity[]
   settings: AxisOrganizationSettings
   streakLeaders: AxisMemberContinuity[]
 }
@@ -32,11 +36,13 @@ const ROLE_OPTIONS: AxisOrganizationRole[] = [
 export function OrganizationAdminPanel({
   activeMembersThisWeek,
   attendancePercent,
+  dailyVisibility,
   invites,
   members,
   organizationName,
   organizationSlug,
   participationContinuity,
+  recentActivity,
   settings,
   streakLeaders,
 }: OrganizationAdminPanelProps) {
@@ -117,6 +123,33 @@ export function OrganizationAdminPanel({
           </div>
           <p className={styles.status}>{pending ? "Saving" : message || "Ready"}</p>
         </header>
+
+        <section className={styles.dailyPanel}>
+          <div className={styles.panelHeader}>
+            <span>Today</span>
+            <strong>{organizationName} rhythm</strong>
+          </div>
+          <div className={styles.dailyMetrics}>
+            <Metric label="checked in" value={String(dailyVisibility.checkedInToday)} />
+            <Metric label="completed" value={String(dailyVisibility.completedToday)} />
+            <Metric label="active today" value={String(dailyVisibility.activeToday)} />
+            <Metric label="most active" value={dailyVisibility.mostActiveToday} />
+            <Metric label="top streak" value={dailyVisibility.topStreak} />
+          </div>
+          <div className={styles.activityList}>
+            {recentActivity.length ? (
+              recentActivity.map((activity) => (
+                <article className={styles.activityRow} key={activity.id}>
+                  <span>{activity.label}</span>
+                  <strong>{activity.status}</strong>
+                  <em>{activity.detail}</em>
+                </article>
+              ))
+            ) : (
+              <p className={styles.empty}>No check-ins yet today.</p>
+            )}
+          </div>
+        </section>
 
         <section className={styles.grid}>
           <form className={styles.panel} onSubmit={submitInvite}>

@@ -91,11 +91,13 @@ export default async function OrganizationAdminPage({
     <OrganizationAdminPanel
       activeMembersThisWeek={adminModel.activeMembersThisWeek}
       attendancePercent={adminModel.attendancePercent}
+      dailyVisibility={adminModel.dailyVisibility}
       invites={adminModel.invites}
       members={adminModel.members}
       organizationName={organization.name}
       organizationSlug={organization.slug}
       participationContinuity={adminModel.participationContinuity}
+      recentActivity={adminModel.recentActivity}
       settings={adminModel.settings}
       streakLeaders={adminModel.streakLeaders}
     />

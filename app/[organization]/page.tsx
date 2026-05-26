@@ -66,6 +66,9 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
     : 0
   const lastCheckIn = summary?.checkIns[0]
   const checkedInToday = lastCheckIn ? isToday(lastCheckIn.occurred_at) : false
+  const checkedOutToday = Boolean(
+    checkedInToday && lastCheckIn?.checked_out_at
+  )
   const lastCheckInLabel = lastCheckIn
     ? formatLastCheckIn(lastCheckIn.occurred_at)
     : "No check-in yet"
@@ -74,6 +77,9 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
     checkedInToday && lastCheckIn
       ? `Checked in \u2014 ${formatAttendanceTime(lastCheckIn.occurred_at)}`
       : "Check in"
+  const checkoutLabel = lastCheckIn?.checked_out_at
+    ? `Checked out \u2014 ${formatAttendanceTime(lastCheckIn.checked_out_at)}`
+    : ""
   const leaderboardStanding = getLeaderboardStanding(
     leaderboard,
     identity?.clerkUserId || identity?.supabaseUserId || ""
@@ -119,6 +125,8 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
     <ContinuousAxisHome
       activeTodayLabel={activeTodayLabel}
       checkedInToday={checkedInToday}
+      checkedOutToday={checkedOutToday}
+      checkoutLabel={checkoutLabel}
       continuityDays={continuityDays}
       history={history}
       historyStats={historyStats}
