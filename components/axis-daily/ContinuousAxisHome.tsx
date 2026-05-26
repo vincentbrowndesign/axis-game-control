@@ -1,8 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { CSSProperties } from "react"
+import type { AxisSessionSegment } from "@/lib/axis-daily/session-flow"
 import styles from "@/app/page.module.css"
 
 type CheckInStatus =
@@ -19,6 +20,7 @@ type CheckInResponse = {
     id: string
     occurred_at: string
     reflection?: string | null
+    session_segments?: AxisSessionSegment[]
   }
   error?: string
   message?: string
@@ -58,6 +60,28 @@ type OrganizationSignal = {
   value: string
 }
 
+type OrganizationCulture = {
+  avatar: string
+  detail: string
+  metric: string
+  name: string
+  signal: string
+  slug: string
+}
+
+type HomeContinuityOption = {
+  durationMinutes: number
+  label: string
+}
+
+const HOME_CONTINUITY_OPTIONS: HomeContinuityOption[] = [
+  { durationMinutes: 35, label: "Home workout" },
+  { durationMinutes: 20, label: "Recovery session" },
+  { durationMinutes: 25, label: "Film study" },
+  { durationMinutes: 20, label: "Mobility work" },
+  { durationMinutes: 45, label: "Shooting workout" },
+]
+
 type ContinuousAxisHomeProps = {
   activeTodayLabel: string
   checkedOutToday: boolean
@@ -68,6 +92,7 @@ type ContinuousAxisHomeProps = {
   historyStats: HistoryStats
   lastCheckInLabel: string
   leaderboardSignal: string
+  organizationCulture?: OrganizationCulture[]
   organizationAvatar?: string
   organizationSignals?: OrganizationSignal[]
   organizationName?: string
@@ -76,6 +101,7 @@ type ContinuousAxisHomeProps = {
   participationSignal: string
   progressionCells: ProgressionCell[]
   ritualLabel: string
+  sessionSegments: AxisSessionSegment[]
   streakDays: number
   streakLabel: string
 }
@@ -90,6 +116,7 @@ export function ContinuousAxisHome({
   historyStats,
   lastCheckInLabel,
   leaderboardSignal,
+  organizationCulture = [],
   organizationAvatar,
   organizationSignals = [],
   organizationName = "Axis",
@@ -98,6 +125,7 @@ export function ContinuousAxisHome({
   participationSignal,
   progressionCells,
   ritualLabel,
+  sessionSegments,
   streakDays,
   streakLabel,
 }: ContinuousAxisHomeProps) {
@@ -110,6 +138,11 @@ export function ContinuousAxisHome({
     checkedOutToday ? checkoutLabel : checkedInToday ? ritualLabel : ""
   )
   const [reflection, setReflection] = useState("")
+  const [segments, setSegments] = useState(sessionSegments)
+
+  useEffect(() => {
+    setSegments(sessionSegments)
+  }, [sessionSegments])
 
   const actionLabel = useMemo(() => {
     if (status === "checking") return "Checking in"
@@ -150,7 +183,7 @@ export function ContinuousAxisHome({
     "--axis-ring-progress": `${ringProgress}%`,
   } as CSSProperties
 
-  async function submitCheckIn() {
+  async function submitCheckIn(homeContinuity?: HomeContinuityOption) {
     if (busy || status === "checked-out") return
 
     if (status === "history-updated") {
@@ -164,10 +197,10 @@ export function ContinuousAxisHome({
     try {
       const response = await fetch("/api/check-in", {
         body: JSON.stringify({
-          durationMinutes: 60,
-          notes: null,
+          durationMinutes: homeContinuity?.durationMinutes || 60,
+          notes: homeContinuity ? "Home continuity" : null,
           organizationSlug,
-          workoutType: "Training",
+          workoutType: homeContinuity?.label || "Training",
         }),
         headers: {
           "Content-Type": "application/json",
@@ -192,8 +225,11 @@ export function ContinuousAxisHome({
         data.checkIn.occurred_at
       )}`
       setCompletedAt(savedLabel)
+      if (data.checkIn.session_segments) {
+        setSegments(data.checkIn.session_segments)
+      }
       setStatus("history-updated")
-      setMessage(data.message || "History updated")
+      setMessage(homeContinuity ? "Home continuity saved" : data.message || "History updated")
       router.refresh()
     } catch (error) {
       console.error("AXIS CHECK-IN", {
@@ -231,6 +267,13 @@ export function ContinuousAxisHome({
       setCompletedAt(
         `Checked out - ${formatAttendanceTime(data.checkIn.checked_out_at)}`
       )
+      if (data.checkIn.session_segments) {
+        setSegments(data.checkIn.session_segments)
+      } else {
+        setSegments((current) =>
+          current.map((segment) => ({ ...segment, status: "completed" }))
+        )
+      }
       setStatus("checked-out")
       setMessage(data.message || "History updated")
       router.refresh()
@@ -241,6 +284,39 @@ export function ContinuousAxisHome({
       })
       setStatus("history-updated")
       setMessage("Check-out failed")
+    }
+  }
+
+  async function advanceSegment(segmentId: string) {
+    if (busy || status !== "history-updated") return
+
+    try {
+      const response = await fetch("/api/session-progress", {
+        body: JSON.stringify({
+          organizationSlug,
+          segmentId,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+      const data = (await response.json().catch(() => ({}))) as CheckInResponse
+
+      if (!response.ok || !data.ok || !data.checkIn?.session_segments) {
+        setMessage(humanCheckInError(data.error || "Unable to update session"))
+        return
+      }
+
+      setSegments(data.checkIn.session_segments)
+      setMessage(data.message || "Session updated")
+      router.refresh()
+    } catch (error) {
+      console.error("AXIS SESSION PROGRESS", {
+        error,
+        stage: "client-session-progress-failed",
+      })
+      setMessage("Unable to update session")
     }
   }
 
@@ -286,6 +362,23 @@ export function ContinuousAxisHome({
           </section>
         ) : null}
 
+        {organizationCulture.length ? (
+          <section className={styles.cultureLayer} aria-label="Organization culture">
+            {organizationCulture.map((organization) => (
+              <article className={styles.cultureCard} key={organization.slug}>
+                <span className={styles.cultureAvatar} aria-hidden="true">
+                  {organization.avatar}
+                </span>
+                <div>
+                  <span>{organization.name}</span>
+                  <strong>{organization.signal}</strong>
+                  <em>{organization.metric} / {organization.detail}</em>
+                </div>
+              </article>
+            ))}
+          </section>
+        ) : null}
+
         <section className={styles.activityRail} aria-label="Gym activity">
           <div className={styles.activitySignal}>
             <span className={styles.liveDot} aria-hidden="true" />
@@ -318,7 +411,7 @@ export function ContinuousAxisHome({
                     : ""
                 }`}
                 disabled={busy || status === "checked-out"}
-                onClick={submitCheckIn}
+                onClick={() => submitCheckIn()}
                 type="button"
               >
                 {actionLabel}
@@ -335,6 +428,23 @@ export function ContinuousAxisHome({
                 <p className={styles.ritualWhisper}>Write your story.</p>
               )}
               <p className={styles.inlineStatus}>{message}</p>
+              {status === "idle" ? (
+                <div className={styles.homeContinuity} aria-label="Home continuity">
+                  <span>away from the gym</span>
+                  <div>
+                    {HOME_CONTINUITY_OPTIONS.map((option) => (
+                      <button
+                        disabled={busy}
+                        key={option.label}
+                        onClick={() => submitCheckIn(option)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className={styles.ritualMomentum} aria-hidden="true">
                 {progressionCells.slice(0, 9).map((cell) => (
                   <span
@@ -349,6 +459,28 @@ export function ContinuousAxisHome({
                   />
                 ))}
               </div>
+              {status === "history-updated" || status === "checked-out" ? (
+                <div className={styles.sessionFlow} aria-label="Today session">
+                  {segments.map((segment) => (
+                    <button
+                      className={
+                        segment.status === "completed"
+                          ? styles.sessionSegmentComplete
+                          : segment.status === "active"
+                            ? styles.sessionSegmentActive
+                            : styles.sessionSegment
+                      }
+                      disabled={status === "checked-out" || segment.status !== "active"}
+                      key={segment.id}
+                      onClick={() => advanceSegment(segment.id)}
+                      type="button"
+                    >
+                      <span>{segment.label}</span>
+                      <strong>{segment.status}</strong>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
 

@@ -4,7 +4,10 @@ import {
   formatAttendanceDate,
   getActiveTodayCount,
   getAttendanceSummary,
+  getOrganizationCulture,
+  getParticipationSignals,
 } from "@/lib/axis-daily/attendance"
+import { AXIS_DEFAULT_SESSION_SEGMENTS } from "@/lib/axis-daily/session-flow"
 import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
 import { ContinuousAxisHome } from "@/components/axis-daily/ContinuousAxisHome"
 import styles from "./page.module.css"
@@ -14,6 +17,8 @@ export default async function HomePage() {
   const summary = identity ? await getAttendanceSummary(identity, 60) : null
   const leaderboard = identity ? await getAxisLeaderboard() : []
   const activeTodayCount = identity ? await getActiveTodayCount() : 0
+  const participationSignals = identity ? await getParticipationSignals() : []
+  const organizationCulture = identity ? await getOrganizationCulture() : []
   const lastCheckIn = summary?.checkIns[0]
   const checkedInToday = lastCheckIn ? isToday(lastCheckIn.occurred_at) : false
   const checkedOutToday = Boolean(
@@ -103,9 +108,12 @@ export default async function HomePage() {
       lastCheckInLabel={lastCheckInLabel}
       leaderboardSignal={leaderboardSignal}
       leaderboardPlacement={leaderboardStanding.placement}
+      organizationCulture={organizationCulture}
+      organizationSignals={participationSignals}
       participationSignal={participationSignal}
       progressionCells={accumulation}
       ritualLabel={ritualLabel}
+      sessionSegments={lastCheckIn?.session_segments || AXIS_DEFAULT_SESSION_SEGMENTS}
       streakDays={summary?.streakDays || 0}
       streakLabel={streakLabel}
     />

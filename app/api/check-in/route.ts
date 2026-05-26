@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
+import {
+  AXIS_DEFAULT_SESSION_SEGMENTS,
+  normalizeSessionSegments,
+} from "@/lib/axis-daily/session-flow"
 import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
@@ -145,6 +149,7 @@ export async function POST(request: Request) {
     latitude: hasLocation ? latitude : 0,
     longitude: hasLocation ? longitude : 0,
     notes,
+    session_segments: AXIS_DEFAULT_SESSION_SEGMENTS,
     status: "checked_in",
     user_id: identity.supabaseUserId,
     workout_type: workoutType,
@@ -174,7 +179,10 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({
-      checkIn: existingCheckIn,
+      checkIn: {
+        ...existingCheckIn,
+        session_segments: normalizeSessionSegments(existingCheckIn.session_segments),
+      },
       distanceMeters: Math.round(distanceMeters),
       duplicate: true,
       message: "History updated",
@@ -218,12 +226,13 @@ export async function POST(request: Request) {
   const inserted = await supabaseAdmin
     .from("axis_training_check_ins")
     .insert(insertPayload)
-    .select("id, occurred_at, checked_out_at, reflection")
+    .select("id, occurred_at, checked_out_at, reflection, session_segments")
     .single<{
       checked_out_at: string | null
       id: string
       occurred_at: string
       reflection: string | null
+      session_segments: typeof AXIS_DEFAULT_SESSION_SEGMENTS
     }>()
 
   if (inserted.error) {
@@ -252,7 +261,10 @@ export async function POST(request: Request) {
   })
 
   return NextResponse.json({
-    checkIn: inserted.data,
+    checkIn: {
+      ...inserted.data,
+      session_segments: normalizeSessionSegments(inserted.data.session_segments),
+    },
     distanceMeters: Math.round(distanceMeters),
     message: "History updated",
     ok: true,
@@ -314,7 +326,7 @@ async function findExistingCheckIn({
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")
-    .select("id, occurred_at, checked_out_at, reflection")
+    .select("id, occurred_at, checked_out_at, reflection, session_segments")
     .eq("status", "checked_in")
     .gte("occurred_at", start.toISOString())
     .lt("occurred_at", end.toISOString())
@@ -335,6 +347,7 @@ async function findExistingCheckIn({
       id: string
       occurred_at: string
       reflection: string | null
+      session_segments: typeof AXIS_DEFAULT_SESSION_SEGMENTS
     }>(),
     new Promise<{
       data: null

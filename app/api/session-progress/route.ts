@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import {
-  completeSessionSegments,
+  advanceSessionSegment,
   normalizeSessionSegments,
 } from "@/lib/axis-daily/session-flow"
 import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
@@ -9,9 +9,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
 
-type CheckOutBody = {
+type SessionProgressBody = {
   organizationSlug?: unknown
-  reflection?: unknown
+  segmentId?: unknown
 }
 
 export async function POST(request: Request) {
@@ -22,7 +22,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in required", traceId }, { status: 401 })
   }
 
-  const body = (await request.json().catch(() => ({}))) as CheckOutBody
+  const body = (await request.json().catch(() => ({}))) as SessionProgressBody
+  const segmentId = typeof body.segmentId === "string" ? body.segmentId : ""
+
+  if (!segmentId) {
+    return NextResponse.json(
+      { error: "Session step missing", traceId },
+      { status: 400 }
+    )
+  }
+
   const organization =
     typeof body.organizationSlug === "string" && body.organizationSlug.trim()
       ? await getAxisOrganizationBySlug(body.organizationSlug)
@@ -53,61 +62,45 @@ export async function POST(request: Request) {
   }
 
   if (activeCheckIn.checked_out_at) {
-    return NextResponse.json({
-      checkIn: {
-        ...activeCheckIn,
-        session_segments: normalizeSessionSegments(activeCheckIn.session_segments),
-      },
-      duplicate: true,
-      message: "History updated",
-      ok: true,
-      traceId,
-    })
+    return NextResponse.json(
+      { error: "Session already completed", traceId },
+      { status: 409 }
+    )
   }
 
-  const checkedOutAt = new Date().toISOString()
-  const reflection =
-    typeof body.reflection === "string" && body.reflection.trim()
-      ? body.reflection.trim().slice(0, 160)
-      : null
+  const sessionSegments = advanceSessionSegment(
+    normalizeSessionSegments(activeCheckIn.session_segments),
+    segmentId
+  )
   const result = await supabaseAdmin
     .from("axis_training_check_ins")
-    .update({
-      checked_out_at: checkedOutAt,
-      reflection,
-      session_segments: completeSessionSegments(
-        normalizeSessionSegments(activeCheckIn.session_segments)
-      ),
-    })
+    .update({ session_segments: sessionSegments })
     .eq("id", activeCheckIn.id)
-    .select("id, occurred_at, checked_out_at, reflection, session_segments")
+    .select("id, session_segments")
     .single<{
-      checked_out_at: string | null
       id: string
-      occurred_at: string
-      reflection: string | null
       session_segments: unknown
     }>()
 
   if (result.error) {
-    console.error("AXIS CHECK-OUT", {
+    console.error("AXIS SESSION PROGRESS", {
       message: result.error.message,
       stage: "update-failed",
       traceId,
     })
 
     return NextResponse.json(
-      { error: "Check-out failed", traceId },
+      { error: "Unable to update session", traceId },
       { status: 500 }
     )
   }
 
   return NextResponse.json({
     checkIn: {
-      ...result.data,
+      id: result.data.id,
       session_segments: normalizeSessionSegments(result.data.session_segments),
     },
-    message: "History updated",
+    message: "Session updated",
     ok: true,
     traceId,
   })
@@ -129,7 +122,7 @@ async function findTodayCheckIn({
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")
-    .select("id, occurred_at, checked_out_at, reflection, session_segments")
+    .select("id, checked_out_at, session_segments")
     .eq("status", "checked_in")
     .gte("occurred_at", start.toISOString())
     .lt("occurred_at", end.toISOString())
@@ -148,8 +141,6 @@ async function findTodayCheckIn({
     query.maybeSingle<{
       checked_out_at: string | null
       id: string
-      occurred_at: string
-      reflection: string | null
       session_segments: unknown
     }>(),
     new Promise<{
@@ -160,7 +151,7 @@ async function findTodayCheckIn({
         () =>
           resolve({
             data: null,
-            error: new Error("Check-out lookup timed out"),
+            error: new Error("Session progress lookup timed out"),
           }),
         2500
       )

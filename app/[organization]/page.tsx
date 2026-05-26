@@ -5,7 +5,10 @@ import {
   formatAttendanceDate,
   getActiveTodayCount,
   getAttendanceSummary,
+  getOrganizationCulture,
+  getParticipationSignals,
 } from "@/lib/axis-daily/attendance"
+import { AXIS_DEFAULT_SESSION_SEGMENTS } from "@/lib/axis-daily/session-flow"
 import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
 import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { ContinuousAxisHome } from "@/components/axis-daily/ContinuousAxisHome"
@@ -64,6 +67,12 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
   const activeTodayCount = identity
     ? await getActiveTodayCount(organizationId)
     : 0
+  const participationSignals = identity
+    ? await getParticipationSignals(organizationId)
+    : []
+  const organizationCulture = identity
+    ? await getOrganizationCulture(organizationId)
+    : []
   const lastCheckIn = summary?.checkIns[0]
   const checkedInToday = lastCheckIn ? isToday(lastCheckIn.occurred_at) : false
   const checkedOutToday = Boolean(
@@ -101,11 +110,6 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
   const activeTodayLabel = activeTodayCount
     ? `${activeTodayCount} active today`
     : "floor opening"
-  const organizationSignals = buildOrganizationSignals({
-    activeTodayCount,
-    leaderboard,
-    organizationName: organization.name,
-  })
   const checkIns = summary?.checkIns || []
   const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
@@ -134,54 +138,18 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
       leaderboardPlacement={leaderboardStanding.placement}
       leaderboardSignal={leaderboardSignal}
       organizationAvatar={organization.avatar}
+      organizationCulture={organizationCulture}
       organizationName={organization.name}
-      organizationSignals={organizationSignals}
+      organizationSignals={participationSignals}
       organizationSlug={organization.slug}
       participationSignal={participationSignal}
       progressionCells={accumulation}
       ritualLabel={ritualLabel}
+      sessionSegments={lastCheckIn?.session_segments || AXIS_DEFAULT_SESSION_SEGMENTS}
       streakDays={summary?.streakDays || 0}
       streakLabel={streakLabel}
     />
   )
-}
-
-function buildOrganizationSignals({
-  activeTodayCount,
-  leaderboard,
-  organizationName,
-}: {
-  activeTodayCount: number
-  leaderboard: Awaited<ReturnType<typeof getAxisLeaderboard>>
-  organizationName: string
-}) {
-  const mostActive = leaderboard.find(
-    (category) => category.id === "hours-this-week"
-  )?.entries[0]
-  const streakLeader = leaderboard.find(
-    (category) => category.id === "active-streak"
-  )?.entries[0]
-
-  return [
-    {
-      label: `${organizationName} today`,
-      value: activeTodayCount
-        ? `${activeTodayCount} checked in today`
-        : "floor opening",
-    },
-    {
-      label: "active streak leader",
-      value: streakLeader
-        ? `${streakLeader.label} - ${streakLeader.value}`
-        : "waiting for a streak",
-    },
-    {
-      label: "most active this week",
-      value: mostActive
-        ? `${mostActive.label} - ${mostActive.value}`
-        : "board open",
-    },
-  ]
 }
 
 function getLeaderboardStanding(

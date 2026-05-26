@@ -76,6 +76,12 @@ Status: foundation
 - Mobile-first athletic interaction pass moved the check-in ritual higher in the small-screen flow, enlarged touch targets, reduced mobile scan weight, hid nonessential activity meter detail, and improved safe-area spacing for one-handed gym use.
 - Session completion loop added checkout on the saved check-in record, optional one-line reflection, and the completed states `Checking out`, `Checked out`, and `History updated` so Axis can track completed effort cycles.
 - Admin visibility now gives coaches a calm daily summary from real organization check-ins: checked in, completed sessions, active today, top streak, and recent participation activity without adding surveillance or analytics-heavy UI.
+- Real activity pass added saved participation signals to the member and organization worlds: active today, organization activity, recent check-ins, streak movement, and weekly leading organization all come from persisted check-in records.
+- Calendar/progression refinement made the continuity calendar the primary emotional object with stronger active-day treatment, tactile completed-day tiles, visible streak chains, softer future states, and quieter supporting metadata.
+- Organization culture layer added real organization identity cards inside the shared Axis world, showing active communities, participation metrics, completion detail, and culture signals from persisted organization check-ins.
+- Lightweight session flow now appears after check-in with persisted segment states for Warmup, Station 1, Station 2, and Scrimmage. Segments move from started to active to completed, and checkout marks the day complete without adding forms or complex workout tooling.
+- Home continuity added optional one-tap effort records for home workout, recovery, film study, mobility work, and shooting workout so streak/history can grow beyond physical practice without surveillance or extra forms.
+- Identity token infrastructure added the first physical layer: users can create an Axis tag URL for QR/NFC use, and `/t/[token]` performs a real token-based check-in that updates history without turning the wearable into surveillance hardware.
 
 FUTURE LAYERS
 
