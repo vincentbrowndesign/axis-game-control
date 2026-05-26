@@ -94,6 +94,7 @@ export default async function OrganizationAdminPage({
       dailyVisibility={adminModel.dailyVisibility}
       invites={adminModel.invites}
       members={adminModel.members}
+      operationalTrust={adminModel.operationalTrust}
       organizationName={organization.name}
       organizationSlug={organization.slug}
       participationContinuity={adminModel.participationContinuity}

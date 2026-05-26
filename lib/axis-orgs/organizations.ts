@@ -44,6 +44,7 @@ const RESERVED_SLUGS = new Set([
   "leaderboard",
   "measures",
   "memory",
+  "profile",
   "replay-native",
   "rf-test",
   "sign-in",

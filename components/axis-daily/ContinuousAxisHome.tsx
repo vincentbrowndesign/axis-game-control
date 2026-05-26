@@ -69,6 +69,13 @@ type OrganizationCulture = {
   slug: string
 }
 
+type ContinuityReminder = {
+  id: string
+  label: string
+  tone: "active" | "calm" | "watch"
+  value: string
+}
+
 type HomeContinuityOption = {
   durationMinutes: number
   label: string
@@ -100,6 +107,7 @@ type ContinuousAxisHomeProps = {
   leaderboardPlacement: string
   participationSignal: string
   progressionCells: ProgressionCell[]
+  reminders: ContinuityReminder[]
   ritualLabel: string
   sessionSegments: AxisSessionSegment[]
   streakDays: number
@@ -124,6 +132,7 @@ export function ContinuousAxisHome({
   leaderboardPlacement,
   participationSignal,
   progressionCells,
+  reminders,
   ritualLabel,
   sessionSegments,
   streakDays,
@@ -334,6 +343,9 @@ export function ContinuousAxisHome({
               {organizationName}
             </p>
             <h1 className={styles.memberTitle}>Welcome back.</h1>
+            <a className={styles.profileLink} href="/profile">
+              Save file
+            </a>
           </div>
           <div className={styles.topSignals} aria-label="Continuity state">
             <div className={styles.topSignal}>
@@ -374,6 +386,26 @@ export function ContinuousAxisHome({
                   <strong>{organization.signal}</strong>
                   <em>{organization.metric} / {organization.detail}</em>
                 </div>
+              </article>
+            ))}
+          </section>
+        ) : null}
+
+        {reminders.length ? (
+          <section className={styles.reminderRail} aria-label="Continuity reminders">
+            {reminders.map((reminder) => (
+              <article
+                className={`${styles.reminderCard} ${
+                  reminder.tone === "active"
+                    ? styles.reminderCardActive
+                    : reminder.tone === "watch"
+                      ? styles.reminderCardWatch
+                      : ""
+                }`}
+                key={reminder.id}
+              >
+                <span>{reminder.label}</span>
+                <strong>{reminder.value}</strong>
               </article>
             ))}
           </section>

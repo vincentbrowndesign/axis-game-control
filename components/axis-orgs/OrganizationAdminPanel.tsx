@@ -6,6 +6,7 @@ import type {
   AxisDailyVisibility,
   AxisInvite,
   AxisMemberContinuity,
+  AxisOperationalTrustItem,
   AxisOrganizationActivity,
   AxisOrganizationRole,
   AxisOrganizationSettings,
@@ -18,6 +19,7 @@ type OrganizationAdminPanelProps = {
   dailyVisibility: AxisDailyVisibility
   invites: AxisInvite[]
   members: AxisMemberContinuity[]
+  operationalTrust: AxisOperationalTrustItem[]
   organizationName: string
   organizationSlug: string
   participationContinuity: string
@@ -39,6 +41,7 @@ export function OrganizationAdminPanel({
   dailyVisibility,
   invites,
   members,
+  operationalTrust,
   organizationName,
   organizationSlug,
   participationContinuity,
@@ -148,6 +151,31 @@ export function OrganizationAdminPanel({
             ) : (
               <p className={styles.empty}>No check-ins yet today.</p>
             )}
+          </div>
+        </section>
+
+        <section className={styles.trustPanel}>
+          <div className={styles.panelHeader}>
+            <span>Operational pulse</span>
+            <strong>Core loop health</strong>
+          </div>
+          <div className={styles.trustGrid}>
+            {operationalTrust.map((item) => (
+              <article
+                className={`${styles.trustItem} ${
+                  item.state === "active"
+                    ? styles.trustItemActive
+                    : item.state === "ready"
+                      ? styles.trustItemReady
+                      : ""
+                }`}
+                key={item.label}
+              >
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <em>{item.detail}</em>
+              </article>
+            ))}
           </div>
         </section>
 

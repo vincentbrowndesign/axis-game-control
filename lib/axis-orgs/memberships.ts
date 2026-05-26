@@ -61,6 +61,13 @@ export type AxisOrganizationActivity = {
   status: string
 }
 
+export type AxisOperationalTrustItem = {
+  detail: string
+  label: string
+  state: "active" | "ready" | "waiting"
+  value: string
+}
+
 export type AxisOrganizationAdminModel = {
   activeMembersThisWeek: number
   attendancePercent: number
@@ -69,6 +76,7 @@ export type AxisOrganizationAdminModel = {
   members: AxisMemberContinuity[]
   participationContinuity: string
   recentActivity: AxisOrganizationActivity[]
+  operationalTrust: AxisOperationalTrustItem[]
   settings: AxisOrganizationSettings
   streakLeaders: AxisMemberContinuity[]
 }
@@ -202,6 +210,16 @@ export async function getOrganizationAdminModel(organizationId: string) {
     },
     invites,
     members,
+    operationalTrust: buildOperationalTrust({
+      activeMembersThisWeek,
+      attendancePercent,
+      checkedInToday,
+      completedToday,
+      invites,
+      members,
+      recentActivityCount: checkIns.length,
+      streakLeaders,
+    }),
     participationContinuity: `${activeMembersThisWeek}/${members.length} active this week`,
     recentActivity: checkIns.slice(0, 6).map((checkIn, index) => {
       const member = members.find(
@@ -223,6 +241,71 @@ export async function getOrganizationAdminModel(organizationId: string) {
     settings,
     streakLeaders,
   } satisfies AxisOrganizationAdminModel
+}
+
+function buildOperationalTrust({
+  activeMembersThisWeek,
+  attendancePercent,
+  checkedInToday,
+  completedToday,
+  invites,
+  members,
+  recentActivityCount,
+  streakLeaders,
+}: {
+  activeMembersThisWeek: number
+  attendancePercent: number
+  checkedInToday: number
+  completedToday: number
+  invites: AxisInvite[]
+  members: AxisMemberContinuity[]
+  recentActivityCount: number
+  streakLeaders: AxisMemberContinuity[]
+}) {
+  return [
+    {
+      detail: invites.length
+        ? `${invites.length} invite${invites.length === 1 ? "" : "s"} waiting`
+        : "join flow ready",
+      label: "onboarding",
+      state: members.length ? "active" : invites.length ? "ready" : "waiting",
+      value: members.length
+        ? `${members.length} member${members.length === 1 ? "" : "s"}`
+        : "invite members",
+    },
+    {
+      detail: recentActivityCount
+        ? "saved check-ins found"
+        : "first saved check-in waiting",
+      label: "persistence",
+      state: recentActivityCount ? "active" : "waiting",
+      value: recentActivityCount ? "history saving" : "history empty",
+    },
+    {
+      detail: completedToday
+        ? `${completedToday} completed today`
+        : "completion loop ready",
+      label: "participation",
+      state: checkedInToday ? "active" : "ready",
+      value: checkedInToday
+        ? `${checkedInToday} checked in`
+        : "floor opening",
+    },
+    {
+      detail: `${activeMembersThisWeek}/${members.length || 0} active this week`,
+      label: "continuity",
+      state: activeMembersThisWeek ? "active" : members.length ? "ready" : "waiting",
+      value: `${attendancePercent}% attendance`,
+    },
+    {
+      detail: streakLeaders[0]
+        ? `${streakLeaders[0].streakDays} day top streak`
+        : "rankings start after check-ins",
+      label: "leaderboard",
+      state: streakLeaders.length ? "active" : "waiting",
+      value: streakLeaders.length ? "ranking live" : "board waiting",
+    },
+  ] satisfies AxisOperationalTrustItem[]
 }
 
 async function readMemberships(organizationId: string) {

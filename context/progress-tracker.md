@@ -82,6 +82,9 @@ Status: foundation
 - Lightweight session flow now appears after check-in with persisted segment states for Warmup, Station 1, Station 2, and Scrimmage. Segments move from started to active to completed, and checkout marks the day complete without adding forms or complex workout tooling.
 - Home continuity added optional one-tap effort records for home workout, recovery, film study, mobility work, and shooting workout so streak/history can grow beyond physical practice without surveillance or extra forms.
 - Identity token infrastructure added the first physical layer: users can create an Axis tag URL for QR/NFC use, and `/t/[token]` performs a real token-based check-in that updates history without turning the wearable into surveillance hardware.
+- Daily return reminders now generate quiet in-product continuity prompts from real streak, organization, and leaderboard state so return behavior feels supported rather than spammed.
+- Player profile save file added at `/profile`, showing current streak, total sessions, saved time, organization, active history calendar, leaderboard placement, and recent participation from real continuity records.
+- Operational trust pass added a calm organization pulse for onboarding, persistence, participation, continuity, and leaderboard health, derived from real members, invites, check-ins, streaks, and completion records.
 
 FUTURE LAYERS
 

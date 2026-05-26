@@ -1,0 +1,317 @@
+import Link from "next/link"
+import { currentUser } from "@clerk/nextjs/server"
+import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
+import {
+  formatAttendanceDate,
+  getAttendanceSummary,
+} from "@/lib/axis-daily/attendance"
+import {
+  getAxisLeaderboard,
+  type AxisLeaderboardCategory,
+} from "@/lib/axis-daily/leaderboard"
+import { supabaseAdmin } from "@/lib/supabase/admin"
+import styles from "./page.module.css"
+
+type ProfileDay = {
+  id: string
+  label: string
+  state: "active" | "complete" | "empty" | "future" | "missed"
+}
+
+type MembershipRow = {
+  axis_organizations: {
+    avatar: string | null
+    logo: string | null
+    name: string
+    slug: string
+  } | null
+  joined_at: string | null
+  role: string
+}
+
+export default async function PlayerProfilePage() {
+  const identity = await getAxisRequestIdentity()
+
+  if (!identity) {
+    return (
+      <main className={styles.surface}>
+        <section className={styles.entryShell}>
+          <p className={styles.brand}>Axis</p>
+          <h1 className={styles.title}>Save file.</h1>
+          <p className={styles.statement}>
+            Sign in to see the history you are building.
+          </p>
+          <Link className={styles.link} href="/sign-in">
+            Sign in
+          </Link>
+        </section>
+      </main>
+    )
+  }
+
+  const [user, summary, leaderboard, memberships] = await Promise.all([
+    currentUser().catch(() => null),
+    getAttendanceSummary(identity, 180),
+    getAxisLeaderboard(),
+    getPlayerMemberships(identity),
+  ])
+  const memberId = identity.clerkUserId || identity.supabaseUserId || ""
+  const completedDays = new Set(
+    summary.checkIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+  )
+  const profileDays = buildProfileDays(completedDays)
+  const recentParticipation = summary.checkIns.slice(0, 6)
+  const standing = getLeaderboardStanding(leaderboard, memberId)
+  const primaryOrganization = memberships[0]
+  const displayName = user?.firstName
+    ? `${user.firstName}'s save file`
+    : memberFileLabel(memberId)
+
+  return (
+    <main className={styles.surface}>
+      <section className={styles.shell}>
+        <header className={styles.header}>
+          <div>
+            <p className={styles.brand}>Axis profile</p>
+            <h1 className={styles.title}>{displayName}</h1>
+          </div>
+          <div className={styles.identityCard} aria-label="Player identity">
+            <span>organization</span>
+            <strong>{primaryOrganization?.axis_organizations?.name || "Axis"}</strong>
+            <em>{primaryOrganization?.role || "player"}</em>
+          </div>
+        </header>
+
+        <section className={styles.metricGrid} aria-label="Player save data">
+          <article className={styles.metric}>
+            <span>current streak</span>
+            <strong>{summary.streakDays}</strong>
+            <em>{summary.streakDays === 1 ? "day active" : "days active"}</em>
+          </article>
+          <article className={styles.metric}>
+            <span>total sessions</span>
+            <strong>{summary.checkIns.length}</strong>
+            <em>{summary.checkIns.length === 1 ? "saved session" : "saved sessions"}</em>
+          </article>
+          <article className={styles.metric}>
+            <span>total time</span>
+            <strong>{formatHours(summary.totalMinutes)}</strong>
+            <em>hours later</em>
+          </article>
+          <article className={styles.metric}>
+            <span>leaderboard</span>
+            <strong>{standing.placement}</strong>
+            <em>{standing.context}</em>
+          </article>
+        </section>
+
+        <section className={styles.profileBody}>
+          <article className={styles.historyPanel}>
+            <div className={styles.sectionHeader}>
+              <span>active history</span>
+              <strong>{profileDays.filter((day) => day.state === "complete").length} marks</strong>
+            </div>
+            <div className={styles.historyGrid} aria-label="Active history calendar">
+              {profileDays.map((day) => (
+                <span
+                  aria-label={`${day.label} ${day.state}`}
+                  className={
+                    day.state === "complete"
+                      ? styles.dayComplete
+                      : day.state === "active"
+                        ? styles.dayActive
+                        : day.state === "future"
+                          ? styles.dayFuture
+                          : day.state === "missed"
+                            ? styles.dayMissed
+                            : styles.day
+                  }
+                  key={day.id}
+                >
+                  {day.label}
+                </span>
+              ))}
+            </div>
+          </article>
+
+          <article className={styles.recentPanel}>
+            <div className={styles.sectionHeader}>
+              <span>recent participation</span>
+              <strong>{recentParticipation.length ? "saved" : "ready"}</strong>
+            </div>
+            <div className={styles.recentList}>
+              {recentParticipation.length ? (
+                recentParticipation.map((checkIn) => (
+                  <div className={styles.recentItem} key={checkIn.id}>
+                    <span>{formatAttendanceDate(checkIn.occurred_at)}</span>
+                    <strong>{checkIn.workout_type}</strong>
+                    <em>
+                      {formatAttendanceTime(checkIn.occurred_at)}
+                      {checkIn.checked_out_at
+                        ? ` / completed ${formatAttendanceTime(checkIn.checked_out_at)}`
+                        : ""}
+                    </em>
+                  </div>
+                ))
+              ) : (
+                <p className={styles.emptyState}>No saved sessions yet.</p>
+              )}
+            </div>
+          </article>
+        </section>
+
+        <footer className={styles.footer}>
+          <Link className={styles.link} href="/">
+            Check in
+          </Link>
+          <Link className={styles.link} href="/leaderboard">
+            Leaderboard
+          </Link>
+        </footer>
+      </section>
+    </main>
+  )
+}
+
+async function getPlayerMemberships(
+  identity: NonNullable<Awaited<ReturnType<typeof getAxisRequestIdentity>>>
+) {
+  let query = supabaseAdmin
+    .from("axis_organization_memberships")
+    .select("role, joined_at, axis_organizations(name, slug, avatar, logo)")
+    .eq("status", "active")
+    .order("joined_at", { ascending: true })
+    .limit(4)
+
+  query = identity.supabaseUserId
+    ? query.eq("user_id", identity.supabaseUserId)
+    : query.eq("clerk_user_id", identity.clerkUserId || "")
+
+  const result = await Promise.race([
+    query.returns<MembershipRow[]>(),
+    timeoutMemberships(2500),
+  ])
+
+  if (result.error) return []
+
+  return result.data || []
+}
+
+function getLeaderboardStanding(
+  categories: AxisLeaderboardCategory[],
+  memberId: string
+) {
+  if (!memberId) {
+    return {
+      context: "MOST ACTIVE",
+      placement: "unranked",
+    }
+  }
+
+  for (const category of categories) {
+    const entry = category.entries.find((candidate) => candidate.id === memberId)
+
+    if (entry) {
+      return {
+        context: leaderboardContext(category.id),
+        placement: `#${entry.rank} ${leaderboardScope(category.id)}`,
+      }
+    }
+  }
+
+  return {
+    context: "MOST ACTIVE",
+    placement: "unranked",
+  }
+}
+
+function leaderboardContext(categoryId: string) {
+  if (categoryId === "active-today") return "MOST ACTIVE TODAY"
+  if (categoryId === "active-streak") return "LONGEST STREAK"
+  if (categoryId === "monthly-consistency") return "MOST CONSISTENT"
+  if (categoryId === "sessions-completed") return "MOST SESSIONS"
+
+  return "MOST ACTIVE"
+}
+
+function leaderboardScope(categoryId: string) {
+  if (categoryId === "active-today") return "TODAY"
+  if (categoryId === "active-streak") return "STREAK"
+  if (categoryId === "monthly-consistency") return "MONTH"
+  if (categoryId === "sessions-completed") return "SESSIONS"
+
+  return "THIS WEEK"
+}
+
+function buildProfileDays(completedDays: Set<string>) {
+  const today = new Date()
+  const daysInMonth = new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    0
+  ).getDate()
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(today.getFullYear(), today.getMonth(), index + 1)
+    const key = toDateKey(date)
+
+    return {
+      id: key,
+      label: String(index + 1).padStart(2, "0"),
+      state: completedDays.has(key)
+        ? ("complete" as const)
+        : isToday(date)
+          ? ("active" as const)
+          : date > today
+            ? ("future" as const)
+            : ("missed" as const),
+    } satisfies ProfileDay
+  })
+}
+
+function formatAttendanceTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value))
+}
+
+function formatHours(minutes: number) {
+  if (minutes < 60) return `${minutes}m`
+
+  const hours = minutes / 60
+
+  return `${hours.toFixed(hours >= 10 ? 0 : 1)}h`
+}
+
+function isToday(date: Date) {
+  const today = new Date()
+
+  return toDateKey(date) === toDateKey(today)
+}
+
+function memberFileLabel(value: string) {
+  const suffix = value.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()
+
+  return suffix ? `FILE ${suffix}` : "Player save file"
+}
+
+function timeoutMemberships(milliseconds: number) {
+  return new Promise<{
+    data: MembershipRow[] | null
+    error: Error
+  }>((resolve) => {
+    setTimeout(
+      () =>
+        resolve({
+          data: null,
+          error: new Error("Profile membership lookup timed out"),
+        }),
+      milliseconds
+    )
+  })
+}
+
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10)
+}

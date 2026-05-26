@@ -1,0 +1,332 @@
+.surface {
+  --axis-accent: 212, 143, 45;
+  --axis-live: 35, 142, 82;
+  --axis-ink: 35, 32, 27;
+  --axis-panel: 242, 236, 223;
+  align-items: flex-start;
+  background:
+    radial-gradient(circle at 20% 8%, rgba(255, 252, 240, 0.38), transparent 18rem),
+    radial-gradient(circle at 82% 18%, rgba(var(--axis-accent), 0.12), transparent 20rem),
+    linear-gradient(180deg, #ddd4c5 0%, #cec4b2 48%, #b8ad9b 100%);
+  color: rgb(var(--axis-ink));
+  display: flex;
+  min-height: 100dvh;
+  overflow: auto;
+  padding: clamp(5rem, 7vw, 6rem) clamp(1.5rem, 4vw, 4rem) clamp(2rem, 4vw, 4rem);
+}
+
+.shell,
+.entryShell {
+  display: grid;
+  margin: 0 auto;
+  max-width: 1160px;
+  width: 100%;
+}
+
+.shell {
+  gap: clamp(1rem, 2.5vw, 2rem);
+}
+
+.entryShell {
+  align-content: center;
+  min-height: 70dvh;
+}
+
+.brand,
+.statement,
+.link,
+.identityCard,
+.metric,
+.sectionHeader,
+.recentItem,
+.emptyState {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+}
+
+.brand,
+.link,
+.identityCard span,
+.identityCard em,
+.metric span,
+.metric em,
+.sectionHeader,
+.recentItem span,
+.recentItem em,
+.emptyState {
+  text-transform: uppercase;
+}
+
+.brand {
+  color: rgba(var(--axis-accent), 0.72);
+  font-size: 0.72rem;
+  margin: 0 0 0.9rem;
+}
+
+.title {
+  color: rgba(var(--axis-ink), 0.94);
+  font-size: clamp(4.2rem, 10vw, 7.8rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.94;
+  margin: 0;
+  max-width: 14ch;
+}
+
+.statement {
+  color: rgba(var(--axis-ink), 0.54);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  margin: 1.3rem 0 0;
+  max-width: 32rem;
+}
+
+.header {
+  align-items: end;
+  display: grid;
+  gap: clamp(1rem, 3vw, 2rem);
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.28fr);
+}
+
+.identityCard,
+.metric,
+.historyPanel,
+.recentPanel {
+  background: rgba(var(--axis-panel), 0.58);
+  border: 1px solid rgba(91, 76, 56, 0.14);
+  border-radius: 1.15rem;
+}
+
+.identityCard {
+  display: grid;
+  gap: 0.45rem;
+  min-height: 6.2rem;
+  padding: 0.9rem;
+}
+
+.identityCard span,
+.metric span,
+.sectionHeader span,
+.recentItem span {
+  color: rgba(var(--axis-ink), 0.38);
+  font-size: 0.58rem;
+}
+
+.identityCard strong {
+  color: rgba(var(--axis-ink), 0.82);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.identityCard em,
+.metric em,
+.recentItem em,
+.emptyState {
+  color: rgba(var(--axis-ink), 0.4);
+  font-size: 0.58rem;
+  font-style: normal;
+}
+
+.metricGrid {
+  display: grid;
+  gap: 0.82rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric {
+  display: grid;
+  gap: 0.55rem;
+  min-height: 7.8rem;
+  padding: 0.9rem;
+}
+
+.metric strong {
+  color: rgba(var(--axis-ink), 0.9);
+  font-size: clamp(2.2rem, 5vw, 3.8rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.9;
+}
+
+.metric:first-child {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.12), rgba(255, 250, 238, 0.28)),
+    rgba(var(--axis-panel), 0.6);
+  border-color: rgba(var(--axis-live), 0.2);
+}
+
+.profileBody {
+  display: grid;
+  gap: clamp(1rem, 2.5vw, 1.7rem);
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.42fr);
+}
+
+.historyPanel,
+.recentPanel {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 2.5vw, 1.35rem);
+}
+
+.sectionHeader {
+  align-items: center;
+  color: rgba(var(--axis-ink), 0.54);
+  display: flex;
+  font-size: 0.62rem;
+  justify-content: space-between;
+}
+
+.sectionHeader strong {
+  color: rgba(var(--axis-live), 0.72);
+  font-weight: 500;
+}
+
+.historyGrid {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(25% - 1px),
+      rgba(91, 76, 56, 0.08) calc(25% - 1px),
+      rgba(91, 76, 56, 0.08) 25%
+    ),
+    linear-gradient(90deg, rgba(var(--axis-live), 0.055), transparent 42%),
+    rgba(255, 250, 238, 0.3);
+  border: 1px solid rgba(91, 76, 56, 0.1);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: clamp(0.8rem, 2vw, 1rem);
+}
+
+.day,
+.dayActive,
+.dayComplete,
+.dayFuture,
+.dayMissed {
+  align-items: center;
+  aspect-ratio: 1;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 238, 0.34), rgba(var(--axis-ink), 0.018));
+  border: 1px solid rgba(var(--axis-ink), 0.07);
+  border-radius: 0.72rem;
+  color: rgba(var(--axis-ink), 0.34);
+  display: grid;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: clamp(0.54rem, 1.2vw, 0.68rem);
+  justify-items: center;
+}
+
+.dayComplete {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.34), transparent 36%),
+    linear-gradient(145deg, rgba(var(--axis-live), 0.46), rgba(var(--axis-live), 0.2));
+  border-color: rgba(var(--axis-live), 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(24, 92, 55, 0.16);
+  color: rgba(26, 92, 54, 0.82);
+}
+
+.dayActive {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.44), transparent 34%),
+    linear-gradient(145deg, rgba(var(--axis-accent), 0.68), rgba(var(--axis-live), 0.22));
+  border-color: rgba(var(--axis-accent), 0.72);
+  color: rgba(76, 51, 16, 0.94);
+  transform: scale(1.08);
+}
+
+.dayMissed {
+  background: rgba(var(--axis-ink), 0.035);
+  border-color: rgba(var(--axis-ink), 0.09);
+}
+
+.dayFuture {
+  background: rgba(var(--axis-ink), 0.018);
+  border-color: rgba(var(--axis-ink), 0.025);
+  color: rgba(var(--axis-ink), 0.12);
+}
+
+.recentList {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.recentItem,
+.emptyState {
+  background: rgba(255, 250, 238, 0.2);
+  border: 1px solid rgba(var(--axis-ink), 0.055);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.45rem;
+  min-height: 4.4rem;
+  padding: 0.75rem;
+}
+
+.recentItem strong {
+  color: rgba(var(--axis-ink), 0.74);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.footer {
+  border-top: 1px solid rgba(var(--axis-accent), 0.16);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-top: 1rem;
+}
+
+.link {
+  align-items: center;
+  background: rgba(var(--axis-panel), 0.56);
+  border: 1px solid rgba(96, 82, 62, 0.16);
+  color: rgba(var(--axis-ink), 0.8);
+  display: inline-flex;
+  font-size: 0.72rem;
+  justify-content: center;
+  min-height: 2.55rem;
+  padding: 0 1rem;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.link:hover {
+  background: rgba(255, 250, 238, 0.68);
+}
+
+@media (max-width: 900px) {
+  .surface {
+    padding:
+      calc(1rem + env(safe-area-inset-top))
+      0.85rem
+      calc(1.25rem + env(safe-area-inset-bottom));
+  }
+
+  .header,
+  .metricGrid,
+  .profileBody {
+    grid-template-columns: 1fr;
+  }
+
+  .title {
+    font-size: clamp(3.8rem, 17vw, 5.6rem);
+  }
+
+  .metric {
+    min-height: 5.8rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .surface {
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+  }
+
+  .historyGrid {
+    gap: 0.32rem;
+  }
+}

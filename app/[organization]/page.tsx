@@ -10,6 +10,7 @@ import {
 } from "@/lib/axis-daily/attendance"
 import { AXIS_DEFAULT_SESSION_SEGMENTS } from "@/lib/axis-daily/session-flow"
 import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
+import { buildContinuityReminders } from "@/lib/axis-daily/reminders"
 import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { ContinuousAxisHome } from "@/components/axis-daily/ContinuousAxisHome"
 import styles from "@/app/page.module.css"
@@ -124,6 +125,13 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
   const continuityDays = buildContinuityDays(completedDays)
   const accumulation = buildCurrentMonthGrid(completedDays)
   const historyStats = buildHistoryStats(checkIns)
+  const reminders = buildContinuityReminders({
+    activeTodayCount,
+    checkedInToday,
+    leaderboard,
+    organizationName: organization.name,
+    summary,
+  })
 
   return (
     <ContinuousAxisHome
@@ -144,6 +152,7 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
       organizationSlug={organization.slug}
       participationSignal={participationSignal}
       progressionCells={accumulation}
+      reminders={reminders}
       ritualLabel={ritualLabel}
       sessionSegments={lastCheckIn?.session_segments || AXIS_DEFAULT_SESSION_SEGMENTS}
       streakDays={summary?.streakDays || 0}

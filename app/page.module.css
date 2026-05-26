@@ -38,6 +38,7 @@
 .brand,
 .kicker,
 .action,
+.profileLink,
 .ritualAction,
 .historySignal,
 .topSignal,
@@ -57,6 +58,7 @@
 .brand,
 .kicker,
 .action,
+.profileLink,
 .historySignal span,
 .topSignal span,
 .activitySignal,
@@ -173,6 +175,20 @@
 
 .action:hover {
   background: rgba(255, 250, 238, 0.68);
+}
+
+.profileLink {
+  align-items: center;
+  color: rgba(var(--axis-ink), 0.44);
+  display: inline-flex;
+  font-size: 0.62rem;
+  margin-top: 0.75rem;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.profileLink:hover {
+  color: rgba(var(--axis-ink), 0.7);
 }
 
 .memberRitualShell {
@@ -322,6 +338,67 @@
   color: rgba(var(--axis-ink), 0.44);
   font-size: 0.58rem;
   font-style: normal;
+}
+
+.reminderRail {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reminderCard {
+  background:
+    linear-gradient(90deg, rgba(255, 250, 238, 0.3), rgba(var(--axis-panel), 0.22)),
+    rgba(255, 250, 238, 0.2);
+  border: 1px solid rgba(91, 76, 56, 0.1);
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.35rem;
+  min-height: 4.4rem;
+  padding: 0.78rem;
+}
+
+.reminderCard span,
+.reminderCard strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.reminderCard span {
+  color: rgba(var(--axis-ink), 0.38);
+  font-size: 0.56rem;
+}
+
+.reminderCard strong {
+  color: rgba(var(--axis-ink), 0.72);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.reminderCardActive {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.12), rgba(255, 250, 238, 0.24)),
+    rgba(255, 250, 238, 0.22);
+  border-color: rgba(var(--axis-live), 0.16);
+}
+
+.reminderCardActive strong {
+  color: rgba(24, 92, 55, 0.82);
+}
+
+.reminderCardWatch {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-accent), 0.14), rgba(255, 250, 238, 0.22)),
+    rgba(255, 250, 238, 0.2);
+  border-color: rgba(var(--axis-accent), 0.18);
+}
+
+.reminderCardWatch strong {
+  color: rgba(104, 70, 24, 0.82);
 }
 
 .topSignal {
@@ -1306,12 +1383,16 @@
     order: 4;
   }
 
-  .activityRail {
+  .reminderRail {
     order: 5;
   }
 
-  .continuityBed {
+  .activityRail {
     order: 6;
+  }
+
+  .continuityBed {
+    order: 7;
   }
 
   .ritualCenter,
@@ -1342,6 +1423,10 @@
   }
 
   .cultureLayer {
+    grid-template-columns: 1fr;
+  }
+
+  .reminderRail {
     grid-template-columns: 1fr;
   }
 
