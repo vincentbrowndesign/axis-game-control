@@ -8,8 +8,31 @@ Use the existing Axis stack only.
 - Clerk: identity continuity.
 - Supabase: persistent history layer for check-ins, streaks, sessions, and future history objects.
 - Trigger.dev: future progression/background processing when work must survive refreshes or reconnects.
-- Mux: inactive future media boundary.
+- Mux: dormant future media boundary for replay/media delivery.
 - Roboflow/CV: inactive future vision boundary.
+
+## Dormant Replay / Media Boundary
+
+Replay and media infrastructure must remain preserved but inactive in the
+product surface.
+
+Keep backend foundations for:
+
+- Mux.
+- Upload APIs.
+- Session storage.
+- Media persistence.
+- Timeline systems.
+- Replay pipelines.
+- Trigger orchestration.
+- Video infrastructure.
+
+Do not expose replay-first navigation, upload-era dashboards, speculative
+telemetry, tactical overlays, or AI media systems in the active member and
+organization experience.
+
+Long term, replay becomes visual proof of accumulated effort history. It is not
+the front door.
 
 ## Active Data Flow
 

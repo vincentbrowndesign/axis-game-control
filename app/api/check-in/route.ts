@@ -135,13 +135,6 @@ export async function POST(request: Request) {
     )
   }
 
-  if (requestedOrganization && !organization?.id) {
-    return NextResponse.json(
-      { error: "Organization is not ready yet", traceId },
-      { status: 409 }
-    )
-  }
-
   const insertPayload: Record<string, unknown> = {
     clerk_user_id: identity.clerkUserId,
     distance_meters: Math.round(distanceMeters),

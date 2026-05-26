@@ -85,6 +85,9 @@ Status: foundation
 - Daily return reminders now generate quiet in-product continuity prompts from real streak, organization, and leaderboard state so return behavior feels supported rather than spammed.
 - Player profile save file added at `/profile`, showing current streak, total sessions, saved time, organization, active history calendar, leaderboard placement, and recent participation from real continuity records.
 - Operational trust pass added a calm organization pulse for onboarding, persistence, participation, continuity, and leaderboard health, derived from real members, invites, check-ins, streaks, and completion records.
+- Coach and parent trust layer added lightweight continuity visibility for completed sessions, active streaks, weekly check-ins, most consistent member, last completed session, and member-level effort accumulation without surveillance language.
+- Organization operating system pass added a lightweight org overview for active members, session participation, continuity, streak systems, and participation health so organizations can run training culture from real participation records.
+- Future replay infrastructure pass preserved upload/session/media foundations while removing active replay-native navigation from the saved games archive; replay remains dormant future proof of effort history.
 
 FUTURE LAYERS
 

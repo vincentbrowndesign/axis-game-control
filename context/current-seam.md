@@ -26,5 +26,9 @@ A member checks in, Axis History grows, the leaderboard updates from verified ef
 - Topology systems.
 - Runtime diagrams.
 - Dashboard surfaces.
+- Replay-first navigation.
+- Upload-era dashboards.
+- Speculative telemetry.
+- Tactical overlays.
 
 Those layers remain archived or inactive until the seam is stable.

@@ -6,10 +6,12 @@ import type {
   AxisDailyVisibility,
   AxisInvite,
   AxisMemberContinuity,
+  AxisOrganizationOperatingItem,
   AxisOperationalTrustItem,
   AxisOrganizationActivity,
   AxisOrganizationRole,
   AxisOrganizationSettings,
+  AxisSupportVisibilityItem,
 } from "@/lib/axis-orgs/memberships"
 import styles from "./OrganizationAdminPanel.module.css"
 
@@ -20,12 +22,14 @@ type OrganizationAdminPanelProps = {
   invites: AxisInvite[]
   members: AxisMemberContinuity[]
   operationalTrust: AxisOperationalTrustItem[]
+  operatingSummary: AxisOrganizationOperatingItem[]
   organizationName: string
   organizationSlug: string
   participationContinuity: string
   recentActivity: AxisOrganizationActivity[]
   settings: AxisOrganizationSettings
   streakLeaders: AxisMemberContinuity[]
+  supportVisibility: AxisSupportVisibilityItem[]
 }
 
 const ROLE_OPTIONS: AxisOrganizationRole[] = [
@@ -42,12 +46,14 @@ export function OrganizationAdminPanel({
   invites,
   members,
   operationalTrust,
+  operatingSummary,
   organizationName,
   organizationSlug,
   participationContinuity,
   recentActivity,
   settings,
   streakLeaders,
+  supportVisibility,
 }: OrganizationAdminPanelProps) {
   const router = useRouter()
   const [message, setMessage] = useState("")
@@ -127,6 +133,31 @@ export function OrganizationAdminPanel({
           <p className={styles.status}>{pending ? "Saving" : message || "Ready"}</p>
         </header>
 
+        <section className={styles.operatingPanel}>
+          <div className={styles.panelHeader}>
+            <span>Org overview</span>
+            <strong>Run training culture</strong>
+          </div>
+          <div className={styles.operatingGrid}>
+            {operatingSummary.map((item) => (
+              <article
+                className={`${styles.operatingItem} ${
+                  item.tone === "active"
+                    ? styles.operatingItemActive
+                    : item.tone === "steady"
+                      ? styles.operatingItemSteady
+                      : ""
+                }`}
+                key={item.label}
+              >
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <em>{item.detail}</em>
+              </article>
+            ))}
+          </div>
+        </section>
+
         <section className={styles.dailyPanel}>
           <div className={styles.panelHeader}>
             <span>Today</span>
@@ -171,6 +202,22 @@ export function OrganizationAdminPanel({
                 }`}
                 key={item.label}
               >
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <em>{item.detail}</em>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.supportPanel}>
+          <div className={styles.panelHeader}>
+            <span>Coach / parent view</span>
+            <strong>Consistency and completion</strong>
+          </div>
+          <div className={styles.supportGrid}>
+            {supportVisibility.map((item) => (
+              <article className={styles.supportItem} key={item.label}>
                 <span>{item.label}</span>
                 <strong>{item.value}</strong>
                 <em>{item.detail}</em>
@@ -273,8 +320,10 @@ export function OrganizationAdminPanel({
                 <article className={styles.memberRow} key={member.id}>
                   <div>
                     <span>{memberLabel(member)}</span>
-                    <strong>{member.checkIns} check-ins</strong>
-                    <em>{member.streakDays} day streak</em>
+                    <strong>{member.checkInsThisWeek} this week</strong>
+                    <em>
+                      {member.completedSessions} completed / {member.streakDays} day streak
+                    </em>
                   </div>
                   <select
                     defaultValue={member.role}

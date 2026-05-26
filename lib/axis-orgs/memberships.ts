@@ -40,8 +40,13 @@ export type AxisOrganizationSettings = {
 }
 
 export type AxisMemberContinuity = AxisMembership & {
+  activeDaysThisMonth: number
   checkIns: number
+  checkInsThisWeek: number
+  completedSessions: number
+  completedThisWeek: number
   lastCheckIn: string | null
+  lastCompletedSession: string | null
   streakDays: number
 }
 
@@ -68,17 +73,32 @@ export type AxisOperationalTrustItem = {
   value: string
 }
 
+export type AxisOrganizationOperatingItem = {
+  detail: string
+  label: string
+  tone: "active" | "steady" | "watch"
+  value: string
+}
+
+export type AxisSupportVisibilityItem = {
+  detail: string
+  label: string
+  value: string
+}
+
 export type AxisOrganizationAdminModel = {
   activeMembersThisWeek: number
   attendancePercent: number
   dailyVisibility: AxisDailyVisibility
   invites: AxisInvite[]
   members: AxisMemberContinuity[]
+  operatingSummary: AxisOrganizationOperatingItem[]
   participationContinuity: string
   recentActivity: AxisOrganizationActivity[]
   operationalTrust: AxisOperationalTrustItem[]
   settings: AxisOrganizationSettings
   streakLeaders: AxisMemberContinuity[]
+  supportVisibility: AxisSupportVisibilityItem[]
 }
 
 const MANAGE_ROLES = new Set<AxisOrganizationRole>([
@@ -140,12 +160,13 @@ export async function getOrganizationAdminModel(organizationId: string) {
     readSettings(organizationId),
   ])
 
-  const checkInsByMember = new Map<string, string[]>()
+  const checkInsByMember = new Map<string, AdminCheckInRow[]>()
   const checkInsTodayByMember = new Map<string, number>()
   const activeThisWeek = new Set<string>()
   const activeToday = new Set<string>()
   const weekStart = startOfWeek(new Date())
   const todayKey = toDateKey(new Date())
+  const monthKey = toMonthKey(new Date())
   let checkedInToday = 0
   let completedToday = 0
 
@@ -153,9 +174,9 @@ export async function getOrganizationAdminModel(organizationId: string) {
     const key = checkIn.user_id || checkIn.clerk_user_id
     if (!key) continue
 
-    const dates = checkInsByMember.get(key) || []
-    dates.push(checkIn.occurred_at)
-    checkInsByMember.set(key, dates)
+    const memberCheckIns = checkInsByMember.get(key) || []
+    memberCheckIns.push(checkIn)
+    checkInsByMember.set(key, memberCheckIns)
 
     if (new Date(checkIn.occurred_at) >= weekStart) {
       activeThisWeek.add(key)
@@ -174,12 +195,29 @@ export async function getOrganizationAdminModel(organizationId: string) {
 
   const members = memberships.map((membership) => {
     const key = membership.userId || membership.clerkUserId || ""
-    const dates = checkInsByMember.get(key) || []
+    const memberCheckIns = checkInsByMember.get(key) || []
+    const dates = memberCheckIns.map((checkIn) => checkIn.occurred_at)
+    const thisWeek = memberCheckIns.filter(
+      (checkIn) => new Date(checkIn.occurred_at) >= weekStart
+    )
+    const monthDates = new Set(
+      memberCheckIns
+        .filter((checkIn) => toMonthKey(new Date(checkIn.occurred_at)) === monthKey)
+        .map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+    )
+    const completedSessions = memberCheckIns.filter(
+      (checkIn) => checkIn.checked_out_at
+    )
 
     return {
       ...membership,
+      activeDaysThisMonth: monthDates.size,
       checkIns: dates.length,
+      checkInsThisWeek: thisWeek.length,
+      completedSessions: completedSessions.length,
+      completedThisWeek: thisWeek.filter((checkIn) => checkIn.checked_out_at).length,
       lastCheckIn: dates[0] || null,
+      lastCompletedSession: completedSessions[0]?.checked_out_at || null,
       streakDays: calculateStreak(dates),
     }
   })
@@ -210,6 +248,14 @@ export async function getOrganizationAdminModel(organizationId: string) {
     },
     invites,
     members,
+    operatingSummary: buildOperatingSummary({
+      activeMembersThisWeek,
+      attendancePercent,
+      checkedInToday,
+      completedToday,
+      members,
+      streakLeaders,
+    }),
     operationalTrust: buildOperationalTrust({
       activeMembersThisWeek,
       attendancePercent,
@@ -240,7 +286,85 @@ export async function getOrganizationAdminModel(organizationId: string) {
     }),
     settings,
     streakLeaders,
+    supportVisibility: buildSupportVisibility({
+      activeMembersThisWeek,
+      completedToday,
+      members,
+    }),
   } satisfies AxisOrganizationAdminModel
+}
+
+function buildOperatingSummary({
+  activeMembersThisWeek,
+  attendancePercent,
+  checkedInToday,
+  completedToday,
+  members,
+  streakLeaders,
+}: {
+  activeMembersThisWeek: number
+  attendancePercent: number
+  checkedInToday: number
+  completedToday: number
+  members: AxisMemberContinuity[]
+  streakLeaders: AxisMemberContinuity[]
+}) {
+  const completedThisWeek = members.reduce(
+    (total, member) => total + member.completedThisWeek,
+    0
+  )
+  const activeStreaks = members.filter((member) => member.streakDays > 0).length
+  const healthTone =
+    attendancePercent >= 70 ? "active" : attendancePercent >= 35 ? "steady" : "watch"
+  const healthLabel =
+    attendancePercent >= 70 ? "strong" : attendancePercent >= 35 ? "building" : "warming up"
+
+  return [
+    {
+      detail: activeMembersThisWeek
+        ? `${activeMembersThisWeek} active this week`
+        : "invite and check in members",
+      label: "active members",
+      tone: activeMembersThisWeek ? "active" : "watch",
+      value: `${members.length} total`,
+    },
+    {
+      detail: completedToday
+        ? `${completedToday} completed today`
+        : "completion loop ready",
+      label: "session participation",
+      tone: completedThisWeek ? "active" : checkedInToday ? "steady" : "watch",
+      value: `${completedThisWeek} completed`,
+    },
+    {
+      detail: `${attendancePercent}% weekly attendance`,
+      label: "continuity",
+      tone: healthTone,
+      value: healthLabel,
+    },
+    {
+      detail: streakLeaders[0]
+        ? `${memberLabel(streakLeaders[0])} leading`
+        : "streaks start after check-ins",
+      label: "streak systems",
+      tone: activeStreaks ? "active" : "watch",
+      value: `${activeStreaks} active`,
+    },
+    {
+      detail: "culture health from participation",
+      label: "participation health",
+      tone: healthTone,
+      value: `${attendancePercent}%`,
+    },
+  ] satisfies AxisOrganizationOperatingItem[]
+}
+
+type AdminCheckInRow = {
+  checked_out_at: string | null
+  clerk_user_id: string | null
+  id: string
+  occurred_at: string
+  user_id: string | null
 }
 
 function buildOperationalTrust({
@@ -426,21 +550,76 @@ async function readCheckIns(organizationId: string) {
       .eq("status", "checked_in")
       .order("occurred_at", { ascending: false })
       .limit(3000)
-      .returns<
-        {
-          checked_out_at: string | null
-          clerk_user_id: string | null
-          id: string
-          occurred_at: string
-          user_id: string | null
-        }[]
-      >(),
+      .returns<AdminCheckInRow[]>(),
     timeoutListResult(3500),
   ])
 
   if (result.error) return []
 
   return result.data || []
+}
+
+function buildSupportVisibility({
+  activeMembersThisWeek,
+  completedToday,
+  members,
+}: {
+  activeMembersThisWeek: number
+  completedToday: number
+  members: AxisMemberContinuity[]
+}) {
+  const completedThisWeek = members.reduce(
+    (total, member) => total + member.completedThisWeek,
+    0
+  )
+  const activeStreaks = members.filter((member) => member.streakDays > 0)
+  const mostConsistent = [...members].sort(
+    (a, b) =>
+      b.activeDaysThisMonth - a.activeDaysThisMonth ||
+      b.streakDays - a.streakDays ||
+      b.checkIns - a.checkIns
+  )[0]
+  const lastCompleted = [...members]
+    .filter((member) => member.lastCompletedSession)
+    .sort(
+      (a, b) =>
+        new Date(b.lastCompletedSession || 0).getTime() -
+        new Date(a.lastCompletedSession || 0).getTime()
+    )[0]
+
+  return [
+    {
+      detail: "completed effort cycles",
+      label: "completed this week",
+      value: `${completedThisWeek} session${completedThisWeek === 1 ? "" : "s"}`,
+    },
+    {
+      detail: "consistency currently alive",
+      label: "active streaks",
+      value: `${activeStreaks.length} active`,
+    },
+    {
+      detail: "members who showed up",
+      label: "checked in this week",
+      value: `${activeMembersThisWeek} member${activeMembersThisWeek === 1 ? "" : "s"}`,
+    },
+    {
+      detail: mostConsistent
+        ? `${mostConsistent.activeDaysThisMonth} active day${mostConsistent.activeDaysThisMonth === 1 ? "" : "s"} this month`
+        : "no month record yet",
+      label: "most consistent",
+      value: mostConsistent ? memberLabel(mostConsistent) : "waiting",
+    },
+    {
+      detail: completedToday
+        ? `${completedToday} completed today`
+        : "completion record waiting",
+      label: "last completed",
+      value: lastCompleted
+        ? formatSupportDate(lastCompleted.lastCompletedSession || "")
+        : "none yet",
+    },
+  ] satisfies AxisSupportVisibilityItem[]
 }
 
 async function readSettings(organizationId: string) {
@@ -547,6 +726,28 @@ function formatAdminTime(value: string) {
   }).format(new Date(value))
 }
 
+function formatSupportDate(value: string) {
+  if (!value) return "none yet"
+
+  const date = new Date(value)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+
+  if (toDateKey(date) === toDateKey(today)) {
+    return `today - ${formatAdminTime(value)}`
+  }
+
+  if (toDateKey(date) === toDateKey(yesterday)) {
+    return `yesterday - ${formatAdminTime(value)}`
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "short",
+  }).format(date)
+}
+
 function startOfWeek(date: Date) {
   const start = new Date(date)
   const day = start.getDay()
@@ -591,4 +792,8 @@ function timeoutListResult(milliseconds: number) {
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10)
+}
+
+function toMonthKey(date: Date) {
+  return date.toISOString().slice(0, 7)
 }

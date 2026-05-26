@@ -95,12 +95,14 @@ export default async function OrganizationAdminPage({
       invites={adminModel.invites}
       members={adminModel.members}
       operationalTrust={adminModel.operationalTrust}
+      operatingSummary={adminModel.operatingSummary}
       organizationName={organization.name}
       organizationSlug={organization.slug}
       participationContinuity={adminModel.participationContinuity}
       recentActivity={adminModel.recentActivity}
       settings={adminModel.settings}
       streakLeaders={adminModel.streakLeaders}
+      supportVisibility={adminModel.supportVisibility}
     />
   )
 }

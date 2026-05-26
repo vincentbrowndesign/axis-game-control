@@ -40,10 +40,13 @@
 }
 
 .captureLink {
+  align-items: center;
   border: 1px solid rgba(245, 245, 240, 0.12);
   color: rgba(245, 245, 240, 0.68);
+  display: inline-flex;
+  margin: 0;
   min-height: 2.25rem;
-  padding: 0.72rem 0.9rem 0;
+  padding: 0 0.9rem;
   text-decoration: none;
 }
 
@@ -68,10 +71,6 @@
 
 .gameRow:last-child {
   border-bottom: 1px solid rgba(245, 245, 240, 0.08);
-}
-
-.gameRow:hover {
-  background: rgba(245, 245, 240, 0.025);
 }
 
 .date,

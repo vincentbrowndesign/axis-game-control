@@ -77,11 +77,31 @@
   padding: 1rem;
 }
 
+.operatingPanel {
+  background:
+    linear-gradient(90deg, rgba(255, 250, 238, 0.38), rgba(54, 141, 79, 0.08)),
+    rgba(246, 240, 226, 0.64);
+  border: 1px solid rgba(91, 76, 56, 0.14);
+  border-radius: 1.35rem;
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
 .trustPanel {
   background:
     linear-gradient(90deg, rgba(54, 141, 79, 0.075), rgba(212, 143, 45, 0.09)),
     rgba(246, 240, 226, 0.5);
   border: 1px solid rgba(54, 141, 79, 0.14);
+  border-radius: 1.25rem;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.supportPanel {
+  background: rgba(242, 236, 223, 0.6);
+  border: 1px solid rgba(91, 76, 56, 0.14);
   border-radius: 1.25rem;
   display: grid;
   gap: 0.85rem;
@@ -163,7 +183,19 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.operatingGrid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .trustGrid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.supportGrid {
   display: grid;
   gap: 0.6rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -171,7 +203,9 @@
 
 .metric,
 .leader,
-.trustItem {
+.operatingItem,
+.trustItem,
+.supportItem {
   background: rgba(255, 250, 238, 0.26);
   border: 1px solid rgba(35, 32, 27, 0.055);
   border-radius: 0.75rem;
@@ -179,6 +213,113 @@
   gap: 0.35rem;
   min-height: 4rem;
   padding: 0.75rem;
+}
+
+.operatingItem {
+  background:
+    linear-gradient(145deg, rgba(255, 250, 238, 0.34), rgba(35, 32, 27, 0.025)),
+    rgba(255, 250, 238, 0.28);
+  min-height: 5rem;
+  position: relative;
+}
+
+.operatingItem::before {
+  background: rgba(35, 32, 27, 0.16);
+  border-radius: 999px;
+  content: "";
+  height: 0.42rem;
+  position: absolute;
+  right: 0.75rem;
+  top: 0.75rem;
+  width: 0.42rem;
+}
+
+.operatingItemActive {
+  background:
+    linear-gradient(145deg, rgba(54, 141, 79, 0.14), rgba(255, 250, 238, 0.3)),
+    rgba(255, 250, 238, 0.26);
+  border-color: rgba(54, 141, 79, 0.2);
+}
+
+.operatingItemActive::before {
+  background: rgba(54, 141, 79, 0.78);
+}
+
+.operatingItemSteady {
+  background:
+    linear-gradient(145deg, rgba(212, 143, 45, 0.12), rgba(255, 250, 238, 0.3)),
+    rgba(255, 250, 238, 0.26);
+  border-color: rgba(212, 143, 45, 0.18);
+}
+
+.operatingItemSteady::before {
+  background: rgba(212, 143, 45, 0.76);
+}
+
+.operatingItem span,
+.operatingItem strong,
+.operatingItem em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+.operatingItem span {
+  color: rgba(35, 32, 27, 0.44);
+  font-size: 0.6rem;
+}
+
+.operatingItem strong {
+  color: rgba(35, 32, 27, 0.84);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding-right: 0.8rem;
+  white-space: nowrap;
+}
+
+.operatingItem em {
+  color: rgba(35, 32, 27, 0.48);
+  font-size: 0.58rem;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.supportItem {
+  background:
+    linear-gradient(145deg, rgba(255, 250, 238, 0.3), rgba(54, 141, 79, 0.06)),
+    rgba(255, 250, 238, 0.24);
+  min-height: 4.8rem;
+}
+
+.supportItem span,
+.supportItem strong,
+.supportItem em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+.supportItem span {
+  color: rgba(35, 32, 27, 0.44);
+  font-size: 0.6rem;
+}
+
+.supportItem strong {
+  color: rgba(35, 32, 27, 0.82);
+  font-size: 0.76rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.supportItem em {
+  color: rgba(35, 32, 27, 0.48);
+  font-size: 0.58rem;
+  font-style: normal;
+  white-space: nowrap;
 }
 
 .trustItem {
@@ -349,7 +490,9 @@
   .grid,
   .settingsGrid,
   .dailyMetrics,
+  .operatingGrid,
   .trustGrid,
+  .supportGrid,
   .activityList,
   .metrics,
   .memberRow,

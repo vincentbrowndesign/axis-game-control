@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import { retrieveSessionMemory } from "@/lib/mcp/supabaseMemory"
 import { normalizeReplay } from "@/lib/normalizeReplay"
@@ -85,9 +84,7 @@ export default async function GamesPage() {
           <p className={styles.eyebrow}>AXIS ARCHIVE</p>
           <h1 className={styles.title}>Game history</h1>
         </div>
-        <Link className={styles.captureLink} href="/game-day">
-          Add Game
-        </Link>
+        <p className={styles.captureLink}>Media dormant</p>
       </header>
 
       <section className={styles.history} aria-label="Saved game replays">
@@ -95,9 +92,8 @@ export default async function GamesPage() {
           <div className={styles.empty}>No saved games yet.</div>
         ) : (
           games.map((game) => (
-            <Link
+            <article
               className={styles.gameRow}
-              href={`/replay-native?session=${encodeURIComponent(game.id)}`}
               key={game.id}
             >
               <span className={styles.date}>{formatDate(game.createdAt)}</span>
@@ -112,7 +108,7 @@ export default async function GamesPage() {
                   ? `${game.telemetryFrames} frames`
                   : game.status}
               </span>
-            </Link>
+            </article>
           ))
         )}
       </section>
