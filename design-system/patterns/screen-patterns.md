@@ -37,6 +37,21 @@ Required structure:
 
 Avoid abstract hero composition. If the layout starts feeling like a poster, return to the member-profile/activity-template.
 
+## Template Acceleration Rules
+
+Use modern templates only for structure:
+
+- module spacing
+- progression rhythm
+- continuity calendars
+- profile/activity surfaces
+- leaderboard objects
+- interaction pacing
+
+Reject template choices that bring startup gradients, corporate dashboard density, crypto-card styling, generic AI-tool framing, or productivity-app hierarchy.
+
+Every borrowed structure must answer: does this feel like athletic continuity?
+
 ## Axis History
 
 Purpose: prove time accumulated.

@@ -42,6 +42,7 @@ Status: in progress
 - Light surface athletic pass moved the member home away from heavy cinematic darkness toward warm concrete, soft graphite, daylight gym energy, and calmer active signals.
 - Glow refinement compressed broad haze into sharper signal edges, shorter shadows, and more readable athletic typography.
 - Athletic rhythm pass added a compact ritual momentum strip, more tactile completed-day states, stronger active-day emphasis, and clearer progression surfaces without adding new features.
+- Template acceleration pass made structural rhythm more reusable: top records became soft modules, the activity rail became a contained participation band, and continuity/history surfaces gained clearer grouped cadence.
 
 LEADERBOARD
 
