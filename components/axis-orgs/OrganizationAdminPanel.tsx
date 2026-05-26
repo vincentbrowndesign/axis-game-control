@@ -166,6 +166,7 @@ export function OrganizationAdminPanel({
           <div className={styles.dailyMetrics}>
             <Metric label="checked in" value={String(dailyVisibility.checkedInToday)} />
             <Metric label="completed" value={String(dailyVisibility.completedToday)} />
+            <Metric label="active sessions" value={String(dailyVisibility.activeSessions)} />
             <Metric label="active today" value={String(dailyVisibility.activeToday)} />
             <Metric label="most active" value={dailyVisibility.mostActiveToday} />
             <Metric label="top streak" value={dailyVisibility.topStreak} />
@@ -320,7 +321,7 @@ export function OrganizationAdminPanel({
                 <article className={styles.memberRow} key={member.id}>
                   <div>
                     <span>{memberLabel(member)}</span>
-                    <strong>{member.checkInsThisWeek} this week</strong>
+                    <strong>{memberHoursLabel(member.minutesThisWeek)} this week</strong>
                     <em>
                       {member.completedSessions} completed / {member.streakDays} day streak
                     </em>
@@ -414,4 +415,12 @@ function memberLabel(member: AxisMemberContinuity) {
   const suffix = value.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()
 
   return suffix ? `MEMBER ${suffix}` : "MEMBER"
+}
+
+function memberHoursLabel(minutes: number) {
+  if (minutes <= 0) return "0h"
+
+  const hours = minutes / 60
+
+  return hours < 10 ? `${hours.toFixed(1)}h` : `${Math.round(hours)}h`
 }

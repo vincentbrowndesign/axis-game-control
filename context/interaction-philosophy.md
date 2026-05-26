@@ -1,10 +1,10 @@
 # Interaction Philosophy
 
-Axis interactions should feel like entering a live athletic system, not clicking through disconnected webpages.
+Axis interactions should feel like entering a live athletic operating system, not clicking through disconnected webpages.
 
 ## Ritual Rule
 
-Check In is the current emotional center.
+Check In starts the effort cycle. Check Out completes it. Progression, history, and leaderboard movement make the effort visible.
 
 The action should feel:
 
@@ -33,11 +33,15 @@ After check-in:
 
 Checked in - time
 
+After check-out:
+
+Checked out - time
+
 Use the same interaction object for both states. Do not create competing buttons, widgets, banners, or status cards.
 
 ## Metadata Rule
 
-Streak and last check-in are archival records.
+Streak, last check-in, last session, completed hours, and leaderboard placement are archival records.
 
 They should feel like:
 
@@ -61,6 +65,20 @@ Rank only effort continuity:
 - Sessions completed.
 
 Never rank talent, points, popularity, likes, comments, or attention.
+
+## Organization Activity Rule
+
+Organization activity should feel like a gym is alive, not like a feed.
+
+Show real participation signals:
+
+- Active today.
+- Active sessions.
+- Weekly participation.
+- Recent check-ins.
+- Streak leaders.
+
+Do not add comments, chats, likes, popularity systems, or content streams.
 
 ## Avoid
 

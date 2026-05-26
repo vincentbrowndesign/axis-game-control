@@ -4,16 +4,16 @@ Axis is a soft athletic operating system.
 
 The visual system exists to protect the current product loop:
 
-show up -> check in -> history grows -> leaderboard updates -> return tomorrow
+show up -> participate -> progression updates -> history grows -> leaderboard updates -> return tomorrow
 
-Axis should feel like a living sports continuity interface: warm, active, premium, social, and calm.
+Axis should feel like a living sports continuity operating system: warm, active, premium, communal, and calm.
 
-Axis is not a SaaS dashboard, startup site, cyberpunk terminal, analytics surface, or disconnected set of pages.
+Axis is not a SaaS dashboard, startup site, cyberpunk terminal, analytics surface, replay-first product, speculative AI surface, telemetry experiment, or disconnected set of pages.
 
 ## Typography Rules
 
 - Use giant athletic typography for the emotional center of a screen.
-- Use clean premium display type for identity, ritual, and major state changes.
+- Use clean premium display type for identity, participation, progression, and major state changes.
 - Use small monospace metadata for streaks, timestamps, leaderboard rank, and system records.
 - Keep copy minimal. Let state, scale, and progression carry meaning.
 - Use soft but strong hierarchy: one dominant phrase, a few supporting records.
@@ -102,6 +102,7 @@ Every Axis screen must obey:
 - soft surfaces
 - visual progression
 - calm structure
+- real operational state
 
 Avoid dashboard drift. Do not fill space because space exists.
 

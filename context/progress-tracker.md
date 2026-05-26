@@ -2,6 +2,14 @@
 
 ## Stabilized Verticals
 
+PRODUCT LOCK
+
+Status: active
+
+- Axis is locked as an athletic continuity operating system: identity -> participation -> progression -> history -> leaderboard -> return behavior.
+- Future work should refine stability, mobile usability, operational trust, and semantic clarity instead of creating new identity pivots.
+- Replay, speculative AI, telemetry experiments, media expansion, feeds, and dashboard patterns remain inactive future boundaries.
+
 IDENTITY
 
 Status: done
@@ -88,14 +96,16 @@ Status: foundation
 - Coach and parent trust layer added lightweight continuity visibility for completed sessions, active streaks, weekly check-ins, most consistent member, last completed session, and member-level effort accumulation without surveillance language.
 - Organization operating system pass added a lightweight org overview for active members, session participation, continuity, streak systems, and participation health so organizations can run training culture from real participation records.
 - Future replay infrastructure pass preserved upload/session/media foundations while removing active replay-native navigation from the saved games archive; replay remains dormant future proof of effort history.
+- Real session hours system now derives effort time from check-in to check-out timestamps, showing completed hours this week/month/total, last-session duration, and real completed-time leaderboard hours without counting open sessions.
+- Real organization activity now uses saved organization check-ins to show unique active-today counts, weekly participation, open active sessions, recent check-ins, and active streak leaders across member worlds and coach/admin visibility.
 
 FUTURE LAYERS
 
 Status: paused
 
-- Media, commentary, feeds, vision, and analytics remain paused until identity, presence, and history stabilize.
+- Media, commentary, feeds, vision, and analytics remain paused until identity, participation, progression, history, and leaderboard are operationally stable.
 - Future layers must inherit from the ritual continuity loop later.
 
 ## Current Active Loop
 
-show up -> check in -> history grows -> return tomorrow
+show up -> participate -> progression updates -> history grows -> leaderboard updates -> return tomorrow

@@ -1,25 +1,29 @@
 # AXIS CONSTITUTION
 
-Axis is a personal sports history system.
+Axis is an athletic continuity operating system.
 
 The stabilized product direction is:
 
-identity -> presence -> history -> ritual continuity
+identity -> participation -> progression -> history -> leaderboard -> return behavior
 
 ## Product Truth
 
 - Identity is the entry point.
-- Presence is the proof.
+- Participation is the proof.
 - Check In is the ritual.
+- Check Out completes the effort cycle.
+- Progression makes effort visible.
 - Axis History is the persistent record.
-- Streak and last check-in are save data.
-- Leaderboard is the first social tension layer for effort continuity.
+- Streak, last check-in, completed hours, and last session are save data.
+- Leaderboard is quiet social tension from effort continuity.
+- Organizations are living communities inside one shared Axis world.
 - Future media and intelligence layers must sit on top of presence continuity, not replace the current core loop.
 
 ## Core Loop
 
 show up
--> check in
+-> participate
+-> progress updates
 -> history grows
 -> leaderboard updates
 -> return tomorrow
@@ -27,16 +31,16 @@ show up
 ## Hard Rules
 
 - Preserve auth, Supabase, check-in, upload, storage, replay, voice, and utility infrastructure.
-- Keep the app identity-first, ritual-first, history-first, adaptive, calm, and lightweight.
-- Show Check In, streak, last check-in, Axis History, and effort continuity first.
+- Keep the app identity-first, participation-first, progression-first, history-first, adaptive, calm, and lightweight.
+- Show Check In, Check Out, streak, last session, effort hours, Axis History, and leaderboard continuity first.
 - Keep intelligence and infrastructure underneath the surface.
-- Do not add future media or intelligence layers until the current seam is stable.
+- Do not add future media or intelligence layers until the operational continuity system is stable.
 
 ## Universal Design Chain
 
-Axis is a living athletic continuity system, personal sports device, membership world, persistent identity machine, and save-file style progression system.
+Axis is a living athletic continuity system, personal sports device, membership world, persistent identity machine, and save-file style progression system organizations can build culture on top of.
 
-Axis is not a dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, analytics tool, marketing website, cold hacker terminal, dystopian tracker, or lonely cinematic replay surface.
+Axis is not a prototype experiment, dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, analytics tool, marketing website, cold hacker terminal, dystopian tracker, replay-first product, speculative AI system, telemetry experiment, or lonely cinematic replay surface.
 
 Reference emotional hardware:
 
@@ -64,15 +68,16 @@ Every UI generation must feel:
 - Communal.
 - Embedded.
 - Structurally stable.
+- Operationally real.
 - Low-friction.
 - Earned.
 - Inevitable.
 
 Every Axis screen follows the same structure:
 
-- Top: identity/presence signal.
-- Center: dominant ritual or content layer.
-- Bottom: interaction, history, or continuity records.
+- Top: identity, organization, and participation signal.
+- Center: dominant ritual, progression, or content layer.
+- Bottom: history, leaderboard, or continuity records.
 
 Axis is structural UI, not overlay UI. Interfaces must feel built into the screen itself, preserve screen integrity, and avoid random floating cards, stacked panels, disconnected widgets, viewport collisions, and keyboard instability.
 
@@ -86,7 +91,7 @@ Typography carries hierarchy through oversized clean display type and tiny monos
 
 Intelligence stays ambient and underneath the system. The interface should not visually announce it; intelligence should feel invisible, attentive, and embedded into reality.
 
-Future passes must evolve gradually without breaking continuity. Refine, compress, stabilize, and mature the same ritual environment instead of restarting the visual language.
+Future passes must evolve gradually without breaking continuity. Refine, stabilize, and mature the same operational product instead of restarting the identity, product loop, or visual language.
 
 ## Do Not Add
 
@@ -102,5 +107,7 @@ Future passes must evolve gradually without breaking continuity. Refine, compres
 - Feeds.
 - Broadcasts.
 - Replay-first surfaces.
+- Speculative AI surfaces.
+- Telemetry experiments.
 - Ontology-heavy screens.
 - Startup or platform language.

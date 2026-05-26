@@ -1,6 +1,6 @@
 # UI Direction
 
-Axis should feel like a living athletic continuity system, personal sports device, and save-file progression system.
+Axis should feel like a living athletic continuity operating system, personal sports device, and save-file progression system.
 
 The visual language is premium athletic infrastructure with restrained electronics underneath:
 
@@ -27,7 +27,8 @@ The visual language is premium athletic infrastructure with restrained electroni
 The interface should feel:
 
 - Identity-driven.
-- Ritualistic.
+- Participation-driven.
+- Progression-driven.
 - Persistent.
 - Calm.
 - Alive.
@@ -38,6 +39,7 @@ The interface should feel:
 - Save-state oriented.
 - Membership-based.
 - Earned through repetition.
+- Operationally real.
 
 It should not feel like:
 
@@ -50,12 +52,19 @@ It should not feel like:
 - Dystopian terminals.
 - Hacker aesthetics.
 - Replay-era cinematic isolation.
+- Speculative AI.
+- Telemetry experiments.
+- Prototype surfaces.
 
 ## Current Surface
 
-The authenticated home revolves around one ritual:
+The authenticated experience revolves around one operational loop:
 
-Welcome back.
--> Check In
--> Write your story.
--> streak / last check-in
+Identity / organization.
+-> Check In.
+-> Participate.
+-> Check Out.
+-> Progression updates.
+-> Axis History.
+-> Leaderboard tension.
+-> Return tomorrow.

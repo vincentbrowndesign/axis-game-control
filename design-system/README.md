@@ -13,5 +13,8 @@ Use these files before changing UI:
 
 Active product loop:
 
-show up -> check in -> history grows -> leaderboard updates -> return tomorrow
+show up -> participate -> progression updates -> history grows -> leaderboard updates -> return tomorrow
 
+Locked product identity:
+
+identity -> participation -> progression -> history -> leaderboard -> return behavior

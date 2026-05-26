@@ -1,21 +1,23 @@
 # Current Seam
 
-history -> leaderboard -> return tomorrow
+participation -> progression -> history -> leaderboard -> return tomorrow
 
 This is the only active continuity seam.
 
 ## Focus
 
-- Effort continuity.
-- Verified check-ins.
-- Streak and participation history.
-- Quiet social tension.
-- Return tomorrow behavior.
+- Identity continuity.
+- Real participation.
+- Check-in and check-out reliability.
+- Completed effort hours.
+- Streak and history persistence.
+- Organization activity.
+- Quiet leaderboard tension.
 - Daily return behavior.
 
 ## Proof
 
-A member checks in, Axis History grows, the leaderboard updates from verified effort, and the member returns tomorrow to keep the chain alive.
+A member shows up, participates, checks out, Axis History grows, the leaderboard updates from verified effort, and the member returns tomorrow to keep the chain alive.
 
 ## Do Not Drift Into
 
@@ -29,6 +31,8 @@ A member checks in, Axis History grows, the leaderboard updates from verified ef
 - Replay-first navigation.
 - Upload-era dashboards.
 - Speculative telemetry.
+- Speculative AI systems.
+- Identity pivots.
 - Tactical overlays.
 
 Those layers remain archived or inactive until the seam is stable.

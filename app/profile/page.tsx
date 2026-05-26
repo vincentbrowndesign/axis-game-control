@@ -6,6 +6,13 @@ import {
   getAttendanceSummary,
 } from "@/lib/axis-daily/attendance"
 import {
+  completedMinutesThisMonth,
+  completedMinutesThisWeek,
+  completedSessionMinutes,
+  formatEffortHours,
+  formatSessionDuration,
+} from "@/lib/axis-daily/duration"
+import {
   getAxisLeaderboard,
   type AxisLeaderboardCategory,
 } from "@/lib/axis-daily/leaderboard"
@@ -61,6 +68,13 @@ export default async function PlayerProfilePage() {
   )
   const profileDays = buildProfileDays(completedDays)
   const recentParticipation = summary.checkIns.slice(0, 6)
+  const completedSessions = summary.checkIns.filter(
+    (checkIn) => checkIn.checked_out_at
+  )
+  const lastCompletedSession = completedSessions[0]
+  const lastCompletedMinutes = lastCompletedSession
+    ? completedSessionMinutes(lastCompletedSession)
+    : 0
   const standing = getLeaderboardStanding(leaderboard, memberId)
   const primaryOrganization = memberships[0]
   const displayName = user?.firstName
@@ -89,14 +103,24 @@ export default async function PlayerProfilePage() {
             <em>{summary.streakDays === 1 ? "day active" : "days active"}</em>
           </article>
           <article className={styles.metric}>
-            <span>total sessions</span>
-            <strong>{summary.checkIns.length}</strong>
-            <em>{summary.checkIns.length === 1 ? "saved session" : "saved sessions"}</em>
+            <span>hours this week</span>
+            <strong>{formatEffortHours(completedMinutesThisWeek(summary.checkIns))}</strong>
+            <em>completed time</em>
           </article>
           <article className={styles.metric}>
-            <span>total time</span>
-            <strong>{formatHours(summary.totalMinutes)}</strong>
-            <em>hours later</em>
+            <span>hours this month</span>
+            <strong>{formatEffortHours(completedMinutesThisMonth(summary.checkIns))}</strong>
+            <em>effort investment</em>
+          </article>
+          <article className={styles.metric}>
+            <span>total hours</span>
+            <strong>{formatEffortHours(summary.totalMinutes)}</strong>
+            <em>completed only</em>
+          </article>
+          <article className={styles.metric}>
+            <span>last session</span>
+            <strong>{formatSessionDuration(lastCompletedMinutes)}</strong>
+            <em>{lastCompletedSession ? "completed effort" : "waiting"}</em>
           </article>
           <article className={styles.metric}>
             <span>leaderboard</span>
@@ -148,7 +172,7 @@ export default async function PlayerProfilePage() {
                     <em>
                       {formatAttendanceTime(checkIn.occurred_at)}
                       {checkIn.checked_out_at
-                        ? ` / completed ${formatAttendanceTime(checkIn.checked_out_at)}`
+                        ? ` / ${formatSessionDuration(completedSessionMinutes(checkIn))}`
                         : ""}
                     </em>
                   </div>
@@ -274,14 +298,6 @@ function formatAttendanceTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value))
-}
-
-function formatHours(minutes: number) {
-  if (minutes < 60) return `${minutes}m`
-
-  const hours = minutes / 60
-
-  return `${hours.toFixed(hours >= 10 ? 0 : 1)}h`
 }
 
 function isToday(date: Date) {

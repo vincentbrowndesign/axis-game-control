@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { completedSessionMinutes } from "@/lib/axis-daily/duration"
 
 type LeaderboardCheckInRow = {
+  checked_out_at: string | null
   clerk_user_id: string | null
   duration_minutes: number
   occurred_at: string
@@ -40,7 +42,7 @@ export async function getAxisLeaderboard(
 
   let query = supabaseAdmin
       .from("axis_training_check_ins")
-      .select("clerk_user_id, user_id, status, duration_minutes, occurred_at")
+      .select("clerk_user_id, user_id, status, duration_minutes, occurred_at, checked_out_at")
       .gte("occurred_at", since.toISOString())
       .order("occurred_at", { ascending: false })
       .limit(3000)
@@ -128,10 +130,13 @@ function buildLedgers(rows: LeaderboardCheckInRow[]) {
     const dateKey = toDateKey(occurredAt)
 
     ledger.dates.add(dateKey)
-    ledger.sessions += 1
+
+    if (row.checked_out_at) {
+      ledger.sessions += 1
+    }
 
     if (occurredAt >= weekStart) {
-      ledger.totalMinutesThisWeek += Math.max(0, row.duration_minutes)
+      ledger.totalMinutesThisWeek += completedSessionMinutes(row)
     }
 
     if (dateKey === todayKey) {

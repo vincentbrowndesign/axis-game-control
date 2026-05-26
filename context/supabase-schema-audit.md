@@ -10,7 +10,7 @@ No destructive operations were performed.
 
 Axis is currently organized around:
 
-show up -> check in -> progression -> history -> leaderboard -> return tomorrow
+show up -> participate -> progression -> history -> leaderboard -> return tomorrow
 
 Tables, buckets, and policies should be judged by whether they support that loop now, preserve identity/history continuity, or provide a deliberate dormant foundation for future media layers.
 
@@ -156,7 +156,7 @@ Those legacy routes should be archived or disabled before dropping their tables/
 
 5. Preserve media foundations.
    - Keep `axis-replays`, `axis_sessions`, `axis_uploads`, and `axis_processing_jobs`.
-   - Treat replay/media as dormant infrastructure until the identity -> presence -> history loop stabilizes.
+   - Treat replay/media as dormant infrastructure until the identity -> participation -> progression -> history -> leaderboard loop is operationally stable.
 
 6. Normalize the active model later.
    - Add organizations/memberships only as a focused unit.
@@ -172,4 +172,3 @@ Any future destructive cleanup must be preceded by backup/export and explicit ap
 - deleting empty storage buckets
 - dropping duplicate indexes
 - removing legacy route-backed tables
-

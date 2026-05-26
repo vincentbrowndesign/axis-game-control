@@ -1,5 +1,13 @@
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import type { AxisRequestIdentity } from "@/lib/axis-auth/identity"
+import {
+  completedMinutesThisMonth,
+  completedMinutesThisWeek,
+  completedSessionMinutes,
+  formatEffortHours,
+  formatSessionDuration,
+  totalCompletedMinutes,
+} from "@/lib/axis-daily/duration"
 
 export const AXIS_ORGANIZATION_ROLES = [
   "player",
@@ -47,10 +55,15 @@ export type AxisMemberContinuity = AxisMembership & {
   completedThisWeek: number
   lastCheckIn: string | null
   lastCompletedSession: string | null
+  lastCompletedSessionMinutes: number
+  minutesThisMonth: number
+  minutesThisWeek: number
+  totalCompletedMinutes: number
   streakDays: number
 }
 
 export type AxisDailyVisibility = {
+  activeSessions: number
   activeToday: number
   checkedInToday: number
   completedToday: number
@@ -169,6 +182,7 @@ export async function getOrganizationAdminModel(organizationId: string) {
   const monthKey = toMonthKey(new Date())
   let checkedInToday = 0
   let completedToday = 0
+  let activeSessionsToday = 0
 
   for (const checkIn of checkIns) {
     const key = checkIn.user_id || checkIn.clerk_user_id
@@ -189,6 +203,8 @@ export async function getOrganizationAdminModel(organizationId: string) {
 
       if (checkIn.checked_out_at) {
         completedToday += 1
+      } else {
+        activeSessionsToday += 1
       }
     }
   }
@@ -208,6 +224,7 @@ export async function getOrganizationAdminModel(organizationId: string) {
     const completedSessions = memberCheckIns.filter(
       (checkIn) => checkIn.checked_out_at
     )
+    const lastCompletedSession = completedSessions[0] || null
 
     return {
       ...membership,
@@ -217,7 +234,13 @@ export async function getOrganizationAdminModel(organizationId: string) {
       completedSessions: completedSessions.length,
       completedThisWeek: thisWeek.filter((checkIn) => checkIn.checked_out_at).length,
       lastCheckIn: dates[0] || null,
-      lastCompletedSession: completedSessions[0]?.checked_out_at || null,
+      lastCompletedSession: lastCompletedSession?.checked_out_at || null,
+      lastCompletedSessionMinutes: lastCompletedSession
+        ? completedSessionMinutes(lastCompletedSession)
+        : 0,
+      minutesThisMonth: completedMinutesThisMonth(memberCheckIns),
+      minutesThisWeek: completedMinutesThisWeek(memberCheckIns),
+      totalCompletedMinutes: totalCompletedMinutes(memberCheckIns),
       streakDays: calculateStreak(dates),
     }
   })
@@ -238,6 +261,7 @@ export async function getOrganizationAdminModel(organizationId: string) {
     activeMembersThisWeek,
     attendancePercent,
     dailyVisibility: {
+      activeSessions: activeSessionsToday,
       activeToday: activeToday.size,
       checkedInToday,
       completedToday,
@@ -313,6 +337,10 @@ function buildOperatingSummary({
     (total, member) => total + member.completedThisWeek,
     0
   )
+  const minutesThisWeek = members.reduce(
+    (total, member) => total + member.minutesThisWeek,
+    0
+  )
   const activeStreaks = members.filter((member) => member.streakDays > 0).length
   const healthTone =
     attendancePercent >= 70 ? "active" : attendancePercent >= 35 ? "steady" : "watch"
@@ -334,7 +362,7 @@ function buildOperatingSummary({
         : "completion loop ready",
       label: "session participation",
       tone: completedThisWeek ? "active" : checkedInToday ? "steady" : "watch",
-      value: `${completedThisWeek} completed`,
+      value: formatEffortHours(minutesThisWeek),
     },
     {
       detail: `${attendancePercent}% weekly attendance`,
@@ -362,6 +390,7 @@ function buildOperatingSummary({
 type AdminCheckInRow = {
   checked_out_at: string | null
   clerk_user_id: string | null
+  duration_minutes: number
   id: string
   occurred_at: string
   user_id: string | null
@@ -545,7 +574,7 @@ async function readCheckIns(organizationId: string) {
   const result = await Promise.race([
     supabaseAdmin
       .from("axis_training_check_ins")
-      .select("id, user_id, clerk_user_id, occurred_at, checked_out_at")
+      .select("id, user_id, clerk_user_id, occurred_at, checked_out_at, duration_minutes")
       .eq("organization_id", organizationId)
       .eq("status", "checked_in")
       .order("occurred_at", { ascending: false })
@@ -572,6 +601,14 @@ function buildSupportVisibility({
     (total, member) => total + member.completedThisWeek,
     0
   )
+  const minutesThisWeek = members.reduce(
+    (total, member) => total + member.minutesThisWeek,
+    0
+  )
+  const minutesThisMonth = members.reduce(
+    (total, member) => total + member.minutesThisMonth,
+    0
+  )
   const activeStreaks = members.filter((member) => member.streakDays > 0)
   const mostConsistent = [...members].sort(
     (a, b) =>
@@ -589,9 +626,14 @@ function buildSupportVisibility({
 
   return [
     {
-      detail: "completed effort cycles",
+      detail: `${completedThisWeek} completed session${completedThisWeek === 1 ? "" : "s"}`,
       label: "completed this week",
-      value: `${completedThisWeek} session${completedThisWeek === 1 ? "" : "s"}`,
+      value: formatEffortHours(minutesThisWeek),
+    },
+    {
+      detail: "completed effort this month",
+      label: "hours this month",
+      value: formatEffortHours(minutesThisMonth),
     },
     {
       detail: "consistency currently alive",
@@ -616,10 +658,10 @@ function buildSupportVisibility({
         : "completion record waiting",
       label: "last completed",
       value: lastCompleted
-        ? formatSupportDate(lastCompleted.lastCompletedSession || "")
+        ? formatSessionDuration(lastCompleted.lastCompletedSessionMinutes)
         : "none yet",
     },
-  ] satisfies AxisSupportVisibilityItem[]
+  ].slice(0, 5) satisfies AxisSupportVisibilityItem[]
 }
 
 async function readSettings(organizationId: string) {
