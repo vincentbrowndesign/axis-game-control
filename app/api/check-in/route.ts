@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
+import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -7,6 +8,7 @@ export const runtime = "nodejs"
 type CheckInBody = {
   latitude?: unknown
   longitude?: unknown
+  organizationSlug?: unknown
   workoutType?: unknown
   durationMinutes?: unknown
   notes?: unknown
@@ -113,7 +115,11 @@ export async function POST(request: Request) {
     typeof body.notes === "string" && body.notes.trim()
       ? body.notes.trim().slice(0, 600)
       : null
-  const insertPayload = {
+  const organization =
+    typeof body.organizationSlug === "string" && body.organizationSlug.trim()
+      ? await getAxisOrganizationBySlug(body.organizationSlug)
+      : null
+  const insertPayload: Record<string, unknown> = {
     clerk_user_id: identity.clerkUserId,
     distance_meters: Math.round(distanceMeters),
     duration_minutes: durationMinutes,
@@ -123,6 +129,44 @@ export async function POST(request: Request) {
     status: "checked_in",
     user_id: identity.supabaseUserId,
     workout_type: workoutType,
+  }
+
+  if (organization?.id) {
+    insertPayload.organization_id = organization.id
+  }
+
+  const existingCheckIn = await findExistingCheckIn({
+    clerkUserId: identity.clerkUserId,
+    organizationId: organization?.id || null,
+    supabaseUserId: identity.supabaseUserId,
+  })
+
+  if (existingCheckIn) {
+    console.info("AXIS CHECK-IN", {
+      checkInId: existingCheckIn.id,
+      organization: organization
+        ? {
+            id: organization.id,
+            slug: organization.slug,
+          }
+        : null,
+      stage: "already-checked-in",
+      traceId,
+    })
+
+    return NextResponse.json({
+      checkIn: existingCheckIn,
+      distanceMeters: Math.round(distanceMeters),
+      duplicate: true,
+      ok: true,
+      organization: organization
+        ? {
+            slug: organization.slug,
+          }
+        : null,
+      traceId,
+      verification: gymVerificationRequired ? "gym_boundary" : "not_required",
+    })
   }
 
   console.info("AXIS CHECK-IN", {
@@ -139,17 +183,34 @@ export async function POST(request: Request) {
       user_id: insertPayload.user_id,
       workout_type: insertPayload.workout_type,
     },
+    organization: organization
+      ? {
+          id: organization.id,
+          slug: organization.slug,
+        }
+      : null,
     stage: "insert-start",
     table: "public.axis_training_check_ins",
     traceId,
     verification: gymVerificationRequired ? "gym_boundary" : "not_required",
   })
 
-  const inserted = await supabaseAdmin
+  let inserted = await supabaseAdmin
     .from("axis_training_check_ins")
     .insert(insertPayload)
     .select("id, occurred_at")
     .single<{ id: string; occurred_at: string }>()
+
+  if (inserted.error && organization?.id) {
+    const fallbackPayload = { ...insertPayload }
+    delete fallbackPayload.organization_id
+
+    inserted = await supabaseAdmin
+      .from("axis_training_check_ins")
+      .insert(fallbackPayload)
+      .select("id, occurred_at")
+      .single<{ id: string; occurred_at: string }>()
+  }
 
   if (inserted.error) {
     console.error("AXIS CHECK-IN", {
@@ -181,6 +242,11 @@ export async function POST(request: Request) {
     checkIn: inserted.data,
     distanceMeters: Math.round(distanceMeters),
     ok: true,
+    organization: organization
+      ? {
+          slug: organization.slug,
+        }
+      : null,
     traceId,
     verification: gymVerificationRequired ? "gym_boundary" : "not_required",
   })
@@ -215,4 +281,65 @@ function distanceBetweenMeters(
 
 function toRadians(value: number) {
   return (value * Math.PI) / 180
+}
+
+async function findExistingCheckIn({
+  clerkUserId,
+  organizationId,
+  supabaseUserId,
+}: {
+  clerkUserId: string | null
+  organizationId: string | null
+  supabaseUserId: string | null
+}) {
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+
+  let query = supabaseAdmin
+    .from("axis_training_check_ins")
+    .select("id, occurred_at")
+    .eq("status", "checked_in")
+    .gte("occurred_at", start.toISOString())
+    .lt("occurred_at", end.toISOString())
+    .order("occurred_at", { ascending: false })
+    .limit(1)
+
+  if (organizationId) {
+    query = query.eq("organization_id", organizationId)
+  }
+
+  query = supabaseUserId
+    ? query.eq("user_id", supabaseUserId)
+    : query.eq("clerk_user_id", clerkUserId || "")
+
+  const result = await Promise.race([
+    query.maybeSingle<{ id: string; occurred_at: string }>(),
+    new Promise<{
+      data: null
+      error: Error
+    }>((resolve) => {
+      setTimeout(
+        () =>
+          resolve({
+            data: null,
+            error: new Error("Check-in lookup timed out"),
+          }),
+        2500
+      )
+    }),
+  ])
+
+  if (result.error) {
+    console.warn("AXIS CHECK-IN", {
+      detail: result.error.message,
+      stage: "existing-check-in-lookup-failed",
+    })
+
+    return null
+  }
+
+  return result.data
 }

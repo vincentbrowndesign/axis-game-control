@@ -41,6 +41,9 @@ type ContinuousAxisHomeProps = {
   history: HistoryNode[]
   lastCheckInLabel: string
   leaderboardSignal: string
+  organizationAvatar?: string
+  organizationName?: string
+  organizationSlug?: string
   leaderboardPlacement: string
   participationSignal: string
   progressionCells: ProgressionCell[]
@@ -56,6 +59,9 @@ export function ContinuousAxisHome({
   history,
   lastCheckInLabel,
   leaderboardSignal,
+  organizationAvatar,
+  organizationName = "Axis",
+  organizationSlug,
   leaderboardPlacement,
   participationSignal,
   progressionCells,
@@ -110,6 +116,7 @@ export function ContinuousAxisHome({
         body: JSON.stringify({
           durationMinutes: 60,
           notes: null,
+          organizationSlug,
           workoutType: "Training",
         }),
         headers: {
@@ -153,7 +160,14 @@ export function ContinuousAxisHome({
       <section className={styles.operatingShell}>
         <header className={styles.operatingHeader}>
           <div>
-            <p className={styles.brand}>Axis</p>
+            <p className={styles.brand}>
+              {organizationAvatar ? (
+                <span className={styles.organizationAvatar} aria-hidden="true">
+                  {organizationAvatar}
+                </span>
+              ) : null}
+              {organizationName}
+            </p>
             <h1 className={styles.memberTitle}>Welcome back.</h1>
           </div>
           <div className={styles.topSignals} aria-label="Continuity state">

@@ -65,9 +65,26 @@
 }
 
 .brand {
+  align-items: center;
   color: rgba(var(--axis-accent), 0.7);
+  display: inline-flex;
   font-size: 0.72rem;
+  gap: 0.45rem;
   margin: 0;
+}
+
+.organizationAvatar {
+  align-items: center;
+  background: rgba(var(--axis-accent), 0.12);
+  border: 1px solid rgba(var(--axis-accent), 0.22);
+  border-radius: 0.5rem;
+  color: rgba(var(--axis-ink), 0.72);
+  display: inline-grid;
+  font-size: 0.6rem;
+  height: 1.55rem;
+  justify-items: center;
+  min-width: 1.55rem;
+  padding: 0 0.28rem;
 }
 
 .kicker {

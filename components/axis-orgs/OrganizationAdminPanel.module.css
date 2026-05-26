@@ -1,0 +1,223 @@
+.surface {
+  background:
+    radial-gradient(circle at 14% 12%, rgba(255, 252, 240, 0.36), transparent 18rem),
+    linear-gradient(180deg, #ddd4c5 0%, #c9bfad 100%);
+  color: #23201b;
+  min-height: 100dvh;
+  padding: clamp(5rem, 7vw, 6rem) clamp(1.25rem, 4vw, 4rem) 3rem;
+}
+
+.shell {
+  display: grid;
+  gap: 1.25rem;
+  margin: 0 auto;
+  max-width: 1080px;
+}
+
+.header {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.header h1 {
+  font-size: clamp(3.4rem, 8vw, 6.6rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.kicker,
+.status,
+.panelHeader,
+.panel input,
+.panel select,
+.panel button,
+.toggle,
+.metric,
+.leader,
+.memberRow,
+.inviteRow,
+.empty {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.kicker,
+.status {
+  color: rgba(35, 32, 27, 0.52);
+  font-size: 0.68rem;
+  margin: 0 0 0.75rem;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.panel {
+  background: rgba(242, 236, 223, 0.58);
+  border: 1px solid rgba(91, 76, 56, 0.14);
+  border-radius: 1.2rem;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.panelHeader {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.panelHeader span,
+.memberRow span,
+.inviteRow span,
+.metric span,
+.leader span,
+.toggle span,
+.empty {
+  color: rgba(35, 32, 27, 0.44);
+  font-size: 0.6rem;
+}
+
+.panelHeader strong,
+.memberRow strong,
+.inviteRow strong,
+.metric strong,
+.leader strong {
+  color: rgba(35, 32, 27, 0.82);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.panel input,
+.panel select,
+.panel button {
+  background: rgba(255, 250, 238, 0.42);
+  border: 1px solid rgba(91, 76, 56, 0.16);
+  border-radius: 0.75rem;
+  color: rgba(35, 32, 27, 0.84);
+  min-height: 2.65rem;
+  padding: 0 0.8rem;
+}
+
+.panel button {
+  cursor: pointer;
+}
+
+.panel button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.toggle {
+  align-items: center;
+  background: rgba(255, 250, 238, 0.26);
+  border: 1px solid rgba(35, 32, 27, 0.055);
+  border-radius: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  min-height: 2.6rem;
+  padding: 0 0.8rem;
+}
+
+.settingsGrid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metrics {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric,
+.leader {
+  background: rgba(255, 250, 238, 0.26);
+  border: 1px solid rgba(35, 32, 27, 0.055);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+  min-height: 4rem;
+  padding: 0.75rem;
+}
+
+.leaders {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.leader {
+  min-height: 0;
+}
+
+.inviteLink,
+.inviteRow code {
+  background: rgba(255, 250, 238, 0.32);
+  border: 1px solid rgba(35, 32, 27, 0.055);
+  border-radius: 0.6rem;
+  color: rgba(35, 32, 27, 0.58);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  margin: 0;
+  overflow: hidden;
+  padding: 0.55rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberList,
+.inviteList {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.memberRow,
+.inviteRow {
+  align-items: center;
+  background: rgba(255, 250, 238, 0.24);
+  border: 1px solid rgba(35, 32, 27, 0.055);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.28fr) auto;
+  padding: 0.75rem;
+}
+
+.memberRow div {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.memberRow em,
+.inviteRow em {
+  color: rgba(35, 32, 27, 0.44);
+  font-size: 0.58rem;
+  font-style: normal;
+}
+
+.inviteRow {
+  grid-template-columns: minmax(0, 1fr) auto minmax(9rem, 0.45fr) auto;
+}
+
+@media (max-width: 760px) {
+  .header,
+  .grid,
+  .settingsGrid,
+  .metrics,
+  .memberRow,
+  .inviteRow {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    align-items: start;
+    display: grid;
+  }
+}

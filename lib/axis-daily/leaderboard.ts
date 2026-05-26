@@ -30,19 +30,26 @@ type MemberLedger = {
   totalMinutesThisWeek: number
 }
 
-export async function getAxisLeaderboard(): Promise<AxisLeaderboardCategory[]> {
+export async function getAxisLeaderboard(
+  organizationId?: string | null
+): Promise<AxisLeaderboardCategory[]> {
   const since = new Date()
   since.setMonth(since.getMonth() - 6)
   since.setHours(0, 0, 0, 0)
 
-  const result = await Promise.race([
-    supabaseAdmin
+  let query = supabaseAdmin
       .from("axis_training_check_ins")
       .select("clerk_user_id, user_id, status, duration_minutes, occurred_at")
       .gte("occurred_at", since.toISOString())
       .order("occurred_at", { ascending: false })
       .limit(3000)
-      .returns<LeaderboardCheckInRow[]>(),
+
+  if (organizationId) {
+    query = query.eq("organization_id", organizationId)
+  }
+
+  const result = await Promise.race([
+    query.returns<LeaderboardCheckInRow[]>(),
     timeoutResult(4500),
   ])
 

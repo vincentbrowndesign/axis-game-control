@@ -19,7 +19,8 @@ export type AxisAttendanceSummary = {
 
 export async function getAttendanceSummary(
   identity: AxisRequestIdentity,
-  limit = 30
+  limit = 30,
+  organizationId?: string | null
 ): Promise<AxisAttendanceSummary> {
   const emptySummary = {
     checkIns: [],
@@ -37,6 +38,10 @@ export async function getAttendanceSummary(
   query = identity.supabaseUserId
     ? query.eq("user_id", identity.supabaseUserId)
     : query.eq("clerk_user_id", identity.clerkUserId || "")
+
+  if (organizationId) {
+    query = query.eq("organization_id", organizationId)
+  }
 
   const result = await Promise.race([
     query.returns<AxisTrainingCheckIn[]>(),
@@ -59,20 +64,26 @@ export async function getAttendanceSummary(
   }
 }
 
-export async function getActiveTodayCount() {
+export async function getActiveTodayCount(organizationId?: string | null) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
 
-  const result = await Promise.race([
-    supabaseAdmin
+  let query = supabaseAdmin
       .from("axis_training_check_ins")
       .select("id", { count: "exact", head: true })
       .eq("status", "checked_in")
       .gte("occurred_at", today.toISOString())
-      .lt("occurred_at", tomorrow.toISOString()),
+      .lt("occurred_at", tomorrow.toISOString())
+
+  if (organizationId) {
+    query = query.eq("organization_id", organizationId)
+  }
+
+  const result = await Promise.race([
+    query,
     timeoutCountResult(4500),
   ])
 

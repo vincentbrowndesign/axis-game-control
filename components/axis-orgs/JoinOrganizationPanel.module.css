@@ -1,0 +1,81 @@
+.surface {
+  align-items: center;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 252, 240, 0.36), transparent 18rem),
+    linear-gradient(180deg, #ddd4c5 0%, #c9bfad 100%);
+  color: #23201b;
+  display: grid;
+  min-height: 100dvh;
+  padding: clamp(5rem, 7vw, 6rem) clamp(1.25rem, 4vw, 4rem) 3rem;
+}
+
+.card {
+  background: rgba(242, 236, 223, 0.58);
+  border: 1px solid rgba(91, 76, 56, 0.14);
+  border-radius: 1.4rem;
+  display: grid;
+  gap: 1rem;
+  margin: 0 auto;
+  max-width: 46rem;
+  padding: clamp(1.2rem, 4vw, 2.5rem);
+}
+
+.avatar,
+.kicker,
+.status,
+.card button {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.avatar {
+  align-items: center;
+  background: rgba(212, 143, 45, 0.12);
+  border: 1px solid rgba(212, 143, 45, 0.22);
+  border-radius: 0.75rem;
+  color: rgba(35, 32, 27, 0.76);
+  display: inline-grid;
+  height: 3rem;
+  justify-items: center;
+  margin: 0;
+  width: 3rem;
+}
+
+.kicker,
+.status {
+  color: rgba(35, 32, 27, 0.46);
+  font-size: 0.68rem;
+  margin: 0;
+}
+
+.card h1 {
+  font-size: clamp(3.4rem, 8vw, 6.6rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.copy {
+  color: rgba(35, 32, 27, 0.6);
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  line-height: 1.45;
+  margin: 0;
+  max-width: 34rem;
+}
+
+.card button {
+  background: rgba(255, 250, 238, 0.42);
+  border: 1px solid rgba(91, 76, 56, 0.16);
+  border-radius: 0.85rem;
+  color: rgba(35, 32, 27, 0.84);
+  cursor: pointer;
+  min-height: 3rem;
+  padding: 0 1rem;
+}
+
+.card button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}

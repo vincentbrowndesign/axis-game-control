@@ -56,6 +56,18 @@ Status: in progress
 - Categories track effort continuity: weekly hours, active streak, monthly consistency, and sessions completed.
 - No talent, points, popularity, likes, comments, chat, or feed mechanics.
 
+ORGANIZATIONS
+
+Status: foundation
+
+- Organization routing foundation added for `/btc`, `/bridge`, and `/city2city`.
+- Organization identity can frame the existing check-in, history, and leaderboard continuity surface without replacing the current flow.
+- Supabase migration added organizations, memberships, and optional organization-scoped check-ins for future organization-level continuity.
+- Role and admin foundation added for player, coach, admin, parent, and owner roles.
+- Organization admin route supports lightweight invites, member removal, role assignment, attendance continuity viewing, and optional feature toggles without introducing dashboard-heavy UI.
+- Operational maturity pass added tokenized organization invite links, a `/join/[token]` player onboarding route, invite acceptance into active memberships, organization attendance percentage, active-member count, participation continuity, and streak leaders.
+- Check-in persistence now treats an existing same-day saved check-in as a successful continuity state, reducing duplicate rows and protecting streak and leaderboard consistency.
+
 FUTURE LAYERS
 
 Status: paused
