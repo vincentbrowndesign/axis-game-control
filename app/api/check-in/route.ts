@@ -113,7 +113,7 @@ export async function POST(request: Request) {
   const workoutType =
     typeof body.workoutType === "string" && body.workoutType.trim()
       ? body.workoutType.trim().slice(0, 80)
-      : "Training"
+      : "Open Gym"
   const durationMinutes = clampDuration(Number(body.durationMinutes))
   const notes =
     typeof body.notes === "string" && body.notes.trim()

@@ -140,6 +140,7 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
       checkedOutToday={checkedOutToday}
       checkoutLabel={checkoutLabel}
       continuityDays={continuityDays}
+      currentSessionTitle={lastCheckIn?.workout_type || "Open Gym"}
       history={history}
       historyStats={historyStats}
       lastCheckInLabel={lastCheckInLabel}

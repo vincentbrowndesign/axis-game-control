@@ -29,7 +29,7 @@ export async function checkInWithIdentityToken(token: AxisIdentityToken) {
       session_segments: AXIS_DEFAULT_SESSION_SEGMENTS,
       status: "checked_in",
       user_id: token.userId,
-      workout_type: "Training",
+      workout_type: "Open Gym",
     })
     .select("id, occurred_at")
     .single<{

@@ -98,6 +98,9 @@ Status: foundation
 - Future replay infrastructure pass preserved upload/session/media foundations while removing active replay-native navigation from the saved games archive; replay remains dormant future proof of effort history.
 - Real session hours system now derives effort time from check-in to check-out timestamps, showing completed hours this week/month/total, last-session duration, and real completed-time leaderboard hours without counting open sessions.
 - Real organization activity now uses saved organization check-ins to show unique active-today counts, weekly participation, open active sessions, recent check-ins, and active streak leaders across member worlds and coach/admin visibility.
+- Session culture layer added lightweight session titles and type selection, organization context, active-member signal, participation continuity, completion status, and persisted `Open Gym` default so sessions feel like living athletic events rather than forms.
+- Athletic profile evolution made `/profile` feel more like an earned save file, with a stronger identity surface and records for current streak, total sessions, hours invested, active month, organization, and current rank from real participation history.
+- Axis world feel pass added a quiet world-presence rail to member organization surfaces, summarizing active organizations, live sessions, streak leaders, and growing history from persisted participation signals without creating a feed.
 
 FUTURE LAYERS
 

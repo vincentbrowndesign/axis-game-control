@@ -36,6 +36,7 @@
 .statement,
 .link,
 .identityCard,
+.identitySurface,
 .metric,
 .sectionHeader,
 .recentItem,
@@ -48,6 +49,8 @@
 .link,
 .identityCard span,
 .identityCard em,
+.identitySurface span,
+.identitySurface em,
 .metric span,
 .metric em,
 .sectionHeader,
@@ -104,6 +107,78 @@
   padding: 0.9rem;
 }
 
+.identitySurface {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.12), transparent 46%),
+    linear-gradient(90deg, rgba(255, 250, 238, 0.42), rgba(var(--axis-panel), 0.5));
+  border: 1px solid rgba(91, 76, 56, 0.14);
+  border-radius: 1.35rem;
+  display: grid;
+  gap: clamp(0.8rem, 2vw, 1.2rem);
+  grid-template-columns: auto minmax(0, 1fr) minmax(12rem, 0.24fr);
+  padding: clamp(0.9rem, 2.4vw, 1.25rem);
+}
+
+.identityMark {
+  align-items: center;
+  aspect-ratio: 1;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.42), transparent 42%),
+    linear-gradient(145deg, rgba(var(--axis-live), 0.38), rgba(var(--axis-accent), 0.22));
+  border: 1px solid rgba(var(--axis-live), 0.28);
+  border-radius: 1.05rem;
+  color: rgba(var(--axis-ink), 0.86);
+  display: grid;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 500;
+  justify-items: center;
+  min-width: clamp(4.4rem, 9vw, 6rem);
+}
+
+.identityRecord,
+.identityPulse {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.identitySurface span {
+  color: rgba(var(--axis-ink), 0.4);
+  font-size: 0.58rem;
+}
+
+.identityRecord strong {
+  color: rgba(var(--axis-ink), 0.92);
+  font-size: clamp(2rem, 4.6vw, 4rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.9;
+}
+
+.identityPulse {
+  background: rgba(255, 250, 238, 0.28);
+  border: 1px solid rgba(var(--axis-ink), 0.055);
+  border-radius: 0.95rem;
+  padding: 0.85rem;
+}
+
+.identityPulse strong {
+  color: rgba(var(--axis-ink), 0.9);
+  font-size: clamp(1.55rem, 3.3vw, 2.65rem);
+  font-weight: 500;
+  line-height: 0.92;
+}
+
+.identitySurface em {
+  color: rgba(var(--axis-ink), 0.42);
+  font-size: 0.58rem;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .identityCard span,
 .metric span,
 .sectionHeader span,
@@ -146,6 +221,7 @@
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.9;
+  overflow-wrap: anywhere;
 }
 
 .metric:first-child {
@@ -306,6 +382,7 @@
   }
 
   .header,
+  .identitySurface,
   .metricGrid,
   .profileBody {
     grid-template-columns: 1fr;
@@ -316,6 +393,10 @@
   }
 
   .metric {
+    min-height: 5.8rem;
+  }
+
+  .identityPulse {
     min-height: 5.8rem;
   }
 }

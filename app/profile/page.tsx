@@ -71,15 +71,19 @@ export default async function PlayerProfilePage() {
   const completedSessions = summary.checkIns.filter(
     (checkIn) => checkIn.checked_out_at
   )
-  const lastCompletedSession = completedSessions[0]
-  const lastCompletedMinutes = lastCompletedSession
-    ? completedSessionMinutes(lastCompletedSession)
-    : 0
   const standing = getLeaderboardStanding(leaderboard, memberId)
   const primaryOrganization = memberships[0]
+  const athleteName = user?.firstName || "Player"
   const displayName = user?.firstName
     ? `${user.firstName}'s save file`
-    : memberFileLabel(memberId)
+    : "Player save file"
+  const organizationName = primaryOrganization?.axis_organizations?.name || "Axis"
+  const organizationRole = primaryOrganization?.role || "player"
+  const activeThisMonth = profileDays.filter(
+    (day) => day.state === "complete"
+  ).length
+  const totalSessions = summary.checkIns.length
+  const hoursInvested = formatEffortHours(summary.totalMinutes)
 
   return (
     <main className={styles.surface}>
@@ -91,10 +95,28 @@ export default async function PlayerProfilePage() {
           </div>
           <div className={styles.identityCard} aria-label="Player identity">
             <span>organization</span>
-            <strong>{primaryOrganization?.axis_organizations?.name || "Axis"}</strong>
-            <em>{primaryOrganization?.role || "player"}</em>
+            <strong>{organizationName}</strong>
+            <em>{organizationRole}</em>
           </div>
         </header>
+
+        <section className={styles.identitySurface} aria-label="Athletic identity">
+          <div className={styles.identityMark} aria-hidden="true">
+            {athleteInitials(athleteName)}
+          </div>
+          <div className={styles.identityRecord}>
+            <span>athletic identity</span>
+            <strong>{athleteName}</strong>
+            <em>
+              {organizationName} / {activeThisMonth} active this month / {standing.placement}
+            </em>
+          </div>
+          <div className={styles.identityPulse} aria-label="Effort continuity">
+            <span>hours invested</span>
+            <strong>{hoursInvested}</strong>
+            <em>{completedSessions.length} completed sessions</em>
+          </div>
+        </section>
 
         <section className={styles.metricGrid} aria-label="Player save data">
           <article className={styles.metric}>
@@ -103,27 +125,27 @@ export default async function PlayerProfilePage() {
             <em>{summary.streakDays === 1 ? "day active" : "days active"}</em>
           </article>
           <article className={styles.metric}>
-            <span>hours this week</span>
-            <strong>{formatEffortHours(completedMinutesThisWeek(summary.checkIns))}</strong>
-            <em>completed time</em>
+            <span>total sessions</span>
+            <strong>{totalSessions}</strong>
+            <em>{completedSessions.length} completed</em>
           </article>
           <article className={styles.metric}>
-            <span>hours this month</span>
-            <strong>{formatEffortHours(completedMinutesThisMonth(summary.checkIns))}</strong>
-            <em>effort investment</em>
+            <span>hours invested</span>
+            <strong>{hoursInvested}</strong>
+            <em>{formatEffortHours(completedMinutesThisWeek(summary.checkIns))} this week</em>
           </article>
           <article className={styles.metric}>
-            <span>total hours</span>
-            <strong>{formatEffortHours(summary.totalMinutes)}</strong>
-            <em>completed only</em>
+            <span>active this month</span>
+            <strong>{activeThisMonth}</strong>
+            <em>{formatEffortHours(completedMinutesThisMonth(summary.checkIns))} logged</em>
           </article>
           <article className={styles.metric}>
-            <span>last session</span>
-            <strong>{formatSessionDuration(lastCompletedMinutes)}</strong>
-            <em>{lastCompletedSession ? "completed effort" : "waiting"}</em>
+            <span>organization</span>
+            <strong>{organizationName}</strong>
+            <em>{organizationRole}</em>
           </article>
           <article className={styles.metric}>
-            <span>leaderboard</span>
+            <span>current rank</span>
             <strong>{standing.placement}</strong>
             <em>{standing.context}</em>
           </article>
@@ -306,10 +328,13 @@ function isToday(date: Date) {
   return toDateKey(date) === toDateKey(today)
 }
 
-function memberFileLabel(value: string) {
-  const suffix = value.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()
-
-  return suffix ? `FILE ${suffix}` : "Player save file"
+function athleteInitials(value: string) {
+  return value
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "AX"
 }
 
 function timeoutMemberships(milliseconds: number) {

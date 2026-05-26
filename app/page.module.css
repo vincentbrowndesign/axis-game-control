@@ -269,6 +269,63 @@
   white-space: nowrap;
 }
 
+.worldPresence {
+  align-items: stretch;
+  background:
+    linear-gradient(90deg, rgba(var(--axis-live), 0.055), rgba(var(--axis-accent), 0.045)),
+    rgba(255, 250, 238, 0.18);
+  border: 1px solid rgba(91, 76, 56, 0.1);
+  border-radius: 1.05rem;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 0.68rem;
+}
+
+.worldPresenceItem {
+  background: rgba(var(--axis-panel), 0.26);
+  border: 1px solid rgba(var(--axis-ink), 0.045);
+  border-radius: 0.72rem;
+  display: grid;
+  gap: 0.36rem;
+  min-width: 0;
+  padding: 0.68rem;
+  position: relative;
+}
+
+.worldPresenceItem::before {
+  background: rgba(var(--axis-live), 0.78);
+  border-radius: 999px;
+  content: "";
+  height: 0.42rem;
+  position: absolute;
+  right: 0.62rem;
+  top: 0.62rem;
+  width: 0.42rem;
+}
+
+.worldPresenceItem span,
+.worldPresenceItem strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.worldPresenceItem span {
+  color: rgba(var(--axis-ink), 0.38);
+  font-size: 0.54rem;
+}
+
+.worldPresenceItem strong {
+  color: rgba(var(--axis-ink), 0.76);
+  font-size: 0.66rem;
+  font-weight: 500;
+  padding-right: 0.65rem;
+}
+
 .cultureLayer {
   display: grid;
   gap: 0.7rem;
@@ -702,11 +759,143 @@
   transform: scale(1.12);
 }
 
+.sessionTypeDock {
+  display: grid;
+  gap: 0.55rem;
+  margin: 1rem auto 0;
+  max-width: 35rem;
+}
+
+.sessionTypeDock > span {
+  color: rgba(var(--axis-ink), 0.36);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sessionTypeDock div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: center;
+}
+
+.sessionTypeDock button {
+  appearance: none;
+  background: rgba(255, 250, 238, 0.3);
+  border: 1px solid rgba(var(--axis-ink), 0.08);
+  border-radius: 999px;
+  color: rgba(var(--axis-ink), 0.58);
+  cursor: pointer;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
+  min-height: 2.35rem;
+  padding: 0 0.85rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.sessionTypeDock button:hover,
+.sessionTypeDock button:focus-visible,
+.sessionTypeActive {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.16), rgba(var(--axis-accent), 0.12)),
+    rgba(255, 250, 238, 0.36) !important;
+  border-color: rgba(var(--axis-live), 0.22) !important;
+  color: rgba(var(--axis-ink), 0.86) !important;
+  outline: none;
+}
+
+.sessionTypeDock button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.sessionCulture {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.08), rgba(255, 250, 238, 0.22)),
+    rgba(var(--axis-panel), 0.42);
+  border: 1px solid rgba(91, 76, 56, 0.13);
+  border-radius: 1.15rem;
+  display: grid;
+  gap: 0.82rem;
+  margin: 1.05rem auto 0;
+  max-width: 37rem;
+  padding: 0.9rem;
+  text-align: left;
+}
+
+.sessionCultureHeader {
+  align-items: end;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sessionCultureHeader span,
+.sessionCultureHeader em,
+.sessionCultureMeta span,
+.sessionCultureMeta strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sessionCultureHeader span {
+  color: rgba(var(--axis-ink), 0.42);
+  font-size: 0.58rem;
+  grid-column: 1 / -1;
+}
+
+.sessionCultureHeader strong {
+  color: rgba(var(--axis-ink), 0.86);
+  font-size: clamp(1.35rem, 3vw, 2.2rem);
+  font-weight: 500;
+  line-height: 0.96;
+  min-width: 0;
+}
+
+.sessionCultureHeader em {
+  color: rgba(var(--axis-live), 0.82);
+  font-size: 0.62rem;
+  font-style: normal;
+}
+
+.sessionCultureMeta {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sessionCultureMeta div {
+  background: rgba(255, 250, 238, 0.28);
+  border: 1px solid rgba(var(--axis-ink), 0.055);
+  border-radius: 0.78rem;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.62rem;
+}
+
+.sessionCultureMeta span {
+  color: rgba(var(--axis-ink), 0.36);
+  font-size: 0.52rem;
+}
+
+.sessionCultureMeta strong {
+  color: rgba(var(--axis-ink), 0.72);
+  font-size: 0.58rem;
+  font-weight: 500;
+}
+
 .sessionFlow {
   display: grid;
   gap: 0.45rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 1.05rem auto 0;
+  margin: 0 auto;
   max-width: 30rem;
 }
 
@@ -1379,20 +1568,24 @@
     order: 3;
   }
 
-  .cultureLayer {
+  .worldPresence {
     order: 4;
   }
 
-  .reminderRail {
+  .cultureLayer {
     order: 5;
   }
 
-  .activityRail {
+  .reminderRail {
     order: 6;
   }
 
-  .continuityBed {
+  .activityRail {
     order: 7;
+  }
+
+  .continuityBed {
+    order: 8;
   }
 
   .ritualCenter,
@@ -1420,6 +1613,10 @@
 
   .worldSignals {
     grid-template-columns: 1fr;
+  }
+
+  .worldPresence {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .cultureLayer {
@@ -1465,6 +1662,25 @@
     width: min(100%, 24rem);
   }
 
+  .sessionCulture {
+    max-width: 24rem;
+    padding: 0.75rem;
+  }
+
+  .sessionCultureMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .sessionTypeDock div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .sessionTypeDock button {
+    border-radius: 0.85rem;
+    min-height: 2.8rem;
+  }
+
   .sessionFlow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     max-width: 24rem;
@@ -1507,6 +1723,10 @@
 
   .historyGrid {
     gap: 0.6rem;
+  }
+
+  .worldPresence {
+    grid-template-columns: 1fr;
   }
 }
 
