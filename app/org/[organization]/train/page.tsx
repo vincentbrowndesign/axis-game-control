@@ -44,7 +44,7 @@ export default async function OrganizationTrainPage({
         thisWeekCount: 0,
         todayCheckIn: null,
       }
-  const checkedInAt = checkInSummary.todayCheckIn?.checked_in_at || null
+  const sessionStartedAt = checkInSummary.todayCheckIn?.checked_in_at || null
 
   return (
     <main className={styles.surface}>
@@ -54,17 +54,8 @@ export default async function OrganizationTrainPage({
           <h1 className={styles.trainTitle}>Train</h1>
         </header>
 
-        <section className={styles.trainStatus} aria-label="Today">
-          <span>Today:</span>
-          <strong>
-            {checkedInAt
-              ? `Checked in - ${formatCheckInTime(checkedInAt)}`
-              : "Not checked in yet"}
-          </strong>
-        </section>
-
         <TrainCheckInButton
-          checkedInAt={checkedInAt}
+          sessionStartedAt={sessionStartedAt}
           organizationSlug={organizationSlug}
         />
 
@@ -101,21 +92,14 @@ export default async function OrganizationTrainPage({
         </section>
 
         <MovementCalibrationFlow
-          checkedInAt={checkedInAt}
-          isCheckedIn={Boolean(checkedInAt)}
+          isSessionStarted={Boolean(sessionStartedAt)}
           organizationSlug={organizationSlug}
           playerId={userId}
+          sessionStartedAt={sessionStartedAt}
         />
       </section>
     </main>
   )
-}
-
-function formatCheckInTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value))
 }
 
 function formatCheckInDateTime(value: string) {

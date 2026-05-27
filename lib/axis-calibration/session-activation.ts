@@ -1,5 +1,5 @@
 export type SessionActivationStatus =
-  | "checked_in"
+  | "in_session"
   | "step_into_frame"
   | "move_around"
   | "ready"
@@ -11,33 +11,33 @@ export type SessionIdentityHandshake = {
 }
 
 export type SessionActivation = {
-  checkedInAt: string
   handshake: SessionIdentityHandshake
   id: string
   organizationSlug: string
+  sessionStartedAt: string
   status: SessionActivationStatus
 }
 
 type CreateSessionActivationInput = {
-  checkedInAt: string
   organizationSlug: string
   playerId: string
+  sessionStartedAt: string
 }
 
 export function createSessionActivation({
-  checkedInAt,
   organizationSlug,
   playerId,
+  sessionStartedAt,
 }: CreateSessionActivationInput): SessionActivation {
   return {
-    checkedInAt,
     handshake: {
       method: "signed_in",
       playerId,
     },
     id: createActivationId(),
     organizationSlug,
-    status: "checked_in",
+    sessionStartedAt,
+    status: "in_session",
   }
 }
 

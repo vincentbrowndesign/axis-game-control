@@ -42,17 +42,17 @@ const MOVE_AROUND_MS = 1300
 const LOCKED_MS = 2300
 
 type MovementCalibrationFlowProps = {
-  checkedInAt: string | null
-  isCheckedIn: boolean
+  isSessionStarted: boolean
   organizationSlug: string
   playerId: string
+  sessionStartedAt: string | null
 }
 
 export function MovementCalibrationFlow({
-  checkedInAt,
-  isCheckedIn,
+  isSessionStarted,
   organizationSlug,
   playerId,
+  sessionStartedAt,
 }: MovementCalibrationFlowProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -66,10 +66,10 @@ export function MovementCalibrationFlow({
   const sessionSamplesRef = useRef<SessionMovementSample[]>([])
   const sessionSubjectIdRef = useRef("")
   const streamRef = useRef<MediaStream | null>(null)
-  const statusRef = useRef<CalibrationState>(CALIBRATION_LANGUAGE.CHECKED_IN)
+  const statusRef = useRef<CalibrationState>(CALIBRATION_LANGUAGE.READY)
   const visibleSinceRef = useRef<number | null>(null)
   const [status, setStatus] = useState<CalibrationState>(
-    CALIBRATION_LANGUAGE.CHECKED_IN,
+    CALIBRATION_LANGUAGE.READY,
   )
   const [isActive, setIsActive] = useState(false)
 
@@ -79,7 +79,7 @@ export function MovementCalibrationFlow({
     }
   }, [])
 
-  if (!isCheckedIn) return null
+  if (!isSessionStarted) return null
 
   async function startCamera() {
     if (isActive) return
@@ -90,9 +90,9 @@ export function MovementCalibrationFlow({
     previousDirectionRef.current = 0
     sessionSamplesRef.current = []
     sessionActivationRef.current =
-      checkedInAt && playerId
+      sessionStartedAt && playerId
         ? createSessionActivation({
-            checkedInAt,
+            sessionStartedAt,
             organizationSlug,
             playerId,
           })
@@ -483,10 +483,6 @@ export function MovementCalibrationFlow({
 
   return (
     <section className={styles.calibrationShell}>
-      <div className={styles.calibrationHeader}>
-        <span>SESSION STARTED</span>
-        <strong>{isTrainingActive ? "WORKOUT LIVE" : "TRAINING READY"}</strong>
-      </div>
       <div
         className={`${styles.calibrationViewport} ${
           isTrainingActive ? styles.calibrationViewportActive : ""

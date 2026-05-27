@@ -52,6 +52,13 @@ export async function POST(
   }
 
   return NextResponse.json({
+    activeSession: {
+      id: saved.checkIn.id,
+      organization_slug: saved.checkIn.organization_slug,
+      started_at: saved.checkIn.checked_in_at,
+      status: "in_session",
+      user_id: saved.checkIn.user_id,
+    },
     checkIn: saved.checkIn,
     duplicate: saved.duplicate,
     ok: true,
