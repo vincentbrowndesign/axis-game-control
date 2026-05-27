@@ -349,8 +349,7 @@ export async function POST(request: Request) {
       .eq("id", sessionId)
       .eq("user_id", user.id)
 
-    revalidatePath("/games")
-    revalidatePath("/replay-native")
+    revalidatePath("/")
 
     return NextResponse.json({
       ok: true,

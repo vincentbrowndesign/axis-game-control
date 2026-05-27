@@ -1,4 +1,5 @@
 import { AXIS_DEFAULT_SESSION_SEGMENTS } from "@/lib/axis-daily/session-flow"
+import { axisTodayRange } from "@/lib/axis-daily/continuity"
 import type { AxisIdentityToken } from "@/lib/axis-daily/identity-tokens"
 import { markIdentityTokenUsed } from "@/lib/axis-daily/identity-tokens"
 import { supabaseAdmin } from "@/lib/supabase/admin"
@@ -54,10 +55,7 @@ export async function checkInWithIdentityToken(token: AxisIdentityToken) {
 }
 
 async function findExistingTokenCheckIn(token: AxisIdentityToken) {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 1)
+  const { end, start } = axisTodayRange()
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")

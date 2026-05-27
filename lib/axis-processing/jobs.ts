@@ -463,7 +463,7 @@ function completeBroadcastJob({ metadata, session, traceId }: JobRunnerContext) 
   const outputs = buildOutputBundle({
     clips: clipValues,
     metadata,
-    replayHref: `/replay-native?session=${encodeURIComponent(session.id)}`,
+    replayHref: "",
     sessionId: session.id,
     sessionTitle: session.title || "Game",
   })

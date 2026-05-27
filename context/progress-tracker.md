@@ -9,6 +9,9 @@ Status: active
 - Axis is locked as an athletic continuity operating system: identity -> participation -> progression -> history -> leaderboard -> return behavior.
 - Future work should refine stability, mobile usability, operational trust, and semantic clarity instead of creating new identity pivots.
 - Replay, speculative AI, telemetry experiments, media expansion, feeds, and dashboard patterns remain inactive future boundaries.
+- Legacy replay/runtime UI routes are archived out of active App Router runtime so `/` and active navigation stay continuity-first.
+- Runtime boundaries are now documented in `/context/runtime-boundaries.md`: archived replay routes must not mount, link, redirect, or return as active navigation.
+- Active product lock added: archived replay UX route segments are centralized in `/lib/axis-active-product/routes.ts`, reserved from organization slugs, and blocked at proxy level with 404 responses.
 
 IDENTITY
 
@@ -63,6 +66,8 @@ Status: in progress
 - Rankings come only from verified check-ins and accumulated participation history.
 - Categories track effort continuity: weekly hours, active streak, monthly consistency, and sessions completed.
 - No talent, points, popularity, likes, comments, chat, or feed mechanics.
+- Organization leaderboard now adds culture momentum from real persisted activity, ranking organizations by most active week, consistency, org streaks, completed sessions, and logged hours without adding social-media mechanics.
+- Continuity engine pass centralized Axis day/week/streak math so check-in, check-out, token check-in, session progress, history, profile, admin visibility, reminders, and leaderboards share the same persistence window instead of drifting between server time and product time.
 
 ORGANIZATIONS
 
@@ -96,11 +101,14 @@ Status: foundation
 - Coach and parent trust layer added lightweight continuity visibility for completed sessions, active streaks, weekly check-ins, most consistent member, last completed session, and member-level effort accumulation without surveillance language.
 - Organization operating system pass added a lightweight org overview for active members, session participation, continuity, streak systems, and participation health so organizations can run training culture from real participation records.
 - Future replay infrastructure pass preserved upload/session/media foundations while removing active replay-native navigation from the saved games archive; replay remains dormant future proof of effort history.
+- Legacy replay surfaces were moved to `/archive/legacy-replay-runtime`: replay-native, AxisShell draw/dot/voice/scrub/wipe, game-day upload UI, games archive UI, CV/RF demos, measures prototypes, and replay canvas components. Backend media, upload, Mux, timeline, and CV foundations remain preserved.
+- Replay-era runtime references were hardened by removing active `replayHref` values and archived-page revalidation from session/upload processing routes. Archived slugs remain reserved to prevent fallback organization routing.
 - Real session hours system now derives effort time from check-in to check-out timestamps, showing completed hours this week/month/total, last-session duration, and real completed-time leaderboard hours without counting open sessions.
 - Real organization activity now uses saved organization check-ins to show unique active-today counts, weekly participation, open active sessions, recent check-ins, and active streak leaders across member worlds and coach/admin visibility.
 - Session culture layer added lightweight session titles and type selection, organization context, active-member signal, participation continuity, completion status, and persisted `Open Gym` default so sessions feel like living athletic events rather than forms.
 - Athletic profile evolution made `/profile` feel more like an earned save file, with a stronger identity surface and records for current streak, total sessions, hours invested, active month, organization, and current rank from real participation history.
 - Axis world feel pass added a quiet world-presence rail to member organization surfaces, summarizing active organizations, live sessions, streak leaders, and growing history from persisted participation signals without creating a feed.
+- Real-world onboarding now carries invite acceptance into the organization world, shows a restrained first-check-in path, and marks the first completed session with `History started`, `streak active`, and `return tomorrow` without adding startup onboarding flows.
 
 FUTURE LAYERS
 

@@ -19,7 +19,7 @@ Codex must:
 - Keep the frontend simple, calm, participation-first, progression-first, and lightweight.
 - Prioritize identity continuity, Check In, Check Out, progression, Axis History, leaderboard, streak, effort hours, last session, organization activity, and return behavior.
 - Keep intelligence invisible and assistive.
-- Use basketball-first wording only when it supports the current participation/history loop.
+- Use athletic participation wording only when it supports the current participation/history loop.
 - Hide systems, constraints, phases, ontology, dashboards, analytics, and tactical structure unless explicitly requested.
 - Preserve the Axis athletic operating-system identity: warm athletic surfaces, restrained live signals, giant athletic typography, progression objects, tiny archival metadata, and save-file atmosphere.
 - Use structural UI rather than floating overlay UI.
@@ -39,6 +39,7 @@ Do not:
 - Add startup, platform, neuroscience, or abstract product language.
 - Add widget stacks, random floating cards, dashboard-heavy surfaces, loud gradients, or web-form-based primary interaction.
 - Resume replay, clips, commentary, feeds, broadcasts, speculative AI, telemetry, or computer vision work until the identity -> participation -> progression -> history -> leaderboard loop is operationally stable.
+- Mount archived replay UX routes, cinematic media shells, draw/scrub/voice replay tools, tactical replay layers, old telemetry UI, or speculative AI surfaces in active runtime.
 
 Every task must identify:
 

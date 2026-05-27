@@ -1,3 +1,5 @@
+import { axisStartOfWeek } from "@/lib/axis-daily/continuity"
+
 type AxisCompletedTimeRecord = {
   checked_out_at: string | null
   duration_minutes?: number | null
@@ -45,7 +47,7 @@ export function completedMinutesThisMonth(records: AxisCompletedTimeRecord[]) {
 }
 
 export function completedMinutesThisWeek(records: AxisCompletedTimeRecord[]) {
-  const start = startOfWeek(new Date())
+  const start = axisStartOfWeek(new Date())
   const end = new Date(start)
   end.setDate(start.getDate() + 7)
 
@@ -77,14 +79,4 @@ export function totalCompletedMinutes(records: AxisCompletedTimeRecord[]) {
     (total, record) => total + completedSessionMinutes(record),
     0
   )
-}
-
-function startOfWeek(date: Date) {
-  const start = new Date(date)
-  const day = start.getDay()
-  const offset = day === 0 ? 6 : day - 1
-  start.setDate(start.getDate() - offset)
-  start.setHours(0, 0, 0, 0)
-
-  return start
 }

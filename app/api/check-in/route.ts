@@ -4,6 +4,7 @@ import {
   AXIS_DEFAULT_SESSION_SEGMENTS,
   normalizeSessionSegments,
 } from "@/lib/axis-daily/session-flow"
+import { axisTodayRange } from "@/lib/axis-daily/continuity"
 import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
@@ -311,11 +312,7 @@ async function findExistingCheckIn({
   organizationId: string | null
   supabaseUserId: string | null
 }) {
-  const now = new Date()
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 1)
+  const { end, start } = axisTodayRange()
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")

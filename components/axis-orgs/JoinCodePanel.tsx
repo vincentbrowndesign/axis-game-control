@@ -34,6 +34,12 @@ export function JoinCodePanel() {
           Use the invite from your coach or organization. Your first check-in
           starts the history.
         </p>
+        <div className={styles.entryPath} aria-label="Axis entry path">
+          <span>identity</span>
+          <span>organization</span>
+          <span>first session</span>
+          <span>history</span>
+        </div>
         <form className={styles.joinForm} onSubmit={submitInvite}>
           <input
             autoComplete="off"

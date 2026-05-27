@@ -12,6 +12,7 @@ import {
   formatEffortHours,
   formatSessionDuration,
 } from "@/lib/axis-daily/duration"
+import { axisDateKey } from "@/lib/axis-daily/continuity"
 import {
   getAxisLeaderboard,
   type AxisLeaderboardCategory,
@@ -64,7 +65,7 @@ export default async function PlayerProfilePage() {
   ])
   const memberId = identity.clerkUserId || identity.supabaseUserId || ""
   const completedDays = new Set(
-    summary.checkIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+    summary.checkIns.map((checkIn) => axisDateKey(new Date(checkIn.occurred_at)))
   )
   const profileDays = buildProfileDays(completedDays)
   const recentParticipation = summary.checkIns.slice(0, 6)
@@ -299,7 +300,7 @@ function buildProfileDays(completedDays: Set<string>) {
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth(), index + 1)
-    const key = toDateKey(date)
+    const key = axisDateKey(date)
 
     return {
       id: key,
@@ -325,7 +326,7 @@ function formatAttendanceTime(value: string) {
 function isToday(date: Date) {
   const today = new Date()
 
-  return toDateKey(date) === toDateKey(today)
+  return axisDateKey(date) === axisDateKey(today)
 }
 
 function athleteInitials(value: string) {
@@ -351,8 +352,4 @@ function timeoutMemberships(milliseconds: number) {
       milliseconds
     )
   })
-}
-
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10)
 }

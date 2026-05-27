@@ -202,7 +202,7 @@ export async function POST(request: Request) {
         userId: identity.supabaseUserId,
       })
 
-      revalidatePath("/games")
+      revalidatePath("/")
 
       return safeJson({
         ok: true,
@@ -338,7 +338,7 @@ export async function POST(request: Request) {
       userId: identity.supabaseUserId,
     })
 
-    revalidatePath("/games")
+    revalidatePath("/")
 
     return safeJson({
       ok: true,

@@ -8,6 +8,12 @@ import {
   formatSessionDuration,
   totalCompletedMinutes,
 } from "@/lib/axis-daily/duration"
+import {
+  activeContinuityStreak,
+  axisDateKey,
+  axisMonthKey,
+  axisStartOfWeek,
+} from "@/lib/axis-daily/continuity"
 
 export const AXIS_ORGANIZATION_ROLES = [
   "player",
@@ -177,9 +183,9 @@ export async function getOrganizationAdminModel(organizationId: string) {
   const checkInsTodayByMember = new Map<string, number>()
   const activeThisWeek = new Set<string>()
   const activeToday = new Set<string>()
-  const weekStart = startOfWeek(new Date())
-  const todayKey = toDateKey(new Date())
-  const monthKey = toMonthKey(new Date())
+  const weekStart = axisStartOfWeek(new Date())
+  const todayKey = axisDateKey(new Date())
+  const monthKey = axisMonthKey(new Date())
   let checkedInToday = 0
   let completedToday = 0
   let activeSessionsToday = 0
@@ -196,7 +202,7 @@ export async function getOrganizationAdminModel(organizationId: string) {
       activeThisWeek.add(key)
     }
 
-    if (toDateKey(new Date(checkIn.occurred_at)) === todayKey) {
+    if (axisDateKey(new Date(checkIn.occurred_at)) === todayKey) {
       checkedInToday += 1
       activeToday.add(key)
       checkInsTodayByMember.set(key, (checkInsTodayByMember.get(key) || 0) + 1)
@@ -218,8 +224,8 @@ export async function getOrganizationAdminModel(organizationId: string) {
     )
     const monthDates = new Set(
       memberCheckIns
-        .filter((checkIn) => toMonthKey(new Date(checkIn.occurred_at)) === monthKey)
-        .map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+        .filter((checkIn) => axisMonthKey(new Date(checkIn.occurred_at)) === monthKey)
+        .map((checkIn) => axisDateKey(new Date(checkIn.occurred_at)))
     )
     const completedSessions = memberCheckIns.filter(
       (checkIn) => checkIn.checked_out_at
@@ -712,16 +718,9 @@ function normalizeMembership(value: {
 }
 
 function calculateStreak(values: string[]) {
-  const days = new Set(values.map((value) => toDateKey(new Date(value))))
-  let streak = 0
-  const cursor = new Date()
+  const days = new Set(values.map((value) => axisDateKey(new Date(value))))
 
-  while (days.has(toDateKey(cursor))) {
-    streak += 1
-    cursor.setDate(cursor.getDate() - 1)
-  }
-
-  return streak
+  return activeContinuityStreak(days)
 }
 
 function findMostActiveToday(
@@ -776,11 +775,11 @@ function formatSupportDate(value: string) {
   const yesterday = new Date()
   yesterday.setDate(today.getDate() - 1)
 
-  if (toDateKey(date) === toDateKey(today)) {
+  if (axisDateKey(date) === axisDateKey(today)) {
     return `today - ${formatAdminTime(value)}`
   }
 
-  if (toDateKey(date) === toDateKey(yesterday)) {
+  if (axisDateKey(date) === axisDateKey(yesterday)) {
     return `yesterday - ${formatAdminTime(value)}`
   }
 
@@ -788,16 +787,6 @@ function formatSupportDate(value: string) {
     day: "2-digit",
     month: "short",
   }).format(date)
-}
-
-function startOfWeek(date: Date) {
-  const start = new Date(date)
-  const day = start.getDay()
-  const offset = day === 0 ? 6 : day - 1
-  start.setDate(start.getDate() - offset)
-  start.setHours(0, 0, 0, 0)
-
-  return start
 }
 
 function timeoutResult(milliseconds: number) {
@@ -830,12 +819,4 @@ function timeoutListResult(milliseconds: number) {
       milliseconds
     )
   })
-}
-
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10)
-}
-
-function toMonthKey(date: Date) {
-  return date.toISOString().slice(0, 7)
 }

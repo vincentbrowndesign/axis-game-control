@@ -1,9 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { clerkMiddleware } from "@clerk/nextjs/server"
 import { createServerClient } from "@supabase/ssr"
+import { isArchivedAxisUxSegment } from "@/lib/axis-active-product/routes"
 import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig"
 
 async function axisProxy(request: NextRequest) {
+  const firstSegment = request.nextUrl.pathname.split("/").filter(Boolean)[0]
+
+  if (firstSegment && isArchivedAxisUxSegment(firstSegment)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
   let response = NextResponse.next({
     request,
   })

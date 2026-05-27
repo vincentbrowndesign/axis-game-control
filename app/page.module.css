@@ -269,6 +269,48 @@
   white-space: nowrap;
 }
 
+.firstSessionMoment {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.16), rgba(var(--axis-accent), 0.08)),
+    rgba(255, 250, 238, 0.24);
+  border: 1px solid rgba(var(--axis-live), 0.18);
+  border-radius: 1.12rem;
+  display: grid;
+  gap: 0.58rem;
+  padding: 0.9rem;
+}
+
+.firstSessionMoment span,
+.firstSessionMoment em {
+  color: rgba(var(--axis-ink), 0.42);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.58rem;
+  font-style: normal;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.firstSessionMoment strong {
+  color: rgba(24, 92, 55, 0.88);
+  font-size: clamp(1.65rem, 4vw, 3.15rem);
+  font-weight: 500;
+  line-height: 0.94;
+}
+
+.firstSessionMoment div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.firstSessionMoment em {
+  background: rgba(255, 250, 238, 0.28);
+  border: 1px solid rgba(var(--axis-live), 0.12);
+  border-radius: 999px;
+  color: rgba(var(--axis-ink), 0.52);
+  padding: 0.42rem 0.62rem;
+}
+
 .worldPresence {
   align-items: stretch;
   background:
@@ -1572,20 +1614,24 @@
     order: 4;
   }
 
-  .cultureLayer {
+  .firstSessionMoment {
     order: 5;
   }
 
-  .reminderRail {
+  .cultureLayer {
     order: 6;
   }
 
-  .activityRail {
+  .reminderRail {
     order: 7;
   }
 
-  .continuityBed {
+  .activityRail {
     order: 8;
+  }
+
+  .continuityBed {
+    order: 9;
   }
 
   .ritualCenter,

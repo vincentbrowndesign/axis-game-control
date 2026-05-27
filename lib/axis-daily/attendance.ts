@@ -5,6 +5,12 @@ import {
   type AxisSessionSegment,
 } from "@/lib/axis-daily/session-flow"
 import { totalCompletedMinutes } from "@/lib/axis-daily/duration"
+import {
+  activeContinuityStreak,
+  axisDateKey,
+  axisStartOfWeek,
+  axisTodayRange,
+} from "@/lib/axis-daily/continuity"
 
 export type AxisTrainingCheckIn = {
   checked_out_at: string | null
@@ -105,18 +111,14 @@ export async function getAttendanceSummary(
 }
 
 export async function getActiveTodayCount(organizationId?: string | null) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const today = axisTodayRange()
 
   let query = supabaseAdmin
       .from("axis_training_check_ins")
       .select("id, user_id, clerk_user_id")
       .eq("status", "checked_in")
-      .gte("occurred_at", today.toISOString())
-      .lt("occurred_at", tomorrow.toISOString())
+      .gte("occurred_at", today.start.toISOString())
+      .lt("occurred_at", today.end.toISOString())
 
   if (organizationId) {
     query = query.eq("organization_id", organizationId)
@@ -145,13 +147,10 @@ export async function getActiveTodayCount(organizationId?: string | null) {
 }
 
 export async function getParticipationSignals(organizationId?: string | null) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const weekStart = startOfWeek(new Date())
-  const since = new Date(today)
-  since.setDate(today.getDate() - 30)
+  const today = axisTodayRange()
+  const weekStart = axisStartOfWeek(new Date())
+  const since = new Date(today.start)
+  since.setDate(today.start.getDate() - 30)
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")
@@ -160,7 +159,7 @@ export async function getParticipationSignals(organizationId?: string | null) {
     )
     .eq("status", "checked_in")
     .gte("occurred_at", since.toISOString())
-    .lt("occurred_at", tomorrow.toISOString())
+    .lt("occurred_at", today.end.toISOString())
     .order("occurred_at", { ascending: false })
     .limit(700)
 
@@ -178,13 +177,13 @@ export async function getParticipationSignals(organizationId?: string | null) {
   }
 
   const rows = result.data || []
-  const todayRows = rows.filter((row) => new Date(row.occurred_at) >= today)
+  const todayRows = rows.filter((row) => new Date(row.occurred_at) >= today.start)
   const weekRows = rows.filter((row) => new Date(row.occurred_at) >= weekStart)
   const todayMembers = new Set(todayRows.map(memberKey).filter(Boolean))
   const weekMembers = new Set(weekRows.map(memberKey).filter(Boolean))
   const yesterdayMembers = new Set(
     rows
-      .filter((row) => isYesterday(row.occurred_at, today))
+      .filter((row) => isYesterday(row.occurred_at, today.start))
       .map(memberKey)
       .filter(Boolean)
   )
@@ -280,12 +279,9 @@ export async function getParticipationSignals(organizationId?: string | null) {
 }
 
 export async function getOrganizationCulture(organizationId?: string | null) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const since = new Date(today)
-  since.setDate(today.getDate() - 30)
+  const today = axisTodayRange()
+  const since = new Date(today.start)
+  since.setDate(today.start.getDate() - 30)
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")
@@ -294,7 +290,7 @@ export async function getOrganizationCulture(organizationId?: string | null) {
     )
     .eq("status", "checked_in")
     .gte("occurred_at", since.toISOString())
-    .lt("occurred_at", tomorrow.toISOString())
+    .lt("occurred_at", today.end.toISOString())
     .order("occurred_at", { ascending: false })
     .limit(900)
 
@@ -311,7 +307,7 @@ export async function getOrganizationCulture(organizationId?: string | null) {
     return [] satisfies AxisOrganizationCulture[]
   }
 
-  return buildOrganizationCulture(result.data || [], today)
+  return buildOrganizationCulture(result.data || [], today.start)
 }
 
 function timeoutResult(milliseconds: number) {
@@ -368,18 +364,10 @@ function timeoutActiveTodayResult(milliseconds: number) {
 
 export function calculateStreak(checkIns: AxisTrainingCheckIn[]) {
   const days = new Set(
-    checkIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+    checkIns.map((checkIn) => axisDateKey(new Date(checkIn.occurred_at)))
   )
 
-  let streak = 0
-  const cursor = new Date()
-
-  while (days.has(toDateKey(cursor))) {
-    streak += 1
-    cursor.setDate(cursor.getDate() - 1)
-  }
-
-  return streak
+  return activeContinuityStreak(days)
 }
 
 export function formatAttendanceDate(value: string) {
@@ -427,7 +415,7 @@ function isYesterday(value: string, today: Date) {
   yesterday.setDate(today.getDate() - 1)
   const date = new Date(value)
 
-  return toDateKey(date) === toDateKey(yesterday)
+  return axisDateKey(date) === axisDateKey(yesterday)
 }
 
 function organizationActivity(rows: ParticipationCheckInRow[]) {
@@ -457,7 +445,7 @@ function findTopStreakDays(rows: ParticipationCheckInRow[]) {
     if (!key) continue
 
     const dates = memberDates.get(key) || new Set<string>()
-    dates.add(toDateKey(new Date(row.occurred_at)))
+    dates.add(axisDateKey(new Date(row.occurred_at)))
     memberDates.set(key, dates)
   }
 
@@ -468,7 +456,7 @@ function findTopStreakDays(rows: ParticipationCheckInRow[]) {
 }
 
 function buildOrganizationCulture(rows: ParticipationCheckInRow[], today: Date) {
-  const weekStart = startOfWeek(today)
+  const weekStart = axisStartOfWeek(today)
   const groups = new Map<
     string,
     {
@@ -509,10 +497,10 @@ function buildOrganizationCulture(rows: ParticipationCheckInRow[], today: Date) 
     const key = memberKey(row)
 
     group.weeklyCheckIns += 1
-    group.dates.add(toDateKey(new Date(row.occurred_at)))
+    group.dates.add(axisDateKey(new Date(row.occurred_at)))
     if (key) {
       const memberDates = group.memberDates.get(key) || new Set<string>()
-      memberDates.add(toDateKey(new Date(row.occurred_at)))
+      memberDates.add(axisDateKey(new Date(row.occurred_at)))
       group.memberDates.set(key, memberDates)
     }
 
@@ -607,28 +595,6 @@ function countOrganizations(rows: ParticipationCheckInRow[]) {
   return counts
 }
 
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10)
-}
-
 function calculateDateSetStreak(days: Set<string>) {
-  let streak = 0
-  const cursor = new Date()
-
-  while (days.has(toDateKey(cursor))) {
-    streak += 1
-    cursor.setDate(cursor.getDate() - 1)
-  }
-
-  return streak
-}
-
-function startOfWeek(date: Date) {
-  const start = new Date(date)
-  const day = start.getDay()
-  const offset = day === 0 ? 6 : day - 1
-  start.setDate(start.getDate() - offset)
-  start.setHours(0, 0, 0, 0)
-
-  return start
+  return activeContinuityStreak(days)
 }

@@ -159,9 +159,6 @@ export async function POST(req: Request) {
     }
 
     revalidatePath("/")
-    revalidatePath("/games")
-    revalidatePath("/sessions")
-    revalidatePath("/team/local")
 
     return NextResponse.json({
       ok: true,

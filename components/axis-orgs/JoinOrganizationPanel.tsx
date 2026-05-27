@@ -37,7 +37,7 @@ export function JoinOrganizationPanel({
     }
 
     setMessage("Joined")
-    router.push(`/${response.organizationSlug}`)
+    router.push(`/${response.organizationSlug}?joined=1`)
     router.refresh()
   }
 
@@ -51,6 +51,12 @@ export function JoinOrganizationPanel({
           Enter the organization world as {role}. Your first check-in starts
           the record here.
         </p>
+        <div className={styles.entryPath} aria-label="First session path">
+          <span>join organization</span>
+          <span>first check-in</span>
+          <span>history started</span>
+          <span>streak active</span>
+        </div>
         <button disabled={pending} onClick={acceptInvite} type="button">
           {pending ? "Joining" : "Join organization"}
         </button>

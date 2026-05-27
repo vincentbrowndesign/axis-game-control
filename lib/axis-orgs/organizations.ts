@@ -1,4 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import {
+  AXIS_ACTIVE_ROUTE_SEGMENTS,
+  AXIS_ARCHIVED_UX_SEGMENTS,
+} from "@/lib/axis-active-product/routes"
 
 export type AxisOrganization = {
   avatar: string
@@ -34,21 +38,8 @@ const STATIC_ORGANIZATIONS: AxisOrganization[] = [
 
 const RESERVED_SLUGS = new Set([
   "api",
-  "auth",
-  "axis-shell",
-  "check-in",
-  "cv-demo",
-  "game-day",
-  "games",
-  "join",
-  "leaderboard",
-  "measures",
-  "memory",
-  "profile",
-  "replay-native",
-  "rf-test",
-  "sign-in",
-  "sign-up",
+  ...AXIS_ACTIVE_ROUTE_SEGMENTS,
+  ...AXIS_ARCHIVED_UX_SEGMENTS,
 ])
 
 export function isReservedOrganizationSlug(slug: string) {

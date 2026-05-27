@@ -76,11 +76,57 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.organizationBoard {
+  background: rgba(247, 244, 235, 0.035);
+  border: 1px solid rgba(var(--axis-accent), 0.14);
+  border-radius: 2rem;
+  display: grid;
+  gap: 1.35rem;
+  padding: clamp(1rem, 2.4vw, 1.6rem);
+}
+
+.sectionHeader {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.sectionHeader p,
+.sectionHeader span,
+.organizationIdentity em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.sectionHeader p {
+  color: rgba(var(--axis-ink), 0.84);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.sectionHeader span {
+  color: rgba(var(--axis-live), 0.6);
+  font-size: 0.64rem;
+}
+
+.organizationGrid {
+  display: grid;
+  gap: 1.15rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .category {
   border-top: 1px solid rgba(var(--axis-accent), 0.16);
   display: grid;
   gap: 1rem;
   padding-top: 0.9rem;
+}
+
+.organizationCategory {
+  display: grid;
+  gap: 0.8rem;
 }
 
 .categoryHeader {
@@ -112,6 +158,10 @@
   display: grid;
 }
 
+.organizationRows {
+  display: grid;
+}
+
 .row {
   align-items: center;
   border-top: 1px solid rgba(var(--axis-accent), 0.1);
@@ -121,7 +171,26 @@
   min-height: 3.35rem;
 }
 
+.organizationRow {
+  align-items: center;
+  border-top: 1px solid rgba(var(--axis-accent), 0.1);
+  color: inherit;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 2.4rem minmax(6rem, 0.6fr) minmax(0, 1fr) auto;
+  min-height: 4.35rem;
+  text-decoration: none;
+}
+
+.organizationRow:hover {
+  background: rgba(var(--axis-accent), 0.04);
+}
+
 .row:last-child {
+  border-bottom: 1px solid rgba(var(--axis-accent), 0.1);
+}
+
+.organizationRow:last-child {
   border-bottom: 1px solid rgba(var(--axis-accent), 0.1);
 }
 
@@ -144,9 +213,40 @@
   white-space: nowrap;
 }
 
+.organizationIdentity {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.organizationIdentity strong {
+  color: rgba(var(--axis-ink), 0.88);
+  font-size: 0.95rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organizationIdentity em {
+  color: rgba(var(--axis-accent), 0.62);
+  font-size: 0.58rem;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .row strong {
   color: rgba(var(--axis-live), 0.78);
   font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.organizationRow b {
+  color: rgba(var(--axis-live), 0.82);
+  font-size: 0.86rem;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -199,11 +299,13 @@
   }
 
   .header,
-  .boardGrid {
+  .boardGrid,
+  .organizationGrid {
     grid-template-columns: 1fr;
   }
 
-  .row {
+  .row,
+  .organizationRow {
     gap: 0.45rem;
     grid-template-columns: 2rem minmax(0, 1fr) auto;
     padding: 0.7rem 0;

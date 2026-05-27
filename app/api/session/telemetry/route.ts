@@ -123,8 +123,7 @@ export async function POST(request: Request) {
       )
     }
 
-    revalidatePath("/games")
-    revalidatePath(`/replay-native`)
+    revalidatePath("/")
 
     return NextResponse.json({
       ok: true,

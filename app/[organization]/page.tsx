@@ -8,6 +8,7 @@ import {
   getOrganizationCulture,
   getParticipationSignals,
 } from "@/lib/axis-daily/attendance"
+import { axisDateKey, axisMonthKey } from "@/lib/axis-daily/continuity"
 import { AXIS_DEFAULT_SESSION_SEGMENTS } from "@/lib/axis-daily/session-flow"
 import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
 import { buildContinuityReminders } from "@/lib/axis-daily/reminders"
@@ -19,10 +20,17 @@ type OrganizationPageProps = {
   params: Promise<{
     organization: string
   }>
+  searchParams?: Promise<{
+    joined?: string
+  }>
 }
 
-export default async function OrganizationPage({ params }: OrganizationPageProps) {
+export default async function OrganizationPage({
+  params,
+  searchParams,
+}: OrganizationPageProps) {
   const { organization: organizationSlug } = await params
+  const search = searchParams ? await searchParams : {}
   const organization = await getAxisOrganizationBySlug(organizationSlug)
 
   if (!organization) notFound()
@@ -112,6 +120,7 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
     ? `${activeTodayCount} active today`
     : "floor opening"
   const checkIns = summary?.checkIns || []
+  const joinedFromInvite = search.joined === "1" && checkIns.length === 0
   const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
     id: checkIn.id,
@@ -120,7 +129,7 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
     title: checkIn.workout_type,
   }))
   const completedDays = new Set(
-    checkIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+    checkIns.map((checkIn) => axisDateKey(new Date(checkIn.occurred_at)))
   )
   const continuityDays = buildContinuityDays(completedDays)
   const accumulation = buildCurrentMonthGrid(completedDays)
@@ -141,8 +150,10 @@ export default async function OrganizationPage({ params }: OrganizationPageProps
       checkoutLabel={checkoutLabel}
       continuityDays={continuityDays}
       currentSessionTitle={lastCheckIn?.workout_type || "Open Gym"}
+      firstSessionActive={checkedOutToday && checkIns.length === 1}
       history={history}
       historyStats={historyStats}
+      joinedFromInvite={joinedFromInvite}
       lastCheckInLabel={lastCheckInLabel}
       leaderboardPlacement={leaderboardStanding.placement}
       leaderboardSignal={leaderboardSignal}
@@ -228,26 +239,14 @@ function formatLastCheckIn(value: string) {
 }
 
 function isToday(value: string) {
-  const date = new Date(value)
-  const today = new Date()
-
-  return (
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate()
-  )
+  return axisDateKey(new Date(value)) === axisDateKey(new Date())
 }
 
 function isYesterday(value: string) {
-  const date = new Date(value)
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
 
-  return (
-    date.getFullYear() === yesterday.getFullYear() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getDate() === yesterday.getDate()
-  )
+  return axisDateKey(new Date(value)) === axisDateKey(yesterday)
 }
 
 function buildContinuityDays(completedDays: Set<string>) {
@@ -256,7 +255,7 @@ function buildContinuityDays(completedDays: Set<string>) {
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(today)
     date.setDate(today.getDate() - (34 - index))
-    const key = toDateKey(date)
+    const key = axisDateKey(date)
     const isCurrentDay = isToday(date.toISOString())
 
     return {
@@ -283,7 +282,7 @@ function buildCurrentMonthGrid(completedDays: Set<string>) {
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth(), index + 1)
-    const key = toDateKey(date)
+    const key = axisDateKey(date)
     const isCurrentDay = isToday(date.toISOString())
 
     return {
@@ -304,18 +303,18 @@ function buildHistoryStats(
   checkIns: NonNullable<Awaited<ReturnType<typeof getAttendanceSummary>>>["checkIns"]
 ) {
   const today = new Date()
-  const currentMonth = toMonthKey(today)
+  const currentMonth = axisMonthKey(today)
   const monthCheckIns = checkIns.filter(
-    (checkIn) => toMonthKey(new Date(checkIn.occurred_at)) === currentMonth
+    (checkIn) => axisMonthKey(new Date(checkIn.occurred_at)) === currentMonth
   )
   const completedDays = new Set(
-    monthCheckIns.map((checkIn) => toDateKey(new Date(checkIn.occurred_at)))
+    monthCheckIns.map((checkIn) => axisDateKey(new Date(checkIn.occurred_at)))
   )
   let missed = 0
 
   for (let day = 1; day < today.getDate(); day += 1) {
     const date = new Date(today.getFullYear(), today.getMonth(), day)
-    if (!completedDays.has(toDateKey(date))) missed += 1
+    if (!completedDays.has(axisDateKey(date))) missed += 1
   }
 
   return {
@@ -325,12 +324,4 @@ function buildHistoryStats(
     totalSessions:
       checkIns.length === 1 ? "1 total session" : `${checkIns.length} total sessions`,
   }
-}
-
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10)
-}
-
-function toMonthKey(date: Date) {
-  return date.toISOString().slice(0, 7)
 }

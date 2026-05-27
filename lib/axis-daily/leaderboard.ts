@@ -1,5 +1,12 @@
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { completedSessionMinutes } from "@/lib/axis-daily/duration"
+import {
+  activeContinuityStreak,
+  axisDateKey,
+  axisMonthKey,
+  axisStartOfWeek,
+  axisTodayRange,
+} from "@/lib/axis-daily/continuity"
 
 type LeaderboardCheckInRow = {
   checked_out_at: string | null
@@ -8,6 +15,16 @@ type LeaderboardCheckInRow = {
   occurred_at: string
   status: string
   user_id: string | null
+}
+
+type OrganizationLeaderboardCheckInRow = LeaderboardCheckInRow & {
+  axis_organizations: {
+    avatar: string | null
+    logo: string | null
+    name: string
+    slug: string
+  } | null
+  organization_id: string | null
 }
 
 export type AxisLeaderboardEntry = {
@@ -24,6 +41,22 @@ export type AxisLeaderboardCategory = {
   title: string
 }
 
+export type AxisOrganizationLeaderboardEntry = {
+  detail: string
+  id: string
+  label: string
+  rank: number
+  signal: string
+  slug: string
+  value: string
+}
+
+export type AxisOrganizationLeaderboardCategory = {
+  entries: AxisOrganizationLeaderboardEntry[]
+  id: string
+  title: string
+}
+
 type MemberLedger = {
   id: string
   dates: Set<string>
@@ -33,17 +66,30 @@ type MemberLedger = {
   totalMinutesThisWeek: number
 }
 
+type OrganizationLedger = {
+  activeMembersToday: Set<string>
+  completedSessions: number
+  dates: Set<string>
+  id: string
+  label: string
+  monthlyDates: Set<string>
+  slug: string
+  totalMinutes: number
+  weeklyCheckIns: number
+  weeklyMembers: Set<string>
+}
+
 export async function getAxisLeaderboard(
   organizationId?: string | null
 ): Promise<AxisLeaderboardCategory[]> {
   const since = new Date()
   since.setMonth(since.getMonth() - 6)
-  since.setHours(0, 0, 0, 0)
+  const sinceDay = axisDayStart(since)
 
   let query = supabaseAdmin
       .from("axis_training_check_ins")
       .select("clerk_user_id, user_id, status, duration_minutes, occurred_at, checked_out_at")
-      .gte("occurred_at", since.toISOString())
+      .gte("occurred_at", sinceDay.toISOString())
       .order("occurred_at", { ascending: false })
       .limit(3000)
 
@@ -106,11 +152,88 @@ export async function getAxisLeaderboard(
   ]
 }
 
+export async function getAxisOrganizationLeaderboard(): Promise<
+  AxisOrganizationLeaderboardCategory[]
+> {
+  const since = new Date()
+  since.setMonth(since.getMonth() - 6)
+  const sinceDay = axisDayStart(since)
+
+  const result = await Promise.race([
+    supabaseAdmin
+      .from("axis_training_check_ins")
+      .select(
+        "clerk_user_id, user_id, status, duration_minutes, occurred_at, checked_out_at, organization_id, axis_organizations(name, slug, avatar, logo)"
+      )
+      .eq("status", "checked_in")
+      .not("organization_id", "is", null)
+      .gte("occurred_at", sinceDay.toISOString())
+      .order("occurred_at", { ascending: false })
+      .limit(4000)
+      .returns<OrganizationLeaderboardCheckInRow[]>(),
+    timeoutOrganizationResult(4500),
+  ])
+
+  if (result.error) {
+    return emptyOrganizationCategories()
+  }
+
+  const ledgers = buildOrganizationLedgers(result.data || [])
+
+  return [
+    {
+      entries: rankedOrganizationEntries(ledgers, (ledger) => ledger.weeklyMembers.size, {
+        detail: "unique members active this week",
+        format: (value) => `${value} active`,
+        signal: "most active this week",
+      }),
+      id: "most-active-week",
+      title: "Most Active Organizations",
+    },
+    {
+      entries: rankedOrganizationEntries(ledgers, (ledger) => ledger.monthlyDates.size, {
+        detail: "active days this month",
+        format: (value) => `${value} ${value === 1 ? "day" : "days"}`,
+        signal: "highest consistency",
+      }),
+      id: "highest-consistency",
+      title: "Highest Consistency",
+    },
+    {
+      entries: rankedOrganizationEntries(ledgers, activeOrganizationStreakDays, {
+        detail: "organization streak",
+        format: (value) => `${value} ${value === 1 ? "day" : "days"}`,
+        signal: "longest org streak",
+      }),
+      id: "longest-org-streak",
+      title: "Longest Org Streaks",
+    },
+    {
+      entries: rankedOrganizationEntries(ledgers, (ledger) => ledger.completedSessions, {
+        detail: "completed sessions",
+        format: (value) => `${value} ${value === 1 ? "session" : "sessions"}`,
+        signal: "most completed sessions",
+      }),
+      id: "completed-sessions",
+      title: "Most Completed Sessions",
+    },
+    {
+      entries: rankedOrganizationEntries(ledgers, (ledger) => ledger.totalMinutes, {
+        detail: "logged from completed sessions",
+        format: formatHours,
+        signal: "hours logged",
+      }),
+      id: "hours-logged",
+      title: "Hours Logged",
+    },
+  ]
+}
+
 function buildLedgers(rows: LeaderboardCheckInRow[]) {
   const ledgers = new Map<string, MemberLedger>()
-  const todayKey = toDateKey(new Date())
-  const weekStart = startOfWeek(new Date())
-  const monthKey = toMonthKey(new Date())
+  const todayKey = axisDateKey(new Date())
+  const weekStart = axisStartOfWeek(new Date())
+  const monthKey = axisMonthKey(new Date())
 
   for (const row of rows) {
     if (row.status !== "checked_in") continue
@@ -127,7 +250,7 @@ function buildLedgers(rows: LeaderboardCheckInRow[]) {
       sessionsToday: 0,
       totalMinutesThisWeek: 0,
     }
-    const dateKey = toDateKey(occurredAt)
+    const dateKey = axisDateKey(occurredAt)
 
     ledger.dates.add(dateKey)
 
@@ -143,11 +266,63 @@ function buildLedgers(rows: LeaderboardCheckInRow[]) {
       ledger.sessionsToday += 1
     }
 
-    if (toMonthKey(occurredAt) === monthKey) {
+    if (axisMonthKey(occurredAt) === monthKey) {
       ledger.monthlyDates.add(dateKey)
     }
 
     ledgers.set(id, ledger)
+  }
+
+  return Array.from(ledgers.values())
+}
+
+function buildOrganizationLedgers(rows: OrganizationLeaderboardCheckInRow[]) {
+  const ledgers = new Map<string, OrganizationLedger>()
+  const todayKey = axisDateKey(new Date())
+  const weekStart = axisStartOfWeek(new Date())
+  const monthKey = axisMonthKey(new Date())
+
+  for (const row of rows) {
+    if (!row.organization_id || !row.axis_organizations) continue
+
+    const organization = row.axis_organizations
+    const ledger = ledgers.get(row.organization_id) || {
+      activeMembersToday: new Set<string>(),
+      completedSessions: 0,
+      dates: new Set<string>(),
+      id: row.organization_id,
+      label: organization.name,
+      monthlyDates: new Set<string>(),
+      slug: organization.slug,
+      totalMinutes: 0,
+      weeklyCheckIns: 0,
+      weeklyMembers: new Set<string>(),
+    }
+    const occurredAt = new Date(row.occurred_at)
+    const dateKey = axisDateKey(occurredAt)
+    const member = row.clerk_user_id || row.user_id || ""
+
+    ledger.dates.add(dateKey)
+
+    if (axisMonthKey(occurredAt) === monthKey) {
+      ledger.monthlyDates.add(dateKey)
+    }
+
+    if (occurredAt >= weekStart) {
+      ledger.weeklyCheckIns += 1
+      if (member) ledger.weeklyMembers.add(member)
+    }
+
+    if (dateKey === todayKey && member) {
+      ledger.activeMembersToday.add(member)
+    }
+
+    if (row.checked_out_at) {
+      ledger.completedSessions += 1
+      ledger.totalMinutes += completedSessionMinutes(row)
+    }
+
+    ledgers.set(row.organization_id, ledger)
   }
 
   return Array.from(ledgers.values())
@@ -178,32 +353,40 @@ function rankedEntries(
     }))
 }
 
+function rankedOrganizationEntries(
+  ledgers: OrganizationLedger[],
+  valueFor: (ledger: OrganizationLedger) => number,
+  options: {
+    detail: string
+    format: (value: number) => string
+    signal: string
+  }
+) {
+  return ledgers
+    .map((ledger) => ({
+      ledger,
+      value: valueFor(ledger),
+    }))
+    .filter((entry) => entry.value > 0)
+    .sort((a, b) => b.value - a.value || a.ledger.label.localeCompare(b.ledger.label))
+    .slice(0, 6)
+    .map((entry, index) => ({
+      detail: options.detail,
+      id: entry.ledger.id,
+      label: entry.ledger.label,
+      rank: index + 1,
+      signal: options.signal,
+      slug: entry.ledger.slug,
+      value: options.format(entry.value),
+    }))
+}
+
 function activeStreakDays(ledger: MemberLedger) {
-  const today = new Date()
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
+  return activeContinuityStreak(ledger.dates)
+}
 
-  if (!ledger.dates.has(toDateKey(today)) && !ledger.dates.has(toDateKey(yesterday))) {
-    return 0
-  }
-
-  let streak = 0
-  const cursor = new Date(today)
-
-  while (ledger.dates.has(toDateKey(cursor))) {
-    streak += 1
-    cursor.setDate(cursor.getDate() - 1)
-  }
-
-  if (streak === 0 && ledger.dates.has(toDateKey(yesterday))) {
-    cursor.setTime(yesterday.getTime())
-    while (ledger.dates.has(toDateKey(cursor))) {
-      streak += 1
-      cursor.setDate(cursor.getDate() - 1)
-    }
-  }
-
-  return streak
+function activeOrganizationStreakDays(ledger: OrganizationLedger) {
+  return activeContinuityStreak(ledger.dates)
 }
 
 function emptyCategories(): AxisLeaderboardCategory[] {
@@ -213,6 +396,16 @@ function emptyCategories(): AxisLeaderboardCategory[] {
     { entries: [], id: "active-streak", title: "Longest Active Streak" },
     { entries: [], id: "monthly-consistency", title: "Most Consistent This Month" },
     { entries: [], id: "sessions-completed", title: "Most Sessions Completed" },
+  ]
+}
+
+function emptyOrganizationCategories(): AxisOrganizationLeaderboardCategory[] {
+  return [
+    { entries: [], id: "most-active-week", title: "Most Active Organizations" },
+    { entries: [], id: "highest-consistency", title: "Highest Consistency" },
+    { entries: [], id: "longest-org-streak", title: "Longest Org Streaks" },
+    { entries: [], id: "completed-sessions", title: "Most Completed Sessions" },
+    { entries: [], id: "hours-logged", title: "Hours Logged" },
   ]
 }
 
@@ -232,14 +425,8 @@ function memberFileLabel(value: string) {
   return suffix ? `FILE ${suffix}` : "FILE"
 }
 
-function startOfWeek(date: Date) {
-  const start = new Date(date)
-  const day = start.getDay()
-  const offset = day === 0 ? 6 : day - 1
-  start.setDate(start.getDate() - offset)
-  start.setHours(0, 0, 0, 0)
-
-  return start
+function axisDayStart(date: Date) {
+  return axisTodayRange(date).start
 }
 
 function timeoutResult(milliseconds: number) {
@@ -258,10 +445,18 @@ function timeoutResult(milliseconds: number) {
   })
 }
 
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10)
-}
-
-function toMonthKey(date: Date) {
-  return date.toISOString().slice(0, 7)
+function timeoutOrganizationResult(milliseconds: number) {
+  return new Promise<{
+    data: OrganizationLeaderboardCheckInRow[] | null
+    error: Error
+  }>((resolve) => {
+    setTimeout(
+      () =>
+        resolve({
+          data: null,
+          error: new Error("Organization leaderboard timed out"),
+        }),
+      milliseconds
+    )
+  })
 }

@@ -1,5 +1,6 @@
 import type { AxisLeaderboardCategory } from "@/lib/axis-daily/leaderboard"
 import type { AxisAttendanceSummary } from "@/lib/axis-daily/attendance"
+import { axisDateKey } from "@/lib/axis-daily/continuity"
 
 export type AxisContinuityReminder = {
   id: string
@@ -76,12 +77,11 @@ function daysSinceLastCheckIn(summary: AxisAttendanceSummary | null) {
   if (!lastCheckIn) return 0
 
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
   const last = new Date(lastCheckIn.occurred_at)
-  last.setHours(0, 0, 0, 0)
+  const todayKey = axisDateKey(today)
+  const lastKey = axisDateKey(last)
+  const todayUtc = Date.parse(`${todayKey}T00:00:00.000Z`)
+  const lastUtc = Date.parse(`${lastKey}T00:00:00.000Z`)
 
-  return Math.max(
-    0,
-    Math.floor((today.getTime() - last.getTime()) / 86_400_000)
-  )
+  return Math.max(0, Math.floor((todayUtc - lastUtc) / 86_400_000))
 }

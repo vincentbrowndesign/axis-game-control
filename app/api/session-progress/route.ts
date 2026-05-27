@@ -4,6 +4,7 @@ import {
   advanceSessionSegment,
   normalizeSessionSegments,
 } from "@/lib/axis-daily/session-flow"
+import { axisTodayRange } from "@/lib/axis-daily/continuity"
 import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
@@ -115,10 +116,7 @@ async function findTodayCheckIn({
   organizationId: string | null
   supabaseUserId: string | null
 }) {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 1)
+  const { end, start } = axisTodayRange()
 
   let query = supabaseAdmin
     .from("axis_training_check_ins")

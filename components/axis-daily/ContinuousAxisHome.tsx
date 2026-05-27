@@ -109,8 +109,10 @@ type ContinuousAxisHomeProps = {
   checkoutLabel: string
   continuityDays: ContinuityDay[]
   currentSessionTitle: string
+  firstSessionActive: boolean
   history: HistoryNode[]
   historyStats: HistoryStats
+  joinedFromInvite: boolean
   lastCheckInLabel: string
   leaderboardSignal: string
   organizationCulture?: OrganizationCulture[]
@@ -135,8 +137,10 @@ export function ContinuousAxisHome({
   checkoutLabel,
   continuityDays,
   currentSessionTitle,
+  firstSessionActive,
   history,
   historyStats,
+  joinedFromInvite,
   lastCheckInLabel,
   leaderboardSignal,
   organizationCulture = [],
@@ -263,6 +267,10 @@ export function ContinuousAxisHome({
       value: history.length ? `${history.length} saved marks` : "first mark waiting",
     },
   ]
+  const firstSessionMoment =
+    firstSessionActive || (status === "checked-out" && history.length <= 1)
+  const onboardingMoment =
+    joinedFromInvite && status === "idle" && history.length === 0
 
   async function submitCheckIn(homeContinuity?: HomeContinuityOption) {
     if (busy || status === "checked-out") return
@@ -443,6 +451,18 @@ export function ContinuousAxisHome({
                 <strong>{signal.value}</strong>
               </div>
             ))}
+          </section>
+        ) : null}
+
+        {onboardingMoment || firstSessionMoment ? (
+          <section className={styles.firstSessionMoment} aria-label="First session">
+            <span>{firstSessionMoment ? "first session logged" : "organization joined"}</span>
+            <strong>{firstSessionMoment ? "History started." : "First check-in waiting."}</strong>
+            <div>
+              <em>{firstSessionMoment ? "streak active" : "enter the floor"}</em>
+              <em>{firstSessionMoment ? "identity attached" : "history starts here"}</em>
+              <em>{firstSessionMoment ? "return tomorrow" : organizationName}</em>
+            </div>
           </section>
         ) : null}
 

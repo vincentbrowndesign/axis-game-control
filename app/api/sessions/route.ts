@@ -91,7 +91,7 @@ export async function GET() {
           : normalized.status || "uploaded",
       processing,
       fileName: normalized.fileName || "",
-      replayHref: `/replay-native?session=${encodeURIComponent(normalized.id)}`,
+      replayHref: "",
       archive: {
         manifest: archive,
         outputs,
