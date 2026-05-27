@@ -1,10 +1,9 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
 import type {
   AxisDailyVisibility,
-  AxisInvite,
   AxisMemberContinuity,
   AxisOrganizationOperatingItem,
   AxisOperationalTrustItem,
@@ -19,7 +18,6 @@ type OrganizationAdminPanelProps = {
   activeMembersThisWeek: number
   attendancePercent: number
   dailyVisibility: AxisDailyVisibility
-  invites: AxisInvite[]
   members: AxisMemberContinuity[]
   operationalTrust: AxisOperationalTrustItem[]
   operatingSummary: AxisOrganizationOperatingItem[]
@@ -34,11 +32,6 @@ type OrganizationAdminPanelProps = {
 
 type MemberActionResponse = {
   error?: string
-  inviteCode?: string
-  inviteId?: string
-  joinCodePath?: string
-  joinPath?: string
-  joinQueryPath?: string
   ok?: boolean
 }
 
@@ -53,7 +46,6 @@ export function OrganizationAdminPanel({
   activeMembersThisWeek,
   attendancePercent,
   dailyVisibility,
-  invites,
   members,
   operationalTrust,
   operatingSummary,
@@ -68,7 +60,6 @@ export function OrganizationAdminPanel({
   const router = useRouter()
   const [message, setMessage] = useState("")
   const [pending, setPending] = useState(false)
-  const [latestInvitePath, setLatestInvitePath] = useState("")
   const completionRate =
     dailyVisibility.checkedInToday > 0
       ? Math.round(
@@ -79,25 +70,6 @@ export function OrganizationAdminPanel({
     dailyVisibility.activeToday > 0
       ? `${dailyVisibility.activeToday} active today`
       : "culture waiting"
-
-  async function submitInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setPending(true)
-    setMessage("Saving invite")
-
-    const response = await postMemberAction(organizationSlug, {
-      action: "invite",
-      code: String(form.get("code") || ""),
-      email: String(form.get("email") || ""),
-      role: String(form.get("role") || "player"),
-    })
-
-    setPending(false)
-    setLatestInvitePath(response.joinCodePath || response.joinPath || "")
-    setMessage(response.ok ? "Invite saved" : response.error || "Invite failed")
-    if (response.ok) router.refresh()
-  }
 
   async function assignRole(membershipId: string, role: string) {
     setPending(true)
@@ -126,32 +98,6 @@ export function OrganizationAdminPanel({
     setPending(false)
     setMessage(response.ok ? "Member removed" : response.error || "Remove failed")
     if (response.ok) router.refresh()
-  }
-
-  async function disableInvite(inviteId: string) {
-    setPending(true)
-    setMessage("Disabling invite")
-
-    const response = await postMemberAction(organizationSlug, {
-      action: "disable-invite",
-      inviteId,
-    })
-
-    setPending(false)
-    setMessage(response.ok ? "Invite disabled" : response.error || "Disable failed")
-    if (response.ok) router.refresh()
-  }
-
-  async function copyInviteLink(path: string) {
-    const absolutePath =
-      typeof window === "undefined" ? path : `${window.location.origin}${path}`
-
-    try {
-      await navigator.clipboard.writeText(absolutePath)
-      setMessage("Invite link copied")
-    } catch {
-      setMessage(absolutePath)
-    }
   }
 
   async function toggleSetting(key: keyof AxisOrganizationSettings, value: boolean) {
@@ -299,32 +245,15 @@ export function OrganizationAdminPanel({
         </section>
 
         <section className={styles.grid}>
-          <form className={styles.panel} onSubmit={submitInvite}>
+          <section className={styles.panel}>
             <div className={styles.panelHeader}>
-              <span>Add members</span>
-              <strong>Invite into the culture</strong>
+              <span>Member entry</span>
+              <strong>Open organization join</strong>
             </div>
-            <input name="email" placeholder="member@email.com optional" type="email" />
-            <input
-              autoComplete="off"
-              name="code"
-              placeholder={`${organizationSlug.toUpperCase()}2025`}
-              spellCheck={false}
-            />
-            <select name="role" defaultValue="player">
-              {ROLE_OPTIONS.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-            <button disabled={pending} type="submit">
-              Save invite
-            </button>
-            {latestInvitePath ? (
-              <p className={styles.inviteLink}>{latestInvitePath}</p>
-            ) : null}
-          </form>
+            <p className={styles.empty}>
+              Players join from /join and choose Bridge or City 2 City.
+            </p>
+          </section>
 
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
@@ -424,46 +353,6 @@ export function OrganizationAdminPanel({
           </div>
         </section>
 
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <span>Invite queue</span>
-            <strong>Open paths</strong>
-          </div>
-          <div className={styles.inviteList}>
-            {invites.length ? (
-              invites.map((invite) => {
-                const path = invitePath(invite, organizationSlug)
-
-                return (
-                  <article className={styles.inviteRow} key={invite.id}>
-                    <span>{invite.email || "open invite"}</span>
-                    <strong>{invite.role}</strong>
-                    <code>{path}</code>
-                    <em>{invite.status}</em>
-                    <div className={styles.inviteActions}>
-                      <button
-                        disabled={pending}
-                        onClick={() => copyInviteLink(path)}
-                        type="button"
-                      >
-                        Copy Link
-                      </button>
-                      <button
-                        disabled={pending || invite.status !== "pending"}
-                        onClick={() => disableInvite(invite.id)}
-                        type="button"
-                      >
-                        Disable
-                      </button>
-                    </div>
-                  </article>
-                )
-              })
-            ) : (
-              <p className={styles.empty}>No pending invites.</p>
-            )}
-          </div>
-        </section>
       </section>
     </main>
   )
@@ -548,10 +437,4 @@ function memberHoursLabel(minutes: number) {
   const hours = minutes / 60
 
   return hours < 10 ? `${hours.toFixed(1)}h` : `${Math.round(hours)}h`
-}
-
-function invitePath(invite: AxisInvite, organizationSlug: string) {
-  return invite.inviteCode
-    ? `/join/${organizationSlug}/${invite.inviteCode}`
-    : `/join/${invite.inviteToken}`
 }

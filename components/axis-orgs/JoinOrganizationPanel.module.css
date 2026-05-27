@@ -176,18 +176,40 @@
 }
 
 .worlds {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.worlds span {
-  background: rgba(255, 255, 255, 0.24);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  color: rgba(246, 246, 246, 0.48);
-  font-size: 0.62rem;
-  padding: 0.45rem 0.65rem;
+.worlds button {
+  align-items: start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1rem;
+  color: rgba(246, 246, 246, 0.92);
+  display: grid;
+  gap: 1.2rem;
+  justify-items: start;
+  min-height: 8rem;
+  padding: 1rem;
+  text-align: left;
+}
+
+.worlds button:hover:not(:disabled),
+.worlds button:focus-visible {
+  background: rgba(174, 255, 47, 0.1);
+  border-color: rgba(174, 255, 47, 0.48);
+}
+
+.worlds button strong {
+  color: rgba(174, 255, 47, 0.9);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.worlds button span {
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+  line-height: 0.95;
 }
 
 @media (max-width: 640px) {
@@ -213,6 +235,10 @@
   }
 
   .joinStats {
+    grid-template-columns: 1fr;
+  }
+
+  .worlds {
     grid-template-columns: 1fr;
   }
 

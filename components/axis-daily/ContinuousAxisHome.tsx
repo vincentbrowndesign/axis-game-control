@@ -93,7 +93,7 @@ type ContinuousAxisHomeProps = {
   firstSessionActive: boolean
   history: HistoryNode[]
   historyStats: HistoryStats
-  joinedFromInvite: boolean
+  joinedFromOrganization: boolean
   lastCheckInLabel: string
   leaderboardSignal: string
   organizationCulture?: OrganizationCulture[]
@@ -121,7 +121,7 @@ export function ContinuousAxisHome({
   firstSessionActive,
   history,
   historyStats,
-  joinedFromInvite,
+  joinedFromOrganization,
   lastCheckInLabel,
   leaderboardSignal,
   organizationAvatar,
@@ -168,7 +168,7 @@ export function ContinuousAxisHome({
   const firstSessionMoment =
     firstSessionActive || (status === "checked-out" && history.length <= 1)
   const onboardingMoment =
-    joinedFromInvite && status === "idle" && history.length === 0
+    joinedFromOrganization && status === "idle" && history.length === 0
 
   async function submitCheckIn(homeContinuity?: HomeContinuityOption) {
     if (busy || status === "checked-out") return

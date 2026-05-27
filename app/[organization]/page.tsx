@@ -120,7 +120,7 @@ export default async function OrganizationPage({
     ? `${activeTodayCount} active today`
     : "floor opening"
   const checkIns = summary?.checkIns || []
-  const joinedFromInvite = search.joined === "1" && checkIns.length === 0
+  const joinedFromOrganization = search.joined === "1" && checkIns.length === 0
   const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
     id: checkIn.id,
@@ -153,7 +153,7 @@ export default async function OrganizationPage({
       firstSessionActive={checkedOutToday && checkIns.length === 1}
       history={history}
       historyStats={historyStats}
-      joinedFromInvite={joinedFromInvite}
+      joinedFromOrganization={joinedFromOrganization}
       lastCheckInLabel={lastCheckInLabel}
       leaderboardPlacement={leaderboardStanding.placement}
       leaderboardSignal={leaderboardSignal}

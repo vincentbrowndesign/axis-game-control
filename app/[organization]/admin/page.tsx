@@ -57,7 +57,7 @@ export default async function OrganizationAdminPage({
             <p className={styles.kicker}>Organization control</p>
             <h1 className={styles.heading}>Setup waiting.</h1>
             <p className={styles.text}>
-              Apply the organization migration to unlock roles, invites,
+              Apply the organization migration to unlock roles,
               settings, and member continuity for this organization.
             </p>
           </div>
@@ -92,7 +92,6 @@ export default async function OrganizationAdminPage({
       activeMembersThisWeek={adminModel.activeMembersThisWeek}
       attendancePercent={adminModel.attendancePercent}
       dailyVisibility={adminModel.dailyVisibility}
-      invites={adminModel.invites}
       members={adminModel.members}
       operationalTrust={adminModel.operationalTrust}
       operatingSummary={adminModel.operatingSummary}

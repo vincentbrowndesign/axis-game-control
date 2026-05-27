@@ -513,7 +513,7 @@ function buildOperatingSummary({
     {
       detail: activeMembersThisWeek
         ? `${activeMembersThisWeek} active this week`
-        : "invite and check in members",
+        : "members can join from Axis entry",
       label: "active members",
       tone: activeMembersThisWeek ? "active" : "watch",
       value: `${members.length} total`,
@@ -580,13 +580,13 @@ function buildOperationalTrust({
   return [
     {
       detail: invites.length
-        ? `${invites.length} invite${invites.length === 1 ? "" : "s"} waiting`
+        ? "open join flow active"
         : "join flow ready",
       label: "onboarding",
-      state: members.length ? "active" : invites.length ? "ready" : "waiting",
+      state: members.length || invites.length ? "active" : "waiting",
       value: members.length
         ? `${members.length} member${members.length === 1 ? "" : "s"}`
-        : "invite members",
+        : "members choose org",
     },
     {
       detail: recentActivityCount

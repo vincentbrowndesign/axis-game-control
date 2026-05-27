@@ -1,27 +1,47 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
 import styles from "./JoinOrganizationPanel.module.css"
+
+const V1_ORGANIZATIONS = [
+  {
+    avatar: "BR",
+    name: "Bridge",
+    slug: "bridge",
+  },
+  {
+    avatar: "C2",
+    name: "City 2 City",
+    slug: "city2city",
+  },
+]
 
 export function JoinCodePanel() {
   const router = useRouter()
-  const [message, setMessage] = useState("Invite link required.")
+  const [message, setMessage] = useState("Choose organization.")
+  const [pendingSlug, setPendingSlug] = useState("")
 
-  function submitInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function joinOrganization(slug: string, name: string) {
+    setPendingSlug(slug)
+    setMessage(`Joining ${name}`)
 
-    const form = new FormData(event.currentTarget)
-    const value = String(form.get("invite") || "").trim()
-    const invitePath = extractInvitePath(value)
+    const response = await fetch("/api/organizations/join", {
+      body: JSON.stringify({ organization: slug }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }).then((result) => result.json().catch(() => ({ ok: false })))
 
-    if (!invitePath) {
-      setMessage("Invite code not recognized.")
+    setPendingSlug("")
+
+    if (!response.ok) {
+      setMessage(response.error || "Organization could not be joined.")
       return
     }
 
-    setMessage("Opening invite.")
-    router.push(invitePath)
+    setMessage(`${name} ready`)
+    router.push(`/${response.organizationSlug || slug}?joined=1`)
+    router.refresh()
   }
 
   return (
@@ -29,74 +49,33 @@ export function JoinCodePanel() {
       <section className={styles.card}>
         <p className={styles.avatar}>AX</p>
         <p className={styles.kicker}>Join Axis</p>
-        <h1>Join your organization.</h1>
+        <h1>Join organization.</h1>
         <p className={styles.copy}>
-          Use the link from your coach. Axis will load your training group and
-          start your first check-in.
+          Choose your training group and continue into Axis.
         </p>
         <div className={styles.entryPath} aria-label="Axis entry path">
-          <span>invite link</span>
-          <span>group loaded</span>
+          <span>sign in</span>
+          <span>choose org</span>
           <span>check in</span>
           <span>history</span>
         </div>
         <div className={styles.worlds}>
-          <span>Bridge</span>
-          <span>City 2 City</span>
+          {V1_ORGANIZATIONS.map((organization) => (
+            <button
+              disabled={Boolean(pendingSlug)}
+              key={organization.slug}
+              onClick={() =>
+                joinOrganization(organization.slug, organization.name)
+              }
+              type="button"
+            >
+              <strong>{organization.avatar}</strong>
+              <span>{organization.name}</span>
+            </button>
+          ))}
         </div>
-        <details className={styles.joinFallback}>
-          <summary>Use invite manually</summary>
-          <form className={styles.joinForm} onSubmit={submitInvite}>
-            <input
-              autoComplete="off"
-              name="invite"
-              placeholder="Paste invite link"
-              spellCheck={false}
-            />
-            <button type="submit">Continue</button>
-          </form>
-        </details>
         <p className={styles.status}>{message}</p>
       </section>
     </main>
   )
-}
-
-function extractInvitePath(value: string) {
-  if (!value) return ""
-
-  try {
-    const url = new URL(value, "https://ontheaxis.com")
-    const org = normalizeSlug(url.searchParams.get("org") || "")
-    const code = normalizeCode(url.searchParams.get("code") || "")
-
-    if (org && code) return `/join/${org}/${code}`
-  } catch {
-    // Fall through to path and raw-code parsing.
-  }
-
-  const orgCodeMatch = value.match(/\/join\/([a-zA-Z0-9-]+)\/([a-zA-Z0-9-]+)/)
-  if (orgCodeMatch?.[1] && orgCodeMatch?.[2]) {
-    return `/join/${normalizeSlug(orgCodeMatch[1])}/${normalizeCode(orgCodeMatch[2])}`
-  }
-
-  const joinMatch = value.match(/\/join\/([a-zA-Z0-9-]+)/)
-  if (joinMatch?.[1]) return `/join/${joinMatch[1]}`
-
-  const uuidMatch = value.match(
-    /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/
-  )
-  if (uuidMatch?.[0]) return `/join/${uuidMatch[0]}`
-
-  const rawCode = normalizeCode(value)
-
-  return rawCode ? `/join/${rawCode}` : ""
-}
-
-function normalizeCode(value: string) {
-  return value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 40)
-}
-
-function normalizeSlug(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 64)
 }
