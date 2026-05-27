@@ -116,6 +116,8 @@ Status: foundation
 - Organization invite system added human invite codes and links for Bridge and City 2 City, including `/join?org=bridge&code=BRIDGE2025` and `/join/bridge/BRIDGE2025`, while archiving the old BTC seed from the active organization set.
 - Organization join and invite management now shows real organization entry context, active-member signals, checked-in-today counts, and active streaks on valid invite links. Coaches/admins can create invite codes, copy invite links, disable pending invites, view joined members, and assign basic roles from the lightweight organization surface.
 - Palette lock pass set the permanent Axis palette to black, white, and lime green only, removing beige/wellness direction from the constitution, design tokens, and active entry/profile/join/admin surfaces.
+- Invite flow rebuild made invite links the primary product path: `/join/bridge/ABCD123` and `/join/city2city/EFGH456` now auto-load the organization surface with member/check-in/streak signals before auth or acceptance, while manual invite entry is only a quiet fallback.
+- Join language pass grounded organization entry around direct onboarding language: `Join your organization`, `Join Bridge`, and `Join City 2 City` replace abstract invite wording while preserving the minimal progression path.
 
 FUTURE LAYERS
 

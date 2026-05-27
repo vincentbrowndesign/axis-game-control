@@ -7,8 +7,9 @@ import styles from "./JoinOrganizationPanel.module.css"
 type JoinOrganizationPanelProps = {
   activeMembers: number
   activeStreaks: number
+  authenticated: boolean
   checkedInToday: number
-  inviteCode?: string | null
+  invitePath: string
   organizationAvatar: string
   organizationName: string
   role: string
@@ -18,8 +19,9 @@ type JoinOrganizationPanelProps = {
 export function JoinOrganizationPanel({
   activeMembers,
   activeStreaks,
+  authenticated,
   checkedInToday,
-  inviteCode,
+  invitePath,
   organizationAvatar,
   organizationName,
   role,
@@ -30,6 +32,11 @@ export function JoinOrganizationPanel({
   const [pending, setPending] = useState(false)
 
   async function acceptInvite() {
+    if (!authenticated) {
+      router.push(`/sign-in?redirect_url=${encodeURIComponent(invitePath)}`)
+      return
+    }
+
     setPending(true)
     setMessage("Joining")
 
@@ -53,12 +60,8 @@ export function JoinOrganizationPanel({
     <main className={styles.surface}>
       <section className={styles.card}>
         <p className={styles.avatar}>{organizationAvatar}</p>
-        <p className={styles.kicker}>Joining</p>
-        <h1>{organizationName}.</h1>
-        <p className={styles.copy}>
-          Step into the organization world. Your first check-in starts the
-          record here.
-        </p>
+        <p className={styles.kicker}>Organization loaded</p>
+        <h1>Join {organizationName}.</h1>
         <div className={styles.joinStats} aria-label="Organization activity">
           <span>
             <strong>{activeMembers}</strong>
@@ -74,18 +77,18 @@ export function JoinOrganizationPanel({
           </span>
         </div>
         <div className={styles.entryPath} aria-label="First session path">
-          <span>join organization</span>
-          <span>first check-in</span>
-          <span>history started</span>
-          <span>streak active</span>
+          <span>join</span>
+          <span>check in</span>
+          <span>history</span>
+          <span>return</span>
         </div>
-        <p className={styles.roleLine}>
-          {inviteCode ? `Invite code: ${inviteCode}` : "Invite link active"} / {role}
-        </p>
+        <p className={styles.roleLine}>{role}</p>
         <button disabled={pending} onClick={acceptInvite} type="button">
-          {pending ? "Joining" : "Join organization"}
+          {pending ? "Joining" : "Continue"}
         </button>
-        <p className={styles.status}>{message || "Ready"}</p>
+        <p className={styles.status}>
+          {message || (authenticated ? "Ready" : "Sign in to continue")}
+        </p>
       </section>
     </main>
   )

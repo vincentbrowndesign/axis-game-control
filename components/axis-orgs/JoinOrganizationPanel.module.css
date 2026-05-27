@@ -26,6 +26,7 @@
 .entryPath,
 .joinStats,
 .roleLine,
+.joinFallback,
 .joinForm,
 .worlds,
 .card button {
@@ -143,6 +144,20 @@
   display: grid;
   gap: 0.7rem;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.joinFallback {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 0.7rem;
+  padding-top: 0.8rem;
+}
+
+.joinFallback summary {
+  color: rgba(246, 246, 246, 0.42);
+  cursor: pointer;
+  font-size: 0.58rem;
+  list-style-position: inside;
 }
 
 .joinForm input {

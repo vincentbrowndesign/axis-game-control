@@ -6,7 +6,7 @@ import styles from "./JoinOrganizationPanel.module.css"
 
 export function JoinCodePanel() {
   const router = useRouter()
-  const [message, setMessage] = useState("Paste an invite link or code.")
+  const [message, setMessage] = useState("Invite link required.")
 
   function submitInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -29,30 +29,33 @@ export function JoinCodePanel() {
       <section className={styles.card}>
         <p className={styles.avatar}>AX</p>
         <p className={styles.kicker}>Join Axis</p>
-        <h1>Enter your team.</h1>
+        <h1>Join your organization.</h1>
         <p className={styles.copy}>
-          Use the invite from your coach or organization. Your first check-in
-          starts the history.
+          Use the link from your coach. Axis will load your training group and
+          start your first check-in.
         </p>
         <div className={styles.entryPath} aria-label="Axis entry path">
-          <span>identity</span>
-          <span>organization</span>
-          <span>first session</span>
+          <span>invite link</span>
+          <span>group loaded</span>
+          <span>check in</span>
           <span>history</span>
         </div>
-        <form className={styles.joinForm} onSubmit={submitInvite}>
-          <input
-            autoComplete="off"
-            name="invite"
-            placeholder="Paste invite link or code"
-            spellCheck={false}
-          />
-          <button type="submit">Continue</button>
-        </form>
         <div className={styles.worlds}>
           <span>Bridge</span>
           <span>City 2 City</span>
         </div>
+        <details className={styles.joinFallback}>
+          <summary>Use invite manually</summary>
+          <form className={styles.joinForm} onSubmit={submitInvite}>
+            <input
+              autoComplete="off"
+              name="invite"
+              placeholder="Paste invite link"
+              spellCheck={false}
+            />
+            <button type="submit">Continue</button>
+          </form>
+        </details>
         <p className={styles.status}>{message}</p>
       </section>
     </main>

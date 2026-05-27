@@ -25,10 +25,22 @@ export default async function JoinCodePage({ params }: JoinCodePageProps) {
           <div className={styles.entryCopy}>
             <p className={styles.brand}>Axis</p>
             <p className={styles.kicker}>Organization invite</p>
-            <h1 className={styles.heading}>Invite closed.</h1>
+            <h1 className={styles.heading}>Invite expired.</h1>
             <p className={styles.text}>
-              Ask your coach or organization admin for a fresh invite link.
+              This invite is no longer active. Request a new link from your
+              coach.
             </p>
+            <div className={styles.entryActions}>
+              <Link className={styles.action} href="/">
+                Return home
+              </Link>
+              <a
+                className={styles.action}
+                href={`mailto:?subject=Axis invite link request&body=I need a new Axis invite link for ${organization}.`}
+              >
+                Contact organization
+              </a>
+            </div>
           </div>
         </section>
       </main>
@@ -37,39 +49,15 @@ export default async function JoinCodePage({ params }: JoinCodePageProps) {
 
   const snapshot = await getOrganizationJoinSnapshot(invite.organizationId)
   const identity = await getAxisRequestIdentity()
-
-  if (!identity) {
-    return (
-      <main className={styles.surface}>
-        <section className={styles.entryShell}>
-          <div className={styles.entryCopy}>
-            <p className={styles.brand}>{invite.organization.name}</p>
-            <p className={styles.kicker}>Organization invite</p>
-            <h1 className={styles.heading}>Sign in to join.</h1>
-            <p className={styles.text}>
-              {snapshot.activeMembers} active members. {snapshot.checkedInToday} checked
-              in today. Sign in and step into the organization record.
-            </p>
-            <div className={styles.entryActions}>
-              <Link className={styles.action} href="/sign-in">
-                Sign in
-              </Link>
-              <Link className={styles.action} href="/sign-up">
-                Sign up
-              </Link>
-            </div>
-          </div>
-        </section>
-      </main>
-    )
-  }
+  const invitePath = `/join/${organization}/${code}`
 
   return (
     <JoinOrganizationPanel
       activeMembers={snapshot.activeMembers}
       activeStreaks={snapshot.activeStreaks}
+      authenticated={Boolean(identity)}
       checkedInToday={snapshot.checkedInToday}
-      inviteCode={invite.inviteCode}
+      invitePath={invitePath}
       organizationAvatar={invite.organization.avatar}
       organizationName={invite.organization.name}
       role={invite.role}

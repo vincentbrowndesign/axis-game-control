@@ -33,8 +33,7 @@ export default async function JoinOrganizationPage({
             <p className={styles.kicker}>Organization entry</p>
             <h1 className={styles.heading}>Sign in to join.</h1>
             <p className={styles.text}>
-              Your organization history needs an identity before your invite can
-              become part of the record.
+              Sign in first, then open the invite link from your coach.
             </p>
             <div className={styles.entryActions}>
               <Link className={styles.action} href="/sign-in">
