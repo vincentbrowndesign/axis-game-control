@@ -14,13 +14,6 @@ export type AxisOrganization = {
 
 const STATIC_ORGANIZATIONS: AxisOrganization[] = [
   {
-    avatar: "B",
-    id: null,
-    logo: "B",
-    name: "BTC",
-    slug: "btc",
-  },
-  {
     avatar: "BR",
     id: null,
     logo: "BR",

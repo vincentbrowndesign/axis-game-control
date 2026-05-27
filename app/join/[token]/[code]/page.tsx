@@ -1,21 +1,22 @@
 import Link from "next/link"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import {
-  getOrganizationInviteByToken,
+  getOrganizationInviteByCode,
   getOrganizationJoinSnapshot,
 } from "@/lib/axis-orgs/memberships"
 import { JoinOrganizationPanel } from "@/components/axis-orgs/JoinOrganizationPanel"
 import styles from "@/app/page.module.css"
 
-type JoinPageProps = {
+type JoinCodePageProps = {
   params: Promise<{
+    code: string
     token: string
   }>
 }
 
-export default async function JoinPage({ params }: JoinPageProps) {
-  const { token } = await params
-  const invite = await getOrganizationInviteByToken(token)
+export default async function JoinCodePage({ params }: JoinCodePageProps) {
+  const { code, token: organization } = await params
+  const invite = await getOrganizationInviteByCode(organization, code)
 
   if (!invite || invite.status !== "pending") {
     return (
@@ -72,7 +73,7 @@ export default async function JoinPage({ params }: JoinPageProps) {
       organizationAvatar={invite.organization.avatar}
       organizationName={invite.organization.name}
       role={invite.role}
-      token={token}
+      token={invite.inviteCode || invite.inviteToken}
     />
   )
 }

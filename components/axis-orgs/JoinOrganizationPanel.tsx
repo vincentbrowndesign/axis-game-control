@@ -5,6 +5,10 @@ import { useState } from "react"
 import styles from "./JoinOrganizationPanel.module.css"
 
 type JoinOrganizationPanelProps = {
+  activeMembers: number
+  activeStreaks: number
+  checkedInToday: number
+  inviteCode?: string | null
   organizationAvatar: string
   organizationName: string
   role: string
@@ -12,6 +16,10 @@ type JoinOrganizationPanelProps = {
 }
 
 export function JoinOrganizationPanel({
+  activeMembers,
+  activeStreaks,
+  checkedInToday,
+  inviteCode,
   organizationAvatar,
   organizationName,
   role,
@@ -45,18 +53,35 @@ export function JoinOrganizationPanel({
     <main className={styles.surface}>
       <section className={styles.card}>
         <p className={styles.avatar}>{organizationAvatar}</p>
-        <p className={styles.kicker}>Organization invite</p>
-        <h1>Join {organizationName}.</h1>
+        <p className={styles.kicker}>Joining</p>
+        <h1>{organizationName}.</h1>
         <p className={styles.copy}>
-          Enter the organization world as {role}. Your first check-in starts
-          the record here.
+          Step into the organization world. Your first check-in starts the
+          record here.
         </p>
+        <div className={styles.joinStats} aria-label="Organization activity">
+          <span>
+            <strong>{activeMembers}</strong>
+            active members
+          </span>
+          <span>
+            <strong>{checkedInToday}</strong>
+            checked in today
+          </span>
+          <span>
+            <strong>{activeStreaks}</strong>
+            active streaks
+          </span>
+        </div>
         <div className={styles.entryPath} aria-label="First session path">
           <span>join organization</span>
           <span>first check-in</span>
           <span>history started</span>
           <span>streak active</span>
         </div>
+        <p className={styles.roleLine}>
+          {inviteCode ? `Invite code: ${inviteCode}` : "Invite link active"} / {role}
+        </p>
         <button disabled={pending} onClick={acceptInvite} type="button">
           {pending ? "Joining" : "Join organization"}
         </button>

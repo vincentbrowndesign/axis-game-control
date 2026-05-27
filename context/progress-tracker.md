@@ -76,7 +76,7 @@ ORGANIZATIONS
 
 Status: foundation
 
-- Organization routing foundation added for `/btc`, `/bridge`, and `/city2city`.
+- Organization routing foundation is active for `/bridge` and `/city2city`.
 - Organization identity can frame the existing check-in, history, and leaderboard continuity surface without replacing the current flow.
 - Supabase migration added organizations, memberships, and optional organization-scoped check-ins for future organization-level continuity.
 - Role and admin foundation added for player, coach, admin, parent, and owner roles.
@@ -113,6 +113,8 @@ Status: foundation
 - Axis world feel pass added a quiet world-presence rail to member organization surfaces, summarizing active organizations, live sessions, streak leaders, and growing history from persisted participation signals without creating a feed.
 - Real-world onboarding now carries invite acceptance into the organization world, shows a restrained first-check-in path, and marks the first completed session with `History started`, `streak active`, and `return tomorrow` without adding startup onboarding flows.
 - Organization system refinement tightened the coach/admin surface into culture operations: live participation status, completion, attendance health, continuity trust, support visibility, member roles, invites, and optional trust layers stay operational without becoming enterprise dashboard software.
+- Organization invite system added human invite codes and links for Bridge and City 2 City, including `/join?org=bridge&code=BRIDGE2025` and `/join/bridge/BRIDGE2025`, while archiving the old BTC seed from the active organization set.
+- Organization join and invite management now shows real organization entry context, active-member signals, checked-in-today counts, and active streaks on valid invite links. Coaches/admins can create invite codes, copy invite links, disable pending invites, view joined members, and assign basic roles from the lightweight organization surface.
 
 FUTURE LAYERS
 

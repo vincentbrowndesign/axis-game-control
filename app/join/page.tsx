@@ -1,9 +1,27 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import { JoinCodePanel } from "@/components/axis-orgs/JoinCodePanel"
 import styles from "@/app/page.module.css"
 
-export default async function JoinOrganizationPage() {
+type JoinOrganizationPageProps = {
+  searchParams?: Promise<{
+    code?: string
+    org?: string
+  }>
+}
+
+export default async function JoinOrganizationPage({
+  searchParams,
+}: JoinOrganizationPageProps) {
+  const search = searchParams ? await searchParams : {}
+  const organization = normalizeSlug(search.org || "")
+  const code = normalizeCode(search.code || "")
+
+  if (organization && code) {
+    redirect(`/join/${organization}/${code}`)
+  }
+
   const identity = await getAxisRequestIdentity()
 
   if (!identity) {
@@ -33,4 +51,12 @@ export default async function JoinOrganizationPage() {
   }
 
   return <JoinCodePanel />
+}
+
+function normalizeCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 40)
+}
+
+function normalizeSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 64)
 }

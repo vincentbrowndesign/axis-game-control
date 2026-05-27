@@ -13,6 +13,7 @@ import {
   axisDateKey,
   axisMonthKey,
   axisStartOfWeek,
+  axisTodayRange,
 } from "@/lib/axis-daily/continuity"
 
 export const AXIS_ORGANIZATION_ROLES = [
@@ -45,8 +46,9 @@ export type AxisMembershipWorld = AxisMembership & {
 
 export type AxisInvite = {
   createdAt: string
-  email: string
+  email: string | null
   id: string
+  inviteCode: string | null
   inviteToken: string
   role: AxisOrganizationRole
   status: string
@@ -125,6 +127,12 @@ export type AxisOrganizationAdminModel = {
   settings: AxisOrganizationSettings
   streakLeaders: AxisMemberContinuity[]
   supportVisibility: AxisSupportVisibilityItem[]
+}
+
+export type AxisOrganizationJoinSnapshot = {
+  activeMembers: number
+  activeStreaks: number
+  checkedInToday: number
 }
 
 const MANAGE_ROLES = new Set<AxisOrganizationRole>([
@@ -251,6 +259,72 @@ export async function getAxisMembershipWorlds(identity: AxisRequestIdentity) {
       organizationSlug: organization.slug,
     }
   })
+}
+
+export async function getOrganizationJoinSnapshot(organizationId: string) {
+  const today = axisTodayRange()
+  const since = new Date()
+  since.setDate(since.getDate() - 60)
+
+  const [membershipsResult, checkInsResult] = await Promise.all([
+    Promise.race([
+      supabaseAdmin
+        .from("axis_organization_memberships")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("status", "active")
+        .returns<{ id: string }[]>(),
+      timeoutListResult(2500),
+    ]),
+    Promise.race([
+      supabaseAdmin
+        .from("axis_training_check_ins")
+        .select("user_id, clerk_user_id, occurred_at")
+        .eq("organization_id", organizationId)
+        .eq("status", "checked_in")
+        .gte("occurred_at", since.toISOString())
+        .lt("occurred_at", today.end.toISOString())
+        .returns<
+          {
+            clerk_user_id: string | null
+            occurred_at: string
+            user_id: string | null
+          }[]
+        >(),
+      timeoutListResult(2500),
+    ]),
+  ])
+
+  const checkIns = checkInsResult.error ? [] : checkInsResult.data || []
+  const checkedInToday = new Set<string>()
+  const daysByMember = new Map<string, Set<string>>()
+
+  for (const checkIn of checkIns) {
+    const key = checkIn.user_id || checkIn.clerk_user_id
+    if (!key) continue
+
+    const occurredAt = new Date(checkIn.occurred_at)
+    const memberDays = daysByMember.get(key) || new Set<string>()
+    memberDays.add(axisDateKey(occurredAt))
+    daysByMember.set(key, memberDays)
+
+    if (
+      occurredAt >= today.start &&
+      occurredAt < today.end
+    ) {
+      checkedInToday.add(key)
+    }
+  }
+
+  return {
+    activeMembers: membershipsResult.error
+      ? 0
+      : membershipsResult.data?.length || 0,
+    activeStreaks: [...daysByMember.values()].filter(
+      (days) => activeContinuityStreak(days) > 0
+    ).length,
+    checkedInToday: checkedInToday.size,
+  } satisfies AxisOrganizationJoinSnapshot
 }
 
 export async function getOrganizationAdminModel(organizationId: string) {
@@ -580,15 +654,16 @@ async function readInvites(organizationId: string) {
   const result = await Promise.race([
     supabaseAdmin
       .from("axis_organization_invites")
-      .select("id, invite_token, email, role, status, created_at")
+      .select("id, invite_token, invite_code, email, role, status, created_at")
       .eq("organization_id", organizationId)
       .neq("status", "revoked")
       .order("created_at", { ascending: false })
       .returns<
         {
           created_at: string
-          email: string
+          email: string | null
           id: string
+          invite_code: string | null
           invite_token: string
           role: AxisOrganizationRole
           status: string
@@ -603,6 +678,7 @@ async function readInvites(organizationId: string) {
     createdAt: invite.created_at,
     email: invite.email,
     id: invite.id,
+    inviteCode: invite.invite_code,
     inviteToken: invite.invite_token,
     role: invite.role,
     status: invite.status,
@@ -610,14 +686,38 @@ async function readInvites(organizationId: string) {
 }
 
 export async function getOrganizationInviteByToken(token: string) {
+  return getOrganizationInviteByIdentifier(token)
+}
+
+export async function getOrganizationInviteByCode(
+  organizationSlug: string,
+  code: string
+) {
+  return getOrganizationInviteByIdentifier(code, organizationSlug)
+}
+
+async function getOrganizationInviteByIdentifier(
+  identifier: string,
+  organizationSlug?: string
+) {
+  const normalizedCode = normalizeInviteCode(identifier)
+  const normalizedSlug = organizationSlug
+    ? organizationSlug.toLowerCase().replace(/[^a-z0-9-]/g, "")
+    : ""
+  const uuid = identifier.match(
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+  )?.[0]
+  let query = supabaseAdmin
+    .from("axis_organization_invites")
+    .select(
+      "id, invite_token, invite_code, email, role, status, organization_id, axis_organizations(id, name, slug, avatar, logo)"
+    )
+    .eq("status", "pending")
+
+  query = uuid ? query.eq("invite_token", uuid) : query.eq("invite_code", normalizedCode)
+
   const result = await Promise.race([
-    supabaseAdmin
-      .from("axis_organization_invites")
-      .select(
-        "id, invite_token, email, role, status, organization_id, axis_organizations(id, name, slug, avatar, logo)"
-      )
-      .eq("invite_token", token)
-      .maybeSingle<{
+    query.maybeSingle<{
         axis_organizations: {
           avatar: string | null
           id: string
@@ -625,8 +725,9 @@ export async function getOrganizationInviteByToken(token: string) {
           name: string
           slug: string
         } | null
-        email: string
+        email: string | null
         id: string
+        invite_code: string | null
         invite_token: string
         organization_id: string
         role: AxisOrganizationRole
@@ -639,9 +740,17 @@ export async function getOrganizationInviteByToken(token: string) {
     return null
   }
 
+  if (
+    normalizedSlug &&
+    result.data.axis_organizations.slug.toLowerCase() !== normalizedSlug
+  ) {
+    return null
+  }
+
   return {
     email: result.data.email,
     id: result.data.id,
+    inviteCode: result.data.invite_code,
     inviteToken: result.data.invite_token,
     organization: {
       avatar:
@@ -656,6 +765,10 @@ export async function getOrganizationInviteByToken(token: string) {
     role: result.data.role,
     status: result.data.status,
   }
+}
+
+export function normalizeInviteCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 40)
 }
 
 async function readCheckIns(organizationId: string) {

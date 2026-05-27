@@ -5,6 +5,7 @@ import {
   canManageOrganization,
   getOrganizationMembership,
   isAxisOrganizationRole,
+  normalizeInviteCode,
 } from "@/lib/axis-orgs/memberships"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
@@ -18,7 +19,9 @@ type MembersRouteContext = {
 
 type MembersActionBody = {
   action?: unknown
+  code?: unknown
   email?: unknown
+  inviteId?: unknown
   membershipId?: unknown
   role?: unknown
 }
@@ -55,11 +58,22 @@ export async function POST(request: Request, context: MembersRouteContext) {
 
   if (action === "invite") {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : ""
+    const requestedCode =
+      typeof body.code === "string" ? normalizeInviteCode(body.code) : ""
     const role = isAxisOrganizationRole(body.role) ? body.role : "player"
+    const inviteCode =
+      requestedCode || defaultInviteCode(organization.slug, new Date().getFullYear())
 
-    if (!email || !email.includes("@")) {
+    if (email && !email.includes("@")) {
       return NextResponse.json(
-        { error: "VALID EMAIL REQUIRED", traceId },
+        { error: "VALID EMAIL OR BLANK REQUIRED", traceId },
+        { status: 400 }
+      )
+    }
+
+    if (!inviteCode || inviteCode.length < 4) {
+      return NextResponse.json(
+        { error: "VALID INVITE CODE REQUIRED", traceId },
         { status: 400 }
       )
     }
@@ -67,15 +81,16 @@ export async function POST(request: Request, context: MembersRouteContext) {
     const result = await supabaseAdmin
       .from("axis_organization_invites")
       .insert({
-        email,
+        email: email || null,
+        invite_code: inviteCode,
         invited_by_clerk_user_id: identity.clerkUserId,
         invited_by_user_id: identity.supabaseUserId,
         organization_id: organization.id,
         role,
         status: "pending",
       })
-      .select("id, invite_token")
-      .single<{ id: string; invite_token: string }>()
+      .select("id, invite_token, invite_code")
+      .single<{ id: string; invite_code: string | null; invite_token: string }>()
 
     if (result.error) {
       return NextResponse.json(
@@ -84,9 +99,14 @@ export async function POST(request: Request, context: MembersRouteContext) {
       )
     }
 
+    const code = result.data.invite_code || inviteCode
+
     return NextResponse.json({
+      inviteCode: code,
       inviteId: result.data.id,
+      joinCodePath: `/join/${organization.slug}/${code}`,
       joinPath: `/join/${result.data.invite_token}`,
+      joinQueryPath: `/join?org=${organization.slug}&code=${code}`,
       ok: true,
       traceId,
     })
@@ -151,5 +171,46 @@ export async function POST(request: Request, context: MembersRouteContext) {
     return NextResponse.json({ membershipId: result.data.id, ok: true, traceId })
   }
 
+  if (action === "disable-invite") {
+    const inviteId = typeof body.inviteId === "string" ? body.inviteId : ""
+
+    if (!inviteId) {
+      return NextResponse.json(
+        { error: "INVITE REQUIRED", traceId },
+        { status: 400 }
+      )
+    }
+
+    const result = await supabaseAdmin
+      .from("axis_organization_invites")
+      .update({ status: "revoked", updated_at: new Date().toISOString() })
+      .eq("id", inviteId)
+      .eq("organization_id", organization.id)
+      .eq("status", "pending")
+      .select("id")
+      .single<{ id: string }>()
+
+    if (result.error) {
+      return NextResponse.json(
+        { detail: result.error.message, error: "INVITE NOT DISABLED", traceId },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ inviteId: result.data.id, ok: true, traceId })
+  }
+
   return NextResponse.json({ error: "UNKNOWN ACTION", traceId }, { status: 400 })
+}
+
+function defaultInviteCode(slug: string, year: number) {
+  const prefix =
+    slug === "city2city"
+      ? "CITY2CITY"
+      : slug === "bridge"
+        ? "BRIDGE"
+        : normalizeInviteCode(slug)
+  const suffix = crypto.randomUUID().slice(0, 6).toUpperCase()
+
+  return normalizeInviteCode(`${prefix}${year}-${suffix}`)
 }

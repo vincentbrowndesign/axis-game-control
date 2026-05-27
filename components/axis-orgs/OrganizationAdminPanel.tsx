@@ -32,6 +32,16 @@ type OrganizationAdminPanelProps = {
   supportVisibility: AxisSupportVisibilityItem[]
 }
 
+type MemberActionResponse = {
+  error?: string
+  inviteCode?: string
+  inviteId?: string
+  joinCodePath?: string
+  joinPath?: string
+  joinQueryPath?: string
+  ok?: boolean
+}
+
 const ROLE_OPTIONS: AxisOrganizationRole[] = [
   "player",
   "coach",
@@ -78,12 +88,13 @@ export function OrganizationAdminPanel({
 
     const response = await postMemberAction(organizationSlug, {
       action: "invite",
+      code: String(form.get("code") || ""),
       email: String(form.get("email") || ""),
       role: String(form.get("role") || "player"),
     })
 
     setPending(false)
-    setLatestInvitePath(response.joinPath || "")
+    setLatestInvitePath(response.joinCodePath || response.joinPath || "")
     setMessage(response.ok ? "Invite saved" : response.error || "Invite failed")
     if (response.ok) router.refresh()
   }
@@ -115,6 +126,32 @@ export function OrganizationAdminPanel({
     setPending(false)
     setMessage(response.ok ? "Member removed" : response.error || "Remove failed")
     if (response.ok) router.refresh()
+  }
+
+  async function disableInvite(inviteId: string) {
+    setPending(true)
+    setMessage("Disabling invite")
+
+    const response = await postMemberAction(organizationSlug, {
+      action: "disable-invite",
+      inviteId,
+    })
+
+    setPending(false)
+    setMessage(response.ok ? "Invite disabled" : response.error || "Disable failed")
+    if (response.ok) router.refresh()
+  }
+
+  async function copyInviteLink(path: string) {
+    const absolutePath =
+      typeof window === "undefined" ? path : `${window.location.origin}${path}`
+
+    try {
+      await navigator.clipboard.writeText(absolutePath)
+      setMessage("Invite link copied")
+    } catch {
+      setMessage(absolutePath)
+    }
   }
 
   async function toggleSetting(key: keyof AxisOrganizationSettings, value: boolean) {
@@ -267,7 +304,13 @@ export function OrganizationAdminPanel({
               <span>Add members</span>
               <strong>Invite into the culture</strong>
             </div>
-            <input name="email" placeholder="member@email.com" type="email" />
+            <input name="email" placeholder="member@email.com optional" type="email" />
+            <input
+              autoComplete="off"
+              name="code"
+              placeholder={`${organizationSlug.toUpperCase()}2025`}
+              spellCheck={false}
+            />
             <select name="role" defaultValue="player">
               {ROLE_OPTIONS.map((role) => (
                 <option key={role} value={role}>
@@ -388,14 +431,34 @@ export function OrganizationAdminPanel({
           </div>
           <div className={styles.inviteList}>
             {invites.length ? (
-              invites.map((invite) => (
-                <article className={styles.inviteRow} key={invite.id}>
-                  <span>{invite.email}</span>
-                  <strong>{invite.role}</strong>
-                  <code>{`/join/${invite.inviteToken}`}</code>
-                  <em>{invite.status}</em>
-                </article>
-              ))
+              invites.map((invite) => {
+                const path = invitePath(invite, organizationSlug)
+
+                return (
+                  <article className={styles.inviteRow} key={invite.id}>
+                    <span>{invite.email || "open invite"}</span>
+                    <strong>{invite.role}</strong>
+                    <code>{path}</code>
+                    <em>{invite.status}</em>
+                    <div className={styles.inviteActions}>
+                      <button
+                        disabled={pending}
+                        onClick={() => copyInviteLink(path)}
+                        type="button"
+                      >
+                        Copy Link
+                      </button>
+                      <button
+                        disabled={pending || invite.status !== "pending"}
+                        onClick={() => disableInvite(invite.id)}
+                        type="button"
+                      >
+                        Disable
+                      </button>
+                    </div>
+                  </article>
+                )
+              })
             ) : (
               <p className={styles.empty}>No pending invites.</p>
             )}
@@ -466,7 +529,10 @@ async function postMemberAction(organizationSlug: string, body: unknown) {
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
     method: "POST",
-  }).then((result) => result.json().catch(() => ({ ok: false })))
+  }).then(
+    (result) =>
+      result.json().catch(() => ({ ok: false })) as Promise<MemberActionResponse>
+  )
 }
 
 function memberLabel(member: AxisMemberContinuity) {
@@ -482,4 +548,10 @@ function memberHoursLabel(minutes: number) {
   const hours = minutes / 60
 
   return hours < 10 ? `${hours.toFixed(1)}h` : `${Math.round(hours)}h`
+}
+
+function invitePath(invite: AxisInvite, organizationSlug: string) {
+  return invite.inviteCode
+    ? `/join/${organizationSlug}/${invite.inviteCode}`
+    : `/join/${invite.inviteToken}`
 }
