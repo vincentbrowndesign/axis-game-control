@@ -1,9 +1,8 @@
 export type SessionActivationStatus =
   | "checked_in"
   | "step_into_frame"
-  | "player_found"
   | "move_around"
-  | "tracking_ready"
+  | "ready"
   | "training_active"
 
 export type SessionIdentityHandshake = {

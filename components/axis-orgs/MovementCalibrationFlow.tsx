@@ -12,7 +12,7 @@ import {
 } from "@/lib/axis-calibration/vocabulary"
 import styles from "@/app/page.module.css"
 
-type MotionPrimitive = {
+type MovementReading = {
   directionChanged: boolean
   jumped: boolean
   moving: boolean
@@ -27,17 +27,10 @@ type SessionMovementSample = {
   movementState: "moving" | "stopped"
   organizationSlug: string
   playerId: string
+  sessionStability: number
   subjectId: string
   timestamp: number
-  trackingContinuityConfidence: number
   visibilityState: "visible" | "lost"
-}
-
-type MotionBox = {
-  height: number
-  width: number
-  x: number
-  y: number
 }
 
 const SAMPLE_WIDTH = 96
@@ -45,7 +38,6 @@ const SAMPLE_HEIGHT = 54
 const DIFF_THRESHOLD = 30
 const MOVING_RATIO = 0.035
 const STOPPED_RATIO = 0.015
-const PLAYER_FOUND_MS = 500
 const MOVE_AROUND_MS = 1300
 const LOCKED_MS = 2300
 
@@ -168,13 +160,8 @@ export function MovementCalibrationFlow({
       return
     }
 
-    if (next === CALIBRATION_LANGUAGE.PLAYER_FOUND) {
-      sessionActivation.status = "player_found"
-      return
-    }
-
-    if (next === CALIBRATION_LANGUAGE.TRACKING_READY) {
-      sessionActivation.status = "tracking_ready"
+    if (next === CALIBRATION_LANGUAGE.READY) {
+      sessionActivation.status = "ready"
       return
     }
 
@@ -231,7 +218,7 @@ export function MovementCalibrationFlow({
 
     if (!previousFrame) {
       previousFrameRef.current = new Uint8ClampedArray(frame.data)
-      drawTrackingFrame()
+      clearSessionOverlay()
       frameRef.current = window.requestAnimationFrame(readFrame)
       return
     }
@@ -244,11 +231,11 @@ export function MovementCalibrationFlow({
       changedRatio: frameState.changedRatio,
       center: poseState.center || frameState.center,
       poseVisible: poseState.visible,
-      trackingContinuityConfidence: poseState.trackingContinuityConfidence,
+      sessionStability: poseState.sessionStability,
     })
     updatePhase(primitive)
-    writeSessionSample(primitive, poseState.trackingContinuityConfidence)
-    drawTrackingFrame(poseState.box || frameState.box)
+    writeSessionSample(primitive, poseState.sessionStability)
+    clearSessionOverlay()
 
     frameRef.current = window.requestAnimationFrame(readFrame)
   }
@@ -328,7 +315,7 @@ export function MovementCalibrationFlow({
       return {
         box: null,
         center: null,
-        trackingContinuityConfidence: 0,
+        sessionStability: 0,
         visible: false,
       }
     }
@@ -340,7 +327,7 @@ export function MovementCalibrationFlow({
       return {
         box: null,
         center: null,
-        trackingContinuityConfidence: 0,
+        sessionStability: 0,
         visible: false,
       }
     }
@@ -357,7 +344,7 @@ export function MovementCalibrationFlow({
       return {
         box: null,
         center: null,
-        trackingContinuityConfidence: visibleKeypoints.length / 17,
+        sessionStability: visibleKeypoints.length / 17,
         visible: false,
       }
     }
@@ -379,7 +366,7 @@ export function MovementCalibrationFlow({
         x: box.x + box.width / 2,
         y: box.y + box.height / 2,
       },
-      trackingContinuityConfidence: visibleKeypoints.length / 17,
+      sessionStability: visibleKeypoints.length / 17,
       visible: true,
     }
   }
@@ -392,8 +379,8 @@ export function MovementCalibrationFlow({
     changedRatio: number
     center: { x: number; y: number } | null
     poseVisible: boolean
-    trackingContinuityConfidence: number
-  }): MotionPrimitive {
+    sessionStability: number
+  }): MovementReading {
     const previousCenter = previousCenterRef.current
     const moving = changedRatio > MOVING_RATIO
     const stopped = changedRatio < STOPPED_RATIO
@@ -426,8 +413,8 @@ export function MovementCalibrationFlow({
   }
 
   function writeSessionSample(
-    primitive: MotionPrimitive,
-    trackingContinuityConfidence: number,
+    primitive: MovementReading,
+    sessionStability: number,
   ) {
     const sessionActivation = sessionActivationRef.current
     if (!sessionActivation) return
@@ -439,9 +426,9 @@ export function MovementCalibrationFlow({
       movementState: primitive.moving ? "moving" : "stopped",
       organizationSlug: sessionActivation.organizationSlug,
       playerId: sessionActivation.handshake.playerId,
+      sessionStability,
       subjectId: sessionSubjectIdRef.current,
       timestamp: Date.now(),
-      trackingContinuityConfidence,
       visibilityState: primitive.visible ? "visible" : "lost",
     })
 
@@ -450,7 +437,7 @@ export function MovementCalibrationFlow({
     }
   }
 
-  function updatePhase(primitive: MotionPrimitive) {
+  function updatePhase(primitive: MovementReading) {
     const now = performance.now()
 
     if (!primitive.visible) {
@@ -462,29 +449,23 @@ export function MovementCalibrationFlow({
     visibleSinceRef.current ??= now
     const visibleDuration = now - visibleSinceRef.current
 
-    if (visibleDuration < PLAYER_FOUND_MS) {
-      setPhase(CALIBRATION_LANGUAGE.PLAYER_FOUND)
-      return
-    }
-
     if (visibleDuration < MOVE_AROUND_MS) {
       setPhase(CALIBRATION_LANGUAGE.MOVE_AROUND)
       return
     }
 
     if (visibleDuration < LOCKED_MS) {
-      setPhase(CALIBRATION_LANGUAGE.TRACKING_READY)
+      setPhase(CALIBRATION_LANGUAGE.READY)
       return
     }
 
     setPhase(CALIBRATION_LANGUAGE.TRAINING_ACTIVE)
   }
 
-  function drawTrackingFrame(box?: MotionBox | null) {
+  function clearSessionOverlay() {
     const canvas = canvasRef.current
-    const video = videoRef.current
 
-    if (!canvas || !video) return
+    if (!canvas) return
 
     const rect = canvas.getBoundingClientRect()
     const pixelRatio = window.devicePixelRatio || 1
@@ -496,32 +477,16 @@ export function MovementCalibrationFlow({
 
     context.scale(pixelRatio, pixelRatio)
     context.clearRect(0, 0, rect.width, rect.height)
-
-    if (statusRef.current !== CALIBRATION_LANGUAGE.TRAINING_ACTIVE || !box) return
-
-    const x = 12 + box.x * (rect.width - 24)
-    const y = 12 + box.y * (rect.height - 24)
-    const width = Math.max(28, box.width * (rect.width - 24))
-    const height = Math.max(28, box.height * (rect.height - 24))
-    const centerX = x + width / 2
-    const centerY = y + height / 2
-
-    context.beginPath()
-    context.arc(centerX, centerY, 5, 0, Math.PI * 2)
-    context.fillStyle = "rgba(174, 255, 47, 0.62)"
-    context.fill()
-
-    context.beginPath()
-    context.arc(centerX, centerY, 18, 0, Math.PI * 2)
-    context.strokeStyle = "rgba(174, 255, 47, 0.36)"
-    context.lineWidth = 1
-    context.stroke()
   }
 
   const isTrainingActive = status === CALIBRATION_LANGUAGE.TRAINING_ACTIVE
 
   return (
     <section className={styles.calibrationShell}>
+      <div className={styles.calibrationHeader}>
+        <span>SESSION STARTED</span>
+        <strong>{isTrainingActive ? "WORKOUT LIVE" : "TRAINING READY"}</strong>
+      </div>
       <div
         className={`${styles.calibrationViewport} ${
           isTrainingActive ? styles.calibrationViewportActive : ""
