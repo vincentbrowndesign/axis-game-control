@@ -40,12 +40,12 @@ export function JoinCodePanel() {
 
     setPendingSlug("")
 
-    if (!response.ok) {
-      setMessage(response.error || "Choose Bridge or City 2 City.")
+    if (!response.ok || response.persisted !== true) {
+      setMessage(response.error || "Organization membership was not saved.")
       return
     }
 
-    setMessage(`${name} ready`)
+    setMessage(`${name} saved`)
     router.push(`/player/check-in?org=${response.organizationSlug || slug}&joined=1`)
     router.refresh()
   }

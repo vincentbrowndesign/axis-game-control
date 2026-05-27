@@ -5,7 +5,7 @@ import {
   normalizeSessionSegments,
 } from "@/lib/axis-daily/session-flow"
 import { axisTodayRange } from "@/lib/axis-daily/continuity"
-import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
+import { ensureAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as CheckOutBody
   const organization =
     typeof body.organizationSlug === "string" && body.organizationSlug.trim()
-      ? await getAxisOrganizationBySlug(body.organizationSlug)
+      ? await ensureAxisOrganizationBySlug(body.organizationSlug)
       : null
   const requestedOrganization =
     typeof body.organizationSlug === "string" && body.organizationSlug.trim()
@@ -138,9 +138,12 @@ async function findTodayCheckIn({
     query = query.eq("organization_id", organizationId)
   }
 
-  query = supabaseUserId
-    ? query.eq("user_id", supabaseUserId)
-    : query.eq("clerk_user_id", clerkUserId || "")
+  query =
+    supabaseUserId && clerkUserId
+      ? query.or(`user_id.eq.${supabaseUserId},clerk_user_id.eq.${clerkUserId}`)
+      : supabaseUserId
+        ? query.eq("user_id", supabaseUserId)
+        : query.eq("clerk_user_id", clerkUserId || "")
 
   const result = await Promise.race([
     query.maybeSingle<{

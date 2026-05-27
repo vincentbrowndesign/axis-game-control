@@ -81,9 +81,14 @@ export async function getAttendanceSummary(
     .order("occurred_at", { ascending: false })
     .limit(limit)
 
-  query = identity.supabaseUserId
-    ? query.eq("user_id", identity.supabaseUserId)
-    : query.eq("clerk_user_id", identity.clerkUserId || "")
+  query =
+    identity.supabaseUserId && identity.clerkUserId
+      ? query.or(
+          `user_id.eq.${identity.supabaseUserId},clerk_user_id.eq.${identity.clerkUserId}`
+        )
+      : identity.supabaseUserId
+        ? query.eq("user_id", identity.supabaseUserId)
+        : query.eq("clerk_user_id", identity.clerkUserId || "")
 
   if (organizationId) {
     query = query.eq("organization_id", organizationId)

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
 import {
-  getAxisOrganizationBySlug,
+  ensureAxisOrganizationBySlug,
   normalizeOrganizationSlug,
 } from "@/lib/axis-orgs/organizations"
 import { supabaseAdmin } from "@/lib/supabase/admin"
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const organization = await getAxisOrganizationBySlug(slug)
+    const organization = await ensureAxisOrganizationBySlug(slug)
 
     if (!organization) {
       return NextResponse.json(
@@ -43,13 +43,14 @@ export async function POST(request: Request) {
     }
 
     if (!organization.id) {
-      return NextResponse.json({
-        ok: true,
-        organizationSlug: organization.slug,
-        persisted: false,
-        role: "player",
-        traceId,
-      })
+      return NextResponse.json(
+        {
+          error: "Organization could not be saved.",
+          ok: false,
+          traceId,
+        },
+        { status: 503 },
+      )
     }
 
     let existingQuery = supabaseAdmin
@@ -80,20 +81,33 @@ export async function POST(request: Request) {
         traceId,
       })
 
-      return NextResponse.json({
-        ok: true,
-        organizationSlug: organization.slug,
-        persisted: false,
-        role: "player",
-        traceId,
-      })
+      return NextResponse.json(
+        {
+          error: "Organization membership could not be checked.",
+          ok: false,
+          traceId,
+        },
+        { status: 500 },
+      )
     }
 
     if (existing.data) {
       if (existing.data.status !== "active") {
+        const reactivationPayload: Record<string, string | null> = {
+          status: "active",
+        }
+
+        if (identity.clerkUserId) {
+          reactivationPayload.clerk_user_id = identity.clerkUserId
+        }
+
+        if (identity.supabaseUserId) {
+          reactivationPayload.user_id = identity.supabaseUserId
+        }
+
         const reactivated = await supabaseAdmin
           .from("axis_organization_memberships")
-          .update({ status: "active" })
+          .update(reactivationPayload)
           .eq("id", existing.data.id)
           .select("id, role")
           .single<{ id: string; role: string }>()
@@ -104,19 +118,21 @@ export async function POST(request: Request) {
             traceId,
           })
 
-          return NextResponse.json({
-            ok: true,
-            organizationSlug: organization.slug,
-            persisted: false,
-            role: "player",
-            traceId,
-          })
+          return NextResponse.json(
+            {
+              error: "Organization membership could not be saved.",
+              ok: false,
+              traceId,
+            },
+            { status: 500 },
+          )
         }
 
         return NextResponse.json({
           membershipId: reactivated.data.id,
           ok: true,
           organizationSlug: organization.slug,
+          persisted: true,
           role: reactivated.data.role,
           traceId,
         })
@@ -126,6 +142,7 @@ export async function POST(request: Request) {
         membershipId: existing.data.id,
         ok: true,
         organizationSlug: organization.slug,
+        persisted: true,
         role: existing.data.role,
         traceId,
       })
@@ -149,19 +166,21 @@ export async function POST(request: Request) {
         traceId,
       })
 
-      return NextResponse.json({
-        ok: true,
-        organizationSlug: organization.slug,
-        persisted: false,
-        role: "player",
-        traceId,
-      })
+      return NextResponse.json(
+        {
+          error: "Organization membership could not be saved.",
+          ok: false,
+          traceId,
+        },
+        { status: 500 },
+      )
     }
 
     return NextResponse.json({
       membershipId: inserted.data.id,
       ok: true,
       organizationSlug: organization.slug,
+      persisted: true,
       role: inserted.data.role,
       traceId,
     })

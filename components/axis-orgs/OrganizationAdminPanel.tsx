@@ -44,7 +44,7 @@ export function OrganizationAdminPanel({
   const cultureState =
     dailyVisibility.activeToday > 0
       ? `${dailyVisibility.activeToday} active today`
-      : "culture waiting"
+      : "0 active today"
 
   return (
     <main className={styles.surface}>
@@ -79,7 +79,7 @@ export function OrganizationAdminPanel({
         <section className={styles.operatingPanel}>
           <div className={styles.panelHeader}>
             <span>Culture health</span>
-            <strong>Is our culture alive?</strong>
+            <strong>Live organization record</strong>
           </div>
           <div className={styles.operatingGrid}>
             {operatingSummary.map((item) => (
@@ -125,7 +125,7 @@ export function OrganizationAdminPanel({
                 </article>
               ))
             ) : (
-              <p className={styles.empty}>No check-ins yet today.</p>
+              <p className={styles.empty}>No check-ins yet.</p>
             )}
           </div>
         </section>
@@ -133,7 +133,7 @@ export function OrganizationAdminPanel({
         <section className={styles.trustPanel}>
           <div className={styles.panelHeader}>
             <span>Continuity health</span>
-            <strong>Can people trust the record?</strong>
+            <strong>Participation record</strong>
           </div>
           <div className={styles.trustGrid}>
             {operationalTrust.map((item) => (
@@ -158,7 +158,7 @@ export function OrganizationAdminPanel({
         <section className={styles.supportPanel}>
           <div className={styles.panelHeader}>
             <span>Support visibility</span>
-            <strong>Growth without surveillance</strong>
+            <strong>Consistency signals</strong>
           </div>
           <div className={styles.supportGrid}>
             {supportVisibility.map((item) => (
@@ -191,7 +191,7 @@ export function OrganizationAdminPanel({
                   </article>
                 ))
               ) : (
-                <p className={styles.empty}>No streak leaders yet.</p>
+                <p className={styles.empty}>Continuity begins after first check-in.</p>
               )}
             </div>
           </section>
@@ -216,7 +216,7 @@ export function OrganizationAdminPanel({
                 </article>
               ))
             ) : (
-              <p className={styles.empty}>No members saved yet.</p>
+              <p className={styles.empty}>Waiting for first session.</p>
             )}
           </div>
         </section>

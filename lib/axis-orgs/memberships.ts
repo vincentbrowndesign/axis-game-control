@@ -164,9 +164,14 @@ export async function getOrganizationMembership(
     .eq("status", "active")
     .limit(1)
 
-  query = identity.supabaseUserId
-    ? query.eq("user_id", identity.supabaseUserId)
-    : query.eq("clerk_user_id", identity.clerkUserId || "")
+  query =
+    identity.supabaseUserId && identity.clerkUserId
+      ? query.or(
+          `user_id.eq.${identity.supabaseUserId},clerk_user_id.eq.${identity.clerkUserId}`
+        )
+      : identity.supabaseUserId
+        ? query.eq("user_id", identity.supabaseUserId)
+        : query.eq("clerk_user_id", identity.clerkUserId || "")
 
   const result = await Promise.race([
     query.maybeSingle<{
@@ -194,9 +199,14 @@ export async function getAxisMembershipWorlds(identity: AxisRequestIdentity) {
     .order("joined_at", { ascending: false })
     .limit(12)
 
-  query = identity.supabaseUserId
-    ? query.eq("user_id", identity.supabaseUserId)
-    : query.eq("clerk_user_id", identity.clerkUserId || "")
+  query =
+    identity.supabaseUserId && identity.clerkUserId
+      ? query.or(
+          `user_id.eq.${identity.supabaseUserId},clerk_user_id.eq.${identity.clerkUserId}`
+        )
+      : identity.supabaseUserId
+        ? query.eq("user_id", identity.supabaseUserId)
+        : query.eq("clerk_user_id", identity.clerkUserId || "")
 
   const membershipsResult = await Promise.race([
     query.returns<
@@ -371,7 +381,30 @@ export async function getOrganizationAdminModel(organizationId: string) {
     }
   }
 
-  const members = memberships.map((membership) => {
+  const membershipByKey = new Map<string, AxisMembership>()
+
+  for (const membership of memberships) {
+    const key = membership.userId || membership.clerkUserId || ""
+    if (key) membershipByKey.set(key, membership)
+  }
+
+  for (const checkIn of checkIns) {
+    const key = checkIn.user_id || checkIn.clerk_user_id || ""
+
+    if (!key || membershipByKey.has(key)) continue
+
+    membershipByKey.set(key, {
+      clerkUserId: checkIn.clerk_user_id,
+      createdAt: checkIn.occurred_at,
+      id: `activity-${key}`,
+      joinedAt: checkIn.occurred_at,
+      role: "player",
+      status: "active",
+      userId: checkIn.user_id,
+    })
+  }
+
+  const members = [...membershipByKey.values()].map((membership) => {
     const key = membership.userId || membership.clerkUserId || ""
     const memberCheckIns = checkInsByMember.get(key) || []
     const dates = memberCheckIns.map((checkIn) => checkIn.occurred_at)
@@ -430,7 +463,7 @@ export async function getOrganizationAdminModel(organizationId: string) {
       mostActiveToday,
       topStreak: streakLeaders[0]
         ? `${memberLabel(streakLeaders[0])} - ${streakLeaders[0].streakDays} days`
-        : "No streak yet",
+        : "No check-ins yet",
     },
     invites,
     members,
@@ -521,7 +554,7 @@ function buildOperatingSummary({
     {
       detail: completedToday
         ? `${completedToday} completed today`
-        : "completion loop ready",
+        : "Waiting for first session.",
       label: "session participation",
       tone: completedThisWeek ? "active" : checkedInToday ? "steady" : "watch",
       value: formatEffortHours(minutesThisWeek),
@@ -581,9 +614,9 @@ function buildOperationalTrust({
     {
       detail: invites.length
         ? "open join flow active"
-        : "join flow ready",
+        : "open join flow active",
       label: "onboarding",
-      state: members.length || invites.length ? "active" : "waiting",
+      state: members.length || invites.length ? "active" : "ready",
       value: members.length
         ? `${members.length} member${members.length === 1 ? "" : "s"}`
         : "members choose org",
@@ -591,15 +624,15 @@ function buildOperationalTrust({
     {
       detail: recentActivityCount
         ? "saved check-ins found"
-        : "first saved check-in waiting",
+        : "No check-ins yet.",
       label: "persistence",
-      state: recentActivityCount ? "active" : "waiting",
-      value: recentActivityCount ? "history saving" : "history empty",
+      state: recentActivityCount ? "active" : "ready",
+      value: recentActivityCount ? "history saving" : "0 saved",
     },
     {
       detail: completedToday
         ? `${completedToday} completed today`
-        : "completion loop ready",
+        : "Waiting for first session.",
       label: "participation",
       state: checkedInToday ? "active" : "ready",
       value: checkedInToday
@@ -609,16 +642,16 @@ function buildOperationalTrust({
     {
       detail: `${activeMembersThisWeek}/${members.length || 0} active this week`,
       label: "continuity",
-      state: activeMembersThisWeek ? "active" : members.length ? "ready" : "waiting",
+      state: activeMembersThisWeek ? "active" : "ready",
       value: `${attendancePercent}% attendance`,
     },
     {
       detail: streakLeaders[0]
         ? `${streakLeaders[0].streakDays} day top streak`
-        : "rankings start after check-ins",
+        : "Continuity begins after first check-in.",
       label: "leaderboard",
-      state: streakLeaders.length ? "active" : "waiting",
-      value: streakLeaders.length ? "ranking live" : "board waiting",
+      state: streakLeaders.length ? "active" : "ready",
+      value: streakLeaders.length ? "ranking live" : "0 ranked",
     },
   ] satisfies AxisOperationalTrustItem[]
 }
@@ -851,12 +884,12 @@ function buildSupportVisibility({
         ? `${mostConsistent.activeDaysThisMonth} active day${mostConsistent.activeDaysThisMonth === 1 ? "" : "s"} this month`
         : "no month record yet",
       label: "most consistent",
-      value: mostConsistent ? memberLabel(mostConsistent) : "waiting",
+      value: mostConsistent ? memberLabel(mostConsistent) : "0 recorded",
     },
     {
       detail: completedToday
         ? `${completedToday} completed today`
-        : "completion record waiting",
+        : "Waiting for first session.",
       label: "last completed",
       value: lastCompleted
         ? formatSessionDuration(lastCompleted.lastCompletedSessionMinutes)

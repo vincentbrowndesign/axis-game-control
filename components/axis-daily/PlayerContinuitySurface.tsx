@@ -12,7 +12,7 @@ import { axisDateKey, axisMonthKey } from "@/lib/axis-daily/continuity"
 import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
 import { buildContinuityReminders } from "@/lib/axis-daily/reminders"
 import { AXIS_DEFAULT_SESSION_SEGMENTS } from "@/lib/axis-daily/session-flow"
-import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
+import { ensureAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import { ContinuousAxisHome } from "@/components/axis-daily/ContinuousAxisHome"
 import styles from "@/app/page.module.css"
 
@@ -25,7 +25,7 @@ export async function PlayerContinuitySurface({
   joined = false,
   organizationSlug,
 }: PlayerContinuitySurfaceProps) {
-  const organization = await getAxisOrganizationBySlug(organizationSlug)
+  const organization = await ensureAxisOrganizationBySlug(organizationSlug)
 
   if (!organization) notFound()
 

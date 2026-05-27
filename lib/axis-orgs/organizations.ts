@@ -51,6 +51,50 @@ export async function getAxisOrganizationBySlug(slug: string) {
   return STATIC_ORGANIZATIONS.find((org) => org.slug === normalized) || null
 }
 
+export async function ensureAxisOrganizationBySlug(slug: string) {
+  const normalized = normalizeOrganizationSlug(slug)
+
+  if (!normalized || isReservedOrganizationSlug(normalized)) return null
+
+  const fromDatabase = await readOrganization(normalized)
+
+  if (fromDatabase) return fromDatabase
+
+  const staticOrganization = STATIC_ORGANIZATIONS.find(
+    (org) => org.slug === normalized
+  )
+
+  if (!staticOrganization) return null
+
+  const result = await Promise.race([
+    supabaseAdmin
+      .from("axis_organizations")
+      .upsert(
+        {
+          avatar: staticOrganization.avatar,
+          logo: staticOrganization.logo,
+          name: staticOrganization.name,
+          slug: staticOrganization.slug,
+          status: "active",
+        },
+        { onConflict: "slug" }
+      )
+      .select("id, name, slug, avatar, logo")
+      .single<{
+        avatar: string | null
+        id: string
+        logo: string | null
+        name: string
+        slug: string
+      }>(),
+    timeoutOrganizationResult(2500),
+  ])
+
+  if (result.error || !result.data) return staticOrganization
+
+  return normalizeOrganization(result.data)
+}
+
 export function normalizeOrganizationSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 64)
 }
@@ -73,18 +117,22 @@ async function readOrganization(slug: string): Promise<AxisOrganization | null> 
 
   if (result.error || !result.data) return null
 
+  return normalizeOrganization(result.data)
+}
+
+function normalizeOrganization(value: {
+  avatar: string | null
+  id: string
+  logo: string | null
+  name: string
+  slug: string
+}) {
   return {
-    avatar:
-      result.data.logo ||
-      result.data.avatar ||
-      result.data.name.slice(0, 2).toUpperCase(),
-    id: result.data.id,
-    logo:
-      result.data.logo ||
-      result.data.avatar ||
-      result.data.name.slice(0, 2).toUpperCase(),
-    name: result.data.name,
-    slug: result.data.slug,
+    avatar: value.logo || value.avatar || value.name.slice(0, 2).toUpperCase(),
+    id: value.id,
+    logo: value.logo || value.avatar || value.name.slice(0, 2).toUpperCase(),
+    name: value.name,
+    slug: value.slug,
   }
 }
 

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
-import { getAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
+import { ensureAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
 import {
   getOrganizationAdminModel,
   type AxisOrganizationAdminModel,
@@ -19,7 +19,7 @@ export default async function OrgDashboardRoute({
   params,
 }: OrgDashboardRouteProps) {
   const { organization: organizationSlug } = await params
-  const organization = await getAxisOrganizationBySlug(organizationSlug)
+  const organization = await ensureAxisOrganizationBySlug(organizationSlug)
 
   if (!organization) notFound()
 
@@ -75,8 +75,8 @@ function emptyOrganizationModel() {
       activeToday: 0,
       checkedInToday: 0,
       completedToday: 0,
-      mostActiveToday: "waiting",
-      topStreak: "waiting",
+      mostActiveToday: "No check-ins yet",
+      topStreak: "No check-ins yet",
     },
     invites: [],
     members: [],
@@ -88,25 +88,25 @@ function emptyOrganizationModel() {
         value: "0 total",
       },
       {
-        detail: "completion loop ready",
+        detail: "Waiting for first session.",
         label: "session participation",
         tone: "watch",
         value: "0h",
       },
       {
-        detail: "participation waiting",
+        detail: "0% weekly attendance",
         label: "continuity",
         tone: "watch",
-        value: "building",
+        value: "0%",
       },
       {
-        detail: "streaks start after check-ins",
+        detail: "Continuity begins after first check-in.",
         label: "streak leaders",
         tone: "watch",
         value: "0 active",
       },
       {
-        detail: "leaderboard movement starts with check-ins",
+        detail: "0 ranked members",
         label: "leaderboard",
         tone: "watch",
         value: "open",
@@ -114,25 +114,25 @@ function emptyOrganizationModel() {
     ],
     operationalTrust: [
       {
-        detail: "players can start from Build History",
+        detail: "Build History entry active",
         label: "player entry",
         state: "ready",
         value: "open",
       },
       {
-        detail: "first saved check-in waiting",
+        detail: "No check-ins yet.",
         label: "persistence",
-        state: "waiting",
-        value: "history empty",
+        state: "ready",
+        value: "0 saved",
       },
       {
-        detail: "active sessions appear after check-in",
+        detail: "Waiting for first session.",
         label: "session state",
         state: "ready",
-        value: "ready",
+        value: "0 active",
       },
     ],
-    participationContinuity: "First streak waiting",
+    participationContinuity: "Continuity begins after first check-in.",
     recentActivity: [],
     settings: {
       homeSessionsEnabled: false,
@@ -144,19 +144,19 @@ function emptyOrganizationModel() {
     streakLeaders: [],
     supportVisibility: [
       {
-        detail: "participation will appear here",
+        detail: "No check-ins yet.",
         label: "checked in today",
         value: "0",
       },
       {
-        detail: "completed sessions will appear here",
+        detail: "Waiting for first session.",
         label: "completed",
         value: "0",
       },
       {
-        detail: "streak leaders begin after check-ins",
+        detail: "Continuity begins after first check-in.",
         label: "top streak",
-        value: "waiting",
+        value: "0 days",
       },
     ],
   } satisfies AxisOrganizationAdminModel
