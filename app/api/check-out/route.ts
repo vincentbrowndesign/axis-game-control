@@ -33,10 +33,10 @@ export async function POST(request: Request) {
       ? body.organizationSlug.trim()
       : ""
 
-  if (requestedOrganization && !organization?.id) {
+  if (requestedOrganization && !organization) {
     return NextResponse.json(
-      { error: "Organization not ready", traceId },
-      { status: 409 }
+      { error: "Choose organization again", traceId },
+      { status: 404 }
     )
   }
 

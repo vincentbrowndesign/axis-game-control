@@ -24,10 +24,10 @@ export async function POST(request: Request) {
       ? await getAxisOrganizationBySlug(body.organizationSlug)
       : null
 
-  if (body.organizationSlug && !organization?.id) {
+  if (body.organizationSlug && !organization) {
     return NextResponse.json(
-      { error: "Organization not ready" },
-      { status: 409 }
+      { error: "Choose organization again" },
+      { status: 404 }
     )
   }
 

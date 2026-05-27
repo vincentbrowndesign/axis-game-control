@@ -19,12 +19,18 @@ const V1_ORGANIZATIONS = [
 
 export function JoinCodePanel() {
   const router = useRouter()
-  const [message, setMessage] = useState("Choose organization.")
+  const [message, setMessage] = useState("Choose Bridge or City 2 City.")
   const [pendingSlug, setPendingSlug] = useState("")
+  const [selectedSlug, setSelectedSlug] = useState("")
 
-  async function joinOrganization(slug: string, name: string) {
+  function selectOrganization(slug: string, name: string) {
+    setSelectedSlug(slug)
+    setMessage(`${name} active`)
+  }
+
+  async function continueOrganization(slug: string, name: string) {
     setPendingSlug(slug)
-    setMessage(`Joining ${name}`)
+    setMessage(`Entering ${name}`)
 
     const response = await fetch("/api/organizations/join", {
       body: JSON.stringify({ organization: slug }),
@@ -35,12 +41,12 @@ export function JoinCodePanel() {
     setPendingSlug("")
 
     if (!response.ok) {
-      setMessage(response.error || "Organization could not be joined.")
+      setMessage(response.error || "Choose Bridge or City 2 City.")
       return
     }
 
     setMessage(`${name} ready`)
-    router.push(`/${response.organizationSlug || slug}?joined=1`)
+    router.push(`/player/check-in?org=${response.organizationSlug || slug}&joined=1`)
     router.refresh()
   }
 
@@ -48,25 +54,17 @@ export function JoinCodePanel() {
     <main className={styles.surface}>
       <section className={styles.card}>
         <p className={styles.avatar}>AX</p>
-        <p className={styles.kicker}>Join Axis</p>
-        <h1>Join organization.</h1>
-        <p className={styles.copy}>
-          Choose your training group and continue into Axis.
-        </p>
-        <div className={styles.entryPath} aria-label="Axis entry path">
-          <span>sign in</span>
-          <span>choose org</span>
-          <span>check in</span>
-          <span>history</span>
-        </div>
+        <p className={styles.kicker}>Player system</p>
+        <h1>Build history.</h1>
         <div className={styles.worlds}>
           {V1_ORGANIZATIONS.map((organization) => (
             <button
+              className={
+                selectedSlug === organization.slug ? styles.worldActive : ""
+              }
               disabled={Boolean(pendingSlug)}
               key={organization.slug}
-              onClick={() =>
-                joinOrganization(organization.slug, organization.name)
-              }
+              onClick={() => selectOrganization(organization.slug, organization.name)}
               type="button"
             >
               <strong>{organization.avatar}</strong>
@@ -74,6 +72,30 @@ export function JoinCodePanel() {
             </button>
           ))}
         </div>
+        {selectedSlug ? (
+          <button
+            className={styles.continueButton}
+            disabled={Boolean(pendingSlug)}
+            onClick={() => {
+              const organization = V1_ORGANIZATIONS.find(
+                (candidate) => candidate.slug === selectedSlug
+              )
+
+              if (organization) {
+                continueOrganization(organization.slug, organization.name)
+              }
+            }}
+            type="button"
+          >
+            {pendingSlug
+              ? "Entering"
+              : `Continue into ${
+                  V1_ORGANIZATIONS.find(
+                    (organization) => organization.slug === selectedSlug
+                  )?.name || "organization"
+                }`}
+          </button>
+        ) : null}
         <p className={styles.status}>{message}</p>
       </section>
     </main>

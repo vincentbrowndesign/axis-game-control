@@ -410,7 +410,7 @@ function humanCheckInError(value?: string) {
   if (!value) return "Check-in failed"
 
   if (value.toLowerCase().includes("organization")) {
-    return "Organization not ready"
+    return "Choose organization again"
   }
 
   if (value.toLowerCase().includes("check-out")) {

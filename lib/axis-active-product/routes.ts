@@ -15,6 +15,8 @@ export const AXIS_ACTIVE_ROUTE_SEGMENTS = [
   "join",
   "leaderboard",
   "memory",
+  "org",
+  "player",
   "profile",
   "sign-in",
   "sign-up",

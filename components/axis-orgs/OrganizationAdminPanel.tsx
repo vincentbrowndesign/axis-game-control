@@ -1,15 +1,9 @@
-"use client"
-
-import { useRouter } from "next/navigation"
-import { useState } from "react"
 import type {
   AxisDailyVisibility,
   AxisMemberContinuity,
   AxisOrganizationOperatingItem,
   AxisOperationalTrustItem,
   AxisOrganizationActivity,
-  AxisOrganizationRole,
-  AxisOrganizationSettings,
   AxisSupportVisibilityItem,
 } from "@/lib/axis-orgs/memberships"
 import styles from "./OrganizationAdminPanel.module.css"
@@ -22,25 +16,11 @@ type OrganizationAdminPanelProps = {
   operationalTrust: AxisOperationalTrustItem[]
   operatingSummary: AxisOrganizationOperatingItem[]
   organizationName: string
-  organizationSlug: string
   participationContinuity: string
   recentActivity: AxisOrganizationActivity[]
-  settings: AxisOrganizationSettings
   streakLeaders: AxisMemberContinuity[]
   supportVisibility: AxisSupportVisibilityItem[]
 }
-
-type MemberActionResponse = {
-  error?: string
-  ok?: boolean
-}
-
-const ROLE_OPTIONS: AxisOrganizationRole[] = [
-  "player",
-  "coach",
-  "admin",
-  "organization_owner",
-]
 
 export function OrganizationAdminPanel({
   activeMembersThisWeek,
@@ -50,16 +30,11 @@ export function OrganizationAdminPanel({
   operationalTrust,
   operatingSummary,
   organizationName,
-  organizationSlug,
   participationContinuity,
   recentActivity,
-  settings,
   streakLeaders,
   supportVisibility,
 }: OrganizationAdminPanelProps) {
-  const router = useRouter()
-  const [message, setMessage] = useState("")
-  const [pending, setPending] = useState(false)
   const completionRate =
     dailyVisibility.checkedInToday > 0
       ? Math.round(
@@ -71,50 +46,6 @@ export function OrganizationAdminPanel({
       ? `${dailyVisibility.activeToday} active today`
       : "culture waiting"
 
-  async function assignRole(membershipId: string, role: string) {
-    setPending(true)
-    setMessage("Saving role")
-
-    const response = await postMemberAction(organizationSlug, {
-      action: "assign-role",
-      membershipId,
-      role,
-    })
-
-    setPending(false)
-    setMessage(response.ok ? "Role saved" : response.error || "Role failed")
-    if (response.ok) router.refresh()
-  }
-
-  async function removeMember(membershipId: string) {
-    setPending(true)
-    setMessage("Removing member")
-
-    const response = await postMemberAction(organizationSlug, {
-      action: "remove",
-      membershipId,
-    })
-
-    setPending(false)
-    setMessage(response.ok ? "Member removed" : response.error || "Remove failed")
-    if (response.ok) router.refresh()
-  }
-
-  async function toggleSetting(key: keyof AxisOrganizationSettings, value: boolean) {
-    setPending(true)
-    setMessage("Saving setting")
-
-    const response = await fetch(`/api/organizations/${organizationSlug}/settings`, {
-      body: JSON.stringify({ [key]: value }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    }).then((result) => result.json().catch(() => ({ ok: false })))
-
-    setPending(false)
-    setMessage(response.ok ? "Setting saved" : response.error || "Setting failed")
-    if (response.ok) router.refresh()
-  }
-
   return (
     <main className={styles.surface}>
       <section className={styles.shell}>
@@ -122,12 +53,8 @@ export function OrganizationAdminPanel({
           <div>
             <p className={styles.kicker}>{organizationName}</p>
             <h1>Culture operations.</h1>
-            <p className={styles.headerCopy}>
-              Attendance, participation, streaks, and member continuity in one
-              lightweight operating view.
-            </p>
           </div>
-          <p className={styles.status}>{pending ? "Saving" : message || "Ready"}</p>
+          <p className={styles.status}>Live</p>
         </header>
 
         <section className={styles.commandRail} aria-label="Organization culture status">
@@ -247,16 +174,6 @@ export function OrganizationAdminPanel({
         <section className={styles.grid}>
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
-              <span>Member entry</span>
-              <strong>Open organization join</strong>
-            </div>
-            <p className={styles.empty}>
-              Players join from /join and choose Bridge or City 2 City.
-            </p>
-          </section>
-
-          <section className={styles.panel}>
-            <div className={styles.panelHeader}>
               <span>Streak leaders</span>
               <strong>{participationContinuity}</strong>
             </div>
@@ -282,42 +199,6 @@ export function OrganizationAdminPanel({
 
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
-            <span>Org systems</span>
-            <strong>Optional trust layers</strong>
-          </div>
-          <div className={styles.settingsGrid}>
-            <SettingToggle
-              checked={settings.leaderboardEnabled}
-              label="Enable leaderboard"
-              onChange={(value) => toggleSetting("leaderboardEnabled", value)}
-            />
-            <SettingToggle
-              checked={settings.homeSessionsEnabled}
-              label="Enable home sessions"
-              onChange={(value) => toggleSetting("homeSessionsEnabled", value)}
-            />
-            <SettingToggle
-              checked={settings.nfcEnabled}
-              label="Enable NFC later"
-              onChange={(value) => toggleSetting("nfcEnabled", value)}
-            />
-            <SettingToggle
-              checked={settings.qrStationsEnabled}
-              label="Enable QR stations later"
-              onChange={(value) => toggleSetting("qrStationsEnabled", value)}
-            />
-            <SettingToggle
-              checked={settings.locationVerificationEnabled}
-              label="Enable location verification later"
-              onChange={(value) =>
-                toggleSetting("locationVerificationEnabled", value)
-              }
-            />
-          </div>
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
             <span>Member continuity</span>
             <strong>Roles and participation</strong>
           </div>
@@ -332,19 +213,6 @@ export function OrganizationAdminPanel({
                       {member.completedSessions} completed / {member.streakDays} day streak
                     </em>
                   </div>
-                  <select
-                    defaultValue={member.role}
-                    onChange={(event) => assignRole(member.id, event.target.value)}
-                  >
-                    {ROLE_OPTIONS.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                  <button disabled={pending} onClick={() => removeMember(member.id)}>
-                    Remove
-                  </button>
                 </article>
               ))
             ) : (
@@ -389,38 +257,6 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
-  )
-}
-
-function SettingToggle({
-  checked,
-  label,
-  onChange,
-}: {
-  checked: boolean
-  label: string
-  onChange: (value: boolean) => void
-}) {
-  return (
-    <label className={styles.toggle}>
-      <span>{label}</span>
-      <input
-        defaultChecked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        type="checkbox"
-      />
-    </label>
-  )
-}
-
-async function postMemberAction(organizationSlug: string, body: unknown) {
-  return fetch(`/api/organizations/${organizationSlug}/members`, {
-    body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  }).then(
-    (result) =>
-      result.json().catch(() => ({ ok: false })) as Promise<MemberActionResponse>
   )
 }
 

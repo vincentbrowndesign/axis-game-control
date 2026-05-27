@@ -35,11 +35,21 @@ export async function POST(request: Request) {
 
     const organization = await getAxisOrganizationBySlug(slug)
 
-    if (!organization?.id) {
+    if (!organization) {
       return NextResponse.json(
-        { error: "Organization is not ready yet.", ok: false, traceId },
-        { status: 409 },
+        { error: "Choose Bridge or City 2 City.", ok: false, traceId },
+        { status: 400 },
       )
+    }
+
+    if (!organization.id) {
+      return NextResponse.json({
+        ok: true,
+        organizationSlug: organization.slug,
+        persisted: false,
+        role: "player",
+        traceId,
+      })
     }
 
     let existingQuery = supabaseAdmin
@@ -65,10 +75,18 @@ export async function POST(request: Request) {
     }>()
 
     if (existing.error) {
-      return NextResponse.json(
-        { error: "Organization could not be joined.", ok: false, traceId },
-        { status: 500 },
-      )
+      console.error("[axis:organizations:join:lookup]", {
+        error: existing.error,
+        traceId,
+      })
+
+      return NextResponse.json({
+        ok: true,
+        organizationSlug: organization.slug,
+        persisted: false,
+        role: "player",
+        traceId,
+      })
     }
 
     if (existing.data) {
@@ -81,10 +99,18 @@ export async function POST(request: Request) {
           .single<{ id: string; role: string }>()
 
         if (reactivated.error || !reactivated.data) {
-          return NextResponse.json(
-            { error: "Organization could not be joined.", ok: false, traceId },
-            { status: 500 },
-          )
+          console.error("[axis:organizations:join:reactivate]", {
+            error: reactivated.error,
+            traceId,
+          })
+
+          return NextResponse.json({
+            ok: true,
+            organizationSlug: organization.slug,
+            persisted: false,
+            role: "player",
+            traceId,
+          })
         }
 
         return NextResponse.json({
@@ -118,10 +144,18 @@ export async function POST(request: Request) {
       .single<{ id: string; role: string }>()
 
     if (inserted.error || !inserted.data) {
-      return NextResponse.json(
-        { error: "Organization could not be joined.", ok: false, traceId },
-        { status: 500 },
-      )
+      console.error("[axis:organizations:join:insert]", {
+        error: inserted.error,
+        traceId,
+      })
+
+      return NextResponse.json({
+        ok: true,
+        organizationSlug: organization.slug,
+        persisted: false,
+        role: "player",
+        traceId,
+      })
     }
 
     return NextResponse.json({
@@ -135,7 +169,7 @@ export async function POST(request: Request) {
     console.error("[axis:organizations:join]", { error, traceId })
 
     return NextResponse.json(
-      { error: "Organization could not be joined.", ok: false, traceId },
+      { error: "Unable to continue.", ok: false, traceId },
       { status: 500 },
     )
   }

@@ -29,7 +29,7 @@ export default async function HomePage() {
           <div className={styles.modeGrid}>
             <Link
               className={`${styles.modeCard} ${styles.modeCardPlayer}`}
-              href={playerWorld ? `/${playerWorld.organizationSlug}` : "/join"}
+              href="/player"
             >
               <span>Player</span>
               <strong>Build history</strong>
@@ -42,11 +42,7 @@ export default async function HomePage() {
 
             <Link
               className={`${styles.modeCard} ${styles.modeCardOrganization}`}
-              href={
-                organizationWorld
-                  ? `/${organizationWorld.organizationSlug}/admin`
-                  : "/join"
-              }
+              href={organizationWorld ? `/org/${organizationWorld.organizationSlug}` : "/org"}
             >
               <span>Organization</span>
               <strong>Run culture</strong>
