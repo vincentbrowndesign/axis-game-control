@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react"
 import type { NormalizedLandmark, PoseLandmarker } from "@mediapipe/tasks-vision"
 import {
+  createSessionActivation,
+  type SessionActivation,
+} from "@/lib/axis-calibration/session-activation"
+import {
   CALIBRATION_LANGUAGE,
   type CalibrationState,
 } from "@/lib/axis-calibration/vocabulary"
@@ -17,9 +21,12 @@ type MotionPrimitive = {
 }
 
 type SessionMovementSample = {
+  activationId: string
   directionChanged: boolean
   jumped: boolean
   movementState: "moving" | "stopped"
+  organizationSlug: string
+  playerId: string
   subjectId: string
   timestamp: number
   trackingContinuityConfidence: number
@@ -38,8 +45,22 @@ const SAMPLE_HEIGHT = 54
 const DIFF_THRESHOLD = 30
 const MOVING_RATIO = 0.035
 const STOPPED_RATIO = 0.015
+const PLAYER_DETECTED_MS = 500
+const LOCKED_MS = 2300
 
-export function MovementCalibrationFlow() {
+type MovementCalibrationFlowProps = {
+  checkedInAt: string | null
+  isCheckedIn: boolean
+  organizationSlug: string
+  playerId: string
+}
+
+export function MovementCalibrationFlow({
+  checkedInAt,
+  isCheckedIn,
+  organizationSlug,
+  playerId,
+}: MovementCalibrationFlowProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sampleCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -48,12 +69,15 @@ export function MovementCalibrationFlow() {
   const previousCenterRef = useRef<{ x: number; y: number } | null>(null)
   const previousDirectionRef = useRef(0)
   const detectorRef = useRef<PoseLandmarker | null>(null)
+  const sessionActivationRef = useRef<SessionActivation | null>(null)
   const sessionSamplesRef = useRef<SessionMovementSample[]>([])
   const sessionSubjectIdRef = useRef("")
   const streamRef = useRef<MediaStream | null>(null)
-  const statusRef = useRef<CalibrationState>(CALIBRATION_LANGUAGE.READY)
-  const stoppedSinceRef = useRef<number | null>(null)
-  const [status, setStatus] = useState<CalibrationState>(CALIBRATION_LANGUAGE.READY)
+  const statusRef = useRef<CalibrationState>(CALIBRATION_LANGUAGE.CHECKED_IN)
+  const visibleSinceRef = useRef<number | null>(null)
+  const [status, setStatus] = useState<CalibrationState>(
+    CALIBRATION_LANGUAGE.CHECKED_IN,
+  )
   const [isActive, setIsActive] = useState(false)
 
   useEffect(() => {
@@ -62,16 +86,26 @@ export function MovementCalibrationFlow() {
     }
   }, [])
 
+  if (!isCheckedIn) return null
+
   async function startCamera() {
     if (isActive) return
 
-    setPhase(CALIBRATION_LANGUAGE.READY)
+    setPhase(CALIBRATION_LANGUAGE.SEARCHING)
     previousFrameRef.current = null
     previousCenterRef.current = null
     previousDirectionRef.current = 0
     sessionSamplesRef.current = []
+    sessionActivationRef.current =
+      checkedInAt && playerId
+        ? createSessionActivation({
+            checkedInAt,
+            organizationSlug,
+            playerId,
+          })
+        : null
     sessionSubjectIdRef.current = crypto.randomUUID()
-    stoppedSinceRef.current = null
+    visibleSinceRef.current = null
 
     try {
       await initializeDetector()
@@ -95,7 +129,7 @@ export function MovementCalibrationFlow() {
       frameRef.current = window.requestAnimationFrame(readFrame)
     } catch {
       setIsActive(false)
-      setPhase(CALIBRATION_LANGUAGE.LOST)
+      setPhase(CALIBRATION_LANGUAGE.SEARCHING)
     }
   }
 
@@ -116,6 +150,31 @@ export function MovementCalibrationFlow() {
     if (statusRef.current === next) return
     statusRef.current = next
     setStatus(next)
+    updateActivationStatus(next)
+  }
+
+  function updateActivationStatus(next: CalibrationState) {
+    const sessionActivation = sessionActivationRef.current
+    if (!sessionActivation) return
+
+    if (next === CALIBRATION_LANGUAGE.SEARCHING) {
+      sessionActivation.status = "searching"
+      return
+    }
+
+    if (next === CALIBRATION_LANGUAGE.PLAYER_DETECTED) {
+      sessionActivation.status = "player_detected"
+      return
+    }
+
+    if (next === CALIBRATION_LANGUAGE.CALIBRATION_LOCK) {
+      sessionActivation.status = "calibration_lock"
+      return
+    }
+
+    if (next === CALIBRATION_LANGUAGE.SESSION_ACTIVE) {
+      sessionActivation.status = "session_active"
+    }
   }
 
   async function initializeDetector() {
@@ -156,7 +215,7 @@ export function MovementCalibrationFlow() {
     })
 
     if (!sampleContext) {
-      setPhase(CALIBRATION_LANGUAGE.LOST)
+      setPhase(CALIBRATION_LANGUAGE.SEARCHING)
       return
     }
 
@@ -364,10 +423,16 @@ export function MovementCalibrationFlow() {
     primitive: MotionPrimitive,
     trackingContinuityConfidence: number,
   ) {
+    const sessionActivation = sessionActivationRef.current
+    if (!sessionActivation) return
+
     sessionSamplesRef.current.push({
+      activationId: sessionActivation.id,
       directionChanged: primitive.directionChanged,
       jumped: primitive.jumped,
       movementState: primitive.moving ? "moving" : "stopped",
+      organizationSlug: sessionActivation.organizationSlug,
+      playerId: sessionActivation.handshake.playerId,
       subjectId: sessionSubjectIdRef.current,
       timestamp: Date.now(),
       trackingContinuityConfidence,
@@ -383,36 +448,25 @@ export function MovementCalibrationFlow() {
     const now = performance.now()
 
     if (!primitive.visible) {
-      setPhase(CALIBRATION_LANGUAGE.LOST)
+      visibleSinceRef.current = null
+      setPhase(CALIBRATION_LANGUAGE.SEARCHING)
       return
     }
 
-    if (statusRef.current === CALIBRATION_LANGUAGE.READY) {
-      setPhase(CALIBRATION_LANGUAGE.HOLD_STILL)
+    visibleSinceRef.current ??= now
+    const visibleDuration = now - visibleSinceRef.current
+
+    if (visibleDuration < PLAYER_DETECTED_MS) {
+      setPhase(CALIBRATION_LANGUAGE.PLAYER_DETECTED)
       return
     }
 
-    if (primitive.stopped) {
-      stoppedSinceRef.current ??= now
-    } else {
-      stoppedSinceRef.current = null
-    }
-
-    if (
-      statusRef.current === CALIBRATION_LANGUAGE.HOLD_STILL &&
-      stoppedSinceRef.current &&
-      now - stoppedSinceRef.current > 900
-    ) {
-      setPhase(CALIBRATION_LANGUAGE.MOVE)
+    if (visibleDuration < LOCKED_MS) {
+      setPhase(CALIBRATION_LANGUAGE.CALIBRATION_LOCK)
       return
     }
 
-    if (
-      statusRef.current === CALIBRATION_LANGUAGE.MOVE &&
-      (primitive.moving || primitive.directionChanged || primitive.jumped)
-    ) {
-      setPhase(CALIBRATION_LANGUAGE.TRACKING)
-    }
+    setPhase(CALIBRATION_LANGUAGE.SESSION_ACTIVE)
   }
 
   function drawTrackingFrame(box?: MotionBox | null) {
@@ -431,26 +485,37 @@ export function MovementCalibrationFlow() {
 
     context.scale(pixelRatio, pixelRatio)
     context.clearRect(0, 0, rect.width, rect.height)
-    context.strokeStyle = "rgba(174, 255, 47, 0.68)"
-    context.lineWidth = 1
-    context.strokeRect(12, 12, rect.width - 24, rect.height - 24)
 
-    if (!box) return
+    if (statusRef.current !== CALIBRATION_LANGUAGE.SESSION_ACTIVE || !box) return
 
     const x = 12 + box.x * (rect.width - 24)
     const y = 12 + box.y * (rect.height - 24)
     const width = Math.max(28, box.width * (rect.width - 24))
     const height = Math.max(28, box.height * (rect.height - 24))
+    const centerX = x + width / 2
+    const centerY = y + height / 2
 
-    context.strokeStyle = "rgba(255, 255, 255, 0.82)"
-    context.strokeRect(x, y, width, height)
-    context.fillStyle = "rgba(174, 255, 47, 0.74)"
-    context.fillRect(x + width / 2 - 2, y + height / 2 - 2, 4, 4)
+    context.beginPath()
+    context.arc(centerX, centerY, 5, 0, Math.PI * 2)
+    context.fillStyle = "rgba(174, 255, 47, 0.62)"
+    context.fill()
+
+    context.beginPath()
+    context.arc(centerX, centerY, 18, 0, Math.PI * 2)
+    context.strokeStyle = "rgba(174, 255, 47, 0.36)"
+    context.lineWidth = 1
+    context.stroke()
   }
+
+  const isSessionActive = status === CALIBRATION_LANGUAGE.SESSION_ACTIVE
 
   return (
     <section className={styles.calibrationShell}>
-      <div className={styles.calibrationViewport}>
+      <div
+        className={`${styles.calibrationViewport} ${
+          isSessionActive ? styles.calibrationViewportActive : ""
+        }`}
+      >
         <video
           className={styles.calibrationVideo}
           muted
@@ -462,19 +527,19 @@ export function MovementCalibrationFlow() {
           className={styles.calibrationCanvas}
           ref={canvasRef}
         />
-        {!isActive ? (
-          <button
-            className={styles.calibrationStart}
-            onClick={startCamera}
-            type="button"
-          >
-            {CALIBRATION_LANGUAGE.START}
-          </button>
-        ) : null}
-      </div>
-      <div className={styles.calibrationBar}>
-        <strong className={styles.calibrationState}>{status}</strong>
-        {isActive ? <span>{CALIBRATION_LANGUAGE.ACTIVE}</span> : null}
+        <div className={styles.calibrationGuidance}>
+          <span className={styles.calibrationGuideSignal} />
+          <strong className={styles.calibrationState}>{status}</strong>
+          {!isActive ? (
+            <button
+              className={styles.calibrationStart}
+              onClick={startCamera}
+              type="button"
+            >
+              {CALIBRATION_LANGUAGE.START}
+            </button>
+          ) : null}
+        </div>
       </div>
     </section>
   )

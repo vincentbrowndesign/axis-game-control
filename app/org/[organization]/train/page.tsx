@@ -100,7 +100,12 @@ export default async function OrganizationTrainPage({
           </p>
         </section>
 
-        <MovementCalibrationFlow />
+        <MovementCalibrationFlow
+          checkedInAt={checkedInAt}
+          isCheckedIn={Boolean(checkedInAt)}
+          organizationSlug={organizationSlug}
+          playerId={userId}
+        />
       </section>
     </main>
   )
