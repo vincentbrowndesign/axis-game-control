@@ -1,13 +1,67 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
+import {
+  canManageOrganization,
+  getAxisMembershipWorlds,
+} from "@/lib/axis-orgs/memberships"
 import styles from "@/app/page.module.css"
 
 export default async function HomePage() {
   const identity = await getAxisRequestIdentity()
 
   if (identity) {
-    redirect("/join")
+    const memberships = await getAxisMembershipWorlds(identity)
+    const playerWorld = memberships[0] || null
+    const organizationWorld =
+      memberships.find((membership) => canManageOrganization(membership.role)) ||
+      null
+
+    return (
+      <main className={styles.surface}>
+        <section className={styles.modeShell}>
+          <header className={styles.modeHeader}>
+            <p className={styles.brand}>Axis</p>
+            <p className={styles.kicker}>Choose experience</p>
+            <h1 className={styles.modeHeading}>Enter the system.</h1>
+            <p className={styles.modeText}>Choose how you show up.</p>
+          </header>
+
+          <div className={styles.modeGrid}>
+            <Link
+              className={`${styles.modeCard} ${styles.modeCardPlayer}`}
+              href={playerWorld ? `/${playerWorld.organizationSlug}` : "/join"}
+            >
+              <span>Player</span>
+              <strong>Check in.</strong>
+              <em>Continue your streak. Build history.</em>
+              <small>
+                {playerWorld
+                  ? `${playerWorld.organizationName} ready`
+                  : "Join an organization"}
+              </small>
+            </Link>
+
+            <Link
+              className={`${styles.modeCard} ${styles.modeCardOrganization}`}
+              href={
+                organizationWorld
+                  ? `/${organizationWorld.organizationSlug}/admin`
+                  : "/join"
+              }
+            >
+              <span>Organization</span>
+              <strong>Run culture.</strong>
+              <em>Attendance, sessions, streaks, and participation.</em>
+              <small>
+                {organizationWorld
+                  ? `${organizationWorld.organizationName} control`
+                  : "Coach/admin role required"}
+              </small>
+            </Link>
+          </div>
+        </section>
+      </main>
+    )
   }
 
   return (

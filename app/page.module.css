@@ -19,7 +19,8 @@
 
 .entryShell,
 .memberRitualShell,
-.operatingShell {
+.operatingShell,
+.modeShell {
   display: grid;
   margin: 0 auto;
   max-width: 1180px;
@@ -33,6 +34,114 @@
 
 .entryCopy {
   max-width: 44rem;
+}
+
+.modeShell {
+  align-content: center;
+  gap: clamp(1.4rem, 4vw, 2.6rem);
+  min-height: 68dvh;
+}
+
+.modeHeader {
+  display: grid;
+  gap: 0.72rem;
+  max-width: 56rem;
+}
+
+.modeHeading {
+  color: rgba(var(--axis-ink), 0.96);
+  font-size: clamp(4.2rem, 8.4vw, 7.6rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.96;
+  margin: 0;
+}
+
+.modeText {
+  color: rgba(var(--axis-ink), 0.52);
+  font-size: clamp(1rem, 1.35vw, 1.18rem);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.modeGrid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.modeCard {
+  background:
+    linear-gradient(135deg, rgba(255, 250, 238, 0.44), rgba(var(--axis-panel), 0.3)),
+    rgba(var(--axis-panel), 0.46);
+  border: 1px solid rgba(91, 76, 56, 0.14);
+  border-radius: 1.35rem;
+  color: rgba(var(--axis-ink), 0.82);
+  display: grid;
+  gap: clamp(0.75rem, 2vw, 1rem);
+  min-height: clamp(17rem, 28vw, 24rem);
+  padding: clamp(1.05rem, 3vw, 1.45rem);
+  text-decoration: none;
+  touch-action: manipulation;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 120ms ease;
+}
+
+.modeCard:hover,
+.modeCard:focus-visible {
+  background:
+    linear-gradient(135deg, rgba(255, 250, 238, 0.56), rgba(var(--axis-panel), 0.4)),
+    rgba(var(--axis-panel), 0.54);
+  border-color: rgba(var(--axis-accent), 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 1rem 2.2rem rgba(78, 62, 38, 0.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.modeCard span,
+.modeCard small {
+  color: rgba(var(--axis-ink), 0.38);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.modeCard strong {
+  color: rgba(var(--axis-ink), 0.9);
+  font-size: clamp(2.4rem, 5.2vw, 4.8rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.95;
+  max-width: 11ch;
+}
+
+.modeCard em {
+  color: rgba(var(--axis-ink), 0.54);
+  font-size: clamp(0.98rem, 1.35vw, 1.14rem);
+  font-style: normal;
+  line-height: 1.45;
+  max-width: 28rem;
+}
+
+.modeCard small {
+  align-self: end;
+  color: rgba(var(--axis-live), 0.72);
+}
+
+.modeCardOrganization {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-accent), 0.12), rgba(255, 250, 238, 0.34)),
+    rgba(var(--axis-panel), 0.42);
+}
+
+.modeCardOrganization small {
+  color: rgba(var(--axis-accent), 0.76);
 }
 
 .brand,
@@ -524,6 +633,48 @@
   white-space: nowrap;
 }
 
+.primarySignal {
+  align-self: start;
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.09), rgba(var(--axis-accent), 0.07)),
+    rgba(255, 250, 238, 0.28);
+  border: 1px solid rgba(91, 76, 56, 0.12);
+  border-radius: 1.05rem;
+  display: grid;
+  gap: 0.45rem;
+  justify-self: end;
+  min-width: min(100%, 18rem);
+  padding: 0.85rem;
+}
+
+.primarySignal span,
+.primarySignal strong,
+.primarySignal em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.primarySignal span {
+  color: rgba(var(--axis-live), 0.76);
+  font-size: 0.6rem;
+}
+
+.primarySignal strong {
+  color: rgba(var(--axis-ink), 0.82);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.primarySignal em {
+  color: rgba(var(--axis-ink), 0.44);
+  font-size: 0.6rem;
+  font-style: normal;
+}
+
 .activityRail {
   align-items: center;
   background:
@@ -623,6 +774,10 @@
   display: grid;
   gap: clamp(1rem, 2.8vw, 2rem);
   grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.32fr);
+}
+
+.centerStageMinimal {
+  display: grid;
 }
 
 .ritualCenter {
@@ -1255,6 +1410,51 @@
   position: relative;
 }
 
+.retentionRecord {
+  align-content: stretch;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.retentionRecord div {
+  background: rgba(255, 250, 238, 0.24);
+  border: 1px solid rgba(var(--axis-ink), 0.055);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.4rem;
+  min-height: 5.45rem;
+  padding: 0.8rem;
+}
+
+.retentionRecord span,
+.retentionRecord strong,
+.retentionRecord em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.retentionRecord span {
+  color: rgba(var(--axis-ink), 0.38);
+  font-size: 0.58rem;
+}
+
+.retentionRecord strong {
+  color: rgba(var(--axis-ink), 0.78);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.retentionRecord em {
+  color: rgba(var(--axis-ink), 0.42);
+  font-size: 0.58rem;
+  font-style: normal;
+}
+
 .continuitySurface::before {
   background: linear-gradient(
     90deg,
@@ -1581,6 +1781,22 @@
     min-height: auto;
   }
 
+  .modeShell {
+    min-height: auto;
+  }
+
+  .modeHeading {
+    font-size: clamp(3.5rem, 16vw, 5.4rem);
+  }
+
+  .modeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .modeCard {
+    min-height: 15rem;
+  }
+
   .brand {
     margin-bottom: 1.1rem;
   }
@@ -1636,6 +1852,7 @@
 
   .ritualCenter,
   .centerStage,
+  .centerStageMinimal,
   .historyStrip,
   .activityRail,
   .continuitySurface,
@@ -1646,6 +1863,10 @@
 
   .topSignals {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .primarySignal {
+    justify-self: stretch;
   }
 
   .topSignal,
@@ -1743,6 +1964,10 @@
   }
 
   .historyStats {
+    grid-template-columns: 1fr;
+  }
+
+  .retentionRecord {
     grid-template-columns: 1fr;
   }
 

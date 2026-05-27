@@ -29,6 +29,14 @@
   margin: 0;
 }
 
+.headerCopy {
+  color: rgba(35, 32, 27, 0.56);
+  font-size: clamp(0.95rem, 1.7vw, 1.18rem);
+  line-height: 1.45;
+  margin: 0.95rem 0 0;
+  max-width: 39rem;
+}
+
 .kicker,
 .status,
 .panelHeader,
@@ -38,6 +46,7 @@
 .toggle,
 .metric,
 .leader,
+.commandSignal,
 .memberRow,
 .inviteRow,
 .empty {
@@ -57,6 +66,62 @@
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.commandRail {
+  background:
+    linear-gradient(90deg, rgba(54, 141, 79, 0.11), rgba(212, 143, 45, 0.12)),
+    rgba(246, 240, 226, 0.58);
+  border: 1px solid rgba(91, 76, 56, 0.14);
+  border-radius: 1.35rem;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 0.72rem;
+}
+
+.commandSignal {
+  background: rgba(255, 250, 238, 0.28);
+  border: 1px solid rgba(35, 32, 27, 0.06);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.45rem;
+  min-height: 5.4rem;
+  padding: 0.85rem;
+  position: relative;
+}
+
+.commandSignal::after {
+  background: rgba(35, 32, 27, 0.18);
+  border-radius: 999px;
+  content: "";
+  height: 0.46rem;
+  position: absolute;
+  right: 0.85rem;
+  top: 0.85rem;
+  width: 0.46rem;
+}
+
+.commandSignalActive {
+  background:
+    linear-gradient(145deg, rgba(54, 141, 79, 0.17), rgba(255, 250, 238, 0.34)),
+    rgba(255, 250, 238, 0.26);
+  border-color: rgba(54, 141, 79, 0.22);
+}
+
+.commandSignalActive::after {
+  background: rgba(54, 141, 79, 0.82);
+}
+
+.commandSignalSteady {
+  background:
+    linear-gradient(145deg, rgba(212, 143, 45, 0.13), rgba(255, 250, 238, 0.33)),
+    rgba(255, 250, 238, 0.26);
+  border-color: rgba(212, 143, 45, 0.2);
+}
+
+.commandSignalSteady::after {
+  background: rgba(212, 143, 45, 0.82);
 }
 
 .panel {
@@ -117,6 +182,7 @@
 .memberRow span,
 .inviteRow span,
 .metric span,
+.commandSignal span,
 .leader span,
 .toggle span,
 .empty {
@@ -128,6 +194,7 @@
 .memberRow strong,
 .inviteRow strong,
 .metric strong,
+.commandSignal strong,
 .leader strong {
   color: rgba(35, 32, 27, 0.82);
   font-size: 0.76rem;
@@ -180,7 +247,7 @@
 .dailyMetrics {
   display: grid;
   gap: 0.6rem;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .operatingGrid {
@@ -489,6 +556,7 @@
   .header,
   .grid,
   .settingsGrid,
+  .commandRail,
   .dailyMetrics,
   .operatingGrid,
   .trustGrid,

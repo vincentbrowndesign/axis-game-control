@@ -59,6 +59,16 @@ export function OrganizationAdminPanel({
   const [message, setMessage] = useState("")
   const [pending, setPending] = useState(false)
   const [latestInvitePath, setLatestInvitePath] = useState("")
+  const completionRate =
+    dailyVisibility.checkedInToday > 0
+      ? Math.round(
+          (dailyVisibility.completedToday / dailyVisibility.checkedInToday) * 100,
+        )
+      : 0
+  const cultureState =
+    dailyVisibility.activeToday > 0
+      ? `${dailyVisibility.activeToday} active today`
+      : "culture waiting"
 
   async function submitInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -128,15 +138,38 @@ export function OrganizationAdminPanel({
         <header className={styles.header}>
           <div>
             <p className={styles.kicker}>{organizationName}</p>
-            <h1>Organization control.</h1>
+            <h1>Culture operations.</h1>
+            <p className={styles.headerCopy}>
+              Attendance, participation, streaks, and member continuity in one
+              lightweight operating view.
+            </p>
           </div>
           <p className={styles.status}>{pending ? "Saving" : message || "Ready"}</p>
         </header>
 
+        <section className={styles.commandRail} aria-label="Organization culture status">
+          <CommandSignal label="today" value={cultureState} tone="active" />
+          <CommandSignal
+            label="completed"
+            value={`${dailyVisibility.completedToday} sessions`}
+            tone={dailyVisibility.completedToday > 0 ? "active" : "steady"}
+          />
+          <CommandSignal
+            label="this week"
+            value={`${activeMembersThisWeek} active`}
+            tone={activeMembersThisWeek > 0 ? "active" : "steady"}
+          />
+          <CommandSignal
+            label="attendance"
+            value={`${attendancePercent}% health`}
+            tone={attendancePercent > 0 ? "steady" : "idle"}
+          />
+        </section>
+
         <section className={styles.operatingPanel}>
           <div className={styles.panelHeader}>
-            <span>Org overview</span>
-            <strong>Run training culture</strong>
+            <span>Culture health</span>
+            <strong>Is our culture alive?</strong>
           </div>
           <div className={styles.operatingGrid}>
             {operatingSummary.map((item) => (
@@ -160,12 +193,13 @@ export function OrganizationAdminPanel({
 
         <section className={styles.dailyPanel}>
           <div className={styles.panelHeader}>
-            <span>Today</span>
-            <strong>{organizationName} rhythm</strong>
+            <span>Live today</span>
+            <strong>{organizationName} participation</strong>
           </div>
           <div className={styles.dailyMetrics}>
             <Metric label="checked in" value={String(dailyVisibility.checkedInToday)} />
             <Metric label="completed" value={String(dailyVisibility.completedToday)} />
+            <Metric label="completion" value={`${completionRate}%`} />
             <Metric label="active sessions" value={String(dailyVisibility.activeSessions)} />
             <Metric label="active today" value={String(dailyVisibility.activeToday)} />
             <Metric label="most active" value={dailyVisibility.mostActiveToday} />
@@ -188,8 +222,8 @@ export function OrganizationAdminPanel({
 
         <section className={styles.trustPanel}>
           <div className={styles.panelHeader}>
-            <span>Operational pulse</span>
-            <strong>Core loop health</strong>
+            <span>Continuity health</span>
+            <strong>Can people trust the record?</strong>
           </div>
           <div className={styles.trustGrid}>
             {operationalTrust.map((item) => (
@@ -213,8 +247,8 @@ export function OrganizationAdminPanel({
 
         <section className={styles.supportPanel}>
           <div className={styles.panelHeader}>
-            <span>Coach / parent view</span>
-            <strong>Consistency and completion</strong>
+            <span>Support visibility</span>
+            <strong>Growth without surveillance</strong>
           </div>
           <div className={styles.supportGrid}>
             {supportVisibility.map((item) => (
@@ -230,8 +264,8 @@ export function OrganizationAdminPanel({
         <section className={styles.grid}>
           <form className={styles.panel} onSubmit={submitInvite}>
             <div className={styles.panelHeader}>
-              <span>Invite</span>
-              <strong>Players and staff</strong>
+              <span>Add members</span>
+              <strong>Invite into the culture</strong>
             </div>
             <input name="email" placeholder="member@email.com" type="email" />
             <select name="role" defaultValue="player">
@@ -251,7 +285,7 @@ export function OrganizationAdminPanel({
 
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
-              <span>Continuity</span>
+              <span>Streak leaders</span>
               <strong>{participationContinuity}</strong>
             </div>
             <div className={styles.metrics}>
@@ -276,8 +310,8 @@ export function OrganizationAdminPanel({
 
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
-            <span>Settings</span>
-            <strong>Optional systems</strong>
+            <span>Org systems</span>
+            <strong>Optional trust layers</strong>
           </div>
           <div className={styles.settingsGrid}>
             <SettingToggle
@@ -312,8 +346,8 @@ export function OrganizationAdminPanel({
 
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
-            <span>Members</span>
-            <strong>Roles and continuity</strong>
+            <span>Member continuity</span>
+            <strong>Roles and participation</strong>
           </div>
           <div className={styles.memberList}>
             {members.length ? (
@@ -349,8 +383,8 @@ export function OrganizationAdminPanel({
 
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
-            <span>Pending</span>
-            <strong>Invites</strong>
+            <span>Invite queue</span>
+            <strong>Open paths</strong>
           </div>
           <div className={styles.inviteList}>
             {invites.length ? (
@@ -369,6 +403,31 @@ export function OrganizationAdminPanel({
         </section>
       </section>
     </main>
+  )
+}
+
+function CommandSignal({
+  label,
+  tone,
+  value,
+}: {
+  label: string
+  tone: "active" | "idle" | "steady"
+  value: string
+}) {
+  return (
+    <article
+      className={`${styles.commandSignal} ${
+        tone === "active"
+          ? styles.commandSignalActive
+          : tone === "steady"
+            ? styles.commandSignalSteady
+            : ""
+      }`}
+    >
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
   )
 }
 

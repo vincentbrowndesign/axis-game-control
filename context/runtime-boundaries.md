@@ -12,6 +12,7 @@ show up
 Active UX routes may support:
 
 - auth
+- experience choice
 - check in
 - progression
 - history
@@ -58,3 +59,10 @@ Backend media foundations remain preserved:
 Backend systems may store future replay/media metadata, but active UX must not route users into replay-era surfaces until the product explicitly reactivates that layer.
 
 If a new visible feature does not support show up -> participate -> history grows -> return tomorrow, it does not belong in the active runtime product.
+
+The authenticated entry surface must split cleanly into two modes:
+
+- Player systems: emotional, immersive, check-in/progression/history/leaderboard focused.
+- Organization systems: operational, structured, member/attendance/session/culture visibility focused.
+
+Both modes belong to one shared Axis ecosystem.

@@ -36,6 +36,13 @@ export type AxisMembership = {
   userId: string | null
 }
 
+export type AxisMembershipWorld = AxisMembership & {
+  organizationAvatar: string
+  organizationId: string
+  organizationName: string
+  organizationSlug: string
+}
+
 export type AxisInvite = {
   createdAt: string
   email: string
@@ -169,6 +176,81 @@ export async function getOrganizationMembership(
   if (result.error || !result.data) return null
 
   return normalizeMembership(result.data)
+}
+
+export async function getAxisMembershipWorlds(identity: AxisRequestIdentity) {
+  let query = supabaseAdmin
+    .from("axis_organization_memberships")
+    .select("id, organization_id, user_id, clerk_user_id, role, status, joined_at, created_at")
+    .eq("status", "active")
+    .order("joined_at", { ascending: false })
+    .limit(12)
+
+  query = identity.supabaseUserId
+    ? query.eq("user_id", identity.supabaseUserId)
+    : query.eq("clerk_user_id", identity.clerkUserId || "")
+
+  const membershipsResult = await Promise.race([
+    query.returns<
+      {
+        clerk_user_id: string | null
+        created_at: string
+        id: string
+        joined_at: string | null
+        organization_id: string
+        role: AxisOrganizationRole
+        status: string
+        user_id: string | null
+      }[]
+    >(),
+    timeoutMembershipListResult(2500),
+  ])
+
+  const memberships = membershipsResult.data || []
+  const organizationIds = memberships
+    .map((membership) => membership.organization_id)
+    .filter(Boolean)
+
+  if (membershipsResult.error || !organizationIds.length) return []
+
+  const organizationsResult = await Promise.race([
+    supabaseAdmin
+      .from("axis_organizations")
+      .select("id, name, slug, avatar, logo")
+      .in("id", organizationIds)
+      .returns<
+        {
+          avatar: string | null
+          id: string
+          logo: string | null
+          name: string
+          slug: string
+        }[]
+      >(),
+    timeoutListResult(2500),
+  ])
+
+  if (organizationsResult.error || !organizationsResult.data) return []
+
+  const organizations = new Map(
+    organizationsResult.data.map((organization) => [organization.id, organization])
+  )
+
+  return memberships.flatMap<AxisMembershipWorld>((membership) => {
+    const organization = organizations.get(membership.organization_id)
+    if (!organization) return []
+
+    return {
+      ...normalizeMembership(membership),
+      organizationAvatar:
+        organization.logo ||
+        organization.avatar ||
+        organization.name.slice(0, 2).toUpperCase(),
+      organizationId: organization.id,
+      organizationName: organization.name,
+      organizationSlug: organization.slug,
+    }
+  })
 }
 
 export async function getOrganizationAdminModel(organizationId: string) {
@@ -799,6 +881,22 @@ function timeoutResult(milliseconds: number) {
         resolve({
           data: null,
           error: new Error("Organization membership timed out"),
+        }),
+      milliseconds
+    )
+  })
+}
+
+function timeoutMembershipListResult(milliseconds: number) {
+  return new Promise<{
+    data: []
+    error: Error
+  }>((resolve) => {
+    setTimeout(
+      () =>
+        resolve({
+          data: [],
+          error: new Error("Organization membership lookup timed out"),
         }),
       milliseconds
     )

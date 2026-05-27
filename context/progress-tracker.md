@@ -12,6 +12,9 @@ Status: active
 - Legacy replay/runtime UI routes are archived out of active App Router runtime so `/` and active navigation stay continuity-first.
 - Runtime boundaries are now documented in `/context/runtime-boundaries.md`: archived replay routes must not mount, link, redirect, or return as active navigation.
 - Active product lock added: archived replay UX route segments are centralized in `/lib/axis-active-product/routes.ts`, reserved from organization slugs, and blocked at proxy level with 404 responses.
+- Entry split added: signed-in users now land on a clear Player vs Organization choice surface so the active product separates emotional participation from operational culture visibility without creating separate apps.
+- Player loop refined: the visible player surface now centers on the Check In/Check Out ritual, weekly continuity, streak, history grid, and leaderboard movement while hiding extra org/world/session workflow layers from the daily player experience.
+- Extreme minimalism pass reduced active screens toward one dominant action, one emotional state, and one continuity signal: the player surface now centers on the ritual plus one primary history object, and the signed-in entry copy is shorter.
 
 IDENTITY
 
@@ -109,6 +112,7 @@ Status: foundation
 - Athletic profile evolution made `/profile` feel more like an earned save file, with a stronger identity surface and records for current streak, total sessions, hours invested, active month, organization, and current rank from real participation history.
 - Axis world feel pass added a quiet world-presence rail to member organization surfaces, summarizing active organizations, live sessions, streak leaders, and growing history from persisted participation signals without creating a feed.
 - Real-world onboarding now carries invite acceptance into the organization world, shows a restrained first-check-in path, and marks the first completed session with `History started`, `streak active`, and `return tomorrow` without adding startup onboarding flows.
+- Organization system refinement tightened the coach/admin surface into culture operations: live participation status, completion, attendance health, continuity trust, support visibility, member roles, invites, and optional trust layers stay operational without becoming enterprise dashboard software.
 
 FUTURE LAYERS
 
