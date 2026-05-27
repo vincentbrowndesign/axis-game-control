@@ -1,9 +1,10 @@
 export type SessionActivationStatus =
   | "checked_in"
-  | "searching"
-  | "player_detected"
-  | "calibration_lock"
-  | "session_active"
+  | "step_into_frame"
+  | "player_found"
+  | "move_around"
+  | "tracking_ready"
+  | "training_active"
 
 export type SessionIdentityHandshake = {
   method: "signed_in" | "wristband"

@@ -30,15 +30,15 @@ export default async function OrganizationStartPage({
         <header className={styles.modeHeader}>
           <p className={styles.brand}>{organization.name}</p>
           <h1 className={styles.modeHeading}>{organization.name}</h1>
-          <p className={styles.modeText}>What are you here to do?</p>
+          <p className={styles.modeText}>Train or coach.</p>
         </header>
 
         <div className={styles.modeGrid}>
           <Link className={styles.modeCard} href={`/org/${organization.slug}/train`}>
             <span>Train</span>
             <strong>Train</strong>
-            <em>Check in and build your history.</em>
-            <small>Open</small>
+            <em>Check in for practice.</em>
+            <small>Enter</small>
           </Link>
           <Link
             className={`${styles.modeCard} ${styles.modeCardOrganization}`}
@@ -46,8 +46,8 @@ export default async function OrganizationStartPage({
           >
             <span>Coach</span>
             <strong>Coach</strong>
-            <em>View attendance and participation.</em>
-            <small>Open</small>
+            <em>View players and check-ins.</em>
+            <small>Enter</small>
           </Link>
         </div>
       </section>

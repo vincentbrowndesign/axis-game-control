@@ -45,7 +45,8 @@ const SAMPLE_HEIGHT = 54
 const DIFF_THRESHOLD = 30
 const MOVING_RATIO = 0.035
 const STOPPED_RATIO = 0.015
-const PLAYER_DETECTED_MS = 500
+const PLAYER_FOUND_MS = 500
+const MOVE_AROUND_MS = 1300
 const LOCKED_MS = 2300
 
 type MovementCalibrationFlowProps = {
@@ -91,7 +92,7 @@ export function MovementCalibrationFlow({
   async function startCamera() {
     if (isActive) return
 
-    setPhase(CALIBRATION_LANGUAGE.SEARCHING)
+    setPhase(CALIBRATION_LANGUAGE.STEP_INTO_FRAME)
     previousFrameRef.current = null
     previousCenterRef.current = null
     previousDirectionRef.current = 0
@@ -129,7 +130,7 @@ export function MovementCalibrationFlow({
       frameRef.current = window.requestAnimationFrame(readFrame)
     } catch {
       setIsActive(false)
-      setPhase(CALIBRATION_LANGUAGE.SEARCHING)
+      setPhase(CALIBRATION_LANGUAGE.STEP_INTO_FRAME)
     }
   }
 
@@ -157,23 +158,28 @@ export function MovementCalibrationFlow({
     const sessionActivation = sessionActivationRef.current
     if (!sessionActivation) return
 
-    if (next === CALIBRATION_LANGUAGE.SEARCHING) {
-      sessionActivation.status = "searching"
+    if (next === CALIBRATION_LANGUAGE.STEP_INTO_FRAME) {
+      sessionActivation.status = "step_into_frame"
       return
     }
 
-    if (next === CALIBRATION_LANGUAGE.PLAYER_DETECTED) {
-      sessionActivation.status = "player_detected"
+    if (next === CALIBRATION_LANGUAGE.MOVE_AROUND) {
+      sessionActivation.status = "move_around"
       return
     }
 
-    if (next === CALIBRATION_LANGUAGE.CALIBRATION_LOCK) {
-      sessionActivation.status = "calibration_lock"
+    if (next === CALIBRATION_LANGUAGE.PLAYER_FOUND) {
+      sessionActivation.status = "player_found"
       return
     }
 
-    if (next === CALIBRATION_LANGUAGE.SESSION_ACTIVE) {
-      sessionActivation.status = "session_active"
+    if (next === CALIBRATION_LANGUAGE.TRACKING_READY) {
+      sessionActivation.status = "tracking_ready"
+      return
+    }
+
+    if (next === CALIBRATION_LANGUAGE.TRAINING_ACTIVE) {
+      sessionActivation.status = "training_active"
     }
   }
 
@@ -215,7 +221,7 @@ export function MovementCalibrationFlow({
     })
 
     if (!sampleContext) {
-      setPhase(CALIBRATION_LANGUAGE.SEARCHING)
+      setPhase(CALIBRATION_LANGUAGE.STEP_INTO_FRAME)
       return
     }
 
@@ -449,24 +455,29 @@ export function MovementCalibrationFlow({
 
     if (!primitive.visible) {
       visibleSinceRef.current = null
-      setPhase(CALIBRATION_LANGUAGE.SEARCHING)
+      setPhase(CALIBRATION_LANGUAGE.STEP_INTO_FRAME)
       return
     }
 
     visibleSinceRef.current ??= now
     const visibleDuration = now - visibleSinceRef.current
 
-    if (visibleDuration < PLAYER_DETECTED_MS) {
-      setPhase(CALIBRATION_LANGUAGE.PLAYER_DETECTED)
+    if (visibleDuration < PLAYER_FOUND_MS) {
+      setPhase(CALIBRATION_LANGUAGE.PLAYER_FOUND)
+      return
+    }
+
+    if (visibleDuration < MOVE_AROUND_MS) {
+      setPhase(CALIBRATION_LANGUAGE.MOVE_AROUND)
       return
     }
 
     if (visibleDuration < LOCKED_MS) {
-      setPhase(CALIBRATION_LANGUAGE.CALIBRATION_LOCK)
+      setPhase(CALIBRATION_LANGUAGE.TRACKING_READY)
       return
     }
 
-    setPhase(CALIBRATION_LANGUAGE.SESSION_ACTIVE)
+    setPhase(CALIBRATION_LANGUAGE.TRAINING_ACTIVE)
   }
 
   function drawTrackingFrame(box?: MotionBox | null) {
@@ -486,7 +497,7 @@ export function MovementCalibrationFlow({
     context.scale(pixelRatio, pixelRatio)
     context.clearRect(0, 0, rect.width, rect.height)
 
-    if (statusRef.current !== CALIBRATION_LANGUAGE.SESSION_ACTIVE || !box) return
+    if (statusRef.current !== CALIBRATION_LANGUAGE.TRAINING_ACTIVE || !box) return
 
     const x = 12 + box.x * (rect.width - 24)
     const y = 12 + box.y * (rect.height - 24)
@@ -507,13 +518,13 @@ export function MovementCalibrationFlow({
     context.stroke()
   }
 
-  const isSessionActive = status === CALIBRATION_LANGUAGE.SESSION_ACTIVE
+  const isTrainingActive = status === CALIBRATION_LANGUAGE.TRAINING_ACTIVE
 
   return (
     <section className={styles.calibrationShell}>
       <div
         className={`${styles.calibrationViewport} ${
-          isSessionActive ? styles.calibrationViewportActive : ""
+          isTrainingActive ? styles.calibrationViewportActive : ""
         }`}
       >
         <video

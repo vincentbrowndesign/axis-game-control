@@ -38,22 +38,22 @@ export default async function OrganizationCoachPage({
         <header className={styles.coachHeader}>
           <p className={styles.brand}>{axisOrganization.name}</p>
           <h1 className={styles.coachPulse}>
-            {activity.activeToday} active today
+            {activity.activeToday} ACTIVE TODAY
           </h1>
         </header>
 
         <section className={styles.coachSection} aria-label="Active today">
-          <span>Active today</span>
+          <span>ACTIVE TODAY</span>
           <strong>{activity.activeToday}</strong>
           <p>
             {activity.hasAnyCheckIns
               ? `${activity.activeToday} checked in today.`
-              : "Activity begins after first check-in."}
+              : "First check-in starts the board."}
           </p>
         </section>
 
         <section className={styles.coachSection} aria-label="Checked in">
-          <span>Checked in</span>
+          <span>CHECKED IN</span>
           {activity.checkedInToday.length ? (
             <ul className={styles.coachList}>
               {activity.checkedInToday.map((checkIn) => (
@@ -72,18 +72,18 @@ export default async function OrganizationCoachPage({
           )}
         </section>
 
-        <section className={styles.coachSection} aria-label="This week">
-          <span>This week</span>
+        <section className={styles.coachSection} aria-label="Attendance">
+          <span>ATTENDANCE</span>
           <strong>{activity.thisWeekActiveUsers}</strong>
           <p>
             {activity.thisWeekActiveUsers
-              ? `${activity.thisWeekActiveUsers} unique active this week.`
+              ? `${activity.thisWeekActiveUsers} players active this week.`
               : "Waiting for first session."}
           </p>
         </section>
 
         <section className={styles.coachSection} aria-label="Current streaks">
-          <span>Current streaks</span>
+          <span>CURRENT STREAKS</span>
           {activity.streakLeaders.length ? (
             <ul className={styles.coachList}>
               {activity.streakLeaders.map((leader) => (

@@ -21,7 +21,7 @@ export default function HomePage() {
         <header className={styles.modeHeader}>
           <p className={styles.brand}>Axis</p>
           <h1 className={styles.modeHeading}>AXIS</h1>
-          <p className={styles.modeText}>Choose organization.</p>
+          <p className={styles.modeText}>Choose team.</p>
         </header>
 
         <div className={styles.modeGrid}>
@@ -33,7 +33,7 @@ export default function HomePage() {
             >
               <span>{organization.avatar}</span>
               <strong>{organization.name}</strong>
-              <small>Open</small>
+              <small>Enter</small>
             </Link>
           ))}
         </div>

@@ -68,16 +68,16 @@ export default async function OrganizationTrainPage({
           organizationSlug={organizationSlug}
         />
 
-        <section className={styles.trainRecords} aria-label="Training continuity">
+        <section className={styles.trainRecords} aria-label="Training record">
           <p>
-            <span>Current streak:</span>
+            <span>CURRENT STREAK</span>
             <strong>
               {checkInSummary.currentStreak}{" "}
               {checkInSummary.currentStreak === 1 ? "day" : "days"}
             </strong>
           </p>
           <p>
-            <span>Last check-in:</span>
+            <span>LAST SESSION</span>
             <strong>
               {checkInSummary.lastCheckIn
                 ? formatCheckInDateTime(checkInSummary.lastCheckIn.checked_in_at)
@@ -85,16 +85,16 @@ export default async function OrganizationTrainPage({
             </strong>
           </p>
           <p>
-            <span>This week:</span>
+            <span>ACTIVE THIS WEEK</span>
             <strong>{checkInSummary.thisWeekCount} / 7 days</strong>
           </p>
           <p>
-            <span>History:</span>
+            <span>SESSION COUNT</span>
             <strong>
               {checkInSummary.history.length
-                ? checkInSummary.history
-                    .map((checkIn) => formatCheckInDate(checkIn.checked_in_at))
-                    .join(", ")
+                ? `${checkInSummary.history.length} ${
+                    checkInSummary.history.length === 1 ? "session" : "sessions"
+                  }`
                 : "no sessions yet"}
             </strong>
           </p>
@@ -123,13 +123,6 @@ function formatCheckInDateTime(value: string) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    month: "short",
-  }).format(new Date(value))
-}
-
-function formatCheckInDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
     month: "short",
   }).format(new Date(value))
 }

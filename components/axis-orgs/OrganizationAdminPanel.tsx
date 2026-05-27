@@ -50,34 +50,34 @@ export function OrganizationAdminPanel({
           <p className={styles.status}>{heroState.signal}</p>
         </header>
 
-        <section className={styles.pulseGrid} aria-label="Organization pulse">
+        <section className={styles.pulseGrid} aria-label="Team board">
           <PulseSignal
             detail="players active right now"
-            label="active today"
+            label="ACTIVE TODAY"
             tone={dailyVisibility.activeToday > 0 ? "active" : "idle"}
             value={String(dailyVisibility.activeToday)}
           />
           <PulseSignal
             detail="saved check-ins today"
-            label="checked in"
+            label="CHECKED IN"
             tone={dailyVisibility.checkedInToday > 0 ? "active" : "idle"}
             value={String(dailyVisibility.checkedInToday)}
           />
           <PulseSignal
             detail="completed today"
-            label="completed sessions"
+            label="SESSION COUNT"
             tone={dailyVisibility.completedToday > 0 ? "active" : "idle"}
             value={String(dailyVisibility.completedToday)}
           />
           <PulseSignal
-            detail={topStreak ? `${memberLabel(topStreak)} leading` : "streaks begin after check-ins"}
-            label="current streaks"
+            detail={topStreak ? `${memberLabel(topStreak)} leading` : "streaks start after check-ins"}
+            label="CURRENT STREAKS"
             tone={activeStreaks > 0 ? "active" : "idle"}
             value={String(activeStreaks)}
           />
           <PulseSignal
             detail={mostActiveThisWeek.detail}
-            label="most active this week"
+            label="MOST ACTIVE"
             tone={activeMembersThisWeek > 0 ? "active" : "idle"}
             value={mostActiveThisWeek.value}
           />
@@ -137,7 +137,7 @@ function buildHeroState({
   if (dailyVisibility.activeToday > 0) {
     return {
       detail: "active today",
-      signal: dailyVisibility.participationMovement,
+      signal: "practice live",
       value: `${dailyVisibility.activeToday} active today`,
     }
   }
@@ -145,7 +145,7 @@ function buildHeroState({
   if (dailyVisibility.activeSessions > 0) {
     return {
       detail: "active sessions",
-      signal: dailyVisibility.participationMovement,
+      signal: "practice live",
       value: `${dailyVisibility.activeSessions} active sessions`,
     }
   }
@@ -153,7 +153,7 @@ function buildHeroState({
   if (dailyVisibility.checkedInToday > 0) {
     return {
       detail: "checked in today",
-      signal: dailyVisibility.continuityMomentum,
+      signal: "team active",
       value: `${dailyVisibility.checkedInToday} checked in`,
     }
   }
@@ -162,14 +162,14 @@ function buildHeroState({
     return {
       detail: mostActiveThisWeek.detail,
       signal: "most active this week",
-      value: `${organizationName} moving`,
+      value: `${organizationName} active`,
     }
   }
 
   if (activeStreaks > 0) {
     return {
       detail: "current streaks",
-      signal: dailyVisibility.continuityMomentum,
+      signal: "current streak",
       value: `${activeStreaks} streaks alive`,
     }
   }

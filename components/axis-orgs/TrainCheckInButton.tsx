@@ -54,10 +54,10 @@ export function TrainCheckInButton({
   }
 
   const label = savedAt
-    ? `Checked in - ${formatCheckInTime(savedAt)}`
+    ? `CHECKED IN - ${formatCheckInTime(savedAt)}`
     : isChecking || isPending
-      ? "Checking in"
-      : "Check in"
+      ? "CHECKING IN"
+      : "CHECK IN"
 
   return (
     <div className={styles.trainCheckInControl}>
