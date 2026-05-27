@@ -54,10 +54,19 @@ export default async function OrganizationTrainPage({
           <h1 className={styles.trainTitle}>Train</h1>
         </header>
 
-        <TrainCheckInButton
-          sessionStartedAt={sessionStartedAt}
-          organizationSlug={organizationSlug}
-        />
+        <section className={styles.sessionSurface} aria-label="Training session">
+          <TrainCheckInButton
+            sessionStartedAt={sessionStartedAt}
+            organizationSlug={organizationSlug}
+          />
+
+          <MovementCalibrationFlow
+            isSessionStarted={Boolean(sessionStartedAt)}
+            organizationSlug={organizationSlug}
+            playerId={userId}
+            sessionStartedAt={sessionStartedAt}
+          />
+        </section>
 
         <section className={styles.trainRecords} aria-label="Training record">
           <p>
@@ -91,12 +100,6 @@ export default async function OrganizationTrainPage({
           </p>
         </section>
 
-        <MovementCalibrationFlow
-          isSessionStarted={Boolean(sessionStartedAt)}
-          organizationSlug={organizationSlug}
-          playerId={userId}
-          sessionStartedAt={sessionStartedAt}
-        />
       </section>
     </main>
   )

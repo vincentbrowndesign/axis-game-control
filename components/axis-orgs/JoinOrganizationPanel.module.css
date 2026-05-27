@@ -1,23 +1,23 @@
 .surface {
   align-items: center;
   background:
-    radial-gradient(circle at 82% 18%, rgba(174, 255, 47, 0.1), transparent 18rem),
-    linear-gradient(180deg, #050505 0%, #000000 100%);
+    linear-gradient(180deg, rgba(54, 56, 53, 0.78), rgba(32, 33, 31, 0.98) 44%),
+    linear-gradient(90deg, #282a27 0%, #20211f 52%, #262724 100%);
   color: #f6f6f6;
   display: grid;
   min-height: 100dvh;
-  padding: clamp(5rem, 7vw, 6rem) clamp(1.25rem, 4vw, 4rem) 3rem;
+  padding: clamp(3.25rem, 5vw, 4.5rem) clamp(1rem, 3vw, 2.75rem) 1.5rem;
 }
 
 .card {
-  background: rgba(12, 12, 12, 0.88);
+  background: rgba(32, 33, 31, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1.4rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.72rem;
   margin: 0 auto;
-  max-width: 46rem;
-  padding: clamp(1.2rem, 4vw, 2.5rem);
+  max-width: 40rem;
+  padding: clamp(0.95rem, 3vw, 1.6rem);
 }
 
 .avatar,
@@ -42,10 +42,10 @@
   border-radius: 0.75rem;
   color: rgba(246, 246, 246, 0.86);
   display: inline-grid;
-  height: 3rem;
+  height: 2.55rem;
   justify-items: center;
   margin: 0;
-  width: 3rem;
+  width: 2.55rem;
 }
 
 .kicker,
@@ -56,7 +56,7 @@
 }
 
 .card h1 {
-  font-size: clamp(3.4rem, 8vw, 6.6rem);
+  font-size: clamp(2.7rem, 6.4vw, 5rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.95;
@@ -66,14 +66,14 @@
 .copy {
   color: rgba(246, 246, 246, 0.62);
   font-size: clamp(1rem, 1.5vw, 1.25rem);
-  line-height: 1.45;
+  line-height: 1.28;
   margin: 0;
   max-width: 34rem;
 }
 
 .entryPath {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.32rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -87,14 +87,14 @@
   font-size: 0.56rem;
   min-width: 0;
   overflow: hidden;
-  padding: 0.62rem;
+  padding: 0.48rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .joinStats {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.42rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -107,14 +107,14 @@
   color: rgba(246, 246, 246, 0.5);
   display: grid;
   font-size: 0.58rem;
-  gap: 0.24rem;
-  min-height: 4.15rem;
-  padding: 0.72rem;
+  gap: 0.18rem;
+  min-height: 3.25rem;
+  padding: 0.55rem;
 }
 
 .joinStats strong {
   color: rgba(246, 246, 246, 0.84);
-  font-size: 1.15rem;
+  font-size: 0.98rem;
   font-weight: 500;
 }
 
@@ -130,8 +130,8 @@
   border-radius: 0.85rem;
   color: rgba(246, 246, 246, 0.9);
   cursor: pointer;
-  min-height: 3rem;
-  padding: 0 1rem;
+  min-height: 2.65rem;
+  padding: 0 0.8rem;
   touch-action: manipulation;
 }
 
@@ -142,15 +142,15 @@
 
 .joinForm {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.5rem;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .joinFallback {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: grid;
-  gap: 0.7rem;
-  padding-top: 0.8rem;
+  gap: 0.5rem;
+  padding-top: 0.6rem;
 }
 
 .joinFallback summary {
@@ -166,7 +166,7 @@
   border-radius: 0.85rem;
   color: rgba(246, 246, 246, 0.84);
   font-size: 1rem;
-  min-height: 3.25rem;
+  min-height: 2.8rem;
   min-width: 0;
   padding: 0 1rem;
 }
@@ -177,7 +177,7 @@
 
 .worlds {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.5rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -188,10 +188,10 @@
   border-radius: 1rem;
   color: rgba(246, 246, 246, 0.92);
   display: grid;
-  gap: 1.2rem;
+  gap: 0.75rem;
   justify-items: start;
-  min-height: 8rem;
-  padding: 1rem;
+  min-height: 6rem;
+  padding: 0.75rem;
   text-align: left;
 }
 
@@ -208,7 +208,7 @@
 }
 
 .worlds button strong {
-  color: rgba(174, 255, 47, 0.9);
+  color: rgba(174, 255, 47, 0.72);
   font-size: 0.78rem;
   font-weight: 600;
 }
@@ -219,11 +219,11 @@
 }
 
 .continueButton {
-  background: rgba(174, 255, 47, 0.9) !important;
-  border-color: rgba(174, 255, 47, 0.9) !important;
-  color: #050505 !important;
+  background: rgba(174, 255, 47, 0.72) !important;
+  border-color: rgba(174, 255, 47, 0.52) !important;
+  color: #20211f !important;
   font-weight: 700;
-  min-height: 3.6rem;
+  min-height: 3rem;
 }
 
 @media (max-width: 640px) {
@@ -257,6 +257,6 @@
   }
 
   .card button {
-    min-height: 3.5rem;
+    min-height: 3rem;
   }
 }

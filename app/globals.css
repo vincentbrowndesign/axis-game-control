@@ -2,7 +2,7 @@
 @import "../design-system/tokens/axis-tokens.css";
 
 :root {
-  --background: #171513;
+  --background: #232423;
   --foreground: #242424;
   --axis-surface: #f8f8f5;
   --axis-muted: rgba(36, 36, 36, 0.48);
@@ -61,8 +61,8 @@ textarea {
 }
 
 .axis-auth-action {
-  background: rgba(31, 27, 23, 0.68);
-  border: 1px solid rgba(244, 176, 75, 0.18);
+  background: rgba(42, 43, 41, 0.72);
+  border: 1px solid rgba(174, 255, 47, 0.14);
   color: rgba(247, 244, 235, 0.74);
   cursor: pointer;
   font-size: 12px;

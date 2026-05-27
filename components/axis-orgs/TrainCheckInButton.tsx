@@ -85,18 +85,18 @@ export function TrainCheckInButton({
         onClick={handleCheckIn}
         type="button"
       >
-        {label}
+        <span className={styles.trainSessionLabel}>{label}</span>
+        {startedAt ? (
+          <>
+            <span className={styles.trainSessionElapsed}>
+              {formatElapsedTime(startedAt, now)}
+            </span>
+            <span className={styles.trainSessionStart}>
+              START {formatSessionTime(startedAt)}
+            </span>
+          </>
+        ) : null}
       </button>
-      {startedAt ? (
-        <div className={styles.trainSessionMeta} aria-label="Active session">
-          <span>
-            <em />
-            ACTIVE
-          </span>
-          <strong>{formatElapsedTime(startedAt, now)}</strong>
-          <small>START {formatSessionTime(startedAt)}</small>
-        </div>
-      ) : null}
       {error ? <p className={styles.trainCheckInError}>{error}</p> : null}
     </div>
   )

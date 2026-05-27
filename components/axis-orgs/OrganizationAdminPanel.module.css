@@ -1,31 +1,31 @@
 .surface {
   background:
-    radial-gradient(circle at 86% 12%, rgba(174, 255, 47, 0.1), transparent 18rem),
-    linear-gradient(180deg, #050505 0%, #000000 100%);
+    linear-gradient(180deg, rgba(54, 56, 53, 0.78), rgba(32, 33, 31, 0.98) 44%),
+    linear-gradient(90deg, #282a27 0%, #20211f 52%, #262724 100%);
   color: #f6f6f6;
   min-height: 100dvh;
   overflow: visible;
-  padding: clamp(5rem, 7vw, 6rem) clamp(1.25rem, 4vw, 4rem)
-    max(3rem, env(safe-area-inset-bottom));
+  padding: clamp(3.25rem, 5vw, 4.5rem) clamp(1rem, 3vw, 2.75rem)
+    max(1.5rem, env(safe-area-inset-bottom));
 }
 
 .shell {
   display: grid;
-  gap: 1.25rem;
+  gap: 0.85rem;
   margin: 0 auto;
-  max-width: 1080px;
+  max-width: 980px;
 }
 
 .header {
   align-items: start;
   display: grid;
-  gap: 1rem;
+  gap: 0.7rem;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .header h1 {
   color: #f6f6f6;
-  font-size: clamp(4.2rem, 12vw, 9.5rem);
+  font-size: clamp(3.2rem, 8.5vw, 6.5rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.88;
@@ -38,7 +38,7 @@
   color: rgba(246, 246, 246, 0.56);
   font-size: clamp(0.95rem, 1.7vw, 1.18rem);
   line-height: 1.45;
-  margin: 0.95rem 0 0;
+  margin: 0.55rem 0 0;
   max-width: 39rem;
 }
 
@@ -68,11 +68,11 @@
 }
 
 .heroDetail {
-  color: rgba(174, 255, 47, 0.82);
+  color: rgba(174, 255, 47, 0.68);
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
   font-size: clamp(0.74rem, 1.4vw, 0.94rem);
   letter-spacing: 0.06em;
-  margin: 1rem 0 0;
+  margin: 0.55rem 0 0;
   text-transform: uppercase;
 }
 
@@ -88,36 +88,36 @@
 
 .grid {
   display: grid;
-  gap: 1rem;
+  gap: 0.7rem;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
 .commandRail {
   background:
-    linear-gradient(90deg, rgba(174, 255, 47, 0.1), transparent),
-    rgba(12, 12, 12, 0.86);
+    linear-gradient(90deg, rgba(174, 255, 47, 0.04), transparent),
+    rgba(32, 33, 31, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1.35rem;
   display: grid;
-  gap: 0.65rem;
+  gap: 0.48rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 0.72rem;
+  padding: 0.58rem;
 }
 
 .pulseGrid {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.55rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .pulseSignal {
-  background: rgba(12, 12, 12, 0.88);
+  background: rgba(32, 33, 31, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1.25rem;
   display: grid;
-  gap: 0.75rem;
-  min-height: 10rem;
-  padding: 1rem;
+  gap: 0.5rem;
+  min-height: 7rem;
+  padding: 0.75rem;
   position: relative;
 }
 
@@ -134,13 +134,13 @@
 
 .pulseSignalActive {
   background:
-    linear-gradient(145deg, rgba(174, 255, 47, 0.16), rgba(255, 255, 255, 0.035)),
-    rgba(12, 12, 12, 0.9);
-  border-color: rgba(174, 255, 47, 0.24);
+    linear-gradient(145deg, rgba(174, 255, 47, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(38, 40, 37, 0.86);
+  border-color: rgba(174, 255, 47, 0.18);
 }
 
 .pulseSignalActive::after {
-  background: rgba(174, 255, 47, 0.86);
+  background: rgba(174, 255, 47, 0.68);
 }
 
 .pulseSignal span,
@@ -161,7 +161,7 @@
 .pulseSignal strong {
   align-self: end;
   color: #f6f6f6;
-  font-size: clamp(1.85rem, 4vw, 3.6rem);
+  font-size: clamp(1.45rem, 3.2vw, 2.7rem);
   font-weight: 500;
   line-height: 0.95;
   padding-right: 0.85rem;
@@ -180,9 +180,9 @@
   border: 1px solid rgba(246, 246, 246, 0.06);
   border-radius: 1rem;
   display: grid;
-  gap: 0.45rem;
-  min-height: 5.4rem;
-  padding: 0.85rem;
+  gap: 0.32rem;
+  min-height: 4.25rem;
+  padding: 0.65rem;
   position: relative;
 }
 
@@ -199,18 +199,18 @@
 
 .commandSignalActive {
   background:
-    linear-gradient(145deg, rgba(174, 255, 47, 0.16), rgba(255, 255, 255, 0.05)),
+    linear-gradient(145deg, rgba(174, 255, 47, 0.08), rgba(255, 255, 255, 0.05)),
     rgba(255, 255, 255, 0.04);
   border-color: rgba(174, 255, 47, 0.22);
 }
 
 .commandSignalActive::after {
-  background: rgba(174, 255, 47, 0.82);
+  background: rgba(174, 255, 47, 0.62);
 }
 
 .commandSignalSteady {
   background:
-    linear-gradient(145deg, rgba(174, 255, 47, 0.1), rgba(255, 255, 255, 0.04)),
+    linear-gradient(145deg, rgba(174, 255, 47, 0.06), rgba(255, 255, 255, 0.04)),
     rgba(255, 255, 255, 0.04);
   border-color: rgba(174, 255, 47, 0.18);
 }
@@ -224,8 +224,8 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1.2rem;
   display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
+  gap: 0.62rem;
+  padding: 0.78rem;
 }
 
 .dailyPanel {
@@ -233,8 +233,8 @@
   border: 1px solid rgba(174, 255, 47, 0.18);
   border-radius: 1.35rem;
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: 0.65rem;
+  padding: 0.78rem;
 }
 
 .operatingPanel {
@@ -244,8 +244,8 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1.35rem;
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: 0.65rem;
+  padding: 0.78rem;
 }
 
 .trustPanel {
@@ -255,8 +255,8 @@
   border: 1px solid rgba(174, 255, 47, 0.14);
   border-radius: 1.25rem;
   display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
+  gap: 0.62rem;
+  padding: 0.78rem;
 }
 
 .supportPanel {
@@ -264,8 +264,8 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1.25rem;
   display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
+  gap: 0.62rem;
+  padding: 0.78rem;
 }
 
 .panelHeader {
@@ -329,37 +329,37 @@
 
 .settingsGrid {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .metrics {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .dailyMetrics {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .operatingGrid {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .trustGrid {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .supportGrid {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
@@ -372,16 +372,16 @@
   border: 1px solid rgba(246, 246, 246, 0.055);
   border-radius: 0.75rem;
   display: grid;
-  gap: 0.35rem;
-  min-height: 4rem;
-  padding: 0.75rem;
+  gap: 0.26rem;
+  min-height: 3.25rem;
+  padding: 0.58rem;
 }
 
 .operatingItem {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(246, 246, 246, 0.025)),
     rgba(255, 255, 255, 0.28);
-  min-height: 5rem;
+  min-height: 4rem;
   position: relative;
 }
 
@@ -452,7 +452,7 @@
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.3), rgba(174, 255, 47, 0.06)),
     rgba(255, 255, 255, 0.24);
-  min-height: 4.8rem;
+  min-height: 3.85rem;
 }
 
 .supportItem span,
@@ -485,7 +485,7 @@
 }
 
 .trustItem {
-  min-height: 4.75rem;
+  min-height: 3.8rem;
   position: relative;
 }
 
@@ -550,12 +550,12 @@
 
 .leaders {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.4rem;
 }
 
 .activityList {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.4rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -564,9 +564,9 @@
   border: 1px solid rgba(246, 246, 246, 0.055);
   border-radius: 0.78rem;
   display: grid;
-  gap: 0.3rem;
-  min-height: 4.25rem;
-  padding: 0.75rem;
+  gap: 0.24rem;
+  min-height: 3.35rem;
+  padding: 0.58rem;
 }
 
 .activityRow span,
@@ -616,7 +616,7 @@
 .memberList,
 .inviteList {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
 }
 
 .memberRow,
@@ -626,9 +626,9 @@
   border: 1px solid rgba(246, 246, 246, 0.055);
   border-radius: 0.85rem;
   display: grid;
-  gap: 0.7rem;
+  gap: 0.5rem;
   grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.28fr) auto;
-  padding: 0.75rem;
+  padding: 0.58rem;
 }
 
 .memberRow div {
@@ -676,11 +676,11 @@
 @media (max-width: 760px) {
   .surface {
     min-height: auto;
-    padding: 5.25rem 0.85rem max(2rem, env(safe-area-inset-bottom));
+    padding: 3.5rem 0.85rem max(1.25rem, env(safe-area-inset-bottom));
   }
 
   .shell {
-    gap: 0.9rem;
+    gap: 0.65rem;
   }
 
   .header,
@@ -705,7 +705,7 @@
   }
 
   .header h1 {
-    font-size: clamp(2.8rem, 16vw, 4.4rem);
+    font-size: clamp(2.6rem, 13vw, 3.8rem);
   }
 
   .commandSignal,
