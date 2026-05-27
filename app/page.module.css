@@ -249,6 +249,234 @@
   margin-top: 2rem;
 }
 
+.trainShell {
+  align-content: start;
+  display: grid;
+  gap: clamp(1.2rem, 3vw, 2rem);
+  margin: 0 auto;
+  max-width: 760px;
+  min-height: 72dvh;
+  width: 100%;
+}
+
+.trainHeader {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.trainTitle {
+  color: rgba(var(--axis-ink), 0.96);
+  font-size: clamp(5rem, 13vw, 9rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.88;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.trainStatus {
+  border-left: 2px solid rgba(var(--axis-live), 0.75);
+  display: grid;
+  gap: 0.35rem;
+  padding-left: 1rem;
+}
+
+.trainStatus span,
+.trainStatus strong,
+.trainRecords span,
+.trainRecords strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.trainStatus span,
+.trainRecords span {
+  color: rgba(var(--axis-ink), 0.48);
+  font-size: 0.68rem;
+}
+
+.trainStatus strong {
+  color: rgba(var(--axis-ink), 0.88);
+  font-size: clamp(1.1rem, 2vw, 1.45rem);
+  font-weight: 500;
+}
+
+.trainCheckInControl {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.trainCheckInButton {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.22), rgba(var(--axis-live), 0.08)),
+    rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(var(--axis-live), 0.42);
+  border-radius: 1.1rem;
+  color: rgba(var(--axis-ink), 0.96);
+  cursor: pointer;
+  font-size: clamp(2.8rem, 8vw, 7.4rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.9;
+  min-height: clamp(11rem, 28vw, 18rem);
+  overflow-wrap: anywhere;
+  padding: clamp(1.2rem, 4vw, 2.4rem);
+  text-transform: uppercase;
+  touch-action: manipulation;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 120ms ease;
+  width: 100%;
+}
+
+.trainCheckInButton:hover,
+.trainCheckInButton:focus-visible {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.32), rgba(var(--axis-live), 0.1)),
+    rgba(255, 255, 255, 0.08);
+  border-color: rgba(var(--axis-live), 0.72);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.trainCheckInButton:active {
+  transform: translateY(0);
+}
+
+.trainCheckInButton:disabled {
+  cursor: default;
+  opacity: 0.92;
+  transform: none;
+}
+
+.trainCheckInError {
+  color: rgba(var(--axis-ink), 0.82);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.trainRecords {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 1rem;
+}
+
+.trainRecords p {
+  align-items: baseline;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.trainRecords strong {
+  color: rgba(var(--axis-ink), 0.84);
+  font-size: 0.76rem;
+  font-weight: 500;
+  text-align: right;
+}
+
+.coachShell {
+  display: grid;
+  gap: clamp(0.85rem, 2vw, 1.2rem);
+  margin: 0 auto;
+  max-width: 980px;
+  width: 100%;
+}
+
+.coachHeader {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  display: grid;
+  gap: 0.5rem;
+  padding-bottom: clamp(1rem, 2vw, 1.35rem);
+}
+
+.coachPulse {
+  color: rgba(var(--axis-ink), 0.96);
+  font-size: clamp(4rem, 11vw, 8.5rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.88;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.coachSection {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.65rem;
+  padding: clamp(1rem, 2.5vw, 1.35rem);
+}
+
+.coachSection span,
+.coachSection p,
+.coachList em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.coachSection span {
+  color: rgba(var(--axis-ink), 0.48);
+  font-size: 0.66rem;
+}
+
+.coachSection strong {
+  color: rgba(var(--axis-ink), 0.92);
+  font-size: clamp(1.55rem, 4vw, 3.25rem);
+  font-weight: 500;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.coachSection p {
+  color: rgba(var(--axis-ink), 0.56);
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.coachList {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.coachList li {
+  align-items: baseline;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.8rem 0;
+}
+
+.coachList li:first-child {
+  border-top: 0;
+}
+
+.coachList strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: clamp(0.82rem, 2vw, 1.05rem);
+  letter-spacing: 0.03em;
+}
+
+.coachList em {
+  color: rgba(var(--axis-live), 0.8);
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-style: normal;
+}
+
 .identityTokenCard {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);

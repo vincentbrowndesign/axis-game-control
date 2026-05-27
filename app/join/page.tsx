@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
 
-export default async function JoinOrganizationPage() {
-  redirect("/player/join")
+export default function JoinPage() {
+  redirect("/")
 }

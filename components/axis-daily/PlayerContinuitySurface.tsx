@@ -46,8 +46,8 @@ export async function PlayerContinuitySurface({
               </span>
               {organization.name}
             </p>
-            <p className={styles.kicker}>Player system</p>
-            <h1 className={styles.heading}>Build history.</h1>
+            <p className={styles.kicker}>Train</p>
+            <h1 className={styles.heading}>Train.</h1>
             <p className={styles.text}>
               Check in, build history, and stay connected to the people showing
               up with you.

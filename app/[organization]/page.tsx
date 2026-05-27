@@ -1,25 +1,23 @@
-import { PlayerContinuitySurface } from "@/components/axis-daily/PlayerContinuitySurface"
+import { notFound, redirect } from "next/navigation"
+import { normalizeOrganizationSlug } from "@/lib/axis-orgs/organizations"
 
-type OrganizationPageProps = {
+type OrganizationShortcutPageProps = {
   params: Promise<{
     organization: string
   }>
-  searchParams?: Promise<{
-    joined?: string
-  }>
 }
 
-export default async function OrganizationPage({
-  params,
-  searchParams,
-}: OrganizationPageProps) {
-  const { organization } = await params
-  const search = searchParams ? await searchParams : {}
+const ACTIVE_ORGANIZATIONS = new Set(["bridge", "city2city"])
 
-  return (
-    <PlayerContinuitySurface
-      joined={search.joined === "1"}
-      organizationSlug={organization}
-    />
-  )
+export default async function OrganizationShortcutPage({
+  params,
+}: OrganizationShortcutPageProps) {
+  const { organization } = await params
+  const organizationSlug = normalizeOrganizationSlug(organization)
+
+  if (!ACTIVE_ORGANIZATIONS.has(organizationSlug)) {
+    notFound()
+  }
+
+  redirect(`/org/${organizationSlug}/start`)
 }

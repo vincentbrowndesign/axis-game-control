@@ -1,14 +1,23 @@
-import { redirect } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
+import { normalizeOrganizationSlug } from "@/lib/axis-orgs/organizations"
 
-type OrganizationAdminPageProps = {
+type OrganizationAdminShortcutPageProps = {
   params: Promise<{
     organization: string
   }>
 }
 
-export default async function OrganizationAdminPage({
+const ACTIVE_ORGANIZATIONS = new Set(["bridge", "city2city"])
+
+export default async function OrganizationAdminShortcutPage({
   params,
-}: OrganizationAdminPageProps) {
-  const { organization: organizationSlug } = await params
-  redirect(`/org/${organizationSlug}`)
+}: OrganizationAdminShortcutPageProps) {
+  const { organization } = await params
+  const organizationSlug = normalizeOrganizationSlug(organization)
+
+  if (!ACTIVE_ORGANIZATIONS.has(organizationSlug)) {
+    notFound()
+  }
+
+  redirect(`/org/${organizationSlug}/coach`)
 }
