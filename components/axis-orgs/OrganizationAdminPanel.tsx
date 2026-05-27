@@ -70,9 +70,9 @@ export function OrganizationAdminPanel({
             tone={activeMembersThisWeek > 0 ? "active" : "steady"}
           />
           <CommandSignal
-            label="attendance"
-            value={`${attendancePercent}% health`}
-            tone={attendancePercent > 0 ? "steady" : "idle"}
+            label="movement"
+            value={dailyVisibility.participationMovement}
+            tone={dailyVisibility.checkedInToday > 0 ? "active" : "idle"}
           />
         </section>
 
@@ -114,6 +114,7 @@ export function OrganizationAdminPanel({
             <Metric label="active today" value={String(dailyVisibility.activeToday)} />
             <Metric label="most active" value={dailyVisibility.mostActiveToday} />
             <Metric label="top streak" value={dailyVisibility.topStreak} />
+            <Metric label="momentum" value={dailyVisibility.continuityMomentum} />
           </div>
           <div className={styles.activityList}>
             {recentActivity.length ? (

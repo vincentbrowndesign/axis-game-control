@@ -6,6 +6,7 @@ import {
 } from "@/lib/axis-daily/session-flow"
 import { axisTodayRange } from "@/lib/axis-daily/continuity"
 import { ensureAxisOrganizationBySlug } from "@/lib/axis-orgs/organizations"
+import { ensureAxisPlayerMembership } from "@/lib/axis-orgs/memberships"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -134,6 +135,17 @@ export async function POST(request: Request) {
       { error: "Organization not found", traceId },
       { status: 404 }
     )
+  }
+
+  if (organization?.id) {
+    const membership = await ensureAxisPlayerMembership(organization.id, identity)
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: "Organization membership could not be saved.", traceId },
+        { status: 500 }
+      )
+    }
   }
 
   const insertPayload: Record<string, unknown> = {

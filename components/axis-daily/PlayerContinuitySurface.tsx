@@ -8,7 +8,11 @@ import {
   getOrganizationCulture,
   getParticipationSignals,
 } from "@/lib/axis-daily/attendance"
-import { axisDateKey, axisMonthKey } from "@/lib/axis-daily/continuity"
+import {
+  axisDateKey,
+  axisMonthKey,
+  axisStartOfWeek,
+} from "@/lib/axis-daily/continuity"
 import { getAxisLeaderboard } from "@/lib/axis-daily/leaderboard"
 import { buildContinuityReminders } from "@/lib/axis-daily/reminders"
 import { AXIS_DEFAULT_SESSION_SEGMENTS } from "@/lib/axis-daily/session-flow"
@@ -107,6 +111,31 @@ export async function PlayerContinuitySurface({
     : "floor opening"
   const checkIns = summary?.checkIns || []
   const joinedFromOrganization = joined && checkIns.length === 0
+  const activeThisWeek = checkIns.filter(
+    (checkIn) => new Date(checkIn.occurred_at) >= axisStartOfWeek(new Date())
+  ).length
+  const playerContinuityRecords = [
+    {
+      detail: summary?.streakDays === 1 ? "day active" : "days active",
+      label: "current streak",
+      value: String(summary?.streakDays || 0),
+    },
+    {
+      detail: organization.name,
+      label: "last check-in",
+      value: lastCheckIn ? formatLastCheckIn(lastCheckIn.occurred_at) : "None yet",
+    },
+    {
+      detail: activeThisWeek === 1 ? "session this week" : "sessions this week",
+      label: "active this week",
+      value: String(activeThisWeek),
+    },
+    {
+      detail: checkIns.length === 1 ? "saved session" : "saved sessions",
+      label: "total sessions",
+      value: String(checkIns.length),
+    },
+  ]
   const history = checkIns.slice(0, 8).map((checkIn) => ({
     dateLabel: formatAttendanceDate(checkIn.occurred_at),
     id: checkIn.id,
@@ -149,6 +178,7 @@ export async function PlayerContinuitySurface({
       organizationSignals={participationSignals}
       organizationSlug={organization.slug}
       participationSignal={participationSignal}
+      playerContinuityRecords={playerContinuityRecords}
       progressionCells={accumulation}
       reminders={reminders}
       ritualLabel={ritualLabel}

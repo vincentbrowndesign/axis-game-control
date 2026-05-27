@@ -4,18 +4,24 @@ import {
   formatAttendanceDate,
   getAttendanceSummary,
 } from "@/lib/axis-daily/attendance"
+import { getAxisMembershipWorlds } from "@/lib/axis-orgs/memberships"
 import styles from "@/components/axis-daily/AxisDaily.module.css"
 
 export default async function MemoryPage() {
   const identity = await getAxisRequestIdentity()
-  const summary = identity ? await getAttendanceSummary(identity, 60) : null
+  const memberships = identity ? await getAxisMembershipWorlds(identity) : []
+  const playerWorld = memberships[0]
+  const summary = identity
+    ? await getAttendanceSummary(identity, 60, playerWorld?.organizationId)
+    : null
   const checkIns = summary?.checkIns || []
+  const organizationName = playerWorld?.organizationName || "Axis"
 
   return (
     <main className={styles.surface}>
       <header className={styles.telemetry}>
         <div>
-          <p className={styles.eyebrow}>Axis History</p>
+          <p className={styles.eyebrow}>{organizationName}</p>
           <h1 className={styles.title}>Axis History</h1>
         </div>
         <Link className={styles.link} href="/">
@@ -26,7 +32,7 @@ export default async function MemoryPage() {
       <section className={styles.main}>
         <div className={styles.copy}>
           <p className={styles.eyebrow}>Return tomorrow</p>
-          <h2 className={styles.title}>The work stays attached to the player.</h2>
+          <h2 className={styles.title}>The work stays attached to {organizationName}.</h2>
           <p className={styles.statement}>
             Recent training days, streaks, notes, and sessions stay inside
             your Axis History.

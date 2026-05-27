@@ -4,7 +4,7 @@ import {
   ensureAxisOrganizationBySlug,
   normalizeOrganizationSlug,
 } from "@/lib/axis-orgs/organizations"
-import { supabaseAdmin } from "@/lib/supabase/admin"
+import { ensureAxisPlayerMembership } from "@/lib/axis-orgs/memberships"
 
 export const runtime = "nodejs"
 
@@ -53,119 +53,9 @@ export async function POST(request: Request) {
       )
     }
 
-    let existingQuery = supabaseAdmin
-      .from("axis_organization_memberships")
-      .select("id, role, status")
-      .eq("organization_id", organization.id)
-      .limit(1)
+    const membership = await ensureAxisPlayerMembership(organization.id, identity)
 
-    if (identity.supabaseUserId && identity.clerkUserId) {
-      existingQuery = existingQuery.or(
-        `user_id.eq.${identity.supabaseUserId},clerk_user_id.eq.${identity.clerkUserId}`,
-      )
-    } else {
-      existingQuery = identity.supabaseUserId
-        ? existingQuery.eq("user_id", identity.supabaseUserId)
-        : existingQuery.eq("clerk_user_id", identity.clerkUserId || "")
-    }
-
-    const existing = await existingQuery.maybeSingle<{
-      id: string
-      role: string
-      status: string
-    }>()
-
-    if (existing.error) {
-      console.error("[axis:organizations:join:lookup]", {
-        error: existing.error,
-        traceId,
-      })
-
-      return NextResponse.json(
-        {
-          error: "Organization membership could not be checked.",
-          ok: false,
-          traceId,
-        },
-        { status: 500 },
-      )
-    }
-
-    if (existing.data) {
-      if (existing.data.status !== "active") {
-        const reactivationPayload: Record<string, string | null> = {
-          status: "active",
-        }
-
-        if (identity.clerkUserId) {
-          reactivationPayload.clerk_user_id = identity.clerkUserId
-        }
-
-        if (identity.supabaseUserId) {
-          reactivationPayload.user_id = identity.supabaseUserId
-        }
-
-        const reactivated = await supabaseAdmin
-          .from("axis_organization_memberships")
-          .update(reactivationPayload)
-          .eq("id", existing.data.id)
-          .select("id, role")
-          .single<{ id: string; role: string }>()
-
-        if (reactivated.error || !reactivated.data) {
-          console.error("[axis:organizations:join:reactivate]", {
-            error: reactivated.error,
-            traceId,
-          })
-
-          return NextResponse.json(
-            {
-              error: "Organization membership could not be saved.",
-              ok: false,
-              traceId,
-            },
-            { status: 500 },
-          )
-        }
-
-        return NextResponse.json({
-          membershipId: reactivated.data.id,
-          ok: true,
-          organizationSlug: organization.slug,
-          persisted: true,
-          role: reactivated.data.role,
-          traceId,
-        })
-      }
-
-      return NextResponse.json({
-        membershipId: existing.data.id,
-        ok: true,
-        organizationSlug: organization.slug,
-        persisted: true,
-        role: existing.data.role,
-        traceId,
-      })
-    }
-
-    const inserted = await supabaseAdmin
-      .from("axis_organization_memberships")
-      .insert({
-        clerk_user_id: identity.clerkUserId,
-        organization_id: organization.id,
-        role: "player",
-        status: "active",
-        user_id: identity.supabaseUserId,
-      })
-      .select("id, role")
-      .single<{ id: string; role: string }>()
-
-    if (inserted.error || !inserted.data) {
-      console.error("[axis:organizations:join:insert]", {
-        error: inserted.error,
-        traceId,
-      })
-
+    if (!membership) {
       return NextResponse.json(
         {
           error: "Organization membership could not be saved.",
@@ -177,11 +67,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      membershipId: inserted.data.id,
+      membershipId: membership.id,
       ok: true,
       organizationSlug: organization.slug,
       persisted: true,
-      role: inserted.data.role,
+      role: membership.role,
       traceId,
     })
   } catch (error) {

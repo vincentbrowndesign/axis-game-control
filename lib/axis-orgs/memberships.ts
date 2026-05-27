@@ -82,7 +82,9 @@ export type AxisDailyVisibility = {
   activeToday: number
   checkedInToday: number
   completedToday: number
+  continuityMomentum: string
   mostActiveToday: string
+  participationMovement: string
   topStreak: string
 }
 
@@ -271,6 +273,95 @@ export async function getAxisMembershipWorlds(identity: AxisRequestIdentity) {
   })
 }
 
+export async function ensureAxisPlayerMembership(
+  organizationId: string,
+  identity: AxisRequestIdentity
+) {
+  if (!identity.supabaseUserId && !identity.clerkUserId) return null
+
+  let existingQuery = supabaseAdmin
+    .from("axis_organization_memberships")
+    .select("id, role, status")
+    .eq("organization_id", organizationId)
+    .limit(1)
+
+  existingQuery =
+    identity.supabaseUserId && identity.clerkUserId
+      ? existingQuery.or(
+          `user_id.eq.${identity.supabaseUserId},clerk_user_id.eq.${identity.clerkUserId}`
+        )
+      : identity.supabaseUserId
+        ? existingQuery.eq("user_id", identity.supabaseUserId)
+        : existingQuery.eq("clerk_user_id", identity.clerkUserId || "")
+
+  const existing = await existingQuery.maybeSingle<{
+    id: string
+    role: AxisOrganizationRole
+    status: string
+  }>()
+
+  if (existing.error) return null
+
+  if (existing.data) {
+    if (existing.data.status !== "active") {
+      const reactivated = await supabaseAdmin
+        .from("axis_organization_memberships")
+        .update({ status: "active" })
+        .eq("id", existing.data.id)
+        .select("id, role")
+        .single<{ id: string; role: AxisOrganizationRole }>()
+
+      if (reactivated.error || !reactivated.data) return null
+
+      return reactivated.data
+    }
+
+    return {
+      id: existing.data.id,
+      role: existing.data.role,
+    }
+  }
+
+  const inserted = await supabaseAdmin
+    .from("axis_organization_memberships")
+    .insert({
+      clerk_user_id: identity.clerkUserId,
+      organization_id: organizationId,
+      role: "player",
+      status: "active",
+      user_id: identity.supabaseUserId,
+    })
+    .select("id, role")
+    .single<{ id: string; role: AxisOrganizationRole }>()
+
+  if (!inserted.error && inserted.data) return inserted.data
+
+  let retryQuery = supabaseAdmin
+    .from("axis_organization_memberships")
+    .select("id, role")
+    .eq("organization_id", organizationId)
+    .eq("status", "active")
+    .limit(1)
+
+  retryQuery =
+    identity.supabaseUserId && identity.clerkUserId
+      ? retryQuery.or(
+          `user_id.eq.${identity.supabaseUserId},clerk_user_id.eq.${identity.clerkUserId}`
+        )
+      : identity.supabaseUserId
+        ? retryQuery.eq("user_id", identity.supabaseUserId)
+        : retryQuery.eq("clerk_user_id", identity.clerkUserId || "")
+
+  const retry = await retryQuery.maybeSingle<{
+    id: string
+    role: AxisOrganizationRole
+  }>()
+
+  if (retry.error || !retry.data) return null
+
+  return retry.data
+}
+
 export async function getOrganizationJoinSnapshot(organizationId: string) {
   const today = axisTodayRange()
   const since = new Date()
@@ -451,6 +542,19 @@ export async function getOrganizationAdminModel(organizationId: string) {
     .sort((a, b) => b.streakDays - a.streakDays || b.checkIns - a.checkIns)
     .slice(0, 3)
   const mostActiveToday = findMostActiveToday(members, checkInsTodayByMember)
+  const streaksExtendedToday = members.filter((member) => {
+    const key = member.userId || member.clerkUserId || ""
+
+    return activeToday.has(key) && member.streakDays > 1
+  }).length
+  const participationMovement = checkedInToday
+    ? `${checkedInToday} check-in${checkedInToday === 1 ? "" : "s"} saved`
+    : "No check-ins yet."
+  const continuityMomentum = streaksExtendedToday
+    ? `${streaksExtendedToday} streak${streaksExtendedToday === 1 ? "" : "s"} extended`
+    : activeMembersThisWeek
+      ? `${activeMembersThisWeek} active this week`
+      : "Continuity begins after first check-in."
 
   return {
     activeMembersThisWeek,
@@ -460,7 +564,9 @@ export async function getOrganizationAdminModel(organizationId: string) {
       activeToday: activeToday.size,
       checkedInToday,
       completedToday,
+      continuityMomentum,
       mostActiveToday,
+      participationMovement,
       topStreak: streakLeaders[0]
         ? `${memberLabel(streakLeaders[0])} - ${streakLeaders[0].streakDays} days`
         : "No check-ins yet",

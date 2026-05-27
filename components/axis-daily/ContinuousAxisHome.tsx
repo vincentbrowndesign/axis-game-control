@@ -54,6 +54,12 @@ type HistoryStats = {
   totalSessions: string
 }
 
+type PlayerContinuityRecord = {
+  detail: string
+  label: string
+  value: string
+}
+
 type OrganizationSignal = {
   label: string
   value: string
@@ -103,6 +109,7 @@ type ContinuousAxisHomeProps = {
   organizationSlug?: string
   leaderboardPlacement: string
   participationSignal: string
+  playerContinuityRecords: PlayerContinuityRecord[]
   progressionCells: ProgressionCell[]
   reminders: ContinuityReminder[]
   ritualLabel: string
@@ -112,7 +119,6 @@ type ContinuousAxisHomeProps = {
 }
 
 export function ContinuousAxisHome({
-  activeTodayLabel,
   checkedOutToday,
   checkedInToday,
   checkoutLabel,
@@ -120,15 +126,12 @@ export function ContinuousAxisHome({
   currentSessionTitle,
   firstSessionActive,
   history,
-  historyStats,
   joinedFromOrganization,
-  lastCheckInLabel,
-  leaderboardSignal,
   organizationAvatar,
   organizationName = "Axis",
   organizationSlug,
   leaderboardPlacement,
-  participationSignal,
+  playerContinuityRecords,
   progressionCells,
   ritualLabel,
   streakDays,
@@ -371,26 +374,13 @@ export function ContinuousAxisHome({
             </div>
 
             <div className={styles.retentionRecord} aria-label="Continuity records">
-              <div>
-                <span>active</span>
-                <strong>{participationSignal}</strong>
-                <em>{activeTodayLabel}</em>
-              </div>
-              <div>
-                <span>last</span>
-                <strong>{historyStats.lastSession}</strong>
-                <em>{lastCheckInLabel}</em>
-              </div>
-              <div>
-                <span>rank</span>
-                <strong>{leaderboardSignal}</strong>
-                <em>{leaderboardPlacement}</em>
-              </div>
-              <div>
-                <span>month</span>
-                <strong>{historyStats.currentMonthParticipation}</strong>
-                <em>{historyStats.totalSessions}</em>
-              </div>
+              {playerContinuityRecords.map((record) => (
+                <div key={record.label}>
+                  <span>{record.label}</span>
+                  <strong>{record.value}</strong>
+                  <em>{record.detail}</em>
+                </div>
+              ))}
             </div>
           </div>
         </section>

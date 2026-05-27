@@ -17,24 +17,13 @@ import {
   getAxisLeaderboard,
   type AxisLeaderboardCategory,
 } from "@/lib/axis-daily/leaderboard"
-import { supabaseAdmin } from "@/lib/supabase/admin"
+import { getAxisMembershipWorlds } from "@/lib/axis-orgs/memberships"
 import styles from "./page.module.css"
 
 type ProfileDay = {
   id: string
   label: string
   state: "active" | "complete" | "empty" | "future" | "missed"
-}
-
-type MembershipRow = {
-  axis_organizations: {
-    avatar: string | null
-    logo: string | null
-    name: string
-    slug: string
-  } | null
-  joined_at: string | null
-  role: string
 }
 
 export default async function PlayerProfilePage() {
@@ -57,11 +46,14 @@ export default async function PlayerProfilePage() {
     )
   }
 
-  const [user, summary, leaderboard, memberships] = await Promise.all([
+  const [user, memberships] = await Promise.all([
     currentUser().catch(() => null),
-    getAttendanceSummary(identity, 180),
-    getAxisLeaderboard(),
-    getPlayerMemberships(identity),
+    getAxisMembershipWorlds(identity),
+  ])
+  const primaryOrganization = memberships[0]
+  const [summary, leaderboard] = await Promise.all([
+    getAttendanceSummary(identity, 180, primaryOrganization?.organizationId),
+    getAxisLeaderboard(primaryOrganization?.organizationId),
   ])
   const memberId = identity.clerkUserId || identity.supabaseUserId || ""
   const completedDays = new Set(
@@ -73,12 +65,11 @@ export default async function PlayerProfilePage() {
     (checkIn) => checkIn.checked_out_at
   )
   const standing = getLeaderboardStanding(leaderboard, memberId)
-  const primaryOrganization = memberships[0]
   const athleteName = user?.firstName || "Player"
   const displayName = user?.firstName
     ? `${user.firstName}'s save file`
     : "Player save file"
-  const organizationName = primaryOrganization?.axis_organizations?.name || "Axis"
+  const organizationName = primaryOrganization?.organizationName || "Axis"
   const organizationRole = primaryOrganization?.role || "player"
   const activeThisMonth = profileDays.filter(
     (day) => day.state === "complete"
@@ -220,30 +211,6 @@ export default async function PlayerProfilePage() {
   )
 }
 
-async function getPlayerMemberships(
-  identity: NonNullable<Awaited<ReturnType<typeof getAxisRequestIdentity>>>
-) {
-  let query = supabaseAdmin
-    .from("axis_organization_memberships")
-    .select("role, joined_at, axis_organizations(name, slug, avatar, logo)")
-    .eq("status", "active")
-    .order("joined_at", { ascending: true })
-    .limit(4)
-
-  query = identity.supabaseUserId
-    ? query.eq("user_id", identity.supabaseUserId)
-    : query.eq("clerk_user_id", identity.clerkUserId || "")
-
-  const result = await Promise.race([
-    query.returns<MembershipRow[]>(),
-    timeoutMemberships(2500),
-  ])
-
-  if (result.error) return []
-
-  return result.data || []
-}
-
 function getLeaderboardStanding(
   categories: AxisLeaderboardCategory[],
   memberId: string
@@ -336,20 +303,4 @@ function athleteInitials(value: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase() || "AX"
-}
-
-function timeoutMemberships(milliseconds: number) {
-  return new Promise<{
-    data: MembershipRow[] | null
-    error: Error
-  }>((resolve) => {
-    setTimeout(
-      () =>
-        resolve({
-          data: null,
-          error: new Error("Profile membership lookup timed out"),
-        }),
-      milliseconds
-    )
-  })
 }

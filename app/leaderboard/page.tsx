@@ -4,13 +4,20 @@ import {
   getAxisLeaderboard,
   getAxisOrganizationLeaderboard,
 } from "@/lib/axis-daily/leaderboard"
+import { getAxisMembershipWorlds } from "@/lib/axis-orgs/memberships"
 import styles from "./page.module.css"
 
 export default async function LeaderboardPage() {
   const identity = await getAxisRequestIdentity()
+  const memberships = identity ? await getAxisMembershipWorlds(identity) : []
+  const playerWorld = memberships[0]
   const [categories, organizationCategories] = identity
-    ? await Promise.all([getAxisLeaderboard(), getAxisOrganizationLeaderboard()])
+    ? await Promise.all([
+        getAxisLeaderboard(playerWorld?.organizationId),
+        getAxisOrganizationLeaderboard(),
+      ])
     : [[], []]
+  const leaderboardScope = playerWorld?.organizationName || "Axis"
 
   return (
     <main className={styles.surface}>
@@ -21,7 +28,7 @@ export default async function LeaderboardPage() {
             <h1 className={styles.title}>Leaderboard</h1>
           </div>
           <p className={styles.statement}>
-            People are putting work in. Rankings come from saved check-ins only.
+            {leaderboardScope} effort records. Rankings come from saved check-ins only.
           </p>
         </header>
 
