@@ -5,6 +5,7 @@ import {
   getAxisOrganizationBySlug,
   normalizeOrganizationSlug,
 } from "@/lib/axis-orgs/organizations"
+import { MovementCalibrationFlow } from "@/components/axis-orgs/MovementCalibrationFlow"
 import { TrainCheckInButton } from "@/components/axis-orgs/TrainCheckInButton"
 import styles from "@/app/page.module.css"
 
@@ -98,6 +99,8 @@ export default async function OrganizationTrainPage({
             </strong>
           </p>
         </section>
+
+        <MovementCalibrationFlow />
       </section>
     </main>
   )

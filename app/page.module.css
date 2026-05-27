@@ -382,6 +382,108 @@
   text-align: right;
 }
 
+.calibrationShell {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.calibrationViewport {
+  aspect-ratio: 16 / 10;
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.08), transparent 42%),
+    rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1.1rem;
+  min-height: 15rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.calibrationVideo,
+.calibrationCanvas {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.calibrationVideo {
+  background: #000000;
+  filter: saturate(0.88) contrast(1.04);
+}
+
+.calibrationCanvas {
+  pointer-events: none;
+}
+
+.calibrationStart {
+  align-items: center;
+  appearance: none;
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.2), rgba(var(--axis-live), 0.08)),
+    rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(var(--axis-live), 0.44);
+  border-radius: 0.95rem;
+  color: rgba(var(--axis-ink), 0.96);
+  cursor: pointer;
+  display: grid;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: clamp(1rem, 3vw, 1.45rem);
+  inset: 50% auto auto 50%;
+  letter-spacing: 0.04em;
+  min-height: 4.2rem;
+  min-width: min(14rem, calc(100% - 2rem));
+  padding: 0 1.2rem;
+  position: absolute;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  transform: translate(-50%, -50%);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 120ms ease;
+}
+
+.calibrationStart:hover,
+.calibrationStart:focus-visible {
+  background:
+    linear-gradient(135deg, rgba(var(--axis-live), 0.32), rgba(var(--axis-live), 0.1)),
+    rgba(0, 0, 0, 0.74);
+  border-color: rgba(var(--axis-live), 0.72);
+  outline: none;
+  transform: translate(-50%, calc(-50% - 1px));
+}
+
+.calibrationStart:active {
+  transform: translate(-50%, -50%);
+}
+
+.calibrationBar {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+}
+
+.calibrationBar strong,
+.calibrationBar span {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.calibrationBar strong {
+  color: rgba(var(--axis-ink), 0.9);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  font-weight: 500;
+}
+
+.calibrationBar span {
+  color: rgba(var(--axis-live), 0.78);
+  font-size: 0.66rem;
+}
+
 .coachShell {
   display: grid;
   gap: clamp(0.85rem, 2vw, 1.2rem);
