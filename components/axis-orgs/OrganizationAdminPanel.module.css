@@ -4,7 +4,9 @@
     linear-gradient(180deg, #050505 0%, #000000 100%);
   color: #f6f6f6;
   min-height: 100dvh;
-  padding: clamp(5rem, 7vw, 6rem) clamp(1.25rem, 4vw, 4rem) 3rem;
+  overflow: visible;
+  padding: clamp(5rem, 7vw, 6rem) clamp(1.25rem, 4vw, 4rem)
+    max(3rem, env(safe-area-inset-bottom));
 }
 
 .shell {
@@ -15,18 +17,21 @@
 }
 
 .header {
-  align-items: end;
-  display: flex;
+  align-items: start;
+  display: grid;
   gap: 1rem;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .header h1 {
-  font-size: clamp(3.4rem, 8vw, 6.6rem);
+  color: #f6f6f6;
+  font-size: clamp(4.2rem, 12vw, 9.5rem);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 0.95;
+  line-height: 0.88;
   margin: 0;
+  max-width: 11ch;
+  text-transform: uppercase;
 }
 
 .headerCopy {
@@ -62,6 +67,25 @@
   margin: 0 0 0.75rem;
 }
 
+.heroDetail {
+  color: rgba(174, 255, 47, 0.82);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: clamp(0.74rem, 1.4vw, 0.94rem);
+  letter-spacing: 0.06em;
+  margin: 1rem 0 0;
+  text-transform: uppercase;
+}
+
+.status {
+  border: 1px solid rgba(174, 255, 47, 0.2);
+  border-radius: 999px;
+  color: rgba(246, 246, 246, 0.74);
+  margin: 0;
+  max-width: 18rem;
+  padding: 0.65rem 0.85rem;
+  text-align: right;
+}
+
 .grid {
   display: grid;
   gap: 1rem;
@@ -78,6 +102,77 @@
   gap: 0.65rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 0.72rem;
+}
+
+.pulseGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.pulseSignal {
+  background: rgba(12, 12, 12, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+  min-height: 10rem;
+  padding: 1rem;
+  position: relative;
+}
+
+.pulseSignal::after {
+  background: rgba(246, 246, 246, 0.18);
+  border-radius: 999px;
+  content: "";
+  height: 0.5rem;
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  width: 0.5rem;
+}
+
+.pulseSignalActive {
+  background:
+    linear-gradient(145deg, rgba(174, 255, 47, 0.16), rgba(255, 255, 255, 0.035)),
+    rgba(12, 12, 12, 0.9);
+  border-color: rgba(174, 255, 47, 0.24);
+}
+
+.pulseSignalActive::after {
+  background: rgba(174, 255, 47, 0.86);
+}
+
+.pulseSignal span,
+.pulseSignal strong,
+.pulseSignal em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+.pulseSignal span {
+  color: rgba(246, 246, 246, 0.48);
+  font-size: 0.62rem;
+}
+
+.pulseSignal strong {
+  align-self: end;
+  color: #f6f6f6;
+  font-size: clamp(1.85rem, 4vw, 3.6rem);
+  font-weight: 500;
+  line-height: 0.95;
+  padding-right: 0.85rem;
+  white-space: nowrap;
+}
+
+.pulseSignal em {
+  color: rgba(246, 246, 246, 0.54);
+  font-size: 0.62rem;
+  font-style: normal;
+  white-space: nowrap;
 }
 
 .commandSignal {
@@ -579,10 +674,20 @@
 }
 
 @media (max-width: 760px) {
+  .surface {
+    min-height: auto;
+    padding: 5.25rem 0.85rem max(2rem, env(safe-area-inset-bottom));
+  }
+
+  .shell {
+    gap: 0.9rem;
+  }
+
   .header,
   .grid,
   .settingsGrid,
   .commandRail,
+  .pulseGrid,
   .dailyMetrics,
   .operatingGrid,
   .trustGrid,
@@ -597,6 +702,21 @@
   .header {
     align-items: start;
     display: grid;
+  }
+
+  .header h1 {
+    font-size: clamp(2.8rem, 16vw, 4.4rem);
+  }
+
+  .commandSignal,
+  .pulseSignal,
+  .metric,
+  .operatingItem,
+  .trustItem,
+  .supportItem,
+  .activityRow,
+  .memberRow {
+    min-height: 0;
   }
 
   .inviteActions {

@@ -3,7 +3,6 @@ import type {
   AxisMemberContinuity,
   AxisOrganizationOperatingItem,
   AxisOperationalTrustItem,
-  AxisOrganizationActivity,
   AxisSupportVisibilityItem,
 } from "@/lib/axis-orgs/memberships"
 import styles from "./OrganizationAdminPanel.module.css"
@@ -17,34 +16,27 @@ type OrganizationAdminPanelProps = {
   operatingSummary: AxisOrganizationOperatingItem[]
   organizationName: string
   participationContinuity: string
-  recentActivity: AxisOrganizationActivity[]
   streakLeaders: AxisMemberContinuity[]
   supportVisibility: AxisSupportVisibilityItem[]
 }
 
 export function OrganizationAdminPanel({
   activeMembersThisWeek,
-  attendancePercent,
   dailyVisibility,
   members,
-  operationalTrust,
-  operatingSummary,
   organizationName,
-  participationContinuity,
-  recentActivity,
   streakLeaders,
-  supportVisibility,
 }: OrganizationAdminPanelProps) {
-  const completionRate =
-    dailyVisibility.checkedInToday > 0
-      ? Math.round(
-          (dailyVisibility.completedToday / dailyVisibility.checkedInToday) * 100,
-        )
-      : 0
-  const cultureState =
-    dailyVisibility.activeToday > 0
-      ? `${dailyVisibility.activeToday} active today`
-      : "0 active today"
+  const activeStreaks = members.filter((member) => member.streakDays > 0).length
+  const mostActiveThisWeek = findMostActiveThisWeek(members)
+  const topStreak = streakLeaders[0]
+  const heroState = buildHeroState({
+    activeMembersThisWeek,
+    activeStreaks,
+    dailyVisibility,
+    mostActiveThisWeek,
+    organizationName,
+  })
 
   return (
     <main className={styles.surface}>
@@ -52,211 +44,69 @@ export function OrganizationAdminPanel({
         <header className={styles.header}>
           <div>
             <p className={styles.kicker}>{organizationName}</p>
-            <h1>Culture operations.</h1>
+            <h1>{heroState.value}</h1>
+            <p className={styles.heroDetail}>{heroState.detail}</p>
           </div>
-          <p className={styles.status}>Live</p>
+          <p className={styles.status}>{heroState.signal}</p>
         </header>
 
-        <section className={styles.commandRail} aria-label="Organization culture status">
-          <CommandSignal label="today" value={cultureState} tone="active" />
-          <CommandSignal
-            label="completed"
-            value={`${dailyVisibility.completedToday} sessions`}
-            tone={dailyVisibility.completedToday > 0 ? "active" : "steady"}
+        <section className={styles.pulseGrid} aria-label="Organization pulse">
+          <PulseSignal
+            detail="players active right now"
+            label="active today"
+            tone={dailyVisibility.activeToday > 0 ? "active" : "idle"}
+            value={String(dailyVisibility.activeToday)}
           />
-          <CommandSignal
-            label="this week"
-            value={`${activeMembersThisWeek} active`}
-            tone={activeMembersThisWeek > 0 ? "active" : "steady"}
-          />
-          <CommandSignal
-            label="movement"
-            value={dailyVisibility.participationMovement}
+          <PulseSignal
+            detail="saved check-ins today"
+            label="checked in"
             tone={dailyVisibility.checkedInToday > 0 ? "active" : "idle"}
+            value={String(dailyVisibility.checkedInToday)}
+          />
+          <PulseSignal
+            detail="completed today"
+            label="completed sessions"
+            tone={dailyVisibility.completedToday > 0 ? "active" : "idle"}
+            value={String(dailyVisibility.completedToday)}
+          />
+          <PulseSignal
+            detail={topStreak ? `${memberLabel(topStreak)} leading` : "streaks begin after check-ins"}
+            label="current streaks"
+            tone={activeStreaks > 0 ? "active" : "idle"}
+            value={String(activeStreaks)}
+          />
+          <PulseSignal
+            detail={mostActiveThisWeek.detail}
+            label="most active this week"
+            tone={activeMembersThisWeek > 0 ? "active" : "idle"}
+            value={mostActiveThisWeek.value}
           />
         </section>
-
-        <section className={styles.operatingPanel}>
-          <div className={styles.panelHeader}>
-            <span>Culture health</span>
-            <strong>Live organization record</strong>
-          </div>
-          <div className={styles.operatingGrid}>
-            {operatingSummary.map((item) => (
-              <article
-                className={`${styles.operatingItem} ${
-                  item.tone === "active"
-                    ? styles.operatingItemActive
-                    : item.tone === "steady"
-                      ? styles.operatingItemSteady
-                      : ""
-                }`}
-                key={item.label}
-              >
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <em>{item.detail}</em>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className={styles.dailyPanel}>
-          <div className={styles.panelHeader}>
-            <span>Live today</span>
-            <strong>{organizationName} participation</strong>
-          </div>
-          <div className={styles.dailyMetrics}>
-            <Metric label="checked in" value={String(dailyVisibility.checkedInToday)} />
-            <Metric label="completed" value={String(dailyVisibility.completedToday)} />
-            <Metric label="completion" value={`${completionRate}%`} />
-            <Metric label="active sessions" value={String(dailyVisibility.activeSessions)} />
-            <Metric label="active today" value={String(dailyVisibility.activeToday)} />
-            <Metric label="most active" value={dailyVisibility.mostActiveToday} />
-            <Metric label="top streak" value={dailyVisibility.topStreak} />
-            <Metric label="momentum" value={dailyVisibility.continuityMomentum} />
-          </div>
-          <div className={styles.activityList}>
-            {recentActivity.length ? (
-              recentActivity.map((activity) => (
-                <article className={styles.activityRow} key={activity.id}>
-                  <span>{activity.label}</span>
-                  <strong>{activity.status}</strong>
-                  <em>{activity.detail}</em>
-                </article>
-              ))
-            ) : (
-              <p className={styles.empty}>No check-ins yet.</p>
-            )}
-          </div>
-        </section>
-
-        <section className={styles.trustPanel}>
-          <div className={styles.panelHeader}>
-            <span>Continuity health</span>
-            <strong>Participation record</strong>
-          </div>
-          <div className={styles.trustGrid}>
-            {operationalTrust.map((item) => (
-              <article
-                className={`${styles.trustItem} ${
-                  item.state === "active"
-                    ? styles.trustItemActive
-                    : item.state === "ready"
-                      ? styles.trustItemReady
-                      : ""
-                }`}
-                key={item.label}
-              >
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <em>{item.detail}</em>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className={styles.supportPanel}>
-          <div className={styles.panelHeader}>
-            <span>Support visibility</span>
-            <strong>Consistency signals</strong>
-          </div>
-          <div className={styles.supportGrid}>
-            {supportVisibility.map((item) => (
-              <article className={styles.supportItem} key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <em>{item.detail}</em>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className={styles.grid}>
-          <section className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <span>Streak leaders</span>
-              <strong>{participationContinuity}</strong>
-            </div>
-            <div className={styles.metrics}>
-              <Metric label="attendance" value={`${attendancePercent}%`} />
-              <Metric label="active" value={String(activeMembersThisWeek)} />
-              <Metric label="members" value={String(members.length)} />
-            </div>
-            <div className={styles.leaders}>
-              {streakLeaders.length ? (
-                streakLeaders.map((member) => (
-                  <article className={styles.leader} key={member.id}>
-                    <span>{memberLabel(member)}</span>
-                    <strong>{member.streakDays} day streak</strong>
-                  </article>
-                ))
-              ) : (
-                <p className={styles.empty}>Continuity begins after first check-in.</p>
-              )}
-            </div>
-          </section>
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <span>Member continuity</span>
-            <strong>Roles and participation</strong>
-          </div>
-          <div className={styles.memberList}>
-            {members.length ? (
-              members.map((member) => (
-                <article className={styles.memberRow} key={member.id}>
-                  <div>
-                    <span>{memberLabel(member)}</span>
-                    <strong>{memberHoursLabel(member.minutesThisWeek)} this week</strong>
-                    <em>
-                      {member.completedSessions} completed / {member.streakDays} day streak
-                    </em>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className={styles.empty}>Waiting for first session.</p>
-            )}
-          </div>
-        </section>
-
       </section>
     </main>
   )
 }
 
-function CommandSignal({
+function PulseSignal({
+  detail,
   label,
   tone,
   value,
 }: {
+  detail: string
   label: string
-  tone: "active" | "idle" | "steady"
+  tone: "active" | "idle"
   value: string
 }) {
   return (
     <article
-      className={`${styles.commandSignal} ${
-        tone === "active"
-          ? styles.commandSignalActive
-          : tone === "steady"
-            ? styles.commandSignalSteady
-            : ""
+      className={`${styles.pulseSignal} ${
+        tone === "active" ? styles.pulseSignalActive : ""
       }`}
     >
       <span>{label}</span>
       <strong>{value}</strong>
-    </article>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <article className={styles.metric}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <em>{detail}</em>
     </article>
   )
 }
@@ -268,10 +118,88 @@ function memberLabel(member: AxisMemberContinuity) {
   return suffix ? `MEMBER ${suffix}` : "MEMBER"
 }
 
-function memberHoursLabel(minutes: number) {
-  if (minutes <= 0) return "0h"
+function buildHeroState({
+  activeMembersThisWeek,
+  activeStreaks,
+  dailyVisibility,
+  mostActiveThisWeek,
+  organizationName,
+}: {
+  activeMembersThisWeek: number
+  activeStreaks: number
+  dailyVisibility: AxisDailyVisibility
+  mostActiveThisWeek: {
+    detail: string
+    value: string
+  }
+  organizationName: string
+}) {
+  if (dailyVisibility.activeToday > 0) {
+    return {
+      detail: "active today",
+      signal: dailyVisibility.participationMovement,
+      value: `${dailyVisibility.activeToday} active today`,
+    }
+  }
 
-  const hours = minutes / 60
+  if (dailyVisibility.activeSessions > 0) {
+    return {
+      detail: "active sessions",
+      signal: dailyVisibility.participationMovement,
+      value: `${dailyVisibility.activeSessions} active sessions`,
+    }
+  }
 
-  return hours < 10 ? `${hours.toFixed(1)}h` : `${Math.round(hours)}h`
+  if (dailyVisibility.checkedInToday > 0) {
+    return {
+      detail: "checked in today",
+      signal: dailyVisibility.continuityMomentum,
+      value: `${dailyVisibility.checkedInToday} checked in`,
+    }
+  }
+
+  if (activeMembersThisWeek > 0) {
+    return {
+      detail: mostActiveThisWeek.detail,
+      signal: "most active this week",
+      value: `${organizationName} moving`,
+    }
+  }
+
+  if (activeStreaks > 0) {
+    return {
+      detail: "current streaks",
+      signal: dailyVisibility.continuityMomentum,
+      value: `${activeStreaks} streaks alive`,
+    }
+  }
+
+  return {
+    detail: "waiting for first check-in",
+    signal: "floor opening",
+    value: `${organizationName} ready`,
+  }
+}
+
+function findMostActiveThisWeek(members: AxisMemberContinuity[]) {
+  const member = [...members].sort(
+    (a, b) =>
+      b.checkInsThisWeek - a.checkInsThisWeek ||
+      b.minutesThisWeek - a.minutesThisWeek ||
+      b.streakDays - a.streakDays
+  )[0]
+
+  if (!member || member.checkInsThisWeek <= 0) {
+    return {
+      detail: "waiting for this week",
+      value: "None yet",
+    }
+  }
+
+  return {
+    detail: `${member.checkInsThisWeek} check-in${
+      member.checkInsThisWeek === 1 ? "" : "s"
+    }`,
+    value: memberLabel(member),
+  }
 }

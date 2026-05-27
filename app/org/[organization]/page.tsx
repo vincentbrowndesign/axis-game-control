@@ -59,7 +59,6 @@ export default async function OrgDashboardRoute({
       operatingSummary={adminModel.operatingSummary}
       organizationName={organization.name}
       participationContinuity={adminModel.participationContinuity}
-      recentActivity={adminModel.recentActivity}
       streakLeaders={adminModel.streakLeaders}
       supportVisibility={adminModel.supportVisibility}
     />
