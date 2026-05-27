@@ -21,9 +21,9 @@ export default async function HomePage() {
         <section className={styles.modeShell}>
           <header className={styles.modeHeader}>
             <p className={styles.brand}>Axis</p>
-            <p className={styles.kicker}>Choose experience</p>
-            <h1 className={styles.modeHeading}>Enter the system.</h1>
-            <p className={styles.modeText}>Choose how you show up.</p>
+            <p className={styles.kicker}>System entry</p>
+            <h1 className={styles.modeHeading}>Enter Axis.</h1>
+            <p className={styles.modeText}>Player / Organization</p>
           </header>
 
           <div className={styles.modeGrid}>
@@ -32,8 +32,7 @@ export default async function HomePage() {
               href={playerWorld ? `/${playerWorld.organizationSlug}` : "/join"}
             >
               <span>Player</span>
-              <strong>Check in.</strong>
-              <em>Continue your streak. Build history.</em>
+              <strong>Build history</strong>
               <small>
                 {playerWorld
                   ? `${playerWorld.organizationName} ready`
@@ -50,8 +49,7 @@ export default async function HomePage() {
               }
             >
               <span>Organization</span>
-              <strong>Run culture.</strong>
-              <em>Attendance, sessions, streaks, and participation.</em>
+              <strong>Run culture</strong>
               <small>
                 {organizationWorld
                   ? `${organizationWorld.organizationName} control`

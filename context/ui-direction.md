@@ -14,9 +14,10 @@ The visual language is premium athletic infrastructure with restrained electroni
 
 ## Visual Rules
 
-- Use graphite, warm charcoal, smoked gray, soft arena black, and polished dark surfaces.
+- Use black and white as the primary Axis palette.
+- Use lime green as the only accent.
 - Avoid empty black voids and lonely sci-fi atmosphere.
-- Use restrained athletic signal accents: scoreboard amber, electric green, active white, tunnel blue, and movement orange.
+- Avoid beige wellness tones, warm cream gradients, muted startup palettes, and earthy UI colors.
 - Accent appears only in active, focus, completion, social tension, and subtle live-gym states.
 - Use oversized clean display type for emotion.
 - Use tiny monospace metadata for records.
@@ -33,7 +34,6 @@ The interface should feel:
 - Calm.
 - Alive.
 - Athletic.
-- Warm.
 - Communal.
 - Electronic.
 - Save-state oriented.

@@ -1,42 +1,41 @@
 :root {
-  --axis-color-graphite-950: #11100e;
-  --axis-color-graphite-900: #171513;
-  --axis-color-graphite-850: #1f1b17;
-  --axis-color-graphite-800: #29241f;
-  --axis-color-graphite-700: #37312a;
-  --axis-color-concrete-100: #eee7d9;
-  --axis-color-concrete-200: #ddd4c5;
-  --axis-color-concrete-300: #cec4b2;
-  --axis-color-arena-ink: #23201b;
+  --axis-color-black: #000000;
+  --axis-color-white: #f6f6f6;
+  --axis-color-lime: #aeff2f;
+  --axis-color-graphite-950: #000000;
+  --axis-color-graphite-900: #050505;
+  --axis-color-graphite-850: #0c0c0c;
+  --axis-color-graphite-800: #141414;
+  --axis-color-graphite-700: #1f1f1f;
 
-  --axis-color-ink: #f7f4eb;
-  --axis-color-ink-soft: rgba(247, 244, 235, 0.74);
-  --axis-color-ink-muted: rgba(247, 244, 235, 0.5);
-  --axis-color-ink-faint: rgba(247, 244, 235, 0.34);
-  --axis-color-ink-day: #23201b;
-  --axis-color-ink-day-muted: rgba(35, 32, 27, 0.58);
+  --axis-color-ink: #f6f6f6;
+  --axis-color-ink-soft: rgba(246, 246, 246, 0.74);
+  --axis-color-ink-muted: rgba(246, 246, 246, 0.5);
+  --axis-color-ink-faint: rgba(246, 246, 246, 0.34);
+  --axis-color-ink-day: #f6f6f6;
+  --axis-color-ink-day-muted: rgba(246, 246, 246, 0.58);
 
-  --axis-surface: #171513;
-  --axis-surface-soft: rgba(31, 27, 23, 0.72);
-  --axis-surface-raised: rgba(41, 36, 31, 0.78);
-  --axis-surface-day: #ddd4c5;
-  --axis-surface-day-soft: rgba(242, 236, 223, 0.54);
-  --axis-surface-day-raised: rgba(255, 250, 238, 0.64);
-  --axis-surface-active: rgba(244, 176, 75, 0.1);
-  --axis-surface-live: rgba(110, 255, 156, 0.1);
+  --axis-surface: #000000;
+  --axis-surface-soft: rgba(12, 12, 12, 0.86);
+  --axis-surface-raised: rgba(20, 20, 20, 0.9);
+  --axis-surface-day: #000000;
+  --axis-surface-day-soft: rgba(12, 12, 12, 0.86);
+  --axis-surface-day-raised: rgba(20, 20, 20, 0.9);
+  --axis-surface-active: rgba(174, 255, 47, 0.1);
+  --axis-surface-live: rgba(174, 255, 47, 0.1);
 
-  --axis-border: rgba(247, 244, 235, 0.1);
-  --axis-border-strong: rgba(244, 176, 75, 0.22);
-  --axis-border-live: rgba(110, 255, 156, 0.28);
+  --axis-border: rgba(246, 246, 246, 0.12);
+  --axis-border-strong: rgba(174, 255, 47, 0.24);
+  --axis-border-live: rgba(174, 255, 47, 0.28);
 
-  --axis-signal-amber: #f4b04b;
-  --axis-signal-green: #6eff9c;
-  --axis-signal-orange: #ff8a3d;
-  --axis-signal-blue: #76b7ff;
-  --axis-signal-white: #fff8e8;
+  --axis-signal-amber: #aeff2f;
+  --axis-signal-green: #aeff2f;
+  --axis-signal-orange: #aeff2f;
+  --axis-signal-blue: #aeff2f;
+  --axis-signal-white: #f6f6f6;
 
-  --axis-glow: 0 0 28px rgba(244, 176, 75, 0.08);
-  --axis-glow-live: 0 0 30px rgba(110, 255, 156, 0.08);
+  --axis-glow: 0 0 24px rgba(174, 255, 47, 0.08);
+  --axis-glow-live: 0 0 28px rgba(174, 255, 47, 0.1);
   --axis-shadow-soft: 0 24px 80px rgba(0, 0, 0, 0.26);
 
   --axis-radius-xs: 0.55rem;

@@ -81,11 +81,11 @@ Every Axis screen follows the same structure:
 
 Axis is structural UI, not overlay UI. Interfaces must feel built into the screen itself, preserve screen integrity, and avoid random floating cards, stacked panels, disconnected widgets, viewport collisions, and keyboard instability.
 
-Use premium athletic dark surfaces, not empty black voids: graphite, warm charcoal, smoked gray, soft arena black, and polished dark surfaces. Darkness should feel like an active gym or arena system with people inside it.
+Use the permanent Axis palette: black and white as the primary system, with lime green as the only accent. Black should feel like athletic hardware and sports electronics, not empty luxury whitespace or cinematic void.
 
-Use a restrained warm signal accent system. Prefer scoreboard amber, electric green, active white, tunnel blue, and movement orange. Accent appears only in active states, focus states, successful ritual completion, community/progression signals, and subtle live-gym moments.
+Use lime green as the restrained signal accent. It appears only in active states, focus states, successful ritual completion, community/progression signals, and subtle live-gym moments. Lime should feel active, electrical, athletic, and alive, not neon cyberpunk.
 
-Avoid rainbow UI, startup gradients, excessive color, loud shadows, thick borders, giant cards, unnecessary framing, cyberpunk glow, dead minimalism, and isolated black voids.
+Avoid beige wellness tones, warm cream gradients, muted startup palettes, earthy UI colors, rainbow UI, startup gradients, excessive color, loud shadows, thick borders, giant cards, unnecessary framing, cyberpunk glow, dead minimalism, and isolated black voids.
 
 Typography carries hierarchy through oversized clean display type and tiny monospace metadata. The contrast between huge emotional typography and small system records is critical. Avoid repeated state language, excessive labels, giant explanation, and visual shouting.
 

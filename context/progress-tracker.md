@@ -42,7 +42,7 @@ Status: in progress
 - Streak and last check-in are treated as archival save data.
 - Check In now saves in place on the home surface instead of routing through separate ritual pages.
 - Visible station/session-step progression is hidden for V1 so the post-check-in moment can stay focused on history, streak, and leaderboard continuity.
-- Palette direction now favors living gym energy: warm charcoal surfaces, scoreboard amber, electric green, and active athletic participation over cold replay-era voids.
+- Palette direction now favors sports-electronics contrast: black, white, lime green, and active athletic participation over cold replay-era voids.
 - V1 check-in no longer asks for browser location or blocks on gym-boundary verification; organization verification remains a future optional layer.
 - Supabase schema audit completed; no destructive cleanup performed. Current data model should be stabilized around check-ins, history, leaderboard, and preserved future media foundations.
 - Axis design system scaffold added so future screens inherit shared tokens, soft athletic surfaces, progression primitives, and the visual constitution instead of ad hoc styling.
@@ -53,7 +53,7 @@ Status: in progress
 - Real continuity modules replaced placeholder side cards with a streak ring, mini history grid, rank object, and active-today participation count from check-in data.
 - Progression grid now extends into softer future days and marks the next accumulation node, making streak direction and momentum easier to read visually.
 - Home surface now scrolls from the top on desktop to prevent clipped content, and the design pattern is anchored to a concrete member-profile/activity-template.
-- Light surface athletic pass moved the member home away from heavy cinematic darkness toward warm concrete, soft graphite, daylight gym energy, and calmer active signals.
+- Light surface athletic pass moved the member home away from heavy cinematic darkness toward sharper sports-system contrast and calmer active signals.
 - Glow refinement compressed broad haze into sharper signal edges, shorter shadows, and more readable athletic typography.
 - Athletic rhythm pass added a compact ritual momentum strip, more tactile completed-day states, stronger active-day emphasis, and clearer progression surfaces without adding new features.
 - Template acceleration pass made structural rhythm more reusable: top records became soft modules, the activity rail became a contained participation band, and continuity/history surfaces gained clearer grouped cadence.
@@ -115,6 +115,7 @@ Status: foundation
 - Organization system refinement tightened the coach/admin surface into culture operations: live participation status, completion, attendance health, continuity trust, support visibility, member roles, invites, and optional trust layers stay operational without becoming enterprise dashboard software.
 - Organization invite system added human invite codes and links for Bridge and City 2 City, including `/join?org=bridge&code=BRIDGE2025` and `/join/bridge/BRIDGE2025`, while archiving the old BTC seed from the active organization set.
 - Organization join and invite management now shows real organization entry context, active-member signals, checked-in-today counts, and active streaks on valid invite links. Coaches/admins can create invite codes, copy invite links, disable pending invites, view joined members, and assign basic roles from the lightweight organization surface.
+- Palette lock pass set the permanent Axis palette to black, white, and lime green only, removing beige/wellness direction from the constitution, design tokens, and active entry/profile/join/admin surfaces.
 
 FUTURE LAYERS
 

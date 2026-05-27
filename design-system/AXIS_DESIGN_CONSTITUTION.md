@@ -6,7 +6,7 @@ The visual system exists to protect the current product loop:
 
 show up -> participate -> progression updates -> history grows -> leaderboard updates -> return tomorrow
 
-Axis should feel like a living sports continuity operating system: warm, active, premium, communal, and calm.
+Axis should feel like a living sports continuity operating system: active, premium, communal, calm, and operational.
 
 Axis is not a SaaS dashboard, startup site, cyberpunk terminal, analytics surface, replay-first product, speculative AI surface, telemetry experiment, or disconnected set of pages.
 
@@ -43,31 +43,25 @@ Move away from hard terminal rectangles. Axis can keep electronic confidence wit
 
 ## Color Rules
 
-The palette should feel warm, active, human, and electrical.
+The permanent Axis palette is locked:
 
-Use:
+- primary: black
+- primary: white
+- accent: lime green only
 
-- warm light concrete
-- soft graphite
-- arena tunnel wall neutrals
-- premium wearable surfaces
-- warm graphite
-- smoked dark surfaces
-- active athletic signal colors
-- sharp signal edges
-- alive energy
+The lime green should feel active, electrical, athletic, and alive. It should appear in active states, focus states, completion states, progression signals, and subtle participation movement.
 
 Avoid:
 
-- black-hole darkness
-- heavy cinematic shadows
-- dead black voids
-- lonely cinematic darkness
+- beige wellness tones
+- warm cream gradients
+- muted startup palettes
+- earthy UI colors
 - cyberpunk neon overload
 - rainbow interfaces
 - generic startup gradients
 
-Axis can use darkness for contrast, but the default emotional temperature should feel like an active gym during the day: human, warm, and awake. Do not let the interface collapse back into a lonely replay-era void.
+Axis can use black for contrast and system identity, but it should feel like sports electronics, athletic hardware, premium operational systems, modern scoreboard energy, and active athletic infrastructure.
 
 Glow must support hierarchy, not replace it. Prefer crisp OLED-like edges, contained active states, and readable typography over broad bloom, blur spread, or foggy light spill.
 
