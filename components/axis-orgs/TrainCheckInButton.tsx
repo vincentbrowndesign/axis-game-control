@@ -135,7 +135,7 @@ export function TrainCheckInButton({
           status: response.status,
           statusText: response.statusText,
         })
-        setError("Session could not be started. Try again.")
+        setError("Unable to start session.")
         return
       }
 
@@ -146,7 +146,7 @@ export function TrainCheckInButton({
       startTransition(() => router.refresh())
     } catch (error) {
       console.error("AXIS START SESSION FAILED", error)
-      setError("Session could not be started. Try again.")
+      setError("Unable to start session.")
     } finally {
       setIsChecking(false)
     }

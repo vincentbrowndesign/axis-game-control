@@ -114,7 +114,7 @@ export async function saveCheckIn({
       organization_slug: organizationSlug,
       user_id: userId,
     })
-    .select(checkInSelect())
+    .select(CHECK_IN_SELECT_BASE)
     .single<RawAxisCheckIn>()
 
   if (result.error) {
