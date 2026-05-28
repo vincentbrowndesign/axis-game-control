@@ -8,7 +8,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export type AxisCheckIn = {
   checked_in_at: string
+  checked_out_at: string | null
   created_at: string
+  duration_minutes: number
   id: string
   organization_slug: string
   user_id: string
@@ -25,7 +27,9 @@ export async function getTodayCheckIn({
 
   const result = await supabaseAdmin
     .from("check_ins")
-    .select("id, user_id, organization_slug, checked_in_at, created_at")
+    .select(
+      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
+    )
     .eq("user_id", userId)
     .eq("organization_slug", organizationSlug)
     .gte("checked_in_at", start.toISOString())
@@ -69,7 +73,9 @@ export async function saveCheckIn({
       organization_slug: organizationSlug,
       user_id: userId,
     })
-    .select("id, user_id, organization_slug, checked_in_at, created_at")
+    .select(
+      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
+    )
     .single<AxisCheckIn>()
 
   if (result.error) {
@@ -104,6 +110,66 @@ export async function saveCheckIn({
   }
 }
 
+export async function completeCheckIn({
+  organizationSlug,
+  userId,
+}: {
+  organizationSlug: string
+  userId: string
+}) {
+  const existing = await getTodayCheckIn({ organizationSlug, userId })
+
+  if (!existing) {
+    return {
+      error: new Error("Session not found"),
+    }
+  }
+
+  if (existing.checked_out_at) {
+    return {
+      checkIn: existing,
+      duplicate: true,
+    }
+  }
+
+  const checkedOutAt = new Date().toISOString()
+  const durationMinutes = completedSessionMinutes({
+    checkedInAt: existing.checked_in_at,
+    checkedOutAt,
+  })
+  const result = await supabaseAdmin
+    .from("check_ins")
+    .update({
+      checked_out_at: checkedOutAt,
+      duration_minutes: durationMinutes,
+    })
+    .eq("id", existing.id)
+    .select(
+      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
+    )
+    .single<AxisCheckIn>()
+
+  if (result.error) {
+    console.error("AXIS TRAIN CHECK-OUT", {
+      code: result.error.code,
+      detail: result.error.details,
+      hint: result.error.hint,
+      message: result.error.message,
+      organizationSlug,
+      stage: "update-failed",
+    })
+
+    return {
+      error: result.error,
+    }
+  }
+
+  return {
+    checkIn: result.data,
+    duplicate: false,
+  }
+}
+
 export async function getCheckInSummary({
   organizationSlug,
   userId,
@@ -113,7 +179,9 @@ export async function getCheckInSummary({
 }) {
   const result = await supabaseAdmin
     .from("check_ins")
-    .select("id, user_id, organization_slug, checked_in_at, created_at")
+    .select(
+      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
+    )
     .eq("user_id", userId)
     .eq("organization_slug", organizationSlug)
     .order("checked_in_at", { ascending: false })
@@ -136,7 +204,9 @@ export async function getCheckInSummary({
 export async function getOrganizationCheckInActivity(organizationSlug: string) {
   const result = await supabaseAdmin
     .from("check_ins")
-    .select("id, user_id, organization_slug, checked_in_at, created_at")
+    .select(
+      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
+    )
     .eq("organization_slug", organizationSlug)
     .order("checked_in_at", { ascending: false })
     .limit(1000)
@@ -153,6 +223,22 @@ export async function getOrganizationCheckInActivity(organizationSlug: string) {
   }
 
   return buildOrganizationCheckInActivity(result.data || [])
+}
+
+function completedSessionMinutes({
+  checkedInAt,
+  checkedOutAt,
+}: {
+  checkedInAt: string
+  checkedOutAt: string
+}) {
+  const startedAt = new Date(checkedInAt).getTime()
+  const endedAt = new Date(checkedOutAt).getTime()
+  const diffMinutes = Math.round((endedAt - startedAt) / 60000)
+
+  if (!Number.isFinite(diffMinutes)) return 0
+
+  return Math.max(0, Math.min(diffMinutes, 600))
 }
 
 function buildCheckInSummary(checkIns: AxisCheckIn[]) {

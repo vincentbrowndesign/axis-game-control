@@ -1,23 +1,23 @@
 .surface {
-  align-items: center;
+  align-items: start;
   background:
     linear-gradient(180deg, rgba(54, 56, 53, 0.78), rgba(32, 33, 31, 0.98) 44%),
     linear-gradient(90deg, #282a27 0%, #20211f 52%, #262724 100%);
   color: #f6f6f6;
   display: grid;
   min-height: 100dvh;
-  padding: clamp(3.25rem, 5vw, 4.5rem) clamp(1rem, 3vw, 2.75rem) 1.5rem;
+  padding: clamp(2rem, 3.6vw, 3rem) clamp(0.8rem, 2.4vw, 2rem) 1rem;
 }
 
 .card {
   background: rgba(32, 33, 31, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 1.4rem;
+  border-radius: 1rem;
   display: grid;
-  gap: 0.72rem;
+  gap: 0.5rem;
   margin: 0 auto;
-  max-width: 40rem;
-  padding: clamp(0.95rem, 3vw, 1.6rem);
+  max-width: 34rem;
+  padding: clamp(0.72rem, 2vw, 1.1rem);
 }
 
 .avatar,
@@ -56,7 +56,7 @@
 }
 
 .card h1 {
-  font-size: clamp(2.7rem, 6.4vw, 5rem);
+  font-size: clamp(2.2rem, 5.2vw, 3.8rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.95;
@@ -65,7 +65,7 @@
 
 .copy {
   color: rgba(246, 246, 246, 0.62);
-  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  font-size: clamp(0.88rem, 1.2vw, 1rem);
   line-height: 1.28;
   margin: 0;
   max-width: 34rem;
@@ -73,7 +73,7 @@
 
 .entryPath {
   display: grid;
-  gap: 0.32rem;
+  gap: 0.22rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -94,7 +94,7 @@
 
 .joinStats {
   display: grid;
-  gap: 0.42rem;
+  gap: 0.28rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -108,8 +108,8 @@
   display: grid;
   font-size: 0.58rem;
   gap: 0.18rem;
-  min-height: 3.25rem;
-  padding: 0.55rem;
+  min-height: 2.75rem;
+  padding: 0.42rem;
 }
 
 .joinStats strong {
@@ -130,7 +130,7 @@
   border-radius: 0.85rem;
   color: rgba(246, 246, 246, 0.9);
   cursor: pointer;
-  min-height: 2.65rem;
+  min-height: 2.45rem;
   padding: 0 0.8rem;
   touch-action: manipulation;
 }
@@ -177,7 +177,7 @@
 
 .worlds {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.34rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -185,13 +185,13 @@
   align-items: start;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 1rem;
+  border-radius: 0.8rem;
   color: rgba(246, 246, 246, 0.92);
   display: grid;
-  gap: 0.75rem;
+  gap: 0.48rem;
   justify-items: start;
-  min-height: 6rem;
-  padding: 0.75rem;
+  min-height: 4.9rem;
+  padding: 0.55rem;
   text-align: left;
 }
 
@@ -223,16 +223,16 @@
   border-color: rgba(174, 255, 47, 0.52) !important;
   color: #20211f !important;
   font-weight: 700;
-  min-height: 3rem;
+  min-height: 2.65rem;
 }
 
 @media (max-width: 640px) {
   .surface {
-    align-items: end;
+    align-items: start;
     padding:
-      calc(1rem + env(safe-area-inset-top))
-      0.85rem
-      calc(1.25rem + env(safe-area-inset-bottom));
+      calc(0.72rem + env(safe-area-inset-top))
+      0.62rem
+      calc(0.9rem + env(safe-area-inset-bottom));
   }
 
   .card {
@@ -257,6 +257,6 @@
   }
 
   .card button {
-    min-height: 3rem;
+    min-height: 2.65rem;
   }
 }

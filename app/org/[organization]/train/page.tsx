@@ -43,25 +43,26 @@ export default async function OrganizationTrainPage({
         lastCheckIn: null,
         thisWeekCount: 0,
         todayCheckIn: null,
-      }
+  }
   const sessionStartedAt = checkInSummary.todayCheckIn?.checked_in_at || null
+  const sessionCompletedAt = checkInSummary.todayCheckIn?.checked_out_at || null
 
   return (
     <main className={styles.surface}>
       <section className={styles.trainShell}>
-        <header className={styles.trainHeader}>
-          <p className={styles.brand}>{axisOrganization.name}</p>
-          <h1 className={styles.trainTitle}>Train</h1>
-        </header>
-
         <section className={styles.sessionSurface} aria-label="Training session">
           <TrainCheckInButton
+            activeThisWeek={checkInSummary.thisWeekCount}
+            currentStreak={checkInSummary.currentStreak}
+            durationMinutes={checkInSummary.todayCheckIn?.duration_minutes || 0}
+            sessionCompletedAt={sessionCompletedAt}
             sessionStartedAt={sessionStartedAt}
             organizationSlug={organizationSlug}
+            organizationName={axisOrganization.name}
           />
 
           <MovementCalibrationFlow
-            isSessionStarted={Boolean(sessionStartedAt)}
+            isSessionStarted={Boolean(sessionStartedAt && !sessionCompletedAt)}
             organizationSlug={organizationSlug}
             playerId={userId}
             sessionStartedAt={sessionStartedAt}
