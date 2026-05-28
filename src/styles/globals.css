@@ -73,15 +73,19 @@ body {
 .axis-active-state span,
 .axis-active-state strong,
 .axis-active-state em,
-.axis-group-session header span,
-.axis-group-session header strong,
+.axis-session-head span,
+.axis-session-head strong,
+.axis-roster-object header span,
+.axis-roster-object header strong,
+.axis-session-module header span,
+.axis-session-module header strong,
+.axis-current-mode strong,
+.axis-current-mode button,
 .axis-mode-list button,
 .axis-recording-toggle,
+.axis-available-roster button,
 .axis-participant-list span,
 .axis-participant-list button,
-.axis-participant-form span,
-.axis-participant-form input,
-.axis-participant-form button,
 .axis-checkout-button,
 .axis-sign-out,
 .axis-auth-message,
@@ -178,9 +182,7 @@ h1 {
 }
 
 .axis-entry-form input:focus,
-.axis-participant-form input:focus,
 .axis-entry-form button:focus-visible,
-.axis-participant-form button:focus-visible,
 .axis-check-button:focus-visible,
 .axis-checkout-button:focus-visible,
 .axis-sign-out:focus-visible {
@@ -189,7 +191,6 @@ h1 {
 }
 
 .axis-entry-form button,
-.axis-participant-form button,
 .axis-checkout-button,
 .axis-sign-out {
   appearance: none;
@@ -207,11 +208,6 @@ h1 {
   align-self: end;
   border-color: rgba(168, 217, 51, 0.48);
   color: var(--axis-live);
-}
-
-.axis-participant-form button {
-  align-self: end;
-  min-height: 2.75rem;
 }
 
 .axis-restore-line {
@@ -243,7 +239,7 @@ h1 {
 .axis-presence {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7.4rem, 1fr));
 }
 
 .axis-presence p {
@@ -331,30 +327,103 @@ h1 {
   border-top-color: rgba(168, 217, 51, 0.22);
 }
 
-.axis-group-session {
+.axis-session-object {
   border-top: 1px solid var(--axis-line);
   display: grid;
-  gap: 0.7rem;
+  gap: 0.85rem;
   padding-top: 0.85rem;
 }
 
-.axis-group-session header {
+.axis-session-head {
+  align-items: center;
+  border: 1px solid rgba(168, 217, 51, 0.18);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 4.25rem;
+  padding: 0.7rem;
+}
+
+.axis-session-head p {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.axis-session-head span,
+.axis-roster-object header span,
+.axis-session-module header span {
+  color: var(--axis-muted);
+  font-size: 0.66rem;
+}
+
+.axis-session-head strong,
+.axis-roster-object header strong,
+.axis-session-module header strong {
+  color: var(--axis-live);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.axis-roster-object,
+.axis-session-module {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.7rem;
+}
+
+.axis-roster-object {
+  border-color: rgba(168, 217, 51, 0.22);
+}
+
+.axis-roster-object header,
+.axis-session-module header {
   align-items: center;
   display: flex;
   gap: 1rem;
   justify-content: space-between;
 }
 
-.axis-group-session header span,
-.axis-participant-form span {
-  color: var(--axis-muted);
-  font-size: 0.66rem;
+.axis-session-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.axis-group-session header strong {
-  color: var(--axis-live);
-  font-size: 0.72rem;
-  font-weight: 600;
+.axis-current-mode {
+  align-items: end;
+  border: 0;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 3.7rem;
+  padding: 0;
+}
+
+.axis-current-mode strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.5rem, 5vw, 2.75rem);
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.axis-current-mode button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.64rem;
+  min-height: 2rem;
+  padding: 0.45rem 0.58rem;
+  touch-action: manipulation;
+}
+
+.axis-current-mode button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
 }
 
 .axis-mode-list {
@@ -403,7 +472,35 @@ h1 {
   color: var(--axis-live);
 }
 
+.axis-recording-primary {
+  justify-self: end;
+  min-width: 9.4rem;
+}
+
 .axis-recording-toggle:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-available-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.axis-available-roster button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-ink);
+  cursor: pointer;
+  font-size: 0.66rem;
+  min-height: 2.2rem;
+  padding: 0.48rem 0.65rem;
+  touch-action: manipulation;
+}
+
+.axis-available-roster button:focus-visible {
   outline: 1px solid var(--axis-live);
   outline-offset: 0.2rem;
 }
@@ -425,6 +522,14 @@ h1 {
   padding: 0.46rem 0.58rem;
 }
 
+.axis-active-roster-list span {
+  border-color: rgba(168, 217, 51, 0.28);
+}
+
+.axis-roster-empty {
+  color: var(--axis-muted);
+}
+
 .axis-participant-token button {
   appearance: none;
   background: transparent;
@@ -443,32 +548,6 @@ h1 {
 
 .axis-participant-list-inactive span {
   color: var(--axis-muted);
-}
-
-.axis-participant-form {
-  display: grid;
-  gap: 0.55rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.axis-participant-form label {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.axis-participant-form input {
-  appearance: none;
-  background: var(--axis-bg);
-  border: 1px solid var(--axis-line);
-  color: var(--axis-ink);
-  font-size: 0.76rem;
-  min-height: 2.75rem;
-  padding: 0 0.75rem;
-  width: 100%;
-}
-
-.axis-participant-form input::placeholder {
-  color: rgba(244, 244, 240, 0.28);
 }
 
 .axis-checkout-button {
@@ -581,7 +660,6 @@ h1 {
   }
 
   .axis-entry-form,
-  .axis-participant-form,
   .axis-presence,
   .axis-history-grid,
   .axis-archive-strip {
@@ -612,9 +690,25 @@ h1 {
     justify-self: start;
   }
 
-  .axis-group-session header {
+  .axis-session-head,
+  .axis-roster-object header,
+  .axis-session-module header {
     align-items: start;
     display: grid;
+  }
+
+  .axis-session-head,
+  .axis-session-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-recording-primary {
+    justify-self: start;
+  }
+
+  .axis-current-mode {
+    align-items: start;
+    grid-template-columns: 1fr;
   }
 
   .axis-session-row strong,

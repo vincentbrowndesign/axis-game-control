@@ -28,6 +28,21 @@ const defaultParticipationMode: ParticipationMode = "Training";
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 
+type AthleteIdentity = {
+  id: string;
+  name: string;
+  rosterCode: string;
+  calibrationAnchorId: string;
+};
+
+const availableAthletes: AthleteIdentity[] = [
+  { id: "bridge-vincent", name: "Vincent", rosterCode: "BR-01", calibrationAnchorId: "calibration:bridge:vincent" },
+  { id: "bridge-cole", name: "Cole", rosterCode: "BR-02", calibrationAnchorId: "calibration:bridge:cole" },
+  { id: "bridge-jalen", name: "Jalen", rosterCode: "BR-03", calibrationAnchorId: "calibration:bridge:jalen" },
+  { id: "bridge-mason", name: "Mason", rosterCode: "BR-04", calibrationAnchorId: "calibration:bridge:mason" },
+  { id: "bridge-rocket", name: "Rocket", rosterCode: "BR-05", calibrationAnchorId: "calibration:bridge:rocket" },
+];
+
 type SavedSession = {
   id: string;
   startedAt: string;
@@ -35,16 +50,20 @@ type SavedSession = {
   durationSeconds: number;
   mode?: ParticipationMode;
   recordingAttached?: boolean;
-  participants?: string[];
+  participants?: SessionParticipant[];
   participantCount?: number;
   activeParticipantCount?: number;
 };
 
-type ActiveParticipant = {
-  id: string;
-  name: string;
+type ActiveParticipant = AthleteIdentity & {
   joinedAt: string;
   leftAt?: string;
+};
+
+type SessionParticipant = AthleteIdentity & {
+  joinedAt: string;
+  leftAt?: string;
+  activeAtCheckout: boolean;
 };
 
 type AxisSave = {
@@ -105,6 +124,66 @@ function formatCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function identityForName(name: string): AthleteIdentity {
+  const normalizedName = name.trim().toLowerCase();
+  const rosterIdentity = availableAthletes.find((athlete) => athlete.name.toLowerCase() === normalizedName);
+
+  if (rosterIdentity) return rosterIdentity;
+
+  const fallbackId = normalizedName.replace(/[^a-z0-9]+/g, "-") || "athlete";
+
+  return {
+    id: `custom-${fallbackId}`,
+    name: name.trim() || "Athlete",
+    rosterCode: "CUSTOM",
+    calibrationAnchorId: `calibration:custom:${fallbackId}`,
+  };
+}
+
+function normalizeActiveParticipant(participant: unknown): ActiveParticipant | null {
+  if (typeof participant === "string") {
+    return {
+      ...identityForName(participant),
+      joinedAt: new Date().toISOString(),
+    };
+  }
+
+  if (!participant || typeof participant !== "object") return null;
+
+  const candidate = participant as Partial<ActiveParticipant>;
+  const identity = identityForName(candidate.name ?? candidate.id ?? "Athlete");
+  const isRosterIdentity = availableAthletes.some((athlete) => athlete.id === identity.id);
+
+  return {
+    ...identity,
+    id: isRosterIdentity ? identity.id : (candidate.id ?? identity.id),
+    rosterCode: candidate.rosterCode ?? identity.rosterCode,
+    calibrationAnchorId: candidate.calibrationAnchorId ?? identity.calibrationAnchorId,
+    joinedAt: candidate.joinedAt ?? new Date().toISOString(),
+    leftAt: candidate.leftAt,
+  };
+}
+
+function normalizeSessionParticipant(participant: unknown): SessionParticipant | null {
+  const activeParticipant = normalizeActiveParticipant(participant);
+  if (!activeParticipant) return null;
+
+  const candidate = typeof participant === "object" && participant ? (participant as Partial<SessionParticipant>) : {};
+
+  return {
+    ...activeParticipant,
+    activeAtCheckout: Boolean(candidate.activeAtCheckout ?? !activeParticipant.leftAt),
+  };
+}
+
+function isActiveParticipant(participant: ActiveParticipant | null): participant is ActiveParticipant {
+  return Boolean(participant);
+}
+
+function isSessionParticipant(participant: SessionParticipant | null): participant is SessionParticipant {
+  return Boolean(participant);
+}
+
 function dayKey(date: Date | string) {
   const value = typeof date === "string" ? new Date(date) : date;
 
@@ -141,13 +220,22 @@ function readSave(): AxisSave {
           startedAt: parsed.activeSession.startedAt,
           mode: parsed.activeSession.mode ?? defaultParticipationMode,
           recordingAttached: Boolean(parsed.activeSession.recordingAttached),
-          participants: Array.isArray(parsed.activeSession.participants) ? parsed.activeSession.participants : [],
+          participants: Array.isArray(parsed.activeSession.participants)
+            ? parsed.activeSession.participants.map(normalizeActiveParticipant).filter(isActiveParticipant)
+            : [],
         }
       : null;
 
     return {
       activeSession,
-      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      sessions: Array.isArray(parsed.sessions)
+        ? parsed.sessions.map((session) => ({
+            ...session,
+            participants: Array.isArray(session.participants)
+              ? session.participants.map(normalizeSessionParticipant).filter(isSessionParticipant)
+              : [],
+          }))
+        : [],
     };
   } catch {
     return defaultSave;
@@ -186,11 +274,11 @@ export function RitualHome() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
-  const [participantName, setParticipantName] = useState("");
   const [save, setSave] = useState<AxisSave>(defaultSave);
   const [ritualState, setRitualState] = useState<RitualState>("idle");
   const [now, setNow] = useState(() => Date.now());
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
+  const [isModePickerOpen, setIsModePickerOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -291,6 +379,9 @@ export function RitualHome() {
   const inactiveParticipants = activeParticipants.filter((participant) => participant.leftAt);
   const activeParticipantCount = presentParticipants.length;
   const participantCount = activeParticipants.length;
+  const selectableAthletes = availableAthletes.filter(
+    (athlete) => !presentParticipants.some((participant) => participant.id === athlete.id),
+  );
   const currentStreak = calculateStreak(save.sessions);
   const lastCheckIn = save.activeSession
     ? formatTime(save.activeSession.startedAt)
@@ -394,7 +485,6 @@ export function RitualHome() {
   }
 
   function checkIn() {
-    const starterName = athleteLabel.trim() || "Athlete";
     const nextSave = {
       ...save,
       activeSession: {
@@ -402,13 +492,7 @@ export function RitualHome() {
         startedAt: new Date().toISOString(),
         mode: defaultParticipationMode,
         recordingAttached: false,
-        participants: [
-          {
-            id: identity?.id ?? starterName,
-            name: starterName,
-            joinedAt: new Date().toISOString(),
-          },
-        ],
+        participants: [],
       },
     };
 
@@ -417,6 +501,7 @@ export function RitualHome() {
     setNow(Date.now());
     setRitualState("active");
     setLatestSavedSessionId(null);
+    setIsModePickerOpen(false);
   }
 
   function changeMode(mode: ParticipationMode) {
@@ -432,6 +517,7 @@ export function RitualHome() {
 
     writeSave(nextSave);
     setSave(nextSave);
+    setIsModePickerOpen(false);
   }
 
   function toggleRecordingAttachment() {
@@ -449,19 +535,12 @@ export function RitualHome() {
     setSave(nextSave);
   }
 
-  function addParticipant(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function selectAthlete(athlete: AthleteIdentity) {
     if (!save.activeSession) return;
 
-    const name = participantName.trim();
-    if (!name) return;
-
-    const existingParticipant = activeParticipants.find(
-      (participant) => participant.name.toLowerCase() === name.toLowerCase(),
-    );
+    const existingParticipant = activeParticipants.find((participant) => participant.id === athlete.id);
 
     if (existingParticipant && !existingParticipant.leftAt) {
-      setParticipantName("");
       return;
     }
 
@@ -482,8 +561,7 @@ export function RitualHome() {
           : [
               ...activeParticipants,
               {
-                id: crypto.randomUUID(),
-                name,
+                ...athlete,
                 joinedAt: new Date().toISOString(),
               },
             ],
@@ -492,7 +570,6 @@ export function RitualHome() {
 
     writeSave(nextSave);
     setSave(nextSave);
-    setParticipantName("");
   }
 
   function removeParticipant(participantId: string) {
@@ -532,7 +609,10 @@ export function RitualHome() {
       durationSeconds,
       mode: save.activeSession.mode ?? defaultParticipationMode,
       recordingAttached: Boolean(save.activeSession.recordingAttached),
-      participants: activeParticipants.map((participant) => participant.name),
+      participants: activeParticipants.map((participant) => ({
+        ...participant,
+        activeAtCheckout: !participant.leftAt,
+      })),
       participantCount,
       activeParticipantCount,
     };
@@ -661,7 +741,7 @@ export function RitualHome() {
             disabled={ritualState === "active" || ritualState === "saving"}
             type="button"
           >
-            {ritualState === "active" ? "Group active" : ritualState === "saving" ? "Saving" : "Check in"}
+            {ritualState === "active" ? "Session active" : ritualState === "saving" ? "Saving" : "Check in"}
           </button>
           <div className="axis-active-state">
             <span>{participationLabel}</span>
@@ -669,76 +749,110 @@ export function RitualHome() {
             {activeTimerLabel ? <em>{activeTimerLabel}</em> : null}
           </div>
           {save.activeSession ? (
-            <section className="axis-group-session" aria-label="Active group session">
-              <header>
-                <span>Participation mode</span>
-                <strong>{currentMode}</strong>
+            <section className="axis-session-object" aria-label="Session continuity object">
+              <header className="axis-session-head">
+                <p>
+                  <span>Session</span>
+                  <strong>Live environment</strong>
+                </p>
+                <p>
+                  <span>Session time</span>
+                  <strong>{formatDuration(elapsedSeconds)}</strong>
+                </p>
+                <button
+                  className="axis-recording-toggle axis-recording-primary"
+                  data-attached={isRecordingAttached}
+                  onClick={toggleRecordingAttachment}
+                  type="button"
+                >
+                  {isRecordingAttached ? "Recording attached" : "Recording off"}
+                </button>
               </header>
-              <div className="axis-mode-list" aria-label="Participation modes">
-                {participationModes.map((mode) => (
-                  <button
-                    aria-pressed={currentMode === mode}
-                    key={mode}
-                    onClick={() => changeMode(mode)}
-                    type="button"
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-              <header>
-                <span>Participation memory</span>
-                <strong>{recordingLabel}</strong>
-              </header>
-              <button
-                className="axis-recording-toggle"
-                data-attached={isRecordingAttached}
-                onClick={toggleRecordingAttachment}
-                type="button"
-              >
-                {isRecordingAttached ? "Recording attached" : "Recording off"}
-              </button>
-              <header>
-                <span>Active participants</span>
-                <strong>{formatCount(activeParticipantCount, "athlete")}</strong>
-              </header>
-              <div className="axis-participant-list">
-                {presentParticipants.map((participant) => (
-                  <span className="axis-participant-token" key={participant.id}>
-                    <span>{participant.name}</span>
-                    <button onClick={() => removeParticipant(participant.id)} type="button">
-                      Remove
-                    </button>
-                  </span>
-                ))}
-              </div>
-              {inactiveParticipants.length ? (
-                <>
-                  <header>
-                    <span>Inactive</span>
-                    <strong>{formatCount(inactiveParticipants.length, "athlete")}</strong>
-                  </header>
-                  <div className="axis-participant-list axis-participant-list-inactive">
-                    {inactiveParticipants.map((participant) => (
-                      <span className="axis-participant-token" key={participant.id}>
+
+              <section className="axis-roster-object" aria-label="Active roster">
+                <header>
+                  <span>Active roster</span>
+                  <strong>{formatCount(activeParticipantCount, "active")}</strong>
+                </header>
+                <div className="axis-participant-list axis-active-roster-list">
+                  {presentParticipants.length ? (
+                    presentParticipants.map((participant) => (
+                      <span
+                        className="axis-participant-token"
+                        data-athlete-id={participant.id}
+                        key={participant.id}
+                      >
                         <span>{participant.name}</span>
+                        <button onClick={() => removeParticipant(participant.id)} type="button">
+                          Remove
+                        </button>
                       </span>
+                    ))
+                  ) : (
+                    <span className="axis-roster-empty">Roster waiting</span>
+                  )}
+                </div>
+              </section>
+
+              <div className="axis-session-grid">
+                <section className="axis-session-module" aria-label="Current participation mode">
+                  <header>
+                    <span>Current mode</span>
+                  </header>
+                  <section className="axis-current-mode">
+                    <strong>{currentMode}</strong>
+                    <button onClick={() => setIsModePickerOpen((isOpen) => !isOpen)} type="button">
+                      Change mode
+                    </button>
+                  </section>
+                  {isModePickerOpen ? (
+                    <div className="axis-mode-list" aria-label="Participation modes">
+                      {participationModes.map((mode) => (
+                        <button
+                          aria-pressed={currentMode === mode}
+                          key={mode}
+                          onClick={() => changeMode(mode)}
+                          type="button"
+                        >
+                          {mode}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+
+                <section className="axis-session-module" aria-label="Available athletes">
+                  <header>
+                    <span>Available athletes</span>
+                    <strong>{formatCount(selectableAthletes.length, "ready")}</strong>
+                  </header>
+                  <div className="axis-available-roster">
+                    {selectableAthletes.map((athlete) => (
+                      <button
+                        data-athlete-id={athlete.id}
+                        key={athlete.id}
+                        onClick={() => selectAthlete(athlete)}
+                        type="button"
+                      >
+                        {athlete.name}
+                      </button>
                     ))}
                   </div>
-                </>
-              ) : null}
-              <form className="axis-participant-form" onSubmit={addParticipant}>
-                <label>
-                  <span>Add athlete</span>
-                  <input
-                    onChange={(event) => setParticipantName(event.target.value)}
-                    placeholder="Name"
-                    type="text"
-                    value={participantName}
-                  />
-                </label>
-                <button type="submit">Check in</button>
-              </form>
+                  {inactiveParticipants.length ? (
+                    <div className="axis-participant-list axis-participant-list-inactive" aria-label="Inactive athletes">
+                      {inactiveParticipants.map((participant) => (
+                        <span
+                          className="axis-participant-token"
+                          data-athlete-id={participant.id}
+                          key={participant.id}
+                        >
+                          <span>{participant.name}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+              </div>
             </section>
           ) : null}
           {ritualState === "active" ? (
