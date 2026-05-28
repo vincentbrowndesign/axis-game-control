@@ -175,7 +175,7 @@ export function TrainCheckInButton({
           status: response.status,
           statusText: response.statusText,
         })
-        setError("Session could not be completed. Try again.")
+        setError("Unable to end session.")
         return
       }
 
@@ -185,7 +185,7 @@ export function TrainCheckInButton({
       startTransition(() => router.refresh())
     } catch (error) {
       console.error("AXIS END SESSION FAILED", error)
-      setError("Session could not be completed. Try again.")
+      setError("Unable to end session.")
     } finally {
       setIsEnding(false)
     }

@@ -42,8 +42,13 @@ export async function POST(
   })
 
   if ("error" in saved) {
+    console.error("AXIS END SESSION FAILED", {
+      error: saved.error instanceof Error ? saved.error.message : saved.error,
+      organizationSlug,
+    })
+
     return NextResponse.json(
-      { error: "Session could not be completed. Try again." },
+      { error: "Unable to end session." },
       { status: 500 }
     )
   }

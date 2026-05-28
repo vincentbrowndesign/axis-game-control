@@ -202,38 +202,12 @@ export async function completeCheckIn({
     .update({
       checked_out_at: checkedOutAt,
       duration_minutes: durationMinutes,
-      ...(workUnitsColumnAvailable === false
-        ? {}
-        : { work_units: normalizeWorkUnits(workUnits) }),
     })
     .eq("id", existing.id)
-    .select(checkInSelect())
+    .select(CHECK_IN_SELECT_BASE)
     .single<RawAxisCheckIn>()
 
   if (result.error) {
-    if (isMissingWorkUnitsError(result.error)) {
-      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "check-out-fallback" })
-
-      const fallback = await supabaseAdmin
-        .from("check_ins")
-        .update({
-          checked_out_at: checkedOutAt,
-          duration_minutes: durationMinutes,
-        })
-        .eq("id", existing.id)
-        .select(CHECK_IN_SELECT_BASE)
-        .single<RawAxisCheckIn>()
-
-      if (!fallback.error) {
-        return {
-          checkIn: normalizeCheckIn(fallback.data),
-          duplicate: false,
-        }
-      }
-    } else {
-      workUnitsColumnAvailable = true
-    }
-
     console.error("AXIS TRAIN CHECK-OUT", {
       code: result.error.code,
       detail: result.error.details,
@@ -248,12 +222,50 @@ export async function completeCheckIn({
     }
   }
 
-  if (workUnitsColumnAvailable !== false) {
-    workUnitsColumnAvailable = true
+  const completedCheckIn = normalizeCheckIn(result.data)
+
+  if (workUnitsColumnAvailable === false) {
+    return {
+      checkIn: completedCheckIn,
+      duplicate: false,
+    }
   }
 
+  const workResult = await supabaseAdmin
+    .from("check_ins")
+    .update({
+      work_units: normalizeWorkUnits(workUnits),
+    })
+    .eq("id", existing.id)
+    .select(CHECK_IN_SELECT_WITH_WORK)
+    .single<RawAxisCheckIn>()
+
+  if (workResult.error) {
+    if (isMissingWorkUnitsError(workResult.error)) {
+      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "work-units-save-failed" })
+    } else {
+      workUnitsColumnAvailable = true
+    }
+
+    console.warn("AXIS TRAIN WORK UNITS", {
+      code: workResult.error.code,
+      detail: workResult.error.details,
+      hint: workResult.error.hint,
+      message: workResult.error.message,
+      organizationSlug,
+      stage: "work-units-save-failed",
+    })
+
+    return {
+      checkIn: completedCheckIn,
+      duplicate: false,
+    }
+  }
+
+  workUnitsColumnAvailable = true
+
   return {
-    checkIn: normalizeCheckIn(result.data),
+    checkIn: normalizeCheckIn(workResult.data),
     duplicate: false,
   }
 }
