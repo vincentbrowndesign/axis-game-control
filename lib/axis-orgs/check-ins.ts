@@ -101,6 +101,15 @@ export async function saveCheckIn({
 }) {
   const existing = await getTodayCheckIn({ organizationSlug, userId })
 
+  console.info("AXIS START SESSION", {
+    existingCheckInId: existing?.id || null,
+    existingCheckedOutAt: existing?.checked_out_at || null,
+    hasExistingToday: Boolean(existing),
+    organizationSlug,
+    stage: "active-session-lookup",
+    userId,
+  })
+
   if (existing) {
     return {
       checkIn: existing,
@@ -171,6 +180,7 @@ async function insertCheckIn({
   console.info("AXIS START SESSION", {
     hasWorkUnitsDefault: "work_units" in payload,
     organizationSlug,
+    payload,
     stage: "insert-start",
     userId,
   })
@@ -182,6 +192,13 @@ async function insertCheckIn({
     .single<RawAxisCheckIn>()
 
   if (!result.error) {
+    console.info("AXIS START SESSION", {
+      organizationSlug,
+      returnedRow: result.data,
+      stage: "insert-succeeded",
+      userId,
+    })
+
     if (workUnitsColumnAvailable !== false) {
       workUnitsColumnAvailable = true
     }
@@ -216,6 +233,7 @@ async function insertCheckIn({
       hasData: Boolean(fallback.data),
       message: fallback.error?.message,
       organizationSlug,
+      returnedRow: fallback.data,
       stage: "insert-without-work-units",
       userId,
     })
@@ -429,6 +447,16 @@ async function closeCheckIn({
     checked_out_at: checkedOutAt,
     duration_minutes: durationMinutes,
   }
+
+  console.info("AXIS TRAIN CHECK-OUT", {
+    existingId: existing.id,
+    organizationSlug,
+    requestedId: requestedId || null,
+    stage: "update-payload",
+    updatePayload,
+    userId,
+  })
+
   const byId = await supabaseAdmin
     .from("check_ins")
     .update(updatePayload)

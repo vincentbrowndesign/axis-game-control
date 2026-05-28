@@ -126,6 +126,10 @@ export function TrainCheckInButton({
     setIsChecking(true)
 
     try {
+      console.info("AXIS START SESSION CLICK", {
+        organizationSlug,
+      })
+
       const response = await fetch(`/api/org/${organizationSlug}/check-in`, {
         method: "POST",
       })
@@ -166,6 +170,12 @@ export function TrainCheckInButton({
     setIsEnding(true)
 
     try {
+      console.info("AXIS END SESSION CLICK", {
+        checkInId: activeCheckInId,
+        organizationSlug,
+        workUnitsCount: workState.length,
+      })
+
       const response = await fetch(`/api/org/${organizationSlug}/check-out`, {
         body: JSON.stringify({ checkInId: activeCheckInId, workUnits: workState }),
         headers: {

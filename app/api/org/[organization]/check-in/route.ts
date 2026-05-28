@@ -39,6 +39,14 @@ export async function POST(
     )
   }
 
+  console.info("AXIS START SESSION REQUEST", {
+    identityKind: identity.kind,
+    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    organizationSlug,
+    userId,
+  })
+
   const saved = await saveCheckIn({
     organizationSlug,
     userId,
