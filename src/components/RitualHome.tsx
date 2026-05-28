@@ -124,7 +124,7 @@ export function RitualHome() {
   }, [save.activeSession]);
 
   const participationLabel = useMemo(() => {
-    if (ritualState === "active") return "Checked in";
+    if (ritualState === "active") return "Active session";
     if (ritualState === "complete") return "History updated";
     return "Ready";
   }, [ritualState]);
@@ -211,7 +211,7 @@ export function RitualHome() {
               <strong>{lastCheckIn}</strong>
             </p>
             <p>
-              <span>Signal</span>
+              <span>Continuity</span>
               <strong>{participationLabel}</strong>
             </p>
           </div>
@@ -225,7 +225,7 @@ export function RitualHome() {
             disabled={ritualState === "active"}
             type="button"
           >
-            {ritualState === "active" ? "Checked in" : "Check in"}
+            {ritualState === "active" ? "Active session" : "Check in"}
           </button>
           <div className="axis-active-state">
             <span>{participationLabel}</span>
@@ -291,15 +291,15 @@ export function RitualHome() {
             <section className="axis-archive-strip" aria-label="Replay memory archive">
               <div>
                 <span>Replay memory</span>
-                <strong>{save.sessions.length ? "Ready to attach" : "No memory yet"}</strong>
+                <strong>{save.sessions.length ? "Continuity archive" : "No memory yet"}</strong>
               </div>
               <div>
                 <span>Participation proof</span>
                 <strong>{latestSession ? formatStamp(latestSession.endedAt) : "Waiting"}</strong>
               </div>
               <div>
-                <span>Leaderboard preview</span>
-                <strong>{save.sessions.length ? "#4 nearby" : "Waiting"}</strong>
+                <span>Historical persistence</span>
+                <strong>{save.sessions.length ? "Saved locally" : "Waiting"}</strong>
               </div>
             </section>
           </section>
