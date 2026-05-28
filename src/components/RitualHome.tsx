@@ -5,8 +5,26 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase-
 
 type RitualState = "idle" | "active" | "saving" | "complete";
 type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
+type ParticipationMode =
+  | "Training"
+  | "Station Work"
+  | "Shooting"
+  | "Conditioning"
+  | "Small Group"
+  | "Scrimmage"
+  | "Open Gym";
 
 const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
+const participationModes: ParticipationMode[] = [
+  "Training",
+  "Station Work",
+  "Shooting",
+  "Conditioning",
+  "Small Group",
+  "Scrimmage",
+  "Open Gym",
+];
+const defaultParticipationMode: ParticipationMode = "Training";
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 
@@ -15,12 +33,27 @@ type SavedSession = {
   startedAt: string;
   endedAt: string;
   durationSeconds: number;
+  mode?: ParticipationMode;
+  recordingAttached?: boolean;
+  participants?: string[];
+  participantCount?: number;
+  activeParticipantCount?: number;
+};
+
+type ActiveParticipant = {
+  id: string;
+  name: string;
+  joinedAt: string;
+  leftAt?: string;
 };
 
 type AxisSave = {
   activeSession: {
     id: string;
     startedAt: string;
+    mode?: ParticipationMode;
+    recordingAttached?: boolean;
+    participants?: ActiveParticipant[];
   } | null;
   sessions: SavedSession[];
 };
@@ -68,6 +101,10 @@ function formatDuration(totalSeconds: number) {
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
+function formatCount(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function dayKey(date: Date | string) {
   const value = typeof date === "string" ? new Date(date) : date;
 
@@ -98,8 +135,18 @@ function readSave(): AxisSave {
 
     const parsed = JSON.parse(stored) as Partial<AxisSave>;
 
+    const activeSession = parsed.activeSession
+      ? {
+          id: parsed.activeSession.id,
+          startedAt: parsed.activeSession.startedAt,
+          mode: parsed.activeSession.mode ?? defaultParticipationMode,
+          recordingAttached: Boolean(parsed.activeSession.recordingAttached),
+          participants: Array.isArray(parsed.activeSession.participants) ? parsed.activeSession.participants : [],
+        }
+      : null;
+
     return {
-      activeSession: parsed.activeSession ?? null,
+      activeSession,
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
     };
   } catch {
@@ -139,6 +186,7 @@ export function RitualHome() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [participantName, setParticipantName] = useState("");
   const [save, setSave] = useState<AxisSave>(defaultSave);
   const [ritualState, setRitualState] = useState<RitualState>("idle");
   const [now, setNow] = useState(() => Date.now());
@@ -227,7 +275,7 @@ export function RitualHome() {
   }, [save.activeSession]);
 
   const participationLabel = useMemo(() => {
-    if (ritualState === "active") return "Active session";
+    if (ritualState === "active") return "Group session active";
     if (ritualState === "saving") return "Saving history";
     if (ritualState === "complete") return "History grew";
     return "Ready";
@@ -235,6 +283,14 @@ export function RitualHome() {
 
   const latestSession = save.sessions[0] ?? null;
   const athleteLabel = identity?.email ? identity.email.split("@")[0] || "Athlete 01" : "Athlete 01";
+  const currentMode = save.activeSession?.mode ?? latestSession?.mode ?? defaultParticipationMode;
+  const isRecordingAttached = Boolean(save.activeSession?.recordingAttached);
+  const recordingLabel = isRecordingAttached ? "Recording attached" : "Recording off";
+  const activeParticipants = save.activeSession?.participants ?? [];
+  const presentParticipants = activeParticipants.filter((participant) => !participant.leftAt);
+  const inactiveParticipants = activeParticipants.filter((participant) => participant.leftAt);
+  const activeParticipantCount = presentParticipants.length;
+  const participantCount = activeParticipants.length;
   const currentStreak = calculateStreak(save.sessions);
   const lastCheckIn = save.activeSession
     ? formatTime(save.activeSession.startedAt)
@@ -338,11 +394,21 @@ export function RitualHome() {
   }
 
   function checkIn() {
+    const starterName = athleteLabel.trim() || "Athlete";
     const nextSave = {
       ...save,
       activeSession: {
         id: crypto.randomUUID(),
         startedAt: new Date().toISOString(),
+        mode: defaultParticipationMode,
+        recordingAttached: false,
+        participants: [
+          {
+            id: identity?.id ?? starterName,
+            name: starterName,
+            joinedAt: new Date().toISOString(),
+          },
+        ],
       },
     };
 
@@ -351,6 +417,104 @@ export function RitualHome() {
     setNow(Date.now());
     setRitualState("active");
     setLatestSavedSessionId(null);
+  }
+
+  function changeMode(mode: ParticipationMode) {
+    if (!save.activeSession) return;
+
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        mode,
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
+  }
+
+  function toggleRecordingAttachment() {
+    if (!save.activeSession) return;
+
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        recordingAttached: !isRecordingAttached,
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
+  }
+
+  function addParticipant(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!save.activeSession) return;
+
+    const name = participantName.trim();
+    if (!name) return;
+
+    const existingParticipant = activeParticipants.find(
+      (participant) => participant.name.toLowerCase() === name.toLowerCase(),
+    );
+
+    if (existingParticipant && !existingParticipant.leftAt) {
+      setParticipantName("");
+      return;
+    }
+
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        participants: existingParticipant
+          ? activeParticipants.map((participant) =>
+              participant.id === existingParticipant.id
+                ? {
+                    ...participant,
+                    joinedAt: new Date().toISOString(),
+                    leftAt: undefined,
+                  }
+                : participant,
+            )
+          : [
+              ...activeParticipants,
+              {
+                id: crypto.randomUUID(),
+                name,
+                joinedAt: new Date().toISOString(),
+              },
+            ],
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
+    setParticipantName("");
+  }
+
+  function removeParticipant(participantId: string) {
+    if (!save.activeSession) return;
+
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        participants: activeParticipants.map((participant) =>
+          participant.id === participantId
+            ? {
+                ...participant,
+                leftAt: new Date().toISOString(),
+              }
+            : participant,
+        ),
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
   }
 
   function checkOut() {
@@ -366,6 +530,11 @@ export function RitualHome() {
       startedAt: save.activeSession.startedAt,
       endedAt,
       durationSeconds,
+      mode: save.activeSession.mode ?? defaultParticipationMode,
+      recordingAttached: Boolean(save.activeSession.recordingAttached),
+      participants: activeParticipants.map((participant) => participant.name),
+      participantCount,
+      activeParticipantCount,
     };
     const nextSave = {
       activeSession: null,
@@ -473,6 +642,14 @@ export function RitualHome() {
               <span>Continuity</span>
               <strong>{participationLabel}</strong>
             </p>
+            <p>
+              <span>Mode</span>
+              <strong>{currentMode}</strong>
+            </p>
+            <p>
+              <span>Memory</span>
+              <strong>{recordingLabel}</strong>
+            </p>
           </div>
         </header>
 
@@ -484,13 +661,86 @@ export function RitualHome() {
             disabled={ritualState === "active" || ritualState === "saving"}
             type="button"
           >
-            {ritualState === "active" ? "Checked in" : ritualState === "saving" ? "Saving" : "Check in"}
+            {ritualState === "active" ? "Group active" : ritualState === "saving" ? "Saving" : "Check in"}
           </button>
           <div className="axis-active-state">
             <span>{participationLabel}</span>
             <strong>{sessionSummary}</strong>
             {activeTimerLabel ? <em>{activeTimerLabel}</em> : null}
           </div>
+          {save.activeSession ? (
+            <section className="axis-group-session" aria-label="Active group session">
+              <header>
+                <span>Participation mode</span>
+                <strong>{currentMode}</strong>
+              </header>
+              <div className="axis-mode-list" aria-label="Participation modes">
+                {participationModes.map((mode) => (
+                  <button
+                    aria-pressed={currentMode === mode}
+                    key={mode}
+                    onClick={() => changeMode(mode)}
+                    type="button"
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              <header>
+                <span>Participation memory</span>
+                <strong>{recordingLabel}</strong>
+              </header>
+              <button
+                className="axis-recording-toggle"
+                data-attached={isRecordingAttached}
+                onClick={toggleRecordingAttachment}
+                type="button"
+              >
+                {isRecordingAttached ? "Recording attached" : "Recording off"}
+              </button>
+              <header>
+                <span>Active participants</span>
+                <strong>{formatCount(activeParticipantCount, "athlete")}</strong>
+              </header>
+              <div className="axis-participant-list">
+                {presentParticipants.map((participant) => (
+                  <span className="axis-participant-token" key={participant.id}>
+                    <span>{participant.name}</span>
+                    <button onClick={() => removeParticipant(participant.id)} type="button">
+                      Remove
+                    </button>
+                  </span>
+                ))}
+              </div>
+              {inactiveParticipants.length ? (
+                <>
+                  <header>
+                    <span>Inactive</span>
+                    <strong>{formatCount(inactiveParticipants.length, "athlete")}</strong>
+                  </header>
+                  <div className="axis-participant-list axis-participant-list-inactive">
+                    {inactiveParticipants.map((participant) => (
+                      <span className="axis-participant-token" key={participant.id}>
+                        <span>{participant.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              <form className="axis-participant-form" onSubmit={addParticipant}>
+                <label>
+                  <span>Add athlete</span>
+                  <input
+                    onChange={(event) => setParticipantName(event.target.value)}
+                    placeholder="Name"
+                    type="text"
+                    value={participantName}
+                  />
+                </label>
+                <button type="submit">Check in</button>
+              </form>
+            </section>
+          ) : null}
           {ritualState === "active" ? (
             <button className="axis-checkout-button" onClick={checkOut} type="button">
               Check out
@@ -535,7 +785,15 @@ export function RitualHome() {
                       >
                         <span>{formatStamp(session.endedAt)}</span>
                         <strong>{formatDuration(session.durationSeconds)}</strong>
-                        <em>{index === 0 ? "Latest participation" : "Session memory"}</em>
+                        <em>
+                          {session.participantCount
+                            ? `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"}`
+                            : session.mode
+                              ? session.mode
+                              : index === 0
+                                ? "Latest participation"
+                                : "Session memory"}
+                        </em>
                       </article>
                     ))
                   ) : (

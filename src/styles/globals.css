@@ -73,6 +73,15 @@ body {
 .axis-active-state span,
 .axis-active-state strong,
 .axis-active-state em,
+.axis-group-session header span,
+.axis-group-session header strong,
+.axis-mode-list button,
+.axis-recording-toggle,
+.axis-participant-list span,
+.axis-participant-list button,
+.axis-participant-form span,
+.axis-participant-form input,
+.axis-participant-form button,
 .axis-checkout-button,
 .axis-sign-out,
 .axis-auth-message,
@@ -169,7 +178,9 @@ h1 {
 }
 
 .axis-entry-form input:focus,
+.axis-participant-form input:focus,
 .axis-entry-form button:focus-visible,
+.axis-participant-form button:focus-visible,
 .axis-check-button:focus-visible,
 .axis-checkout-button:focus-visible,
 .axis-sign-out:focus-visible {
@@ -178,6 +189,7 @@ h1 {
 }
 
 .axis-entry-form button,
+.axis-participant-form button,
 .axis-checkout-button,
 .axis-sign-out {
   appearance: none;
@@ -195,6 +207,11 @@ h1 {
   align-self: end;
   border-color: rgba(168, 217, 51, 0.48);
   color: var(--axis-live);
+}
+
+.axis-participant-form button {
+  align-self: end;
+  min-height: 2.75rem;
 }
 
 .axis-restore-line {
@@ -226,7 +243,7 @@ h1 {
 .axis-presence {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .axis-presence p {
@@ -312,6 +329,146 @@ h1 {
 
 .axis-ritual[data-state="active"] .axis-active-state {
   border-top-color: rgba(168, 217, 51, 0.22);
+}
+
+.axis-group-session {
+  border-top: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.7rem;
+  padding-top: 0.85rem;
+}
+
+.axis-group-session header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.axis-group-session header span,
+.axis-participant-form span {
+  color: var(--axis-muted);
+  font-size: 0.66rem;
+}
+
+.axis-group-session header strong {
+  color: var(--axis-live);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.axis-mode-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.axis-mode-list button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.64rem;
+  min-height: 2rem;
+  padding: 0.45rem 0.58rem;
+  touch-action: manipulation;
+}
+
+.axis-mode-list button[aria-pressed="true"] {
+  border-color: rgba(168, 217, 51, 0.42);
+  color: var(--axis-live);
+}
+
+.axis-mode-list button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-recording-toggle {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.66rem;
+  justify-self: start;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.7rem;
+  touch-action: manipulation;
+}
+
+.axis-recording-toggle[data-attached="true"] {
+  border-color: rgba(168, 217, 51, 0.42);
+  color: var(--axis-live);
+}
+
+.axis-recording-toggle:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-participant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.axis-participant-list span {
+  align-items: center;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-ink);
+  display: inline-flex;
+  gap: 0.5rem;
+  font-size: 0.66rem;
+  min-height: 2rem;
+  padding: 0.46rem 0.58rem;
+}
+
+.axis-participant-token button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.58rem;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+.axis-participant-token button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-participant-list-inactive span {
+  color: var(--axis-muted);
+}
+
+.axis-participant-form {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.axis-participant-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.axis-participant-form input {
+  appearance: none;
+  background: var(--axis-bg);
+  border: 1px solid var(--axis-line);
+  color: var(--axis-ink);
+  font-size: 0.76rem;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  width: 100%;
+}
+
+.axis-participant-form input::placeholder {
+  color: rgba(244, 244, 240, 0.28);
 }
 
 .axis-checkout-button {
@@ -424,6 +581,7 @@ h1 {
   }
 
   .axis-entry-form,
+  .axis-participant-form,
   .axis-presence,
   .axis-history-grid,
   .axis-archive-strip {
@@ -452,6 +610,11 @@ h1 {
 
   .axis-active-state em {
     justify-self: start;
+  }
+
+  .axis-group-session header {
+    align-items: start;
+    display: grid;
   }
 
   .axis-session-row strong,
