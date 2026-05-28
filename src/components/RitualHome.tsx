@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-type RitualState = "idle" | "active" | "complete";
+type RitualState = "idle" | "active" | "saving" | "complete";
+type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
 
 const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
 const storageKey = "axis-ritual-save";
+const identityStorageKey = "axis-identity-save";
 
 type SavedSession = {
   id: string;
@@ -20,6 +22,11 @@ type AxisSave = {
     startedAt: string;
   } | null;
   sessions: SavedSession[];
+};
+
+type AxisIdentity = {
+  email: string;
+  restoredAt: string;
 };
 
 const defaultSave: AxisSave = {
@@ -102,16 +109,56 @@ function writeSave(save: AxisSave) {
   window.localStorage.setItem(storageKey, JSON.stringify(save));
 }
 
+function readIdentity(): AxisIdentity | null {
+  try {
+    const stored = window.localStorage.getItem(identityStorageKey);
+    if (!stored) return null;
+
+    const parsed = JSON.parse(stored) as Partial<AxisIdentity>;
+    if (!parsed.email || !parsed.restoredAt) return null;
+
+    return {
+      email: parsed.email,
+      restoredAt: parsed.restoredAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeIdentity(identity: AxisIdentity) {
+  window.localStorage.setItem(identityStorageKey, JSON.stringify(identity));
+}
+
 export function RitualHome() {
+  const [authPhase, setAuthPhase] = useState<AuthPhase>("checking");
+  const [identity, setIdentity] = useState<AxisIdentity | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [save, setSave] = useState<AxisSave>(defaultSave);
   const [ritualState, setRitualState] = useState<RitualState>("idle");
   const [now, setNow] = useState(() => Date.now());
+  const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
+    const storedIdentity = readIdentity();
     const storedSave = readSave();
+
+    setIdentity(storedIdentity);
     setSave(storedSave);
     setRitualState(storedSave.activeSession ? "active" : "idle");
+    setAuthPhase(storedIdentity ? "restoring" : "entry");
   }, []);
+
+  useEffect(() => {
+    if (authPhase !== "restoring") return;
+
+    const timeout = window.setTimeout(() => {
+      setAuthPhase("authenticated");
+    }, 950);
+
+    return () => window.clearTimeout(timeout);
+  }, [authPhase]);
 
   useEffect(() => {
     if (!save.activeSession) return;
@@ -125,11 +172,13 @@ export function RitualHome() {
 
   const participationLabel = useMemo(() => {
     if (ritualState === "active") return "Active session";
-    if (ritualState === "complete") return "History updated";
+    if (ritualState === "saving") return "Saving history";
+    if (ritualState === "complete") return "History grew";
     return "Ready";
   }, [ritualState]);
 
   const latestSession = save.sessions[0] ?? null;
+  const athleteLabel = identity?.email ? identity.email.split("@")[0] || "Athlete 01" : "Athlete 01";
   const currentStreak = calculateStreak(save.sessions);
   const lastCheckIn = save.activeSession
     ? formatTime(save.activeSession.startedAt)
@@ -139,6 +188,15 @@ export function RitualHome() {
   const elapsedSeconds = save.activeSession
     ? Math.max(0, Math.floor((now - new Date(save.activeSession.startedAt).getTime()) / 1000))
     : latestSession?.durationSeconds ?? 0;
+  const sessionSummary = save.activeSession
+    ? `Started ${formatTime(save.activeSession.startedAt)} / ${formatDuration(elapsedSeconds)} active`
+    : latestSession
+      ? `${formatDuration(latestSession.durationSeconds)} saved`
+      : "Session waiting";
+  const historyStatus =
+    ritualState === "complete" && latestSession
+      ? `History grew / ${formatDuration(latestSession.durationSeconds)}`
+      : `${save.sessions.length} sessions saved`;
   const activeWeekDays = new Set(
     save.sessions
       .filter((session) => {
@@ -148,6 +206,21 @@ export function RitualHome() {
       })
       .map((session) => dayKey(session.endedAt)),
   );
+
+  function enterAxis(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextIdentity = {
+      email: email.trim() || "athlete@axis.local",
+      restoredAt: new Date().toISOString(),
+    };
+
+    writeIdentity(nextIdentity);
+    setIdentity(nextIdentity);
+    setEmail("");
+    setPassword("");
+    setAuthPhase("restoring");
+  }
 
   function checkIn() {
     const nextSave = {
@@ -162,6 +235,7 @@ export function RitualHome() {
     setSave(nextSave);
     setNow(Date.now());
     setRitualState("active");
+    setLatestSavedSessionId(null);
   }
 
   function checkOut() {
@@ -183,9 +257,75 @@ export function RitualHome() {
       sessions: [completedSession, ...save.sessions].slice(0, 40),
     };
 
+    setRitualState("saving");
     writeSave(nextSave);
     setSave(nextSave);
-    setRitualState("complete");
+    setLatestSavedSessionId(completedSession.id);
+
+    window.setTimeout(() => {
+      setRitualState("complete");
+    }, 520);
+  }
+
+  if (authPhase === "checking" || authPhase === "restoring") {
+    return (
+      <main className="axis-shell axis-entry-shell">
+        <section className="axis-restore" aria-label="Restoring continuity">
+          <p className="axis-meta">Identity restored</p>
+          <h1>Restoring continuity...</h1>
+          <div className="axis-restore-line" aria-hidden="true" />
+          <div className="axis-restore-rail" aria-label="Continuity restoration steps">
+            <span>Loading session...</span>
+            <span>Restoring history...</span>
+            <span>Return ready</span>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (authPhase === "entry" || !identity) {
+    return (
+      <main className="axis-shell axis-entry-shell">
+        <section className="axis-entry" aria-label="Axis entry">
+          <header className="axis-entry-top">
+            <span>Axis</span>
+            <span>Continuity system</span>
+            <span>Athletic history</span>
+          </header>
+
+          <section className="axis-entry-center">
+            <p className="axis-meta">Identity required</p>
+            <h1>Enter Axis</h1>
+          </section>
+
+          <form className="axis-entry-form" onSubmit={enterAxis}>
+            <label>
+              <span>Email</span>
+              <input
+                autoComplete="email"
+                inputMode="email"
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="athlete@axis"
+                type="email"
+                value={email}
+              />
+            </label>
+            <label>
+              <span>Password</span>
+              <input
+                autoComplete="current-password"
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="save data key"
+                type="password"
+                value={password}
+              />
+            </label>
+            <button type="submit">Enter</button>
+          </form>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -194,7 +334,7 @@ export function RitualHome() {
         <header className="axis-top">
           <div className="axis-identity">
             <p className="axis-meta">Axis</p>
-            <h1>Athlete 01</h1>
+            <h1>{athleteLabel}</h1>
           </div>
 
           <div className="axis-presence" aria-label="Participation data">
@@ -217,25 +357,19 @@ export function RitualHome() {
           </div>
         </header>
 
-        <section className="axis-ritual" aria-label="Check in ritual">
+        <section className="axis-ritual" aria-label="Check in ritual" data-state={ritualState}>
           <p className="axis-meta">Participation ritual</p>
           <button
             className="axis-check-button"
-            onClick={ritualState === "active" ? undefined : checkIn}
-            disabled={ritualState === "active"}
+            onClick={ritualState === "active" || ritualState === "saving" ? undefined : checkIn}
+            disabled={ritualState === "active" || ritualState === "saving"}
             type="button"
           >
-            {ritualState === "active" ? "Active session" : "Check in"}
+            {ritualState === "active" ? "Active session" : ritualState === "saving" ? "Saving history" : "Check in"}
           </button>
           <div className="axis-active-state">
             <span>{participationLabel}</span>
-            <strong>
-              {save.activeSession
-                ? `${formatDuration(elapsedSeconds)} active`
-                : latestSession
-                  ? `${formatDuration(latestSession.durationSeconds)} saved`
-                  : "Session waiting"}
-            </strong>
+            <strong>{sessionSummary}</strong>
           </div>
           {ritualState === "active" ? (
             <button className="axis-checkout-button" onClick={checkOut} type="button">
@@ -248,7 +382,7 @@ export function RitualHome() {
           <section className="axis-history" aria-label="Axis History">
             <header className="axis-history-header">
               <p className="axis-meta">Axis History</p>
-              <strong>{save.sessions.length} sessions saved</strong>
+              <strong>{historyStatus}</strong>
             </header>
 
             <div className="axis-history-grid">
@@ -271,7 +405,14 @@ export function RitualHome() {
                 <div>
                   {save.sessions.length ? (
                     save.sessions.slice(0, 4).map((session, index) => (
-                      <article className="axis-session-row" key={session.id}>
+                      <article
+                        className={
+                          index === 0 || session.id === latestSavedSessionId
+                            ? "axis-session-row axis-session-row-latest"
+                            : "axis-session-row"
+                        }
+                        key={session.id}
+                      >
                         <span>{formatStamp(session.endedAt)}</span>
                         <strong>{formatDuration(session.durationSeconds)}</strong>
                         <em>{index === 0 ? "Latest participation" : "Session memory"}</em>
