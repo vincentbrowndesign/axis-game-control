@@ -72,6 +72,9 @@ body {
 .axis-active-state span,
 .axis-active-state strong,
 .axis-active-state em,
+.axis-bridge-state span,
+.axis-bridge-state strong,
+.axis-bridge-state em,
 .axis-live-strip span,
 .axis-live-strip strong,
 .axis-live-strip em,
@@ -81,12 +84,19 @@ body {
 .axis-roster-object header strong,
 .axis-session-module header span,
 .axis-session-module header strong,
+.axis-session-drawer summary,
+.axis-mode-focus span,
+.axis-mode-focus strong,
+.axis-mode-focus button,
 .axis-calibration-screen header span,
 .axis-calibration-screen header strong,
 .axis-calibration-screen p,
 .axis-calibration-steps span,
 .axis-calibration-action,
 .axis-window-state,
+.axis-camera-preview span,
+.axis-camera-actions button,
+.axis-camera-message,
 .axis-current-mode strong,
 .axis-current-mode button,
 .axis-mode-list button,
@@ -258,6 +268,7 @@ h1 {
 }
 
 .axis-active-state strong,
+.axis-bridge-state strong,
 .axis-live-strip strong,
 .axis-session-row strong,
 .axis-archive-strip strong {
@@ -332,12 +343,33 @@ h1 {
   border-top-color: rgba(168, 217, 51, 0.22);
 }
 
+.axis-bridge-state {
+  align-items: center;
+  border-top: 1px solid rgba(168, 217, 51, 0.22);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  padding-top: 0.8rem;
+}
+
+.axis-bridge-state span,
+.axis-bridge-state em {
+  color: var(--axis-muted);
+  font-size: 0.66rem;
+  font-style: normal;
+}
+
+.axis-bridge-state strong {
+  color: var(--axis-live);
+  font-size: 0.76rem;
+}
+
 .axis-live-strip {
   align-items: center;
   border-top: 1px solid rgba(168, 217, 51, 0.22);
   display: grid;
   gap: 0.55rem;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   padding-top: 0.8rem;
 }
 
@@ -360,6 +392,68 @@ h1 {
   padding-top: 0.75rem;
 }
 
+.axis-mode-focus {
+  align-items: center;
+  border: 1px solid rgba(168, 217, 51, 0.2);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 0.55fr) minmax(0, 1fr) auto;
+  min-height: 3.4rem;
+  padding: 0.7rem;
+}
+
+.axis-mode-focus button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.64rem;
+  min-height: 2rem;
+  padding: 0.45rem 0.58rem;
+  touch-action: manipulation;
+}
+
+.axis-mode-focus button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-session-drawer {
+  border-top: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.65rem;
+}
+
+.axis-session-drawer summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.68rem;
+  gap: 1rem;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 2.35rem;
+  touch-action: manipulation;
+}
+
+.axis-session-drawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.axis-session-drawer summary span {
+  color: var(--axis-live);
+}
+
+.axis-session-drawer summary span::before {
+  content: "▼ ";
+}
+
+.axis-session-drawer[open] summary {
+  margin-bottom: 0.65rem;
+}
+
 .axis-session-head {
   align-items: center;
   border: 1px solid rgba(168, 217, 51, 0.18);
@@ -380,6 +474,7 @@ h1 {
 .axis-session-head span,
 .axis-roster-object header span,
 .axis-session-module header span,
+.axis-mode-focus span,
 .axis-calibration-screen header span {
   color: var(--axis-muted);
   font-size: 0.66rem;
@@ -388,6 +483,7 @@ h1 {
 .axis-session-head strong,
 .axis-roster-object header strong,
 .axis-session-module header strong,
+.axis-mode-focus strong,
 .axis-calibration-screen header strong {
   color: var(--axis-live);
   font-size: 0.72rem;
@@ -545,6 +641,70 @@ h1 {
   min-height: 2.35rem;
   padding: 0.5rem 0.7rem;
   touch-action: manipulation;
+}
+
+.axis-camera-preview {
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  background: var(--axis-bg);
+  border: 1px solid var(--axis-line);
+  display: grid;
+  min-height: 7rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-camera-preview video {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-camera-preview span {
+  color: var(--axis-muted);
+  font-size: 0.66rem;
+  justify-self: center;
+  position: relative;
+}
+
+.axis-camera-preview[data-state="ready"],
+.axis-camera-preview[data-state="attached"] {
+  border-color: rgba(168, 217, 51, 0.28);
+}
+
+.axis-camera-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.axis-camera-actions button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.66rem;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.7rem;
+  touch-action: manipulation;
+}
+
+.axis-camera-actions button:disabled {
+  color: rgba(244, 244, 240, 0.32);
+  cursor: default;
+}
+
+.axis-camera-actions button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-camera-message {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
 }
 
 .axis-recording-toggle[data-attached="true"] {
@@ -818,6 +978,11 @@ h1 {
 
   .axis-active-state em {
     justify-self: start;
+  }
+
+  .axis-bridge-state {
+    align-items: start;
+    grid-template-columns: 1fr;
   }
 
   .axis-live-strip {
