@@ -26,8 +26,11 @@ export type AxisWorkUnit = {
   sets: number
 }
 
-const CHECK_IN_SELECT =
+const CHECK_IN_SELECT_BASE =
+  "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
+const CHECK_IN_SELECT_WITH_WORK =
   "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, work_units, created_at"
+let workUnitsColumnAvailable: boolean | null = null
 
 export async function getTodayCheckIn({
   organizationSlug,
@@ -40,7 +43,7 @@ export async function getTodayCheckIn({
 
   const result = await supabaseAdmin
     .from("check_ins")
-    .select(CHECK_IN_SELECT)
+    .select(checkInSelect())
     .eq("user_id", userId)
     .eq("organization_slug", organizationSlug)
     .gte("checked_in_at", start.toISOString())
@@ -50,13 +53,40 @@ export async function getTodayCheckIn({
     .maybeSingle<RawAxisCheckIn>()
 
   if (result.error) {
+    if (isMissingWorkUnitsError(result.error)) {
+      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "today-read-fallback" })
+
+      const fallback = await supabaseAdmin
+        .from("check_ins")
+        .select(CHECK_IN_SELECT_BASE)
+        .eq("user_id", userId)
+        .eq("organization_slug", organizationSlug)
+        .gte("checked_in_at", start.toISOString())
+        .lt("checked_in_at", end.toISOString())
+        .order("checked_in_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<RawAxisCheckIn>()
+
+      if (!fallback.error) {
+        return fallback.data ? normalizeCheckIn(fallback.data) : null
+      }
+    } else {
+      workUnitsColumnAvailable = true
+    }
+
     console.warn("AXIS TRAIN CHECK-IN", {
+      code: result.error.code,
       detail: result.error.message,
+      hint: result.error.hint,
       organizationSlug,
       stage: "today-read-failed",
     })
 
     return null
+  }
+
+  if (workUnitsColumnAvailable !== false) {
+    workUnitsColumnAvailable = true
   }
 
   return result.data ? normalizeCheckIn(result.data) : null
@@ -84,10 +114,25 @@ export async function saveCheckIn({
       organization_slug: organizationSlug,
       user_id: userId,
     })
-    .select(CHECK_IN_SELECT)
+    .select(checkInSelect())
     .single<RawAxisCheckIn>()
 
   if (result.error) {
+    if (isMissingWorkUnitsError(result.error)) {
+      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "insert-select-fallback" })
+
+      const savedWithoutWork = await getTodayCheckIn({ organizationSlug, userId })
+
+      if (savedWithoutWork) {
+        return {
+          checkIn: savedWithoutWork,
+          duplicate: false,
+        }
+      }
+    } else {
+      workUnitsColumnAvailable = true
+    }
+
     if (result.error.code === "23505") {
       const duplicate = await getTodayCheckIn({ organizationSlug, userId })
 
@@ -111,6 +156,10 @@ export async function saveCheckIn({
     return {
       error: result.error,
     }
+  }
+
+  if (workUnitsColumnAvailable !== false) {
+    workUnitsColumnAvailable = true
   }
 
   return {
@@ -153,13 +202,38 @@ export async function completeCheckIn({
     .update({
       checked_out_at: checkedOutAt,
       duration_minutes: durationMinutes,
-      work_units: normalizeWorkUnits(workUnits),
+      ...(workUnitsColumnAvailable === false
+        ? {}
+        : { work_units: normalizeWorkUnits(workUnits) }),
     })
     .eq("id", existing.id)
-    .select(CHECK_IN_SELECT)
+    .select(checkInSelect())
     .single<RawAxisCheckIn>()
 
   if (result.error) {
+    if (isMissingWorkUnitsError(result.error)) {
+      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "check-out-fallback" })
+
+      const fallback = await supabaseAdmin
+        .from("check_ins")
+        .update({
+          checked_out_at: checkedOutAt,
+          duration_minutes: durationMinutes,
+        })
+        .eq("id", existing.id)
+        .select(CHECK_IN_SELECT_BASE)
+        .single<RawAxisCheckIn>()
+
+      if (!fallback.error) {
+        return {
+          checkIn: normalizeCheckIn(fallback.data),
+          duplicate: false,
+        }
+      }
+    } else {
+      workUnitsColumnAvailable = true
+    }
+
     console.error("AXIS TRAIN CHECK-OUT", {
       code: result.error.code,
       detail: result.error.details,
@@ -172,6 +246,10 @@ export async function completeCheckIn({
     return {
       error: result.error,
     }
+  }
+
+  if (workUnitsColumnAvailable !== false) {
+    workUnitsColumnAvailable = true
   }
 
   return {
@@ -189,7 +267,7 @@ export async function getCheckInSummary({
 }) {
   const result = await supabaseAdmin
     .from("check_ins")
-    .select(CHECK_IN_SELECT)
+    .select(checkInSelect())
     .eq("user_id", userId)
     .eq("organization_slug", organizationSlug)
     .order("checked_in_at", { ascending: false })
@@ -197,13 +275,38 @@ export async function getCheckInSummary({
     .returns<RawAxisCheckIn[]>()
 
   if (result.error) {
+    if (isMissingWorkUnitsError(result.error)) {
+      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "summary-read-fallback" })
+
+      const fallback = await supabaseAdmin
+        .from("check_ins")
+        .select(CHECK_IN_SELECT_BASE)
+        .eq("user_id", userId)
+        .eq("organization_slug", organizationSlug)
+        .order("checked_in_at", { ascending: false })
+        .limit(365)
+        .returns<RawAxisCheckIn[]>()
+
+      if (!fallback.error) {
+        return buildCheckInSummary((fallback.data || []).map(normalizeCheckIn))
+      }
+    } else {
+      workUnitsColumnAvailable = true
+    }
+
     console.warn("AXIS TRAIN CHECK-IN", {
+      code: result.error.code,
       detail: result.error.message,
+      hint: result.error.hint,
       organizationSlug,
       stage: "summary-read-failed",
     })
 
     return emptyCheckInSummary()
+  }
+
+  if (workUnitsColumnAvailable !== false) {
+    workUnitsColumnAvailable = true
   }
 
   return buildCheckInSummary((result.data || []).map(normalizeCheckIn))
@@ -212,15 +315,37 @@ export async function getCheckInSummary({
 export async function getOrganizationCheckInActivity(organizationSlug: string) {
   const result = await supabaseAdmin
     .from("check_ins")
-    .select(CHECK_IN_SELECT)
+    .select(checkInSelect())
     .eq("organization_slug", organizationSlug)
     .order("checked_in_at", { ascending: false })
     .limit(1000)
     .returns<RawAxisCheckIn[]>()
 
   if (result.error) {
+    if (isMissingWorkUnitsError(result.error)) {
+      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "activity-read-fallback" })
+
+      const fallback = await supabaseAdmin
+        .from("check_ins")
+        .select(CHECK_IN_SELECT_BASE)
+        .eq("organization_slug", organizationSlug)
+        .order("checked_in_at", { ascending: false })
+        .limit(1000)
+        .returns<RawAxisCheckIn[]>()
+
+      if (!fallback.error) {
+        return buildOrganizationCheckInActivity(
+          (fallback.data || []).map(normalizeCheckIn)
+        )
+      }
+    } else {
+      workUnitsColumnAvailable = true
+    }
+
     console.warn("AXIS COACH CHECK-INS", {
+      code: result.error.code,
       detail: result.error.message,
+      hint: result.error.hint,
       organizationSlug,
       stage: "activity-read-failed",
     })
@@ -228,11 +353,46 @@ export async function getOrganizationCheckInActivity(organizationSlug: string) {
     return emptyOrganizationCheckInActivity()
   }
 
+  if (workUnitsColumnAvailable !== false) {
+    workUnitsColumnAvailable = true
+  }
+
   return buildOrganizationCheckInActivity((result.data || []).map(normalizeCheckIn))
 }
 
 type RawAxisCheckIn = Omit<AxisCheckIn, "work_units"> & {
-  work_units: unknown
+  work_units?: unknown
+}
+
+function checkInSelect() {
+  return workUnitsColumnAvailable === false
+    ? CHECK_IN_SELECT_BASE
+    : CHECK_IN_SELECT_WITH_WORK
+}
+
+function isMissingWorkUnitsError(error: {
+  code?: string
+  message?: string
+}) {
+  return (
+    error.code === "PGRST204" ||
+    Boolean(error.message?.toLowerCase().includes("work_units"))
+  )
+}
+
+function rememberMissingWorkUnitsColumn({
+  organizationSlug,
+  stage,
+}: {
+  organizationSlug: string
+  stage: string
+}) {
+  workUnitsColumnAvailable = false
+  console.warn("AXIS TRAIN CHECK-IN", {
+    detail: "work_units column unavailable; continuing without work unit storage",
+    organizationSlug,
+    stage,
+  })
 }
 
 export function normalizeWorkUnits(value: unknown): AxisWorkUnit[] {

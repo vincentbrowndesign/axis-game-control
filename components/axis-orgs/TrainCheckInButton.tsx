@@ -130,6 +130,11 @@ export function TrainCheckInButton({
         payload.activeSession?.started_at || payload.checkIn?.checked_in_at
 
       if (!response.ok || !payload.ok || !savedSessionStart) {
+        console.error("AXIS START SESSION FAILED", {
+          payload,
+          status: response.status,
+          statusText: response.statusText,
+        })
         setError("Session could not be started. Try again.")
         return
       }
@@ -139,7 +144,8 @@ export function TrainCheckInButton({
       setCompletedMinutes(0)
       setWorkState(BASKETBALL_WORK_UNITS)
       startTransition(() => router.refresh())
-    } catch {
+    } catch (error) {
+      console.error("AXIS START SESSION FAILED", error)
       setError("Session could not be started. Try again.")
     } finally {
       setIsChecking(false)
@@ -164,6 +170,11 @@ export function TrainCheckInButton({
       const savedCompletedAt = payload.checkIn?.checked_out_at
 
       if (!response.ok || !payload.ok || !savedCompletedAt) {
+        console.error("AXIS END SESSION FAILED", {
+          payload,
+          status: response.status,
+          statusText: response.statusText,
+        })
         setError("Session could not be completed. Try again.")
         return
       }
@@ -172,7 +183,8 @@ export function TrainCheckInButton({
       setCompletedMinutes(Number(payload.checkIn?.duration_minutes || 0))
       setWorkState(payload.checkIn?.work_units?.length ? payload.checkIn.work_units : workState)
       startTransition(() => router.refresh())
-    } catch {
+    } catch (error) {
+      console.error("AXIS END SESSION FAILED", error)
       setError("Session could not be completed. Try again.")
     } finally {
       setIsEnding(false)
