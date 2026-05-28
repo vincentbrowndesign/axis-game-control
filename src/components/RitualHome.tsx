@@ -6,6 +6,8 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase-
 type RitualState = "idle" | "active" | "saving" | "complete";
 type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
 type CalibrationStatus = "required" | "calibrated";
+type CalibrationWorkflowStatus = "not_calibrated" | "calibrating" | "complete";
+type ActiveView = "session" | "camera";
 type CalibrationStep = "stand" | "hold" | "left" | "right";
 type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
@@ -457,8 +459,10 @@ export function RitualHome() {
   const [ritualState, setRitualState] = useState<RitualState>("idle");
   const [now, setNow] = useState(() => Date.now());
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<ActiveView>("session");
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
   const [calibrationStepIndex, setCalibrationStepIndex] = useState<number | null>(null);
+  const [selectedCalibrationAthleteId, setSelectedCalibrationAthleteId] = useState<string | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraDirection, setCameraDirection] = useState<CameraDirection>("back");
   const [cameraMessage, setCameraMessage] = useState("");
@@ -612,6 +616,20 @@ export function RitualHome() {
   }, [save.activeSession?.cameraDirection]);
 
   useEffect(() => {
+    const activeParticipants = save.activeSession?.participants?.filter((participant) => !participant.leftAt) ?? [];
+    if (!activeParticipants.length) {
+      setSelectedCalibrationAthleteId(null);
+      setCalibrationStepIndex(null);
+      return;
+    }
+
+    if (!selectedCalibrationAthleteId || !activeParticipants.some((participant) => participant.id === selectedCalibrationAthleteId)) {
+      setSelectedCalibrationAthleteId(activeParticipants[0].id);
+      setCalibrationStepIndex(null);
+    }
+  }, [save.activeSession?.participants, selectedCalibrationAthleteId]);
+
+  useEffect(() => {
     return () => {
       cameraStream?.getTracks().forEach((track) => track.stop());
     };
@@ -629,19 +647,12 @@ export function RitualHome() {
   const currentMode = save.activeSession?.mode ?? latestSession?.mode ?? defaultParticipationMode;
   const isRecordingAttached = Boolean(save.activeSession?.recordingAttached);
   const recordingLabel = isRecordingAttached ? "Recording attached" : "Recording off";
-  const calibrationStatus = normalizeCalibrationStatus(
-    save.activeSession?.calibrationStatus ?? latestSession?.calibrationStatus,
-  );
-  const calibrationLabel = calibrationStatus === "calibrated" ? "Calibrated" : "Calibration required";
   const cameraState = normalizeCameraState(save.activeSession?.cameraState ?? latestSession?.cameraState);
   const cameraLabel = formatCameraState(cameraState);
   const savedCameraDirection = normalizeCameraDirection(
     save.activeSession?.cameraDirection ?? latestSession?.cameraDirection ?? cameraDirection,
   );
   const cameraDirectionLabel = formatCameraDirection(savedCameraDirection);
-  const cameraDirectionStateLabel = `${savedCameraDirection === "front" ? "Front camera" : "Back camera"} ${
-    cameraState === "offline" ? "offline" : cameraState === "attached" ? "attached" : "ready"
-  }`;
   const activeCalibrationStep =
     calibrationStepIndex === null ? null : calibrationSteps[calibrationStepIndex] ?? null;
   const activeParticipants = save.activeSession?.participants ?? [];
@@ -651,43 +662,26 @@ export function RitualHome() {
   const calibratedParticipantCount = presentParticipants.filter(
     (participant) => normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated",
   ).length;
-  const calibrationRequiredCount = Math.max(0, activeParticipantCount - calibratedParticipantCount);
-  const calibrationProgressTotal = save.activeSession ? Math.max(activeParticipantCount, 1) : 0;
-  const calibrationPhase = !save.activeSession
-    ? "Not calibrated"
-    : calibratedParticipantCount >= calibrationProgressTotal
-      ? "Complete"
-      : calibratedParticipantCount > 0
-        ? "Partial"
-        : "Not calibrated";
-  const calibrationProgressLabel = `${calibratedParticipantCount}/${calibrationProgressTotal} calibrated`;
-  const pipelineStateLabel = !save.activeSession
-    ? "Check-in waiting"
-    : calibrationRequiredCount > 0
-      ? `${formatCount(calibrationRequiredCount, "athlete", "athletes")} needs calibration`
-      : savedCameraDirection === "front"
-        ? "Back camera next"
-        : isRecordingAttached
-          ? "Recording attached"
-          : "Recording ready";
-  const sessionPrimaryActionLabel =
-    calibrationRequiredCount > 0
-      ? savedCameraDirection !== "front"
-        ? "Front camera"
-        : cameraState === "offline"
-        ? "Start front camera"
-        : cameraState === "ready"
-          ? "Attach front camera"
-          : "Start calibration"
-      : savedCameraDirection === "front"
-        ? "Switch to back camera"
-        : cameraState === "offline"
-          ? "Start back camera"
-          : cameraState === "ready"
-            ? "Attach back camera"
-            : !isRecordingAttached
-            ? "Attach recording"
-            : "Recording attached";
+  const calibrationProgressTotal = save.activeSession ? activeParticipantCount : 0;
+  const calibrationProgressLabel = `${calibratedParticipantCount} / ${calibrationProgressTotal} calibrated`;
+  const selectedCalibrationAthlete =
+    presentParticipants.find((participant) => participant.id === selectedCalibrationAthleteId) ?? presentParticipants[0] ?? null;
+  const selectedAthleteCalibrationStatus = selectedCalibrationAthlete
+    ? normalizeCalibrationStatus(selectedCalibrationAthlete.calibrationStatus)
+    : "required";
+  const calibrationWorkflowStatus: CalibrationWorkflowStatus = activeCalibrationStep
+    ? "calibrating"
+    : selectedAthleteCalibrationStatus === "calibrated"
+      ? "complete"
+      : "not_calibrated";
+  const calibrationWorkflowLabel =
+    calibrationWorkflowStatus === "calibrating"
+      ? "CALIBRATING"
+      : calibrationWorkflowStatus === "complete"
+        ? "COMPLETE"
+        : "NOT CALIBRATED";
+  const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
+  const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
   const bridgeRosterLabel = save.activeSession
     ? `${formatCount(activeParticipantCount, "athlete", "athletes")} active`
@@ -858,8 +852,10 @@ export function RitualHome() {
     setNow(Date.now());
     setRitualState("active");
     setLatestSavedSessionId(null);
+    setActiveView("session");
     setIsModePickerOpen(false);
     setCalibrationStepIndex(null);
+    setSelectedCalibrationAthleteId(checkedInAthlete.id);
     setCameraDirection(startingCameraDirection);
   }
 
@@ -1009,63 +1005,15 @@ export function RitualHome() {
   function handleSessionPrimaryAction() {
     if (!save.activeSession) return;
 
-    if (calibrationRequiredCount > 0) {
-      if (savedCameraDirection !== "front") {
-        changeCameraDirection("front");
-        return;
-      }
-
-      if (cameraState === "offline") {
-        void requestCameraPresence("front");
-        return;
-      }
-
-      if (cameraState === "ready") {
-        attachCameraPresence();
-        return;
-      }
-
-      startCalibration();
-      return;
-    }
-
-    if (savedCameraDirection !== "back") {
-      changeCameraDirection("back");
-      return;
-    }
-
-    if (cameraState === "offline") {
-      void requestCameraPresence("back");
-      return;
-    }
-
-    if (cameraState === "ready") {
-      if (cameraStream) {
-        attachCameraPresence();
-        return;
-      }
-
-      void requestCameraPresence("back");
-      return;
-    }
-
-    if (!isRecordingAttached) {
-      toggleRecordingAttachment();
-    }
+    setActiveView("camera");
   }
 
-  function startCalibration() {
-    if (!save.activeSession || cameraState !== "attached") return;
-
-    setCalibrationStepIndex(0);
-  }
-
-  function completeCalibration() {
-    if (!save.activeSession || !identity) return;
+  function completeCameraCalibration() {
+    if (!save.activeSession || !identity || !selectedCalibrationAthlete) return;
 
     const completedAt = new Date().toISOString();
     const nextParticipants = activeParticipants.map((participant) =>
-      participant.leftAt
+      participant.leftAt || participant.id !== selectedCalibrationAthlete.id
         ? participant
         : {
             ...participant,
@@ -1073,47 +1021,61 @@ export function RitualHome() {
             calibratedAt: completedAt,
           },
     );
+    const participationWindow = normalizeParticipationWindow(
+      save.activeSession.participationWindow,
+      save.activeSession.startedAt,
+      currentMode,
+      nextParticipants,
+    );
+    const allActiveParticipantsCalibrated = nextParticipants
+      .filter((participant) => !participant.leftAt)
+      .every((participant) => normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated");
     const nextSave: AxisSave = {
       ...save,
       activeSession: {
         ...save.activeSession,
-        calibrationStatus: "calibrated",
+        calibrationStatus: allActiveParticipantsCalibrated ? "calibrated" : "required",
+        participationWindow,
         clipContinuityContext: createClipContinuityContext(
           save.activeSession.id,
           currentMode,
           cameraState,
           savedCameraDirection,
           save.activeSession.cameraAttachedAt,
-          normalizeParticipationWindow(
-            save.activeSession.participationWindow,
-            save.activeSession.startedAt,
-            currentMode,
-            nextParticipants,
-          ),
+          participationWindow,
           nextParticipants,
         ),
         participants: nextParticipants,
       },
     };
-    const nextIdentity = {
-      ...identity,
-      calibrationStatus: "calibrated" as const,
-      calibratedAt: completedAt,
-      calibrationSessionId: save.activeSession.id,
-    };
+    const nextIdentity =
+      selectedCalibrationAthlete.id === identity.id
+        ? {
+            ...identity,
+            calibrationStatus: "calibrated" as const,
+            calibratedAt: completedAt,
+            calibrationSessionId: save.activeSession.id,
+          }
+        : identity;
 
     writeSave(nextSave);
-    writeIdentity(nextIdentity);
+    if (nextIdentity !== identity) writeIdentity(nextIdentity);
     setSave(nextSave);
     setIdentity(nextIdentity);
     setCalibrationStepIndex(null);
   }
 
-  function advanceCalibration() {
+  function startCameraCalibration() {
+    if (!save.activeSession || cameraState !== "attached" || !selectedCalibrationAthlete) return;
+
+    setCalibrationStepIndex(0);
+  }
+
+  function advanceCameraCalibration() {
     if (calibrationStepIndex === null) return;
 
     if (calibrationStepIndex >= calibrationSteps.length - 1) {
-      completeCalibration();
+      completeCameraCalibration();
       return;
     }
 
@@ -1224,6 +1186,7 @@ export function RitualHome() {
     writeSave(nextSave);
     setSave(nextSave);
     setLatestSavedSessionId(completedSession.id);
+    setActiveView("session");
     setCalibrationStepIndex(null);
     setCameraStream(null);
     setCameraMessage("");
@@ -1295,6 +1258,159 @@ export function RitualHome() {
     );
   }
 
+  if (activeView === "camera" && save.activeSession) {
+    return (
+      <main className="axis-shell">
+        <section className="axis-surface axis-camera-page" aria-label="Camera page">
+          <header className="axis-top">
+            <div className="axis-identity">
+              <p className="axis-meta">Axis camera</p>
+              <h1>Live camera</h1>
+              <button className="axis-sign-out" onClick={() => setActiveView("session")} type="button">
+                Back to session
+              </button>
+            </div>
+
+            <p className="axis-presence-row" aria-label="Camera state">
+              {`${currentMode.toUpperCase()} • ${formatCount(activeParticipantCount, "ATHLETE", "ATHLETES").toUpperCase()} • ${cameraDirectionLabel.toUpperCase()} • ${cameraLabel.toUpperCase()}`}
+            </p>
+          </header>
+
+          <section className="axis-camera-page-main" aria-label="Live camera">
+            <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
+              <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
+              {cameraStream ? null : <span>Camera offline</span>}
+            </div>
+
+            <section className="axis-camera-page-controls" aria-label="Camera controls">
+              <div className="axis-camera-selector" aria-label="Camera direction">
+                <button
+                  aria-pressed={cameraDirection === "front"}
+                  onClick={() => changeCameraDirection("front")}
+                  type="button"
+                >
+                  Front camera
+                </button>
+                <button
+                  aria-pressed={cameraDirection === "back"}
+                  onClick={() => changeCameraDirection("back")}
+                  type="button"
+                >
+                  Back camera
+                </button>
+              </div>
+              <div className="axis-camera-actions">
+                <button onClick={() => requestCameraPresence()} type="button">
+                  {cameraState === "offline" ? "Start camera" : "Refresh camera"}
+                </button>
+                <button disabled={!cameraStream || cameraState === "attached"} onClick={attachCameraPresence} type="button">
+                  {cameraState === "attached" ? "Camera attached" : "Attach camera"}
+                </button>
+              </div>
+              {cameraMessage ? <span className="axis-camera-message">{cameraMessage}</span> : null}
+            </section>
+          </section>
+
+          <section className="axis-camera-page-grid" aria-label="Camera session state">
+            <section className="axis-session-module" aria-label="Active roster">
+              <header>
+                <span>Active roster</span>
+                <strong>{formatCount(activeParticipantCount, "active")}</strong>
+              </header>
+              <div className="axis-participant-list axis-active-roster-list">
+                {presentParticipants.length ? (
+                  presentParticipants.map((participant) => (
+                    <span
+                      className="axis-participant-token"
+                      data-athlete-id={participant.id}
+                      data-selected={selectedCalibrationAthlete?.id === participant.id}
+                      key={participant.id}
+                    >
+                      <span>{participant.name}</span>
+                      <em>{normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated" ? "Complete" : "Not calibrated"}</em>
+                      <button
+                        onClick={() => {
+                          setSelectedCalibrationAthleteId(participant.id);
+                          setCalibrationStepIndex(null);
+                        }}
+                        type="button"
+                      >
+                        Select athlete
+                      </button>
+                    </span>
+                  ))
+                ) : (
+                  <span className="axis-roster-empty">Roster waiting</span>
+                )}
+              </div>
+            </section>
+
+            <section className="axis-session-module axis-camera-calibration-module" aria-label="Calibration status">
+              <header>
+                <span>Calibration status</span>
+                <strong>{calibrationWorkflowLabel}</strong>
+              </header>
+              <span className="axis-window-state">{calibrationProgressLabel}</span>
+              <span className="axis-window-state">
+                {selectedCalibrationAthlete ? selectedCalibrationAthlete.name : "Select athlete"}
+              </span>
+              <button
+                className="axis-calibration-action"
+                disabled={
+                  cameraState !== "attached" ||
+                  !selectedCalibrationAthlete ||
+                  selectedAthleteCalibrationStatus === "calibrated"
+                }
+                onClick={startCameraCalibration}
+                type="button"
+              >
+                {selectedAthleteCalibrationStatus === "calibrated" ? "Calibration complete" : "Start calibration"}
+              </button>
+              {activeCalibrationStep ? (
+                <section className="axis-calibration-screen" aria-label="Identity calibration" aria-live="polite">
+                  <header>
+                    <span>Identity calibration</span>
+                    <strong>{calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Active"}</strong>
+                  </header>
+                  <p>{calibrationStepCopy[activeCalibrationStep]}</p>
+                  <div className="axis-calibration-steps" aria-label="Calibration steps">
+                    {calibrationSteps.map((step, index) => (
+                      <span
+                        aria-current={index === calibrationStepIndex ? "step" : undefined}
+                        data-complete={calibrationStepIndex !== null && index < calibrationStepIndex}
+                        key={step}
+                      >
+                        {calibrationStepCopy[step]}
+                      </span>
+                    ))}
+                  </div>
+                  <button className="axis-calibration-action" onClick={advanceCameraCalibration} type="button">
+                    {calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Next"}
+                  </button>
+                </section>
+              ) : null}
+            </section>
+
+            <section className="axis-session-module axis-recording-module" aria-label="Recording state">
+              <header>
+                <span>Recording state</span>
+                <strong>{recordingLabel}</strong>
+              </header>
+              <button
+                className="axis-recording-toggle axis-recording-primary"
+                data-attached={isRecordingAttached}
+                onClick={toggleRecordingAttachment}
+                type="button"
+              >
+                {isRecordingAttached ? "Recording attached" : "Recording off"}
+              </button>
+            </section>
+          </section>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="axis-shell">
       <section className="axis-surface" aria-label="Axis ritual home">
@@ -1319,28 +1435,10 @@ export function RitualHome() {
               <span>Session live</span>
               <strong>{formatCount(activeParticipantCount, "athlete", "athletes")} active</strong>
               <em>{currentMode}</em>
-              <em>{cameraDirectionStateLabel}</em>
-              <em>{pipelineStateLabel}</em>
-              <button
-                disabled={
-                  calibrationRequiredCount === 0 &&
-                  savedCameraDirection === "back" &&
-                  cameraState === "attached" &&
-                  isRecordingAttached
-                }
-                onClick={handleSessionPrimaryAction}
-                type="button"
-              >
+              <em>{`${cameraDirectionLabel} / ${sessionCameraStatusLabel}`}</em>
+              <button onClick={handleSessionPrimaryAction} type="button">
                 {sessionPrimaryActionLabel}
               </button>
-              <div className="axis-pipeline-rail" aria-label="Session preparation">
-                <span data-active="true">Checked in</span>
-                <span data-active={activeParticipantCount > 0}>Active roster</span>
-                <span data-active={savedCameraDirection === "front" && calibrationRequiredCount > 0}>Front camera</span>
-                <span data-active={calibrationStatus === "calibrated"}>Calibrated</span>
-                <span data-active={savedCameraDirection === "back" && calibrationRequiredCount === 0}>Back camera</span>
-                <span data-active={isRecordingAttached}>Recording attached</span>
-              </div>
             </section>
           ) : (
             <>
@@ -1352,13 +1450,11 @@ export function RitualHome() {
               >
                 {ritualState === "saving" ? "Saving" : "Start session"}
               </button>
-              <section className="axis-bridge-state" aria-label="Camera calibration bridge">
+              <section className="axis-bridge-state" aria-label="Camera state">
                 <span>{bridgeSessionLabel}</span>
                 <strong>{bridgeRosterLabel}</strong>
                 <em>{cameraLabel}</em>
                 <em>{cameraDirectionLabel}</em>
-                <em>{calibrationPhase}</em>
-                <em>{calibrationProgressLabel}</em>
               </section>
             </>
           )}
@@ -1386,7 +1482,6 @@ export function RitualHome() {
                       presentParticipants.map((participant) => (
                         <span
                           className="axis-participant-token"
-                          data-calibrated={normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated"}
                           data-athlete-id={participant.id}
                           key={participant.id}
                         >
@@ -1403,59 +1498,10 @@ export function RitualHome() {
                 </section>
               </details>
 
-              <details className="axis-session-drawer" open={activeCalibrationStep ? true : undefined}>
-                <summary>
-                  <span>Calibration</span>
-                  <strong>{calibrationProgressLabel}</strong>
-                </summary>
-                <section className="axis-session-module axis-calibration-module" aria-label="Calibration state">
-                  <header>
-                    <span>Calibration</span>
-                    <strong>{calibrationPhase}</strong>
-                  </header>
-                  <button
-                    className="axis-calibration-toggle"
-                    data-calibrated={calibrationStatus === "calibrated"}
-                    disabled={cameraState !== "attached" || calibrationStatus === "calibrated"}
-                    onClick={startCalibration}
-                    type="button"
-                  >
-                    {calibrationStatus === "calibrated"
-                      ? "Complete"
-                      : cameraState === "attached"
-                        ? "Start calibration"
-                        : "Camera required"}
-                  </button>
-                </section>
-                {activeCalibrationStep ? (
-                  <section className="axis-calibration-screen" aria-label="Identity calibration" aria-live="polite">
-                    <header>
-                      <span>Identity calibration</span>
-                      <strong>{calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Active"}</strong>
-                    </header>
-                    <p>{calibrationStepCopy[activeCalibrationStep]}</p>
-                    <div className="axis-calibration-steps" aria-label="Calibration steps">
-                      {calibrationSteps.map((step, index) => (
-                        <span
-                          aria-current={index === calibrationStepIndex ? "step" : undefined}
-                          data-complete={calibrationStepIndex !== null && index < calibrationStepIndex}
-                          key={step}
-                        >
-                          {calibrationStepCopy[step]}
-                        </span>
-                      ))}
-                    </div>
-                    <button className="axis-calibration-action" onClick={advanceCalibration} type="button">
-                      {calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Next"}
-                    </button>
-                  </section>
-                ) : null}
-              </details>
-
               <details className="axis-session-drawer">
                 <summary>
-                  <span>Recording</span>
-                  <strong>{`${cameraLabel} / ${cameraDirectionLabel} / ${recordingLabel}`}</strong>
+                  <span>Session details</span>
+                  <strong>{`${currentMode} / ${formatCount(activeParticipantCount, "active")}`}</strong>
                 </summary>
                 <section className="axis-session-module axis-mode-module" aria-label="Current mode control">
                   <header>
@@ -1479,55 +1525,6 @@ export function RitualHome() {
                       ))}
                     </div>
                   ) : null}
-                </section>
-                <section className="axis-session-module axis-recording-module" aria-label="Recording state">
-                  <header>
-                    <span>Recording state</span>
-                    <strong>{recordingLabel}</strong>
-                  </header>
-                  <button
-                    className="axis-recording-toggle axis-recording-primary"
-                    data-attached={isRecordingAttached}
-                    onClick={toggleRecordingAttachment}
-                    type="button"
-                  >
-                    {isRecordingAttached ? "Recording attached" : "Recording off"}
-                  </button>
-                </section>
-                <section className="axis-session-module axis-camera-module" aria-label="Camera presence">
-                  <header>
-                    <span>Camera</span>
-                    <strong>{`${cameraLabel} / ${cameraDirectionLabel}`}</strong>
-                  </header>
-                  <div className="axis-camera-preview" data-state={cameraState}>
-                    <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
-                    {cameraStream ? null : <span>Camera offline</span>}
-                  </div>
-                  <div className="axis-camera-selector" aria-label="Camera direction">
-                    <button
-                      aria-pressed={cameraDirection === "front"}
-                      onClick={() => changeCameraDirection("front")}
-                      type="button"
-                    >
-                      Front camera
-                    </button>
-                    <button
-                      aria-pressed={cameraDirection === "back"}
-                      onClick={() => changeCameraDirection("back")}
-                      type="button"
-                    >
-                      Back camera
-                    </button>
-                  </div>
-                  <div className="axis-camera-actions">
-                    <button onClick={() => requestCameraPresence()} type="button">
-                      {cameraState === "offline" ? "Start camera" : "Refresh camera"}
-                    </button>
-                    <button disabled={!cameraStream || cameraState === "attached"} onClick={attachCameraPresence} type="button">
-                      {cameraState === "attached" ? "Attached" : "Attach camera"}
-                    </button>
-                  </div>
-                  {cameraMessage ? <span className="axis-camera-message">{cameraMessage}</span> : null}
                 </section>
                 <section className="axis-session-module axis-window-module" aria-label="Participation window">
                   <header>
@@ -1590,11 +1587,7 @@ export function RitualHome() {
                         <strong>{formatDuration(session.durationSeconds)}</strong>
                         <em>
                           {session.participantCount
-                            ? `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"} / ${
-                                normalizeCalibrationStatus(session.calibrationStatus) === "calibrated"
-                                  ? "Calibrated"
-                                  : "Calibration required"
-                              } / ${formatCameraState(session.cameraState)} / ${
+                            ? `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"} / ${formatCameraState(session.cameraState)} / ${
                                 session.participationWindow?.status === "closed" ? "Window saved" : "Window open"
                               }`
                             : session.mode
