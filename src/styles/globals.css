@@ -1,10 +1,13 @@
 :root {
   color-scheme: dark;
-  --axis-bg: #1c1d1b;
-  --axis-surface: #242622;
+  --axis-bg: #1b1c1a;
+  --axis-bg-deep: #11120f;
+  --axis-surface: rgba(36, 38, 34, 0.78);
+  --axis-surface-soft: rgba(255, 255, 255, 0.038);
   --axis-line: rgba(255, 255, 255, 0.12);
-  --axis-ink: #f5f5f0;
-  --axis-muted: rgba(245, 245, 240, 0.58);
+  --axis-line-strong: rgba(183, 255, 60, 0.26);
+  --axis-ink: #f6f6f0;
+  --axis-muted: rgba(246, 246, 240, 0.52);
   --axis-live: #b7ff3c;
 }
 
@@ -18,55 +21,374 @@ body {
   min-height: 100%;
 }
 
+button {
+  font: inherit;
+}
+
 body {
   background:
-    linear-gradient(180deg, rgba(45, 47, 43, 0.92), rgba(28, 29, 27, 1)),
-    var(--axis-bg);
+    linear-gradient(180deg, rgba(48, 50, 45, 0.82), rgba(27, 28, 26, 0.98) 42%),
+    linear-gradient(90deg, #20211f, var(--axis-bg-deep));
   color: var(--axis-ink);
   font-family: Arial, Helvetica, sans-serif;
 }
 
 .axis-shell {
-  align-items: center;
   display: grid;
   min-height: 100dvh;
-  padding: clamp(1rem, 4vw, 2rem);
+  padding: clamp(0.8rem, 2.8vw, 1.6rem);
 }
 
 .axis-surface {
+  align-content: start;
   border: 1px solid var(--axis-line);
-  border-radius: 18px;
+  border-radius: 22px;
   display: grid;
-  gap: 0.65rem;
+  gap: clamp(0.7rem, 1.7vw, 1rem);
   margin: 0 auto;
-  max-width: 760px;
-  padding: clamp(1rem, 5vw, 2rem);
+  max-width: 1040px;
+  overflow: hidden;
+  padding: clamp(0.72rem, 2.2vw, 1.15rem);
   width: 100%;
 }
 
+.axis-top {
+  border-bottom: 1px solid var(--axis-line);
+  display: grid;
+  gap: clamp(0.7rem, 2vw, 1rem);
+  grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 0.95fr);
+  padding-bottom: clamp(0.7rem, 1.8vw, 1rem);
+}
+
+.axis-identity {
+  align-content: end;
+  display: grid;
+  gap: 0.18rem;
+}
+
 .axis-meta,
-.axis-copy {
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-  margin: 0;
+.axis-presence span,
+.axis-presence strong,
+.axis-active-state span,
+.axis-active-state strong,
+.axis-checkout-button,
+.axis-rail span {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .axis-meta {
   color: var(--axis-live);
-}
-
-.axis-copy {
-  color: var(--axis-muted);
+  font-size: 0.68rem;
+  line-height: 1;
+  margin: 0;
 }
 
 h1 {
-  font-size: clamp(3rem, 12vw, 8rem);
+  color: var(--axis-ink);
+  font-size: clamp(3rem, 10vw, 7.6rem);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 0.82;
+  line-height: 0.78;
   margin: 0;
-  max-width: 10ch;
+  max-width: 9ch;
   text-transform: uppercase;
+}
+
+.axis-presence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-presence p {
+  background: var(--axis-surface-soft);
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  min-height: 4.35rem;
+  padding: 0.62rem;
+}
+
+.axis-presence p:nth-child(2),
+.axis-presence p:nth-child(4) {
+  border-left: 0;
+}
+
+.axis-presence p:nth-child(3),
+.axis-presence p:nth-child(4) {
+  border-top: 0;
+}
+
+.axis-presence span {
+  color: var(--axis-muted);
+  font-size: 0.6rem;
+}
+
+.axis-presence strong,
+.axis-history-header strong,
+.axis-rail > span,
+.axis-session-ledger > span,
+.axis-session-row span,
+.axis-session-row strong,
+.axis-session-row em,
+.axis-archive-strip span,
+.axis-archive-strip strong {
+  align-self: end;
+}
+
+.axis-presence p:last-child strong {
+  color: var(--axis-live);
+}
+
+.axis-ritual {
+  background:
+    linear-gradient(135deg, rgba(183, 255, 60, 0.055), transparent 38%),
+    var(--axis-surface);
+  border: 1px solid var(--axis-line);
+  border-radius: 18px;
+  display: grid;
+  gap: clamp(0.7rem, 1.8vw, 1rem);
+  padding: clamp(0.8rem, 2.5vw, 1.25rem);
+}
+
+.axis-check-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--axis-ink);
+  cursor: pointer;
+  font-size: clamp(4.2rem, 16vw, 12rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.78;
+  min-height: clamp(10rem, 31vw, 18rem);
+  padding: 0;
+  text-align: left;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-check-button:focus-visible {
+  outline: 1px solid var(--axis-line-strong);
+  outline-offset: 0.4rem;
+}
+
+.axis-check-button:disabled {
+  color: rgba(246, 246, 240, 0.9);
+  cursor: default;
+}
+
+.axis-active-state {
+  align-items: center;
+  border-top: 1px solid var(--axis-line);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.7rem;
+}
+
+.axis-active-state span {
+  color: var(--axis-live);
+  font-size: 0.68rem;
+}
+
+.axis-active-state strong {
+  color: rgba(246, 246, 240, 0.72);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.axis-checkout-button {
+  appearance: none;
+  background: rgba(183, 255, 60, 0.1);
+  border: 1px solid var(--axis-line-strong);
+  border-radius: 999px;
+  color: var(--axis-ink);
+  cursor: pointer;
+  justify-self: start;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  touch-action: manipulation;
+}
+
+.axis-checkout-button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-bottom {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.axis-history {
+  border: 1px solid var(--axis-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.62rem;
+}
+
+.axis-history-header {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.axis-history-header strong,
+.axis-rail > span,
+.axis-session-ledger > span,
+.axis-session-row span,
+.axis-session-row strong,
+.axis-session-row em,
+.axis-archive-strip span,
+.axis-archive-strip strong {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.axis-history-header strong,
+.axis-rail > span,
+.axis-session-ledger > span,
+.axis-session-row span,
+.axis-session-row em,
+.axis-archive-strip span {
+  color: var(--axis-muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.axis-history-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+}
+
+.axis-rail {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.axis-rail div {
+  display: grid;
+  gap: 0.34rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.axis-day {
+  align-items: end;
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--axis-line);
+  border-radius: 10px;
+  color: var(--axis-muted);
+  display: grid;
+  font-size: 0.64rem;
+  padding: 0.42rem;
+}
+
+.axis-day-active {
+  background: rgba(183, 255, 60, 0.085);
+  border-color: var(--axis-line-strong);
+  color: var(--axis-live);
+}
+
+.axis-session-ledger {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.axis-session-ledger > div {
+  display: grid;
+  gap: 0;
+}
+
+.axis-session-row {
+  align-items: center;
+  background: var(--axis-surface-soft);
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(7rem, 0.48fr);
+  min-height: 2.8rem;
+  padding: 0.46rem 0.55rem;
+}
+
+.axis-session-row + .axis-session-row {
+  border-top: 0;
+}
+
+.axis-session-row strong {
+  color: rgba(246, 246, 240, 0.86);
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.axis-session-row em {
+  font-style: normal;
+  text-align: right;
+}
+
+.axis-archive-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-archive-strip div {
+  background: var(--axis-surface-soft);
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.42rem;
+  min-height: 4.25rem;
+  padding: 0.56rem;
+}
+
+.axis-archive-strip div + div {
+  border-left: 0;
+}
+
+.axis-archive-strip strong {
+  color: rgba(246, 246, 240, 0.82);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .axis-shell {
+    padding: 0.7rem;
+  }
+
+  .axis-top,
+  .axis-history-grid,
+  .axis-archive-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-presence {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .axis-check-button {
+    font-size: clamp(3.65rem, 21vw, 6.5rem);
+    min-height: clamp(9rem, 40vw, 14rem);
+  }
+
+  .axis-session-row {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-session-row strong,
+  .axis-session-row em {
+    text-align: left;
+  }
+
+  .axis-archive-strip div + div {
+    border-left: 1px solid var(--axis-line);
+    border-top: 0;
+  }
 }
