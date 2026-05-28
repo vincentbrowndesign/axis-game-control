@@ -7,13 +7,8 @@ export const runtime = "nodejs"
 
 const ACTIVE_ORGANIZATIONS = new Set(["bridge", "city2city"])
 
-type CheckOutBody = {
-  checkInId?: unknown
-  workUnits?: unknown
-}
-
 export async function POST(
-  request: Request,
+  _request: Request,
   context: RouteContext<"/api/org/[organization]/check-out">
 ) {
   const identity = await getAxisRequestIdentity()
@@ -30,35 +25,19 @@ export async function POST(
   }
 
   const userId = identity.clerkUserId || identity.supabaseUserId
-  const body = (await request.json().catch(() => ({}))) as CheckOutBody
 
   if (!userId) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 })
   }
 
-  console.info("AXIS END SESSION REQUEST", {
-    checkInId: typeof body.checkInId === "string" ? body.checkInId : null,
-    hasWorkUnits: Array.isArray(body.workUnits),
-    organizationSlug,
-    userId,
-    workUnitsCount: Array.isArray(body.workUnits) ? body.workUnits.length : 0,
-  })
-
   const saved = await completeCheckIn({
-    checkInId: typeof body.checkInId === "string" ? body.checkInId : undefined,
     organizationSlug,
     userId,
-    workUnits: body.workUnits,
   })
 
   if ("error" in saved) {
-    console.error("AXIS END SESSION FAILED", {
-      error: saved.error instanceof Error ? saved.error.message : saved.error,
-      organizationSlug,
-    })
-
     return NextResponse.json(
-      { error: "Unable to end session." },
+      { error: "Session could not be completed. Try again." },
       { status: 500 }
     )
   }

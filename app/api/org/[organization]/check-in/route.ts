@@ -39,28 +39,14 @@ export async function POST(
     )
   }
 
-  console.info("AXIS START SESSION REQUEST", {
-    identityKind: identity.kind,
-    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-    hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    organizationSlug,
-    userId,
-  })
-
   const saved = await saveCheckIn({
     organizationSlug,
     userId,
   })
 
   if ("error" in saved) {
-    console.error("AXIS START SESSION FAILED", {
-      error: saved.error instanceof Error ? saved.error.message : saved.error,
-      organizationSlug,
-      userId,
-    })
-
     return NextResponse.json(
-      { error: "Unable to start session." },
+      { error: "Check-in could not be saved. Try again." },
       { status: 500 }
     )
   }
