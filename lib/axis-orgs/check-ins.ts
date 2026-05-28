@@ -306,42 +306,55 @@ export async function completeCheckIn({
     }
   }
 
-  const workResult = await supabaseAdmin
-    .from("check_ins")
-    .update({
-      work_units: normalizeWorkUnits(workUnits),
-    })
-    .eq("id", existing.id)
-    .select(CHECK_IN_SELECT_WITH_WORK)
-    .single<RawAxisCheckIn>()
+  try {
+    const workResult = await supabaseAdmin
+      .from("check_ins")
+      .update({
+        work_units: normalizeWorkUnits(workUnits),
+      })
+      .eq("id", existing.id)
+      .select(CHECK_IN_SELECT_WITH_WORK)
+      .single<RawAxisCheckIn>()
 
-  if (workResult.error) {
-    if (isMissingWorkUnitsError(workResult.error)) {
-      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "work-units-save-failed" })
-    } else {
-      workUnitsColumnAvailable = true
+    if (workResult.error) {
+      if (isMissingWorkUnitsError(workResult.error)) {
+        rememberMissingWorkUnitsColumn({ organizationSlug, stage: "work-units-save-failed" })
+      } else {
+        workUnitsColumnAvailable = true
+      }
+
+      console.warn("AXIS TRAIN WORK UNITS", {
+        code: workResult.error.code,
+        detail: workResult.error.details,
+        hint: workResult.error.hint,
+        message: workResult.error.message,
+        organizationSlug,
+        stage: "work-units-save-failed",
+      })
+
+      return {
+        checkIn: completedCheckIn,
+        duplicate: false,
+      }
     }
 
+    workUnitsColumnAvailable = true
+
+    return {
+      checkIn: normalizeCheckIn(workResult.data),
+      duplicate: false,
+    }
+  } catch (error) {
     console.warn("AXIS TRAIN WORK UNITS", {
-      code: workResult.error.code,
-      detail: workResult.error.details,
-      hint: workResult.error.hint,
-      message: workResult.error.message,
+      detail: error instanceof Error ? error.message : error,
       organizationSlug,
-      stage: "work-units-save-failed",
+      stage: "work-units-save-threw",
     })
 
     return {
       checkIn: completedCheckIn,
       duplicate: false,
     }
-  }
-
-  workUnitsColumnAvailable = true
-
-  return {
-    checkIn: normalizeCheckIn(workResult.data),
-    duplicate: false,
   }
 }
 
@@ -640,6 +653,7 @@ export function normalizeWorkUnits(value: unknown): AxisWorkUnit[] {
 function normalizeCheckIn(row: RawAxisCheckIn): AxisCheckIn {
   return {
     ...row,
+    duration_minutes: cleanDurationNumber(row.duration_minutes),
     work_units: normalizeWorkUnits(row.work_units),
   }
 }
@@ -655,9 +669,15 @@ function completedSessionMinutes({
   const endedAt = new Date(checkedOutAt).getTime()
   const diffMinutes = Math.round((endedAt - startedAt) / 60000)
 
-  if (!Number.isFinite(diffMinutes)) return 0
+  return cleanDurationNumber(diffMinutes)
+}
 
-  return Math.max(0, Math.min(diffMinutes, 600))
+function cleanDurationNumber(value: unknown) {
+  const number = Number(value || 0)
+
+  if (!Number.isFinite(number)) return 0
+
+  return Math.max(0, Math.min(Math.round(number), 600))
 }
 
 function cleanWorkNumber(value: unknown) {
