@@ -16,7 +16,7 @@ function rewardFromMarker(marker: ReplayMarker): ReplayReward {
     return {
       found:
         marker.type === "cadence"
-          ? "Rhythm clip ready."
+          ? "Rhythm memory archived."
           : "Related rhythm ready.",
       nextAction: "Leave a note.",
       focus: marker,
@@ -25,7 +25,7 @@ function rewardFromMarker(marker: ReplayMarker): ReplayReward {
 
   if (marker.type === "reset") {
     return {
-      found: "Reset clip ready.",
+      found: "Reset memory archived.",
       nextAction: "Review the footwork.",
       focus: marker,
     }
@@ -34,7 +34,7 @@ function rewardFromMarker(marker: ReplayMarker): ReplayReward {
   if (marker.type === "spurt") {
     return {
       found: "Movement spurt ready.",
-      nextAction: "Open archive.",
+      nextAction: "Open history.",
       focus: marker,
     }
   }
@@ -57,7 +57,7 @@ function rewardFromMarker(marker: ReplayMarker): ReplayReward {
 
   return {
     found: "Clip added.",
-    nextAction: "Review this clip.",
+    nextAction: "Open memory.",
     focus: marker,
   }
 }
@@ -73,7 +73,7 @@ export function getReplayReward(
   if (!focus) {
     return {
       found: "Session saved.",
-      nextAction: "Review this clip.",
+      nextAction: "Open memory.",
       focus: null,
     }
   }

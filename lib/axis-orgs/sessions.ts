@@ -1,4 +1,9 @@
-import { axisTodayRange } from "@/lib/axis-daily/continuity"
+import {
+  activeContinuityStreak,
+  axisDateKey,
+  axisStartOfWeek,
+  axisTodayRange,
+} from "@/lib/axis-daily/continuity"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export type AxisSession = {
@@ -14,6 +19,14 @@ export type AxisSession = {
 
 const SESSION_SELECT =
   "id, user_id, organization_slug, started_at, ended_at, duration_seconds, status, created_at"
+
+const axisSessionTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "2-digit",
+  hour: "numeric",
+  minute: "2-digit",
+  month: "short",
+  timeZone: process.env.AXIS_TIME_ZONE || "America/Chicago",
+})
 
 export async function getTodaySession({
   organizationSlug,
@@ -49,6 +62,68 @@ export async function getTodaySession({
   }
 
   return result.data
+}
+
+export async function getUserSessionContinuity({
+  organizationSlug,
+  userId,
+}: {
+  organizationSlug: string
+  userId: string
+}) {
+  const result = await supabaseAdmin
+    .from("sessions")
+    .select(SESSION_SELECT)
+    .eq("user_id", userId)
+    .eq("organization_slug", organizationSlug)
+    .order("started_at", { ascending: false })
+    .limit(42)
+    .returns<AxisSession[]>()
+
+  if (result.error) {
+    console.error("AXIS SESSION CONTINUITY READ FAILED", {
+      code: result.error.code,
+      detail: result.error.details,
+      hint: result.error.hint,
+      message: result.error.message,
+      organizationSlug,
+      userId,
+    })
+
+    return emptySessionContinuity()
+  }
+
+  const sessions = result.data || []
+  const dayKeys = new Set(
+    sessions.map((session) => axisDateKey(new Date(session.started_at)))
+  )
+  const weekStart = axisStartOfWeek(new Date())
+  const activeThisWeek = new Set(
+    sessions
+      .filter((session) => new Date(session.started_at) >= weekStart)
+      .map((session) => axisDateKey(new Date(session.started_at)))
+  ).size
+  const latest = sessions[0] || null
+  const completedSessions = sessions.filter(
+    (session) => session.status === "complete" || session.ended_at
+  )
+
+  return {
+    activeThisWeek,
+    currentStreak: activeContinuityStreak(dayKeys),
+    lastSessionLabel: latest
+      ? axisSessionTimeFormatter.format(new Date(latest.started_at))
+      : "none",
+    leaderboardLabel: completedSessions.length
+      ? "building"
+      : "opens after first session",
+    recentSessions: sessions.slice(0, 7).map((session) => ({
+      id: session.id,
+      label: axisSessionTimeFormatter.format(new Date(session.started_at)),
+      status: session.status,
+    })),
+    sessionCount: sessions.length,
+  }
 }
 
 export async function startSession({
@@ -222,4 +297,19 @@ function completedSessionSeconds({
   if (!Number.isFinite(diffSeconds)) return 0
 
   return Math.max(0, diffSeconds)
+}
+
+function emptySessionContinuity() {
+  return {
+    activeThisWeek: 0,
+    currentStreak: 0,
+    lastSessionLabel: "none",
+    leaderboardLabel: "opens after first session",
+    recentSessions: [] as Array<{
+      id: string
+      label: string
+      status: AxisSession["status"]
+    }>,
+    sessionCount: 0,
+  }
 }

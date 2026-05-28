@@ -1,113 +1,294 @@
 # AXIS CONSTITUTION
 
-Axis is an athletic continuity operating system.
+Axis is a personal athletic continuity system.
 
 The stabilized product direction is:
 
-identity -> participation -> progression -> history -> leaderboard -> return behavior
+identity
+→ presence
+→ participation
+→ progression
+→ history
+→ leaderboard
+→ return behavior
 
 ## Product Truth
 
-- Identity is the entry point.
-- Participation is the proof.
-- Check In is the ritual.
-- Check Out completes the effort cycle.
-- Progression makes effort visible.
-- Axis History is the persistent record.
-- Streak, last check-in, completed hours, and last session are save data.
-- Leaderboard is quiet social tension from effort continuity.
-- Organizations are living communities inside one shared Axis world.
-- Future media and intelligence layers must sit on top of presence continuity, not replace the current core loop.
+* Identity is the entry point.
+* Presence is the proof of return.
+* Participation is the engine of continuity.
+* Check In is the ritual.
+* Check Out completes the effort cycle.
+* Progression makes participation visible.
+* Axis History is persistent athletic memory.
+* Streak, last check-in, effort hours, uploads, replay memories, and sessions are save data.
+* Organizations are living athletic communities inside one shared Axis world.
+* Replay, upload, media, and intelligence layers exist to support continuity and memory, not replace the ritual loop.
 
 ## Core Loop
 
 show up
--> participate
--> progress updates
--> history grows
--> leaderboard updates
--> return tomorrow
+→ check in
+→ participate
+→ history grows
+→ leaderboard updates
+→ return tomorrow
 
-## Hard Rules
-
-- Preserve auth, Supabase, check-in, upload, storage, replay, voice, and utility infrastructure.
-- Keep the app identity-first, participation-first, progression-first, history-first, adaptive, calm, and lightweight.
-- Show Check In, Check Out, streak, last session, effort hours, Axis History, and leaderboard continuity first.
-- Keep intelligence and infrastructure underneath the surface.
-- Do not add future media or intelligence layers until the operational continuity system is stable.
-
-## Universal Design Chain
-
-Axis is a living athletic continuity system, personal sports device, membership world, persistent identity machine, and save-file style progression system organizations can build culture on top of.
-
-Axis is not a prototype experiment, dashboard, sports SaaS app, generic AI assistant, widget stack, floating overlay system, startup website, productivity app, analytics tool, marketing website, cold hacker terminal, dystopian tracker, replay-first product, speculative AI system, telemetry experiment, or lonely cinematic replay surface.
-
-Reference emotional hardware:
-
-- Apple Fitness and Nike Run Club energy.
-- Modern arena systems and gym scoreboards.
-- Sports tunnel graphics and athletic LED systems.
-- Active sports environments where people are participating together.
-- PS2 operating system and original Xbox dashboard focus states.
-- Dreamcast VMU.
-- Sony MiniDisc interfaces.
-- TiVo and old DVR systems.
-- Panasonic portable electronics.
-- Arcade terminal menus.
-- Winamp, early iTunes, AIM, CRT diagnostics, early ESPN overlays, and old sports broadcast terminals.
-
-Every UI generation must feel:
-
-- Calm.
-- Ritualistic.
-- Alive.
-- Athletic.
-- Warm.
-- Electronic.
-- Persistent.
-- Communal.
-- Embedded.
-- Structurally stable.
-- Operationally real.
-- Low-friction.
-- Earned.
-- Inevitable.
+## Surface Hierarchy
 
 Every Axis screen follows the same structure:
 
-- Top: identity, organization, and participation signal.
-- Center: dominant ritual, progression, or content layer.
-- Bottom: history, leaderboard, or continuity records.
+### Top
 
-Axis is structural UI, not overlay UI. Interfaces must feel built into the screen itself, preserve screen integrity, and avoid random floating cards, stacked panels, disconnected widgets, viewport collisions, and keyboard instability.
+Identity + presence signal.
 
-Use the permanent Axis palette: black and white as the primary system, with lime green as the only accent. Black should feel like athletic hardware and sports electronics, not empty luxury whitespace or cinematic void.
+Examples:
 
-Use lime green as the restrained signal accent. It appears only in active states, focus states, successful ritual completion, community/progression signals, and subtle live-gym moments. Lime should feel active, electrical, athletic, and alive, not neon cyberpunk.
+* athlete identity
+* organization
+* streak
+* last session
+* participation status
+* continuity signal
 
-Avoid beige wellness tones, warm cream gradients, muted startup palettes, earthy UI colors, rainbow UI, startup gradients, excessive color, loud shadows, thick borders, giant cards, unnecessary framing, cyberpunk glow, dead minimalism, and isolated black voids.
+### Center
 
-Typography carries hierarchy through oversized clean display type and tiny monospace metadata. The contrast between huge emotional typography and small system records is critical. Avoid repeated state language, excessive labels, giant explanation, and visual shouting.
+Dominant ritual layer.
 
-Intelligence stays ambient and underneath the system. The interface should not visually announce it; intelligence should feel invisible, attentive, and embedded into reality.
+Examples:
 
-Future passes must evolve gradually without breaking continuity. Refine, stabilize, and mature the same operational product instead of restarting the identity, product loop, or visual language.
+* Check In
+* active session
+* participation state
+* replay memory
+* upload flow
+* continuity actions
+
+### Bottom
+
+History + progression + return tension.
+
+Examples:
+
+* Axis History
+* leaderboard
+* recent sessions
+* replay archive
+* continuity records
+* progression trail
+
+## Product Direction
+
+Axis is:
+
+* a personal sports continuity system
+* an athletic operating system
+* a participation memory layer
+* a ritual device
+* a persistent sports identity machine
+* a save-file style athletic history system
+* a calm communal sports environment
+
+Axis is not:
+
+* a dashboard
+* tactical software
+* sports analytics SaaS
+* replay-first software
+* video breakdown software
+* scouting software
+* a coaching tool
+* a generic AI platform
+* a floating widget system
+* a startup analytics product
+* a speculative intelligence surface
+* a clip-editing application
+* a commentary product
+* a broadcast product
+* a social feed clone
+
+## Replay + Upload Philosophy
+
+Replay and upload are continuity layers.
+
+Their role is:
+
+* preserve participation
+* archive effort
+* attach memory to identity
+* support progression
+* make history emotionally real
+
+Replay exists as:
+
+* athletic memory
+* participation proof
+* continuity archive
+* session history
+
+Replay must not become:
+
+* tactical breakdown software
+* scouting software
+* analysis-first workflow
+* dashboard-first interaction
+* editing-suite UX
+
+## Intelligence Philosophy
+
+Intelligence stays ambient, quiet, assistive, and invisible.
+
+Axis should never visually announce:
+
+* AI
+* systems
+* intelligence engines
+* optimization layers
+* ontology
+* telemetry systems
+
+Intelligence should feel:
+
+* embedded
+* calm
+* supportive
+* inevitable
+* structural
+
+## Visual Identity
+
+Axis uses:
+
+* layered blacks
+* restrained white
+* one muted lime signal accent
+* oversized ritual typography
+* tiny archival metadata
+* save-file atmosphere
+* calm sports electronics energy
+
+Reference emotional hardware:
+
+* Apple Fitness
+* Nike Run Club
+* arena systems
+* gym scoreboards
+* PS2 OS
+* original Xbox dashboard
+* Dreamcast VMU
+* MiniDisc interfaces
+* TiVo
+* DVR systems
+* Panasonic sports electronics
+* arcade terminals
+* early ESPN overlays
+* CRT diagnostics
+* old sports broadcast systems
+
+Axis should feel:
+
+* calm
+* ritualistic
+* alive
+* athletic
+* communal
+* persistent
+* operational
+* electronic
+* embedded
+* low-friction
+* inevitable
+* earned
+
+## Structural UI Rules
+
+Axis is structural UI.
+
+Interfaces should feel:
+
+* built into the screen
+* stable
+* calm
+* integrated
+* continuous
+
+Avoid:
+
+* floating overlay stacks
+* random widget piles
+* startup dashboards
+* viewport collisions
+* excessive framing
+* giant explanation blocks
+* web-form-first interaction
+* loud gradients
+* giant shadows
+* cyberpunk styling
+* dead luxury minimalism
+
+## Hard Rules
+
+Preserve:
+
+* auth
+* Supabase
+* check-in
+* upload
+* storage
+* replay infrastructure
+* voice infrastructure
+* utility infrastructure
+
+Make:
+
+* small scoped changes
+* gradual visual evolution
+* continuity-preserving refinements
+
+Prioritize:
+
+* identity continuity
+* participation continuity
+* check-in ritual
+* Axis History
+* streak
+* leaderboard
+* last session
+* replay memory attached to participation
+* return behavior
 
 ## Do Not Add
 
-- Dashboards.
-- Tactical software UI.
-- Video breakdown software.
-- Manual clipping tools.
-- Timeline editing tools.
-- Basketball IQ scores.
-- Scouting analytics.
-- Assistant chat.
-- Commentary systems.
-- Feeds.
-- Broadcasts.
-- Replay-first surfaces.
-- Speculative AI surfaces.
-- Telemetry experiments.
-- Ontology-heavy screens.
-- Startup or platform language.
+* dashboards
+* tactical software UI
+* basketball IQ scores
+* scouting analytics
+* assistant chat surfaces
+* coaching claims
+* commentary systems
+* broadcast systems
+* replay-first home screens
+* speculative AI systems
+* startup/productivity language
+* giant widget stacks
+* random floating cards
+* tactical overlays
+* analytics-first UX
+* timeline editing software
+* manual clipping suites
+
+## Future Direction
+
+Future media, replay, computer vision, intelligence, and automation systems must sit on top of:
+
+identity
+→ presence
+→ participation
+→ progression
+→ history
+→ leaderboard
+→ return behavior
+
+The ritual loop is primary.
+
+Everything else is secondary.

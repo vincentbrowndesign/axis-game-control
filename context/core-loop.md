@@ -1,18 +1,102 @@
-# Core Loop
+# Axis Core Loop
+
+Axis is a personal athletic continuity system.
+
+The active product loop is:
 
 show up
+-> check in
 -> participate
--> progression updates
 -> history grows
 -> leaderboard updates
 -> return tomorrow
 
-Axis is building identity, participation, progression, history, leaderboard, and return-behavior infrastructure first.
+The stabilized product direction is:
 
-The product can refine, but the anchor does not change:
+identity
+-> presence
+-> participation
+-> progression
+-> history
+-> leaderboard
+-> ritual continuity
 
-identity -> participation -> progression -> history -> leaderboard -> return behavior
+## Product Anchor
 
-Future layers must inherit from this loop instead of replacing it.
+Presence is primary.
 
-Replay, clips, AI, telemetry, and broadcasts are future layers only. They do not define the current product identity.
+Participation is proof.
+
+History is emotional infrastructure.
+
+Axis should always make the athlete feel:
+
+- I showed up.
+- I put work in.
+- My history grew.
+- My place in the group changed.
+- I have a reason to return.
+
+## Active Runtime
+
+The active product should prioritize:
+
+- auth
+- organization entry
+- training/session start
+- training/session completion
+- participation history
+- streaks
+- leaderboard movement
+- coach visibility into attendance and consistency
+
+The current V1 route shape is intentionally small:
+
+- `/`
+- `/org/bridge/start`
+- `/org/city2city/start`
+- `/org/bridge/train`
+- `/org/city2city/train`
+- `/org/bridge/coach`
+- `/org/city2city/coach`
+
+## Surface Hierarchy
+
+Every Axis screen should follow:
+
+Top:
+identity, organization, and presence signal.
+
+Center:
+one dominant ritual or active participation state.
+
+Bottom:
+history, streak, leaderboard, or continuity records.
+
+## What Stays Underneath
+
+Replay, upload, clips, voice, storage, media, computer vision, and intelligence are infrastructure layers. They can support memory and continuity later, but they do not define the active product surface.
+
+Future systems must inherit from the loop instead of replacing it.
+
+## Do Not Drift Into
+
+- dashboards
+- analytics software
+- replay-first UX
+- tactical coaching tools
+- scouting systems
+- speculative AI surfaces
+- startup onboarding
+- social feeds
+- widget stacks
+- abstract system language
+
+If a feature does not support:
+
+show up
+-> participate
+-> history grows
+-> return tomorrow
+
+it should not exist in the active runtime.

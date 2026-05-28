@@ -117,7 +117,7 @@ export async function GET(_req: Request, context: Context) {
         durationMs: typeof clip.durationMs === "number" ? clip.durationMs : 0,
         endMs: typeof clip.endMs === "number" ? clip.endMs : 0,
         id: typeof clip.id === "string" ? clip.id : path,
-        label: typeof clip.label === "string" ? clip.label : "Replay clip",
+        label: typeof clip.label === "string" ? clip.label : "Replay memory",
         path,
         reason: typeof clip.reason === "string" ? clip.reason : "replay_window",
         startMs: typeof clip.startMs === "number" ? clip.startMs : 0,

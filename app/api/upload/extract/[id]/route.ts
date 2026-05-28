@@ -138,7 +138,7 @@ export async function POST(_request: Request, context: Context) {
     })
 
     await writeProcessingState({
-      detail: "Preparing replay preview.",
+      detail: "Preparing memory preview.",
       id,
       metadata,
       state: "GENERATING_REPLAY",
@@ -174,7 +174,7 @@ export async function POST(_request: Request, context: Context) {
       }
 
       await writeProcessingState({
-        detail: "Replay preview queued for another attempt.",
+        detail: "Memory preview queued for another attempt.",
         id,
         metadata,
         state: "QUEUED",
@@ -226,7 +226,7 @@ export async function POST(_request: Request, context: Context) {
       updatedAt: new Date().toISOString(),
     }
     metadata.processing = createProcessingSnapshot({
-      detail: "Replay media is ready.",
+      detail: "Replay memory is ready.",
       previous: asRecord(metadata.processing),
       state: "COMPLETE",
       traceId,
@@ -238,7 +238,7 @@ export async function POST(_request: Request, context: Context) {
       id,
       metadata,
       status: "complete",
-      title: "Game media",
+      title: "Participation memory",
       updatedAt: new Date().toISOString(),
     })
 

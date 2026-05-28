@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import styles from "@/app/page.module.css"
 
 type TrainCheckInButtonProps = {
@@ -36,6 +37,7 @@ export function TrainCheckInButton({
   sessionId,
   sessionStartedAt,
 }: TrainCheckInButtonProps) {
+  const router = useRouter()
   const [isChecking, setIsChecking] = useState(false)
   const [isEnding, setIsEnding] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState(sessionId)
@@ -44,6 +46,13 @@ export function TrainCheckInButton({
   const [completedSeconds, setCompletedSeconds] = useState(durationSeconds)
   const [error, setError] = useState("")
   const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    setActiveSessionId(sessionId)
+    setStartedAt(sessionStartedAt)
+    setCompletedAt(sessionCompletedAt)
+    setCompletedSeconds(durationSeconds)
+  }, [durationSeconds, sessionCompletedAt, sessionId, sessionStartedAt])
 
   useEffect(() => {
     if (!startedAt || completedAt) return
@@ -77,6 +86,7 @@ export function TrainCheckInButton({
       setStartedAt(session.started_at)
       setCompletedAt(session.ended_at || null)
       setCompletedSeconds(Number(session.duration_seconds || 0))
+      router.refresh()
     } catch (error) {
       console.error("AXIS START SESSION FAILED", error)
       setError("Unable to start session.")
@@ -110,6 +120,7 @@ export function TrainCheckInButton({
       setActiveSessionId(session.id || activeSessionId)
       setCompletedAt(session.ended_at)
       setCompletedSeconds(Number(session.duration_seconds || 0))
+      router.refresh()
     } catch (error) {
       console.error("AXIS END SESSION FAILED", error)
       setError("Unable to end session.")
@@ -121,13 +132,13 @@ export function TrainCheckInButton({
   const isComplete = Boolean(completedAt)
   const isInSession = Boolean(startedAt && !completedAt)
   const label = isComplete
-    ? "SESSION COMPLETE"
+    ? "HISTORY UPDATED"
     : isInSession
-      ? "END SESSION"
+      ? "CHECK OUT"
       : isChecking
-      ? "STARTING SESSION"
-      : "START SESSION"
-  const statusLabel = isComplete ? "SESSION COMPLETE" : isInSession ? "IN SESSION" : "READY"
+      ? "CHECKING IN"
+      : "CHECK IN"
+  const statusLabel = isComplete ? "SESSION COMPLETE" : isInSession ? "CHECKED IN" : "READY"
   const elapsedLabel = isComplete
     ? formatDurationSeconds(completedSeconds)
     : startedAt
@@ -152,13 +163,13 @@ export function TrainCheckInButton({
         </button>
       ) : isInSession ? (
         <div className={styles.trainSessionLive}>
-          <span>TRAINING ACTIVE</span>
+          <span>PARTICIPATING</span>
           <button
             disabled={isEnding}
             onClick={handleEndSession}
             type="button"
           >
-            {isEnding ? "ENDING SESSION" : label}
+            {isEnding ? "CHECKING OUT" : label}
           </button>
         </div>
       ) : (

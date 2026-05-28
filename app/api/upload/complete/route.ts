@@ -22,6 +22,8 @@ import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
 
+const ARCHIVE_ERROR = "MEMORY COULD NOT BE ARCHIVED"
+
 type CompleteUploadBody = {
   sessionId?: string
   traceId?: string
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
       return safeJson(
         {
           ok: false,
-          error: "UPLOAD STILL PROCESSING",
+          error: ARCHIVE_ERROR,
           stage: "storage-path",
           traceId,
         },
@@ -124,7 +126,7 @@ export async function POST(request: Request) {
           traceId,
           stored: true,
           fallback: true,
-          recovery: "Playback ready.",
+          recovery: "Memory archived.",
         },
         202
       )
@@ -182,7 +184,7 @@ export async function POST(request: Request) {
             processingJobs,
           },
             status: processing.state.toLowerCase(),
-            title: body.fileName || "Game media",
+            title: body.fileName || "Participation memory",
             updatedAt: new Date().toISOString(),
           }),
           status: processing.state.toLowerCase(),
@@ -252,9 +254,9 @@ export async function POST(request: Request) {
         id: sessionId,
         clerk_user_id: identity.clerkUserId,
         user_id: identity.supabaseUserId,
-        title: body.fileName || "Axis video",
+        title: body.fileName || "Participation memory",
         video_url: signedUrl.data.signedUrl,
-        file_name: body.fileName || "Axis video",
+        file_name: body.fileName || "Participation memory",
         file_path: filePath,
         source: normalizeSource(body.source || "upload"),
         mission: cleanText(body.mission || "Replay memory", "Replay memory"),
@@ -266,18 +268,18 @@ export async function POST(request: Request) {
         status: "queued",
         tags: [],
         transcript_text: "",
-        ai_summary: "Playback saved.",
+        ai_summary: "Participation memory archived.",
         embedding_status: "pending",
         semantic_tags: [],
         metadata: applySessionArchiveManifest({
           createdAt: Date.now(),
           durationSeconds,
-          fileName: body.fileName || "Axis video",
+          fileName: body.fileName || "Participation memory",
           filePath,
           id: sessionId,
           metadata: baseMetadata,
           status: "queued",
-          title: body.fileName || "Axis video",
+          title: body.fileName || "Participation memory",
           updatedAt: new Date().toISOString(),
         }),
       })
@@ -300,7 +302,7 @@ export async function POST(request: Request) {
           traceId,
           stored: true,
           fallback: true,
-          recovery: "Playback ready.",
+          recovery: "Memory archived.",
         },
         202
       )
@@ -312,7 +314,7 @@ export async function POST(request: Request) {
       session_id: inserted.data.id,
       bucket_id: "axis-replays",
       file_path: filePath,
-      file_name: body.fileName || "Axis video",
+      file_name: body.fileName || "Participation memory",
       content_type: body.contentType || "video/mp4",
       size_bytes: body.sizeBytes || 0,
     })
@@ -359,7 +361,7 @@ export async function POST(request: Request) {
     return safeJson(
       {
         ok: false,
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         stage: "unhandled",
         traceId: requestTraceId,
         detail: detailFromError(error),

@@ -42,7 +42,7 @@ export default async function OrganizationCoachPage({
         <section className={styles.coachSection} aria-label="Active today">
           <span>ACTIVE TODAY</span>
           <strong>0</strong>
-          <p>Training board is reset.</p>
+          <p>No sessions yet.</p>
         </section>
 
         <section className={styles.coachSection} aria-label="Checked in">
@@ -58,7 +58,7 @@ export default async function OrganizationCoachPage({
 
         <section className={styles.coachSection} aria-label="Current streaks">
           <span>CURRENT STREAKS</span>
-          <p>Streaks begin after sessions return.</p>
+          <p>Streaks begin after first session.</p>
         </section>
       </section>
     </main>

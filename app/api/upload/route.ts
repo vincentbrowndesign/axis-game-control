@@ -16,6 +16,8 @@ import type { AxisUploadResponse } from "@/lib/uploadResponse"
 
 export const runtime = "nodejs"
 
+const ARCHIVE_ERROR = "MEMORY COULD NOT BE ARCHIVED"
+
 type UploadLogDetail = Record<string, unknown>
 
 function logUploadStage(
@@ -188,7 +190,7 @@ export async function POST(request: Request) {
     } catch (error) {
       return axisError({
         stage: "form-data",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 400,
         detail: detailFromError(error),
         traceId,
@@ -216,7 +218,7 @@ export async function POST(request: Request) {
     if (!(file instanceof File)) {
       return axisError({
         stage: "file-validation",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 400,
         detail: typeof file,
         traceId,
@@ -226,7 +228,7 @@ export async function POST(request: Request) {
     if (file.size <= 0) {
       return axisError({
         stage: "file-validation",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 400,
         traceId,
       })
@@ -252,7 +254,7 @@ export async function POST(request: Request) {
     if (!isSupportedReplayFile(file)) {
       return axisError({
         stage: "file-validation",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 400,
         detail: {
           name: normalized.originalName,
@@ -267,7 +269,7 @@ export async function POST(request: Request) {
     if (!normalized.finalName) {
       return axisError({
         stage: "file-normalization",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 400,
         traceId,
       })
@@ -279,7 +281,7 @@ export async function POST(request: Request) {
     if (!filePath.includes("/")) {
       return axisError({
         stage: "file-normalization",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 400,
         detail: filePath,
         traceId,
@@ -298,7 +300,7 @@ export async function POST(request: Request) {
     } catch (error) {
       return axisError({
         stage: "array-buffer",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 400,
         detail: detailFromError(error),
         traceId,
@@ -338,7 +340,7 @@ export async function POST(request: Request) {
     } catch (error) {
       return axisError({
         stage: "storage-upload",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 500,
         detail: detailFromError(error),
         traceId,
@@ -348,7 +350,7 @@ export async function POST(request: Request) {
     if (upload.error) {
       return axisError({
         stage: "storage-upload",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 500,
         detail: upload.error.message,
         traceId,
@@ -375,7 +377,7 @@ export async function POST(request: Request) {
       return axisError({
         traceId,
         stage: "signed-url",
-        error: "UPLOAD STILL PROCESSING",
+        error: ARCHIVE_ERROR,
         status: 500,
         stored: true,
         detail: signedUrl.error.message,
@@ -435,7 +437,7 @@ export async function POST(request: Request) {
         transcript_text: candidateLandmarks
           .map((landmark) => `[${landmark.timestamp}] ${landmark.title}`)
           .join("\n"),
-        ai_summary: "Candidate replay moments ready for coach reinforcement.",
+        ai_summary: "Replay memory preserved in Axis History.",
         embedding_status: "pending",
         semantic_tags: candidateLandmarks.map((landmark) => landmark.title),
         metadata: {
@@ -480,10 +482,10 @@ export async function POST(request: Request) {
           playbackFallback: {
             status: "ready",
             source: "signed-storage-url",
-            reason: "uploaded-video-preserved-before-extraction",
+            reason: "participation-memory-preserved",
           },
           correctionTimelineEvents: [
-            makeTimelineEvent("CLIP_CAPTURED", "Clip captured"),
+            makeTimelineEvent("CLIP_CAPTURED", "Memory preserved"),
           ],
         },
       })
@@ -510,7 +512,7 @@ export async function POST(request: Request) {
       return axisError({
         traceId,
         stage: "db-session-create",
-        error: "SESSION SAVE FAILED",
+        error: "MEMORY SAVED WITHOUT SESSION",
         status: 500,
         stored: true,
         detail: inserted.error.message,
@@ -571,8 +573,8 @@ export async function POST(request: Request) {
     } catch (error) {
       return axisError({
         detail: detailFromError(error),
-        error: "PROCESSING DID NOT START",
-        recovery: "Game saved, but Axis could not start processing.",
+        error: "MEMORY SAVED WITHOUT PROCESSING",
+        recovery: "Participation memory was saved. Background processing can run later.",
         stage: "trigger-job-create",
         status: 500,
         stored: true,
@@ -617,7 +619,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return axisError({
       stage: "unhandled",
-      error: "UPLOAD STILL PROCESSING",
+      error: ARCHIVE_ERROR,
       status: 500,
       detail: detailFromError(error),
       traceId,

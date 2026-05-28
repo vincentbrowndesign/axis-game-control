@@ -323,7 +323,7 @@ export async function POST(request: Request) {
     })
 
     finalMetadata.processing = createProcessingSnapshot({
-      detail: "Replay, clips, stats, and recap output are ready.",
+      detail: "Replay memory and archive output are ready.",
       previous: asRecord(finalMetadata.processing),
       state: "COMPLETE",
       traceId,
@@ -335,7 +335,7 @@ export async function POST(request: Request) {
       id: sessionId,
       metadata: finalMetadata,
       status: "complete",
-      title: sourceSession.data?.title || "Game media",
+      title: sourceSession.data?.title || "Participation memory",
       updatedAt: new Date().toISOString(),
     })
 
