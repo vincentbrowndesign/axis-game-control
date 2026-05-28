@@ -1,14 +1,12 @@
 :root {
   color-scheme: dark;
-  --axis-bg: #1b1c1a;
-  --axis-bg-deep: #11120f;
-  --axis-surface: rgba(36, 38, 34, 0.78);
-  --axis-surface-soft: rgba(255, 255, 255, 0.038);
-  --axis-line: rgba(255, 255, 255, 0.12);
-  --axis-line-strong: rgba(183, 255, 60, 0.26);
-  --axis-ink: #f6f6f0;
-  --axis-muted: rgba(246, 246, 240, 0.52);
-  --axis-live: #b7ff3c;
+  --axis-bg: #030303;
+  --axis-surface: #090909;
+  --axis-surface-soft: #111;
+  --axis-line: rgba(255, 255, 255, 0.14);
+  --axis-ink: #f4f4f0;
+  --axis-muted: rgba(244, 244, 240, 0.58);
+  --axis-live: #a8d933;
 }
 
 * {
@@ -21,14 +19,13 @@ body {
   min-height: 100%;
 }
 
-button {
+button,
+input {
   font: inherit;
 }
 
 body {
-  background:
-    linear-gradient(180deg, rgba(48, 50, 45, 0.82), rgba(27, 28, 26, 0.98) 42%),
-    linear-gradient(90deg, #20211f, var(--axis-bg-deep));
+  background: var(--axis-bg);
   color: var(--axis-ink);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -36,204 +33,87 @@ body {
 .axis-shell {
   display: grid;
   min-height: 100dvh;
-  padding: clamp(0.8rem, 2.8vw, 1.6rem);
+  padding: clamp(1rem, 3vw, 2rem);
 }
 
 .axis-entry-shell {
   align-items: center;
 }
 
-.axis-entry {
-  border: 1px solid var(--axis-line);
-  border-radius: 22px;
+.axis-entry,
+.axis-restore,
+.axis-surface {
   display: grid;
-  gap: clamp(1rem, 3vw, 1.6rem);
+  gap: clamp(1rem, 3vw, 1.5rem);
   margin: 0 auto;
-  max-width: 960px;
-  overflow: hidden;
-  padding: clamp(0.85rem, 2.8vw, 1.4rem);
+  max-width: 860px;
   width: 100%;
-}
-
-.axis-restore {
-  border: 1px solid var(--axis-line);
-  border-radius: 22px;
-  display: grid;
-  gap: clamp(0.8rem, 2.5vw, 1.2rem);
-  margin: 0 auto;
-  max-width: 960px;
-  overflow: hidden;
-  padding: clamp(0.85rem, 2.8vw, 1.4rem);
-  width: 100%;
-}
-
-.axis-restore h1 {
-  max-width: 10ch;
-}
-
-.axis-restore-line {
-  background: linear-gradient(90deg, transparent, var(--axis-live), transparent);
-  height: 1px;
-  opacity: 0.72;
-}
-
-.axis-restore-rail {
-  border-top: 1px solid var(--axis-line);
-  display: grid;
-  gap: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding-top: 0.72rem;
-}
-
-.axis-restore-rail span {
-  background: var(--axis-surface-soft);
-  border: 1px solid var(--axis-line);
-  color: var(--axis-muted);
-  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: 0.6rem;
-  letter-spacing: 0.06em;
-  min-height: 3.2rem;
-  padding: 0.65rem;
-  text-transform: uppercase;
-}
-
-.axis-restore-rail span + span {
-  border-left: 0;
-}
-
-.axis-entry-top {
-  border-bottom: 1px solid var(--axis-line);
-  display: flex;
-  gap: 0.85rem;
-  justify-content: space-between;
-  padding-bottom: 0.72rem;
-}
-
-.axis-entry-top span,
-.axis-entry-form span,
-.axis-entry-form input,
-.axis-entry-form button {
-  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.axis-entry-top span {
-  color: var(--axis-muted);
-  font-size: 0.62rem;
-}
-
-.axis-entry-top span:first-child {
-  color: var(--axis-live);
-}
-
-.axis-entry-center {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.axis-entry-form {
-  border-top: 1px solid var(--axis-line);
-  display: grid;
-  gap: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  padding-top: 0.72rem;
-}
-
-.axis-entry-form label {
-  display: grid;
-  gap: 0.36rem;
-}
-
-.axis-entry-form label + label {
-  margin-left: -1px;
-}
-
-.axis-entry-form span {
-  color: var(--axis-muted);
-  font-size: 0.6rem;
-}
-
-.axis-entry-form input {
-  appearance: none;
-  background: var(--axis-surface-soft);
-  border: 1px solid var(--axis-line);
-  border-radius: 0;
-  color: var(--axis-ink);
-  font-size: 0.76rem;
-  min-height: 3.2rem;
-  padding: 0 0.75rem;
-  width: 100%;
-}
-
-.axis-entry-form input::placeholder {
-  color: rgba(246, 246, 240, 0.28);
-}
-
-.axis-entry-form input:focus {
-  border-color: var(--axis-line-strong);
-  outline: none;
-}
-
-.axis-entry-form button {
-  align-self: end;
-  appearance: none;
-  background: rgba(183, 255, 60, 0.12);
-  border: 1px solid var(--axis-line-strong);
-  color: var(--axis-ink);
-  cursor: pointer;
-  font-size: 0.72rem;
-  min-height: 3.2rem;
-  padding: 0 1.35rem;
-  touch-action: manipulation;
-}
-
-.axis-entry-form button:focus-visible {
-  outline: 1px solid var(--axis-live);
-  outline-offset: 0.2rem;
 }
 
 .axis-surface {
   align-content: start;
-  border: 1px solid var(--axis-line);
-  border-radius: 22px;
-  display: grid;
-  gap: clamp(0.7rem, 1.7vw, 1rem);
-  margin: 0 auto;
-  max-width: 1040px;
-  overflow: hidden;
-  padding: clamp(0.72rem, 2.2vw, 1.15rem);
-  width: 100%;
 }
 
-.axis-top {
+.axis-entry-top,
+.axis-top,
+.axis-history-header,
+.axis-active-state {
+  align-items: center;
   border-bottom: 1px solid var(--axis-line);
-  display: grid;
-  gap: clamp(0.7rem, 2vw, 1rem);
-  grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 0.95fr);
-  padding-bottom: clamp(0.7rem, 1.8vw, 1rem);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
 }
 
-.axis-identity {
-  align-content: end;
-  display: grid;
-  gap: 0.18rem;
-}
-
+.axis-entry-top span,
 .axis-meta,
 .axis-presence span,
 .axis-presence strong,
 .axis-active-state span,
 .axis-active-state strong,
 .axis-checkout-button,
-.axis-rail span {
+.axis-sign-out,
+.axis-auth-message,
+.axis-rail span,
+.axis-history-header strong,
+.axis-session-ledger > span,
+.axis-session-row span,
+.axis-session-row strong,
+.axis-session-row em,
+.axis-archive-strip span,
+.axis-archive-strip strong,
+.axis-entry-form span,
+.axis-entry-form input,
+.axis-entry-form button,
+.axis-restore-rail span {
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.axis-meta {
+.axis-entry-top span,
+.axis-presence span,
+.axis-history-header strong,
+.axis-rail > span,
+.axis-session-ledger > span,
+.axis-session-row span,
+.axis-session-row em,
+.axis-archive-strip span,
+.axis-auth-message {
+  color: var(--axis-muted);
+  font-size: 0.66rem;
+  font-weight: 500;
+}
+
+.axis-entry-top span:first-child,
+.axis-meta,
+.axis-presence p:last-child strong,
+.axis-active-state span {
   color: var(--axis-live);
+}
+
+.axis-meta {
   font-size: 0.68rem;
   line-height: 1;
   margin: 0;
@@ -241,89 +121,143 @@ body {
 
 h1 {
   color: var(--axis-ink);
-  font-size: clamp(3rem, 10vw, 7.6rem);
+  font-size: clamp(2.25rem, 7vw, 4.75rem);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 0.78;
+  line-height: 0.9;
   margin: 0;
-  max-width: 9ch;
   text-transform: uppercase;
+}
+
+.axis-entry-center,
+.axis-identity,
+.axis-restore {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.axis-entry-form {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.axis-entry-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.axis-entry-form span {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+}
+
+.axis-entry-form input {
+  appearance: none;
+  background: var(--axis-surface);
+  border: 1px solid var(--axis-line);
+  color: var(--axis-ink);
+  font-size: 0.76rem;
+  min-height: 3rem;
+  padding: 0 0.75rem;
+  width: 100%;
+}
+
+.axis-entry-form input::placeholder {
+  color: rgba(244, 244, 240, 0.28);
+}
+
+.axis-entry-form input:focus,
+.axis-entry-form button:focus-visible,
+.axis-check-button:focus-visible,
+.axis-checkout-button:focus-visible,
+.axis-sign-out:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-entry-form button,
+.axis-checkout-button,
+.axis-sign-out {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: var(--axis-ink);
+  cursor: pointer;
+  font-size: 0.72rem;
+  min-height: 3rem;
+  padding: 0 1rem;
+  touch-action: manipulation;
+}
+
+.axis-entry-form button {
+  align-self: end;
+  border-color: rgba(168, 217, 51, 0.48);
+  color: var(--axis-live);
+}
+
+.axis-restore-line {
+  background: var(--axis-live);
+  height: 1px;
+  opacity: 0.7;
+}
+
+.axis-restore-rail {
+  display: flex;
+  gap: 1rem;
+}
+
+.axis-restore-rail span {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+}
+
+.axis-identity {
+  min-width: 0;
+}
+
+.axis-sign-out {
+  justify-self: start;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
 }
 
 .axis-presence {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .axis-presence p {
-  background: var(--axis-surface-soft);
+  background: var(--axis-surface);
   border: 1px solid var(--axis-line);
   display: grid;
-  gap: 0.4rem;
+  gap: 0.35rem;
   margin: 0;
-  min-height: 4.35rem;
-  padding: 0.62rem;
-}
-
-.axis-presence p:nth-child(2),
-.axis-presence p:nth-child(4) {
-  border-left: 0;
-}
-
-.axis-presence p:nth-child(3),
-.axis-presence p:nth-child(4) {
-  border-top: 0;
-}
-
-.axis-presence span {
-  color: var(--axis-muted);
-  font-size: 0.6rem;
+  min-height: 3.6rem;
+  padding: 0.55rem;
 }
 
 .axis-presence strong,
-.axis-history-header strong,
-.axis-rail > span,
-.axis-session-ledger > span,
-.axis-session-row span,
+.axis-active-state strong,
 .axis-session-row strong,
-.axis-session-row em,
-.axis-archive-strip span,
 .axis-archive-strip strong {
-  align-self: end;
-}
-
-.axis-presence p:last-child strong {
-  color: var(--axis-live);
+  color: var(--axis-ink);
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .axis-ritual {
-  background:
-    linear-gradient(135deg, rgba(183, 255, 60, 0.055), transparent 38%),
-    var(--axis-surface);
+  background: var(--axis-surface);
   border: 1px solid var(--axis-line);
-  border-radius: 18px;
   display: grid;
-  gap: clamp(0.7rem, 1.8vw, 1rem);
-  padding: clamp(0.8rem, 2.5vw, 1.25rem);
+  gap: 0.8rem;
+  padding: clamp(0.9rem, 3vw, 1.25rem);
 }
 
-.axis-ritual[data-state="active"] {
-  background:
-    linear-gradient(90deg, rgba(183, 255, 60, 0.09), transparent 42%),
-    var(--axis-surface);
-  border-color: var(--axis-line-strong);
-}
-
-.axis-ritual[data-state="saving"] {
-  background:
-    linear-gradient(90deg, rgba(246, 246, 240, 0.08), transparent 48%),
-    var(--axis-surface);
-}
-
+.axis-ritual[data-state="active"],
 .axis-ritual[data-state="complete"] {
-  background:
-    linear-gradient(135deg, rgba(183, 255, 60, 0.075), transparent 34%),
-    var(--axis-surface);
+  border-color: rgba(168, 217, 51, 0.45);
 }
 
 .axis-check-button {
@@ -332,151 +266,73 @@ h1 {
   border: 0;
   color: var(--axis-ink);
   cursor: pointer;
-  font-size: clamp(4.2rem, 16vw, 12rem);
+  font-size: clamp(2.75rem, 11vw, 6.5rem);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 0.78;
-  min-height: clamp(10rem, 31vw, 18rem);
+  line-height: 0.88;
   padding: 0;
   text-align: left;
   text-transform: uppercase;
   touch-action: manipulation;
 }
 
-.axis-check-button:focus-visible {
-  outline: 1px solid var(--axis-line-strong);
-  outline-offset: 0.4rem;
-}
-
 .axis-check-button:disabled {
-  color: rgba(246, 246, 240, 0.9);
+  color: rgba(244, 244, 240, 0.78);
   cursor: default;
 }
 
-.axis-ritual[data-state="saving"] .axis-check-button {
-  color: rgba(246, 246, 240, 0.62);
-}
-
 .axis-active-state {
-  align-items: center;
+  border-bottom: 0;
   border-top: 1px solid var(--axis-line);
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
+  padding-bottom: 0;
   padding-top: 0.7rem;
 }
 
-.axis-active-state span {
-  color: var(--axis-live);
-  font-size: 0.68rem;
-}
-
-.axis-active-state strong {
-  color: rgba(246, 246, 240, 0.72);
-  font-size: 0.68rem;
-  font-weight: 500;
-}
-
 .axis-checkout-button {
-  appearance: none;
-  background: rgba(183, 255, 60, 0.1);
-  border: 1px solid var(--axis-line-strong);
-  border-radius: 999px;
-  color: var(--axis-ink);
-  cursor: pointer;
+  border-color: rgba(168, 217, 51, 0.48);
+  color: var(--axis-live);
   justify-self: start;
-  min-height: 2.75rem;
-  padding: 0 1rem;
-  touch-action: manipulation;
-}
-
-.axis-checkout-button:focus-visible {
-  outline: 1px solid var(--axis-live);
-  outline-offset: 0.2rem;
-}
-
-.axis-bottom {
-  display: grid;
-  gap: 0.7rem;
 }
 
 .axis-history {
-  border: 1px solid var(--axis-line);
-  border-radius: 16px;
+  border-top: 1px solid var(--axis-line);
   display: grid;
-  gap: 0.7rem;
-  padding: 0.62rem;
-}
-
-.axis-history-header {
-  align-items: center;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-}
-
-.axis-history-header strong,
-.axis-rail > span,
-.axis-session-ledger > span,
-.axis-session-row span,
-.axis-session-row strong,
-.axis-session-row em,
-.axis-archive-strip span,
-.axis-archive-strip strong {
-  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.axis-history-header strong,
-.axis-rail > span,
-.axis-session-ledger > span,
-.axis-session-row span,
-.axis-session-row em,
-.axis-archive-strip span {
-  color: var(--axis-muted);
-  font-size: 0.6rem;
-  font-weight: 500;
+  gap: 0.8rem;
+  padding-top: 0.8rem;
 }
 
 .axis-history-grid {
   display: grid;
-  gap: 0.7rem;
-  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
 }
 
-.axis-rail {
+.axis-rail,
+.axis-session-ledger {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.5rem;
 }
 
 .axis-rail div {
   display: grid;
-  gap: 0.34rem;
+  gap: 0.35rem;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .axis-day {
-  align-items: end;
+  align-items: center;
   aspect-ratio: 1;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--axis-surface-soft);
   border: 1px solid var(--axis-line);
-  border-radius: 10px;
   color: var(--axis-muted);
   display: grid;
-  font-size: 0.64rem;
-  padding: 0.42rem;
+  font-size: 0.62rem;
+  justify-items: center;
 }
 
 .axis-day-active {
-  background: rgba(183, 255, 60, 0.085);
-  border-color: var(--axis-line-strong);
+  border-color: rgba(168, 217, 51, 0.48);
   color: var(--axis-live);
-}
-
-.axis-session-ledger {
-  display: grid;
-  gap: 0.55rem;
 }
 
 .axis-session-ledger > div {
@@ -486,13 +342,13 @@ h1 {
 
 .axis-session-row {
   align-items: center;
-  background: var(--axis-surface-soft);
+  background: var(--axis-surface);
   border: 1px solid var(--axis-line);
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: minmax(0, 1fr) auto minmax(7rem, 0.48fr);
-  min-height: 2.8rem;
-  padding: 0.46rem 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(6rem, 0.45fr);
+  min-height: 2.65rem;
+  padding: 0.45rem 0.55rem;
 }
 
 .axis-session-row + .axis-session-row {
@@ -500,83 +356,55 @@ h1 {
 }
 
 .axis-session-row-latest {
-  background: rgba(183, 255, 60, 0.06);
-  border-color: var(--axis-line-strong);
+  border-color: rgba(168, 217, 51, 0.48);
 }
 
-.axis-session-row strong {
-  color: rgba(246, 246, 240, 0.86);
-  font-size: 0.66rem;
-  font-weight: 600;
+.axis-session-row strong,
+.axis-session-row em {
   text-align: right;
 }
 
 .axis-session-row em {
   font-style: normal;
-  text-align: right;
 }
 
 .axis-archive-strip {
   display: grid;
+  gap: 0.5rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .axis-archive-strip div {
-  background: var(--axis-surface-soft);
+  background: var(--axis-surface);
   border: 1px solid var(--axis-line);
   display: grid;
-  gap: 0.42rem;
-  min-height: 4.25rem;
-  padding: 0.56rem;
-}
-
-.axis-archive-strip div + div {
-  border-left: 0;
-}
-
-.axis-archive-strip strong {
-  color: rgba(246, 246, 240, 0.82);
-  font-size: 0.68rem;
-  font-weight: 600;
+  gap: 0.35rem;
+  min-height: 3.35rem;
+  padding: 0.55rem;
 }
 
 @media (max-width: 720px) {
   .axis-shell {
-    padding: 0.7rem;
+    padding: 1rem;
   }
 
+  .axis-entry-top,
   .axis-top,
-  .axis-history-grid,
-  .axis-archive-strip,
-  .axis-entry-form,
-  .axis-restore-rail {
-    grid-template-columns: 1fr;
-  }
-
-  .axis-entry-top {
+  .axis-history-header,
+  .axis-active-state {
+    align-items: start;
     display: grid;
   }
 
-  .axis-entry-form {
-    gap: 0.62rem;
+  .axis-entry-form,
+  .axis-presence,
+  .axis-history-grid,
+  .axis-archive-strip {
+    grid-template-columns: 1fr;
   }
 
-  .axis-entry-form label + label {
-    margin-left: 0;
-  }
-
-  .axis-restore-rail span + span {
-    border-left: 1px solid var(--axis-line);
-    border-top: 0;
-  }
-
-  .axis-presence {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .axis-check-button {
-    font-size: clamp(3.65rem, 21vw, 6.5rem);
-    min-height: clamp(9rem, 40vw, 14rem);
+  .axis-restore-rail {
+    display: grid;
   }
 
   .axis-session-row {
@@ -586,10 +414,5 @@ h1 {
   .axis-session-row strong,
   .axis-session-row em {
     text-align: left;
-  }
-
-  .axis-archive-strip div + div {
-    border-left: 1px solid var(--axis-line);
-    border-top: 0;
   }
 }

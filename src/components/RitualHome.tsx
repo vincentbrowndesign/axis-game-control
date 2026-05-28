@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase-browser";
 
 type RitualState = "idle" | "active" | "saving" | "complete";
 type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
@@ -26,6 +27,7 @@ type AxisSave = {
 
 type AxisIdentity = {
   email: string;
+  id: string;
   restoredAt: string;
 };
 
@@ -119,6 +121,7 @@ function readIdentity(): AxisIdentity | null {
 
     return {
       email: parsed.email,
+      id: parsed.id ?? parsed.email,
       restoredAt: parsed.restoredAt,
     };
   } catch {
@@ -135,19 +138,72 @@ export function RitualHome() {
   const [identity, setIdentity] = useState<AxisIdentity | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
   const [save, setSave] = useState<AxisSave>(defaultSave);
   const [ritualState, setRitualState] = useState<RitualState>("idle");
   const [now, setNow] = useState(() => Date.now());
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedIdentity = readIdentity();
-    const storedSave = readSave();
+    let isMounted = true;
+    const supabase = getSupabaseBrowserClient();
 
-    setIdentity(storedIdentity);
-    setSave(storedSave);
-    setRitualState(storedSave.activeSession ? "active" : "idle");
-    setAuthPhase(storedIdentity ? "restoring" : "entry");
+    async function restoreSession() {
+      const storedSave = readSave();
+      let storedIdentity: AxisIdentity | null = null;
+
+      if (supabase) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) console.error("Unable to restore Supabase session", error);
+        const user = data.session?.user;
+
+        if (user) {
+          storedIdentity = {
+            email: user.email ?? "athlete@axis.local",
+            id: user.id,
+            restoredAt: new Date().toISOString(),
+          };
+          writeIdentity(storedIdentity);
+        }
+      } else {
+        storedIdentity = readIdentity();
+      }
+
+      if (!isMounted) return;
+
+      setIdentity(storedIdentity);
+      setSave(storedSave);
+      setRitualState(storedSave.activeSession ? "active" : "idle");
+      setAuthPhase(storedIdentity ? "restoring" : "entry");
+    }
+
+    void restoreSession();
+
+    const subscription = supabase?.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+
+      if (!session?.user) {
+        window.localStorage.removeItem(identityStorageKey);
+        setIdentity(null);
+        setAuthPhase("entry");
+        return;
+      }
+
+      const nextIdentity = {
+        email: session.user.email ?? "athlete@axis.local",
+        id: session.user.id,
+        restoredAt: new Date().toISOString(),
+      };
+
+      writeIdentity(nextIdentity);
+      setIdentity(nextIdentity);
+      setAuthPhase("restoring");
+    });
+
+    return () => {
+      isMounted = false;
+      subscription?.data.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -207,11 +263,47 @@ export function RitualHome() {
       .map((session) => dayKey(session.endedAt)),
   );
 
-  function enterAxis(event: FormEvent<HTMLFormElement>) {
+  async function enterAxis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAuthMessage("");
+
+    const trimmedEmail = email.trim();
+    const supabase = getSupabaseBrowserClient();
+
+    if (!trimmedEmail || !password) {
+      setAuthMessage("Email and password required.");
+      return;
+    }
+
+    if (!supabase) {
+      const nextIdentity = {
+        email: trimmedEmail,
+        id: trimmedEmail,
+        restoredAt: new Date().toISOString(),
+      };
+
+      writeIdentity(nextIdentity);
+      setIdentity(nextIdentity);
+      setEmail("");
+      setPassword("");
+      setAuthPhase("restoring");
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: trimmedEmail,
+      password,
+    });
+
+    if (error || !data.user) {
+      console.error("Unable to enter Axis", error);
+      setAuthMessage("Unable to enter.");
+      return;
+    }
 
     const nextIdentity = {
-      email: email.trim() || "athlete@axis.local",
+      email: data.user.email ?? trimmedEmail,
+      id: data.user.id,
       restoredAt: new Date().toISOString(),
     };
 
@@ -220,6 +312,28 @@ export function RitualHome() {
     setEmail("");
     setPassword("");
     setAuthPhase("restoring");
+  }
+
+  async function signOut() {
+    const supabase = getSupabaseBrowserClient();
+    const savedRitual = window.localStorage.getItem(storageKey);
+
+    if (supabase) {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) console.error("Unable to sign out", error);
+    }
+
+    if (savedRitual && !window.localStorage.getItem(storageKey)) {
+      window.localStorage.setItem(storageKey, savedRitual);
+    }
+
+    window.localStorage.removeItem(identityStorageKey);
+    setIdentity(null);
+    setEmail("");
+    setPassword("");
+    setAuthMessage("");
+    setRitualState(save.activeSession ? "active" : "idle");
+    setAuthPhase("entry");
   }
 
   function checkIn() {
@@ -295,7 +409,7 @@ export function RitualHome() {
           </header>
 
           <section className="axis-entry-center">
-            <p className="axis-meta">Identity required</p>
+            <p className="axis-meta">{isSupabaseConfigured() ? "Identity required" : "Local mode"}</p>
             <h1>Enter Axis</h1>
           </section>
 
@@ -323,6 +437,7 @@ export function RitualHome() {
             </label>
             <button type="submit">Enter</button>
           </form>
+          {authMessage ? <p className="axis-auth-message">{authMessage}</p> : null}
         </section>
       </main>
     );
@@ -335,6 +450,9 @@ export function RitualHome() {
           <div className="axis-identity">
             <p className="axis-meta">Axis</p>
             <h1>{athleteLabel}</h1>
+            <button className="axis-sign-out" onClick={signOut} type="button">
+              Sign out
+            </button>
           </div>
 
           <div className="axis-presence" aria-label="Participation data">
@@ -365,7 +483,7 @@ export function RitualHome() {
             disabled={ritualState === "active" || ritualState === "saving"}
             type="button"
           >
-            {ritualState === "active" ? "Active session" : ritualState === "saving" ? "Saving history" : "Check in"}
+            {ritualState === "active" ? "Checked in" : ritualState === "saving" ? "Saving" : "Check in"}
           </button>
           <div className="axis-active-state">
             <span>{participationLabel}</span>
