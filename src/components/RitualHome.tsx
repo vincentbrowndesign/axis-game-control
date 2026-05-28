@@ -5,6 +5,9 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase-
 
 type RitualState = "idle" | "active" | "saving" | "complete";
 type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
+type CalibrationStatus = "required" | "calibrated";
+type CalibrationStep = "stand" | "hold" | "left" | "right";
+type ParticipationWindowStatus = "open" | "closed";
 type ParticipationMode =
   | "Training"
   | "Station Work"
@@ -25,6 +28,13 @@ const participationModes: ParticipationMode[] = [
   "Open Gym",
 ];
 const defaultParticipationMode: ParticipationMode = "Training";
+const calibrationSteps: CalibrationStep[] = ["stand", "hold", "left", "right"];
+const calibrationStepCopy: Record<CalibrationStep, string> = {
+  stand: "Stand in frame.",
+  hold: "Hold still.",
+  left: "Turn left.",
+  right: "Turn right.",
+};
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 
@@ -50,6 +60,8 @@ type SavedSession = {
   durationSeconds: number;
   mode?: ParticipationMode;
   recordingAttached?: boolean;
+  calibrationStatus?: CalibrationStatus;
+  participationWindow?: ParticipationWindow;
   participants?: SessionParticipant[];
   participantCount?: number;
   activeParticipantCount?: number;
@@ -58,12 +70,24 @@ type SavedSession = {
 type ActiveParticipant = AthleteIdentity & {
   joinedAt: string;
   leftAt?: string;
+  calibrationStatus?: CalibrationStatus;
+  calibratedAt?: string;
 };
 
 type SessionParticipant = AthleteIdentity & {
   joinedAt: string;
   leftAt?: string;
+  calibrationStatus?: CalibrationStatus;
+  calibratedAt?: string;
   activeAtCheckout: boolean;
+};
+
+type ParticipationWindow = {
+  openedAt: string;
+  closedAt?: string;
+  status: ParticipationWindowStatus;
+  context: ParticipationMode;
+  participantIds: string[];
 };
 
 type AxisSave = {
@@ -72,6 +96,8 @@ type AxisSave = {
     startedAt: string;
     mode?: ParticipationMode;
     recordingAttached?: boolean;
+    calibrationStatus?: CalibrationStatus;
+    participationWindow?: ParticipationWindow;
     participants?: ActiveParticipant[];
   } | null;
   sessions: SavedSession[];
@@ -81,6 +107,9 @@ type AxisIdentity = {
   email: string;
   id: string;
   restoredAt: string;
+  calibrationStatus?: CalibrationStatus;
+  calibratedAt?: string;
+  calibrationSessionId?: string;
 };
 
 const defaultSave: AxisSave = {
@@ -161,6 +190,8 @@ function normalizeActiveParticipant(participant: unknown): ActiveParticipant | n
     calibrationAnchorId: candidate.calibrationAnchorId ?? identity.calibrationAnchorId,
     joinedAt: candidate.joinedAt ?? new Date().toISOString(),
     leftAt: candidate.leftAt,
+    calibrationStatus: normalizeCalibrationStatus(candidate.calibrationStatus),
+    calibratedAt: candidate.calibratedAt,
   };
 }
 
@@ -172,6 +203,8 @@ function normalizeSessionParticipant(participant: unknown): SessionParticipant |
 
   return {
     ...activeParticipant,
+    calibrationStatus: normalizeCalibrationStatus(candidate.calibrationStatus ?? activeParticipant.calibrationStatus),
+    calibratedAt: candidate.calibratedAt ?? activeParticipant.calibratedAt,
     activeAtCheckout: Boolean(candidate.activeAtCheckout ?? !activeParticipant.leftAt),
   };
 }
@@ -182,6 +215,30 @@ function isActiveParticipant(participant: ActiveParticipant | null): participant
 
 function isSessionParticipant(participant: SessionParticipant | null): participant is SessionParticipant {
   return Boolean(participant);
+}
+
+function normalizeCalibrationStatus(status: unknown): CalibrationStatus {
+  return status === "calibrated" ? "calibrated" : "required";
+}
+
+function normalizeParticipationWindow(
+  window: unknown,
+  openedAt: string,
+  context: ParticipationMode,
+  participants: ActiveParticipant[] | SessionParticipant[],
+): ParticipationWindow {
+  const candidate =
+    window && typeof window === "object" ? (window as Partial<ParticipationWindow>) : {};
+
+  return {
+    openedAt: candidate.openedAt ?? openedAt,
+    closedAt: candidate.closedAt,
+    status: candidate.status === "closed" ? "closed" : "open",
+    context: candidate.context ?? context,
+    participantIds: Array.isArray(candidate.participantIds)
+      ? candidate.participantIds
+      : participants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
+  };
 }
 
 function dayKey(date: Date | string) {
@@ -214,27 +271,49 @@ function readSave(): AxisSave {
 
     const parsed = JSON.parse(stored) as Partial<AxisSave>;
 
+    const activeParticipants = Array.isArray(parsed.activeSession?.participants)
+      ? parsed.activeSession.participants.map(normalizeActiveParticipant).filter(isActiveParticipant)
+      : [];
+    const activeMode = parsed.activeSession?.mode ?? defaultParticipationMode;
     const activeSession = parsed.activeSession
       ? {
           id: parsed.activeSession.id,
           startedAt: parsed.activeSession.startedAt,
-          mode: parsed.activeSession.mode ?? defaultParticipationMode,
+          mode: activeMode,
           recordingAttached: Boolean(parsed.activeSession.recordingAttached),
-          participants: Array.isArray(parsed.activeSession.participants)
-            ? parsed.activeSession.participants.map(normalizeActiveParticipant).filter(isActiveParticipant)
-            : [],
+          calibrationStatus: normalizeCalibrationStatus(parsed.activeSession.calibrationStatus),
+          participationWindow: normalizeParticipationWindow(
+            parsed.activeSession.participationWindow,
+            parsed.activeSession.startedAt,
+            activeMode,
+            activeParticipants,
+          ),
+          participants: activeParticipants,
         }
       : null;
 
     return {
       activeSession,
       sessions: Array.isArray(parsed.sessions)
-        ? parsed.sessions.map((session) => ({
-            ...session,
-            participants: Array.isArray(session.participants)
+        ? parsed.sessions.map((session) => {
+            const sessionParticipants = Array.isArray(session.participants)
               ? session.participants.map(normalizeSessionParticipant).filter(isSessionParticipant)
-              : [],
-          }))
+              : [];
+            const sessionMode = session.mode ?? defaultParticipationMode;
+
+            return {
+              ...session,
+              mode: sessionMode,
+              calibrationStatus: normalizeCalibrationStatus(session.calibrationStatus),
+              participationWindow: normalizeParticipationWindow(
+                session.participationWindow,
+                session.startedAt,
+                sessionMode,
+                sessionParticipants,
+              ),
+              participants: sessionParticipants,
+            };
+          })
         : [],
     };
   } catch {
@@ -258,6 +337,9 @@ function readIdentity(): AxisIdentity | null {
       email: parsed.email,
       id: parsed.id ?? parsed.email,
       restoredAt: parsed.restoredAt,
+      calibrationStatus: normalizeCalibrationStatus(parsed.calibrationStatus),
+      calibratedAt: parsed.calibratedAt,
+      calibrationSessionId: parsed.calibrationSessionId,
     };
   } catch {
     return null;
@@ -279,6 +361,7 @@ export function RitualHome() {
   const [now, setNow] = useState(() => Date.now());
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
+  const [calibrationStepIndex, setCalibrationStepIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -286,6 +369,7 @@ export function RitualHome() {
 
     async function restoreSession() {
       const storedSave = readSave();
+      const savedIdentity = readIdentity();
       let storedIdentity: AxisIdentity | null = null;
 
       if (supabase) {
@@ -298,11 +382,15 @@ export function RitualHome() {
             email: user.email ?? "athlete@axis.local",
             id: user.id,
             restoredAt: new Date().toISOString(),
+            calibrationStatus:
+              savedIdentity?.id === user.id ? savedIdentity.calibrationStatus : normalizeCalibrationStatus(undefined),
+            calibratedAt: savedIdentity?.id === user.id ? savedIdentity.calibratedAt : undefined,
+            calibrationSessionId: savedIdentity?.id === user.id ? savedIdentity.calibrationSessionId : undefined,
           };
           writeIdentity(storedIdentity);
         }
       } else {
-        storedIdentity = readIdentity();
+        storedIdentity = savedIdentity;
       }
 
       if (!isMounted) return;
@@ -329,6 +417,12 @@ export function RitualHome() {
         email: session.user.email ?? "athlete@axis.local",
         id: session.user.id,
         restoredAt: new Date().toISOString(),
+        calibrationStatus:
+          readIdentity()?.id === session.user.id
+            ? readIdentity()?.calibrationStatus
+            : normalizeCalibrationStatus(undefined),
+        calibratedAt: readIdentity()?.id === session.user.id ? readIdentity()?.calibratedAt : undefined,
+        calibrationSessionId: readIdentity()?.id === session.user.id ? readIdentity()?.calibrationSessionId : undefined,
       };
 
       writeIdentity(nextIdentity);
@@ -374,11 +468,25 @@ export function RitualHome() {
   const currentMode = save.activeSession?.mode ?? latestSession?.mode ?? defaultParticipationMode;
   const isRecordingAttached = Boolean(save.activeSession?.recordingAttached);
   const recordingLabel = isRecordingAttached ? "Recording attached" : "Recording off";
+  const calibrationStatus = normalizeCalibrationStatus(
+    save.activeSession?.calibrationStatus ?? latestSession?.calibrationStatus,
+  );
+  const calibrationLabel = calibrationStatus === "calibrated" ? "Calibrated" : "Calibration required";
+  const activeCalibrationStep =
+    calibrationStepIndex === null ? null : calibrationSteps[calibrationStepIndex] ?? null;
   const activeParticipants = save.activeSession?.participants ?? [];
   const presentParticipants = activeParticipants.filter((participant) => !participant.leftAt);
   const inactiveParticipants = activeParticipants.filter((participant) => participant.leftAt);
   const activeParticipantCount = presentParticipants.length;
   const participantCount = activeParticipants.length;
+  const calibratedParticipantCount = presentParticipants.filter(
+    (participant) => normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated",
+  ).length;
+  const participationWindowLabel = save.activeSession
+    ? "Window open"
+    : latestSession?.participationWindow?.status === "closed"
+      ? "Window saved"
+      : "Window waiting";
   const selectableAthletes = availableAthletes.filter(
     (athlete) => !presentParticipants.some((participant) => participant.id === athlete.id),
   );
@@ -397,6 +505,7 @@ export function RitualHome() {
       ? `${formatDuration(latestSession.durationSeconds)} saved`
       : "Session waiting";
   const activeTimerLabel = save.activeSession ? `${formatDuration(elapsedSeconds)} preserved` : null;
+  const compactPresence = `BRIDGE • ${currentStreak} ${currentStreak === 1 ? "DAY" : "DAYS"} • ${lastCheckIn.toUpperCase()} • ${currentMode.toUpperCase()}`;
   const historyStatus =
     ritualState === "complete" && latestSession
       ? `History grew / ${formatDuration(latestSession.durationSeconds)}`
@@ -424,10 +533,15 @@ export function RitualHome() {
     }
 
     if (!supabase) {
+      const savedIdentity = readIdentity();
       const nextIdentity = {
         email: trimmedEmail,
         id: trimmedEmail,
         restoredAt: new Date().toISOString(),
+        calibrationStatus:
+          savedIdentity?.id === trimmedEmail ? savedIdentity.calibrationStatus : normalizeCalibrationStatus(undefined),
+        calibratedAt: savedIdentity?.id === trimmedEmail ? savedIdentity.calibratedAt : undefined,
+        calibrationSessionId: savedIdentity?.id === trimmedEmail ? savedIdentity.calibrationSessionId : undefined,
       };
 
       writeIdentity(nextIdentity);
@@ -453,6 +567,10 @@ export function RitualHome() {
       email: data.user.email ?? trimmedEmail,
       id: data.user.id,
       restoredAt: new Date().toISOString(),
+      calibrationStatus:
+        readIdentity()?.id === data.user.id ? readIdentity()?.calibrationStatus : normalizeCalibrationStatus(undefined),
+      calibratedAt: readIdentity()?.id === data.user.id ? readIdentity()?.calibratedAt : undefined,
+      calibrationSessionId: readIdentity()?.id === data.user.id ? readIdentity()?.calibrationSessionId : undefined,
     };
 
     writeIdentity(nextIdentity);
@@ -485,13 +603,21 @@ export function RitualHome() {
   }
 
   function checkIn() {
-    const nextSave = {
+    const startedAt = new Date().toISOString();
+    const nextSave: AxisSave = {
       ...save,
       activeSession: {
         id: crypto.randomUUID(),
-        startedAt: new Date().toISOString(),
+        startedAt,
         mode: defaultParticipationMode,
         recordingAttached: false,
+        calibrationStatus: "required",
+        participationWindow: {
+          openedAt: startedAt,
+          status: "open",
+          context: defaultParticipationMode,
+          participantIds: [],
+        },
         participants: [],
       },
     };
@@ -502,6 +628,7 @@ export function RitualHome() {
     setRitualState("active");
     setLatestSavedSessionId(null);
     setIsModePickerOpen(false);
+    setCalibrationStepIndex(null);
   }
 
   function changeMode(mode: ParticipationMode) {
@@ -512,6 +639,15 @@ export function RitualHome() {
       activeSession: {
         ...save.activeSession,
         mode,
+        participationWindow: {
+          ...normalizeParticipationWindow(
+            save.activeSession.participationWindow,
+            save.activeSession.startedAt,
+            mode,
+            activeParticipants,
+          ),
+          context: mode,
+        },
       },
     };
 
@@ -535,6 +671,58 @@ export function RitualHome() {
     setSave(nextSave);
   }
 
+  function startCalibration() {
+    if (!save.activeSession) return;
+
+    setCalibrationStepIndex(0);
+  }
+
+  function completeCalibration() {
+    if (!save.activeSession || !identity) return;
+
+    const completedAt = new Date().toISOString();
+    const nextParticipants = activeParticipants.map((participant) =>
+      participant.leftAt
+        ? participant
+        : {
+            ...participant,
+            calibrationStatus: "calibrated" as const,
+            calibratedAt: completedAt,
+          },
+    );
+    const nextSave: AxisSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        calibrationStatus: "calibrated",
+        participants: nextParticipants,
+      },
+    };
+    const nextIdentity = {
+      ...identity,
+      calibrationStatus: "calibrated" as const,
+      calibratedAt: completedAt,
+      calibrationSessionId: save.activeSession.id,
+    };
+
+    writeSave(nextSave);
+    writeIdentity(nextIdentity);
+    setSave(nextSave);
+    setIdentity(nextIdentity);
+    setCalibrationStepIndex(null);
+  }
+
+  function advanceCalibration() {
+    if (calibrationStepIndex === null) return;
+
+    if (calibrationStepIndex >= calibrationSteps.length - 1) {
+      completeCalibration();
+      return;
+    }
+
+    setCalibrationStepIndex(calibrationStepIndex + 1);
+  }
+
   function selectAthlete(athlete: AthleteIdentity) {
     if (!save.activeSession) return;
 
@@ -544,27 +732,38 @@ export function RitualHome() {
       return;
     }
 
-    const nextSave = {
+    const nextParticipants = existingParticipant
+      ? activeParticipants.map((participant) =>
+          participant.id === existingParticipant.id
+            ? {
+                ...participant,
+                joinedAt: new Date().toISOString(),
+                leftAt: undefined,
+              }
+            : participant,
+        )
+      : [
+          ...activeParticipants,
+          {
+            ...athlete,
+            joinedAt: new Date().toISOString(),
+            calibrationStatus: "required" as const,
+          },
+        ];
+    const nextSave: AxisSave = {
       ...save,
       activeSession: {
         ...save.activeSession,
-        participants: existingParticipant
-          ? activeParticipants.map((participant) =>
-              participant.id === existingParticipant.id
-                ? {
-                    ...participant,
-                    joinedAt: new Date().toISOString(),
-                    leftAt: undefined,
-                  }
-                : participant,
-            )
-          : [
-              ...activeParticipants,
-              {
-                ...athlete,
-                joinedAt: new Date().toISOString(),
-              },
-            ],
+        participationWindow: {
+          ...normalizeParticipationWindow(
+            save.activeSession.participationWindow,
+            save.activeSession.startedAt,
+            currentMode,
+            nextParticipants,
+          ),
+          participantIds: nextParticipants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
+        },
+        participants: nextParticipants,
       },
     };
 
@@ -575,18 +774,28 @@ export function RitualHome() {
   function removeParticipant(participantId: string) {
     if (!save.activeSession) return;
 
-    const nextSave = {
+    const nextParticipants = activeParticipants.map((participant) =>
+      participant.id === participantId
+        ? {
+            ...participant,
+            leftAt: new Date().toISOString(),
+          }
+        : participant,
+    );
+    const nextSave: AxisSave = {
       ...save,
       activeSession: {
         ...save.activeSession,
-        participants: activeParticipants.map((participant) =>
-          participant.id === participantId
-            ? {
-                ...participant,
-                leftAt: new Date().toISOString(),
-              }
-            : participant,
-        ),
+        participationWindow: {
+          ...normalizeParticipationWindow(
+            save.activeSession.participationWindow,
+            save.activeSession.startedAt,
+            currentMode,
+            nextParticipants,
+          ),
+          participantIds: nextParticipants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
+        },
+        participants: nextParticipants,
       },
     };
 
@@ -609,6 +818,18 @@ export function RitualHome() {
       durationSeconds,
       mode: save.activeSession.mode ?? defaultParticipationMode,
       recordingAttached: Boolean(save.activeSession.recordingAttached),
+      calibrationStatus: normalizeCalibrationStatus(save.activeSession.calibrationStatus),
+      participationWindow: {
+        ...normalizeParticipationWindow(
+          save.activeSession.participationWindow,
+          save.activeSession.startedAt,
+          save.activeSession.mode ?? defaultParticipationMode,
+          activeParticipants,
+        ),
+        closedAt: endedAt,
+        status: "closed" as const,
+        participantIds: activeParticipants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
+      },
       participants: activeParticipants.map((participant) => ({
         ...participant,
         activeAtCheckout: !participant.leftAt,
@@ -625,6 +846,7 @@ export function RitualHome() {
     writeSave(nextSave);
     setSave(nextSave);
     setLatestSavedSessionId(completedSession.id);
+    setCalibrationStepIndex(null);
 
     window.setTimeout(() => {
       setRitualState("complete");
@@ -705,32 +927,9 @@ export function RitualHome() {
             </button>
           </div>
 
-          <div className="axis-presence" aria-label="Participation data">
-            <p>
-              <span>Organization</span>
-              <strong>Bridge</strong>
-            </p>
-            <p>
-              <span>Streak</span>
-              <strong>{currentStreak} days</strong>
-            </p>
-            <p>
-              <span>Last check-in</span>
-              <strong>{lastCheckIn}</strong>
-            </p>
-            <p>
-              <span>Continuity</span>
-              <strong>{participationLabel}</strong>
-            </p>
-            <p>
-              <span>Mode</span>
-              <strong>{currentMode}</strong>
-            </p>
-            <p>
-              <span>Memory</span>
-              <strong>{recordingLabel}</strong>
-            </p>
-          </div>
+          <p className="axis-presence-row" aria-label="Participation data">
+            {compactPresence}
+          </p>
         </header>
 
         <section className="axis-ritual" aria-label="Check in ritual" data-state={ritualState}>
@@ -743,32 +942,48 @@ export function RitualHome() {
           >
             {ritualState === "active" ? "Session active" : ritualState === "saving" ? "Saving" : "Check in"}
           </button>
-          <div className="axis-active-state">
-            <span>{participationLabel}</span>
-            <strong>{sessionSummary}</strong>
-            {activeTimerLabel ? <em>{activeTimerLabel}</em> : null}
-          </div>
+          {save.activeSession ? (
+            <div className="axis-live-strip" aria-label="Live session state">
+              <span>{participationLabel}</span>
+              <strong>{formatDuration(elapsedSeconds)}</strong>
+              <em>{currentMode}</em>
+              <em>{recordingLabel}</em>
+              <em>{calibrationLabel}</em>
+              <em>{participationWindowLabel}</em>
+              <em>{formatCount(activeParticipantCount, "active")}</em>
+            </div>
+          ) : (
+            <div className="axis-active-state">
+              <span>{participationLabel}</span>
+              <strong>{sessionSummary}</strong>
+              {activeTimerLabel ? <em>{activeTimerLabel}</em> : null}
+            </div>
+          )}
+          {save.activeSession && activeCalibrationStep ? (
+            <section className="axis-calibration-screen" aria-label="Identity calibration" aria-live="polite">
+              <header>
+                <span>Identity calibration</span>
+                <strong>{calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Active"}</strong>
+              </header>
+              <p>{calibrationStepCopy[activeCalibrationStep]}</p>
+              <div className="axis-calibration-steps" aria-label="Calibration steps">
+                {calibrationSteps.map((step, index) => (
+                  <span
+                    aria-current={index === calibrationStepIndex ? "step" : undefined}
+                    data-complete={calibrationStepIndex !== null && index < calibrationStepIndex}
+                    key={step}
+                  >
+                    {calibrationStepCopy[step]}
+                  </span>
+                ))}
+              </div>
+              <button className="axis-calibration-action" onClick={advanceCalibration} type="button">
+                {calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Next"}
+              </button>
+            </section>
+          ) : null}
           {save.activeSession ? (
             <section className="axis-session-object" aria-label="Session continuity object">
-              <header className="axis-session-head">
-                <p>
-                  <span>Session</span>
-                  <strong>Live environment</strong>
-                </p>
-                <p>
-                  <span>Session time</span>
-                  <strong>{formatDuration(elapsedSeconds)}</strong>
-                </p>
-                <button
-                  className="axis-recording-toggle axis-recording-primary"
-                  data-attached={isRecordingAttached}
-                  onClick={toggleRecordingAttachment}
-                  type="button"
-                >
-                  {isRecordingAttached ? "Recording attached" : "Recording off"}
-                </button>
-              </header>
-
               <section className="axis-roster-object" aria-label="Active roster">
                 <header>
                   <span>Active roster</span>
@@ -779,6 +994,7 @@ export function RitualHome() {
                     presentParticipants.map((participant) => (
                       <span
                         className="axis-participant-token"
+                        data-calibrated={normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated"}
                         data-athlete-id={participant.id}
                         key={participant.id}
                       >
@@ -798,9 +1014,9 @@ export function RitualHome() {
                 <section className="axis-session-module" aria-label="Current participation mode">
                   <header>
                     <span>Current mode</span>
+                    <strong>{currentMode}</strong>
                   </header>
                   <section className="axis-current-mode">
-                    <strong>{currentMode}</strong>
                     <button onClick={() => setIsModePickerOpen((isOpen) => !isOpen)} type="button">
                       Change mode
                     </button>
@@ -823,7 +1039,7 @@ export function RitualHome() {
 
                 <section className="axis-session-module" aria-label="Available athletes">
                   <header>
-                    <span>Available athletes</span>
+                    <span>Roster pool</span>
                     <strong>{formatCount(selectableAthletes.length, "ready")}</strong>
                   </header>
                   <div className="axis-available-roster">
@@ -852,6 +1068,45 @@ export function RitualHome() {
                     </div>
                   ) : null}
                 </section>
+
+                <section className="axis-session-module axis-recording-module" aria-label="Recording state">
+                  <header>
+                    <span>Recording state</span>
+                    <strong>{recordingLabel}</strong>
+                  </header>
+                  <button
+                    className="axis-recording-toggle axis-recording-primary"
+                    data-attached={isRecordingAttached}
+                    onClick={toggleRecordingAttachment}
+                    type="button"
+                  >
+                    {isRecordingAttached ? "Recording attached" : "Recording off"}
+                  </button>
+                </section>
+
+                <section className="axis-session-module axis-calibration-module" aria-label="Calibration state">
+                  <header>
+                    <span>Calibration</span>
+                    <strong>{`${calibratedParticipantCount}/${activeParticipantCount} calibrated`}</strong>
+                  </header>
+                  <button
+                    className="axis-calibration-toggle"
+                    data-calibrated={calibrationStatus === "calibrated"}
+                    disabled={calibrationStatus === "calibrated"}
+                    onClick={startCalibration}
+                    type="button"
+                  >
+                    {calibrationStatus === "calibrated" ? "Calibrated" : "Start calibration"}
+                  </button>
+                </section>
+
+                <section className="axis-session-module axis-window-module" aria-label="Participation window">
+                  <header>
+                    <span>Participation window</span>
+                    <strong>{participationWindowLabel}</strong>
+                  </header>
+                  <span className="axis-window-state">{`${currentMode} / ${formatCount(activeParticipantCount, "active")}`}</span>
+                </section>
               </div>
             </section>
           ) : null}
@@ -863,7 +1118,12 @@ export function RitualHome() {
         </section>
 
         <footer className="axis-bottom" aria-label="Continuity records">
-          <section className="axis-history" aria-label="Axis History">
+          <details className="axis-history-drawer">
+            <summary>
+              <span>History</span>
+              <strong>{historyStatus}</strong>
+            </summary>
+            <section className="axis-history" aria-label="Axis History">
             <header className="axis-history-header">
               <p className="axis-meta">Axis History</p>
               <strong>{historyStatus}</strong>
@@ -901,7 +1161,11 @@ export function RitualHome() {
                         <strong>{formatDuration(session.durationSeconds)}</strong>
                         <em>
                           {session.participantCount
-                            ? `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"}`
+                            ? `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"} / ${
+                                normalizeCalibrationStatus(session.calibrationStatus) === "calibrated"
+                                  ? "Calibrated"
+                                  : "Calibration required"
+                              } / ${session.participationWindow?.status === "closed" ? "Window saved" : "Window open"}`
                             : session.mode
                               ? session.mode
                               : index === 0
@@ -935,7 +1199,8 @@ export function RitualHome() {
                 <strong>{save.sessions.length ? "Saved locally" : "Waiting"}</strong>
               </div>
             </section>
-          </section>
+            </section>
+          </details>
         </footer>
       </section>
     </main>
