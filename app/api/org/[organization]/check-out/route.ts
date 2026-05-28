@@ -35,6 +35,13 @@ export async function POST(
     return NextResponse.json({ error: "Sign in required." }, { status: 401 })
   }
 
+  console.info("AXIS END SESSION REQUEST", {
+    hasWorkUnits: Array.isArray(body.workUnits),
+    organizationSlug,
+    userId,
+    workUnitsCount: Array.isArray(body.workUnits) ? body.workUnits.length : 0,
+  })
+
   const saved = await completeCheckIn({
     organizationSlug,
     userId,

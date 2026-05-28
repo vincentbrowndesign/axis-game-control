@@ -197,32 +197,38 @@ export async function completeCheckIn({
     checkedInAt: existing.checked_in_at,
     checkedOutAt,
   })
-  const result = await supabaseAdmin
-    .from("check_ins")
-    .update({
-      checked_out_at: checkedOutAt,
-      duration_minutes: durationMinutes,
-    })
-    .eq("id", existing.id)
-    .select(CHECK_IN_SELECT_BASE)
-    .single<RawAxisCheckIn>()
 
-  if (result.error) {
+  console.info("AXIS TRAIN CHECK-OUT", {
+    checkedOutAt,
+    durationMinutes,
+    existingId: existing.id,
+    organizationSlug,
+    stage: "update-start",
+    userId,
+  })
+
+  const closed = await closeCheckIn({
+    checkedOutAt,
+    durationMinutes,
+    existing,
+    organizationSlug,
+    userId,
+  })
+
+  if ("error" in closed) {
     console.error("AXIS TRAIN CHECK-OUT", {
-      code: result.error.code,
-      detail: result.error.details,
-      hint: result.error.hint,
-      message: result.error.message,
+      error: closed.error instanceof Error ? closed.error.message : closed.error,
       organizationSlug,
       stage: "update-failed",
+      userId,
     })
 
     return {
-      error: result.error,
+      error: closed.error,
     }
   }
 
-  const completedCheckIn = normalizeCheckIn(result.data)
+  const completedCheckIn = closed.checkIn
 
   if (workUnitsColumnAvailable === false) {
     return {
@@ -267,6 +273,80 @@ export async function completeCheckIn({
   return {
     checkIn: normalizeCheckIn(workResult.data),
     duplicate: false,
+  }
+}
+
+async function closeCheckIn({
+  checkedOutAt,
+  durationMinutes,
+  existing,
+  organizationSlug,
+  userId,
+}: {
+  checkedOutAt: string
+  durationMinutes: number
+  existing: AxisCheckIn
+  organizationSlug: string
+  userId: string
+}) {
+  const updatePayload = {
+    checked_out_at: checkedOutAt,
+    duration_minutes: durationMinutes,
+  }
+  const byId = await supabaseAdmin
+    .from("check_ins")
+    .update(updatePayload)
+    .eq("id", existing.id)
+    .select(CHECK_IN_SELECT_BASE)
+    .maybeSingle<RawAxisCheckIn>()
+
+  console.info("AXIS TRAIN CHECK-OUT", {
+    code: byId.error?.code,
+    hasData: Boolean(byId.data),
+    message: byId.error?.message,
+    organizationSlug,
+    stage: "update-by-id",
+    userId,
+  })
+
+  if (!byId.error && byId.data) {
+    return {
+      checkIn: normalizeCheckIn(byId.data),
+    }
+  }
+
+  const { end, start } = axisTodayRange()
+  const fallback = await supabaseAdmin
+    .from("check_ins")
+    .update(updatePayload)
+    .eq("user_id", userId)
+    .eq("organization_slug", organizationSlug)
+    .gte("checked_in_at", start.toISOString())
+    .lt("checked_in_at", end.toISOString())
+    .is("checked_out_at", null)
+    .select(CHECK_IN_SELECT_BASE)
+    .returns<RawAxisCheckIn[]>()
+
+  console.info("AXIS TRAIN CHECK-OUT", {
+    code: fallback.error?.code,
+    count: fallback.data?.length || 0,
+    message: fallback.error?.message,
+    organizationSlug,
+    stage: "update-active-fallback",
+    userId,
+  })
+
+  if (!fallback.error && fallback.data?.length) {
+    return {
+      checkIn: normalizeCheckIn(newestCheckIn(fallback.data)),
+    }
+  }
+
+  return {
+    error:
+      byId.error ||
+      fallback.error ||
+      new Error("No active session row was updated"),
   }
 }
 
@@ -580,6 +660,14 @@ function newestByUser(checkIns: AxisCheckIn[]) {
   return Array.from(groupCheckInsByUser(checkIns).values())
     .map((userCheckIns) => userCheckIns[0])
     .filter(Boolean)
+}
+
+function newestCheckIn(checkIns: RawAxisCheckIn[]) {
+  return [...checkIns].sort(
+    (left, right) =>
+      new Date(right.checked_in_at).getTime() -
+      new Date(left.checked_in_at).getTime()
+  )[0]
 }
 
 function groupCheckInsByUser(checkIns: AxisCheckIn[]) {
