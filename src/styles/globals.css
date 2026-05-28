@@ -364,6 +364,80 @@ h1 {
   font-size: 0.76rem;
 }
 
+.axis-live-command {
+  border-top: 1px solid rgba(168, 217, 51, 0.22);
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.8rem;
+}
+
+.axis-live-command span {
+  color: var(--axis-live);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.axis-live-command strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.9rem, 7vw, 4.1rem);
+  font-weight: 500;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.axis-live-command em {
+  color: var(--axis-muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.axis-live-command button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.42);
+  color: var(--axis-live);
+  cursor: pointer;
+  font-size: 0.72rem;
+  justify-self: start;
+  margin-top: 0.35rem;
+  min-height: 2.55rem;
+  padding: 0.62rem 0.85rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-live-command button:disabled {
+  border-color: var(--axis-line);
+  color: var(--axis-muted);
+  cursor: default;
+}
+
+.axis-live-command button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.axis-pipeline-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+
+.axis-pipeline-rail span {
+  border: 1px solid var(--axis-line);
+  color: var(--axis-muted);
+  font-size: 0.58rem;
+  padding: 0.35rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.axis-pipeline-rail span[data-active="true"] {
+  border-color: rgba(168, 217, 51, 0.38);
+  color: var(--axis-live);
+}
+
 .axis-live-strip {
   align-items: center;
   border-top: 1px solid rgba(168, 217, 51, 0.22);
@@ -402,7 +476,8 @@ h1 {
   padding: 0.7rem;
 }
 
-.axis-mode-focus button {
+.axis-mode-focus button,
+.axis-mode-toggle {
   appearance: none;
   background: transparent;
   border: 1px solid var(--axis-line);
@@ -414,7 +489,8 @@ h1 {
   touch-action: manipulation;
 }
 
-.axis-mode-focus button:focus-visible {
+.axis-mode-focus button:focus-visible,
+.axis-mode-toggle:focus-visible {
   outline: 1px solid var(--axis-live);
   outline-offset: 0.2rem;
 }
@@ -674,12 +750,14 @@ h1 {
   border-color: rgba(168, 217, 51, 0.28);
 }
 
+.axis-camera-selector,
 .axis-camera-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
 }
 
+.axis-camera-selector button,
 .axis-camera-actions button {
   appearance: none;
   background: transparent;
@@ -692,11 +770,17 @@ h1 {
   touch-action: manipulation;
 }
 
+.axis-camera-selector button[aria-pressed="true"] {
+  border-color: rgba(168, 217, 51, 0.42);
+  color: var(--axis-live);
+}
+
 .axis-camera-actions button:disabled {
   color: rgba(244, 244, 240, 0.32);
   cursor: default;
 }
 
+.axis-camera-selector button:focus-visible,
 .axis-camera-actions button:focus-visible {
   outline: 1px solid var(--axis-live);
   outline-offset: 0.2rem;

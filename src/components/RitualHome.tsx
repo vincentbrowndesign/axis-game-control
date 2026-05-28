@@ -8,6 +8,7 @@ type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
 type CalibrationStatus = "required" | "calibrated";
 type CalibrationStep = "stand" | "hold" | "left" | "right";
 type CameraState = "offline" | "ready" | "attached";
+type CameraDirection = "front" | "back";
 type ParticipationWindowStatus = "open" | "closed";
 type ParticipationMode =
   | "Training"
@@ -38,6 +39,7 @@ const calibrationStepCopy: Record<CalibrationStep, string> = {
 };
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
+const organizationSlug = "bridge";
 
 type AthleteIdentity = {
   id: string;
@@ -45,14 +47,6 @@ type AthleteIdentity = {
   rosterCode: string;
   calibrationAnchorId: string;
 };
-
-const availableAthletes: AthleteIdentity[] = [
-  { id: "bridge-vincent", name: "Vincent", rosterCode: "BR-01", calibrationAnchorId: "calibration:bridge:vincent" },
-  { id: "bridge-cole", name: "Cole", rosterCode: "BR-02", calibrationAnchorId: "calibration:bridge:cole" },
-  { id: "bridge-jalen", name: "Jalen", rosterCode: "BR-03", calibrationAnchorId: "calibration:bridge:jalen" },
-  { id: "bridge-mason", name: "Mason", rosterCode: "BR-04", calibrationAnchorId: "calibration:bridge:mason" },
-  { id: "bridge-rocket", name: "Rocket", rosterCode: "BR-05", calibrationAnchorId: "calibration:bridge:rocket" },
-];
 
 type SavedSession = {
   id: string;
@@ -63,6 +57,7 @@ type SavedSession = {
   recordingAttached?: boolean;
   calibrationStatus?: CalibrationStatus;
   cameraState?: CameraState;
+  cameraDirection?: CameraDirection;
   cameraAttachedAt?: string;
   participationWindow?: ParticipationWindow;
   clipContinuityContext?: ClipContinuityContext;
@@ -100,6 +95,7 @@ type ClipContinuityContext = {
   calibratedParticipantIds: string[];
   cameraAttached: boolean;
   cameraState: CameraState;
+  cameraDirection: CameraDirection;
   cameraAttachedAt?: string;
   mode: ParticipationMode;
   participationWindow: ParticipationWindow;
@@ -119,6 +115,7 @@ type AxisSave = {
     recordingAttached?: boolean;
     calibrationStatus?: CalibrationStatus;
     cameraState?: CameraState;
+    cameraDirection?: CameraDirection;
     cameraAttachedAt?: string;
     participationWindow?: ParticipationWindow;
     clipContinuityContext?: ClipContinuityContext;
@@ -177,41 +174,31 @@ function formatCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function identityForName(name: string): AthleteIdentity {
-  const normalizedName = name.trim().toLowerCase();
-  const rosterIdentity = availableAthletes.find((athlete) => athlete.name.toLowerCase() === normalizedName);
-
-  if (rosterIdentity) return rosterIdentity;
-
-  const fallbackId = normalizedName.replace(/[^a-z0-9]+/g, "-") || "athlete";
+function identityFromAxisIdentity(identity: AxisIdentity): AthleteIdentity {
+  const label = identity.email.split("@")[0] || "Athlete";
 
   return {
-    id: `custom-${fallbackId}`,
-    name: name.trim() || "Athlete",
-    rosterCode: "CUSTOM",
-    calibrationAnchorId: `calibration:custom:${fallbackId}`,
+    id: identity.id,
+    name: label,
+    rosterCode: identity.id.slice(0, 8).toUpperCase(),
+    calibrationAnchorId: `calibration:${organizationSlug}:${identity.id}`,
   };
 }
 
 function normalizeActiveParticipant(participant: unknown): ActiveParticipant | null {
-  if (typeof participant === "string") {
-    return {
-      ...identityForName(participant),
-      joinedAt: new Date().toISOString(),
-    };
-  }
+  if (typeof participant === "string") return null;
 
   if (!participant || typeof participant !== "object") return null;
 
   const candidate = participant as Partial<ActiveParticipant>;
-  const identity = identityForName(candidate.name ?? candidate.id ?? "Athlete");
-  const isRosterIdentity = availableAthletes.some((athlete) => athlete.id === identity.id);
+  if (!candidate.id || !candidate.name) return null;
+  if (candidate.id.startsWith(`${organizationSlug}-`) && candidate.rosterCode?.startsWith("BR-")) return null;
 
   return {
-    ...identity,
-    id: isRosterIdentity ? identity.id : (candidate.id ?? identity.id),
-    rosterCode: candidate.rosterCode ?? identity.rosterCode,
-    calibrationAnchorId: candidate.calibrationAnchorId ?? identity.calibrationAnchorId,
+    id: candidate.id,
+    name: candidate.name,
+    rosterCode: candidate.rosterCode ?? candidate.id.slice(0, 8).toUpperCase(),
+    calibrationAnchorId: candidate.calibrationAnchorId ?? `calibration:${organizationSlug}:${candidate.id}`,
     joinedAt: candidate.joinedAt ?? new Date().toISOString(),
     leftAt: candidate.leftAt,
     calibrationStatus: normalizeCalibrationStatus(candidate.calibrationStatus),
@@ -251,6 +238,10 @@ function normalizeCameraState(state: unknown): CameraState {
   return "offline";
 }
 
+function normalizeCameraDirection(direction: unknown): CameraDirection {
+  return direction === "front" ? "front" : "back";
+}
+
 function formatCameraState(state: unknown) {
   const normalizedState = normalizeCameraState(state);
 
@@ -258,6 +249,10 @@ function formatCameraState(state: unknown) {
   if (normalizedState === "ready") return "Camera ready";
 
   return "Camera offline";
+}
+
+function formatCameraDirection(direction: unknown) {
+  return normalizeCameraDirection(direction) === "front" ? "Front camera" : "Back camera";
 }
 
 function normalizeParticipationWindow(
@@ -284,6 +279,7 @@ function createClipContinuityContext(
   sessionId: string,
   mode: ParticipationMode,
   cameraState: CameraState,
+  cameraDirection: CameraDirection,
   cameraAttachedAt: string | undefined,
   participationWindow: ParticipationWindow,
   participants: ActiveParticipant[] | SessionParticipant[],
@@ -298,6 +294,7 @@ function createClipContinuityContext(
       .map((participant) => participant.id),
     cameraAttached: cameraState === "attached",
     cameraState,
+    cameraDirection,
     cameraAttachedAt,
     mode,
     participationWindow,
@@ -345,6 +342,7 @@ function readSave(): AxisSave {
       : [];
     const activeMode = parsed.activeSession?.mode ?? defaultParticipationMode;
     const activeCameraState = normalizeCameraState(parsed.activeSession?.cameraState);
+    const activeCameraDirection = normalizeCameraDirection(parsed.activeSession?.cameraDirection);
     const activeParticipationWindow = normalizeParticipationWindow(
       parsed.activeSession?.participationWindow,
       parsed.activeSession?.startedAt ?? new Date().toISOString(),
@@ -359,12 +357,14 @@ function readSave(): AxisSave {
           recordingAttached: Boolean(parsed.activeSession.recordingAttached),
           calibrationStatus: normalizeCalibrationStatus(parsed.activeSession.calibrationStatus),
           cameraState: activeCameraState,
+          cameraDirection: activeCameraDirection,
           cameraAttachedAt: parsed.activeSession.cameraAttachedAt,
           participationWindow: activeParticipationWindow,
           clipContinuityContext: createClipContinuityContext(
             parsed.activeSession.id,
             activeMode,
             activeCameraState,
+            activeCameraDirection,
             parsed.activeSession.cameraAttachedAt,
             activeParticipationWindow,
             activeParticipants,
@@ -382,6 +382,7 @@ function readSave(): AxisSave {
               : [];
             const sessionMode = session.mode ?? defaultParticipationMode;
             const sessionCameraState = normalizeCameraState(session.cameraState);
+            const sessionCameraDirection = normalizeCameraDirection(session.cameraDirection);
             const sessionParticipationWindow = normalizeParticipationWindow(
               session.participationWindow,
               session.startedAt,
@@ -394,12 +395,14 @@ function readSave(): AxisSave {
               mode: sessionMode,
               calibrationStatus: normalizeCalibrationStatus(session.calibrationStatus),
               cameraState: sessionCameraState,
+              cameraDirection: sessionCameraDirection,
               cameraAttachedAt: session.cameraAttachedAt,
               participationWindow: sessionParticipationWindow,
               clipContinuityContext: createClipContinuityContext(
                 session.id,
                 sessionMode,
                 sessionCameraState,
+                sessionCameraDirection,
                 session.cameraAttachedAt,
                 sessionParticipationWindow,
                 sessionParticipants,
@@ -457,6 +460,7 @@ export function RitualHome() {
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
   const [calibrationStepIndex, setCalibrationStepIndex] = useState<number | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraDirection, setCameraDirection] = useState<CameraDirection>("back");
   const [cameraMessage, setCameraMessage] = useState("");
 
   useEffect(() => {
@@ -553,10 +557,59 @@ export function RitualHome() {
   }, [save.activeSession]);
 
   useEffect(() => {
+    if (!identity || !save.activeSession || save.activeSession.participants?.length) return;
+
+    const checkedInAthlete = identityFromAxisIdentity(identity);
+    const participant = {
+      ...checkedInAthlete,
+      joinedAt: save.activeSession.startedAt,
+      calibrationStatus: "required" as const,
+    };
+    const participationWindow = {
+      ...normalizeParticipationWindow(
+        save.activeSession.participationWindow,
+        save.activeSession.startedAt,
+        save.activeSession.mode ?? defaultParticipationMode,
+        [participant],
+      ),
+      participantIds: [participant.id],
+    };
+    const cameraState = normalizeCameraState(save.activeSession.cameraState);
+    const activeDirection = normalizeCameraDirection(save.activeSession.cameraDirection);
+    const nextSave: AxisSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        participationWindow,
+        clipContinuityContext: createClipContinuityContext(
+          save.activeSession.id,
+          save.activeSession.mode ?? defaultParticipationMode,
+          cameraState,
+          activeDirection,
+          save.activeSession.cameraAttachedAt,
+          participationWindow,
+          [participant],
+        ),
+        participants: [participant],
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
+  }, [identity, save]);
+
+  useEffect(() => {
     if (cameraPreviewRef.current) {
       cameraPreviewRef.current.srcObject = cameraStream;
     }
   }, [cameraStream]);
+
+  useEffect(() => {
+    const activeDirection = save.activeSession?.cameraDirection;
+    if (!activeDirection) return;
+
+    setCameraDirection(normalizeCameraDirection(activeDirection));
+  }, [save.activeSession?.cameraDirection]);
 
   useEffect(() => {
     return () => {
@@ -582,36 +635,68 @@ export function RitualHome() {
   const calibrationLabel = calibrationStatus === "calibrated" ? "Calibrated" : "Calibration required";
   const cameraState = normalizeCameraState(save.activeSession?.cameraState ?? latestSession?.cameraState);
   const cameraLabel = formatCameraState(cameraState);
+  const savedCameraDirection = normalizeCameraDirection(
+    save.activeSession?.cameraDirection ?? latestSession?.cameraDirection ?? cameraDirection,
+  );
+  const cameraDirectionLabel = formatCameraDirection(savedCameraDirection);
+  const cameraDirectionStateLabel = `${savedCameraDirection === "front" ? "Front camera" : "Back camera"} ${
+    cameraState === "offline" ? "offline" : cameraState === "attached" ? "attached" : "ready"
+  }`;
   const activeCalibrationStep =
     calibrationStepIndex === null ? null : calibrationSteps[calibrationStepIndex] ?? null;
   const activeParticipants = save.activeSession?.participants ?? [];
   const presentParticipants = activeParticipants.filter((participant) => !participant.leftAt);
-  const inactiveParticipants = activeParticipants.filter((participant) => participant.leftAt);
   const activeParticipantCount = presentParticipants.length;
   const participantCount = activeParticipants.length;
   const calibratedParticipantCount = presentParticipants.filter(
     (participant) => normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated",
   ).length;
-  const calibrationProgressTotal = save.activeSession ? Math.max(activeParticipantCount, 1) : availableAthletes.length;
-  const calibrationPhase =
-    calibratedParticipantCount >= calibrationProgressTotal
+  const calibrationRequiredCount = Math.max(0, activeParticipantCount - calibratedParticipantCount);
+  const calibrationProgressTotal = save.activeSession ? Math.max(activeParticipantCount, 1) : 0;
+  const calibrationPhase = !save.activeSession
+    ? "Not calibrated"
+    : calibratedParticipantCount >= calibrationProgressTotal
       ? "Complete"
       : calibratedParticipantCount > 0
         ? "Partial"
         : "Not calibrated";
   const calibrationProgressLabel = `${calibratedParticipantCount}/${calibrationProgressTotal} calibrated`;
+  const pipelineStateLabel = !save.activeSession
+    ? "Check-in waiting"
+    : calibrationRequiredCount > 0
+      ? `${formatCount(calibrationRequiredCount, "athlete", "athletes")} needs calibration`
+      : savedCameraDirection === "front"
+        ? "Back camera next"
+        : isRecordingAttached
+          ? "Recording attached"
+          : "Recording ready";
+  const sessionPrimaryActionLabel =
+    calibrationRequiredCount > 0
+      ? savedCameraDirection !== "front"
+        ? "Front camera"
+        : cameraState === "offline"
+        ? "Start front camera"
+        : cameraState === "ready"
+          ? "Attach front camera"
+          : "Start calibration"
+      : savedCameraDirection === "front"
+        ? "Switch to back camera"
+        : cameraState === "offline"
+          ? "Start back camera"
+          : cameraState === "ready"
+            ? "Attach back camera"
+            : !isRecordingAttached
+            ? "Attach recording"
+            : "Recording attached";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
   const bridgeRosterLabel = save.activeSession
     ? `${formatCount(activeParticipantCount, "athlete", "athletes")} active`
-    : `${formatCount(availableAthletes.length, "athlete", "athletes")} ready`;
+    : "No active check-in";
   const participationWindowLabel = save.activeSession
     ? "Window open"
     : latestSession?.participationWindow?.status === "closed"
       ? "Window saved"
       : "Window waiting";
-  const selectableAthletes = availableAthletes.filter(
-    (athlete) => !presentParticipants.some((participant) => participant.id === athlete.id),
-  );
   const currentStreak = calculateStreak(save.sessions);
   const lastCheckIn = save.activeSession
     ? formatTime(save.activeSession.startedAt)
@@ -725,13 +810,19 @@ export function RitualHome() {
   }
 
   function checkIn() {
+    if (!identity) return;
+
     const startedAt = new Date().toISOString();
     const sessionId = crypto.randomUUID();
-    const startingParticipants = availableAthletes.map((athlete) => ({
-      ...athlete,
-      joinedAt: startedAt,
-      calibrationStatus: "required" as const,
-    }));
+    const startingCameraDirection: CameraDirection = "front";
+    const checkedInAthlete = identityFromAxisIdentity(identity);
+    const startingParticipants = [
+      {
+        ...checkedInAthlete,
+        joinedAt: startedAt,
+        calibrationStatus: "required" as const,
+      },
+    ];
     const participationWindow = {
       openedAt: startedAt,
       status: "open" as const,
@@ -747,11 +838,13 @@ export function RitualHome() {
         recordingAttached: false,
         calibrationStatus: "required",
         cameraState: "offline",
+        cameraDirection: startingCameraDirection,
         participationWindow,
         clipContinuityContext: createClipContinuityContext(
           sessionId,
           defaultParticipationMode,
           "offline",
+          startingCameraDirection,
           undefined,
           participationWindow,
           startingParticipants,
@@ -767,6 +860,7 @@ export function RitualHome() {
     setLatestSavedSessionId(null);
     setIsModePickerOpen(false);
     setCalibrationStepIndex(null);
+    setCameraDirection(startingCameraDirection);
   }
 
   function changeMode(mode: ParticipationMode) {
@@ -782,6 +876,7 @@ export function RitualHome() {
       context: mode,
     };
     const cameraState = normalizeCameraState(save.activeSession.cameraState);
+    const activeDirection = normalizeCameraDirection(save.activeSession.cameraDirection);
     const nextSave = {
       ...save,
       activeSession: {
@@ -792,6 +887,7 @@ export function RitualHome() {
           save.activeSession.id,
           mode,
           cameraState,
+          activeDirection,
           save.activeSession.cameraAttachedAt,
           participationWindow,
           activeParticipants,
@@ -819,10 +915,15 @@ export function RitualHome() {
     setSave(nextSave);
   }
 
-  function updateCameraSessionState(nextCameraState: CameraState, attachedAt?: string) {
+  function updateCameraSessionState(
+    nextCameraState: CameraState,
+    nextCameraDirection = cameraDirection,
+    attachedAt?: string,
+  ) {
     if (!save.activeSession) return;
 
     const cameraAttachedAt = attachedAt ?? save.activeSession.cameraAttachedAt;
+    const normalizedDirection = normalizeCameraDirection(nextCameraDirection);
     const participationWindow = normalizeParticipationWindow(
       save.activeSession.participationWindow,
       save.activeSession.startedAt,
@@ -834,11 +935,13 @@ export function RitualHome() {
       activeSession: {
         ...save.activeSession,
         cameraState: nextCameraState,
+        cameraDirection: normalizedDirection,
         cameraAttachedAt,
         clipContinuityContext: createClipContinuityContext(
           save.activeSession.id,
           currentMode,
           nextCameraState,
+          normalizedDirection,
           cameraAttachedAt,
           participationWindow,
           activeParticipants,
@@ -850,9 +953,10 @@ export function RitualHome() {
     setSave(nextSave);
   }
 
-  async function requestCameraPresence() {
+  async function requestCameraPresence(nextDirection = cameraDirection) {
     if (!save.activeSession) return;
 
+    const normalizedDirection = normalizeCameraDirection(nextDirection);
     setCameraMessage("");
 
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -865,7 +969,7 @@ export function RitualHome() {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
-          facingMode: "environment",
+          facingMode: normalizedDirection === "front" ? "user" : "environment",
         },
       });
 
@@ -873,18 +977,81 @@ export function RitualHome() {
         currentStream?.getTracks().forEach((track) => track.stop());
         return stream;
       });
-      updateCameraSessionState("ready");
+      setCameraDirection(normalizedDirection);
+      updateCameraSessionState("ready", normalizedDirection);
     } catch (error) {
       console.error("Unable to start camera presence", error);
       setCameraMessage("Camera unavailable.");
-      updateCameraSessionState("offline");
+      updateCameraSessionState("offline", normalizedDirection);
     }
   }
 
   function attachCameraPresence() {
     if (!save.activeSession || !cameraStream) return;
 
-    updateCameraSessionState("attached", new Date().toISOString());
+    updateCameraSessionState("attached", cameraDirection, new Date().toISOString());
+  }
+
+  function changeCameraDirection(nextDirection: CameraDirection) {
+    const normalizedDirection = normalizeCameraDirection(nextDirection);
+
+    setCameraDirection(normalizedDirection);
+    if (!save.activeSession) return;
+
+    if (cameraStream) {
+      void requestCameraPresence(normalizedDirection);
+      return;
+    }
+
+    updateCameraSessionState(cameraState === "attached" ? "ready" : cameraState, normalizedDirection);
+  }
+
+  function handleSessionPrimaryAction() {
+    if (!save.activeSession) return;
+
+    if (calibrationRequiredCount > 0) {
+      if (savedCameraDirection !== "front") {
+        changeCameraDirection("front");
+        return;
+      }
+
+      if (cameraState === "offline") {
+        void requestCameraPresence("front");
+        return;
+      }
+
+      if (cameraState === "ready") {
+        attachCameraPresence();
+        return;
+      }
+
+      startCalibration();
+      return;
+    }
+
+    if (savedCameraDirection !== "back") {
+      changeCameraDirection("back");
+      return;
+    }
+
+    if (cameraState === "offline") {
+      void requestCameraPresence("back");
+      return;
+    }
+
+    if (cameraState === "ready") {
+      if (cameraStream) {
+        attachCameraPresence();
+        return;
+      }
+
+      void requestCameraPresence("back");
+      return;
+    }
+
+    if (!isRecordingAttached) {
+      toggleRecordingAttachment();
+    }
   }
 
   function startCalibration() {
@@ -915,6 +1082,7 @@ export function RitualHome() {
           save.activeSession.id,
           currentMode,
           cameraState,
+          savedCameraDirection,
           save.activeSession.cameraAttachedAt,
           normalizeParticipationWindow(
             save.activeSession.participationWindow,
@@ -952,64 +1120,6 @@ export function RitualHome() {
     setCalibrationStepIndex(calibrationStepIndex + 1);
   }
 
-  function selectAthlete(athlete: AthleteIdentity) {
-    if (!save.activeSession) return;
-
-    const existingParticipant = activeParticipants.find((participant) => participant.id === athlete.id);
-
-    if (existingParticipant && !existingParticipant.leftAt) {
-      return;
-    }
-
-    const nextParticipants = existingParticipant
-      ? activeParticipants.map((participant) =>
-          participant.id === existingParticipant.id
-            ? {
-                ...participant,
-                joinedAt: new Date().toISOString(),
-                leftAt: undefined,
-              }
-            : participant,
-        )
-      : [
-          ...activeParticipants,
-          {
-            ...athlete,
-            joinedAt: new Date().toISOString(),
-            calibrationStatus: "required" as const,
-          },
-        ];
-    const participationWindow = {
-      ...normalizeParticipationWindow(
-        save.activeSession.participationWindow,
-        save.activeSession.startedAt,
-        currentMode,
-        nextParticipants,
-      ),
-      participantIds: nextParticipants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
-    };
-    const cameraState = normalizeCameraState(save.activeSession.cameraState);
-    const nextSave: AxisSave = {
-      ...save,
-      activeSession: {
-        ...save.activeSession,
-        participationWindow,
-        clipContinuityContext: createClipContinuityContext(
-          save.activeSession.id,
-          currentMode,
-          cameraState,
-          save.activeSession.cameraAttachedAt,
-          participationWindow,
-          nextParticipants,
-        ),
-        participants: nextParticipants,
-      },
-    };
-
-    writeSave(nextSave);
-    setSave(nextSave);
-  }
-
   function removeParticipant(participantId: string) {
     if (!save.activeSession) return;
 
@@ -1031,6 +1141,7 @@ export function RitualHome() {
       participantIds: nextParticipants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
     };
     const cameraState = normalizeCameraState(save.activeSession.cameraState);
+    const activeDirection = normalizeCameraDirection(save.activeSession.cameraDirection);
     const nextSave: AxisSave = {
       ...save,
       activeSession: {
@@ -1040,6 +1151,7 @@ export function RitualHome() {
           save.activeSession.id,
           currentMode,
           cameraState,
+          activeDirection,
           save.activeSession.cameraAttachedAt,
           participationWindow,
           nextParticipants,
@@ -1062,6 +1174,7 @@ export function RitualHome() {
     );
     const sessionMode = save.activeSession.mode ?? defaultParticipationMode;
     const sessionCameraState = normalizeCameraState(save.activeSession.cameraState);
+    const sessionCameraDirection = normalizeCameraDirection(save.activeSession.cameraDirection);
     const sessionParticipants = activeParticipants.map((participant) => ({
       ...participant,
       activeAtCheckout: !participant.leftAt,
@@ -1086,12 +1199,14 @@ export function RitualHome() {
       recordingAttached: Boolean(save.activeSession.recordingAttached),
       calibrationStatus: normalizeCalibrationStatus(save.activeSession.calibrationStatus),
       cameraState: sessionCameraState,
+      cameraDirection: sessionCameraDirection,
       cameraAttachedAt: save.activeSession.cameraAttachedAt,
       participationWindow,
       clipContinuityContext: createClipContinuityContext(
         save.activeSession.id,
         sessionMode,
         sessionCameraState,
+        sessionCameraDirection,
         save.activeSession.cameraAttachedAt,
         participationWindow,
         sessionParticipants,
@@ -1199,50 +1314,68 @@ export function RitualHome() {
 
         <section className="axis-ritual" aria-label="Check in ritual" data-state={ritualState}>
           <p className="axis-meta">Participation ritual</p>
-          <button
-            className="axis-check-button"
-            onClick={ritualState === "active" || ritualState === "saving" ? undefined : checkIn}
-            disabled={ritualState === "active" || ritualState === "saving"}
-            type="button"
-          >
-            {ritualState === "active" ? "Session live" : ritualState === "saving" ? "Saving" : "Start session"}
-          </button>
-          <section className="axis-bridge-state" aria-label="Camera calibration bridge">
-            <span>{bridgeSessionLabel}</span>
-            <strong>{bridgeRosterLabel}</strong>
-            <em>{cameraLabel}</em>
-            <em>{calibrationPhase}</em>
-            <em>{calibrationProgressLabel}</em>
-          </section>
+          {save.activeSession ? (
+            <section className="axis-live-command" aria-label="Session live">
+              <span>Session live</span>
+              <strong>{formatCount(activeParticipantCount, "athlete", "athletes")} active</strong>
+              <em>{currentMode}</em>
+              <em>{cameraDirectionStateLabel}</em>
+              <em>{pipelineStateLabel}</em>
+              <button
+                disabled={
+                  calibrationRequiredCount === 0 &&
+                  savedCameraDirection === "back" &&
+                  cameraState === "attached" &&
+                  isRecordingAttached
+                }
+                onClick={handleSessionPrimaryAction}
+                type="button"
+              >
+                {sessionPrimaryActionLabel}
+              </button>
+              <div className="axis-pipeline-rail" aria-label="Session preparation">
+                <span data-active="true">Checked in</span>
+                <span data-active={activeParticipantCount > 0}>Active roster</span>
+                <span data-active={savedCameraDirection === "front" && calibrationRequiredCount > 0}>Front camera</span>
+                <span data-active={calibrationStatus === "calibrated"}>Calibrated</span>
+                <span data-active={savedCameraDirection === "back" && calibrationRequiredCount === 0}>Back camera</span>
+                <span data-active={isRecordingAttached}>Recording attached</span>
+              </div>
+            </section>
+          ) : (
+            <>
+              <button
+                className="axis-check-button"
+                onClick={ritualState === "saving" ? undefined : checkIn}
+                disabled={ritualState === "saving"}
+                type="button"
+              >
+                {ritualState === "saving" ? "Saving" : "Start session"}
+              </button>
+              <section className="axis-bridge-state" aria-label="Camera calibration bridge">
+                <span>{bridgeSessionLabel}</span>
+                <strong>{bridgeRosterLabel}</strong>
+                <em>{cameraLabel}</em>
+                <em>{cameraDirectionLabel}</em>
+                <em>{calibrationPhase}</em>
+                <em>{calibrationProgressLabel}</em>
+              </section>
+            </>
+          )}
           {save.activeSession ? (
             <section className="axis-session-object" aria-label="Session continuity object">
-              <section className="axis-mode-focus" aria-label="Current mode">
-                <span>Current mode</span>
-                <strong>{currentMode}</strong>
-                <button onClick={() => setIsModePickerOpen((isOpen) => !isOpen)} type="button">
-                  Change mode
-                </button>
-              </section>
-              {isModePickerOpen ? (
-                <div className="axis-mode-list" aria-label="Participation modes">
-                  {participationModes.map((mode) => (
-                    <button
-                      aria-pressed={currentMode === mode}
-                      key={mode}
-                      onClick={() => changeMode(mode)}
-                      type="button"
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
               <details className="axis-session-drawer">
                 <summary>
-                  <span>Roster</span>
+                  <span>Active roster</span>
                   <strong>{formatCount(activeParticipantCount, "active")}</strong>
                 </summary>
+                <section className="axis-session-module" aria-label="Available athlete">
+                  <header>
+                    <span>Available athlete</span>
+                    <strong>{athleteLabel}</strong>
+                  </header>
+                  <span className="axis-window-state">Checked in</span>
+                </section>
                 <section className="axis-roster-object" aria-label="Active roster">
                   <header>
                     <span>Active roster</span>
@@ -1267,37 +1400,6 @@ export function RitualHome() {
                       <span className="axis-roster-empty">Roster waiting</span>
                     )}
                   </div>
-                </section>
-                <section className="axis-session-module" aria-label="Available athletes">
-                  <header>
-                    <span>Roster pool</span>
-                    <strong>{formatCount(selectableAthletes.length, "ready")}</strong>
-                  </header>
-                  <div className="axis-available-roster">
-                    {selectableAthletes.map((athlete) => (
-                      <button
-                        data-athlete-id={athlete.id}
-                        key={athlete.id}
-                        onClick={() => selectAthlete(athlete)}
-                        type="button"
-                      >
-                        {athlete.name}
-                      </button>
-                    ))}
-                  </div>
-                  {inactiveParticipants.length ? (
-                    <div className="axis-participant-list axis-participant-list-inactive" aria-label="Inactive athletes">
-                      {inactiveParticipants.map((participant) => (
-                        <span
-                          className="axis-participant-token"
-                          data-athlete-id={participant.id}
-                          key={participant.id}
-                        >
-                          <span>{participant.name}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
                 </section>
               </details>
 
@@ -1352,9 +1454,32 @@ export function RitualHome() {
 
               <details className="axis-session-drawer">
                 <summary>
-                  <span>Recording details</span>
-                  <strong>{`${cameraLabel} / ${recordingLabel}`}</strong>
+                  <span>Recording</span>
+                  <strong>{`${cameraLabel} / ${cameraDirectionLabel} / ${recordingLabel}`}</strong>
                 </summary>
+                <section className="axis-session-module axis-mode-module" aria-label="Current mode control">
+                  <header>
+                    <span>Current mode</span>
+                    <strong>{currentMode}</strong>
+                  </header>
+                  <button className="axis-mode-toggle" onClick={() => setIsModePickerOpen((isOpen) => !isOpen)} type="button">
+                    Change mode
+                  </button>
+                  {isModePickerOpen ? (
+                    <div className="axis-mode-list" aria-label="Participation modes">
+                      {participationModes.map((mode) => (
+                        <button
+                          aria-pressed={currentMode === mode}
+                          key={mode}
+                          onClick={() => changeMode(mode)}
+                          type="button"
+                        >
+                          {mode}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
                 <section className="axis-session-module axis-recording-module" aria-label="Recording state">
                   <header>
                     <span>Recording state</span>
@@ -1372,14 +1497,30 @@ export function RitualHome() {
                 <section className="axis-session-module axis-camera-module" aria-label="Camera presence">
                   <header>
                     <span>Camera</span>
-                    <strong>{cameraLabel}</strong>
+                    <strong>{`${cameraLabel} / ${cameraDirectionLabel}`}</strong>
                   </header>
                   <div className="axis-camera-preview" data-state={cameraState}>
                     <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
                     {cameraStream ? null : <span>Camera offline</span>}
                   </div>
+                  <div className="axis-camera-selector" aria-label="Camera direction">
+                    <button
+                      aria-pressed={cameraDirection === "front"}
+                      onClick={() => changeCameraDirection("front")}
+                      type="button"
+                    >
+                      Front camera
+                    </button>
+                    <button
+                      aria-pressed={cameraDirection === "back"}
+                      onClick={() => changeCameraDirection("back")}
+                      type="button"
+                    >
+                      Back camera
+                    </button>
+                  </div>
                   <div className="axis-camera-actions">
-                    <button onClick={requestCameraPresence} type="button">
+                    <button onClick={() => requestCameraPresence()} type="button">
                       {cameraState === "offline" ? "Start camera" : "Refresh camera"}
                     </button>
                     <button disabled={!cameraStream || cameraState === "attached"} onClick={attachCameraPresence} type="button">
