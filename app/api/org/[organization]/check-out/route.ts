@@ -7,8 +7,12 @@ export const runtime = "nodejs"
 
 const ACTIVE_ORGANIZATIONS = new Set(["bridge", "city2city"])
 
+type CheckOutBody = {
+  workUnits?: unknown
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   context: RouteContext<"/api/org/[organization]/check-out">
 ) {
   const identity = await getAxisRequestIdentity()
@@ -25,6 +29,7 @@ export async function POST(
   }
 
   const userId = identity.clerkUserId || identity.supabaseUserId
+  const body = (await request.json().catch(() => ({}))) as CheckOutBody
 
   if (!userId) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 })
@@ -33,6 +38,7 @@ export async function POST(
   const saved = await completeCheckIn({
     organizationSlug,
     userId,
+    workUnits: body.workUnits,
   })
 
   if ("error" in saved) {

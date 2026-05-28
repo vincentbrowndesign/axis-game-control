@@ -52,33 +52,13 @@ export default async function OrganizationCoachPage({
           </p>
         </section>
 
-        <section className={styles.coachSection} aria-label="Checked in">
-          <span>CHECKED IN</span>
-          {activity.checkedInToday.length ? (
-            <ul className={styles.coachList}>
-              {activity.checkedInToday.map((checkIn) => (
-                <li key={checkIn.id}>
-                  <strong>{formatUserLabel(checkIn.user_id)}</strong>
-                  <em>{formatCheckInTime(checkIn.checked_in_at)}</em>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>
-              {activity.hasAnyCheckIns
-                ? "Waiting for first session today."
-                : "No check-ins yet."}
-            </p>
-          )}
-        </section>
-
-        <section className={styles.coachSection} aria-label="Attendance">
-          <span>ATTENDANCE</span>
-          <strong>{activity.thisWeekActiveUsers}</strong>
+        <section className={styles.coachSection} aria-label="Current sessions">
+          <span>CURRENT SESSIONS</span>
+          <strong>{activity.activeSessions}</strong>
           <p>
-            {activity.thisWeekActiveUsers
-              ? `${activity.thisWeekActiveUsers} players active this week.`
-              : "Waiting for first session."}
+            {activity.activeSessions
+              ? `${activity.activeSessions} training now.`
+              : "No live sessions right now."}
           </p>
         </section>
 
@@ -97,16 +77,35 @@ export default async function OrganizationCoachPage({
             <p>Streaks begin after more check-ins.</p>
           )}
         </section>
+
+        <section className={styles.coachSection} aria-label="Most active">
+          <span>MOST ACTIVE</span>
+          {activity.mostActive.length ? (
+            <ul className={styles.coachList}>
+              {activity.mostActive.map((member) => (
+                <li key={member.userId}>
+                  <strong>{formatUserLabel(member.userId)}</strong>
+                  <em>{member.workCompleted} work</em>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Work appears after completed sessions.</p>
+          )}
+        </section>
+
+        <section className={styles.coachSection} aria-label="Work completed">
+          <span>WORK COMPLETED</span>
+          <strong>{activity.workCompletedToday}</strong>
+          <p>
+            {activity.workCompletedToday
+              ? `${activity.workCompletedToday} work units completed today.`
+              : "Waiting for completed work."}
+          </p>
+        </section>
       </section>
     </main>
   )
-}
-
-function formatCheckInTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value))
 }
 
 function formatUserLabel(userId: string) {

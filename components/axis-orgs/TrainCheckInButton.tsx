@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import type { AxisWorkUnit } from "@/lib/axis-orgs/check-ins"
 import styles from "@/app/page.module.css"
 
 type TrainCheckInButtonProps = {
@@ -12,6 +13,7 @@ type TrainCheckInButtonProps = {
   organizationSlug: string
   sessionCompletedAt: string | null
   sessionStartedAt: string | null
+  workUnits: AxisWorkUnit[]
 }
 
 type CheckInResponse = {
@@ -30,10 +32,54 @@ type CheckOutResponse = {
   checkIn?: {
     checked_out_at?: string | null
     duration_minutes?: number | null
+    work_units?: AxisWorkUnit[]
   }
   error?: string
   ok?: boolean
 }
+
+const BASKETBALL_WORK_UNITS: AxisWorkUnit[] = [
+  {
+    completed: false,
+    duration_minutes: 8,
+    makes: 0,
+    name: "Ball Handles",
+    reps: 30,
+    sets: 3,
+  },
+  {
+    completed: false,
+    duration_minutes: 10,
+    makes: 0,
+    name: "Free Throws",
+    reps: 10,
+    sets: 5,
+  },
+  {
+    completed: false,
+    duration_minutes: 12,
+    makes: 0,
+    name: "Form Shooting",
+    reps: 25,
+    sets: 4,
+  },
+  {
+    completed: false,
+    duration_minutes: 10,
+    makes: 0,
+    name: "Layups",
+    reps: 20,
+    sets: 4,
+  },
+  {
+    completed: false,
+    duration_minutes: 8,
+    makes: 0,
+    name: "Sprints",
+    reps: 1,
+    sets: 6,
+  },
+]
 
 export function TrainCheckInButton({
   activeThisWeek,
@@ -43,6 +89,7 @@ export function TrainCheckInButton({
   organizationSlug,
   sessionCompletedAt,
   sessionStartedAt,
+  workUnits,
 }: TrainCheckInButtonProps) {
   const router = useRouter()
   const [isChecking, setIsChecking] = useState(false)
@@ -50,6 +97,9 @@ export function TrainCheckInButton({
   const [startedAt, setStartedAt] = useState(sessionStartedAt)
   const [completedAt, setCompletedAt] = useState(sessionCompletedAt)
   const [completedMinutes, setCompletedMinutes] = useState(durationMinutes)
+  const [workState, setWorkState] = useState(() =>
+    workUnits.length ? workUnits : BASKETBALL_WORK_UNITS
+  )
   const [error, setError] = useState("")
   const [now, setNow] = useState(() => Date.now())
   const [isPending, startTransition] = useTransition()
@@ -87,6 +137,7 @@ export function TrainCheckInButton({
       setStartedAt(savedSessionStart)
       setCompletedAt(null)
       setCompletedMinutes(0)
+      setWorkState(BASKETBALL_WORK_UNITS)
       startTransition(() => router.refresh())
     } catch {
       setError("Session could not be started. Try again.")
@@ -103,6 +154,10 @@ export function TrainCheckInButton({
 
     try {
       const response = await fetch(`/api/org/${organizationSlug}/check-out`, {
+        body: JSON.stringify({ workUnits: workState }),
+        headers: {
+          "Content-Type": "application/json",
+        },
         method: "POST",
       })
       const payload = (await response.json()) as CheckOutResponse
@@ -115,6 +170,7 @@ export function TrainCheckInButton({
 
       setCompletedAt(savedCompletedAt)
       setCompletedMinutes(Number(payload.checkIn?.duration_minutes || 0))
+      setWorkState(payload.checkIn?.work_units?.length ? payload.checkIn.work_units : workState)
       startTransition(() => router.refresh())
     } catch {
       setError("Session could not be completed. Try again.")
@@ -138,6 +194,7 @@ export function TrainCheckInButton({
     : startedAt
       ? formatElapsedTime(startedAt, now)
       : "0:00"
+  const completedWorkCount = workState.filter((unit) => unit.completed).length
 
   return (
     <div className={styles.trainCheckInControl}>
@@ -166,7 +223,79 @@ export function TrainCheckInButton({
             {isEnding || isPending ? "ENDING SESSION" : label}
           </button>
         </div>
-      ) : (
+      ) : null}
+      {startedAt && isInSession ? (
+        <section className={styles.workUnitRail} aria-label="Basketball work">
+          {workState.map((unit, index) => (
+            <article
+              className={
+                unit.completed ? styles.workUnitComplete : styles.workUnit
+              }
+              key={unit.name}
+            >
+              <div className={styles.workUnitName}>
+                <strong>{unit.name}</strong>
+                <button
+                  onClick={() => toggleWorkUnit(index)}
+                  type="button"
+                >
+                  {unit.completed ? "DONE" : "ADD"}
+                </button>
+              </div>
+              <div className={styles.workUnitFields}>
+                <label>
+                  <span>SETS</span>
+                  <input
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) =>
+                      updateWorkUnit(index, "sets", event.target.value)
+                    }
+                    type="number"
+                    value={unit.sets}
+                  />
+                </label>
+                <label>
+                  <span>REPS</span>
+                  <input
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) =>
+                      updateWorkUnit(index, "reps", event.target.value)
+                    }
+                    type="number"
+                    value={unit.reps}
+                  />
+                </label>
+                <label>
+                  <span>MAKES</span>
+                  <input
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) =>
+                      updateWorkUnit(index, "makes", event.target.value)
+                    }
+                    type="number"
+                    value={unit.makes}
+                  />
+                </label>
+                <label>
+                  <span>MIN</span>
+                  <input
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) =>
+                      updateWorkUnit(index, "duration_minutes", event.target.value)
+                    }
+                    type="number"
+                    value={unit.duration_minutes}
+                  />
+                </label>
+              </div>
+            </article>
+          ))}
+        </section>
+      ) : startedAt ? (
         <div className={styles.trainSessionComplete}>
           <p>
             <span>DURATION</span>
@@ -180,11 +309,37 @@ export function TrainCheckInButton({
             <span>ACTIVE THIS WEEK</span>
             <strong>{activeThisWeek} / 7 days</strong>
           </p>
+          <p>
+            <span>WORK COMPLETED</span>
+            <strong>{completedWorkCount}</strong>
+          </p>
         </div>
-      )}
+      ) : null}
       {error ? <p className={styles.trainCheckInError}>{error}</p> : null}
     </div>
   )
+
+  function toggleWorkUnit(index: number) {
+    setWorkState((current) =>
+      current.map((unit, unitIndex) =>
+        unitIndex === index ? { ...unit, completed: !unit.completed } : unit
+      )
+    )
+  }
+
+  function updateWorkUnit(
+    index: number,
+    field: "duration_minutes" | "makes" | "reps" | "sets",
+    value: string
+  ) {
+    setWorkState((current) =>
+      current.map((unit, unitIndex) =>
+        unitIndex === index
+          ? { ...unit, [field]: cleanWorkInput(value) }
+          : unit
+      )
+    )
+  }
 }
 
 function formatElapsedTime(value: string, now: number) {
@@ -217,4 +372,12 @@ function formatDurationMinutes(value: number) {
 
 function padTime(value: number) {
   return String(value).padStart(2, "0")
+}
+
+function cleanWorkInput(value: string) {
+  const number = Number(value)
+
+  if (!Number.isFinite(number)) return 0
+
+  return Math.max(0, Math.min(Math.round(number), 10000))
 }

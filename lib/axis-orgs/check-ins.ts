@@ -14,7 +14,20 @@ export type AxisCheckIn = {
   id: string
   organization_slug: string
   user_id: string
+  work_units: AxisWorkUnit[]
 }
+
+export type AxisWorkUnit = {
+  completed: boolean
+  duration_minutes: number
+  makes: number
+  name: string
+  reps: number
+  sets: number
+}
+
+const CHECK_IN_SELECT =
+  "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, work_units, created_at"
 
 export async function getTodayCheckIn({
   organizationSlug,
@@ -27,16 +40,14 @@ export async function getTodayCheckIn({
 
   const result = await supabaseAdmin
     .from("check_ins")
-    .select(
-      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
-    )
+    .select(CHECK_IN_SELECT)
     .eq("user_id", userId)
     .eq("organization_slug", organizationSlug)
     .gte("checked_in_at", start.toISOString())
     .lt("checked_in_at", end.toISOString())
     .order("checked_in_at", { ascending: false })
     .limit(1)
-    .maybeSingle<AxisCheckIn>()
+    .maybeSingle<RawAxisCheckIn>()
 
   if (result.error) {
     console.warn("AXIS TRAIN CHECK-IN", {
@@ -48,7 +59,7 @@ export async function getTodayCheckIn({
     return null
   }
 
-  return result.data
+  return result.data ? normalizeCheckIn(result.data) : null
 }
 
 export async function saveCheckIn({
@@ -73,10 +84,8 @@ export async function saveCheckIn({
       organization_slug: organizationSlug,
       user_id: userId,
     })
-    .select(
-      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
-    )
-    .single<AxisCheckIn>()
+    .select(CHECK_IN_SELECT)
+    .single<RawAxisCheckIn>()
 
   if (result.error) {
     if (result.error.code === "23505") {
@@ -105,7 +114,7 @@ export async function saveCheckIn({
   }
 
   return {
-    checkIn: result.data,
+    checkIn: normalizeCheckIn(result.data),
     duplicate: false,
   }
 }
@@ -113,9 +122,11 @@ export async function saveCheckIn({
 export async function completeCheckIn({
   organizationSlug,
   userId,
+  workUnits = [],
 }: {
   organizationSlug: string
   userId: string
+  workUnits?: unknown
 }) {
   const existing = await getTodayCheckIn({ organizationSlug, userId })
 
@@ -142,12 +153,11 @@ export async function completeCheckIn({
     .update({
       checked_out_at: checkedOutAt,
       duration_minutes: durationMinutes,
+      work_units: normalizeWorkUnits(workUnits),
     })
     .eq("id", existing.id)
-    .select(
-      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
-    )
-    .single<AxisCheckIn>()
+    .select(CHECK_IN_SELECT)
+    .single<RawAxisCheckIn>()
 
   if (result.error) {
     console.error("AXIS TRAIN CHECK-OUT", {
@@ -165,7 +175,7 @@ export async function completeCheckIn({
   }
 
   return {
-    checkIn: result.data,
+    checkIn: normalizeCheckIn(result.data),
     duplicate: false,
   }
 }
@@ -179,14 +189,12 @@ export async function getCheckInSummary({
 }) {
   const result = await supabaseAdmin
     .from("check_ins")
-    .select(
-      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
-    )
+    .select(CHECK_IN_SELECT)
     .eq("user_id", userId)
     .eq("organization_slug", organizationSlug)
     .order("checked_in_at", { ascending: false })
     .limit(365)
-    .returns<AxisCheckIn[]>()
+    .returns<RawAxisCheckIn[]>()
 
   if (result.error) {
     console.warn("AXIS TRAIN CHECK-IN", {
@@ -198,19 +206,17 @@ export async function getCheckInSummary({
     return emptyCheckInSummary()
   }
 
-  return buildCheckInSummary(result.data || [])
+  return buildCheckInSummary((result.data || []).map(normalizeCheckIn))
 }
 
 export async function getOrganizationCheckInActivity(organizationSlug: string) {
   const result = await supabaseAdmin
     .from("check_ins")
-    .select(
-      "id, user_id, organization_slug, checked_in_at, checked_out_at, duration_minutes, created_at"
-    )
+    .select(CHECK_IN_SELECT)
     .eq("organization_slug", organizationSlug)
     .order("checked_in_at", { ascending: false })
     .limit(1000)
-    .returns<AxisCheckIn[]>()
+    .returns<RawAxisCheckIn[]>()
 
   if (result.error) {
     console.warn("AXIS COACH CHECK-INS", {
@@ -222,7 +228,43 @@ export async function getOrganizationCheckInActivity(organizationSlug: string) {
     return emptyOrganizationCheckInActivity()
   }
 
-  return buildOrganizationCheckInActivity(result.data || [])
+  return buildOrganizationCheckInActivity((result.data || []).map(normalizeCheckIn))
+}
+
+type RawAxisCheckIn = Omit<AxisCheckIn, "work_units"> & {
+  work_units: unknown
+}
+
+export function normalizeWorkUnits(value: unknown): AxisWorkUnit[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((unit) => {
+      if (!unit || typeof unit !== "object") return null
+
+      const record = unit as Record<string, unknown>
+      const name = typeof record.name === "string" ? record.name.trim() : ""
+
+      if (!name) return null
+
+      return {
+        completed: Boolean(record.completed),
+        duration_minutes: cleanWorkNumber(record.duration_minutes),
+        makes: cleanWorkNumber(record.makes),
+        name: name.slice(0, 40),
+        reps: cleanWorkNumber(record.reps),
+        sets: cleanWorkNumber(record.sets),
+      }
+    })
+    .filter((unit): unit is AxisWorkUnit => Boolean(unit))
+    .slice(0, 12)
+}
+
+function normalizeCheckIn(row: RawAxisCheckIn): AxisCheckIn {
+  return {
+    ...row,
+    work_units: normalizeWorkUnits(row.work_units),
+  }
 }
 
 function completedSessionMinutes({
@@ -239,6 +281,14 @@ function completedSessionMinutes({
   if (!Number.isFinite(diffMinutes)) return 0
 
   return Math.max(0, Math.min(diffMinutes, 600))
+}
+
+function cleanWorkNumber(value: unknown) {
+  const number = Number(value || 0)
+
+  if (!Number.isFinite(number)) return 0
+
+  return Math.max(0, Math.min(Math.round(number), 10000))
 }
 
 function buildCheckInSummary(checkIns: AxisCheckIn[]) {
@@ -292,6 +342,13 @@ function buildOrganizationCheckInActivity(checkIns: AxisCheckIn[]) {
       .filter((checkIn) => new Date(checkIn.checked_in_at) >= weekStart)
       .map((checkIn) => checkIn.user_id)
   )
+  const activeSessions = todayCheckIns.filter((checkIn) => !checkIn.checked_out_at).length
+  const completedToday = todayCheckIns.filter((checkIn) => checkIn.checked_out_at).length
+  const workCompletedToday = todayCheckIns.reduce(
+    (total, checkIn) =>
+      total + checkIn.work_units.filter((unit) => unit.completed).length,
+    0
+  )
   const checkInsByUser = groupCheckInsByUser(checkIns)
   const streakLeaders = Array.from(checkInsByUser.entries())
     .map(([userId, userCheckIns]) => {
@@ -307,23 +364,43 @@ function buildOrganizationCheckInActivity(checkIns: AxisCheckIn[]) {
     .filter((leader) => leader.streak > 0)
     .sort((left, right) => right.streak - left.streak)
     .slice(0, 5)
+  const mostActive = Array.from(checkInsByUser.entries())
+    .map(([userId, userCheckIns]) => ({
+      userId,
+      workCompleted: userCheckIns.reduce(
+        (total, checkIn) =>
+          total + checkIn.work_units.filter((unit) => unit.completed).length,
+        0
+      ),
+    }))
+    .filter((member) => member.workCompleted > 0)
+    .sort((left, right) => right.workCompleted - left.workCompleted)
+    .slice(0, 5)
 
   return {
     activeToday: checkedInTodayByUser.length,
+    activeSessions,
     checkedInToday: checkedInTodayByUser,
+    completedToday,
     hasAnyCheckIns: checkIns.length > 0,
+    mostActive,
     streakLeaders,
     thisWeekActiveUsers: activeThisWeek.size,
+    workCompletedToday,
   }
 }
 
 function emptyOrganizationCheckInActivity() {
   return {
     activeToday: 0,
+    activeSessions: 0,
     checkedInToday: [] as AxisCheckIn[],
+    completedToday: 0,
     hasAnyCheckIns: false,
+    mostActive: [] as Array<{ userId: string; workCompleted: number }>,
     streakLeaders: [] as Array<{ streak: number; userId: string }>,
     thisWeekActiveUsers: 0,
+    workCompletedToday: 0,
   }
 }
 

@@ -75,6 +75,7 @@
 }
 
 .modeCard {
+  align-content: center;
   background:
     linear-gradient(180deg, rgba(var(--axis-live), 0.035), transparent 34%),
     rgba(var(--axis-panel), 0.74);
@@ -131,7 +132,7 @@
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.9;
-  max-width: 9ch;
+  max-width: 12ch;
   text-transform: uppercase;
 }
 
@@ -335,7 +336,11 @@
 .trainSessionLive span,
 .trainSessionLive button,
 .trainSessionComplete span,
-.trainSessionComplete strong {
+.trainSessionComplete strong,
+.workUnitName strong,
+.workUnitName button,
+.workUnitFields span,
+.workUnitFields input {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
   letter-spacing: 0.04em;
   overflow: hidden;
@@ -461,10 +466,118 @@
   opacity: 0.62;
 }
 
+.workUnitRail {
+  background: rgba(255, 255, 255, 0.018);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.workUnit,
+.workUnitComplete {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 0.58rem;
+  grid-template-columns: minmax(8rem, 0.74fr) minmax(0, 1.26fr);
+  padding: 0.62rem 0.75rem;
+}
+
+.workUnit:first-child,
+.workUnitComplete:first-child {
+  border-top: 0;
+}
+
+.workUnitComplete {
+  background:
+    linear-gradient(90deg, rgba(var(--axis-live), 0.12), transparent 62%),
+    rgba(var(--axis-live), 0.035);
+}
+
+.workUnitName {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.workUnitName strong {
+  color: rgba(var(--axis-ink), 0.88);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.workUnitName button {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  color: rgba(var(--axis-ink), 0.72);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.56rem;
+  min-height: 1.75rem;
+  padding: 0 0.58rem;
+}
+
+.workUnitComplete .workUnitName button {
+  background: rgba(var(--axis-live), 0.16);
+  border-color: rgba(var(--axis-live), 0.28);
+  color: rgba(var(--axis-live), 0.92);
+}
+
+.workUnitName button:hover,
+.workUnitName button:focus-visible {
+  border-color: rgba(var(--axis-live), 0.34);
+  outline: none;
+}
+
+.workUnitFields {
+  display: grid;
+  gap: 0.38rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.workUnitFields label {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.workUnitFields span {
+  color: rgba(var(--axis-ink), 0.42);
+  font-size: 0.52rem;
+}
+
+.workUnitFields input {
+  appearance: textfield;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.46rem;
+  color: rgba(var(--axis-ink), 0.9);
+  font-size: 0.72rem;
+  min-height: 2rem;
+  padding: 0 0.44rem;
+  width: 100%;
+}
+
+.workUnitFields input:focus {
+  border-color: rgba(var(--axis-live), 0.42);
+  outline: none;
+}
+
+.workUnitFields input::-webkit-outer-spin-button,
+.workUnitFields input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
 .trainSessionComplete {
   display: grid;
   gap: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .trainSessionComplete p {
@@ -2611,6 +2724,16 @@
 
   .trainSessionTopBar em {
     grid-column: 1 / -1;
+  }
+
+  .workUnit,
+  .workUnitComplete {
+    grid-template-columns: 1fr;
+    padding: 0.65rem;
+  }
+
+  .workUnitFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .trainSessionComplete {

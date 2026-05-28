@@ -59,6 +59,7 @@ export default async function OrganizationTrainPage({
             sessionStartedAt={sessionStartedAt}
             organizationSlug={organizationSlug}
             organizationName={axisOrganization.name}
+            workUnits={checkInSummary.todayCheckIn?.work_units || []}
           />
 
           <MovementCalibrationFlow
