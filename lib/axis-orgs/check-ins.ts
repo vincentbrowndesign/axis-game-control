@@ -108,31 +108,12 @@ export async function saveCheckIn({
     }
   }
 
-  const result = await supabaseAdmin
-    .from("check_ins")
-    .insert({
-      organization_slug: organizationSlug,
-      user_id: userId,
-    })
-    .select(CHECK_IN_SELECT_BASE)
-    .single<RawAxisCheckIn>()
+  const result = await insertCheckIn({
+    organizationSlug,
+    userId,
+  })
 
   if (result.error) {
-    if (isMissingWorkUnitsError(result.error)) {
-      rememberMissingWorkUnitsColumn({ organizationSlug, stage: "insert-select-fallback" })
-
-      const savedWithoutWork = await getTodayCheckIn({ organizationSlug, userId })
-
-      if (savedWithoutWork) {
-        return {
-          checkIn: savedWithoutWork,
-          duplicate: false,
-        }
-      }
-    } else {
-      workUnitsColumnAvailable = true
-    }
-
     if (result.error.code === "23505") {
       const duplicate = await getTodayCheckIn({ organizationSlug, userId })
 
@@ -168,16 +149,102 @@ export async function saveCheckIn({
   }
 }
 
+async function insertCheckIn({
+  organizationSlug,
+  userId,
+}: {
+  organizationSlug: string
+  userId: string
+}) {
+  const payload: Record<string, unknown> =
+    workUnitsColumnAvailable === false
+      ? {
+          organization_slug: organizationSlug,
+          user_id: userId,
+        }
+      : {
+          organization_slug: organizationSlug,
+          user_id: userId,
+          work_units: [],
+        }
+
+  console.info("AXIS START SESSION", {
+    hasWorkUnitsDefault: "work_units" in payload,
+    organizationSlug,
+    stage: "insert-start",
+    userId,
+  })
+
+  const result = await supabaseAdmin
+    .from("check_ins")
+    .insert(payload)
+    .select(CHECK_IN_SELECT_BASE)
+    .single<RawAxisCheckIn>()
+
+  if (!result.error) {
+    if (workUnitsColumnAvailable !== false) {
+      workUnitsColumnAvailable = true
+    }
+
+    return result
+  }
+
+  console.error("AXIS START SESSION", {
+    code: result.error.code,
+    detail: result.error.details,
+    hint: result.error.hint,
+    message: result.error.message,
+    organizationSlug,
+    stage: "insert-failed",
+    userId,
+  })
+
+  if ("work_units" in payload && isMissingWorkUnitsError(result.error)) {
+    rememberMissingWorkUnitsColumn({ organizationSlug, stage: "insert-without-work-units" })
+
+    const fallback = await supabaseAdmin
+      .from("check_ins")
+      .insert({
+        organization_slug: organizationSlug,
+        user_id: userId,
+      })
+      .select(CHECK_IN_SELECT_BASE)
+      .single<RawAxisCheckIn>()
+
+    console.info("AXIS START SESSION", {
+      code: fallback.error?.code,
+      hasData: Boolean(fallback.data),
+      message: fallback.error?.message,
+      organizationSlug,
+      stage: "insert-without-work-units",
+      userId,
+    })
+
+    return fallback
+  }
+
+  if (!isMissingWorkUnitsError(result.error)) {
+    workUnitsColumnAvailable = true
+  }
+
+  return result
+}
+
 export async function completeCheckIn({
+  checkInId,
   organizationSlug,
   userId,
   workUnits = [],
 }: {
+  checkInId?: string
   organizationSlug: string
   userId: string
   workUnits?: unknown
 }) {
-  const existing = await getTodayCheckIn({ organizationSlug, userId })
+  const existing =
+    (checkInId
+      ? await getCheckInById({ checkInId, organizationSlug, userId })
+      : null) || (await getTodayCheckIn({ organizationSlug, userId }))
 
   if (!existing) {
     return {
@@ -202,6 +269,7 @@ export async function completeCheckIn({
     checkedOutAt,
     durationMinutes,
     existingId: existing.id,
+    requestedId: checkInId || null,
     organizationSlug,
     stage: "update-start",
     userId,
@@ -211,6 +279,7 @@ export async function completeCheckIn({
     checkedOutAt,
     durationMinutes,
     existing,
+    requestedId: checkInId,
     organizationSlug,
     userId,
   })
@@ -276,16 +345,70 @@ export async function completeCheckIn({
   }
 }
 
+async function getCheckInById({
+  checkInId,
+  organizationSlug,
+  userId,
+}: {
+  checkInId: string
+  organizationSlug: string
+  userId: string
+}) {
+  const result = await supabaseAdmin
+    .from("check_ins")
+    .select(checkInSelect())
+    .eq("id", checkInId)
+    .eq("user_id", userId)
+    .eq("organization_slug", organizationSlug)
+    .maybeSingle<RawAxisCheckIn>()
+
+  if (!result.error) {
+    return result.data ? normalizeCheckIn(result.data) : null
+  }
+
+  if (isMissingWorkUnitsError(result.error)) {
+    rememberMissingWorkUnitsColumn({ organizationSlug, stage: "read-by-id-fallback" })
+
+    const fallback = await supabaseAdmin
+      .from("check_ins")
+      .select(CHECK_IN_SELECT_BASE)
+      .eq("id", checkInId)
+      .eq("user_id", userId)
+      .eq("organization_slug", organizationSlug)
+      .maybeSingle<RawAxisCheckIn>()
+
+    if (!fallback.error) {
+      return fallback.data ? normalizeCheckIn(fallback.data) : null
+    }
+  } else {
+    workUnitsColumnAvailable = true
+  }
+
+  console.warn("AXIS TRAIN CHECK-OUT", {
+    checkInId,
+    code: result.error.code,
+    detail: result.error.message,
+    hint: result.error.hint,
+    organizationSlug,
+    stage: "read-by-id-failed",
+    userId,
+  })
+
+  return null
+}
+
 async function closeCheckIn({
   checkedOutAt,
   durationMinutes,
   existing,
+  requestedId,
   organizationSlug,
   userId,
 }: {
   checkedOutAt: string
   durationMinutes: number
   existing: AxisCheckIn
+  requestedId?: string
   organizationSlug: string
   userId: string
 }) {
@@ -305,6 +428,7 @@ async function closeCheckIn({
     hasData: Boolean(byId.data),
     message: byId.error?.message,
     organizationSlug,
+    requestedId: requestedId || null,
     stage: "update-by-id",
     userId,
   })
@@ -332,6 +456,7 @@ async function closeCheckIn({
     count: fallback.data?.length || 0,
     message: fallback.error?.message,
     organizationSlug,
+    requestedId: requestedId || null,
     stage: "update-active-fallback",
     userId,
   })

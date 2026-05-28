@@ -9,6 +9,7 @@ type TrainCheckInButtonProps = {
   activeThisWeek: number
   currentStreak: number
   durationMinutes: number
+  sessionId: string | null
   organizationName: string
   organizationSlug: string
   sessionCompletedAt: string | null
@@ -18,11 +19,13 @@ type TrainCheckInButtonProps = {
 
 type CheckInResponse = {
   activeSession?: {
+    id?: string
     started_at?: string
     status?: string
   }
   checkIn?: {
     checked_in_at?: string
+    id?: string
   }
   error?: string
   ok?: boolean
@@ -85,6 +88,7 @@ export function TrainCheckInButton({
   activeThisWeek,
   currentStreak,
   durationMinutes,
+  sessionId,
   organizationName,
   organizationSlug,
   sessionCompletedAt,
@@ -97,6 +101,7 @@ export function TrainCheckInButton({
   const [startedAt, setStartedAt] = useState(sessionStartedAt)
   const [completedAt, setCompletedAt] = useState(sessionCompletedAt)
   const [completedMinutes, setCompletedMinutes] = useState(durationMinutes)
+  const [activeCheckInId, setActiveCheckInId] = useState(sessionId)
   const [workState, setWorkState] = useState(() =>
     workUnits.length ? workUnits : BASKETBALL_WORK_UNITS
   )
@@ -128,6 +133,7 @@ export function TrainCheckInButton({
 
       const savedSessionStart =
         payload.activeSession?.started_at || payload.checkIn?.checked_in_at
+      const savedSessionId = payload.activeSession?.id || payload.checkIn?.id || null
 
       if (!response.ok || !payload.ok || !savedSessionStart) {
         console.error("AXIS START SESSION FAILED", {
@@ -142,6 +148,7 @@ export function TrainCheckInButton({
       setStartedAt(savedSessionStart)
       setCompletedAt(null)
       setCompletedMinutes(0)
+      setActiveCheckInId(savedSessionId)
       setWorkState(BASKETBALL_WORK_UNITS)
       startTransition(() => router.refresh())
     } catch (error) {
@@ -160,7 +167,7 @@ export function TrainCheckInButton({
 
     try {
       const response = await fetch(`/api/org/${organizationSlug}/check-out`, {
-        body: JSON.stringify({ workUnits: workState }),
+        body: JSON.stringify({ checkInId: activeCheckInId, workUnits: workState }),
         headers: {
           "Content-Type": "application/json",
         },

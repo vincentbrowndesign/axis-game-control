@@ -8,6 +8,7 @@ export const runtime = "nodejs"
 const ACTIVE_ORGANIZATIONS = new Set(["bridge", "city2city"])
 
 type CheckOutBody = {
+  checkInId?: unknown
   workUnits?: unknown
 }
 
@@ -36,6 +37,7 @@ export async function POST(
   }
 
   console.info("AXIS END SESSION REQUEST", {
+    checkInId: typeof body.checkInId === "string" ? body.checkInId : null,
     hasWorkUnits: Array.isArray(body.workUnits),
     organizationSlug,
     userId,
@@ -43,6 +45,7 @@ export async function POST(
   })
 
   const saved = await completeCheckIn({
+    checkInId: typeof body.checkInId === "string" ? body.checkInId : undefined,
     organizationSlug,
     userId,
     workUnits: body.workUnits,

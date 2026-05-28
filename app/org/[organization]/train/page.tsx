@@ -55,6 +55,7 @@ export default async function OrganizationTrainPage({
             activeThisWeek={checkInSummary.thisWeekCount}
             currentStreak={checkInSummary.currentStreak}
             durationMinutes={checkInSummary.todayCheckIn?.duration_minutes || 0}
+            sessionId={checkInSummary.todayCheckIn?.id || null}
             sessionCompletedAt={sessionCompletedAt}
             sessionStartedAt={sessionStartedAt}
             organizationSlug={organizationSlug}

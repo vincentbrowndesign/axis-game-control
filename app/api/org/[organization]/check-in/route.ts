@@ -45,8 +45,14 @@ export async function POST(
   })
 
   if ("error" in saved) {
+    console.error("AXIS START SESSION FAILED", {
+      error: saved.error instanceof Error ? saved.error.message : saved.error,
+      organizationSlug,
+      userId,
+    })
+
     return NextResponse.json(
-      { error: "Check-in could not be saved. Try again." },
+      { error: "Unable to start session." },
       { status: 500 }
     )
   }
