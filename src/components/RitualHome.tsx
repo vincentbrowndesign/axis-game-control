@@ -7,8 +7,8 @@ type RitualState = "idle" | "active" | "saving" | "complete";
 type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
 type CalibrationStatus = "required" | "calibrated";
 type CalibrationWorkflowStatus = "not_calibrated" | "calibrating" | "complete";
+type DetectionStatus = "idle" | "detecting" | "none" | "multiple" | "ready" | "error";
 type ActiveView = "session" | "camera";
-type CalibrationStep = "stand" | "hold" | "left" | "right";
 type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
 type ParticipationWindowStatus = "open" | "closed";
@@ -32,13 +32,6 @@ const participationModes: ParticipationMode[] = [
   "Open Gym",
 ];
 const defaultParticipationMode: ParticipationMode = "Training";
-const calibrationSteps: CalibrationStep[] = ["stand", "hold", "left", "right"];
-const calibrationStepCopy: Record<CalibrationStep, string> = {
-  stand: "Stand in frame.",
-  hold: "Hold still.",
-  left: "Turn left.",
-  right: "Turn right.",
-};
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
@@ -73,6 +66,7 @@ type ActiveParticipant = AthleteIdentity & {
   leftAt?: string;
   calibrationStatus?: CalibrationStatus;
   calibratedAt?: string;
+  calibrationEvidence?: CalibrationEvidence;
 };
 
 type SessionParticipant = AthleteIdentity & {
@@ -80,7 +74,17 @@ type SessionParticipant = AthleteIdentity & {
   leftAt?: string;
   calibrationStatus?: CalibrationStatus;
   calibratedAt?: string;
+  calibrationEvidence?: CalibrationEvidence;
   activeAtCheckout: boolean;
+};
+
+type CalibrationEvidence = {
+  athlete_id: string;
+  session_id: string;
+  timestamp: string;
+  camera_type: CameraDirection;
+  calibration_status: CalibrationStatus;
+  visible_people: number;
 };
 
 type ParticipationWindow = {
@@ -119,6 +123,7 @@ type AxisSave = {
     cameraState?: CameraState;
     cameraDirection?: CameraDirection;
     cameraAttachedAt?: string;
+    calibrationRecords?: CalibrationEvidence[];
     participationWindow?: ParticipationWindow;
     clipContinuityContext?: ClipContinuityContext;
     participants?: ActiveParticipant[];
@@ -205,6 +210,7 @@ function normalizeActiveParticipant(participant: unknown): ActiveParticipant | n
     leftAt: candidate.leftAt,
     calibrationStatus: normalizeCalibrationStatus(candidate.calibrationStatus),
     calibratedAt: candidate.calibratedAt,
+    calibrationEvidence: candidate.calibrationEvidence,
   };
 }
 
@@ -218,6 +224,7 @@ function normalizeSessionParticipant(participant: unknown): SessionParticipant |
     ...activeParticipant,
     calibrationStatus: normalizeCalibrationStatus(candidate.calibrationStatus ?? activeParticipant.calibrationStatus),
     calibratedAt: candidate.calibratedAt ?? activeParticipant.calibratedAt,
+    calibrationEvidence: candidate.calibrationEvidence ?? activeParticipant.calibrationEvidence,
     activeAtCheckout: Boolean(candidate.activeAtCheckout ?? !activeParticipant.leftAt),
   };
 }
@@ -361,6 +368,9 @@ function readSave(): AxisSave {
           cameraState: activeCameraState,
           cameraDirection: activeCameraDirection,
           cameraAttachedAt: parsed.activeSession.cameraAttachedAt,
+          calibrationRecords: Array.isArray(parsed.activeSession.calibrationRecords)
+            ? parsed.activeSession.calibrationRecords
+            : [],
           participationWindow: activeParticipationWindow,
           clipContinuityContext: createClipContinuityContext(
             parsed.activeSession.id,
@@ -461,8 +471,10 @@ export function RitualHome() {
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("session");
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
-  const [calibrationStepIndex, setCalibrationStepIndex] = useState<number | null>(null);
   const [selectedCalibrationAthleteId, setSelectedCalibrationAthleteId] = useState<string | null>(null);
+  const [detectionStatus, setDetectionStatus] = useState<DetectionStatus>("idle");
+  const [visiblePeople, setVisiblePeople] = useState<number | null>(null);
+  const [calibrationEvidence, setCalibrationEvidence] = useState<CalibrationEvidence | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraDirection, setCameraDirection] = useState<CameraDirection>("back");
   const [cameraMessage, setCameraMessage] = useState("");
@@ -619,13 +631,17 @@ export function RitualHome() {
     const activeParticipants = save.activeSession?.participants?.filter((participant) => !participant.leftAt) ?? [];
     if (!activeParticipants.length) {
       setSelectedCalibrationAthleteId(null);
-      setCalibrationStepIndex(null);
+      setDetectionStatus("idle");
+      setVisiblePeople(null);
+      setCalibrationEvidence(null);
       return;
     }
 
     if (!selectedCalibrationAthleteId || !activeParticipants.some((participant) => participant.id === selectedCalibrationAthleteId)) {
       setSelectedCalibrationAthleteId(activeParticipants[0].id);
-      setCalibrationStepIndex(null);
+      setDetectionStatus("idle");
+      setVisiblePeople(null);
+      setCalibrationEvidence(null);
     }
   }, [save.activeSession?.participants, selectedCalibrationAthleteId]);
 
@@ -653,8 +669,6 @@ export function RitualHome() {
     save.activeSession?.cameraDirection ?? latestSession?.cameraDirection ?? cameraDirection,
   );
   const cameraDirectionLabel = formatCameraDirection(savedCameraDirection);
-  const activeCalibrationStep =
-    calibrationStepIndex === null ? null : calibrationSteps[calibrationStepIndex] ?? null;
   const activeParticipants = save.activeSession?.participants ?? [];
   const presentParticipants = activeParticipants.filter((participant) => !participant.leftAt);
   const activeParticipantCount = presentParticipants.length;
@@ -669,13 +683,26 @@ export function RitualHome() {
   const selectedAthleteCalibrationStatus = selectedCalibrationAthlete
     ? normalizeCalibrationStatus(selectedCalibrationAthlete.calibrationStatus)
     : "required";
-  const calibrationWorkflowStatus: CalibrationWorkflowStatus = activeCalibrationStep
+  const calibrationWorkflowStatus: CalibrationWorkflowStatus = detectionStatus === "detecting"
     ? "calibrating"
     : selectedAthleteCalibrationStatus === "calibrated"
       ? "complete"
       : "not_calibrated";
-  const calibrationWorkflowLabel =
-    calibrationWorkflowStatus === "calibrating"
+  const detectionStatusLabel =
+    detectionStatus === "detecting"
+      ? "CHECKING FRAME"
+      : detectionStatus === "none"
+        ? "NO ATHLETE DETECTED"
+        : detectionStatus === "multiple"
+          ? "ONE ATHLETE REQUIRED"
+          : detectionStatus === "ready"
+            ? "CALIBRATION READY"
+            : detectionStatus === "error"
+              ? "CHECK FAILED"
+              : "";
+  const calibrationWorkflowLabel = detectionStatusLabel
+    ? detectionStatusLabel
+    : calibrationWorkflowStatus === "calibrating"
       ? "CALIBRATING"
       : calibrationWorkflowStatus === "complete"
         ? "COMPLETE"
@@ -854,8 +881,10 @@ export function RitualHome() {
     setLatestSavedSessionId(null);
     setActiveView("session");
     setIsModePickerOpen(false);
-    setCalibrationStepIndex(null);
     setSelectedCalibrationAthleteId(checkedInAthlete.id);
+    setDetectionStatus("idle");
+    setVisiblePeople(null);
+    setCalibrationEvidence(null);
     setCameraDirection(startingCameraDirection);
   }
 
@@ -1008,10 +1037,82 @@ export function RitualHome() {
     setActiveView("camera");
   }
 
-  function completeCameraCalibration() {
-    if (!save.activeSession || !identity || !selectedCalibrationAthlete) return;
+  function captureCameraFrame() {
+    const video = cameraPreviewRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  }
+
+  async function startCameraCalibration() {
+    if (!save.activeSession || cameraState !== "attached" || !selectedCalibrationAthlete) return;
+
+    const image = captureCameraFrame();
+    if (!image) {
+      setDetectionStatus("error");
+      setVisiblePeople(null);
+      return;
+    }
+
+    setDetectionStatus("detecting");
+    setVisiblePeople(null);
+    setCalibrationEvidence(null);
+
+    try {
+      const response = await fetch("/api/roboflow/person-detection", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ image }),
+      });
+      const result = (await response.json()) as { visiblePeople?: number; error?: string };
+
+      if (!response.ok) {
+        console.error("Roboflow person detection failed", result.error);
+        setDetectionStatus("error");
+        return;
+      }
+
+      const people = Number(result.visiblePeople ?? 0);
+      setVisiblePeople(people);
+
+      if (people === 0) {
+        setDetectionStatus("none");
+        return;
+      }
+
+      if (people > 1) {
+        setDetectionStatus("multiple");
+        return;
+      }
+
+      setDetectionStatus("ready");
+    } catch (error) {
+      console.error("Unable to run person detection", error);
+      setDetectionStatus("error");
+    }
+  }
+
+  function captureCalibrationEvidence() {
+    if (!save.activeSession || !identity || !selectedCalibrationAthlete || visiblePeople !== 1) return;
 
     const completedAt = new Date().toISOString();
+    const evidence: CalibrationEvidence = {
+      athlete_id: selectedCalibrationAthlete.id,
+      session_id: save.activeSession.id,
+      timestamp: completedAt,
+      camera_type: savedCameraDirection,
+      calibration_status: "calibrated",
+      visible_people: visiblePeople,
+    };
     const nextParticipants = activeParticipants.map((participant) =>
       participant.leftAt || participant.id !== selectedCalibrationAthlete.id
         ? participant
@@ -1019,6 +1120,7 @@ export function RitualHome() {
             ...participant,
             calibrationStatus: "calibrated" as const,
             calibratedAt: completedAt,
+            calibrationEvidence: evidence,
           },
     );
     const participationWindow = normalizeParticipationWindow(
@@ -1035,6 +1137,7 @@ export function RitualHome() {
       activeSession: {
         ...save.activeSession,
         calibrationStatus: allActiveParticipantsCalibrated ? "calibrated" : "required",
+        calibrationRecords: [...(save.activeSession.calibrationRecords ?? []), evidence],
         participationWindow,
         clipContinuityContext: createClipContinuityContext(
           save.activeSession.id,
@@ -1062,24 +1165,9 @@ export function RitualHome() {
     if (nextIdentity !== identity) writeIdentity(nextIdentity);
     setSave(nextSave);
     setIdentity(nextIdentity);
-    setCalibrationStepIndex(null);
-  }
-
-  function startCameraCalibration() {
-    if (!save.activeSession || cameraState !== "attached" || !selectedCalibrationAthlete) return;
-
-    setCalibrationStepIndex(0);
-  }
-
-  function advanceCameraCalibration() {
-    if (calibrationStepIndex === null) return;
-
-    if (calibrationStepIndex >= calibrationSteps.length - 1) {
-      completeCameraCalibration();
-      return;
-    }
-
-    setCalibrationStepIndex(calibrationStepIndex + 1);
+    setCalibrationEvidence(evidence);
+    setDetectionStatus("idle");
+    setVisiblePeople(null);
   }
 
   function removeParticipant(participantId: string) {
@@ -1187,7 +1275,9 @@ export function RitualHome() {
     setSave(nextSave);
     setLatestSavedSessionId(completedSession.id);
     setActiveView("session");
-    setCalibrationStepIndex(null);
+    setDetectionStatus("idle");
+    setVisiblePeople(null);
+    setCalibrationEvidence(null);
     setCameraStream(null);
     setCameraMessage("");
 
@@ -1331,7 +1421,9 @@ export function RitualHome() {
                       <button
                         onClick={() => {
                           setSelectedCalibrationAthleteId(participant.id);
-                          setCalibrationStepIndex(null);
+                          setDetectionStatus("idle");
+                          setVisiblePeople(null);
+                          setCalibrationEvidence(null);
                         }}
                         type="button"
                       >
@@ -1354,39 +1446,41 @@ export function RitualHome() {
               <span className="axis-window-state">
                 {selectedCalibrationAthlete ? selectedCalibrationAthlete.name : "Select athlete"}
               </span>
+              {visiblePeople !== null ? (
+                <span className="axis-window-state">{`${visiblePeople} visible ${
+                  visiblePeople === 1 ? "athlete" : "athletes"
+                }`}</span>
+              ) : null}
               <button
                 className="axis-calibration-action"
                 disabled={
                   cameraState !== "attached" ||
                   !selectedCalibrationAthlete ||
-                  selectedAthleteCalibrationStatus === "calibrated"
+                  selectedAthleteCalibrationStatus === "calibrated" ||
+                  detectionStatus === "detecting"
                 }
                 onClick={startCameraCalibration}
                 type="button"
               >
-                {selectedAthleteCalibrationStatus === "calibrated" ? "Calibration complete" : "Start calibration"}
+                {detectionStatus === "detecting"
+                  ? "Checking frame"
+                  : selectedAthleteCalibrationStatus === "calibrated"
+                    ? "Calibration complete"
+                    : "Start calibration"}
               </button>
-              {activeCalibrationStep ? (
-                <section className="axis-calibration-screen" aria-label="Identity calibration" aria-live="polite">
+              {detectionStatus === "ready" ? (
+                <button className="axis-calibration-action" onClick={captureCalibrationEvidence} type="button">
+                  Capture calibration
+                </button>
+              ) : null}
+              {calibrationEvidence?.athlete_id === selectedCalibrationAthlete?.id ? (
+                <section className="axis-calibration-screen" aria-label="Calibration evidence">
                   <header>
-                    <span>Identity calibration</span>
-                    <strong>{calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Active"}</strong>
+                    <span>Calibration evidence</span>
+                    <strong>Calibrated</strong>
                   </header>
-                  <p>{calibrationStepCopy[activeCalibrationStep]}</p>
-                  <div className="axis-calibration-steps" aria-label="Calibration steps">
-                    {calibrationSteps.map((step, index) => (
-                      <span
-                        aria-current={index === calibrationStepIndex ? "step" : undefined}
-                        data-complete={calibrationStepIndex !== null && index < calibrationStepIndex}
-                        key={step}
-                      >
-                        {calibrationStepCopy[step]}
-                      </span>
-                    ))}
-                  </div>
-                  <button className="axis-calibration-action" onClick={advanceCameraCalibration} type="button">
-                    {calibrationStepIndex === calibrationSteps.length - 1 ? "Complete" : "Next"}
-                  </button>
+                  <p>{calibrationEvidence.camera_type === "front" ? "Front camera" : "Back camera"}</p>
+                  <span className="axis-window-state">{new Date(calibrationEvidence.timestamp).toLocaleTimeString()}</span>
                 </section>
               ) : null}
             </section>
