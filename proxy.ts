@@ -1,58 +1,47 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { clerkMiddleware } from "@clerk/nextjs/server"
-import { createServerClient } from "@supabase/ssr"
-import { isArchivedAxisUxSegment } from "@/lib/axis-active-product/routes"
-import { hasValidClerkServerConfig } from "@/lib/axis-auth/clerkConfig"
 
-async function axisProxy(request: NextRequest) {
-  const firstSegment = request.nextUrl.pathname.split("/").filter(Boolean)[0]
+const ALLOWED_PAGE_PATHS = new Set([
+  "/",
+  "/org/bridge/start",
+  "/org/city2city/start",
+  "/org/bridge/train",
+  "/org/city2city/train",
+  "/org/bridge/coach",
+  "/org/city2city/coach",
+])
 
-  if (firstSegment && isArchivedAxisUxSegment(firstSegment)) {
+const ALLOWED_API_PATHS = new Set([
+  "/api/org/bridge/check-in",
+  "/api/org/bridge/check-out",
+  "/api/org/city2city/check-in",
+  "/api/org/city2city/check-out",
+])
+
+function isAllowedPath(pathname: string) {
+  return ALLOWED_PAGE_PATHS.has(pathname.replace(/\/$/, "") || "/")
+}
+
+function isAllowedApiPath(pathname: string) {
+  return ALLOWED_API_PATHS.has(pathname.replace(/\/$/, ""))
+}
+
+export default function axisProxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  if (isAllowedPath(pathname) || isAllowedApiPath(pathname)) {
+    return NextResponse.next({ request })
+  }
+
+  if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  let response = NextResponse.next({
-    request,
-  })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-
-          response = NextResponse.next({
-            request,
-          })
-
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  await supabase.auth.getClaims()
-
-  return response
+  return NextResponse.redirect(new URL("/", request.url))
 }
-
-export default hasValidClerkServerConfig()
-  ? clerkMiddleware(async (_auth, request: NextRequest) => axisProxy(request))
-  : axisProxy
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/__clerk/(.*)",
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
 }

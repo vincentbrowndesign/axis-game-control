@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server"
 import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
-import { completeCheckIn } from "@/lib/axis-orgs/check-ins"
 import { normalizeOrganizationSlug } from "@/lib/axis-orgs/organizations"
+import { endSession } from "@/lib/axis-orgs/sessions"
 
 export const runtime = "nodejs"
 
 const ACTIVE_ORGANIZATIONS = new Set(["bridge", "city2city"])
 
+type CheckOutBody = {
+  sessionId?: unknown
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   context: RouteContext<"/api/org/[organization]/check-out">
 ) {
   const identity = await getAxisRequestIdentity()
@@ -30,21 +34,20 @@ export async function POST(
     return NextResponse.json({ error: "Sign in required." }, { status: 401 })
   }
 
-  const saved = await completeCheckIn({
+  const body = (await request.json().catch(() => ({}))) as CheckOutBody
+  const saved = await endSession({
     organizationSlug,
+    sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
     userId,
   })
 
   if ("error" in saved) {
-    return NextResponse.json(
-      { error: "Session could not be completed. Try again." },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Unable to end session." }, { status: 500 })
   }
 
   return NextResponse.json({
-    checkIn: saved.checkIn,
     duplicate: saved.duplicate,
     ok: true,
+    session: saved.session,
   })
 }

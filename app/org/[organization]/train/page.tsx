@@ -1,11 +1,10 @@
 import { notFound } from "next/navigation"
-import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
-import { getCheckInSummary } from "@/lib/axis-orgs/check-ins"
 import {
   getAxisOrganizationBySlug,
   normalizeOrganizationSlug,
 } from "@/lib/axis-orgs/organizations"
-import { MovementCalibrationFlow } from "@/components/axis-orgs/MovementCalibrationFlow"
+import { getAxisRequestIdentity } from "@/lib/axis-auth/identity"
+import { getTodaySession } from "@/lib/axis-orgs/sessions"
 import { TrainCheckInButton } from "@/components/axis-orgs/TrainCheckInButton"
 import styles from "@/app/page.module.css"
 
@@ -35,37 +34,23 @@ export default async function OrganizationTrainPage({
 
   const identity = await getAxisRequestIdentity()
   const userId = identity?.clerkUserId || identity?.supabaseUserId || ""
-  const checkInSummary = userId
-    ? await getCheckInSummary({ organizationSlug, userId })
-    : {
-        currentStreak: 0,
-        history: [],
-        lastCheckIn: null,
-        thisWeekCount: 0,
-        todayCheckIn: null,
-  }
-  const sessionStartedAt = checkInSummary.todayCheckIn?.checked_in_at || null
-  const sessionCompletedAt = checkInSummary.todayCheckIn?.checked_out_at || null
+  const session = userId
+    ? await getTodaySession({ organizationSlug, userId })
+    : null
 
   return (
     <main className={styles.surface}>
       <section className={styles.trainShell}>
         <section className={styles.sessionSurface} aria-label="Training session">
           <TrainCheckInButton
-            activeThisWeek={checkInSummary.thisWeekCount}
-            currentStreak={checkInSummary.currentStreak}
-            durationMinutes={checkInSummary.todayCheckIn?.duration_minutes || 0}
-            sessionCompletedAt={sessionCompletedAt}
-            sessionStartedAt={sessionStartedAt}
+            activeThisWeek={0}
+            currentStreak={0}
+            durationSeconds={session?.duration_seconds || 0}
             organizationSlug={organizationSlug}
+            sessionCompletedAt={session?.ended_at || null}
+            sessionId={session?.id || null}
+            sessionStartedAt={session?.started_at || null}
             organizationName={axisOrganization.name}
-          />
-
-          <MovementCalibrationFlow
-            isSessionStarted={Boolean(sessionStartedAt && !sessionCompletedAt)}
-            organizationSlug={organizationSlug}
-            playerId={userId}
-            sessionStartedAt={sessionStartedAt}
           />
         </section>
 
@@ -73,44 +58,24 @@ export default async function OrganizationTrainPage({
           <p>
             <span>CURRENT STREAK</span>
             <strong>
-              {checkInSummary.currentStreak}{" "}
-              {checkInSummary.currentStreak === 1 ? "day" : "days"}
+              0 days
             </strong>
           </p>
           <p>
             <span>LAST SESSION</span>
-            <strong>
-              {checkInSummary.lastCheckIn
-                ? formatCheckInDateTime(checkInSummary.lastCheckIn.checked_in_at)
-                : "none"}
-            </strong>
+            <strong>none</strong>
           </p>
           <p>
             <span>ACTIVE THIS WEEK</span>
-            <strong>{checkInSummary.thisWeekCount} / 7 days</strong>
+            <strong>0 / 7 days</strong>
           </p>
           <p>
             <span>SESSION COUNT</span>
-            <strong>
-              {checkInSummary.history.length
-                ? `${checkInSummary.history.length} ${
-                    checkInSummary.history.length === 1 ? "session" : "sessions"
-                  }`
-                : "no sessions yet"}
-            </strong>
+            <strong>no sessions yet</strong>
           </p>
         </section>
 
       </section>
     </main>
   )
-}
-
-function formatCheckInDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    month: "short",
-  }).format(new Date(value))
 }

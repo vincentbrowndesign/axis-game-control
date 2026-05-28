@@ -1,58 +1,49 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
 import styles from "@/app/page.module.css"
 
 type TrainCheckInButtonProps = {
   activeThisWeek: number
   currentStreak: number
-  durationMinutes: number
+  durationSeconds: number
   organizationName: string
   organizationSlug: string
   sessionCompletedAt: string | null
+  sessionId: string | null
   sessionStartedAt: string | null
 }
 
-type CheckInResponse = {
-  activeSession?: {
+type SessionResponse = {
+  error?: string
+  ok?: boolean
+  session?: {
+    duration_seconds?: number
+    ended_at?: string | null
+    id?: string
     started_at?: string
     status?: string
   }
-  checkIn?: {
-    checked_in_at?: string
-  }
-  error?: string
-  ok?: boolean
-}
-
-type CheckOutResponse = {
-  checkIn?: {
-    checked_out_at?: string | null
-    duration_minutes?: number | null
-  }
-  error?: string
-  ok?: boolean
 }
 
 export function TrainCheckInButton({
   activeThisWeek,
   currentStreak,
-  durationMinutes,
+  durationSeconds,
   organizationName,
   organizationSlug,
   sessionCompletedAt,
+  sessionId,
   sessionStartedAt,
 }: TrainCheckInButtonProps) {
-  const router = useRouter()
   const [isChecking, setIsChecking] = useState(false)
   const [isEnding, setIsEnding] = useState(false)
+  const [activeSessionId, setActiveSessionId] = useState(sessionId)
   const [startedAt, setStartedAt] = useState(sessionStartedAt)
   const [completedAt, setCompletedAt] = useState(sessionCompletedAt)
-  const [completedMinutes, setCompletedMinutes] = useState(durationMinutes)
+  const [completedSeconds, setCompletedSeconds] = useState(durationSeconds)
   const [error, setError] = useState("")
   const [now, setNow] = useState(() => Date.now())
-  const [isPending, startTransition] = useTransition()
 
   useEffect(() => {
     if (!startedAt || completedAt) return
@@ -65,7 +56,7 @@ export function TrainCheckInButton({
   }, [completedAt, startedAt])
 
   async function handleCheckIn() {
-    if (startedAt || completedAt || isChecking || isPending) return
+    if (startedAt || completedAt || isChecking) return
 
     setError("")
     setIsChecking(true)
@@ -74,50 +65,54 @@ export function TrainCheckInButton({
       const response = await fetch(`/api/org/${organizationSlug}/check-in`, {
         method: "POST",
       })
-      const payload = (await response.json()) as CheckInResponse
+      const payload = (await response.json()) as SessionResponse
+      const session = payload.session
 
-      const savedSessionStart =
-        payload.activeSession?.started_at || payload.checkIn?.checked_in_at
-
-      if (!response.ok || !payload.ok || !savedSessionStart) {
-        setError("Session could not be started. Try again.")
+      if (!response.ok || !payload.ok || !session?.started_at) {
+        setError("Unable to start session.")
         return
       }
 
-      setStartedAt(savedSessionStart)
-      setCompletedAt(null)
-      setCompletedMinutes(0)
-      startTransition(() => router.refresh())
-    } catch {
-      setError("Session could not be started. Try again.")
+      setActiveSessionId(session.id || null)
+      setStartedAt(session.started_at)
+      setCompletedAt(session.ended_at || null)
+      setCompletedSeconds(Number(session.duration_seconds || 0))
+    } catch (error) {
+      console.error("AXIS START SESSION FAILED", error)
+      setError("Unable to start session.")
     } finally {
       setIsChecking(false)
     }
   }
 
   async function handleEndSession() {
-    if (!startedAt || completedAt || isEnding || isPending) return
+    if (!startedAt || completedAt || isEnding) return
 
     setError("")
     setIsEnding(true)
 
     try {
       const response = await fetch(`/api/org/${organizationSlug}/check-out`, {
+        body: JSON.stringify({ sessionId: activeSessionId }),
+        headers: {
+          "Content-Type": "application/json",
+        },
         method: "POST",
       })
-      const payload = (await response.json()) as CheckOutResponse
-      const savedCompletedAt = payload.checkIn?.checked_out_at
+      const payload = (await response.json()) as SessionResponse
+      const session = payload.session
 
-      if (!response.ok || !payload.ok || !savedCompletedAt) {
-        setError("Session could not be completed. Try again.")
+      if (!response.ok || !payload.ok || !session?.ended_at) {
+        setError("Unable to end session.")
         return
       }
 
-      setCompletedAt(savedCompletedAt)
-      setCompletedMinutes(Number(payload.checkIn?.duration_minutes || 0))
-      startTransition(() => router.refresh())
-    } catch {
-      setError("Session could not be completed. Try again.")
+      setActiveSessionId(session.id || activeSessionId)
+      setCompletedAt(session.ended_at)
+      setCompletedSeconds(Number(session.duration_seconds || 0))
+    } catch (error) {
+      console.error("AXIS END SESSION FAILED", error)
+      setError("Unable to end session.")
     } finally {
       setIsEnding(false)
     }
@@ -129,12 +124,12 @@ export function TrainCheckInButton({
     ? "SESSION COMPLETE"
     : isInSession
       ? "END SESSION"
-      : isChecking || isPending
+      : isChecking
       ? "STARTING SESSION"
       : "START SESSION"
   const statusLabel = isComplete ? "SESSION COMPLETE" : isInSession ? "IN SESSION" : "READY"
   const elapsedLabel = isComplete
-    ? formatDurationMinutes(completedMinutes)
+    ? formatDurationSeconds(completedSeconds)
     : startedAt
       ? formatElapsedTime(startedAt, now)
       : "0:00"
@@ -149,7 +144,7 @@ export function TrainCheckInButton({
       {!startedAt ? (
         <button
           className={styles.trainCheckInButton}
-          disabled={isChecking || isPending}
+          disabled={isChecking}
           onClick={handleCheckIn}
           type="button"
         >
@@ -159,18 +154,18 @@ export function TrainCheckInButton({
         <div className={styles.trainSessionLive}>
           <span>TRAINING ACTIVE</span>
           <button
-            disabled={isEnding || isPending}
+            disabled={isEnding}
             onClick={handleEndSession}
             type="button"
           >
-            {isEnding || isPending ? "ENDING SESSION" : label}
+            {isEnding ? "ENDING SESSION" : label}
           </button>
         </div>
       ) : (
         <div className={styles.trainSessionComplete}>
           <p>
             <span>DURATION</span>
-            <strong>{formatDurationMinutes(completedMinutes)}</strong>
+            <strong>{formatDurationSeconds(completedSeconds)}</strong>
           </p>
           <p>
             <span>CURRENT STREAK</span>
@@ -203,16 +198,17 @@ function formatElapsedTime(value: string, now: number) {
   return `${minutes}:${padTime(seconds)}`
 }
 
-function formatDurationMinutes(value: number) {
-  if (!value) return "0m"
+function formatDurationSeconds(value: number) {
+  if (!value) return "0s"
 
-  const hours = Math.floor(value / 60)
-  const minutes = value % 60
+  const hours = Math.floor(value / 3600)
+  const minutes = Math.floor((value % 3600) / 60)
+  const seconds = value % 60
 
-  if (!hours) return `${minutes}m`
-  if (!minutes) return `${hours}h`
+  if (hours > 0) return `${hours}h ${padTime(minutes)}m`
+  if (minutes > 0) return `${minutes}m ${padTime(seconds)}s`
 
-  return `${hours}h ${String(minutes).padStart(2, "0")}m`
+  return `${seconds}s`
 }
 
 function padTime(value: number) {
