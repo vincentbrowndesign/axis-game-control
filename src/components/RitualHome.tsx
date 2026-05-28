@@ -245,10 +245,11 @@ export function RitualHome() {
     ? Math.max(0, Math.floor((now - new Date(save.activeSession.startedAt).getTime()) / 1000))
     : latestSession?.durationSeconds ?? 0;
   const sessionSummary = save.activeSession
-    ? `Started ${formatTime(save.activeSession.startedAt)} / ${formatDuration(elapsedSeconds)} active`
+    ? `Started ${formatTime(save.activeSession.startedAt)}`
     : latestSession
       ? `${formatDuration(latestSession.durationSeconds)} saved`
       : "Session waiting";
+  const activeTimerLabel = save.activeSession ? `${formatDuration(elapsedSeconds)} preserved` : null;
   const historyStatus =
     ritualState === "complete" && latestSession
       ? `History grew / ${formatDuration(latestSession.durationSeconds)}`
@@ -488,6 +489,7 @@ export function RitualHome() {
           <div className="axis-active-state">
             <span>{participationLabel}</span>
             <strong>{sessionSummary}</strong>
+            {activeTimerLabel ? <em>{activeTimerLabel}</em> : null}
           </div>
           {ritualState === "active" ? (
             <button className="axis-checkout-button" onClick={checkOut} type="button">
