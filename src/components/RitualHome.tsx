@@ -53,7 +53,6 @@ const defaultDetectionDebug: DetectionDebug = {
   faceDetected: false,
   failureReason: "Waiting for athlete identification.",
   identityConfidence: null,
-  personConfidence: null,
   predictionCount: null,
 };
 
@@ -80,6 +79,8 @@ type SavedSession = {
   participants?: SessionParticipant[];
   participantCount?: number;
   activeParticipantCount?: number;
+  timeline?: SessionTimelineSample[];
+  timelineSummary?: SessionTimelineSummary;
 };
 
 type ActiveParticipant = AthleteIdentity & {
@@ -114,8 +115,53 @@ type DetectionDebug = {
   faceDetected: boolean;
   failureReason: string;
   identityConfidence: number | null;
-  personConfidence: number | null;
   predictionCount: number | null;
+};
+
+type SessionTimelineSample = {
+  directionChanges: number;
+  distanceTraveled: number;
+  entered: boolean;
+  exited: boolean;
+  lostCount: number;
+  moving: boolean;
+  recoveryCount: number;
+  stationary: boolean;
+  timestamp: string;
+  totalDistanceTraveled: number;
+  tracked: boolean;
+  trackingLost: boolean;
+  trackingRecovered: boolean;
+  trackId?: string;
+  visible: boolean;
+  visibleTimeMs: number;
+  x?: number;
+  y?: number;
+};
+
+type SessionTimelineSummary = {
+  directionChanges: number;
+  distanceTraveled: number;
+  entries: number;
+  exits: number;
+  timeMovingSeconds: number;
+  timeStationarySeconds: number;
+  timeTrackedSeconds: number;
+  timeVisibleSeconds: number;
+  trackingLosses: number;
+  trackingRecoveries: number;
+};
+
+type TimelineCursor = {
+  lastTimestampKey?: string;
+  previousDirection?: "down" | "left" | "right" | "up";
+  previousLostCount: number;
+  previousRecoveryCount: number;
+  previousTracked?: boolean;
+  previousVisible?: boolean;
+  previousX?: number;
+  previousY?: number;
+  totalDistanceTraveled: number;
 };
 
 type ParticipationWindow = {
@@ -158,6 +204,7 @@ type AxisSave = {
     participationWindow?: ParticipationWindow;
     clipContinuityContext?: ClipContinuityContext;
     participants?: ActiveParticipant[];
+    timeline?: SessionTimelineSample[];
   } | null;
   sessions: SavedSession[];
 };
@@ -169,6 +216,16 @@ type AxisIdentity = {
   calibrationStatus?: CalibrationStatus;
   calibratedAt?: string;
   calibrationSessionId?: string;
+};
+
+type MovementInterpretation = {
+  evidence: {
+    endTimestamp: string | null;
+    metric: string;
+    startTimestamp: string | null;
+    value: number | string;
+  };
+  text: string;
 };
 
 const defaultSave: AxisSave = {
@@ -212,12 +269,84 @@ function formatCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function formatDebugConfidence(confidence: number | null) {
-  if (confidence === null) return "N/A";
+function formatTrackingStatus(status: string) {
+  if (status === "lost") return "TRACK LOST";
+  if (status === "recovered") return "TRACK RECOVERED";
 
-  const normalized = confidence <= 1 ? confidence * 100 : confidence;
+  return "TRACKING";
+}
 
-  return `${Math.round(normalized)}%`;
+function normalizeTimelineSample(sample: unknown): SessionTimelineSample | null {
+  if (!sample || typeof sample !== "object") return null;
+
+  const candidate = sample as Partial<SessionTimelineSample>;
+  if (typeof candidate.timestamp !== "string") return null;
+
+  return {
+    directionChanges: typeof candidate.directionChanges === "number" ? candidate.directionChanges : 0,
+    distanceTraveled: typeof candidate.distanceTraveled === "number" ? candidate.distanceTraveled : 0,
+    entered: Boolean(candidate.entered),
+    exited: Boolean(candidate.exited),
+    lostCount: typeof candidate.lostCount === "number" ? candidate.lostCount : 0,
+    moving: Boolean(candidate.moving),
+    recoveryCount: typeof candidate.recoveryCount === "number" ? candidate.recoveryCount : 0,
+    stationary: Boolean(candidate.stationary),
+    timestamp: candidate.timestamp,
+    totalDistanceTraveled: typeof candidate.totalDistanceTraveled === "number" ? candidate.totalDistanceTraveled : 0,
+    tracked: Boolean(candidate.tracked),
+    trackingLost: Boolean(candidate.trackingLost),
+    trackingRecovered: Boolean(candidate.trackingRecovered),
+    trackId: typeof candidate.trackId === "string" ? candidate.trackId : undefined,
+    visible: Boolean(candidate.visible),
+    visibleTimeMs: typeof candidate.visibleTimeMs === "number" ? candidate.visibleTimeMs : 0,
+    x: typeof candidate.x === "number" ? candidate.x : undefined,
+    y: typeof candidate.y === "number" ? candidate.y : undefined,
+  };
+}
+
+function normalizeTimeline(samples: unknown) {
+  if (!Array.isArray(samples)) return [];
+
+  return samples.map(normalizeTimelineSample).filter((sample): sample is SessionTimelineSample => Boolean(sample));
+}
+
+function summarizeTimeline(samples: SessionTimelineSample[]): SessionTimelineSummary {
+  return samples.reduce<SessionTimelineSummary>(
+    (summary, sample) => ({
+      directionChanges: summary.directionChanges + sample.directionChanges,
+      distanceTraveled: summary.distanceTraveled + sample.distanceTraveled,
+      entries: summary.entries + (sample.entered ? 1 : 0),
+      exits: summary.exits + (sample.exited ? 1 : 0),
+      timeMovingSeconds: summary.timeMovingSeconds + (sample.moving ? 1 : 0),
+      timeStationarySeconds: summary.timeStationarySeconds + (sample.stationary ? 1 : 0),
+      timeTrackedSeconds: summary.timeTrackedSeconds + (sample.tracked ? 1 : 0),
+      timeVisibleSeconds: summary.timeVisibleSeconds + (sample.visible ? 1 : 0),
+      trackingLosses: summary.trackingLosses + (sample.trackingLost ? 1 : 0),
+      trackingRecoveries: summary.trackingRecoveries + (sample.trackingRecovered ? 1 : 0),
+    }),
+    {
+      directionChanges: 0,
+      distanceTraveled: 0,
+      entries: 0,
+      exits: 0,
+      timeMovingSeconds: 0,
+      timeStationarySeconds: 0,
+      timeTrackedSeconds: 0,
+      timeVisibleSeconds: 0,
+      trackingLosses: 0,
+      trackingRecoveries: 0,
+    },
+  );
+}
+
+function formatTimelineSummary(summary?: SessionTimelineSummary) {
+  if (!summary) return "";
+
+  return `Visible ${formatDuration(summary.timeVisibleSeconds)} / Tracked ${formatDuration(summary.timeTrackedSeconds)} / Moving ${formatDuration(
+    summary.timeMovingSeconds,
+  )} / Distance ${summary.distanceTraveled.toFixed(2)} / Entered ${summary.entries} / Exited ${summary.exits} / Lost ${
+    summary.trackingLosses
+  } / Recovered ${summary.trackingRecoveries}`;
 }
 
 function identityFromAxisIdentity(identity: AxisIdentity): AthleteIdentity {
@@ -421,6 +550,7 @@ function readSave(): AxisSave {
             activeParticipants,
           ),
           participants: activeParticipants,
+          timeline: normalizeTimeline(parsed.activeSession.timeline),
         }
       : null;
 
@@ -459,6 +589,8 @@ function readSave(): AxisSave {
                 sessionParticipants,
               ),
               participants: sessionParticipants,
+              timeline: normalizeTimeline(session.timeline),
+              timelineSummary: session.timelineSummary ?? summarizeTimeline(normalizeTimeline(session.timeline)),
             };
           })
         : [],
@@ -499,6 +631,11 @@ function writeIdentity(identity: AxisIdentity) {
 
 export function RitualHome() {
   const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const timelineCursorRef = useRef<TimelineCursor>({
+    previousLostCount: 0,
+    previousRecoveryCount: 0,
+    totalDistanceTraveled: 0,
+  });
   const [authPhase, setAuthPhase] = useState<AuthPhase>("checking");
   const [identity, setIdentity] = useState<AxisIdentity | null>(null);
   const [email, setEmail] = useState("");
@@ -520,6 +657,9 @@ export function RitualHome() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraDirection, setCameraDirection] = useState<CameraDirection>("back");
   const [cameraMessage, setCameraMessage] = useState("");
+  const [movementInsights, setMovementInsights] = useState<MovementInterpretation[]>([]);
+  const [movementInsightMessage, setMovementInsightMessage] = useState("");
+  const [isInterpretingMovement, setIsInterpretingMovement] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -764,6 +904,7 @@ export function RitualHome() {
     cameraPreviewRef,
     activeView === "camera" && cameraState === "attached" && Boolean(cameraStream),
   );
+  const latestPersonDetectionRef = useRef(personDetection);
   const athleteDetected = personDetection.visiblePeople === 1;
   const calibrationWorkflowLabel = isAthleteMatched
     ? "IDENTITY LOCKED"
@@ -775,6 +916,10 @@ export function RitualHome() {
     : athleteDetected
       ? ["ATHLETE DETECTED"]
       : ["LOOKING FOR ATHLETE"];
+  const primaryTrackingTrack =
+    personDetection.tracks.find((track) => track.status === "visible" || track.status === "recovered") ??
+    personDetection.tracks[0] ??
+    null;
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -817,6 +962,114 @@ export function RitualHome() {
   );
 
   useEffect(() => {
+    latestPersonDetectionRef.current = personDetection;
+  }, [personDetection]);
+
+  useEffect(() => {
+    if (!save.activeSession) {
+      timelineCursorRef.current = {
+        previousLostCount: 0,
+        previousRecoveryCount: 0,
+        totalDistanceTraveled: 0,
+      };
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setSave((currentSave) => {
+        if (!currentSave.activeSession) return currentSave;
+
+        const sampledAt = new Date();
+        const timestampKey = sampledAt.toISOString().slice(0, 19);
+        if (timelineCursorRef.current.lastTimestampKey === timestampKey) return currentSave;
+
+        const detection = latestPersonDetectionRef.current;
+        const track =
+          detection.tracks.find((candidate) => candidate.status === "visible" || candidate.status === "recovered") ??
+          detection.tracks[0] ??
+          null;
+        const tracked = Boolean(track && track.status !== "lost");
+        const visible = detection.visiblePeople > 0;
+        const x = track ? track.boundingBox.x + track.boundingBox.width / 2 : undefined;
+        const y = track ? track.boundingBox.y + track.boundingBox.height / 2 : undefined;
+        const hasPreviousPosition =
+          typeof timelineCursorRef.current.previousX === "number" &&
+          typeof timelineCursorRef.current.previousY === "number" &&
+          typeof x === "number" &&
+          typeof y === "number";
+        const deltaX = hasPreviousPosition ? x - timelineCursorRef.current.previousX! : 0;
+        const deltaY = hasPreviousPosition ? y - timelineCursorRef.current.previousY! : 0;
+        const movementDistance = Math.hypot(deltaX, deltaY);
+        const moving = tracked && movementDistance > 0.015;
+        const entered = visible && timelineCursorRef.current.previousVisible !== true;
+        const exited = timelineCursorRef.current.previousVisible === true && !visible;
+        const totalDistanceTraveled = timelineCursorRef.current.totalDistanceTraveled + (tracked ? movementDistance : 0);
+        const stationary = tracked && !moving;
+        const direction =
+          moving && Math.abs(deltaX) > Math.abs(deltaY)
+            ? deltaX > 0
+              ? "right"
+              : "left"
+            : moving
+              ? deltaY > 0
+                ? "down"
+                : "up"
+              : timelineCursorRef.current.previousDirection;
+        const directionChanges =
+          moving && timelineCursorRef.current.previousDirection && direction !== timelineCursorRef.current.previousDirection ? 1 : 0;
+        const lostCount = track?.lostCount ?? timelineCursorRef.current.previousLostCount;
+        const recoveryCount = track?.recoveryCount ?? timelineCursorRef.current.previousRecoveryCount;
+        const trackingLost = lostCount > timelineCursorRef.current.previousLostCount;
+        const trackingRecovered = recoveryCount > timelineCursorRef.current.previousRecoveryCount;
+        const sample: SessionTimelineSample = {
+          directionChanges,
+          distanceTraveled: tracked ? movementDistance : 0,
+          entered,
+          exited,
+          lostCount,
+          moving,
+          recoveryCount,
+          stationary,
+          timestamp: sampledAt.toISOString(),
+          totalDistanceTraveled,
+          tracked,
+          trackingLost,
+          trackingRecovered,
+          trackId: track?.id,
+          visible,
+          visibleTimeMs: track?.visibleTimeMs ?? 0,
+          x,
+          y,
+        };
+
+        timelineCursorRef.current = {
+          lastTimestampKey: timestampKey,
+          previousDirection: direction,
+          previousLostCount: lostCount,
+          previousRecoveryCount: recoveryCount,
+          previousTracked: tracked,
+          previousVisible: visible,
+          previousX: x,
+          previousY: y,
+          totalDistanceTraveled,
+        };
+
+        const nextSave = {
+          ...currentSave,
+          activeSession: {
+            ...currentSave.activeSession,
+            timeline: [...(currentSave.activeSession.timeline ?? []), sample],
+          },
+        };
+        writeSave(nextSave);
+        return nextSave;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [save.activeSession?.id]);
+
+  useEffect(() => {
     const detectionEnabled = activeView === "camera" && cameraState === "attached" && Boolean(cameraStream);
 
     if (!detectionEnabled) {
@@ -833,7 +1086,6 @@ export function RitualHome() {
           : personDetection.visiblePeople > 1
             ? `Expected one athlete, detected ${personDetection.visiblePeople}.`
             : "Looking for one visible body.",
-      personConfidence: personDetection.confidence,
       predictionCount: personDetection.detectionsReturned,
     });
 
@@ -932,6 +1184,11 @@ export function RitualHome() {
   function checkIn() {
     if (!identity) return;
 
+    timelineCursorRef.current = {
+      previousLostCount: 0,
+      previousRecoveryCount: 0,
+      totalDistanceTraveled: 0,
+    };
     const startedAt = new Date().toISOString();
     const sessionId = crypto.randomUUID();
     const startingCameraDirection: CameraDirection = "front";
@@ -970,6 +1227,7 @@ export function RitualHome() {
           startingParticipants,
         ),
         participants: startingParticipants,
+        timeline: [],
       },
     };
 
@@ -1173,7 +1431,6 @@ export function RitualHome() {
     setDetectionDebug({
       ...defaultDetectionDebug,
       failureReason: people === 1 ? "One visible body detected." : `Expected one athlete, detected ${people}.`,
-      personConfidence: personDetection.confidence,
       predictionCount: personDetection.detectionsReturned,
     });
 
@@ -1326,6 +1583,47 @@ export function RitualHome() {
     setSave(nextSave);
   }
 
+  async function interpretLatestMovement() {
+    const session = save.sessions[0];
+    if (!session) return;
+
+    setIsInterpretingMovement(true);
+    setMovementInsightMessage("");
+    setMovementInsights([]);
+
+    try {
+      const response = await fetch("/api/axis/interpret-session", {
+        body: JSON.stringify({
+          durationSeconds: session.durationSeconds,
+          sessionId: session.id,
+          timeline: session.timeline ?? [],
+          timelineSummary: session.timelineSummary ?? summarizeTimeline(session.timeline ?? []),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        insights?: MovementInterpretation[];
+      };
+
+      if (!response.ok) {
+        console.error("Unable to interpret movement", result.error);
+        setMovementInsightMessage("Movement interpretation unavailable.");
+        return;
+      }
+
+      setMovementInsights(Array.isArray(result.insights) ? result.insights : []);
+    } catch (error) {
+      console.error("Unable to interpret movement", error);
+      setMovementInsightMessage("Movement interpretation unavailable.");
+    } finally {
+      setIsInterpretingMovement(false);
+    }
+  }
+
   function checkOut() {
     if (!save.activeSession) return;
 
@@ -1337,6 +1635,8 @@ export function RitualHome() {
     const sessionMode = save.activeSession.mode ?? defaultParticipationMode;
     const sessionCameraState = normalizeCameraState(save.activeSession.cameraState);
     const sessionCameraDirection = normalizeCameraDirection(save.activeSession.cameraDirection);
+    const timeline = normalizeTimeline(save.activeSession.timeline);
+    const timelineSummary = summarizeTimeline(timeline);
     const sessionParticipants = activeParticipants.map((participant) => ({
       ...participant,
       activeAtCheckout: !participant.leftAt,
@@ -1376,6 +1676,8 @@ export function RitualHome() {
       participants: sessionParticipants,
       participantCount,
       activeParticipantCount,
+      timeline,
+      timelineSummary,
     };
     const nextSave = {
       activeSession: null,
@@ -1482,6 +1784,56 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
               <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera offline</span>}
+              <div className="axis-player-tracking-overlay" aria-label="Player tracking overlay">
+                {personDetection.tracks.map((track) => (
+                  <div
+                    className="axis-player-track-box"
+                    data-status={track.status}
+                    key={track.id}
+                    style={{
+                      height: `${track.boundingBox.height * 100}%`,
+                      left: `${track.boundingBox.x * 100}%`,
+                      top: `${track.boundingBox.y * 100}%`,
+                      width: `${track.boundingBox.width * 100}%`,
+                    }}
+                  >
+                    <div className="axis-player-track-label">
+                      <strong>{track.id}</strong>
+                      <span>{formatTrackingStatus(track.status)}</span>
+                    </div>
+                    <div className="axis-player-track-metrics">
+                      <span>{`VISIBLE ${formatDuration(track.visibleTimeMs / 1000)}`}</span>
+                      <span>{`DIR ${track.movement.direction.toUpperCase()}`}</span>
+                      <span>{`DIST ${track.movement.distanceTraveled.toFixed(2)}`}</span>
+                      <span>{track.movement.moving ? "MOVING" : "STATIONARY"}</span>
+                      <span>{`LOST COUNT ${track.lostCount}`}</span>
+                      <span>{`RECOVERED COUNT ${track.recoveryCount}`}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="axis-outdoor-tracking-readout" aria-label="Outdoor tracking test">
+                <span>
+                  <strong>TRACKED</strong>
+                  <em>{primaryTrackingTrack && primaryTrackingTrack.status !== "lost" ? "YES" : "NO"}</em>
+                </span>
+                <span>
+                  <strong>TRACK ID</strong>
+                  <em>{primaryTrackingTrack?.id ?? "NONE"}</em>
+                </span>
+                <span>
+                  <strong>VISIBLE TIME</strong>
+                  <em>{primaryTrackingTrack ? formatDuration(primaryTrackingTrack.visibleTimeMs / 1000) : "0s"}</em>
+                </span>
+                <span>
+                  <strong>TRACK LOSSES</strong>
+                  <em>{primaryTrackingTrack?.lostCount ?? 0}</em>
+                </span>
+                <span>
+                  <strong>TRACK RECOVERIES</strong>
+                  <em>{primaryTrackingTrack?.recoveryCount ?? 0}</em>
+                </span>
+              </div>
               {showCalibrationDiagnostics ? (
                 <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
                   <span>
@@ -1503,14 +1855,6 @@ export function RitualHome() {
                   <span>
                     <strong>DETECTIONS RETURNED</strong>
                     <em>{personDetection.detectionsReturned}</em>
-                  </span>
-                  <span>
-                    <strong>CONFIDENCE</strong>
-                    <em>{formatDebugConfidence(detectionDebug.personConfidence)}</em>
-                  </span>
-                  <span>
-                    <strong>RAW CONFIDENCE</strong>
-                    <em>{formatDebugConfidence(personDetection.rawConfidence)}</em>
                   </span>
                   <span>
                     <strong>IDENTITY LOCK</strong>
@@ -1849,7 +2193,8 @@ export function RitualHome() {
                         <strong>{formatDuration(session.durationSeconds)}</strong>
                         <em>
                           {session.participantCount
-                            ? `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"} / ${formatCameraState(session.cameraState)} / ${
+                            ? formatTimelineSummary(session.timelineSummary) ||
+                              `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"} / ${formatCameraState(session.cameraState)} / ${
                                 session.participationWindow?.status === "closed" ? "Window saved" : "Window open"
                               }`
                             : session.mode
@@ -1870,6 +2215,28 @@ export function RitualHome() {
                 </div>
               </section>
             </div>
+
+            {save.sessions.length ? (
+              <section className="axis-interpretation-panel" aria-label="Movement interpretation">
+                <header>
+                  <span>Movement interpretation</span>
+                  <button disabled={isInterpretingMovement} onClick={interpretLatestMovement} type="button">
+                    {isInterpretingMovement ? "Reading movement" : "Interpret latest"}
+                  </button>
+                </header>
+                {movementInsightMessage ? <em>{movementInsightMessage}</em> : null}
+                {movementInsights.length ? (
+                  <div>
+                    {movementInsights.map((insight, index) => (
+                      <article key={`${insight.evidence.metric}-${index}`}>
+                        <strong>{insight.text}</strong>
+                        <span>{`${insight.evidence.metric} / ${insight.evidence.value}`}</span>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
 
             <section className="axis-archive-strip" aria-label="Replay memory archive">
               <div>
