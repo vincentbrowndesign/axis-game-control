@@ -414,6 +414,55 @@ h1 {
   outline-offset: 0.2rem;
 }
 
+.axis-shot-bar {
+  align-items: center;
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  padding: 0.5rem;
+  width: 100%;
+}
+
+.axis-shot-bar span {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-shot-bar div {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.axis-shot-bar button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.38);
+  color: var(--axis-live);
+  cursor: pointer;
+  font-size: clamp(1.15rem, 4.8vw, 2.1rem);
+  font-weight: 900;
+  min-height: 3rem;
+  min-width: 6.5rem;
+  padding: 0.55rem 0.8rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-shot-bar button:disabled {
+  border-color: var(--axis-line);
+  color: rgba(244, 244, 240, 0.28);
+  cursor: default;
+}
+
+.axis-shot-bar button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.18rem;
+}
+
 .axis-live-strip {
   align-items: center;
   border-top: 1px solid rgba(168, 217, 51, 0.22);

@@ -86,6 +86,8 @@ type SavedSession = {
   summaryLayer?: SessionSummaryLayer;
   ballTimeline?: BallTimelineSample[];
   replayEvents?: ReplayEvent[];
+  shotEvents?: ShotEvent[];
+  shotSummary?: ShotSummary;
 };
 
 type ActiveParticipant = AthleteIdentity & {
@@ -174,7 +176,47 @@ type BallTimelineSample = {
   visible: boolean;
 };
 
-type ReplayEventType = "left_frame" | "movement_spike" | "recovered" | "tracking_interruption";
+type ShotType = "make" | "miss";
+
+type ShotEvent = {
+  athleteId?: string;
+  athleteName: string;
+  cameraDirection: CameraDirection;
+  cameraId: string;
+  movementState: "moving" | "stationary" | "unknown";
+  replayTimestamp: number;
+  sessionId: string;
+  suggestionConfidence?: number;
+  suggestionId?: string;
+  suggestionReason?: string;
+  suggested?: boolean;
+  timestamp: string;
+  trackId?: string;
+  trackedTimeSeconds: number;
+  type: ShotType;
+  visibleTimeSeconds: number;
+};
+
+type ShotSuggestion = {
+  athleteId?: string;
+  athleteName: string;
+  confidence: number;
+  id: string;
+  reason: string;
+  replayTimestamp: number;
+  timestamp: string;
+  trackId?: string;
+};
+
+type ShotSummary = {
+  attempts: number;
+  fieldGoalPercentage: number;
+  makes: number;
+  misses: number;
+};
+
+type ReplayEventType = "left_frame" | "make" | "miss" | "movement_spike" | "recovered" | "tracking_interruption";
+type TrackingReplayEventType = Exclude<ReplayEventType, "make" | "miss">;
 
 type ReplayEvent = {
   athleteId?: string;
@@ -265,6 +307,8 @@ type AxisSave = {
     participationWindow?: ParticipationWindow;
     clipContinuityContext?: ClipContinuityContext;
     participants?: ActiveParticipant[];
+    replayEvents?: ReplayEvent[];
+    shotEvents?: ShotEvent[];
     timeline?: SessionTimelineSample[];
     ballTimeline?: BallTimelineSample[];
   } | null;
@@ -450,6 +494,8 @@ function normalizeReplayEvent(event: unknown): ReplayEvent | null {
     },
     type:
       candidate.type === "left_frame" ||
+      candidate.type === "make" ||
+      candidate.type === "miss" ||
       candidate.type === "movement_spike" ||
       candidate.type === "recovered" ||
       candidate.type === "tracking_interruption"
@@ -462,6 +508,41 @@ function normalizeReplayEvents(events: unknown) {
   if (!Array.isArray(events)) return [];
 
   return events.map(normalizeReplayEvent).filter((event): event is ReplayEvent => Boolean(event));
+}
+
+function normalizeShotEvent(event: unknown): ShotEvent | null {
+  if (!event || typeof event !== "object") return null;
+
+  const candidate = event as Partial<ShotEvent>;
+  if (candidate.type !== "make" && candidate.type !== "miss") return null;
+  if (typeof candidate.timestamp !== "string" || typeof candidate.sessionId !== "string") return null;
+  const cameraDirection = normalizeCameraDirection(candidate.cameraDirection);
+
+  return {
+    athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
+    athleteName: typeof candidate.athleteName === "string" ? candidate.athleteName : "Athlete",
+    cameraDirection,
+    cameraId: typeof candidate.cameraId === "string" ? candidate.cameraId : getCameraId(cameraDirection),
+    movementState:
+      candidate.movementState === "moving" || candidate.movementState === "stationary" ? candidate.movementState : "unknown",
+    replayTimestamp: typeof candidate.replayTimestamp === "number" ? candidate.replayTimestamp : 0,
+    sessionId: candidate.sessionId,
+    suggestionConfidence: typeof candidate.suggestionConfidence === "number" ? candidate.suggestionConfidence : undefined,
+    suggestionId: typeof candidate.suggestionId === "string" ? candidate.suggestionId : undefined,
+    suggestionReason: typeof candidate.suggestionReason === "string" ? candidate.suggestionReason : undefined,
+    suggested: Boolean(candidate.suggested),
+    timestamp: candidate.timestamp,
+    trackId: typeof candidate.trackId === "string" ? candidate.trackId : undefined,
+    trackedTimeSeconds: typeof candidate.trackedTimeSeconds === "number" ? candidate.trackedTimeSeconds : 0,
+    type: candidate.type,
+    visibleTimeSeconds: typeof candidate.visibleTimeSeconds === "number" ? candidate.visibleTimeSeconds : 0,
+  };
+}
+
+function normalizeShotEvents(events: unknown) {
+  if (!Array.isArray(events)) return [];
+
+  return events.map(normalizeShotEvent).filter((event): event is ShotEvent => Boolean(event));
 }
 
 function createBallTimelineSample(timestamp: string, ballTracking: BallTrackingState): BallTimelineSample {
@@ -483,14 +564,14 @@ function getReplayAthlete(sample: SessionTimelineSample, participants: SessionPa
 }
 
 function createReplayEvent(
-  type: ReplayEventType,
+  type: TrackingReplayEventType,
   sample: SessionTimelineSample,
   participants: SessionParticipant[],
   cameraDirection: CameraDirection,
   index: number,
 ): ReplayEvent {
   const athlete = getReplayAthlete(sample, participants);
-  const labelByType: Record<ReplayEventType, string> = {
+  const labelByType: Record<TrackingReplayEventType, string> = {
     left_frame: "Left frame",
     movement_spike: "Movement spike",
     recovered: "Track recovered",
@@ -540,6 +621,38 @@ function createReplayEvents(
   });
 
   return events.slice(0, 240);
+}
+
+function createShotReplayEvent(shot: ShotEvent, index: number): ReplayEvent {
+  return {
+    athleteId: shot.athleteId,
+    athleteName: shot.athleteName,
+    cameraDirection: shot.cameraDirection,
+    cameraId: shot.cameraId,
+    id: `replay:${shot.timestamp}:${shot.type}:${shot.trackId ?? "track"}:${index}`,
+    label: shot.type === "make" ? "Make" : "Miss",
+    timestamp: shot.timestamp,
+    trackState: {
+      status: shot.trackId ? "tracked" : "visible",
+      trackId: shot.trackId,
+      tracked: Boolean(shot.trackId),
+      visible: shot.visibleTimeSeconds > 0,
+    },
+    type: shot.type,
+  };
+}
+
+function summarizeShots(events: ShotEvent[]): ShotSummary {
+  const makes = events.filter((event) => event.type === "make").length;
+  const misses = events.filter((event) => event.type === "miss").length;
+  const attempts = makes + misses;
+
+  return {
+    attempts,
+    fieldGoalPercentage: attempts > 0 ? Math.round((makes / attempts) * 100) : 0,
+    makes,
+    misses,
+  };
 }
 
 function summarizeTimeline(samples: SessionTimelineSample[]): SessionTimelineSummary {
@@ -647,10 +760,19 @@ function getReplayCount(events: ReplayEvent[] | undefined, type: ReplayEventType
   return events?.filter((event) => event.type === type).length ?? 0;
 }
 
+function formatShotSummary(summary?: ShotSummary) {
+  if (!summary || summary.attempts === 0) return "Shots waiting";
+
+  return `${summary.makes} makes / ${summary.misses} misses / ${summary.attempts} attempts / ${summary.fieldGoalPercentage}% FG`;
+}
+
 function formatReplaySummary(events?: ReplayEvent[]) {
   if (!events?.length) return "Session review waiting";
 
-  return `Replay ${events.length} / Left ${getReplayCount(events, "left_frame")} / Recovered ${getReplayCount(
+  return `Review ${events.length} / Makes ${getReplayCount(events, "make")} / Misses ${getReplayCount(
+    events,
+    "miss",
+  )} / Left ${getReplayCount(events, "left_frame")} / Recovered ${getReplayCount(
     events,
     "recovered",
   )} / Spikes ${getReplayCount(events, "movement_spike")} / Interruptions ${getReplayCount(events, "tracking_interruption")}`;
@@ -661,6 +783,10 @@ function formatReplayEvent(event: ReplayEvent) {
   const movement = typeof event.movementDistance === "number" ? ` / ${event.movementDistance.toFixed(2)}` : "";
 
   return `${formatTime(event.timestamp)} / ${event.athleteName}${trackLabel} / ${event.cameraDirection} camera${movement}`;
+}
+
+function formatShotEvent(event: ShotEvent) {
+  return `${formatDuration(event.replayTimestamp)} / ${event.athleteName} / ${event.cameraDirection} camera`;
 }
 
 function normalizeRawMeasurements(raw: unknown, fallback: SessionRawMeasurements): SessionRawMeasurements {
@@ -896,6 +1022,8 @@ function readSave(): AxisSave {
           participants: activeParticipants,
           timeline: normalizeTimeline(parsed.activeSession.timeline),
           ballTimeline: normalizeBallTimeline(parsed.activeSession.ballTimeline),
+          replayEvents: normalizeReplayEvents(parsed.activeSession.replayEvents),
+          shotEvents: normalizeShotEvents(parsed.activeSession.shotEvents),
         }
       : null;
 
@@ -926,6 +1054,7 @@ function readSave(): AxisSave {
               normalizeReplayEvents(session.replayEvents).length > 0
                 ? normalizeReplayEvents(session.replayEvents)
                 : createReplayEvents(timeline, sessionParticipants, sessionCameraDirection);
+            const shotEvents = normalizeShotEvents(session.shotEvents);
 
             return {
               ...session,
@@ -951,6 +1080,8 @@ function readSave(): AxisSave {
               summaryLayer,
               ballTimeline: normalizeBallTimeline(session.ballTimeline),
               replayEvents,
+              shotEvents,
+              shotSummary: session.shotSummary ?? summarizeShots(shotEvents),
             };
           })
         : [],
@@ -1024,6 +1155,8 @@ export function RitualHome() {
   const [movementInsights, setMovementInsights] = useState<MovementInterpretation[]>([]);
   const [movementInsightMessage, setMovementInsightMessage] = useState("");
   const [isInterpretingMovement, setIsInterpretingMovement] = useState(false);
+  const [shotSuggestion, setShotSuggestion] = useState<ShotSuggestion | null>(null);
+  const lastShotSuggestionAtRef = useRef(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -1302,6 +1435,9 @@ export function RitualHome() {
 
     return athleteId ? presentParticipants.find((participant) => participant.id === athleteId) : undefined;
   };
+  const activeShotSummary = summarizeShots(save.activeSession?.shotEvents ?? []);
+  const canRecordShot = Boolean(save.activeSession && primaryTrackingTrack && primaryTrackingTrack.status !== "lost");
+  const shotActionLabel = shotSuggestion ? "Possible shot detected" : formatShotSummary(activeShotSummary);
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -1350,6 +1486,61 @@ export function RitualHome() {
   useEffect(() => {
     latestBallTrackingRef.current = ballTracking;
   }, [ballTracking]);
+
+  useEffect(() => {
+    if (!save.activeSession || !primaryTrackingTrack || primaryTrackingTrack.status === "lost") {
+      setShotSuggestion(null);
+      return;
+    }
+
+    const movement = primaryTrackingTrack.movement;
+    const isLikelyShotMotion =
+      movement.moving &&
+      movement.direction === "up" &&
+      movement.distanceTraveled >= 0.035 &&
+      primaryTrackingTrack.visibleTimeMs >= 900;
+
+    if (!isLikelyShotMotion) return;
+
+    const nowMs = Date.now();
+    if (nowMs - lastShotSuggestionAtRef.current < 4500) return;
+
+    const trackedAthlete = getTrackAthlete(primaryTrackingTrack.id);
+    const fallbackAthlete = selectedCalibrationAthlete ?? presentParticipants[0] ?? identityFromAxisIdentity(identity ?? {
+      email: "athlete@axis.local",
+      id: "axis-athlete",
+      restoredAt: new Date().toISOString(),
+    });
+    const athlete = trackedAthlete ?? fallbackAthlete;
+    const replayTimestamp = Math.max(
+      0,
+      Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000),
+    );
+
+    lastShotSuggestionAtRef.current = nowMs;
+    setShotSuggestion({
+      athleteId: athlete.id,
+      athleteName: athlete.name,
+      confidence: Math.min(0.96, 0.72 + movement.distanceTraveled * 3),
+      id: `shot-suggestion:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`,
+      reason: "Upward shooting motion",
+      replayTimestamp,
+      timestamp: new Date(nowMs).toISOString(),
+      trackId: primaryTrackingTrack.id,
+    });
+  }, [
+    identity,
+    primaryTrackingTrack,
+    primaryTrackingTrack?.id,
+    primaryTrackingTrack?.movement.direction,
+    primaryTrackingTrack?.movement.distanceTraveled,
+    primaryTrackingTrack?.movement.moving,
+    primaryTrackingTrack?.status,
+    primaryTrackingTrack?.visibleTimeMs,
+    save.activeSession,
+    selectedCalibrationAthlete,
+    presentParticipants,
+  ]);
 
   useEffect(() => {
     if (!save.activeSession) {
@@ -1620,6 +1811,8 @@ export function RitualHome() {
         ),
         participants: startingParticipants,
         ballTimeline: [],
+        replayEvents: [],
+        shotEvents: [],
         timeline: [],
       },
     };
@@ -2024,6 +2217,56 @@ export function RitualHome() {
     }
   }
 
+  function recordShot(type: ShotType, suggestion = shotSuggestion) {
+    if (!save.activeSession || !identity || !primaryTrackingTrack || primaryTrackingTrack.status === "lost") return;
+
+    const trackedAthlete = getTrackAthlete(primaryTrackingTrack.id);
+    const fallbackAthlete = selectedCalibrationAthlete ?? presentParticipants[0] ?? identityFromAxisIdentity(identity);
+    const athlete = suggestion?.athleteId
+      ? { id: suggestion.athleteId, name: suggestion.athleteName }
+      : trackedAthlete ?? fallbackAthlete;
+    const timestamp = new Date().toISOString();
+    const replayTimestamp = Math.max(
+      0,
+      Math.floor((new Date(timestamp).getTime() - new Date(save.activeSession.startedAt).getTime()) / 1000),
+    );
+    const shotEvent: ShotEvent = {
+      athleteId: athlete.id,
+      athleteName: athlete.name,
+      cameraDirection: savedCameraDirection,
+      cameraId: getCameraId(savedCameraDirection),
+      movementState: primaryTrackingTrack.movement.moving
+        ? "moving"
+        : primaryTrackingTrack.movement.stationary
+          ? "stationary"
+          : "unknown",
+      replayTimestamp: suggestion?.replayTimestamp ?? replayTimestamp,
+      sessionId: save.activeSession.id,
+      suggestionConfidence: suggestion?.confidence,
+      suggestionId: suggestion?.id,
+      suggestionReason: suggestion?.reason,
+      suggested: Boolean(suggestion),
+      timestamp,
+      trackId: suggestion?.trackId ?? primaryTrackingTrack.id,
+      trackedTimeSeconds: primaryTrackingTrack.visibleTimeMs / 1000,
+      type,
+      visibleTimeSeconds: primaryTrackingTrack.visibleTimeMs / 1000,
+    };
+    const replayEvent = createShotReplayEvent(shotEvent, save.activeSession.replayEvents?.length ?? 0);
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        replayEvents: [...(save.activeSession.replayEvents ?? []), replayEvent],
+        shotEvents: [...(save.activeSession.shotEvents ?? []), shotEvent],
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
+    setShotSuggestion(null);
+  }
+
   function checkOut() {
     if (!save.activeSession) return;
 
@@ -2037,6 +2280,7 @@ export function RitualHome() {
     const sessionCameraDirection = normalizeCameraDirection(save.activeSession.cameraDirection);
     const timeline = normalizeTimeline(save.activeSession.timeline);
     const ballTimeline = normalizeBallTimeline(save.activeSession.ballTimeline);
+    const shotEvents = normalizeShotEvents(save.activeSession.shotEvents);
     const timelineSummary = summarizeTimeline(timeline);
     const rawMeasurements = createRawMeasurements(timelineSummary);
     const summaryLayer = createSessionSummaryLayer(durationSeconds, rawMeasurements);
@@ -2055,7 +2299,11 @@ export function RitualHome() {
       status: "closed" as const,
       participantIds: activeParticipants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
     };
-    const replayEvents = createReplayEvents(timeline, sessionParticipants, sessionCameraDirection);
+    const replayEvents = [
+      ...normalizeReplayEvents(save.activeSession.replayEvents),
+      ...createReplayEvents(timeline, sessionParticipants, sessionCameraDirection),
+    ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const shotSummary = summarizeShots(shotEvents);
     const completedSession = {
       id: save.activeSession.id,
       startedAt: save.activeSession.startedAt,
@@ -2086,6 +2334,8 @@ export function RitualHome() {
       rawMeasurements,
       summaryLayer,
       replayEvents,
+      shotEvents,
+      shotSummary,
     };
     const nextSave = {
       activeSession: null,
@@ -2585,6 +2835,19 @@ export function RitualHome() {
             </section>
           ) : null}
           {ritualState === "active" ? (
+            <section className="axis-shot-bar" aria-label="Shot confirmation">
+              <span>{shotActionLabel}</span>
+              <div>
+                <button disabled={!canRecordShot} onClick={() => recordShot("make")} type="button">
+                  {shotSuggestion ? "Confirm make" : "Make"}
+                </button>
+                <button disabled={!canRecordShot} onClick={() => recordShot("miss")} type="button">
+                  {shotSuggestion ? "Confirm miss" : "Miss"}
+                </button>
+              </div>
+            </section>
+          ) : null}
+          {ritualState === "active" ? (
             <button className="axis-checkout-button" onClick={checkOut} type="button">
               End session
             </button>
@@ -2645,7 +2908,7 @@ export function RitualHome() {
                                 ? "Latest participation"
                                 : "Session memory"}
                         </em>
-                        <em>{formatReplaySummary(session.replayEvents)}</em>
+                        <em>{`${formatShotSummary(session.shotSummary)} / ${formatReplaySummary(session.replayEvents)}`}</em>
                         {showAxisDebug && session.rawMeasurements ? <em>{formatRawMeasurements(session.rawMeasurements)}</em> : null}
                         {showAxisDebug ? <em>{formatBallTimeline(session.ballTimeline)}</em> : null}
                       </article>
@@ -2655,6 +2918,27 @@ export function RitualHome() {
                       <span>No sessions yet</span>
                       <strong>History waiting</strong>
                       <em>Check in to begin</em>
+                    </article>
+                  )}
+                </div>
+              </section>
+
+              <section className="axis-session-ledger" aria-label="Session shot chart">
+                <span>Session shots</span>
+                <div>
+                  {latestSession?.shotEvents?.length ? (
+                    latestSession.shotEvents.slice(0, 10).map((event, index) => (
+                      <article className="axis-session-row" key={`${event.timestamp}-${event.type}-${index}`}>
+                        <span>{event.type === "make" ? "Make" : "Miss"}</span>
+                        <strong>{event.type.toUpperCase()}</strong>
+                        <em>{formatShotEvent(event)}</em>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="axis-session-row">
+                      <span>Shots waiting</span>
+                      <strong>No shots yet</strong>
+                      <em>Tap Make or Miss during a live session</em>
                     </article>
                   )}
                 </div>
