@@ -2,9 +2,17 @@ type RoboflowPrediction = {
   class?: string;
   class_name?: string;
   confidence?: number;
+  height?: number;
+  width?: number;
+  x?: number;
+  y?: number;
 };
 
 type RoboflowDetectionResponse = {
+  image?: {
+    height?: number;
+    width?: number;
+  };
   predictions?: RoboflowPrediction[];
 };
 
@@ -97,6 +105,16 @@ export async function POST(request: Request) {
     }, null);
 
     return Response.json({
+      detections: predictions.map((prediction) => ({
+        confidence: typeof prediction.confidence === "number" ? prediction.confidence : null,
+        height: typeof prediction.height === "number" ? prediction.height : null,
+        label: prediction.class ?? prediction.class_name ?? "unknown",
+        width: typeof prediction.width === "number" ? prediction.width : null,
+        x: typeof prediction.x === "number" ? prediction.x : null,
+        y: typeof prediction.y === "number" ? prediction.y : null,
+      })),
+      imageHeight: typeof result.image?.height === "number" ? result.image.height : null,
+      imageWidth: typeof result.image?.width === "number" ? result.image.width : null,
       model: modelId,
       personConfidence,
       predictionCount: predictions.length,

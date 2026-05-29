@@ -48,9 +48,12 @@ const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
 const defaultDetectionDebug: DetectionDebug = {
   athleteMatchedName: null,
+  detections: [],
   faceConfidence: null,
   faceDetected: false,
   failureReason: "Waiting for athlete identification.",
+  imageHeight: null,
+  imageWidth: null,
   identityConfidence: null,
   personConfidence: null,
   predictionCount: null,
@@ -107,11 +110,23 @@ type CalibrationEvidence = {
   visible_people: number;
 };
 
+type DetectionBox = {
+  confidence: number | null;
+  height: number | null;
+  label: string;
+  width: number | null;
+  x: number | null;
+  y: number | null;
+};
+
 type DetectionDebug = {
   athleteMatchedName: string | null;
+  detections: DetectionBox[];
   faceConfidence: number | null;
   faceDetected: boolean;
   failureReason: string;
+  imageHeight: number | null;
+  imageWidth: number | null;
   identityConfidence: number | null;
   personConfidence: number | null;
   predictionCount: number | null;
@@ -772,6 +787,15 @@ export function RitualHome() {
       (detectionStatus === "ready"
         ? "Identity lock is ready. Lock identity to match the athlete."
         : "Athlete has not been matched yet.");
+  const detectionBoxes = detectionDebug.detections.filter(
+    (detection) =>
+      detectionDebug.imageWidth &&
+      detectionDebug.imageHeight &&
+      detection.x !== null &&
+      detection.y !== null &&
+      detection.width !== null &&
+      detection.height !== null,
+  );
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -1198,7 +1222,10 @@ export function RitualHome() {
         body: JSON.stringify({ image }),
       });
       const result = (await response.json()) as {
+        detections?: DetectionBox[];
         error?: string;
+        imageHeight?: number | null;
+        imageWidth?: number | null;
         personConfidence?: number | null;
         predictionCount?: number;
         visiblePeople?: number;
@@ -1226,6 +1253,9 @@ export function RitualHome() {
         setDetectionDebug({
           ...defaultDetectionDebug,
           failureReason: "Person detection response did not include a valid athlete count.",
+          detections: Array.isArray(result.detections) ? result.detections : [],
+          imageHeight: typeof result.imageHeight === "number" ? result.imageHeight : null,
+          imageWidth: typeof result.imageWidth === "number" ? result.imageWidth : null,
           personConfidence: result.personConfidence ?? null,
           predictionCount: typeof result.predictionCount === "number" ? result.predictionCount : null,
         });
@@ -1238,6 +1268,9 @@ export function RitualHome() {
       setDetectionDebug({
         ...defaultDetectionDebug,
         failureReason: people === 1 ? "Identity lock is ready. Lock identity to match the athlete." : `Expected one athlete, detected ${people}.`,
+        detections: Array.isArray(result.detections) ? result.detections : [],
+        imageHeight: typeof result.imageHeight === "number" ? result.imageHeight : null,
+        imageWidth: typeof result.imageWidth === "number" ? result.imageWidth : null,
         personConfidence: result.personConfidence ?? null,
         predictionCount: typeof result.predictionCount === "number" ? result.predictionCount : null,
       });
@@ -1550,6 +1583,35 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
               <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera offline</span>}
+              <div className="axis-camera-detection-layer" aria-label="Roboflow detections">
+                {detectionBoxes.length ? (
+                  detectionBoxes.map((detection, index) => {
+                    const imageWidth = detectionDebug.imageWidth ?? 1;
+                    const imageHeight = detectionDebug.imageHeight ?? 1;
+                    const left = (((detection.x ?? 0) - (detection.width ?? 0) / 2) / imageWidth) * 100;
+                    const top = (((detection.y ?? 0) - (detection.height ?? 0) / 2) / imageHeight) * 100;
+                    const width = ((detection.width ?? 0) / imageWidth) * 100;
+                    const height = ((detection.height ?? 0) / imageHeight) * 100;
+
+                    return (
+                      <span
+                        className="axis-camera-detection-box"
+                        key={`${detection.label}-${index}`}
+                        style={{
+                          height: `${Math.max(0, height)}%`,
+                          left: `${Math.max(0, left)}%`,
+                          top: `${Math.max(0, top)}%`,
+                          width: `${Math.max(0, width)}%`,
+                        }}
+                      >
+                        <em>{`${detection.label.toUpperCase()} ${formatDebugConfidence(detection.confidence)}`}</em>
+                      </span>
+                    );
+                  })
+                ) : detectionDebug.predictionCount === 0 ? (
+                  <span className="axis-camera-no-detection">NO PERSON DETECTED</span>
+                ) : null}
+              </div>
               <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
                 <span>
                   <strong>PERSON DETECTED</strong>
