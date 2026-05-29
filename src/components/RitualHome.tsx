@@ -688,7 +688,7 @@ export function RitualHome() {
     (participant) => normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated",
   ).length;
   const calibrationProgressTotal = save.activeSession ? activeParticipantCount : 0;
-  const calibrationProgressLabel = `${calibratedParticipantCount} / ${calibrationProgressTotal} calibrated`;
+  const calibrationProgressLabel = `${calibratedParticipantCount} / ${calibrationProgressTotal} athletes identified`;
   const selectedCalibrationAthlete =
     presentParticipants.find((participant) => participant.id === selectedCalibrationAthleteId) ?? presentParticipants[0] ?? null;
   const selectedAthleteCalibrationStatus = selectedCalibrationAthlete
@@ -705,33 +705,33 @@ export function RitualHome() {
       : "not_calibrated";
   const detectionStatusLabel =
     detectionStatus === "capturing"
-      ? "CAPTURING FRAME"
+      ? "LOOKING FOR ATHLETE"
       : detectionStatus === "camera_not_ready"
-        ? "CAMERA NOT READY"
+        ? "CAMERA WARMING UP"
         : detectionStatus === "capture_failed"
-          ? "FRAME CAPTURE FAILED"
+          ? "COULD NOT SEE ATHLETE"
           : detectionStatus === "frame_captured"
-            ? "FRAME CAPTURED"
+            ? "ATHLETE IN FRAME"
             : detectionStatus === "sending"
-              ? "SENDING TO ROBOFLOW"
+              ? "CHECKING ATHLETE"
               : detectionStatus === "request_failed"
-                ? "ROBOFLOW REQUEST FAILED"
+                ? "COULD NOT IDENTIFY ATHLETE"
                 : detectionStatus === "response_received"
-                  ? "ROBOFLOW RESPONSE RECEIVED"
+                  ? "ATHLETE CHECK RETURNED"
                   : detectionStatus === "invalid_response"
-                    ? "ROBOFLOW RESPONSE INVALID"
+                    ? "COULD NOT READ FRAME"
                     : detectionStatus === "not_one"
-                      ? "VISIBLE PEOPLE != 1"
+                      ? "ONE ATHLETE REQUIRED"
                       : detectionStatus === "ready"
-                        ? "CALIBRATION READY"
+                        ? "ATHLETE DETECTED"
                         : "";
   const calibrationWorkflowLabel = detectionStatusLabel
     ? detectionStatusLabel
     : calibrationWorkflowStatus === "calibrating"
-      ? "CALIBRATING"
+      ? "IDENTIFYING ATHLETE"
       : calibrationWorkflowStatus === "complete"
-        ? "COMPLETE"
-        : "NOT CALIBRATED";
+        ? "IDENTITY LOCKED"
+        : "IDENTIFY ATHLETE";
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -1514,7 +1514,7 @@ export function RitualHome() {
                       key={participant.id}
                     >
                       <span>{participant.name}</span>
-                      <em>{normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated" ? "Complete" : "Not calibrated"}</em>
+                      <em>{normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated" ? "Locked" : "Needs identity"}</em>
                       <button
                         onClick={() => {
                           setSelectedCalibrationAthleteId(participant.id);
@@ -1524,7 +1524,7 @@ export function RitualHome() {
                         }}
                         type="button"
                       >
-                        Select athlete
+                        Choose athlete
                       </button>
                     </span>
                   ))
@@ -1534,16 +1534,18 @@ export function RitualHome() {
               </div>
             </section>
 
-            <section className="axis-session-module axis-camera-calibration-module" aria-label="Calibration status">
+            <section className="axis-session-module axis-camera-calibration-module" aria-label="Athlete identity">
               <header>
-                <span>Calibration status</span>
+                <span>Athlete identity</span>
                 <strong>{calibrationWorkflowLabel}</strong>
               </header>
               <span className="axis-window-state">{calibrationProgressLabel}</span>
               <span className="axis-window-state">
-                {selectedCalibrationAthlete ? selectedCalibrationAthlete.name : "Select athlete"}
+                {selectedCalibrationAthlete ? selectedCalibrationAthlete.name : "Choose athlete"}
               </span>
-              {visiblePeople !== null ? <span className="axis-window-state">{`VISIBLE PEOPLE = ${visiblePeople}`}</span> : null}
+              {visiblePeople !== null ? (
+                <span className="axis-window-state">{`${visiblePeople} ${visiblePeople === 1 ? "athlete" : "athletes"} detected`}</span>
+              ) : null}
               <button
                 className="axis-calibration-action"
                 disabled={
@@ -1557,21 +1559,21 @@ export function RitualHome() {
                 type="button"
               >
                 {detectionStatus === "capturing" || detectionStatus === "sending"
-                  ? "Checking frame"
+                  ? "Looking for athlete"
                   : selectedAthleteCalibrationStatus === "calibrated"
-                    ? "Calibration complete"
-                    : "Start calibration"}
+                    ? "Identity locked"
+                    : "Identify athlete"}
               </button>
               {detectionStatus === "ready" ? (
                 <button className="axis-calibration-action" onClick={captureCalibrationEvidence} type="button">
-                  Capture calibration
+                  Lock identity
                 </button>
               ) : null}
               {calibrationEvidence?.athlete_id === selectedCalibrationAthlete?.id ? (
-                <section className="axis-calibration-screen" aria-label="Calibration evidence">
+                <section className="axis-calibration-screen" aria-label="Identity record">
                   <header>
-                    <span>Calibration evidence</span>
-                    <strong>Calibrated</strong>
+                    <span>Identity record</span>
+                    <strong>Identity locked</strong>
                   </header>
                   <p>{calibrationEvidence.camera_type === "front" ? "Front camera" : "Back camera"}</p>
                   <span className="axis-window-state">{new Date(calibrationEvidence.timestamp).toLocaleTimeString()}</span>
