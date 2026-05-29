@@ -75,6 +75,7 @@ type SavedSession = {
   cameraState?: CameraState;
   cameraDirection?: CameraDirection;
   cameraAttachedAt?: string;
+  muxAssetId?: string;
   participationWindow?: ParticipationWindow;
   clipContinuityContext?: ClipContinuityContext;
   participants?: SessionParticipant[];
@@ -86,6 +87,9 @@ type SavedSession = {
   summaryLayer?: SessionSummaryLayer;
   ballTimeline?: BallTimelineSample[];
   replayEvents?: ReplayEvent[];
+  replayAnchors?: ReplayAnchor[];
+  replayClips?: ReplayClip[];
+  review?: SessionReview;
   shotEvents?: ShotEvent[];
   shotSummary?: ShotSummary;
 };
@@ -236,6 +240,51 @@ type ReplayEvent = {
   type: ReplayEventType;
 };
 
+type ReplayAnchor = {
+  athleteId?: string;
+  athleteName?: string;
+  cameraDirection?: CameraDirection;
+  cameraId?: string;
+  eventId: string;
+  eventType: string;
+  muxAssetId: string;
+  replayLabel: string;
+  sessionId: string;
+  timestamp: string;
+  videoTimestamp: number;
+};
+
+type ReplayClip = {
+  clipEnd: number;
+  clipStart: number;
+  eventId: string;
+  eventType: string;
+  id: string;
+  muxAssetId: string;
+  replayLabel: string;
+  sessionId: string;
+};
+
+type SessionReview = {
+  generatedAt: string;
+  largestInterruption: string;
+  mostActiveMoment: string;
+  notableEvents: string[];
+  reviewNotes: string[];
+  sessionSummary: string;
+};
+
+type AthleteMemory = {
+  athleteId: string;
+  athleteName: string;
+  clips: ReplayClip[];
+  events: ReplayEvent[];
+  movementSamples: SessionTimelineSample[];
+  replayAnchors: ReplayAnchor[];
+  sessions: SavedSession[];
+  trackingEvents: SessionTimelineSample[];
+};
+
 type SessionRawMeasurements = {
   distance: number;
   entered: number;
@@ -303,11 +352,14 @@ type AxisSave = {
     cameraState?: CameraState;
     cameraDirection?: CameraDirection;
     cameraAttachedAt?: string;
+    muxAssetId?: string;
     calibrationRecords?: CalibrationEvidence[];
     participationWindow?: ParticipationWindow;
     clipContinuityContext?: ClipContinuityContext;
     participants?: ActiveParticipant[];
     replayEvents?: ReplayEvent[];
+    replayAnchors?: ReplayAnchor[];
+    replayClips?: ReplayClip[];
     shotEvents?: ShotEvent[];
     timeline?: SessionTimelineSample[];
     ballTimeline?: BallTimelineSample[];
@@ -332,6 +384,11 @@ type MovementInterpretation = {
     value: number | string;
   };
   text: string;
+};
+
+type ReviewEngineResponse = {
+  review?: SessionReview;
+  error?: string;
 };
 
 const defaultSave: AxisSave = {
@@ -510,6 +567,97 @@ function normalizeReplayEvents(events: unknown) {
   return events.map(normalizeReplayEvent).filter((event): event is ReplayEvent => Boolean(event));
 }
 
+function normalizeReplayAnchor(anchor: unknown): ReplayAnchor | null {
+  if (!anchor || typeof anchor !== "object") return null;
+
+  const candidate = anchor as Partial<ReplayAnchor>;
+  if (
+    typeof candidate.eventId !== "string" ||
+    typeof candidate.eventType !== "string" ||
+    typeof candidate.sessionId !== "string" ||
+    typeof candidate.timestamp !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
+    athleteName: typeof candidate.athleteName === "string" ? candidate.athleteName : undefined,
+    cameraDirection: candidate.cameraDirection ? normalizeCameraDirection(candidate.cameraDirection) : undefined,
+    cameraId: typeof candidate.cameraId === "string" ? candidate.cameraId : undefined,
+    eventId: candidate.eventId,
+    eventType: candidate.eventType,
+    muxAssetId: typeof candidate.muxAssetId === "string" ? candidate.muxAssetId : "pending",
+    replayLabel: typeof candidate.replayLabel === "string" ? candidate.replayLabel : candidate.eventType,
+    sessionId: candidate.sessionId,
+    timestamp: candidate.timestamp,
+    videoTimestamp: typeof candidate.videoTimestamp === "number" ? candidate.videoTimestamp : 0,
+  };
+}
+
+function normalizeReplayAnchors(anchors: unknown) {
+  if (!Array.isArray(anchors)) return [];
+
+  return anchors.map(normalizeReplayAnchor).filter((anchor): anchor is ReplayAnchor => Boolean(anchor));
+}
+
+function normalizeReplayClip(clip: unknown): ReplayClip | null {
+  if (!clip || typeof clip !== "object") return null;
+
+  const candidate = clip as Partial<ReplayClip>;
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.eventId !== "string" ||
+    typeof candidate.eventType !== "string" ||
+    typeof candidate.sessionId !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    clipEnd: typeof candidate.clipEnd === "number" ? candidate.clipEnd : 0,
+    clipStart: typeof candidate.clipStart === "number" ? candidate.clipStart : 0,
+    eventId: candidate.eventId,
+    eventType: candidate.eventType,
+    id: candidate.id,
+    muxAssetId: typeof candidate.muxAssetId === "string" ? candidate.muxAssetId : "pending",
+    replayLabel: typeof candidate.replayLabel === "string" ? candidate.replayLabel : candidate.eventType,
+    sessionId: candidate.sessionId,
+  };
+}
+
+function normalizeReplayClips(clips: unknown) {
+  if (!Array.isArray(clips)) return [];
+
+  return clips.map(normalizeReplayClip).filter((clip): clip is ReplayClip => Boolean(clip));
+}
+
+function normalizeSessionReview(review: unknown): SessionReview | undefined {
+  if (!review || typeof review !== "object") return undefined;
+
+  const candidate = review as Partial<SessionReview>;
+  if (
+    typeof candidate.sessionSummary !== "string" ||
+    typeof candidate.mostActiveMoment !== "string" ||
+    typeof candidate.largestInterruption !== "string"
+  ) {
+    return undefined;
+  }
+
+  return {
+    generatedAt: typeof candidate.generatedAt === "string" ? candidate.generatedAt : new Date().toISOString(),
+    largestInterruption: candidate.largestInterruption,
+    mostActiveMoment: candidate.mostActiveMoment,
+    notableEvents: Array.isArray(candidate.notableEvents)
+      ? candidate.notableEvents.filter((event): event is string => typeof event === "string").slice(0, 5)
+      : [],
+    reviewNotes: Array.isArray(candidate.reviewNotes)
+      ? candidate.reviewNotes.filter((note): note is string => typeof note === "string").slice(0, 5)
+      : [],
+    sessionSummary: candidate.sessionSummary,
+  };
+}
+
 function normalizeShotEvent(event: unknown): ShotEvent | null {
   if (!event || typeof event !== "object") return null;
 
@@ -640,6 +788,145 @@ function createShotReplayEvent(shot: ShotEvent, index: number): ReplayEvent {
     },
     type: shot.type,
   };
+}
+
+function getVideoTimestamp(timestamp: string, sessionStartedAt: string) {
+  return Math.max(0, (new Date(timestamp).getTime() - new Date(sessionStartedAt).getTime()) / 1000);
+}
+
+function createReplayAnchor(
+  eventId: string,
+  eventType: string,
+  timestamp: string,
+  sessionId: string,
+  sessionStartedAt: string,
+  muxAssetId: string | undefined,
+  replayLabel: string,
+  details: Partial<Pick<ReplayAnchor, "athleteId" | "athleteName" | "cameraDirection" | "cameraId">> = {},
+): ReplayAnchor {
+  return {
+    ...details,
+    eventId,
+    eventType,
+    muxAssetId: muxAssetId ?? "pending",
+    replayLabel,
+    sessionId,
+    timestamp,
+    videoTimestamp: getVideoTimestamp(timestamp, sessionStartedAt),
+  };
+}
+
+function createReplayAnchorsForSession(session: {
+  calibrationRecords?: CalibrationEvidence[];
+  cameraDirection?: CameraDirection;
+  endedAt?: string;
+  id: string;
+  muxAssetId?: string;
+  participants?: SessionParticipant[];
+  replayEvents?: ReplayEvent[];
+  shotEvents?: ShotEvent[];
+  startedAt: string;
+}) {
+  const cameraDirection = normalizeCameraDirection(session.cameraDirection);
+  const muxAssetId = session.muxAssetId;
+  const anchors: ReplayAnchor[] = [
+    createReplayAnchor(
+      `session:${session.id}:start`,
+      "session_start",
+      session.startedAt,
+      session.id,
+      session.startedAt,
+      muxAssetId,
+      "Session start",
+      { cameraDirection, cameraId: getCameraId(cameraDirection) },
+    ),
+  ];
+
+  (session.calibrationRecords ?? []).forEach((record, index) => {
+    const participant = session.participants?.find((candidate) => candidate.id === record.athlete_id);
+    anchors.push(
+      createReplayAnchor(
+        `identity:${record.session_id}:${record.athlete_id}:${index}`,
+        "identity_locked",
+        record.lockTimestamp ?? record.timestamp,
+        session.id,
+        session.startedAt,
+        muxAssetId,
+        "Identity locked",
+        {
+          athleteId: record.athlete_id,
+          athleteName: participant?.name,
+          cameraDirection: record.camera_type,
+          cameraId: record.camera_id,
+        },
+      ),
+    );
+  });
+
+  (session.replayEvents ?? []).forEach((event) => {
+    anchors.push(
+      createReplayAnchor(
+        event.id,
+        event.type,
+        event.timestamp,
+        session.id,
+        session.startedAt,
+        muxAssetId,
+        event.label,
+        {
+          athleteId: event.athleteId,
+          athleteName: event.athleteName,
+          cameraDirection: event.cameraDirection,
+          cameraId: event.cameraId,
+        },
+      ),
+    );
+  });
+
+  if (session.endedAt) {
+    anchors.push(
+      createReplayAnchor(
+        `session:${session.id}:end`,
+        "session_end",
+        session.endedAt,
+        session.id,
+        session.startedAt,
+        muxAssetId,
+        "Session end",
+        { cameraDirection, cameraId: getCameraId(cameraDirection) },
+      ),
+    );
+  }
+
+  return anchors
+    .sort((a, b) => a.videoTimestamp - b.videoTimestamp)
+    .filter((anchor, index, allAnchors) => allAnchors.findIndex((candidate) => candidate.eventId === anchor.eventId) === index);
+}
+
+function shouldCreateClip(anchor: ReplayAnchor) {
+  return (
+    anchor.eventType === "movement_spike" ||
+    anchor.eventType === "tracking_interruption" ||
+    anchor.eventType === "recovered" ||
+    anchor.eventType === "identity_locked"
+  );
+}
+
+function createReplayClip(anchor: ReplayAnchor): ReplayClip {
+  return {
+    clipEnd: anchor.videoTimestamp + 10,
+    clipStart: Math.max(0, anchor.videoTimestamp - 5),
+    eventId: anchor.eventId,
+    eventType: anchor.eventType,
+    id: `clip:${anchor.eventId}`,
+    muxAssetId: anchor.muxAssetId,
+    replayLabel: anchor.replayLabel,
+    sessionId: anchor.sessionId,
+  };
+}
+
+function createReplayClips(anchors: ReplayAnchor[]) {
+  return anchors.filter(shouldCreateClip).map(createReplayClip);
 }
 
 function summarizeShots(events: ShotEvent[]): ShotSummary {
@@ -785,6 +1072,37 @@ function formatReplayEvent(event: ReplayEvent) {
   return `${formatTime(event.timestamp)} / ${event.athleteName}${trackLabel} / ${event.cameraDirection} camera${movement}`;
 }
 
+function formatReplayAnchor(anchor: ReplayAnchor) {
+  const athlete = anchor.athleteName ? ` / ${anchor.athleteName}` : "";
+  const mux = anchor.muxAssetId === "pending" ? " / Video pending" : ` / ${anchor.muxAssetId}`;
+
+  return `${formatDuration(anchor.videoTimestamp)}${athlete}${mux}`;
+}
+
+function formatReplayClip(clip: ReplayClip) {
+  const mux = clip.muxAssetId === "pending" ? "Video pending" : clip.muxAssetId;
+
+  return `${formatDuration(clip.clipStart)} - ${formatDuration(clip.clipEnd)} / ${mux}`;
+}
+
+function formatAthleteGrowth(memory: AthleteMemory) {
+  if (!memory.sessions.length) return "Memory waiting";
+
+  const totalSeconds = memory.sessions.reduce((total, session) => total + session.durationSeconds, 0);
+  const movementSeconds = memory.movementSamples.filter((sample) => sample.moving).length;
+
+  return `${memory.sessions.length} sessions / ${formatDuration(totalSeconds)} / ${formatDuration(movementSeconds)} moving`;
+}
+
+function formatTrackingTimelineEvent(sample: SessionTimelineSample) {
+  if (sample.trackingLost) return "Track lost";
+  if (sample.trackingRecovered) return "Track recovered";
+  if (sample.entered) return "Entered frame";
+  if (sample.exited) return "Exited frame";
+
+  return "Tracking saved";
+}
+
 function formatShotEvent(event: ShotEvent) {
   return `${formatDuration(event.replayTimestamp)} / ${event.athleteName} / ${event.cameraDirection} camera`;
 }
@@ -827,6 +1145,67 @@ function identityFromAxisIdentity(identity: AxisIdentity): AthleteIdentity {
     name: label,
     rosterCode: identity.id.slice(0, 8).toUpperCase(),
     calibrationAnchorId: `calibration:${organizationSlug}:${identity.id}`,
+  };
+}
+
+function sessionIncludesAthlete(session: SavedSession, athlete: AthleteIdentity) {
+  return Boolean(
+    session.participants?.some((participant) => participant.id === athlete.id) ||
+      session.replayEvents?.some((event) => event.athleteId === athlete.id || event.athleteName === athlete.name) ||
+      session.replayAnchors?.some((anchor) => anchor.athleteId === athlete.id || anchor.athleteName === athlete.name) ||
+      session.shotEvents?.some((event) => event.athleteId === athlete.id || event.athleteName === athlete.name),
+  );
+}
+
+function buildAthleteMemory(athlete: AthleteIdentity | null, sessions: SavedSession[]): AthleteMemory {
+  if (!athlete) {
+    return {
+      athleteId: "",
+      athleteName: "Athlete",
+      clips: [],
+      events: [],
+      movementSamples: [],
+      replayAnchors: [],
+      sessions: [],
+      trackingEvents: [],
+    };
+  }
+
+  const athleteSessions = sessions.filter((session) => sessionIncludesAthlete(session, athlete));
+  const events = athleteSessions.flatMap((session) =>
+    (session.replayEvents ?? []).filter((event) => event.athleteId === athlete.id || event.athleteName === athlete.name),
+  );
+  const eventIds = new Set(events.map((event) => event.id));
+  const replayAnchors = athleteSessions.flatMap((session) =>
+    (session.replayAnchors ?? []).filter(
+      (anchor) =>
+        anchor.athleteId === athlete.id ||
+        anchor.athleteName === athlete.name ||
+        eventIds.has(anchor.eventId) ||
+        anchor.eventType === "session_start" ||
+        anchor.eventType === "session_end",
+    ),
+  );
+  const anchorEventIds = new Set(replayAnchors.map((anchor) => anchor.eventId));
+  const clips = athleteSessions.flatMap((session) =>
+    (session.replayClips ?? []).filter((clip) => eventIds.has(clip.eventId) || anchorEventIds.has(clip.eventId)),
+  );
+  const movementSamples = athleteSessions.flatMap((session) =>
+    (session.timeline ?? []).filter((sample) => sample.athleteId === athlete.id),
+  );
+  const trackingEvents = movementSamples.filter(
+    (sample) => sample.entered || sample.exited || sample.trackingLost || sample.trackingRecovered,
+  );
+
+  return {
+    athleteId: athlete.id,
+    athleteName: athlete.name,
+    clips,
+    events,
+    movementSamples,
+    replayAnchors,
+    sessions: athleteSessions,
+    trackingEvents,
   };
 }
 
@@ -1006,6 +1385,7 @@ function readSave(): AxisSave {
           cameraState: activeCameraState,
           cameraDirection: activeCameraDirection,
           cameraAttachedAt: parsed.activeSession.cameraAttachedAt,
+          muxAssetId: parsed.activeSession.muxAssetId,
           calibrationRecords: Array.isArray(parsed.activeSession.calibrationRecords)
             ? parsed.activeSession.calibrationRecords
             : [],
@@ -1022,6 +1402,8 @@ function readSave(): AxisSave {
           participants: activeParticipants,
           timeline: normalizeTimeline(parsed.activeSession.timeline),
           ballTimeline: normalizeBallTimeline(parsed.activeSession.ballTimeline),
+          replayAnchors: normalizeReplayAnchors(parsed.activeSession.replayAnchors),
+          replayClips: normalizeReplayClips(parsed.activeSession.replayClips),
           replayEvents: normalizeReplayEvents(parsed.activeSession.replayEvents),
           shotEvents: normalizeShotEvents(parsed.activeSession.shotEvents),
         }
@@ -1055,6 +1437,20 @@ function readSave(): AxisSave {
                 ? normalizeReplayEvents(session.replayEvents)
                 : createReplayEvents(timeline, sessionParticipants, sessionCameraDirection);
             const shotEvents = normalizeShotEvents(session.shotEvents);
+            const replayAnchors =
+              normalizeReplayAnchors(session.replayAnchors).length > 0
+                ? normalizeReplayAnchors(session.replayAnchors)
+                : createReplayAnchorsForSession({
+                    ...session,
+                    cameraDirection: sessionCameraDirection,
+                    participants: sessionParticipants,
+                    replayEvents,
+                    shotEvents,
+                  });
+            const replayClips =
+              normalizeReplayClips(session.replayClips).length > 0
+                ? normalizeReplayClips(session.replayClips)
+                : createReplayClips(replayAnchors);
 
             return {
               ...session,
@@ -1063,6 +1459,7 @@ function readSave(): AxisSave {
               cameraState: sessionCameraState,
               cameraDirection: sessionCameraDirection,
               cameraAttachedAt: session.cameraAttachedAt,
+              muxAssetId: session.muxAssetId,
               participationWindow: sessionParticipationWindow,
               clipContinuityContext: createClipContinuityContext(
                 session.id,
@@ -1079,7 +1476,10 @@ function readSave(): AxisSave {
               rawMeasurements,
               summaryLayer,
               ballTimeline: normalizeBallTimeline(session.ballTimeline),
+              replayAnchors,
+              replayClips,
               replayEvents,
+              review: normalizeSessionReview(session.review),
               shotEvents,
               shotSummary: session.shotSummary ?? summarizeShots(shotEvents),
             };
@@ -1156,6 +1556,10 @@ export function RitualHome() {
   const [movementInsightMessage, setMovementInsightMessage] = useState("");
   const [isInterpretingMovement, setIsInterpretingMovement] = useState(false);
   const [shotSuggestion, setShotSuggestion] = useState<ShotSuggestion | null>(null);
+  const [selectedReplayAnchor, setSelectedReplayAnchor] = useState<ReplayAnchor | null>(null);
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [isGeneratingReview, setIsGeneratingReview] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState("");
   const lastShotSuggestionAtRef = useRef(0);
 
   useEffect(() => {
@@ -1364,12 +1768,14 @@ export function RitualHome() {
   const participationLabel = useMemo(() => {
     if (ritualState === "active") return "Session live";
     if (ritualState === "saving") return "Saving history";
-    if (ritualState === "complete") return "History grew";
+    if (ritualState === "complete") return "Session complete";
     return "Session active";
   }, [ritualState]);
 
   const latestSession = save.sessions[0] ?? null;
   const athleteLabel = identity?.email ? identity.email.split("@")[0] || "Athlete 01" : "Athlete 01";
+  const signedInAthlete = identity ? identityFromAxisIdentity(identity) : null;
+  const athleteMemory = buildAthleteMemory(signedInAthlete, save.sessions);
   const currentMode = save.activeSession?.mode ?? latestSession?.mode ?? defaultParticipationMode;
   const isRecordingAttached = Boolean(save.activeSession?.recordingAttached);
   const recordingLabel = isRecordingAttached ? "Recording attached" : "Recording off";
@@ -1438,6 +1844,10 @@ export function RitualHome() {
   const activeShotSummary = summarizeShots(save.activeSession?.shotEvents ?? []);
   const canRecordShot = Boolean(save.activeSession && primaryTrackingTrack && primaryTrackingTrack.status !== "lost");
   const shotActionLabel = shotSuggestion ? "Possible shot detected" : formatShotSummary(activeShotSummary);
+  const latestReviewEvents = latestSession?.replayEvents?.slice(0, 6) ?? [];
+  const latestReviewAnchors = latestSession?.replayAnchors?.slice(0, 6) ?? [];
+  const latestReviewClips = latestSession?.replayClips?.slice(0, 4) ?? [];
+  const latestSessionReview = latestSession?.review;
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -1789,6 +2199,16 @@ export function RitualHome() {
       context: defaultParticipationMode,
       participantIds: startingParticipants.map((participant) => participant.id),
     };
+    const sessionStartAnchor = createReplayAnchor(
+      `session:${sessionId}:start`,
+      "session_start",
+      startedAt,
+      sessionId,
+      startedAt,
+      undefined,
+      "Session start",
+      { cameraDirection: startingCameraDirection, cameraId: getCameraId(startingCameraDirection) },
+    );
     const nextSave: AxisSave = {
       ...save,
       activeSession: {
@@ -1811,6 +2231,8 @@ export function RitualHome() {
         ),
         participants: startingParticipants,
         ballTimeline: [],
+        replayAnchors: [sessionStartAnchor],
+        replayClips: [],
         replayEvents: [],
         shotEvents: [],
         timeline: [],
@@ -1823,6 +2245,7 @@ export function RitualHome() {
     setRitualState("active");
     setLatestSavedSessionId(null);
     setActiveView("session");
+    setIsReviewOpen(false);
     setIsModePickerOpen(false);
     setSelectedCalibrationAthleteId(checkedInAthlete.id);
     setDetectionStatus("idle");
@@ -2064,6 +2487,21 @@ export function RitualHome() {
       track_id: lockedTrack?.id,
       visible_people: visiblePeople,
     };
+    const identityAnchor = createReplayAnchor(
+      `identity:${evidence.session_id}:${evidence.athlete_id}:${completedAt}`,
+      "identity_locked",
+      completedAt,
+      save.activeSession.id,
+      save.activeSession.startedAt,
+      save.activeSession.muxAssetId,
+      "Identity locked",
+      {
+        athleteId: evidence.athlete_id,
+        athleteName: selectedCalibrationAthlete.name,
+        cameraDirection: evidence.camera_type,
+        cameraId: evidence.camera_id,
+      },
+    );
     const nextParticipants = activeParticipants.map((participant) =>
       participant.leftAt || participant.id !== selectedCalibrationAthlete.id
         ? participant
@@ -2089,6 +2527,8 @@ export function RitualHome() {
         ...save.activeSession,
         calibrationStatus: allActiveParticipantsCalibrated ? "calibrated" : "required",
         calibrationRecords: [...(save.activeSession.calibrationRecords ?? []), evidence],
+        replayAnchors: [...(save.activeSession.replayAnchors ?? []), identityAnchor],
+        replayClips: [...(save.activeSession.replayClips ?? []), createReplayClip(identityAnchor)],
         participationWindow,
         clipContinuityContext: createClipContinuityContext(
           save.activeSession.id,
@@ -2217,6 +2657,62 @@ export function RitualHome() {
     }
   }
 
+  async function generateLatestReview() {
+    const session = save.sessions[0];
+    if (!session) return;
+
+    setIsGeneratingReview(true);
+    setReviewMessage("");
+
+    try {
+      const response = await fetch("/api/axis/review-session", {
+        body: JSON.stringify({
+          eventTimeline: session.replayEvents ?? [],
+          movementTimeline: session.timeline ?? [],
+          replayClips: session.replayClips ?? [],
+          sessionDuration: session.durationSeconds,
+          sessionId: session.id,
+          trackingTimeline: (session.timeline ?? []).filter(
+            (sample) => sample.entered || sample.exited || sample.trackingLost || sample.trackingRecovered,
+          ),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const result = (await response.json()) as ReviewEngineResponse;
+
+      if (!response.ok || !result.review) {
+        console.error("Unable to generate Axis review", result.error);
+        setReviewMessage("Review unavailable.");
+        return;
+      }
+
+      const nextSessions = save.sessions.map((savedSession) =>
+        savedSession.id === session.id
+          ? {
+              ...savedSession,
+              review: result.review,
+            }
+          : savedSession,
+      );
+      const nextSave = {
+        ...save,
+        sessions: nextSessions,
+      };
+
+      writeSave(nextSave);
+      setSave(nextSave);
+      setReviewMessage("Review ready.");
+    } catch (error) {
+      console.error("Unable to generate Axis review", error);
+      setReviewMessage("Review unavailable.");
+    } finally {
+      setIsGeneratingReview(false);
+    }
+  }
+
   function recordShot(type: ShotType, suggestion = shotSuggestion) {
     if (!save.activeSession || !identity || !primaryTrackingTrack || primaryTrackingTrack.status === "lost") return;
 
@@ -2253,10 +2749,26 @@ export function RitualHome() {
       visibleTimeSeconds: primaryTrackingTrack.visibleTimeMs / 1000,
     };
     const replayEvent = createShotReplayEvent(shotEvent, save.activeSession.replayEvents?.length ?? 0);
+    const replayAnchor = createReplayAnchor(
+      replayEvent.id,
+      replayEvent.type,
+      replayEvent.timestamp,
+      save.activeSession.id,
+      save.activeSession.startedAt,
+      save.activeSession.muxAssetId,
+      replayEvent.label,
+      {
+        athleteId: replayEvent.athleteId,
+        athleteName: replayEvent.athleteName,
+        cameraDirection: replayEvent.cameraDirection,
+        cameraId: replayEvent.cameraId,
+      },
+    );
     const nextSave = {
       ...save,
       activeSession: {
         ...save.activeSession,
+        replayAnchors: [...(save.activeSession.replayAnchors ?? []), replayAnchor],
         replayEvents: [...(save.activeSession.replayEvents ?? []), replayEvent],
         shotEvents: [...(save.activeSession.shotEvents ?? []), shotEvent],
       },
@@ -2265,6 +2777,10 @@ export function RitualHome() {
     writeSave(nextSave);
     setSave(nextSave);
     setShotSuggestion(null);
+  }
+
+  function jumpToReplayAnchor(anchor: ReplayAnchor) {
+    setSelectedReplayAnchor(anchor);
   }
 
   function checkOut() {
@@ -2304,6 +2820,18 @@ export function RitualHome() {
       ...createReplayEvents(timeline, sessionParticipants, sessionCameraDirection),
     ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     const shotSummary = summarizeShots(shotEvents);
+    const replayAnchors = createReplayAnchorsForSession({
+      calibrationRecords: save.activeSession.calibrationRecords,
+      cameraDirection: sessionCameraDirection,
+      endedAt,
+      id: save.activeSession.id,
+      muxAssetId: save.activeSession.muxAssetId,
+      participants: sessionParticipants,
+      replayEvents,
+      shotEvents,
+      startedAt: save.activeSession.startedAt,
+    });
+    const replayClips = createReplayClips(replayAnchors);
     const completedSession = {
       id: save.activeSession.id,
       startedAt: save.activeSession.startedAt,
@@ -2315,6 +2843,7 @@ export function RitualHome() {
       cameraState: sessionCameraState,
       cameraDirection: sessionCameraDirection,
       cameraAttachedAt: save.activeSession.cameraAttachedAt,
+      muxAssetId: save.activeSession.muxAssetId,
       participationWindow,
       clipContinuityContext: createClipContinuityContext(
         save.activeSession.id,
@@ -2333,6 +2862,8 @@ export function RitualHome() {
       timelineSummary,
       rawMeasurements,
       summaryLayer,
+      replayAnchors,
+      replayClips,
       replayEvents,
       shotEvents,
       shotSummary,
@@ -2347,6 +2878,7 @@ export function RitualHome() {
     setSave(nextSave);
     setLatestSavedSessionId(completedSession.id);
     setActiveView("session");
+    setIsReviewOpen(false);
     setDetectionStatus("idle");
     setVisiblePeople(null);
     setCalibrationEvidence(null);
@@ -2852,7 +3384,153 @@ export function RitualHome() {
               End session
             </button>
           ) : null}
+          {ritualState === "complete" && latestSession ? (
+            <section className="axis-review-entry" aria-label="Session complete">
+              <div>
+                <span>Session complete</span>
+                <strong>{formatDuration(latestSession.durationSeconds)}</strong>
+              </div>
+              <button
+                aria-expanded={isReviewOpen}
+                aria-controls="axis-session-review"
+                onClick={() => setIsReviewOpen((isOpen) => !isOpen)}
+                type="button"
+              >
+                Review
+              </button>
+            </section>
+          ) : null}
         </section>
+
+        {isReviewOpen && latestSession ? (
+          <section className="axis-review-panel" id="axis-session-review" aria-label="Session review">
+            <header>
+              <span>Review</span>
+              <strong>What happened</strong>
+            </header>
+
+            <div className="axis-review-grid">
+              <section className="axis-review-block axis-review-engine" aria-label="Review notes">
+                <span>Review notes</span>
+                {latestSessionReview ? (
+                  <div>
+                    <article className="axis-review-row">
+                      <strong>Session summary</strong>
+                      <em>{latestSessionReview.sessionSummary}</em>
+                    </article>
+                    <article className="axis-review-row">
+                      <strong>Most active moment</strong>
+                      <em>{latestSessionReview.mostActiveMoment}</em>
+                    </article>
+                    <article className="axis-review-row">
+                      <strong>Largest interruption</strong>
+                      <em>{latestSessionReview.largestInterruption}</em>
+                    </article>
+                    {latestSessionReview.notableEvents.map((event, index) => (
+                      <article className="axis-review-row" key={`review-event-${index}`}>
+                        <strong>Notable event</strong>
+                        <em>{event}</em>
+                      </article>
+                    ))}
+                    {latestSessionReview.reviewNotes.map((note, index) => (
+                      <article className="axis-review-row" key={`review-note-${index}`}>
+                        <strong>Note</strong>
+                        <em>{note}</em>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <article className="axis-review-row">
+                    <strong>Review waiting</strong>
+                    <em>Generate notes from recorded replay events</em>
+                  </article>
+                )}
+                <button className="axis-review-action" disabled={isGeneratingReview} onClick={generateLatestReview} type="button">
+                  {isGeneratingReview ? "Reading replay" : latestSessionReview ? "Update review" : "Generate review"}
+                </button>
+                {reviewMessage ? <em className="axis-review-message">{reviewMessage}</em> : null}
+              </section>
+
+              <section className="axis-review-block" aria-label="Session summary">
+                <span>Session summary</span>
+                <article>
+                  <strong>{formatDuration(latestSession.durationSeconds)}</strong>
+                  <em>{`${latestSession.mode ?? defaultParticipationMode} / ${formatCount(
+                    latestSession.activeParticipantCount || latestSession.participantCount || 1,
+                    "athlete",
+                    "athletes",
+                  )}`}</em>
+                </article>
+                <article>
+                  <strong>{`${latestReviewEvents.length} events / ${latestReviewClips.length} clips`}</strong>
+                  <em>{`Ended ${formatStamp(latestSession.endedAt)}`}</em>
+                </article>
+              </section>
+
+              <section className="axis-review-block" aria-label="Timeline">
+                <span>Timeline</span>
+                <div>
+                  {latestReviewAnchors.length ? (
+                    latestReviewAnchors.map((anchor) => (
+                      <button
+                        className="axis-review-row"
+                        key={anchor.eventId}
+                        onClick={() => jumpToReplayAnchor(anchor)}
+                        type="button"
+                      >
+                        <strong>{anchor.replayLabel}</strong>
+                        <em>{formatDuration(anchor.videoTimestamp)}</em>
+                      </button>
+                    ))
+                  ) : (
+                    <article className="axis-review-row">
+                      <strong>Timeline waiting</strong>
+                      <em>No replay anchors yet</em>
+                    </article>
+                  )}
+                </div>
+              </section>
+
+              <section className="axis-review-block" aria-label="Events">
+                <span>Events</span>
+                <div>
+                  {latestReviewEvents.length ? (
+                    latestReviewEvents.map((event) => (
+                      <article className="axis-review-row" key={event.id}>
+                        <strong>{event.label}</strong>
+                        <em>{formatTime(event.timestamp)}</em>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="axis-review-row">
+                      <strong>No events saved</strong>
+                      <em>Session ended cleanly</em>
+                    </article>
+                  )}
+                </div>
+              </section>
+
+              <section className="axis-review-block" aria-label="Replay clips">
+                <span>Replay clips</span>
+                <div>
+                  {latestReviewClips.length ? (
+                    latestReviewClips.map((clip) => (
+                      <article className="axis-review-row" key={clip.id}>
+                        <strong>{clip.replayLabel}</strong>
+                        <em>{formatReplayClip(clip)}</em>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="axis-review-row">
+                      <strong>No clips yet</strong>
+                      <em>Replay will attach when video is ready</em>
+                    </article>
+                  )}
+                </div>
+              </section>
+            </div>
+          </section>
+        ) : null}
 
         <footer className="axis-bottom" aria-label="Continuity records">
           <details className="axis-history-drawer">
@@ -2865,6 +3543,94 @@ export function RitualHome() {
               <p className="axis-meta">Axis History</p>
               <strong>{historyStatus}</strong>
             </header>
+
+            <section className="axis-athlete-memory" aria-label="Athlete Timeline">
+              <header>
+                <div>
+                  <span>Athlete Timeline</span>
+                  <strong>{athleteMemory.athleteName}</strong>
+                </div>
+                <em>{formatAthleteGrowth(athleteMemory)}</em>
+              </header>
+
+              <div className="axis-athlete-memory-grid">
+                <section className="axis-memory-block" aria-label="All sessions">
+                  <span>Sessions</span>
+                  <div>
+                    {athleteMemory.sessions.length ? (
+                      athleteMemory.sessions.map((session) => (
+                        <article className="axis-memory-row" key={`memory-session-${session.id}`}>
+                          <strong>{formatStamp(session.endedAt)}</strong>
+                          <em>{`${formatDuration(session.durationSeconds)} / ${session.mode ?? defaultParticipationMode}`}</em>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="axis-memory-row">
+                        <strong>No sessions yet</strong>
+                        <em>Start session to begin</em>
+                      </article>
+                    )}
+                  </div>
+                </section>
+
+                <section className="axis-memory-block" aria-label="All clips">
+                  <span>Clips</span>
+                  <div>
+                    {athleteMemory.clips.length ? (
+                      athleteMemory.clips.map((clip) => (
+                        <article className="axis-memory-row" key={`memory-clip-${clip.id}`}>
+                          <strong>{clip.replayLabel}</strong>
+                          <em>{formatReplayClip(clip)}</em>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="axis-memory-row">
+                        <strong>No clips yet</strong>
+                        <em>Clips attach after replay events</em>
+                      </article>
+                    )}
+                  </div>
+                </section>
+
+                <section className="axis-memory-block" aria-label="Movement history">
+                  <span>Movement</span>
+                  <div>
+                    {athleteMemory.sessions.length ? (
+                      athleteMemory.sessions.map((session) => (
+                        <article className="axis-memory-row" key={`memory-movement-${session.id}`}>
+                          <strong>{formatStamp(session.endedAt)}</strong>
+                          <em>{session.summaryLayer?.movement ?? "Movement saved"}</em>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="axis-memory-row">
+                        <strong>Movement waiting</strong>
+                        <em>History grows after sessions</em>
+                      </article>
+                    )}
+                  </div>
+                </section>
+
+                <section className="axis-memory-block" aria-label="Tracking history">
+                  <span>Tracking</span>
+                  <div>
+                    {athleteMemory.trackingEvents.length ? (
+                      athleteMemory.trackingEvents.slice(0, 12).map((sample, index) => (
+                        <article className="axis-memory-row" key={`memory-track-${sample.timestamp}-${index}`}>
+                          <strong>{formatTrackingTimelineEvent(sample)}</strong>
+                          <em>{formatTime(sample.timestamp)}</em>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="axis-memory-row">
+                        <strong>No tracking events</strong>
+                        <em>Visible movement will appear here</em>
+                      </article>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </section>
 
             <div className="axis-history-grid">
               <section className="axis-rail" aria-label="Streak progression">
@@ -2939,6 +3705,63 @@ export function RitualHome() {
                       <span>Shots waiting</span>
                       <strong>No shots yet</strong>
                       <em>Tap Make or Miss during a live session</em>
+                    </article>
+                  )}
+                </div>
+              </section>
+
+              <section className="axis-session-ledger" aria-label="Replay timeline">
+                <span>Replay timeline</span>
+                <div>
+                  {latestSession?.replayAnchors?.length ? (
+                    latestSession.replayAnchors.slice(0, 12).map((anchor) => (
+                      <article
+                        className={
+                          selectedReplayAnchor?.eventId === anchor.eventId
+                            ? "axis-session-row axis-replay-anchor-row axis-session-row-latest"
+                            : "axis-session-row axis-replay-anchor-row"
+                        }
+                        key={anchor.eventId}
+                      >
+                        <span>{anchor.replayLabel}</span>
+                        <strong>{formatDuration(anchor.videoTimestamp)}</strong>
+                        <button className="axis-row-action" onClick={() => jumpToReplayAnchor(anchor)} type="button">
+                          Jump
+                        </button>
+                        <em>{formatReplayAnchor(anchor)}</em>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="axis-session-row">
+                      <span>Replay timeline waiting</span>
+                      <strong>No anchors yet</strong>
+                      <em>Events become video jump points after a session</em>
+                    </article>
+                  )}
+                </div>
+                {selectedReplayAnchor ? (
+                  <em className="axis-replay-jump-state">
+                    {`Selected ${selectedReplayAnchor.replayLabel} at ${formatDuration(selectedReplayAnchor.videoTimestamp)}`}
+                  </em>
+                ) : null}
+              </section>
+
+              <section className="axis-session-ledger" aria-label="Replay clips">
+                <span>Replay clips</span>
+                <div>
+                  {latestSession?.replayClips?.length ? (
+                    latestSession.replayClips.slice(0, 8).map((clip) => (
+                      <article className="axis-session-row" key={clip.id}>
+                        <span>{clip.replayLabel}</span>
+                        <strong>{clip.eventType.replaceAll("_", " ")}</strong>
+                        <em>{formatReplayClip(clip)}</em>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="axis-session-row">
+                      <span>Clips waiting</span>
+                      <strong>No clips yet</strong>
+                      <em>Movement and tracking events become clips after a session</em>
                     </article>
                   )}
                 </div>

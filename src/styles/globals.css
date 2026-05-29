@@ -463,6 +463,54 @@ h1 {
   outline-offset: 0.18rem;
 }
 
+.axis-review-entry {
+  align-items: center;
+  border-top: 1px solid rgba(168, 217, 51, 0.22);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-top: 0.8rem;
+}
+
+.axis-review-entry div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.axis-review-entry span {
+  color: var(--axis-live);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-review-entry strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.5rem, 5vw, 2.7rem);
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.axis-review-entry button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.42);
+  color: var(--axis-live);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-height: 2.55rem;
+  padding: 0.6rem 0.85rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-review-entry button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.18rem;
+}
+
 .axis-live-strip {
   align-items: center;
   border-top: 1px solid rgba(168, 217, 51, 0.22);
@@ -1164,6 +1212,223 @@ h1 {
   content: " ▲";
 }
 
+.axis-review-panel {
+  border: 1px solid rgba(168, 217, 51, 0.24);
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.75rem;
+}
+
+.axis-review-panel > header {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.axis-review-panel > header span,
+.axis-review-block > span {
+  color: var(--axis-live);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-review-panel > header strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.45rem, 5vw, 2.35rem);
+  font-weight: 500;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.axis-review-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-review-block {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.55rem;
+}
+
+.axis-review-engine {
+  border-color: rgba(168, 217, 51, 0.24);
+  grid-column: 1 / -1;
+}
+
+.axis-review-block > div {
+  display: grid;
+  gap: 0;
+}
+
+.axis-review-row {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--axis-line);
+  color: inherit;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.35rem;
+  padding: 0.42rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+button.axis-review-row {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.axis-review-row + .axis-review-row {
+  border-top: 0;
+}
+
+.axis-review-row strong {
+  color: var(--axis-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.axis-review-row em {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+  font-style: normal;
+  text-align: right;
+}
+
+button.axis-review-row:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.16rem;
+}
+
+.axis-review-action {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.38);
+  color: var(--axis-live);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 800;
+  justify-self: start;
+  min-height: 2.35rem;
+  padding: 0.55rem 0.75rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-review-action:disabled {
+  border-color: var(--axis-line);
+  color: var(--axis-muted);
+  cursor: default;
+}
+
+.axis-review-action:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.18rem;
+}
+
+.axis-review-message {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+  font-style: normal;
+}
+
+.axis-athlete-memory {
+  border: 1px solid rgba(168, 217, 51, 0.2);
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.65rem;
+}
+
+.axis-athlete-memory > header {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.axis-athlete-memory > header div {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.axis-athlete-memory > header span,
+.axis-memory-block > span {
+  color: var(--axis-live);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-athlete-memory > header strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.25rem, 4.6vw, 2.1rem);
+  font-weight: 500;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.axis-athlete-memory > header em {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.axis-athlete-memory-grid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.axis-memory-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.axis-memory-block > div {
+  display: grid;
+  gap: 0;
+}
+
+.axis-memory-row {
+  align-items: center;
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 2.45rem;
+  padding: 0.42rem 0.5rem;
+}
+
+.axis-memory-row + .axis-memory-row {
+  border-top: 0;
+}
+
+.axis-memory-row strong {
+  color: var(--axis-ink);
+  font-size: 0.68rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.axis-memory-row em {
+  color: var(--axis-muted);
+  font-size: 0.6rem;
+  font-style: normal;
+}
+
 .axis-history-grid {
   display: grid;
   gap: 0.8rem;
@@ -1222,6 +1487,10 @@ h1 {
   border-color: rgba(168, 217, 51, 0.48);
 }
 
+.axis-replay-anchor-row {
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(6rem, 0.45fr);
+}
+
 .axis-session-row strong,
 .axis-session-row em {
   text-align: right;
@@ -1229,6 +1498,34 @@ h1 {
 
 .axis-session-row em {
   font-style: normal;
+}
+
+.axis-row-action {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.34);
+  color: var(--axis-live);
+  cursor: pointer;
+  font-size: 0.58rem;
+  font-weight: 800;
+  min-height: 1.8rem;
+  padding: 0.32rem 0.5rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-row-action:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.16rem;
+}
+
+.axis-replay-jump-state {
+  color: var(--axis-live);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .axis-interpretation-panel {
@@ -1318,6 +1615,8 @@ h1 {
   }
 
   .axis-entry-form,
+  .axis-review-grid,
+  .axis-athlete-memory-grid,
   .axis-history-grid,
   .axis-archive-strip {
     grid-template-columns: 1fr;
@@ -1379,7 +1678,23 @@ h1 {
   }
 
   .axis-session-row strong,
-  .axis-session-row em {
+  .axis-session-row em,
+  .axis-review-row em {
     text-align: left;
+  }
+
+  .axis-review-entry,
+  .axis-review-panel > header,
+  .axis-athlete-memory > header {
+    align-items: start;
+    display: grid;
+  }
+
+  .axis-athlete-memory > header em {
+    text-align: left;
+  }
+
+  .axis-review-row {
+    grid-template-columns: 1fr;
   }
 }
