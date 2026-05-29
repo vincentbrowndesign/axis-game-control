@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type BallTrackingState, useBallTracking } from "../hooks/useBallTracking";
 import { usePersonDetection } from "../hooks/usePersonDetection";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase-browser";
 
@@ -46,7 +47,7 @@ const defaultParticipationMode: ParticipationMode = "Training";
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
-const showCalibrationDiagnostics = process.env.NEXT_PUBLIC_AXIS_CALIBRATION_DEBUG === "true";
+const showAxisDebug = process.env.NEXT_PUBLIC_AXIS_DEBUG === "true";
 const defaultDetectionDebug: DetectionDebug = {
   athleteMatchedName: null,
   faceConfidence: null,
@@ -81,6 +82,10 @@ type SavedSession = {
   activeParticipantCount?: number;
   timeline?: SessionTimelineSample[];
   timelineSummary?: SessionTimelineSummary;
+  rawMeasurements?: SessionRawMeasurements;
+  summaryLayer?: SessionSummaryLayer;
+  ballTimeline?: BallTimelineSample[];
+  replayEvents?: ReplayEvent[];
 };
 
 type ActiveParticipant = AthleteIdentity & {
@@ -102,10 +107,13 @@ type SessionParticipant = AthleteIdentity & {
 
 type CalibrationEvidence = {
   athlete_id: string;
+  camera_id: string;
   session_id: string;
+  lockTimestamp: string;
   timestamp: string;
   camera_type: CameraDirection;
   calibration_status: CalibrationStatus;
+  track_id?: string;
   visible_people: number;
 };
 
@@ -119,6 +127,7 @@ type DetectionDebug = {
 };
 
 type SessionTimelineSample = {
+  athleteId?: string;
   directionChanges: number;
   distanceTraveled: number;
   entered: boolean;
@@ -152,7 +161,59 @@ type SessionTimelineSummary = {
   trackingRecoveries: number;
 };
 
+type BallTimelineSample = {
+  position?: {
+    x: number;
+    y: number;
+  };
+  timestamp: string;
+  velocity?: {
+    x: number;
+    y: number;
+  };
+  visible: boolean;
+};
+
+type ReplayEventType = "left_frame" | "movement_spike" | "recovered" | "tracking_interruption";
+
+type ReplayEvent = {
+  athleteId?: string;
+  athleteName: string;
+  cameraDirection: CameraDirection;
+  cameraId: string;
+  id: string;
+  label: string;
+  movementDistance?: number;
+  timestamp: string;
+  trackState: {
+    status: "interrupted" | "recovered" | "tracked" | "visible";
+    trackId?: string;
+    tracked: boolean;
+    visible: boolean;
+  };
+  type: ReplayEventType;
+};
+
+type SessionRawMeasurements = {
+  distance: number;
+  entered: number;
+  exited: number;
+  lost: number;
+  movingSeconds: number;
+  recovered: number;
+  trackedSeconds: number;
+  visibleSeconds: number;
+};
+
+type SessionSummaryLayer = {
+  movement: string;
+  sessionLength: string;
+  trackingQuality: string;
+  visibility: string;
+};
+
 type TimelineCursor = {
+  lastBallTimestampKey?: string;
   lastTimestampKey?: string;
   previousDirection?: "down" | "left" | "right" | "up";
   previousLostCount: number;
@@ -205,6 +266,7 @@ type AxisSave = {
     clipContinuityContext?: ClipContinuityContext;
     participants?: ActiveParticipant[];
     timeline?: SessionTimelineSample[];
+    ballTimeline?: BallTimelineSample[];
   } | null;
   sessions: SavedSession[];
 };
@@ -276,6 +338,10 @@ function formatTrackingStatus(status: string) {
   return "TRACKING";
 }
 
+function getCameraId(direction: CameraDirection) {
+  return `camera:${organizationSlug}:${direction}`;
+}
+
 function normalizeTimelineSample(sample: unknown): SessionTimelineSample | null {
   if (!sample || typeof sample !== "object") return null;
 
@@ -283,6 +349,7 @@ function normalizeTimelineSample(sample: unknown): SessionTimelineSample | null 
   if (typeof candidate.timestamp !== "string") return null;
 
   return {
+    athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
     directionChanges: typeof candidate.directionChanges === "number" ? candidate.directionChanges : 0,
     distanceTraveled: typeof candidate.distanceTraveled === "number" ? candidate.distanceTraveled : 0,
     entered: Boolean(candidate.entered),
@@ -308,6 +375,171 @@ function normalizeTimeline(samples: unknown) {
   if (!Array.isArray(samples)) return [];
 
   return samples.map(normalizeTimelineSample).filter((sample): sample is SessionTimelineSample => Boolean(sample));
+}
+
+function normalizeBallTimelineSample(sample: unknown): BallTimelineSample | null {
+  if (!sample || typeof sample !== "object") return null;
+
+  const candidate = sample as Partial<BallTimelineSample>;
+  if (typeof candidate.timestamp !== "string") return null;
+
+  const position =
+    candidate.position &&
+    typeof candidate.position.x === "number" &&
+    typeof candidate.position.y === "number"
+      ? {
+          x: candidate.position.x,
+          y: candidate.position.y,
+        }
+      : undefined;
+  const velocity =
+    candidate.velocity &&
+    typeof candidate.velocity.x === "number" &&
+    typeof candidate.velocity.y === "number"
+      ? {
+          x: candidate.velocity.x,
+          y: candidate.velocity.y,
+        }
+      : undefined;
+
+  return {
+    position,
+    timestamp: candidate.timestamp,
+    velocity,
+    visible: Boolean(candidate.visible),
+  };
+}
+
+function normalizeBallTimeline(samples: unknown) {
+  if (!Array.isArray(samples)) return [];
+
+  return samples.map(normalizeBallTimelineSample).filter((sample): sample is BallTimelineSample => Boolean(sample));
+}
+
+function normalizeReplayEvent(event: unknown): ReplayEvent | null {
+  if (!event || typeof event !== "object") return null;
+
+  const candidate = event as Partial<ReplayEvent>;
+  if (typeof candidate.id !== "string" || typeof candidate.timestamp !== "string" || typeof candidate.type !== "string") {
+    return null;
+  }
+
+  const trackState =
+    candidate.trackState && typeof candidate.trackState === "object"
+      ? (candidate.trackState as Partial<ReplayEvent["trackState"]>)
+      : {};
+  const cameraDirection = normalizeCameraDirection(candidate.cameraDirection);
+
+  return {
+    athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
+    athleteName: typeof candidate.athleteName === "string" ? candidate.athleteName : "Athlete",
+    cameraDirection,
+    cameraId: typeof candidate.cameraId === "string" ? candidate.cameraId : getCameraId(cameraDirection),
+    id: candidate.id,
+    label: typeof candidate.label === "string" ? candidate.label : "Replay event",
+    movementDistance: typeof candidate.movementDistance === "number" ? candidate.movementDistance : undefined,
+    timestamp: candidate.timestamp,
+    trackState: {
+      status:
+        trackState.status === "interrupted" || trackState.status === "recovered" || trackState.status === "tracked"
+          ? trackState.status
+          : "visible",
+      trackId: typeof trackState.trackId === "string" ? trackState.trackId : undefined,
+      tracked: Boolean(trackState.tracked),
+      visible: Boolean(trackState.visible),
+    },
+    type:
+      candidate.type === "left_frame" ||
+      candidate.type === "movement_spike" ||
+      candidate.type === "recovered" ||
+      candidate.type === "tracking_interruption"
+        ? candidate.type
+        : "movement_spike",
+  };
+}
+
+function normalizeReplayEvents(events: unknown) {
+  if (!Array.isArray(events)) return [];
+
+  return events.map(normalizeReplayEvent).filter((event): event is ReplayEvent => Boolean(event));
+}
+
+function createBallTimelineSample(timestamp: string, ballTracking: BallTrackingState): BallTimelineSample {
+  return {
+    position: ballTracking.position,
+    timestamp,
+    velocity: ballTracking.velocity,
+    visible: ballTracking.visible,
+  };
+}
+
+function getReplayAthlete(sample: SessionTimelineSample, participants: SessionParticipant[]) {
+  const participant = sample.athleteId ? participants.find((candidate) => candidate.id === sample.athleteId) : undefined;
+
+  return {
+    athleteId: participant?.id ?? sample.athleteId,
+    athleteName: participant?.name ?? "Athlete",
+  };
+}
+
+function createReplayEvent(
+  type: ReplayEventType,
+  sample: SessionTimelineSample,
+  participants: SessionParticipant[],
+  cameraDirection: CameraDirection,
+  index: number,
+): ReplayEvent {
+  const athlete = getReplayAthlete(sample, participants);
+  const labelByType: Record<ReplayEventType, string> = {
+    left_frame: "Left frame",
+    movement_spike: "Movement spike",
+    recovered: "Track recovered",
+    tracking_interruption: "Tracking interrupted",
+  };
+
+  return {
+    athleteId: athlete.athleteId,
+    athleteName: athlete.athleteName,
+    cameraDirection,
+    cameraId: getCameraId(cameraDirection),
+    id: `replay:${sample.timestamp}:${type}:${sample.trackId ?? "track"}:${index}`,
+    label: labelByType[type],
+    movementDistance: type === "movement_spike" ? sample.distanceTraveled : undefined,
+    timestamp: sample.timestamp,
+    trackState: {
+      status:
+        type === "tracking_interruption"
+          ? "interrupted"
+          : type === "recovered"
+            ? "recovered"
+            : sample.tracked
+              ? "tracked"
+              : "visible",
+      trackId: sample.trackId,
+      tracked: sample.tracked,
+      visible: sample.visible,
+    },
+    type,
+  };
+}
+
+function createReplayEvents(
+  samples: SessionTimelineSample[],
+  participants: SessionParticipant[],
+  cameraDirection: CameraDirection,
+) {
+  const events: ReplayEvent[] = [];
+
+  samples.forEach((sample, index) => {
+    if (sample.exited) events.push(createReplayEvent("left_frame", sample, participants, cameraDirection, index));
+    if (sample.trackingLost) events.push(createReplayEvent("tracking_interruption", sample, participants, cameraDirection, index));
+    if (sample.trackingRecovered) events.push(createReplayEvent("recovered", sample, participants, cameraDirection, index));
+    if (sample.distanceTraveled >= 0.055) {
+      events.push(createReplayEvent("movement_spike", sample, participants, cameraDirection, index));
+    }
+  });
+
+  return events.slice(0, 240);
 }
 
 function summarizeTimeline(samples: SessionTimelineSample[]): SessionTimelineSummary {
@@ -339,14 +571,126 @@ function summarizeTimeline(samples: SessionTimelineSample[]): SessionTimelineSum
   );
 }
 
-function formatTimelineSummary(summary?: SessionTimelineSummary) {
+function createRawMeasurements(summary?: SessionTimelineSummary): SessionRawMeasurements {
+  return {
+    distance: summary?.distanceTraveled ?? 0,
+    entered: summary?.entries ?? 0,
+    exited: summary?.exits ?? 0,
+    lost: summary?.trackingLosses ?? 0,
+    movingSeconds: summary?.timeMovingSeconds ?? 0,
+    recovered: summary?.trackingRecoveries ?? 0,
+    trackedSeconds: summary?.timeTrackedSeconds ?? 0,
+    visibleSeconds: summary?.timeVisibleSeconds ?? 0,
+  };
+}
+
+function createSessionSummaryLayer(durationSeconds: number, raw: SessionRawMeasurements): SessionSummaryLayer {
+  const safeDuration = typeof durationSeconds === "number" && Number.isFinite(durationSeconds) ? Math.max(0, durationSeconds) : 0;
+  const visibilityRatio = safeDuration > 0 ? raw.visibleSeconds / safeDuration : 0;
+  const trackingRatio = raw.visibleSeconds > 0 ? raw.trackedSeconds / raw.visibleSeconds : 0;
+
+  return {
+    movement:
+      raw.movingSeconds > 0
+        ? `${formatDuration(raw.movingSeconds)} moving`
+        : raw.visibleSeconds > 0
+          ? "Movement quiet"
+          : "Movement waiting",
+    sessionLength: formatDuration(safeDuration),
+    trackingQuality:
+      trackingRatio >= 0.9 && raw.lost === 0
+        ? "Tracking stable"
+        : trackingRatio >= 0.6
+          ? "Tracking partial"
+        : raw.recovered > 0
+          ? "Tracking recovered"
+          : raw.lost > 0
+            ? "Tracking interrupted"
+            : "Tracking waiting",
+    visibility:
+      visibilityRatio >= 0.8
+        ? "Visible most of session"
+        : visibilityRatio > 0
+          ? "Visible part of session"
+          : "Visibility waiting",
+  };
+}
+
+function formatSummaryLayer(summary?: SessionSummaryLayer) {
   if (!summary) return "";
 
-  return `Visible ${formatDuration(summary.timeVisibleSeconds)} / Tracked ${formatDuration(summary.timeTrackedSeconds)} / Moving ${formatDuration(
-    summary.timeMovingSeconds,
-  )} / Distance ${summary.distanceTraveled.toFixed(2)} / Entered ${summary.entries} / Exited ${summary.exits} / Lost ${
-    summary.trackingLosses
-  } / Recovered ${summary.trackingRecoveries}`;
+  return `${summary.sessionLength} / ${summary.movement} / ${summary.trackingQuality} / ${summary.visibility}`;
+}
+
+function formatRawMeasurements(raw?: SessionRawMeasurements) {
+  if (!raw) return "";
+
+  return `Raw: Visible ${formatDuration(raw.visibleSeconds)} / Tracked ${formatDuration(raw.trackedSeconds)} / Moving ${formatDuration(
+    raw.movingSeconds,
+  )} / Distance ${raw.distance.toFixed(2)} / Entered ${raw.entered} / Exited ${raw.exited} / Lost ${raw.lost} / Recovered ${raw.recovered}`;
+}
+
+function formatBallTimeline(timeline?: BallTimelineSample[]) {
+  if (!timeline?.length) return "Ball timeline: none";
+
+  const visibleSamples = timeline.filter((sample) => sample.visible).length;
+  const latestVisible = [...timeline].reverse().find((sample) => sample.visible && sample.position);
+
+  return `Ball timeline: ${visibleSamples}/${timeline.length} visible${
+    latestVisible?.position
+      ? ` / Last ${latestVisible.position.x.toFixed(2)}, ${latestVisible.position.y.toFixed(2)}`
+      : ""
+  }`;
+}
+
+function getReplayCount(events: ReplayEvent[] | undefined, type: ReplayEventType) {
+  return events?.filter((event) => event.type === type).length ?? 0;
+}
+
+function formatReplaySummary(events?: ReplayEvent[]) {
+  if (!events?.length) return "Session review waiting";
+
+  return `Replay ${events.length} / Left ${getReplayCount(events, "left_frame")} / Recovered ${getReplayCount(
+    events,
+    "recovered",
+  )} / Spikes ${getReplayCount(events, "movement_spike")} / Interruptions ${getReplayCount(events, "tracking_interruption")}`;
+}
+
+function formatReplayEvent(event: ReplayEvent) {
+  const trackLabel = event.trackState.trackId ? ` / ${event.trackState.trackId}` : "";
+  const movement = typeof event.movementDistance === "number" ? ` / ${event.movementDistance.toFixed(2)}` : "";
+
+  return `${formatTime(event.timestamp)} / ${event.athleteName}${trackLabel} / ${event.cameraDirection} camera${movement}`;
+}
+
+function normalizeRawMeasurements(raw: unknown, fallback: SessionRawMeasurements): SessionRawMeasurements {
+  if (!raw || typeof raw !== "object") return fallback;
+
+  const candidate = raw as Partial<SessionRawMeasurements>;
+
+  return {
+    distance: typeof candidate.distance === "number" ? candidate.distance : fallback.distance,
+    entered: typeof candidate.entered === "number" ? candidate.entered : fallback.entered,
+    exited: typeof candidate.exited === "number" ? candidate.exited : fallback.exited,
+    lost: typeof candidate.lost === "number" ? candidate.lost : fallback.lost,
+    movingSeconds: typeof candidate.movingSeconds === "number" ? candidate.movingSeconds : fallback.movingSeconds,
+    recovered: typeof candidate.recovered === "number" ? candidate.recovered : fallback.recovered,
+    trackedSeconds: typeof candidate.trackedSeconds === "number" ? candidate.trackedSeconds : fallback.trackedSeconds,
+    visibleSeconds: typeof candidate.visibleSeconds === "number" ? candidate.visibleSeconds : fallback.visibleSeconds,
+  };
+}
+
+function normalizeSummaryLayer(summary: unknown, fallback: SessionSummaryLayer): SessionSummaryLayer {
+  if (!summary || typeof summary !== "object") return fallback;
+
+  const candidate = summary as Partial<SessionSummaryLayer>;
+
+  return {
+    movement: typeof candidate.movement === "string" ? candidate.movement : fallback.movement,
+    sessionLength: typeof candidate.sessionLength === "string" ? candidate.sessionLength : fallback.sessionLength,
+    trackingQuality: typeof candidate.trackingQuality === "string" ? candidate.trackingQuality : fallback.trackingQuality,
+    visibility: typeof candidate.visibility === "string" ? candidate.visibility : fallback.visibility,
+  };
 }
 
 function identityFromAxisIdentity(identity: AxisIdentity): AthleteIdentity {
@@ -551,6 +895,7 @@ function readSave(): AxisSave {
           ),
           participants: activeParticipants,
           timeline: normalizeTimeline(parsed.activeSession.timeline),
+          ballTimeline: normalizeBallTimeline(parsed.activeSession.ballTimeline),
         }
       : null;
 
@@ -570,6 +915,17 @@ function readSave(): AxisSave {
               sessionMode,
               sessionParticipants,
             );
+            const timeline = normalizeTimeline(session.timeline);
+            const timelineSummary = session.timelineSummary ?? summarizeTimeline(timeline);
+            const rawMeasurements = normalizeRawMeasurements(session.rawMeasurements, createRawMeasurements(timelineSummary));
+            const summaryLayer = normalizeSummaryLayer(
+              session.summaryLayer,
+              createSessionSummaryLayer(session.durationSeconds, rawMeasurements),
+            );
+            const replayEvents =
+              normalizeReplayEvents(session.replayEvents).length > 0
+                ? normalizeReplayEvents(session.replayEvents)
+                : createReplayEvents(timeline, sessionParticipants, sessionCameraDirection);
 
             return {
               ...session,
@@ -589,8 +945,12 @@ function readSave(): AxisSave {
                 sessionParticipants,
               ),
               participants: sessionParticipants,
-              timeline: normalizeTimeline(session.timeline),
-              timelineSummary: session.timelineSummary ?? summarizeTimeline(normalizeTimeline(session.timeline)),
+              timeline,
+              timelineSummary,
+              rawMeasurements,
+              summaryLayer,
+              ballTimeline: normalizeBallTimeline(session.ballTimeline),
+              replayEvents,
             };
           })
         : [],
@@ -635,6 +995,10 @@ export function RitualHome() {
     previousLostCount: 0,
     previousRecoveryCount: 0,
     totalDistanceTraveled: 0,
+  });
+  const latestBallTrackingRef = useRef<BallTrackingState>({
+    trajectory: [],
+    visible: false,
   });
   const [authPhase, setAuthPhase] = useState<AuthPhase>("checking");
   const [identity, setIdentity] = useState<AxisIdentity | null>(null);
@@ -904,6 +1268,10 @@ export function RitualHome() {
     cameraPreviewRef,
     activeView === "camera" && cameraState === "attached" && Boolean(cameraStream),
   );
+  const ballTracking = useBallTracking(
+    cameraPreviewRef,
+    activeView === "camera" && cameraState === "attached" && Boolean(cameraStream),
+  );
   const latestPersonDetectionRef = useRef(personDetection);
   const athleteDetected = personDetection.visiblePeople === 1;
   const calibrationWorkflowLabel = isAthleteMatched
@@ -920,6 +1288,20 @@ export function RitualHome() {
     personDetection.tracks.find((track) => track.status === "visible" || track.status === "recovered") ??
     personDetection.tracks[0] ??
     null;
+  const activeTrackBindings = new Map(
+    (save.activeSession?.calibrationRecords ?? [])
+      .filter((record) => record.track_id)
+      .map((record) => [record.track_id as string, record.athlete_id]),
+  );
+  const primaryTrackingAthleteId = primaryTrackingTrack ? activeTrackBindings.get(primaryTrackingTrack.id) : undefined;
+  const primaryTrackingAthlete = primaryTrackingAthleteId
+    ? presentParticipants.find((participant) => participant.id === primaryTrackingAthleteId)
+    : null;
+  const getTrackAthlete = (trackId: string) => {
+    const athleteId = activeTrackBindings.get(trackId);
+
+    return athleteId ? presentParticipants.find((participant) => participant.id === athleteId) : undefined;
+  };
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -966,6 +1348,10 @@ export function RitualHome() {
   }, [personDetection]);
 
   useEffect(() => {
+    latestBallTrackingRef.current = ballTracking;
+  }, [ballTracking]);
+
+  useEffect(() => {
     if (!save.activeSession) {
       timelineCursorRef.current = {
         previousLostCount: 0,
@@ -984,10 +1370,14 @@ export function RitualHome() {
         if (timelineCursorRef.current.lastTimestampKey === timestampKey) return currentSave;
 
         const detection = latestPersonDetectionRef.current;
+        const ballSample = createBallTimelineSample(sampledAt.toISOString(), latestBallTrackingRef.current);
         const track =
           detection.tracks.find((candidate) => candidate.status === "visible" || candidate.status === "recovered") ??
           detection.tracks[0] ??
           null;
+        const trackBinding = track?.id
+          ? currentSave.activeSession.calibrationRecords?.find((record) => record.track_id === track.id)
+          : undefined;
         const tracked = Boolean(track && track.status !== "lost");
         const visible = detection.visiblePeople > 0;
         const x = track ? track.boundingBox.x + track.boundingBox.width / 2 : undefined;
@@ -1022,6 +1412,7 @@ export function RitualHome() {
         const trackingLost = lostCount > timelineCursorRef.current.previousLostCount;
         const trackingRecovered = recoveryCount > timelineCursorRef.current.previousRecoveryCount;
         const sample: SessionTimelineSample = {
+          athleteId: trackBinding?.athlete_id,
           directionChanges,
           distanceTraveled: tracked ? movementDistance : 0,
           entered,
@@ -1058,6 +1449,7 @@ export function RitualHome() {
           ...currentSave,
           activeSession: {
             ...currentSave.activeSession,
+            ballTimeline: [...(currentSave.activeSession.ballTimeline ?? []), ballSample],
             timeline: [...(currentSave.activeSession.timeline ?? []), sample],
           },
         };
@@ -1227,6 +1619,7 @@ export function RitualHome() {
           startingParticipants,
         ),
         participants: startingParticipants,
+        ballTimeline: [],
         timeline: [],
       },
     };
@@ -1463,12 +1856,19 @@ export function RitualHome() {
     }
 
     const completedAt = new Date().toISOString();
+    const lockedTrack =
+      primaryTrackingTrack && primaryTrackingTrack.status !== "lost"
+        ? primaryTrackingTrack
+        : personDetection.tracks.find((track) => track.status === "visible" || track.status === "recovered");
     const evidence: CalibrationEvidence = {
       athlete_id: selectedCalibrationAthlete.id,
+      camera_id: getCameraId(savedCameraDirection),
       session_id: save.activeSession.id,
+      lockTimestamp: completedAt,
       timestamp: completedAt,
       camera_type: savedCameraDirection,
       calibration_status: "calibrated",
+      track_id: lockedTrack?.id,
       visible_people: visiblePeople,
     };
     const nextParticipants = activeParticipants.map((participant) =>
@@ -1636,7 +2036,10 @@ export function RitualHome() {
     const sessionCameraState = normalizeCameraState(save.activeSession.cameraState);
     const sessionCameraDirection = normalizeCameraDirection(save.activeSession.cameraDirection);
     const timeline = normalizeTimeline(save.activeSession.timeline);
+    const ballTimeline = normalizeBallTimeline(save.activeSession.ballTimeline);
     const timelineSummary = summarizeTimeline(timeline);
+    const rawMeasurements = createRawMeasurements(timelineSummary);
+    const summaryLayer = createSessionSummaryLayer(durationSeconds, rawMeasurements);
     const sessionParticipants = activeParticipants.map((participant) => ({
       ...participant,
       activeAtCheckout: !participant.leftAt,
@@ -1652,6 +2055,7 @@ export function RitualHome() {
       status: "closed" as const,
       participantIds: activeParticipants.filter((participant) => !participant.leftAt).map((participant) => participant.id),
     };
+    const replayEvents = createReplayEvents(timeline, sessionParticipants, sessionCameraDirection);
     const completedSession = {
       id: save.activeSession.id,
       startedAt: save.activeSession.startedAt,
@@ -1676,8 +2080,12 @@ export function RitualHome() {
       participants: sessionParticipants,
       participantCount,
       activeParticipantCount,
+      ballTimeline,
       timeline,
       timelineSummary,
+      rawMeasurements,
+      summaryLayer,
+      replayEvents,
     };
     const nextSave = {
       activeSession: null,
@@ -1784,57 +2192,71 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
               <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera offline</span>}
-              <div className="axis-player-tracking-overlay" aria-label="Player tracking overlay">
-                {personDetection.tracks.map((track) => (
-                  <div
-                    className="axis-player-track-box"
-                    data-status={track.status}
-                    key={track.id}
-                    style={{
-                      height: `${track.boundingBox.height * 100}%`,
-                      left: `${track.boundingBox.x * 100}%`,
-                      top: `${track.boundingBox.y * 100}%`,
-                      width: `${track.boundingBox.width * 100}%`,
-                    }}
-                  >
-                    <div className="axis-player-track-label">
-                      <strong>{track.id}</strong>
-                      <span>{formatTrackingStatus(track.status)}</span>
+              {showAxisDebug ? (
+                <div className="axis-player-tracking-overlay" aria-label="Player tracking overlay">
+                  {personDetection.tracks.map((track) => (
+                    <div
+                      className="axis-player-track-box"
+                      data-status={track.status}
+                      key={track.id}
+                      style={{
+                        height: `${track.boundingBox.height * 100}%`,
+                        left: `${track.boundingBox.x * 100}%`,
+                        top: `${track.boundingBox.y * 100}%`,
+                        width: `${track.boundingBox.width * 100}%`,
+                      }}
+                    >
+                      <div className="axis-player-track-label">
+                        <strong>{getTrackAthlete(track.id)?.name ?? track.displayName}</strong>
+                        <span>{`${track.id} / ${formatTrackingStatus(track.status)}`}</span>
+                      </div>
+                      <div className="axis-player-track-metrics">
+                        <span>{`VISIBLE ${formatDuration(track.visibleTimeMs / 1000)}`}</span>
+                        <span>{`DIR ${track.movement.direction.toUpperCase()}`}</span>
+                        <span>{`DIST ${track.movement.distanceTraveled.toFixed(2)}`}</span>
+                        <span>{track.movement.moving ? "MOVING" : "STATIONARY"}</span>
+                        <span>{`LOST COUNT ${track.lostCount}`}</span>
+                        <span>{`RECOVERED COUNT ${track.recoveryCount}`}</span>
+                      </div>
                     </div>
-                    <div className="axis-player-track-metrics">
-                      <span>{`VISIBLE ${formatDuration(track.visibleTimeMs / 1000)}`}</span>
-                      <span>{`DIR ${track.movement.direction.toUpperCase()}`}</span>
-                      <span>{`DIST ${track.movement.distanceTraveled.toFixed(2)}`}</span>
-                      <span>{track.movement.moving ? "MOVING" : "STATIONARY"}</span>
-                      <span>{`LOST COUNT ${track.lostCount}`}</span>
-                      <span>{`RECOVERED COUNT ${track.recoveryCount}`}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="axis-outdoor-tracking-readout" aria-label="Outdoor tracking test">
-                <span>
-                  <strong>TRACKED</strong>
-                  <em>{primaryTrackingTrack && primaryTrackingTrack.status !== "lost" ? "YES" : "NO"}</em>
-                </span>
-                <span>
-                  <strong>TRACK ID</strong>
-                  <em>{primaryTrackingTrack?.id ?? "NONE"}</em>
-                </span>
-                <span>
-                  <strong>VISIBLE TIME</strong>
-                  <em>{primaryTrackingTrack ? formatDuration(primaryTrackingTrack.visibleTimeMs / 1000) : "0s"}</em>
-                </span>
-                <span>
-                  <strong>TRACK LOSSES</strong>
-                  <em>{primaryTrackingTrack?.lostCount ?? 0}</em>
-                </span>
-                <span>
-                  <strong>TRACK RECOVERIES</strong>
-                  <em>{primaryTrackingTrack?.recoveryCount ?? 0}</em>
-                </span>
-              </div>
-              {showCalibrationDiagnostics ? (
+                  ))}
+                </div>
+              ) : null}
+              {showAxisDebug ? (
+                <div className="axis-outdoor-tracking-readout" aria-label="Outdoor tracking test">
+                  <span>
+                    <strong>TRACKED</strong>
+                    <em>{primaryTrackingTrack && primaryTrackingTrack.status !== "lost" ? "YES" : "NO"}</em>
+                  </span>
+                  <span>
+                    <strong>TRACK ID</strong>
+                    <em>{primaryTrackingTrack ? `${primaryTrackingTrack.displayName} / ${primaryTrackingTrack.id}` : "NONE"}</em>
+                  </span>
+                  <span>
+                    <strong>ATHLETE</strong>
+                    <em>{primaryTrackingAthlete?.name ?? "UNBOUND"}</em>
+                  </span>
+                  <span>
+                    <strong>VISIBLE TIME</strong>
+                    <em>{primaryTrackingTrack ? formatDuration(primaryTrackingTrack.visibleTimeMs / 1000) : "0s"}</em>
+                  </span>
+                  <span>
+                    <strong>TRACK LOSSES</strong>
+                    <em>{primaryTrackingTrack?.lostCount ?? 0}</em>
+                  </span>
+                  <span>
+                    <strong>TRACK RECOVERIES</strong>
+                    <em>{primaryTrackingTrack?.recoveryCount ?? 0}</em>
+                  </span>
+                  {personDetection.tracks.map((track) => (
+                    <span key={`track-readout-${track.id}`}>
+                      <strong>{track.displayName.toUpperCase()}</strong>
+                      <em>{getTrackAthlete(track.id)?.name ?? track.id}</em>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {showAxisDebug ? (
                 <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
                   <span>
                     <strong>MODEL LOADED</strong>
@@ -1872,16 +2294,35 @@ export function RitualHome() {
                     <strong>VIDEO HEIGHT</strong>
                     <em>{personDetection.videoHeight}</em>
                   </span>
+                  <span>
+                    <strong>BALL VISIBLE</strong>
+                    <em>{ballTracking.visible ? "YES" : "NO"}</em>
+                  </span>
+                  <span>
+                    <strong>BALL POSITION</strong>
+                    <em>
+                      {ballTracking.position
+                        ? `${ballTracking.position.x.toFixed(2)}, ${ballTracking.position.y.toFixed(2)}`
+                        : "NONE"}
+                    </em>
+                  </span>
+                  <span>
+                    <strong>BALL VELOCITY</strong>
+                    <em>
+                      {ballTracking.velocity
+                        ? `${ballTracking.velocity.x.toFixed(2)}, ${ballTracking.velocity.y.toFixed(2)}`
+                        : "NONE"}
+                    </em>
+                  </span>
                 </div>
-              ) : (
-                <div className="axis-camera-status-overlay" aria-label="Camera identity state">
-                  {cameraStatusSignals.map((signal) => (
-                    <span data-active={signal !== "LOOKING FOR ATHLETE"} key={signal}>
-                      {signal}
-                    </span>
-                  ))}
-                </div>
-              )}
+              ) : null}
+              <div className="axis-camera-status-overlay" aria-label="Camera identity state">
+                {cameraStatusSignals.map((signal) => (
+                  <span data-active={signal !== "LOOKING FOR ATHLETE"} key={signal}>
+                    {signal}
+                  </span>
+                ))}
+              </div>
             </div>
 
             <section className="axis-camera-page-controls" aria-label="Camera controls">
@@ -1986,20 +2427,21 @@ export function RitualHome() {
                 </button>
               ) : null}
               {calibrationEvidence?.athlete_id === selectedCalibrationAthlete?.id ? (
-                <section className="axis-calibration-screen" aria-label="Identity record">
+                <section className="axis-calibration-screen" aria-label="Athlete confirmed">
                   <header>
-                    <span>Identity record</span>
+                    <span>Athlete confirmed</span>
                     <strong>Identity locked</strong>
                   </header>
                   <p>{calibrationEvidence.camera_type === "front" ? "Front camera" : "Back camera"}</p>
+                  <p>{calibrationEvidence.track_id ? `${calibrationEvidence.track_id} / ${selectedCalibrationAthlete?.name}` : selectedCalibrationAthlete?.name}</p>
                   <span className="axis-window-state">{new Date(calibrationEvidence.timestamp).toLocaleTimeString()}</span>
                 </section>
               ) : null}
             </section>
 
-            <section className="axis-session-module axis-recording-module" aria-label="Recording state">
+            <section className="axis-session-module axis-recording-module" aria-label="Video">
               <header>
-                <span>Recording state</span>
+                <span>Video</span>
                 <strong>{recordingLabel}</strong>
               </header>
               <button
@@ -2193,7 +2635,7 @@ export function RitualHome() {
                         <strong>{formatDuration(session.durationSeconds)}</strong>
                         <em>
                           {session.participantCount
-                            ? formatTimelineSummary(session.timelineSummary) ||
+                            ? formatSummaryLayer(session.summaryLayer) ||
                               `${formatCount(session.participantCount, "athlete")} / ${session.recordingAttached ? "Memory attached" : "Memory off"} / ${formatCameraState(session.cameraState)} / ${
                                 session.participationWindow?.status === "closed" ? "Window saved" : "Window open"
                               }`
@@ -2203,6 +2645,9 @@ export function RitualHome() {
                                 ? "Latest participation"
                                 : "Session memory"}
                         </em>
+                        <em>{formatReplaySummary(session.replayEvents)}</em>
+                        {showAxisDebug && session.rawMeasurements ? <em>{formatRawMeasurements(session.rawMeasurements)}</em> : null}
+                        {showAxisDebug ? <em>{formatBallTimeline(session.ballTimeline)}</em> : null}
                       </article>
                     ))
                   ) : (
@@ -2210,6 +2655,27 @@ export function RitualHome() {
                       <span>No sessions yet</span>
                       <strong>History waiting</strong>
                       <em>Check in to begin</em>
+                    </article>
+                  )}
+                </div>
+              </section>
+
+              <section className="axis-session-ledger" aria-label="Session review">
+                <span>Session review</span>
+                <div>
+                  {latestSession?.replayEvents?.length ? (
+                    latestSession.replayEvents.slice(0, 8).map((event) => (
+                      <article className="axis-session-row" key={event.id}>
+                        <span>{event.label}</span>
+                        <strong>{event.type.replaceAll("_", " ")}</strong>
+                        <em>{formatReplayEvent(event)}</em>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="axis-session-row">
+                      <span>Session review waiting</span>
+                      <strong>No events yet</strong>
+                      <em>Frame exits, recoveries, and movement changes appear here after a session</em>
                     </article>
                   )}
                 </div>
@@ -2238,18 +2704,18 @@ export function RitualHome() {
               </section>
             ) : null}
 
-            <section className="axis-archive-strip" aria-label="Replay memory archive">
+            <section className="axis-archive-strip" aria-label="Session history">
               <div>
-                <span>Replay memory</span>
-                <strong>{save.sessions.length ? "Continuity archive" : "No memory yet"}</strong>
+                <span>Session review</span>
+                <strong>{save.sessions.length ? "Review ready" : "No sessions yet"}</strong>
               </div>
               <div>
-                <span>Participation proof</span>
+                <span>Last workout</span>
                 <strong>{latestSession ? formatStamp(latestSession.endedAt) : "Waiting"}</strong>
               </div>
               <div>
-                <span>Historical persistence</span>
-                <strong>{save.sessions.length ? "Saved locally" : "Waiting"}</strong>
+                <span>Saved sessions</span>
+                <strong>{save.sessions.length ? `${save.sessions.length} saved` : "Waiting"}</strong>
               </div>
             </section>
             </section>

@@ -25,6 +25,7 @@ export type PlayerTrack = {
     x: number;
     y: number;
   };
+  displayName: string;
   id: string;
   location: PlayerLocation;
   lostCount: number;
@@ -51,6 +52,8 @@ type InternalPlayerTrack = PlayerTrack & {
   lastTimestamp: number;
   missingFrames: number;
   recoveredUntil: number;
+  velocityX: number;
+  velocityY: number;
 };
 
 type PoseLandmarks = PoseLandmarkerResult["landmarks"][number];
@@ -88,6 +91,7 @@ const trackingMatchDistance = 0.22;
 const lostTrackMatchDistance = 0.36;
 const movingDistanceThreshold = 0.015;
 const visibleBodyThreshold = 0.35;
+const maxVisiblePlayers = 10;
 
 function getLandmarkConfidence(landmarks: PoseLandmarks) {
   const confidenceValues = landmarks
@@ -142,6 +146,14 @@ function getPoseDetections(result: PoseLandmarkerResult): PoseDetection[] {
     .filter((detection): detection is PoseDetection => Boolean(detection));
 }
 
+function getPlayerDisplayName(index: number) {
+  const alphabetIndex = (index - 1) % 26;
+  const cycle = Math.floor((index - 1) / 26);
+  const suffix = cycle > 0 ? ` ${cycle + 1}` : "";
+
+  return `Player ${String.fromCharCode(65 + alphabetIndex)}${suffix}`;
+}
+
 function getPoseConfidence(result: PoseLandmarkerResult) {
   const detections = getPoseDetections(result);
   const poseConfidences = detections.map((detection) => detection.confidence);
@@ -155,6 +167,40 @@ function getPoseConfidence(result: PoseLandmarkerResult) {
 
 function getDistance(a: PoseDetection["center"], b: PoseDetection["center"]) {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function getPredictedCenter(track: InternalPlayerTrack, timestamp: number) {
+  const elapsedSeconds = Math.max(0, (timestamp - track.lastTimestamp) / 1000);
+
+  return {
+    x: Math.min(1, Math.max(0, track.center.x + track.velocityX * elapsedSeconds)),
+    y: Math.min(1, Math.max(0, track.center.y + track.velocityY * elapsedSeconds)),
+  };
+}
+
+function getBoundingBoxOverlap(a: PlayerTrack["boundingBox"], b: PlayerTrack["boundingBox"]) {
+  const left = Math.max(a.x, b.x);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const top = Math.max(a.y, b.y);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+  const width = Math.max(0, right - left);
+  const height = Math.max(0, bottom - top);
+  const intersection = width * height;
+  const union = a.width * a.height + b.width * b.height - intersection;
+
+  return union > 0 ? intersection / union : 0;
+}
+
+function getTrackDetectionScore(track: InternalPlayerTrack, detection: PoseDetection, timestamp: number) {
+  const predictedCenter = getPredictedCenter(track, timestamp);
+  const distance = getDistance(predictedCenter, detection.center);
+  const overlap = getBoundingBoxOverlap(track.boundingBox, detection.boundingBox);
+  const trackArea = track.boundingBox.width * track.boundingBox.height;
+  const detectionArea = detection.boundingBox.width * detection.boundingBox.height;
+  const areaRatio = trackArea > 0 && detectionArea > 0 ? Math.min(trackArea, detectionArea) / Math.max(trackArea, detectionArea) : 0;
+  const verticalDifference = Math.abs(track.center.y - detection.center.y);
+
+  return distance - overlap * 0.18 - areaRatio * 0.06 + verticalDifference * 0.04;
 }
 
 function getDirection(deltaX: number, deltaY: number, distance: number): PlayerDirection {
@@ -181,6 +227,7 @@ function createStationaryMovement(): PlayerMovement {
 function createVisibleTrackSnapshot(track: InternalPlayerTrack): PlayerTrack {
   return {
     boundingBox: track.boundingBox,
+    displayName: track.displayName,
     id: track.id,
     location: track.location,
     lostCount: track.lostCount,
@@ -199,54 +246,40 @@ function updatePlayerTracks(
 ) {
   const unmatchedTracks = new Set(currentTracks.map((_, index) => index));
   const updatedTracks = [...currentTracks];
+  const unmatchedDetections = new Set(detections.map((_, index) => index));
+  const candidateMatches = detections
+    .flatMap((detection, detectionIndex) =>
+      updatedTracks.map((track, trackIndex) => {
+        const distance = getDistance(getPredictedCenter(track, timestamp), detection.center);
+        const allowedDistance = track.status === "lost" ? lostTrackMatchDistance : trackingMatchDistance;
 
-  detections.forEach((detection) => {
-    let bestTrackIndex: number | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
+        return {
+          detection,
+          detectionIndex,
+          score: getTrackDetectionScore(track, detection, timestamp),
+          trackIndex,
+          valid: distance <= allowedDistance,
+        };
+      }),
+    )
+    .filter((candidate) => candidate.valid)
+    .sort((a, b) => a.score - b.score);
 
-    unmatchedTracks.forEach((trackIndex) => {
-      const track = updatedTracks[trackIndex];
-      const distance = getDistance(detection.center, track.center);
-      const allowedDistance = track.status === "lost" ? lostTrackMatchDistance : trackingMatchDistance;
+  candidateMatches.forEach((match) => {
+    if (!unmatchedTracks.has(match.trackIndex) || !unmatchedDetections.has(match.detectionIndex)) return;
 
-      if (distance < allowedDistance && distance < bestDistance) {
-        bestDistance = distance;
-        bestTrackIndex = trackIndex;
-      }
-    });
-
-    if (bestTrackIndex === null) {
-      const nextId = `PLAYER_${nextPlayerIndexRef.current}`;
-      nextPlayerIndexRef.current += 1;
-      updatedTracks.push({
-        boundingBox: detection.boundingBox,
-        center: detection.center,
-        id: nextId,
-        lastTimestamp: timestamp,
-        location: detection.center,
-        lostCount: 0,
-        missingFrames: 0,
-        movement: createStationaryMovement(),
-        recoveredUntil: 0,
-        recoveryCount: 0,
-        status: "visible",
-        visibleTimeMs: 0,
-      });
-      return;
-    }
-
-    const matchedTrack = updatedTracks[bestTrackIndex];
+    const matchedTrack = updatedTracks[match.trackIndex];
     const wasLost = matchedTrack.status === "lost";
     const elapsedSeconds = Math.max(0.001, (timestamp - matchedTrack.lastTimestamp) / 1000);
-    const deltaX = detection.center.x - matchedTrack.center.x;
-    const deltaY = detection.center.y - matchedTrack.center.y;
+    const deltaX = match.detection.center.x - matchedTrack.center.x;
+    const deltaY = match.detection.center.y - matchedTrack.center.y;
     const distanceTraveled = Math.hypot(deltaX, deltaY);
-    updatedTracks[bestTrackIndex] = {
+    updatedTracks[match.trackIndex] = {
       ...matchedTrack,
-      boundingBox: detection.boundingBox,
-      center: detection.center,
+      boundingBox: match.detection.boundingBox,
+      center: match.detection.center,
       lastTimestamp: timestamp,
-      location: detection.center,
+      location: match.detection.center,
       missingFrames: 0,
       movement: {
         direction: getDirection(deltaX, deltaY, distanceTraveled),
@@ -257,9 +290,40 @@ function updatePlayerTracks(
       recoveredUntil: wasLost ? timestamp + recoveredStateMs : matchedTrack.recoveredUntil,
       recoveryCount: wasLost ? matchedTrack.recoveryCount + 1 : matchedTrack.recoveryCount,
       status: wasLost ? "recovered" : "visible",
+      velocityX: deltaX / elapsedSeconds,
+      velocityY: deltaY / elapsedSeconds,
       visibleTimeMs: matchedTrack.visibleTimeMs + elapsedSeconds * 1000,
     };
-    unmatchedTracks.delete(bestTrackIndex);
+    unmatchedTracks.delete(match.trackIndex);
+    unmatchedDetections.delete(match.detectionIndex);
+  });
+
+  unmatchedDetections.forEach((detectionIndex) => {
+    const detection = detections[detectionIndex];
+    const activeTrackCount = updatedTracks.filter((track) => track.missingFrames < maxOcclusionFrames).length;
+
+    if (activeTrackCount < maxVisiblePlayers) {
+      const nextId = `PLAYER_${nextPlayerIndexRef.current}`;
+      const displayName = getPlayerDisplayName(nextPlayerIndexRef.current);
+      nextPlayerIndexRef.current += 1;
+      updatedTracks.push({
+        boundingBox: detection.boundingBox,
+        center: detection.center,
+        displayName,
+        id: nextId,
+        lastTimestamp: timestamp,
+        location: detection.center,
+        lostCount: 0,
+        missingFrames: 0,
+        movement: createStationaryMovement(),
+        recoveredUntil: 0,
+        recoveryCount: 0,
+        status: "visible",
+        velocityX: 0,
+        velocityY: 0,
+        visibleTimeMs: 0,
+      });
+    }
   });
 
   unmatchedTracks.forEach((trackIndex) => {
@@ -271,7 +335,10 @@ function updatePlayerTracks(
       lastTimestamp: timestamp,
       lostCount: isNewlyLost ? track.lostCount + 1 : track.lostCount,
       missingFrames,
+      movement: missingFrames >= maxOcclusionFrames ? createStationaryMovement() : track.movement,
       status: missingFrames >= maxOcclusionFrames ? "lost" : track.status,
+      velocityX: missingFrames >= maxOcclusionFrames ? 0 : track.velocityX,
+      velocityY: missingFrames >= maxOcclusionFrames ? 0 : track.velocityY,
     };
   });
 
@@ -364,9 +431,14 @@ export function usePersonDetection(videoRef: RefObject<HTMLVideoElement | null>,
 
           const result = landmarker.detectForVideo(video, timestamp);
           const nextDetection = getPoseConfidence(result);
+          const visibleDetections = nextDetection.detections
+            .filter((detection) => detection.confidence >= visibleBodyThreshold)
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, maxVisiblePlayers);
+
           playerTracksRef.current = updatePlayerTracks(
             playerTracksRef.current,
-            nextDetection.detections.filter((detection) => detection.confidence >= visibleBodyThreshold),
+            visibleDetections,
             timestamp,
             nextPlayerIndexRef,
           );
