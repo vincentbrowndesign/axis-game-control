@@ -87,14 +87,34 @@ export async function POST(request: Request) {
       ok: roboflowResponse.ok,
       status: roboflowResponse.status,
     });
+    const predictions = Array.isArray(result.predictions) ? result.predictions : [];
+    const detections = predictions.map((prediction) => ({
+      confidence: typeof prediction.confidence === "number" ? prediction.confidence : null,
+      height: typeof prediction.height === "number" ? prediction.height : null,
+      label: prediction.class ?? prediction.class_name ?? "unknown",
+      width: typeof prediction.width === "number" ? prediction.width : null,
+      x: typeof prediction.x === "number" ? prediction.x : null,
+      y: typeof prediction.y === "number" ? prediction.y : null,
+    }));
+    const debugPayload = {
+      allClassNames: detections.map((detection) => detection.label),
+      allConfidenceValues: detections.map((detection) => detection.confidence),
+      detections,
+      errorPayload: result.error ?? null,
+      predictionCount: predictions.length,
+      rawRoboflowResponse: result,
+      rawStatus: roboflowResponse.status,
+      visiblePeople: countVisiblePeople(predictions),
+    };
+
+    console.log("Raw Roboflow debug response", debugPayload);
 
     if (!roboflowResponse.ok) {
       console.error("Roboflow detection error", result);
       console.log("Calibration aborted", { reason: "roboflow_non_ok", status: roboflowResponse.status });
-      return Response.json({ error: "Person detection failed." }, { status: 502 });
+      return Response.json({ ...debugPayload, error: "Person detection failed.", personConfidence: null }, { status: 502 });
     }
 
-    const predictions = Array.isArray(result.predictions) ? result.predictions : [];
     console.log("Prediction count", { predictions: predictions.length });
 
     const personDetections = getPersonDetections(predictions);
@@ -105,14 +125,7 @@ export async function POST(request: Request) {
     }, null);
 
     return Response.json({
-      detections: predictions.map((prediction) => ({
-        confidence: typeof prediction.confidence === "number" ? prediction.confidence : null,
-        height: typeof prediction.height === "number" ? prediction.height : null,
-        label: prediction.class ?? prediction.class_name ?? "unknown",
-        width: typeof prediction.width === "number" ? prediction.width : null,
-        x: typeof prediction.x === "number" ? prediction.x : null,
-        y: typeof prediction.y === "number" ? prediction.y : null,
-      })),
+      ...debugPayload,
       imageHeight: typeof result.image?.height === "number" ? result.image.height : null,
       imageWidth: typeof result.image?.width === "number" ? result.image.width : null,
       model: modelId,
