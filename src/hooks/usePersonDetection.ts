@@ -6,12 +6,24 @@ import { FilesetResolver, PoseLandmarker, type PoseLandmarkerResult } from "@med
 type PersonDetectionState = {
   bodyDetected: boolean;
   confidence: number | null;
+  detectionsReturned: number;
+  inferenceRunning: boolean;
+  modelLoaded: boolean;
+  rawConfidence: number | null;
+  videoHeight: number;
+  videoWidth: number;
   visiblePeople: number;
 };
 
 const defaultDetectionState: PersonDetectionState = {
   bodyDetected: false,
   confidence: null,
+  detectionsReturned: 0,
+  inferenceRunning: false,
+  modelLoaded: false,
+  rawConfidence: null,
+  videoHeight: 0,
+  videoWidth: 0,
   visiblePeople: 0,
 };
 
@@ -34,6 +46,8 @@ function getPoseConfidence(result: PoseLandmarkerResult) {
 
   return {
     confidence: poseConfidences.length ? Math.max(...poseConfidences) : null,
+    detectionsReturned: result.landmarks.length,
+    rawConfidence: poseConfidences.length ? Math.max(...poseConfidences) : null,
     visiblePeople: poseConfidences.filter((confidence) => confidence >= visibleBodyThreshold).length,
   };
 }
@@ -71,6 +85,12 @@ export function usePersonDetection(videoRef: RefObject<HTMLVideoElement | null>,
     async function runDetectionLoop() {
       try {
         landmarkerRef.current ??= await createPoseLandmarker();
+        if (!cancelled) {
+          setState((current) => ({
+            ...current,
+            modelLoaded: true,
+          }));
+        }
       } catch (error) {
         console.error("Unable to start MediaPipe pose detection", error);
         if (!cancelled) setState(defaultDetectionState);
@@ -82,15 +102,40 @@ export function usePersonDetection(videoRef: RefObject<HTMLVideoElement | null>,
 
         const video = videoRef.current;
         const landmarker = landmarkerRef.current;
+        const videoWidth = video?.videoWidth ?? 0;
+        const videoHeight = video?.videoHeight ?? 0;
 
-        if (video && landmarker && video.videoWidth && video.videoHeight && timestamp - lastDetectionAt >= detectionIntervalMs) {
+        if (video && landmarker && timestamp - lastDetectionAt >= detectionIntervalMs) {
           lastDetectionAt = timestamp;
+
+          if (!videoWidth || !videoHeight) {
+            setState((current) => ({
+              ...current,
+              bodyDetected: false,
+              confidence: null,
+              detectionsReturned: 0,
+              inferenceRunning: false,
+              rawConfidence: null,
+              videoHeight,
+              videoWidth,
+              visiblePeople: 0,
+            }));
+            animationFrame = requestAnimationFrame(detect);
+            return;
+          }
+
           const result = landmarker.detectForVideo(video, timestamp);
           const nextDetection = getPoseConfidence(result);
 
           setState({
             bodyDetected: nextDetection.visiblePeople > 0,
             confidence: nextDetection.confidence,
+            detectionsReturned: nextDetection.detectionsReturned,
+            inferenceRunning: true,
+            modelLoaded: true,
+            rawConfidence: nextDetection.rawConfidence,
+            videoHeight,
+            videoWidth,
             visiblePeople: nextDetection.visiblePeople,
           });
         }

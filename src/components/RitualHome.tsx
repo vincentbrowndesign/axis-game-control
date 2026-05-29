@@ -861,7 +861,7 @@ export function RitualHome() {
             ? `Expected one athlete, detected ${personDetection.visiblePeople}.`
             : "Looking for one visible body.",
       personConfidence: personDetection.confidence,
-      predictionCount: personDetection.visiblePeople,
+      predictionCount: personDetection.detectionsReturned,
     });
 
     if (personDetection.visiblePeople === 1 && selectedCalibrationAthlete) {
@@ -1201,7 +1201,7 @@ export function RitualHome() {
       ...defaultDetectionDebug,
       failureReason: people === 1 ? "One visible body detected." : `Expected one athlete, detected ${people}.`,
       personConfidence: personDetection.confidence,
-      predictionCount: people,
+      predictionCount: personDetection.detectionsReturned,
     });
 
     if (people !== 1) {
@@ -1511,6 +1511,14 @@ export function RitualHome() {
               {cameraStream ? null : <span>Camera offline</span>}
               <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
                 <span>
+                  <strong>MODEL LOADED</strong>
+                  <em>{personDetection.modelLoaded ? "YES" : "NO"}</em>
+                </span>
+                <span>
+                  <strong>INFERENCE RUNNING</strong>
+                  <em>{personDetection.inferenceRunning ? "YES" : "NO"}</em>
+                </span>
+                <span>
                   <strong>BODY DETECTED</strong>
                   <em>{visiblePeople !== null && visiblePeople > 0 ? "YES" : "NO"}</em>
                 </span>
@@ -1519,8 +1527,16 @@ export function RitualHome() {
                   <em>{visiblePeople ?? 0}</em>
                 </span>
                 <span>
+                  <strong>DETECTIONS RETURNED</strong>
+                  <em>{personDetection.detectionsReturned}</em>
+                </span>
+                <span>
                   <strong>CONFIDENCE</strong>
                   <em>{formatDebugConfidence(detectionDebug.personConfidence)}</em>
+                </span>
+                <span>
+                  <strong>RAW CONFIDENCE</strong>
+                  <em>{formatDebugConfidence(personDetection.rawConfidence)}</em>
                 </span>
                 <span>
                   <strong>IDENTITY LOCK</strong>
@@ -1529,6 +1545,14 @@ export function RitualHome() {
                 <span>
                   <strong>FRAME RATE</strong>
                   <em>{`${frameRate} FPS`}</em>
+                </span>
+                <span>
+                  <strong>VIDEO WIDTH</strong>
+                  <em>{personDetection.videoWidth}</em>
+                </span>
+                <span>
+                  <strong>VIDEO HEIGHT</strong>
+                  <em>{personDetection.videoHeight}</em>
                 </span>
               </div>
             </div>
