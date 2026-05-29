@@ -7,7 +7,18 @@ type RitualState = "idle" | "active" | "saving" | "complete";
 type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
 type CalibrationStatus = "required" | "calibrated";
 type CalibrationWorkflowStatus = "not_calibrated" | "calibrating" | "complete";
-type DetectionStatus = "idle" | "detecting" | "none" | "multiple" | "ready" | "error";
+type DetectionStatus =
+  | "idle"
+  | "capturing"
+  | "camera_not_ready"
+  | "capture_failed"
+  | "frame_captured"
+  | "sending"
+  | "request_failed"
+  | "response_received"
+  | "invalid_response"
+  | "not_one"
+  | "ready";
 type ActiveView = "session" | "camera";
 type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
@@ -683,23 +694,37 @@ export function RitualHome() {
   const selectedAthleteCalibrationStatus = selectedCalibrationAthlete
     ? normalizeCalibrationStatus(selectedCalibrationAthlete.calibrationStatus)
     : "required";
-  const calibrationWorkflowStatus: CalibrationWorkflowStatus = detectionStatus === "detecting"
+  const calibrationWorkflowStatus: CalibrationWorkflowStatus =
+    detectionStatus === "capturing" ||
+    detectionStatus === "frame_captured" ||
+    detectionStatus === "sending" ||
+    detectionStatus === "response_received"
     ? "calibrating"
     : selectedAthleteCalibrationStatus === "calibrated"
       ? "complete"
       : "not_calibrated";
   const detectionStatusLabel =
-    detectionStatus === "detecting"
-      ? "CHECKING FRAME"
-      : detectionStatus === "none"
-        ? "NO ATHLETE DETECTED"
-        : detectionStatus === "multiple"
-          ? "ONE ATHLETE REQUIRED"
-          : detectionStatus === "ready"
-            ? "CALIBRATION READY"
-            : detectionStatus === "error"
-              ? "CHECK FAILED"
-              : "";
+    detectionStatus === "capturing"
+      ? "CAPTURING FRAME"
+      : detectionStatus === "camera_not_ready"
+        ? "CAMERA NOT READY"
+        : detectionStatus === "capture_failed"
+          ? "FRAME CAPTURE FAILED"
+          : detectionStatus === "frame_captured"
+            ? "FRAME CAPTURED"
+            : detectionStatus === "sending"
+              ? "SENDING TO ROBOFLOW"
+              : detectionStatus === "request_failed"
+                ? "ROBOFLOW REQUEST FAILED"
+                : detectionStatus === "response_received"
+                  ? "ROBOFLOW RESPONSE RECEIVED"
+                  : detectionStatus === "invalid_response"
+                    ? "ROBOFLOW RESPONSE INVALID"
+                    : detectionStatus === "not_one"
+                      ? "VISIBLE PEOPLE != 1"
+                      : detectionStatus === "ready"
+                        ? "CALIBRATION READY"
+                        : "";
   const calibrationWorkflowLabel = detectionStatusLabel
     ? detectionStatusLabel
     : calibrationWorkflowStatus === "calibrating"
@@ -1039,6 +1064,10 @@ export function RitualHome() {
 
   function captureCameraFrame() {
     const video = cameraPreviewRef.current;
+    console.log("Calibration video dimensions", {
+      videoHeight: video?.videoHeight ?? 0,
+      videoWidth: video?.videoWidth ?? 0,
+    });
     if (!video || !video.videoWidth || !video.videoHeight) return null;
 
     const canvas = document.createElement("canvas");
@@ -1054,16 +1083,19 @@ export function RitualHome() {
   async function startCameraCalibration() {
     if (!save.activeSession || cameraState !== "attached" || !selectedCalibrationAthlete) return;
 
+    setDetectionStatus("capturing");
     const image = captureCameraFrame();
     if (!image) {
-      setDetectionStatus("error");
+      const video = cameraPreviewRef.current;
+      setDetectionStatus(video && (!video.videoWidth || !video.videoHeight) ? "camera_not_ready" : "capture_failed");
       setVisiblePeople(null);
       return;
     }
 
-    setDetectionStatus("detecting");
+    setDetectionStatus("frame_captured");
     setVisiblePeople(null);
     setCalibrationEvidence(null);
+    setDetectionStatus("sending");
 
     try {
       const response = await fetch("/api/roboflow/person-detection", {
@@ -1074,30 +1106,31 @@ export function RitualHome() {
         body: JSON.stringify({ image }),
       });
       const result = (await response.json()) as { visiblePeople?: number; error?: string };
+      setDetectionStatus("response_received");
 
       if (!response.ok) {
         console.error("Roboflow person detection failed", result.error);
-        setDetectionStatus("error");
+        setDetectionStatus("request_failed");
         return;
       }
 
-      const people = Number(result.visiblePeople ?? 0);
+      if (typeof result.visiblePeople !== "number" || !Number.isFinite(result.visiblePeople)) {
+        setDetectionStatus("invalid_response");
+        return;
+      }
+
+      const people = result.visiblePeople;
       setVisiblePeople(people);
 
-      if (people === 0) {
-        setDetectionStatus("none");
-        return;
-      }
-
-      if (people > 1) {
-        setDetectionStatus("multiple");
+      if (people !== 1) {
+        setDetectionStatus("not_one");
         return;
       }
 
       setDetectionStatus("ready");
     } catch (error) {
       console.error("Unable to run person detection", error);
-      setDetectionStatus("error");
+      setDetectionStatus("request_failed");
     }
   }
 
@@ -1446,23 +1479,20 @@ export function RitualHome() {
               <span className="axis-window-state">
                 {selectedCalibrationAthlete ? selectedCalibrationAthlete.name : "Select athlete"}
               </span>
-              {visiblePeople !== null ? (
-                <span className="axis-window-state">{`${visiblePeople} visible ${
-                  visiblePeople === 1 ? "athlete" : "athletes"
-                }`}</span>
-              ) : null}
+              {visiblePeople !== null ? <span className="axis-window-state">{`VISIBLE PEOPLE = ${visiblePeople}`}</span> : null}
               <button
                 className="axis-calibration-action"
                 disabled={
                   cameraState !== "attached" ||
                   !selectedCalibrationAthlete ||
                   selectedAthleteCalibrationStatus === "calibrated" ||
-                  detectionStatus === "detecting"
+                  detectionStatus === "capturing" ||
+                  detectionStatus === "sending"
                 }
                 onClick={startCameraCalibration}
                 type="button"
               >
-                {detectionStatus === "detecting"
+                {detectionStatus === "capturing" || detectionStatus === "sending"
                   ? "Checking frame"
                   : selectedAthleteCalibrationStatus === "calibrated"
                     ? "Calibration complete"
