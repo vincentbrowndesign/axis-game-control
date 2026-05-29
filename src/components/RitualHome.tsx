@@ -2889,6 +2889,71 @@ export function RitualHome() {
     setSelectedReplayAnchor(anchor);
   }
 
+  function createFinalizeWorkPayload(session: SavedSession) {
+    const shotSummary = summarizeShots(session.shotEvents ?? []);
+    const filmMoments = (session.replayAnchors ?? []).map((anchor) => ({
+      filmTimeSeconds: anchor.videoTimestamp,
+      id: anchor.eventId,
+      label: formatHumanMomentLabel(anchor),
+      type: anchor.eventType,
+    }));
+    const events = (session.replayEvents ?? []).map((event) => ({
+      filmTimeSeconds: getVideoTimestamp(event.timestamp, session.startedAt),
+      id: event.id,
+      label: event.label,
+      participantId: event.athleteId,
+      timestamp: event.timestamp,
+      type: event.type,
+    }));
+
+    return {
+      events,
+      film: {
+        id: session.muxAssetId ? `film:${session.muxAssetId}` : undefined,
+        moments: filmMoments,
+        muxAssetId: session.muxAssetId,
+        playbackId: undefined,
+        status: session.recordingAttached ? ("processing" as const) : ("unavailable" as const),
+        thumbnailUrl: undefined,
+        workId: session.id,
+      },
+      results: {
+        attempts: shotSummary.attempts,
+        durationSeconds: session.durationSeconds,
+        eventsCount: events.length,
+        fieldGoalPercentage: shotSummary.attempts ? shotSummary.fieldGoalPercentage : null,
+        filmMomentsCount: filmMoments.length,
+        makes: shotSummary.makes,
+        misses: shotSummary.misses,
+      },
+      work: {
+        endedAt: session.endedAt,
+        id: session.id,
+        participantIds: (session.participants ?? []).map((participant) => participant.id),
+        startedAt: session.startedAt,
+        status: "complete" as const,
+        type: session.mode ?? defaultParticipationMode,
+      },
+    };
+  }
+
+  async function queueFinalizeWork(session: SavedSession) {
+    try {
+      const response = await fetch("/api/work/finalize", {
+        body: JSON.stringify(createFinalizeWorkPayload(session)),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        keepalive: true,
+        method: "POST",
+      });
+
+      if (!response.ok) console.error("Unable to queue finalizeWork", { status: response.status });
+    } catch (error) {
+      console.error("Unable to queue finalizeWork", error);
+    }
+  }
+
   function checkOut() {
     if (!save.activeSession) return;
 
@@ -3007,6 +3072,7 @@ export function RitualHome() {
     window.setTimeout(() => {
       setRitualState("complete");
     }, 520);
+    void queueFinalizeWork(completedSession);
   }
 
   if (authPhase === "checking" || authPhase === "restoring") {
