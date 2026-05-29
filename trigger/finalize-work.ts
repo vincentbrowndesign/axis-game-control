@@ -43,8 +43,14 @@ type FinalizeWorkPayload = {
 };
 
 type FinalizeStageResult = {
-  name: "finalize_film" | "store_results" | "generate_review" | "generate_clips" | "update_archive";
-  status: "complete" | "processing" | "skipped";
+  name:
+    | "finalize_film"
+    | "generate_results"
+    | "generate_clips"
+    | "create_review"
+    | "update_archive"
+    | "send_notifications";
+  status: "complete" | "processing" | "queued" | "skipped";
   detail: string;
 };
 
@@ -78,18 +84,18 @@ function finalizeFilm(payload: FinalizeWorkPayload): FinalizeStageResult {
   };
 }
 
-function storeResults(payload: FinalizeWorkPayload): FinalizeStageResult {
+function generateResults(payload: FinalizeWorkPayload): FinalizeStageResult {
   return {
     detail: `${formatWorkDuration(payload.results.durationSeconds)} / ${payload.results.attempts} attempts`,
-    name: "store_results",
+    name: "generate_results",
     status: "complete",
   };
 }
 
-function generateReview(payload: FinalizeWorkPayload): FinalizeStageResult {
+function createReview(payload: FinalizeWorkPayload): FinalizeStageResult {
   return {
     detail: `${payload.work.type} complete. ${payload.film.moments.length} film moments ready for review.`,
-    name: "generate_review",
+    name: "create_review",
     status: "complete",
   };
 }
@@ -112,15 +118,24 @@ function updateArchive(payload: FinalizeWorkPayload): FinalizeStageResult {
   };
 }
 
+function sendNotifications(payload: FinalizeWorkPayload): FinalizeStageResult {
+  return {
+    detail: `Notifications queued for ${payload.work.id}.`,
+    name: "send_notifications",
+    status: "queued",
+  };
+}
+
 export const finalizeWork = task({
   id: "finalize-work",
   run: async (payload: FinalizeWorkPayload) => {
     const stages = [
       finalizeFilm(payload),
-      storeResults(payload),
-      generateReview(payload),
+      generateResults(payload),
       generateClips(payload),
+      createReview(payload),
       updateArchive(payload),
+      sendNotifications(payload),
     ];
 
     console.log("Axis finalizeWork completed", {

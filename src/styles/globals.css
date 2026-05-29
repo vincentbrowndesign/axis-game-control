@@ -294,6 +294,46 @@ h1 {
   font-size: clamp(1.7rem, 6vw, 3.2rem);
 }
 
+.axis-camera-home {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.axis-camera-home-preview {
+  aspect-ratio: 4 / 5;
+  min-height: clamp(19rem, 70dvh, 34rem);
+}
+
+.axis-camera-home-preview::after {
+  background:
+    linear-gradient(180deg, rgba(3, 3, 3, 0.18), transparent 30%),
+    linear-gradient(0deg, rgba(3, 3, 3, 0.28), transparent 34%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.axis-product-strip {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-product-strip span {
+  background: rgba(244, 244, 240, 0.035);
+  color: var(--axis-muted);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  min-height: 2.35rem;
+  padding: 0.82rem 0.75rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 .axis-active-state strong,
 .axis-bridge-state strong,
 .axis-live-strip strong,
@@ -1011,6 +1051,30 @@ h1 {
   color: var(--axis-live);
 }
 
+.axis-work-state-overlay {
+  align-items: flex-end;
+  display: flex;
+  inset: auto 0 0;
+  justify-content: flex-end;
+  padding: 0.72rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.axis-work-state-overlay strong {
+  background: rgba(6, 6, 6, 0.66);
+  border: 1px solid rgba(168, 217, 51, 0.34);
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 0.58rem 0.68rem;
+  text-transform: uppercase;
+}
+
 .axis-camera-selector,
 .axis-camera-actions {
   display: flex;
@@ -1352,6 +1416,114 @@ h1 {
   font-size: 0.68rem;
   font-style: normal;
   text-transform: uppercase;
+}
+
+.axis-film-stage {
+  gap: 0.65rem;
+  min-height: 0;
+  place-content: stretch;
+}
+
+.axis-film-stage > span,
+.axis-results-stage > span,
+.axis-review-block > span {
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.axis-film-player {
+  aspect-ratio: 16 / 9;
+  background: var(--axis-bg);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  display: block;
+  inline-size: 100%;
+  overflow: hidden;
+}
+
+.axis-film-empty {
+  align-content: end;
+  aspect-ratio: 16 / 9;
+  background: var(--axis-bg);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+}
+
+.axis-film-meta {
+  align-items: center;
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.45rem;
+  padding: 0.48rem 0.55rem;
+}
+
+.axis-film-meta strong,
+.axis-film-empty strong,
+.axis-results-grid strong,
+.axis-film-library-row strong {
+  color: var(--axis-ink);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.axis-film-meta em,
+.axis-film-empty em,
+.axis-results-grid em,
+.axis-film-library-row em {
+  color: var(--axis-muted);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.62rem;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.axis-results-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-results-grid article {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.3rem;
+  min-height: 4.2rem;
+  padding: 0.6rem;
+}
+
+.axis-film-library {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.axis-film-library-row {
+  align-items: center;
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 5rem minmax(0, 1fr) auto;
+  min-height: 3.6rem;
+  padding: 0.45rem;
+}
+
+.axis-film-library-row img,
+.axis-film-library-row div {
+  aspect-ratio: 16 / 9;
+  background: var(--axis-bg);
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  display: block;
+  object-fit: cover;
+  width: 100%;
 }
 
 .axis-review-block > div {
@@ -1710,6 +1882,7 @@ button.axis-review-row:focus-visible {
 
   .axis-entry-form,
   .axis-review-grid,
+  .axis-results-grid,
   .axis-athlete-memory-grid,
   .axis-history-grid,
   .axis-archive-strip {
@@ -1786,6 +1959,17 @@ button.axis-review-row:focus-visible {
 
   .axis-review-entry {
     grid-template-columns: 1fr;
+  }
+
+  .axis-film-meta,
+  .axis-film-library-row {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .axis-film-library-row img,
+  .axis-film-library-row div {
+    max-width: 8rem;
   }
 
   .axis-complete-actions {
