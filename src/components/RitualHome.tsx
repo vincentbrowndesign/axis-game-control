@@ -46,6 +46,15 @@ const defaultParticipationMode: ParticipationMode = "Training";
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
+const defaultDetectionDebug: DetectionDebug = {
+  athleteMatchedName: null,
+  faceConfidence: null,
+  faceDetected: false,
+  failureReason: "Waiting for athlete identification.",
+  identityConfidence: null,
+  personConfidence: null,
+  predictionCount: null,
+};
 
 type AthleteIdentity = {
   id: string;
@@ -96,6 +105,16 @@ type CalibrationEvidence = {
   camera_type: CameraDirection;
   calibration_status: CalibrationStatus;
   visible_people: number;
+};
+
+type DetectionDebug = {
+  athleteMatchedName: string | null;
+  faceConfidence: number | null;
+  faceDetected: boolean;
+  failureReason: string;
+  identityConfidence: number | null;
+  personConfidence: number | null;
+  predictionCount: number | null;
 };
 
 type ParticipationWindow = {
@@ -190,6 +209,14 @@ function formatDuration(totalSeconds: number) {
 
 function formatCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatDebugConfidence(confidence: number | null) {
+  if (confidence === null) return "N/A";
+
+  const normalized = confidence <= 1 ? confidence * 100 : confidence;
+
+  return `${Math.round(normalized)}%`;
 }
 
 function identityFromAxisIdentity(identity: AxisIdentity): AthleteIdentity {
@@ -485,6 +512,7 @@ export function RitualHome() {
   const [selectedCalibrationAthleteId, setSelectedCalibrationAthleteId] = useState<string | null>(null);
   const [detectionStatus, setDetectionStatus] = useState<DetectionStatus>("idle");
   const [visiblePeople, setVisiblePeople] = useState<number | null>(null);
+  const [detectionDebug, setDetectionDebug] = useState<DetectionDebug>(defaultDetectionDebug);
   const [calibrationEvidence, setCalibrationEvidence] = useState<CalibrationEvidence | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraDirection, setCameraDirection] = useState<CameraDirection>("back");
@@ -644,6 +672,7 @@ export function RitualHome() {
       setSelectedCalibrationAthleteId(null);
       setDetectionStatus("idle");
       setVisiblePeople(null);
+      setDetectionDebug(defaultDetectionDebug);
       setCalibrationEvidence(null);
       return;
     }
@@ -652,6 +681,7 @@ export function RitualHome() {
       setSelectedCalibrationAthleteId(activeParticipants[0].id);
       setDetectionStatus("idle");
       setVisiblePeople(null);
+      setDetectionDebug(defaultDetectionDebug);
       setCalibrationEvidence(null);
     }
   }, [save.activeSession?.participants, selectedCalibrationAthleteId]);
@@ -732,6 +762,16 @@ export function RitualHome() {
       : calibrationWorkflowStatus === "complete"
         ? "IDENTITY LOCKED"
         : "IDENTIFY ATHLETE";
+  const isAthleteMatched =
+    Boolean(calibrationEvidence?.athlete_id && calibrationEvidence.athlete_id === selectedCalibrationAthlete?.id) ||
+    selectedAthleteCalibrationStatus === "calibrated";
+  const athleteMatchName = isAthleteMatched ? detectionDebug.athleteMatchedName ?? selectedCalibrationAthlete?.name ?? "Athlete" : null;
+  const identityFailureReason = isAthleteMatched
+    ? "Identity lock saved."
+    : detectionDebug.failureReason ||
+      (detectionStatus === "ready"
+        ? "Identity lock is ready. Lock identity to match the athlete."
+        : "Athlete has not been matched yet.");
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -909,6 +949,7 @@ export function RitualHome() {
     setSelectedCalibrationAthleteId(checkedInAthlete.id);
     setDetectionStatus("idle");
     setVisiblePeople(null);
+    setDetectionDebug(defaultDetectionDebug);
     setCalibrationEvidence(null);
     setCameraDirection(startingCameraDirection);
   }
@@ -1085,16 +1126,19 @@ export function RitualHome() {
 
     if (!save.activeSession) {
       console.log("Calibration aborted", { reason: "missing_active_session" });
+      setDetectionDebug({ ...defaultDetectionDebug, failureReason: "No active session." });
       return;
     }
 
     if (cameraState !== "attached") {
       console.log("Calibration aborted", { cameraState, reason: "camera_not_attached" });
+      setDetectionDebug({ ...defaultDetectionDebug, failureReason: "Camera is not attached." });
       return;
     }
 
     if (!selectedCalibrationAthlete) {
       console.log("Calibration aborted", { reason: "missing_selected_athlete" });
+      setDetectionDebug({ ...defaultDetectionDebug, failureReason: "No athlete selected." });
       return;
     }
 
@@ -1108,13 +1152,20 @@ export function RitualHome() {
     });
 
     setDetectionStatus("capturing");
+    setDetectionDebug({
+      ...defaultDetectionDebug,
+      athleteMatchedName: null,
+      failureReason: "Looking for one visible athlete.",
+    });
     const image = captureCameraFrame();
     if (!image) {
       const video = cameraPreviewRef.current;
+      const reason = video && (!video.videoWidth || !video.videoHeight) ? "Camera frame is not ready." : "Camera frame could not be captured.";
       console.log("Calibration aborted", {
         reason: video && (!video.videoWidth || !video.videoHeight) ? "camera_not_ready" : "frame_capture_failed",
       });
       setDetectionStatus(video && (!video.videoWidth || !video.videoHeight) ? "camera_not_ready" : "capture_failed");
+      setDetectionDebug({ ...defaultDetectionDebug, failureReason: reason });
       setVisiblePeople(null);
       return;
     }
@@ -1146,7 +1197,12 @@ export function RitualHome() {
         },
         body: JSON.stringify({ image }),
       });
-      const result = (await response.json()) as { visiblePeople?: number; error?: string };
+      const result = (await response.json()) as {
+        error?: string;
+        personConfidence?: number | null;
+        predictionCount?: number;
+        visiblePeople?: number;
+      };
       console.log("Response received", {
         ok: response.ok,
         status: response.status,
@@ -1157,18 +1213,34 @@ export function RitualHome() {
         console.error("Roboflow person detection failed", result.error);
         console.log("Calibration aborted", { reason: "roboflow_request_failed", status: response.status });
         setDetectionStatus("request_failed");
+        setDetectionDebug({
+          ...defaultDetectionDebug,
+          failureReason: result.error ?? `Person detection request failed with status ${response.status}.`,
+        });
         return;
       }
 
       if (typeof result.visiblePeople !== "number" || !Number.isFinite(result.visiblePeople)) {
         console.log("Calibration aborted", { reason: "invalid_visible_people", visiblePeople: result.visiblePeople });
         setDetectionStatus("invalid_response");
+        setDetectionDebug({
+          ...defaultDetectionDebug,
+          failureReason: "Person detection response did not include a valid athlete count.",
+          personConfidence: result.personConfidence ?? null,
+          predictionCount: typeof result.predictionCount === "number" ? result.predictionCount : null,
+        });
         return;
       }
 
       const people = result.visiblePeople;
       console.log("Prediction count", { visiblePeople: people });
       setVisiblePeople(people);
+      setDetectionDebug({
+        ...defaultDetectionDebug,
+        failureReason: people === 1 ? "Identity lock is ready. Lock identity to match the athlete." : `Expected one athlete, detected ${people}.`,
+        personConfidence: result.personConfidence ?? null,
+        predictionCount: typeof result.predictionCount === "number" ? result.predictionCount : null,
+      });
 
       if (people !== 1) {
         console.log("Calibration validation failed", { visiblePeople: people });
@@ -1181,6 +1253,7 @@ export function RitualHome() {
     } catch (error) {
       console.error("Unable to run person detection", error);
       console.log("Calibration aborted", { error, reason: "request_exception" });
+      setDetectionDebug({ ...defaultDetectionDebug, failureReason: "Person detection request could not complete." });
       setDetectionStatus("request_failed");
     }
   }
@@ -1193,6 +1266,10 @@ export function RitualHome() {
         hasSelectedAthlete: Boolean(selectedCalibrationAthlete),
         reason: "capture_evidence_guard",
         visiblePeople,
+      });
+      setDetectionDebug({
+        ...detectionDebug,
+        failureReason: "Identity lock cannot be saved until one athlete is detected and selected.",
       });
       return;
     }
@@ -1261,6 +1338,12 @@ export function RitualHome() {
     setCalibrationEvidence(evidence);
     setDetectionStatus("idle");
     setVisiblePeople(null);
+    setDetectionDebug({
+      ...detectionDebug,
+      athleteMatchedName: selectedCalibrationAthlete.name,
+      failureReason: "",
+      identityConfidence: null,
+    });
     console.log("Calibration completed", {
       athleteId: evidence.athlete_id,
       sessionId: evidence.session_id,
@@ -1467,6 +1550,28 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
               <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera offline</span>}
+              <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
+                <span>
+                  <strong>PERSON DETECTED</strong>
+                  <em>{`${visiblePeople !== null && visiblePeople > 0 ? "YES" : "NO"} / ${formatDebugConfidence(detectionDebug.personConfidence)}`}</em>
+                </span>
+                <span>
+                  <strong>FACE DETECTED</strong>
+                  <em>{`${detectionDebug.faceDetected ? "YES" : "NO"} / ${formatDebugConfidence(detectionDebug.faceConfidence)}`}</em>
+                </span>
+                <span>
+                  <strong>IDENTITY MATCH</strong>
+                  <em>{formatDebugConfidence(detectionDebug.identityConfidence)}</em>
+                </span>
+                <span>
+                  <strong>{athleteMatchName ? "ATHLETE MATCHED" : "ATHLETE NOT MATCHED"}</strong>
+                  <em>{athleteMatchName ?? identityFailureReason}</em>
+                </span>
+                <span>
+                  <strong>REASON</strong>
+                  <em>{identityFailureReason}</em>
+                </span>
+              </div>
             </div>
 
             <section className="axis-camera-page-controls" aria-label="Camera controls">
@@ -1520,6 +1625,7 @@ export function RitualHome() {
                           setSelectedCalibrationAthleteId(participant.id);
                           setDetectionStatus("idle");
                           setVisiblePeople(null);
+                          setDetectionDebug(defaultDetectionDebug);
                           setCalibrationEvidence(null);
                         }}
                         type="button"

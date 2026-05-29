@@ -677,6 +677,43 @@ h1 {
   border-color: rgba(168, 217, 51, 0.28);
 }
 
+.axis-camera-debug-overlay {
+  align-self: end;
+  background: rgba(6, 6, 6, 0.74);
+  border-top: 1px solid rgba(244, 244, 240, 0.12);
+  display: grid;
+  gap: 0.32rem;
+  inset: auto 0 0;
+  padding: 0.55rem;
+  position: absolute;
+  z-index: 2;
+}
+
+.axis-camera-debug-overlay span {
+  align-items: center;
+  color: var(--axis-muted);
+  display: flex;
+  font-size: 0.56rem;
+  gap: 0.5rem;
+  justify-content: space-between;
+  letter-spacing: 0.08em;
+  position: static;
+  text-transform: uppercase;
+}
+
+.axis-camera-debug-overlay strong {
+  color: var(--axis-text);
+  font-weight: 700;
+}
+
+.axis-camera-debug-overlay em {
+  color: var(--axis-live);
+  font-style: normal;
+  max-width: 58%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .axis-camera-selector,
 .axis-camera-actions {
   display: flex;

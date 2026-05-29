@@ -35,6 +35,14 @@ function countVisiblePeople(predictions: RoboflowPrediction[]) {
   }).length;
 }
 
+function getPersonDetections(predictions: RoboflowPrediction[]) {
+  return predictions.filter((prediction) => {
+    const label = (prediction.class ?? prediction.class_name ?? "").toLowerCase();
+
+    return personClasses.has(label);
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.ROBOFLOW_API_KEY;
@@ -81,8 +89,17 @@ export async function POST(request: Request) {
     const predictions = Array.isArray(result.predictions) ? result.predictions : [];
     console.log("Prediction count", { predictions: predictions.length });
 
+    const personDetections = getPersonDetections(predictions);
+    const personConfidence = personDetections.reduce<number | null>((highest, prediction) => {
+      if (typeof prediction.confidence !== "number" || !Number.isFinite(prediction.confidence)) return highest;
+
+      return highest === null ? prediction.confidence : Math.max(highest, prediction.confidence);
+    }, null);
+
     return Response.json({
       model: modelId,
+      personConfidence,
+      predictionCount: predictions.length,
       visiblePeople: countVisiblePeople(predictions),
     });
   } catch (error) {
