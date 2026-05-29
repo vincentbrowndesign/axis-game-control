@@ -56,6 +56,18 @@ export async function POST(request: Request) {
     const apiKey = process.env.ROBOFLOW_API_KEY;
     const modelId = getRoboflowModelId();
 
+    console.log("Roboflow runtime environment", {
+      hasApiKey: Boolean(apiKey),
+      hasModelId: Boolean(modelId),
+      hasProject: Boolean(process.env.ROBOFLOW_PROJECT),
+      hasVersion: Boolean(process.env.ROBOFLOW_VERSION),
+      hasWorkspace: Boolean(process.env.ROBOFLOW_WORKSPACE),
+      modelId,
+      project: process.env.ROBOFLOW_PROJECT ?? null,
+      version: process.env.ROBOFLOW_VERSION ?? null,
+      workspace: process.env.ROBOFLOW_WORKSPACE ?? null,
+    });
+
     if (!apiKey || !modelId) {
       return Response.json({ error: "Roboflow is not configured." }, { status: 500 });
     }
@@ -69,22 +81,44 @@ export async function POST(request: Request) {
     }
 
     const endpoint = `https://detect.roboflow.com/${modelId}?api_key=${apiKey}&confidence=35&overlap=30`;
+    const redactedEndpoint = `https://detect.roboflow.com/${modelId}?api_key=<redacted>&confidence=35&overlap=30`;
+    const outboundHeaders = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
     console.log("Request built", {
-      endpoint: `https://detect.roboflow.com/${modelId}?api_key=<redacted>&confidence=35&overlap=30`,
+      endpoint: redactedEndpoint,
       imageBytesApprox: Math.ceil(image.length * 0.75),
       modelId,
+    });
+    console.log("Roboflow outbound request", {
+      bodyApproxBytes: Math.ceil(image.length * 0.75),
+      headers: outboundHeaders,
+      method: "POST",
+      url: redactedEndpoint,
     });
     console.log("Request sent");
     const roboflowResponse = await fetch(endpoint, {
       body: image,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers: outboundHeaders,
       method: "POST",
     });
-    const result = (await roboflowResponse.json()) as RoboflowDetectionResponse & { error?: string };
+    const rawRoboflowBody = await roboflowResponse.text();
+    let result: RoboflowDetectionResponse & { error?: string };
+
+    try {
+      result = JSON.parse(rawRoboflowBody) as RoboflowDetectionResponse & { error?: string };
+    } catch (parseError) {
+      console.error("Roboflow response JSON parse failed", {
+        message: parseError instanceof Error ? parseError.message : String(parseError),
+        rawBody: rawRoboflowBody,
+        stack: parseError instanceof Error ? parseError.stack : null,
+        status: roboflowResponse.status,
+      });
+      throw parseError;
+    }
     console.log("Response received", {
       ok: roboflowResponse.ok,
+      rawBody: rawRoboflowBody,
       status: roboflowResponse.status,
     });
     const predictions = Array.isArray(result.predictions) ? result.predictions : [];
@@ -103,6 +137,7 @@ export async function POST(request: Request) {
       errorPayload: result.error ?? null,
       predictionCount: predictions.length,
       rawRoboflowResponse: result,
+      rawRoboflowResponseBody: rawRoboflowBody,
       rawStatus: roboflowResponse.status,
       visiblePeople: countVisiblePeople(predictions),
     };
@@ -110,7 +145,11 @@ export async function POST(request: Request) {
     console.log("Raw Roboflow debug response", debugPayload);
 
     if (!roboflowResponse.ok) {
-      console.error("Roboflow detection error", result);
+      console.error("Roboflow detection error", {
+        rawBody: rawRoboflowBody,
+        result,
+        status: roboflowResponse.status,
+      });
       console.log("Calibration aborted", { reason: "roboflow_non_ok", status: roboflowResponse.status });
       return Response.json({ ...debugPayload, error: "Person detection failed.", personConfidence: null }, { status: 502 });
     }
@@ -134,8 +173,16 @@ export async function POST(request: Request) {
       visiblePeople: countVisiblePeople(predictions),
     });
   } catch (error) {
-    console.error("Person detection route failed", error);
-    console.log("Calibration aborted", { error, reason: "api_exception" });
+    console.error("Person detection route failed", {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null,
+    });
+    console.log("Calibration aborted", {
+      message: error instanceof Error ? error.message : String(error),
+      reason: "api_exception",
+      stack: error instanceof Error ? error.stack : null,
+    });
     return Response.json({ error: "Person detection failed." }, { status: 500 });
   }
 }
