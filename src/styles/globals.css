@@ -714,6 +714,35 @@ h1 {
   text-align: right;
 }
 
+.axis-camera-status-overlay {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+  inset: auto 0 0;
+  padding: 0.72rem;
+  position: absolute;
+  z-index: 2;
+}
+
+.axis-camera-status-overlay span {
+  background: rgba(6, 6, 6, 0.66);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 0.5rem 0.62rem;
+  position: static;
+  text-transform: uppercase;
+}
+
+.axis-camera-status-overlay span[data-active="true"] {
+  border-color: rgba(168, 217, 51, 0.36);
+  color: var(--axis-live);
+}
+
 .axis-camera-selector,
 .axis-camera-actions {
   display: flex;

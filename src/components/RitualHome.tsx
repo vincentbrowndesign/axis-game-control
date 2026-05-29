@@ -7,7 +7,6 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase-
 type RitualState = "idle" | "active" | "saving" | "complete";
 type AuthPhase = "checking" | "entry" | "restoring" | "authenticated";
 type CalibrationStatus = "required" | "calibrated";
-type CalibrationWorkflowStatus = "not_calibrated" | "calibrating" | "complete";
 type DetectionStatus =
   | "idle"
   | "capturing"
@@ -47,6 +46,7 @@ const defaultParticipationMode: ParticipationMode = "Training";
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
+const showCalibrationDiagnostics = process.env.NEXT_PUBLIC_AXIS_CALIBRATION_DEBUG === "true";
 const defaultDetectionDebug: DetectionDebug = {
   athleteMatchedName: null,
   faceConfidence: null,
@@ -756,44 +756,6 @@ export function RitualHome() {
   const selectedAthleteCalibrationStatus = selectedCalibrationAthlete
     ? normalizeCalibrationStatus(selectedCalibrationAthlete.calibrationStatus)
     : "required";
-  const calibrationWorkflowStatus: CalibrationWorkflowStatus =
-    detectionStatus === "capturing" ||
-    detectionStatus === "frame_captured" ||
-    detectionStatus === "sending" ||
-    detectionStatus === "response_received"
-    ? "calibrating"
-    : selectedAthleteCalibrationStatus === "calibrated"
-      ? "complete"
-      : "not_calibrated";
-  const detectionStatusLabel =
-    detectionStatus === "capturing"
-      ? "LOOKING FOR ATHLETE"
-      : detectionStatus === "camera_not_ready"
-        ? "CAMERA WARMING UP"
-        : detectionStatus === "capture_failed"
-          ? "COULD NOT SEE ATHLETE"
-          : detectionStatus === "frame_captured"
-            ? "ATHLETE IN FRAME"
-            : detectionStatus === "sending"
-              ? "CHECKING ATHLETE"
-              : detectionStatus === "request_failed"
-                ? "COULD NOT IDENTIFY ATHLETE"
-                : detectionStatus === "response_received"
-                  ? "ATHLETE CHECK RETURNED"
-                  : detectionStatus === "invalid_response"
-                    ? "COULD NOT READ FRAME"
-                    : detectionStatus === "not_one"
-                      ? "ONE ATHLETE REQUIRED"
-                      : detectionStatus === "ready"
-                        ? "ATHLETE DETECTED"
-                        : "";
-  const calibrationWorkflowLabel = detectionStatusLabel
-    ? detectionStatusLabel
-    : calibrationWorkflowStatus === "calibrating"
-      ? "IDENTIFYING ATHLETE"
-      : calibrationWorkflowStatus === "complete"
-        ? "IDENTITY LOCKED"
-        : "IDENTIFY ATHLETE";
   const isAthleteMatched =
     Boolean(calibrationEvidence?.athlete_id && calibrationEvidence.athlete_id === selectedCalibrationAthlete?.id) ||
     selectedAthleteCalibrationStatus === "calibrated" ||
@@ -802,6 +764,17 @@ export function RitualHome() {
     cameraPreviewRef,
     activeView === "camera" && cameraState === "attached" && Boolean(cameraStream),
   );
+  const athleteDetected = personDetection.visiblePeople === 1;
+  const calibrationWorkflowLabel = isAthleteMatched
+    ? "IDENTITY LOCKED"
+    : athleteDetected
+      ? "ATHLETE DETECTED"
+      : "LOOKING FOR ATHLETE";
+  const cameraStatusSignals = isAthleteMatched
+    ? ["ATHLETE DETECTED", "IDENTITY LOCKED", "READY TO RECORD"]
+    : athleteDetected
+      ? ["ATHLETE DETECTED"]
+      : ["LOOKING FOR ATHLETE"];
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -1509,52 +1482,62 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
               <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera offline</span>}
-              <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
-                <span>
-                  <strong>MODEL LOADED</strong>
-                  <em>{personDetection.modelLoaded ? "YES" : "NO"}</em>
-                </span>
-                <span>
-                  <strong>INFERENCE RUNNING</strong>
-                  <em>{personDetection.inferenceRunning ? "YES" : "NO"}</em>
-                </span>
-                <span>
-                  <strong>BODY DETECTED</strong>
-                  <em>{visiblePeople !== null && visiblePeople > 0 ? "YES" : "NO"}</em>
-                </span>
-                <span>
-                  <strong>VISIBLE PEOPLE</strong>
-                  <em>{visiblePeople ?? 0}</em>
-                </span>
-                <span>
-                  <strong>DETECTIONS RETURNED</strong>
-                  <em>{personDetection.detectionsReturned}</em>
-                </span>
-                <span>
-                  <strong>CONFIDENCE</strong>
-                  <em>{formatDebugConfidence(detectionDebug.personConfidence)}</em>
-                </span>
-                <span>
-                  <strong>RAW CONFIDENCE</strong>
-                  <em>{formatDebugConfidence(personDetection.rawConfidence)}</em>
-                </span>
-                <span>
-                  <strong>IDENTITY LOCK</strong>
-                  <em>{isAthleteMatched ? "YES" : "NO"}</em>
-                </span>
-                <span>
-                  <strong>FRAME RATE</strong>
-                  <em>{`${frameRate} FPS`}</em>
-                </span>
-                <span>
-                  <strong>VIDEO WIDTH</strong>
-                  <em>{personDetection.videoWidth}</em>
-                </span>
-                <span>
-                  <strong>VIDEO HEIGHT</strong>
-                  <em>{personDetection.videoHeight}</em>
-                </span>
-              </div>
+              {showCalibrationDiagnostics ? (
+                <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
+                  <span>
+                    <strong>MODEL LOADED</strong>
+                    <em>{personDetection.modelLoaded ? "YES" : "NO"}</em>
+                  </span>
+                  <span>
+                    <strong>INFERENCE RUNNING</strong>
+                    <em>{personDetection.inferenceRunning ? "YES" : "NO"}</em>
+                  </span>
+                  <span>
+                    <strong>BODY DETECTED</strong>
+                    <em>{visiblePeople !== null && visiblePeople > 0 ? "YES" : "NO"}</em>
+                  </span>
+                  <span>
+                    <strong>VISIBLE PEOPLE</strong>
+                    <em>{visiblePeople ?? 0}</em>
+                  </span>
+                  <span>
+                    <strong>DETECTIONS RETURNED</strong>
+                    <em>{personDetection.detectionsReturned}</em>
+                  </span>
+                  <span>
+                    <strong>CONFIDENCE</strong>
+                    <em>{formatDebugConfidence(detectionDebug.personConfidence)}</em>
+                  </span>
+                  <span>
+                    <strong>RAW CONFIDENCE</strong>
+                    <em>{formatDebugConfidence(personDetection.rawConfidence)}</em>
+                  </span>
+                  <span>
+                    <strong>IDENTITY LOCK</strong>
+                    <em>{isAthleteMatched ? "YES" : "NO"}</em>
+                  </span>
+                  <span>
+                    <strong>FRAME RATE</strong>
+                    <em>{`${frameRate} FPS`}</em>
+                  </span>
+                  <span>
+                    <strong>VIDEO WIDTH</strong>
+                    <em>{personDetection.videoWidth}</em>
+                  </span>
+                  <span>
+                    <strong>VIDEO HEIGHT</strong>
+                    <em>{personDetection.videoHeight}</em>
+                  </span>
+                </div>
+              ) : (
+                <div className="axis-camera-status-overlay" aria-label="Camera identity state">
+                  {cameraStatusSignals.map((signal) => (
+                    <span data-active={signal !== "LOOKING FOR ATHLETE"} key={signal}>
+                      {signal}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <section className="axis-camera-page-controls" aria-label="Camera controls">
