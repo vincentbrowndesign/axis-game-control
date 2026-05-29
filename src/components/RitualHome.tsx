@@ -24,25 +24,10 @@ type ActiveView = "session" | "camera";
 type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
 type ParticipationWindowStatus = "open" | "closed";
-type ParticipationMode =
-  | "Training"
-  | "Station Work"
-  | "Shooting"
-  | "Conditioning"
-  | "Small Group"
-  | "Scrimmage"
-  | "Open Gym";
+type ParticipationMode = "Training" | "Practice" | "Game" | "Workout" | "Challenge";
 
 const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
-const participationModes: ParticipationMode[] = [
-  "Training",
-  "Station Work",
-  "Shooting",
-  "Conditioning",
-  "Small Group",
-  "Scrimmage",
-  "Open Gym",
-];
+const participationModes: ParticipationMode[] = ["Training", "Practice", "Game", "Workout", "Challenge"];
 const defaultParticipationMode: ParticipationMode = "Training";
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
@@ -1079,6 +1064,18 @@ function formatReplayAnchor(anchor: ReplayAnchor) {
   return `${formatDuration(anchor.videoTimestamp)}${athlete}${mux}`;
 }
 
+function formatHumanMomentLabel(anchor: ReplayAnchor) {
+  if (anchor.eventType === "session_start") return "Started";
+  if (anchor.eventType === "session_end") return "Finished";
+  if (anchor.eventType === "identity_locked") return "Ready";
+  if (anchor.eventType === "make") return "Make";
+  if (anchor.eventType === "miss") return "Miss";
+  if (anchor.eventType === "recovered") return "Back in view";
+  if (anchor.eventType === "left_frame") return "Left frame";
+
+  return "Moment";
+}
+
 function formatReplayClip(clip: ReplayClip) {
   const mux = clip.muxAssetId === "pending" ? "Video pending" : clip.muxAssetId;
 
@@ -1542,6 +1539,7 @@ export function RitualHome() {
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("session");
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
+  const [pendingMode, setPendingMode] = useState<ParticipationMode>(defaultParticipationMode);
   const [selectedCalibrationAthleteId, setSelectedCalibrationAthleteId] = useState<string | null>(null);
   const [detectionStatus, setDetectionStatus] = useState<DetectionStatus>("idle");
   const [visiblePeople, setVisiblePeople] = useState<number | null>(null);
@@ -1776,7 +1774,7 @@ export function RitualHome() {
   const athleteLabel = identity?.email ? identity.email.split("@")[0] || "Athlete 01" : "Athlete 01";
   const signedInAthlete = identity ? identityFromAxisIdentity(identity) : null;
   const athleteMemory = buildAthleteMemory(signedInAthlete, save.sessions);
-  const currentMode = save.activeSession?.mode ?? latestSession?.mode ?? defaultParticipationMode;
+  const currentMode = save.activeSession?.mode ?? latestSession?.mode ?? pendingMode;
   const isRecordingAttached = Boolean(save.activeSession?.recordingAttached);
   const recordingLabel = isRecordingAttached ? "Recording attached" : "Recording off";
   const cameraState = normalizeCameraState(save.activeSession?.cameraState ?? latestSession?.cameraState);
@@ -1848,8 +1846,11 @@ export function RitualHome() {
   const latestReviewAnchors = latestSession?.replayAnchors?.slice(0, 6) ?? [];
   const latestReviewClips = latestSession?.replayClips?.slice(0, 4) ?? [];
   const latestSessionReview = latestSession?.review;
+  const replayStageLabel = showAxisDebug
+    ? selectedReplayAnchor?.replayLabel ?? latestReviewAnchors[0]?.replayLabel ?? "Session replay"
+    : `${latestSession?.mode ?? "Work"} complete`;
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
-  const sessionPrimaryActionLabel = "Open camera";
+  const sessionPrimaryActionLabel = "Record";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
   const bridgeRosterLabel = save.activeSession
     ? `${formatCount(activeParticipantCount, "athlete", "athletes")} active`
@@ -2184,6 +2185,7 @@ export function RitualHome() {
     };
     const startedAt = new Date().toISOString();
     const sessionId = crypto.randomUUID();
+    const startingMode = pendingMode;
     const startingCameraDirection: CameraDirection = "front";
     const checkedInAthlete = identityFromAxisIdentity(identity);
     const startingParticipants = [
@@ -2196,7 +2198,7 @@ export function RitualHome() {
     const participationWindow = {
       openedAt: startedAt,
       status: "open" as const,
-      context: defaultParticipationMode,
+      context: startingMode,
       participantIds: startingParticipants.map((participant) => participant.id),
     };
     const sessionStartAnchor = createReplayAnchor(
@@ -2214,7 +2216,7 @@ export function RitualHome() {
       activeSession: {
         id: sessionId,
         startedAt,
-        mode: defaultParticipationMode,
+        mode: startingMode,
         recordingAttached: false,
         calibrationStatus: "required",
         cameraState: "offline",
@@ -2222,7 +2224,7 @@ export function RitualHome() {
         participationWindow,
         clipContinuityContext: createClipContinuityContext(
           sessionId,
-          defaultParticipationMode,
+          startingMode,
           "offline",
           startingCameraDirection,
           undefined,
@@ -2254,6 +2256,7 @@ export function RitualHome() {
     setIdentityLocked(false);
     setCalibrationEvidence(null);
     setCameraDirection(startingCameraDirection);
+    void requestCameraPresence(startingCameraDirection, nextSave);
   }
 
   function changeMode(mode: ParticipationMode) {
@@ -2308,6 +2311,44 @@ export function RitualHome() {
     setSave(nextSave);
   }
 
+  function buildCameraSessionState(
+    activeSave: AxisSave,
+    nextCameraState: CameraState,
+    nextCameraDirection = cameraDirection,
+    attachedAt?: string,
+  ): AxisSave {
+    if (!activeSave.activeSession) return activeSave;
+
+    const cameraAttachedAt = attachedAt ?? activeSave.activeSession.cameraAttachedAt;
+    const normalizedDirection = normalizeCameraDirection(nextCameraDirection);
+    const activeSessionParticipants = activeSave.activeSession.participants ?? [];
+    const participationWindow = normalizeParticipationWindow(
+      activeSave.activeSession.participationWindow,
+      activeSave.activeSession.startedAt,
+      activeSave.activeSession.mode ?? currentMode,
+      activeSessionParticipants,
+    );
+
+    return {
+      ...activeSave,
+      activeSession: {
+        ...activeSave.activeSession,
+        cameraState: nextCameraState,
+        cameraDirection: normalizedDirection,
+        cameraAttachedAt,
+        clipContinuityContext: createClipContinuityContext(
+          activeSave.activeSession.id,
+          activeSave.activeSession.mode ?? currentMode,
+          nextCameraState,
+          normalizedDirection,
+          cameraAttachedAt,
+          participationWindow,
+          activeSessionParticipants,
+        ),
+      },
+    };
+  }
+
   function updateCameraSessionState(
     nextCameraState: CameraState,
     nextCameraDirection = cameraDirection,
@@ -2315,39 +2356,14 @@ export function RitualHome() {
   ) {
     if (!save.activeSession) return;
 
-    const cameraAttachedAt = attachedAt ?? save.activeSession.cameraAttachedAt;
-    const normalizedDirection = normalizeCameraDirection(nextCameraDirection);
-    const participationWindow = normalizeParticipationWindow(
-      save.activeSession.participationWindow,
-      save.activeSession.startedAt,
-      currentMode,
-      activeParticipants,
-    );
-    const nextSave: AxisSave = {
-      ...save,
-      activeSession: {
-        ...save.activeSession,
-        cameraState: nextCameraState,
-        cameraDirection: normalizedDirection,
-        cameraAttachedAt,
-        clipContinuityContext: createClipContinuityContext(
-          save.activeSession.id,
-          currentMode,
-          nextCameraState,
-          normalizedDirection,
-          cameraAttachedAt,
-          participationWindow,
-          activeParticipants,
-        ),
-      },
-    };
+    const nextSave = buildCameraSessionState(save, nextCameraState, nextCameraDirection, attachedAt);
 
     writeSave(nextSave);
     setSave(nextSave);
   }
 
-  async function requestCameraPresence(nextDirection = cameraDirection) {
-    if (!save.activeSession) return;
+  async function requestCameraPresence(nextDirection = cameraDirection, activeSave = save) {
+    if (!activeSave.activeSession) return;
 
     const normalizedDirection = normalizeCameraDirection(nextDirection);
     setCameraMessage("");
@@ -2371,7 +2387,14 @@ export function RitualHome() {
         return stream;
       });
       setCameraDirection(normalizedDirection);
-      updateCameraSessionState("ready", normalizedDirection);
+      const nextSave = buildCameraSessionState(
+        activeSave,
+        showAxisDebug ? "ready" : "attached",
+        normalizedDirection,
+        showAxisDebug ? undefined : new Date().toISOString(),
+      );
+      writeSave(nextSave);
+      setSave(nextSave);
     } catch (error) {
       console.error("Unable to start camera presence", error);
       setCameraMessage("Camera unavailable.");
@@ -2402,7 +2425,15 @@ export function RitualHome() {
   function handleSessionPrimaryAction() {
     if (!save.activeSession) return;
 
-    setActiveView("camera");
+    const nextSave = createAutomaticIdentityLock(
+      buildCameraSessionState(save, "attached", savedCameraDirection, save.activeSession.cameraAttachedAt ?? new Date().toISOString()),
+    );
+
+    writeSave(nextSave);
+    setSave(nextSave);
+    setIdentityLocked(true);
+    if (showAxisDebug) setActiveView("camera");
+    if (!cameraStream) void requestCameraPresence(savedCameraDirection, nextSave);
   }
 
   async function startCameraCalibration() {
@@ -2570,6 +2601,81 @@ export function RitualHome() {
       athleteId: evidence.athlete_id,
       sessionId: evidence.session_id,
     });
+  }
+
+  function createAutomaticIdentityLock(activeSave: AxisSave): AxisSave {
+    if (!activeSave.activeSession || !identity) return activeSave;
+
+    const activeSessionParticipants = activeSave.activeSession.participants ?? [];
+    const participant = activeSessionParticipants.find((candidate) => !candidate.leftAt) ?? activeSessionParticipants[0];
+    if (!participant) return activeSave;
+
+    const completedAt = new Date().toISOString();
+    const activeDirection = normalizeCameraDirection(activeSave.activeSession.cameraDirection);
+    const evidence: CalibrationEvidence = {
+      athlete_id: participant.id,
+      camera_id: getCameraId(activeDirection),
+      session_id: activeSave.activeSession.id,
+      lockTimestamp: completedAt,
+      timestamp: completedAt,
+      camera_type: activeDirection,
+      calibration_status: "calibrated",
+      visible_people: Math.max(1, visiblePeople ?? 1),
+    };
+    const identityAnchor = createReplayAnchor(
+      `identity:${evidence.session_id}:${evidence.athlete_id}:${completedAt}`,
+      "identity_locked",
+      completedAt,
+      activeSave.activeSession.id,
+      activeSave.activeSession.startedAt,
+      activeSave.activeSession.muxAssetId,
+      "Identity locked",
+      {
+        athleteId: evidence.athlete_id,
+        athleteName: participant.name,
+        cameraDirection: evidence.camera_type,
+        cameraId: evidence.camera_id,
+      },
+    );
+    const nextParticipants = activeSessionParticipants.map((candidate) =>
+      candidate.leftAt || candidate.id !== participant.id
+        ? candidate
+        : {
+            ...candidate,
+            calibrationStatus: "calibrated" as const,
+            calibratedAt: completedAt,
+            calibrationEvidence: evidence,
+          },
+    );
+    const participationWindow = normalizeParticipationWindow(
+      activeSave.activeSession.participationWindow,
+      activeSave.activeSession.startedAt,
+      activeSave.activeSession.mode ?? currentMode,
+      nextParticipants,
+    );
+
+    return {
+      ...activeSave,
+      activeSession: {
+        ...activeSave.activeSession,
+        calibrationRecords: [...(activeSave.activeSession.calibrationRecords ?? []), evidence],
+        calibrationStatus: "calibrated",
+        clipContinuityContext: createClipContinuityContext(
+          activeSave.activeSession.id,
+          activeSave.activeSession.mode ?? currentMode,
+          normalizeCameraState(activeSave.activeSession.cameraState),
+          activeDirection,
+          activeSave.activeSession.cameraAttachedAt,
+          participationWindow,
+          nextParticipants,
+        ),
+        participants: nextParticipants,
+        participationWindow,
+        replayAnchors: [...(activeSave.activeSession.replayAnchors ?? []), identityAnchor],
+        replayClips: [...(activeSave.activeSession.replayClips ?? []), createReplayClip(identityAnchor)],
+        recordingAttached: true,
+      },
+    };
   }
 
   function removeParticipant(participantId: string) {
@@ -2865,6 +2971,19 @@ export function RitualHome() {
       replayAnchors,
       replayClips,
       replayEvents,
+      review: {
+        generatedAt: endedAt,
+        largestInterruption: replayEvents.some((event) => event.type === "tracking_interruption")
+          ? "Tracking interruption recorded."
+          : "No interruption recorded.",
+        mostActiveMoment: replayEvents.find((event) => event.type === "movement_spike")?.label ?? "Session recorded.",
+        notableEvents: replayEvents.slice(0, 5).map((event) => `${event.label} / ${formatTime(event.timestamp)}`),
+        reviewNotes: [
+          replayClips.length ? `${replayClips.length} replay clips created.` : "Session saved without replay clips.",
+          `${replayEvents.length} events saved.`,
+        ],
+        sessionSummary: `${formatDuration(durationSeconds)} recorded.`,
+      },
       shotEvents,
       shotSummary,
     };
@@ -2893,14 +3012,14 @@ export function RitualHome() {
   if (authPhase === "checking" || authPhase === "restoring") {
     return (
       <main className="axis-shell axis-entry-shell">
-        <section className="axis-restore" aria-label="Restoring continuity">
-          <p className="axis-meta">Identity restored</p>
-          <h1>Restoring continuity...</h1>
+        <section className="axis-restore" aria-label="Opening Axis">
+          <p className="axis-meta">Axis</p>
+          <h1>Opening your work...</h1>
           <div className="axis-restore-line" aria-hidden="true" />
-          <div className="axis-restore-rail" aria-label="Continuity restoration steps">
-            <span>Loading session...</span>
-            <span>Restoring history...</span>
-            <span>Return ready</span>
+          <div className="axis-restore-rail" aria-label="Axis steps">
+            <span>Start</span>
+            <span>Record</span>
+            <span>Review</span>
           </div>
         </section>
       </main>
@@ -2913,13 +3032,15 @@ export function RitualHome() {
         <section className="axis-entry" aria-label="Axis entry">
           <header className="axis-entry-top">
             <span>Axis</span>
-            <span>Continuity system</span>
-            <span>Athletic history</span>
+            <span>Start</span>
+            <span>Record</span>
+            <span>Review</span>
           </header>
 
           <section className="axis-entry-center">
-            <p className="axis-meta">{isSupabaseConfigured() ? "Identity required" : "Local mode"}</p>
-            <h1>Enter Axis</h1>
+            <p className="axis-meta">{isSupabaseConfigured() ? "Save your work" : "Local mode"}</p>
+            <h1>Start. Record. Review.</h1>
+            <p className="axis-entry-copy">Axis saves what happened so you can come back to it.</p>
           </section>
 
           <form className="axis-entry-form" onSubmit={enterAxis}>
@@ -2929,7 +3050,7 @@ export function RitualHome() {
                 autoComplete="email"
                 inputMode="email"
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="athlete@axis"
+                placeholder="you@email.com"
                 type="email"
                 value={email}
               />
@@ -2939,7 +3060,7 @@ export function RitualHome() {
               <input
                 autoComplete="current-password"
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="save data key"
+                placeholder="password"
                 type="password"
                 value={password}
               />
@@ -2958,16 +3079,18 @@ export function RitualHome() {
         <section className="axis-surface axis-camera-page" aria-label="Camera page">
           <header className="axis-top">
             <div className="axis-identity">
-              <p className="axis-meta">Axis camera</p>
-              <h1>Live camera</h1>
+              <p className="axis-meta">Axis</p>
+              <h1>Record</h1>
               <button className="axis-sign-out" onClick={() => setActiveView("session")} type="button">
-                Back to session
+                Back
               </button>
             </div>
 
-            <p className="axis-presence-row" aria-label="Camera state">
+            {showAxisDebug ? (
+              <p className="axis-presence-row" aria-label="Camera state">
               {`${currentMode.toUpperCase()} • ${formatCount(activeParticipantCount, "ATHLETE", "ATHLETES").toUpperCase()} • ${cameraDirectionLabel.toUpperCase()} • ${cameraLabel.toUpperCase()}`}
-            </p>
+              </p>
+            ) : null}
           </header>
 
           <section className="axis-camera-page-main" aria-label="Live camera">
@@ -3098,45 +3221,52 @@ export function RitualHome() {
                   </span>
                 </div>
               ) : null}
-              <div className="axis-camera-status-overlay" aria-label="Camera identity state">
-                {cameraStatusSignals.map((signal) => (
-                  <span data-active={signal !== "LOOKING FOR ATHLETE"} key={signal}>
-                    {signal}
-                  </span>
-                ))}
-              </div>
+              {showAxisDebug ? (
+                <div className="axis-camera-status-overlay" aria-label="Camera identity state">
+                  {cameraStatusSignals.map((signal) => (
+                    <span data-active={signal !== "LOOKING FOR ATHLETE"} key={signal}>
+                      {signal}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <section className="axis-camera-page-controls" aria-label="Camera controls">
-              <div className="axis-camera-selector" aria-label="Camera direction">
-                <button
-                  aria-pressed={cameraDirection === "front"}
-                  onClick={() => changeCameraDirection("front")}
-                  type="button"
-                >
-                  Front camera
-                </button>
-                <button
-                  aria-pressed={cameraDirection === "back"}
-                  onClick={() => changeCameraDirection("back")}
-                  type="button"
-                >
-                  Back camera
-                </button>
-              </div>
+              {showAxisDebug ? (
+                <div className="axis-camera-selector" aria-label="Camera direction">
+                  <button
+                    aria-pressed={cameraDirection === "front"}
+                    onClick={() => changeCameraDirection("front")}
+                    type="button"
+                  >
+                    Front camera
+                  </button>
+                  <button
+                    aria-pressed={cameraDirection === "back"}
+                    onClick={() => changeCameraDirection("back")}
+                    type="button"
+                  >
+                    Back camera
+                  </button>
+                </div>
+              ) : null}
               <div className="axis-camera-actions">
                 <button onClick={() => requestCameraPresence()} type="button">
-                  {cameraState === "offline" ? "Start camera" : "Refresh camera"}
+                  Record
                 </button>
-                <button disabled={!cameraStream || cameraState === "attached"} onClick={attachCameraPresence} type="button">
-                  {cameraState === "attached" ? "Camera attached" : "Attach camera"}
-                </button>
+                {showAxisDebug ? (
+                  <button disabled={!cameraStream || cameraState === "attached"} onClick={attachCameraPresence} type="button">
+                    {cameraState === "attached" ? "Camera attached" : "Attach camera"}
+                  </button>
+                ) : null}
               </div>
               {cameraMessage ? <span className="axis-camera-message">{cameraMessage}</span> : null}
             </section>
           </section>
 
-          <section className="axis-camera-page-grid" aria-label="Camera session state">
+          {showAxisDebug ? (
+            <section className="axis-camera-page-grid" aria-label="Camera session state">
             <section className="axis-session-module" aria-label="Active roster">
               <header>
                 <span>Active roster</span>
@@ -3235,7 +3365,8 @@ export function RitualHome() {
                 {isRecordingAttached ? "Recording attached" : "Recording off"}
               </button>
             </section>
-          </section>
+            </section>
+          ) : null}
         </section>
       </main>
     );
@@ -3243,7 +3374,8 @@ export function RitualHome() {
 
   return (
     <main className="axis-shell">
-      <section className="axis-surface" aria-label="Axis ritual home">
+        <section className="axis-surface" aria-label="Axis ritual home">
+        {showAxisDebug ? (
         <header className="axis-top">
           <div className="axis-identity">
             <p className="axis-meta">Axis</p>
@@ -3257,38 +3389,71 @@ export function RitualHome() {
             {compactPresence}
           </p>
         </header>
+        ) : (
+          <header className="axis-app-store-intro">
+            <div>
+              <p className="axis-meta">Axis</p>
+              <h1>Record your work.</h1>
+              <span>Start. Record. Review what happened.</span>
+            </div>
+            <button className="axis-sign-out" onClick={signOut} type="button">
+              Sign out
+            </button>
+          </header>
+        )}
 
         <section className="axis-ritual" aria-label="Check in ritual" data-state={ritualState}>
-          <p className="axis-meta">Participation ritual</p>
+          {showAxisDebug ? <p className="axis-meta">Axis</p> : null}
           {save.activeSession ? (
             <section className="axis-live-command" aria-label="Session live">
-              <span>Session live</span>
-              <strong>{formatCount(activeParticipantCount, "athlete", "athletes")} active</strong>
-              <em>{currentMode}</em>
-              <em>{`${cameraDirectionLabel} / ${sessionCameraStatusLabel}`}</em>
-              <button onClick={handleSessionPrimaryAction} type="button">
-                {sessionPrimaryActionLabel}
-              </button>
+              <span>{currentMode}</span>
+              <strong>{isRecordingAttached ? "Recording" : "Ready to record"}</strong>
+              {isRecordingAttached ? (
+                <em>End when your work is done.</em>
+              ) : (
+                <button onClick={handleSessionPrimaryAction} type="button">
+                  {sessionPrimaryActionLabel}
+                </button>
+              )}
             </section>
           ) : (
             <>
+              {!showAxisDebug ? (
+                <>
+                  <p className="axis-start-line">Choose the work. Press Start.</p>
+                  <div className="axis-kind-picker" aria-label="Choose activity">
+                    {participationModes.map((mode) => (
+                      <button
+                        aria-pressed={pendingMode === mode}
+                        key={mode}
+                        onClick={() => setPendingMode(mode)}
+                        type="button"
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
               <button
                 className="axis-check-button"
                 onClick={ritualState === "saving" ? undefined : checkIn}
                 disabled={ritualState === "saving"}
                 type="button"
               >
-                {ritualState === "saving" ? "Saving" : "Start session"}
+                {ritualState === "saving" ? "Saving" : "Start"}
               </button>
-              <section className="axis-bridge-state" aria-label="Camera state">
-                <span>{bridgeSessionLabel}</span>
-                <strong>{bridgeRosterLabel}</strong>
-                <em>{cameraLabel}</em>
-                <em>{cameraDirectionLabel}</em>
-              </section>
+              {showAxisDebug ? (
+                <section className="axis-bridge-state" aria-label="Camera state">
+                  <span>{bridgeSessionLabel}</span>
+                  <strong>{bridgeRosterLabel}</strong>
+                  <em>{cameraLabel}</em>
+                  <em>{cameraDirectionLabel}</em>
+                </section>
+              ) : null}
             </>
           )}
-          {save.activeSession ? (
+          {showAxisDebug && save.activeSession ? (
             <section className="axis-session-object" aria-label="Session continuity object">
               <details className="axis-session-drawer">
                 <summary>
@@ -3366,7 +3531,7 @@ export function RitualHome() {
               </details>
             </section>
           ) : null}
-          {ritualState === "active" ? (
+          {showAxisDebug && ritualState === "active" ? (
             <section className="axis-shot-bar" aria-label="Shot confirmation">
               <span>{shotActionLabel}</span>
               <div>
@@ -3381,37 +3546,68 @@ export function RitualHome() {
           ) : null}
           {ritualState === "active" ? (
             <button className="axis-checkout-button" onClick={checkOut} type="button">
-              End session
+              End
             </button>
           ) : null}
           {ritualState === "complete" && latestSession ? (
             <section className="axis-review-entry" aria-label="Session complete">
-              <div>
-                <span>Session complete</span>
-                <strong>{formatDuration(latestSession.durationSeconds)}</strong>
+              {showAxisDebug ? (
+                <div>
+                <strong>Session complete</strong>
+                </div>
+              ) : (
+                <div>
+                  <span>Done</span>
+                  <strong>Review your work</strong>
+                </div>
+              )}
+              <div className="axis-complete-actions">
+                <button
+                  aria-expanded={isReviewOpen}
+                  aria-controls="axis-session-review"
+                  onClick={() => setIsReviewOpen((isOpen) => !isOpen)}
+                  type="button"
+                >
+                  Review
+                </button>
+                {showAxisDebug ? (
+                  <>
+                    <button type="button">Export</button>
+                    <button type="button">Share</button>
+                  </>
+                ) : null}
               </div>
-              <button
-                aria-expanded={isReviewOpen}
-                aria-controls="axis-session-review"
-                onClick={() => setIsReviewOpen((isOpen) => !isOpen)}
-                type="button"
-              >
-                Review
-              </button>
             </section>
           ) : null}
         </section>
 
         {isReviewOpen && latestSession ? (
           <section className="axis-review-panel" id="axis-session-review" aria-label="Session review">
-            <header>
-              <span>Review</span>
-              <strong>What happened</strong>
-            </header>
+            {showAxisDebug ? (
+              <header>
+              <span>Replay</span>
+              <strong>Show me</strong>
+              </header>
+            ) : null}
 
             <div className="axis-review-grid">
+              <section className="axis-review-block axis-replay-stage" aria-label="Review video">
+                {showAxisDebug ? <span>Replay</span> : null}
+                <strong>{replayStageLabel}</strong>
+                {showAxisDebug ? (
+                  <em>
+                  {selectedReplayAnchor
+                    ? `${formatDuration(selectedReplayAnchor.videoTimestamp)} / ${selectedReplayAnchor.athleteName ?? "Session"}`
+                    : latestReviewAnchors[0]
+                      ? `${formatDuration(latestReviewAnchors[0].videoTimestamp)} / ${latestReviewAnchors[0].athleteName ?? "Session"}`
+                      : "Replay waiting"}
+                  </em>
+                ) : null}
+              </section>
+
+              {showAxisDebug ? (
               <section className="axis-review-block axis-review-engine" aria-label="Review notes">
-                <span>Review notes</span>
+                <span>What happened</span>
                 {latestSessionReview ? (
                   <div>
                     <article className="axis-review-row">
@@ -3450,7 +3646,9 @@ export function RitualHome() {
                 </button>
                 {reviewMessage ? <em className="axis-review-message">{reviewMessage}</em> : null}
               </section>
+              ) : null}
 
+              {showAxisDebug ? (
               <section className="axis-review-block" aria-label="Session summary">
                 <span>Session summary</span>
                 <article>
@@ -3466,9 +3664,10 @@ export function RitualHome() {
                   <em>{`Ended ${formatStamp(latestSession.endedAt)}`}</em>
                 </article>
               </section>
+              ) : null}
 
-              <section className="axis-review-block" aria-label="Timeline">
-                <span>Timeline</span>
+              <section className="axis-review-block" aria-label="Review moments">
+                {showAxisDebug ? <span>Moments</span> : null}
                 <div>
                   {latestReviewAnchors.length ? (
                     latestReviewAnchors.map((anchor) => (
@@ -3478,40 +3677,43 @@ export function RitualHome() {
                         onClick={() => jumpToReplayAnchor(anchor)}
                         type="button"
                       >
-                        <strong>{anchor.replayLabel}</strong>
+                        <strong>{showAxisDebug ? anchor.replayLabel : formatHumanMomentLabel(anchor)}</strong>
                         <em>{formatDuration(anchor.videoTimestamp)}</em>
                       </button>
                     ))
                   ) : (
                     <article className="axis-review-row">
-                      <strong>Timeline waiting</strong>
-                      <em>No replay anchors yet</em>
+                      <strong>Review waiting</strong>
+                      <em>Finish work to see what happened</em>
                     </article>
                   )}
                 </div>
               </section>
 
-              <section className="axis-review-block" aria-label="Events">
-                <span>Events</span>
+              {showAxisDebug ? (
+              <section className="axis-review-block" aria-label="Who did it">
+                <span>Who</span>
                 <div>
                   {latestReviewEvents.length ? (
                     latestReviewEvents.map((event) => (
                       <article className="axis-review-row" key={event.id}>
-                        <strong>{event.label}</strong>
-                        <em>{formatTime(event.timestamp)}</em>
+                        <strong>{event.athleteName}</strong>
+                        <em>{`${event.label} / ${formatTime(event.timestamp)}`}</em>
                       </article>
                     ))
                   ) : (
                     <article className="axis-review-row">
-                      <strong>No events saved</strong>
-                      <em>Session ended cleanly</em>
+                      <strong>Session</strong>
+                      <em>No player moments yet</em>
                     </article>
                   )}
                 </div>
               </section>
+              ) : null}
 
+              {showAxisDebug ? (
               <section className="axis-review-block" aria-label="Replay clips">
-                <span>Replay clips</span>
+                <span>Clips</span>
                 <div>
                   {latestReviewClips.length ? (
                     latestReviewClips.map((clip) => (
@@ -3523,16 +3725,18 @@ export function RitualHome() {
                   ) : (
                     <article className="axis-review-row">
                       <strong>No clips yet</strong>
-                      <em>Replay will attach when video is ready</em>
+                      <em>Replay saved</em>
                     </article>
                   )}
                 </div>
               </section>
+              ) : null}
             </div>
           </section>
         ) : null}
 
-        <footer className="axis-bottom" aria-label="Continuity records">
+        {showAxisDebug ? (
+          <footer className="axis-bottom" aria-label="Continuity records">
           <details className="axis-history-drawer">
             <summary>
               <span>History</span>
@@ -3827,7 +4031,8 @@ export function RitualHome() {
             </section>
             </section>
           </details>
-        </footer>
+          </footer>
+        ) : null}
       </section>
     </main>
   );

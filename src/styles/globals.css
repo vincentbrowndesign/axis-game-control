@@ -183,6 +183,18 @@ h1 {
   font-size: 0.62rem;
 }
 
+.axis-entry-copy,
+.axis-start-line,
+.axis-app-store-intro span {
+  color: var(--axis-muted);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  line-height: 1.45;
+  margin: 0;
+  text-transform: uppercase;
+}
+
 .axis-entry-form input {
   appearance: none;
   background: var(--axis-surface);
@@ -263,6 +275,25 @@ h1 {
   padding: 0.6rem 0.7rem;
 }
 
+.axis-app-store-intro {
+  align-items: start;
+  border-bottom: 1px solid var(--axis-line);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 0.85rem;
+}
+
+.axis-app-store-intro div {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.axis-app-store-intro h1 {
+  font-size: clamp(1.7rem, 6vw, 3.2rem);
+}
+
 .axis-active-state strong,
 .axis-bridge-state strong,
 .axis-live-strip strong,
@@ -287,6 +318,36 @@ h1 {
 .axis-ritual[data-state="active"],
 .axis-ritual[data-state="complete"] {
   border-color: rgba(168, 217, 51, 0.26);
+}
+
+.axis-kind-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.axis-kind-picker button {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.035);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  min-height: 2.1rem;
+  padding: 0.58rem 0.72rem;
+  text-transform: uppercase;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.axis-kind-picker button[aria-pressed="true"] {
+  background: rgba(168, 217, 51, 0.08);
+  border-color: rgba(168, 217, 51, 0.42);
+  color: var(--axis-live);
 }
 
 .axis-check-button {
@@ -464,11 +525,11 @@ h1 {
 }
 
 .axis-review-entry {
-  align-items: center;
+  align-items: end;
   border-top: 1px solid rgba(168, 217, 51, 0.22);
-  display: flex;
+  display: grid;
   gap: 1rem;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding-top: 0.8rem;
 }
 
@@ -487,9 +548,17 @@ h1 {
 
 .axis-review-entry strong {
   color: var(--axis-ink);
-  font-size: clamp(1.5rem, 5vw, 2.7rem);
+  font-size: clamp(1.65rem, 6vw, 3.2rem);
   font-weight: 500;
   line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.axis-complete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: end;
 }
 
 .axis-review-entry button {
@@ -1261,6 +1330,30 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.axis-replay-stage {
+  background:
+    linear-gradient(180deg, rgba(168, 217, 51, 0.08), transparent 38%),
+    var(--axis-bg);
+  border-color: rgba(168, 217, 51, 0.3);
+  min-height: clamp(10rem, 36vw, 18rem);
+  place-content: end start;
+}
+
+.axis-replay-stage strong {
+  color: var(--axis-ink);
+  font-size: clamp(2rem, 8vw, 4.4rem);
+  font-weight: 500;
+  line-height: 0.9;
+  text-transform: uppercase;
+}
+
+.axis-replay-stage em {
+  color: var(--axis-muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
 .axis-review-block > div {
   display: grid;
   gap: 0;
@@ -1607,6 +1700,7 @@ button.axis-review-row:focus-visible {
   }
 
   .axis-entry-top,
+  .axis-app-store-intro,
   .axis-top,
   .axis-history-header,
   .axis-active-state {
@@ -1688,6 +1782,14 @@ button.axis-review-row:focus-visible {
   .axis-athlete-memory > header {
     align-items: start;
     display: grid;
+  }
+
+  .axis-review-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-complete-actions {
+    justify-content: start;
   }
 
   .axis-athlete-memory > header em {
