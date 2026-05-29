@@ -528,6 +528,7 @@ export function RitualHome() {
   const [detectionStatus, setDetectionStatus] = useState<DetectionStatus>("idle");
   const [visiblePeople, setVisiblePeople] = useState<number | null>(null);
   const [detectionDebug, setDetectionDebug] = useState<DetectionDebug>(defaultDetectionDebug);
+  const [frameRate, setFrameRate] = useState(0);
   const [calibrationEvidence, setCalibrationEvidence] = useState<CalibrationEvidence | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraDirection, setCameraDirection] = useState<CameraDirection>("back");
@@ -675,6 +676,33 @@ export function RitualHome() {
   }, [cameraStream]);
 
   useEffect(() => {
+    if (activeView !== "camera" || !cameraStream) {
+      setFrameRate(0);
+      return;
+    }
+
+    let animationFrame = 0;
+    let frames = 0;
+    let lastSample = performance.now();
+
+    function sampleFrameRate(timestamp: number) {
+      frames += 1;
+
+      if (timestamp - lastSample >= 1000) {
+        setFrameRate(Math.round((frames * 1000) / (timestamp - lastSample)));
+        frames = 0;
+        lastSample = timestamp;
+      }
+
+      animationFrame = requestAnimationFrame(sampleFrameRate);
+    }
+
+    animationFrame = requestAnimationFrame(sampleFrameRate);
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [activeView, cameraStream]);
+
+  useEffect(() => {
     const activeDirection = save.activeSession?.cameraDirection;
     if (!activeDirection) return;
 
@@ -780,22 +808,6 @@ export function RitualHome() {
   const isAthleteMatched =
     Boolean(calibrationEvidence?.athlete_id && calibrationEvidence.athlete_id === selectedCalibrationAthlete?.id) ||
     selectedAthleteCalibrationStatus === "calibrated";
-  const athleteMatchName = isAthleteMatched ? detectionDebug.athleteMatchedName ?? selectedCalibrationAthlete?.name ?? "Athlete" : null;
-  const identityFailureReason = isAthleteMatched
-    ? "Identity lock saved."
-    : detectionDebug.failureReason ||
-      (detectionStatus === "ready"
-        ? "Identity lock is ready. Lock identity to match the athlete."
-        : "Athlete has not been matched yet.");
-  const detectionBoxes = detectionDebug.detections.filter(
-    (detection) =>
-      detectionDebug.imageWidth &&
-      detectionDebug.imageHeight &&
-      detection.x !== null &&
-      detection.y !== null &&
-      detection.width !== null &&
-      detection.height !== null,
-  );
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const sessionPrimaryActionLabel = "Open camera";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
@@ -1583,55 +1595,26 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
               <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera offline</span>}
-              <div className="axis-camera-detection-layer" aria-label="Roboflow detections">
-                {detectionBoxes.length ? (
-                  detectionBoxes.map((detection, index) => {
-                    const imageWidth = detectionDebug.imageWidth ?? 1;
-                    const imageHeight = detectionDebug.imageHeight ?? 1;
-                    const left = (((detection.x ?? 0) - (detection.width ?? 0) / 2) / imageWidth) * 100;
-                    const top = (((detection.y ?? 0) - (detection.height ?? 0) / 2) / imageHeight) * 100;
-                    const width = ((detection.width ?? 0) / imageWidth) * 100;
-                    const height = ((detection.height ?? 0) / imageHeight) * 100;
-
-                    return (
-                      <span
-                        className="axis-camera-detection-box"
-                        key={`${detection.label}-${index}`}
-                        style={{
-                          height: `${Math.max(0, height)}%`,
-                          left: `${Math.max(0, left)}%`,
-                          top: `${Math.max(0, top)}%`,
-                          width: `${Math.max(0, width)}%`,
-                        }}
-                      >
-                        <em>{`${detection.label.toUpperCase()} ${formatDebugConfidence(detection.confidence)}`}</em>
-                      </span>
-                    );
-                  })
-                ) : detectionDebug.predictionCount === 0 ? (
-                  <span className="axis-camera-no-detection">NO PERSON DETECTED</span>
-                ) : null}
-              </div>
               <div className="axis-camera-debug-overlay" aria-label="Camera debug state">
                 <span>
-                  <strong>PERSON DETECTED</strong>
-                  <em>{`${visiblePeople !== null && visiblePeople > 0 ? "YES" : "NO"} / ${formatDebugConfidence(detectionDebug.personConfidence)}`}</em>
+                  <strong>BODY DETECTED</strong>
+                  <em>{visiblePeople !== null && visiblePeople > 0 ? "YES" : "NO"}</em>
                 </span>
                 <span>
-                  <strong>FACE DETECTED</strong>
-                  <em>{`${detectionDebug.faceDetected ? "YES" : "NO"} / ${formatDebugConfidence(detectionDebug.faceConfidence)}`}</em>
+                  <strong>VISIBLE PEOPLE</strong>
+                  <em>{visiblePeople ?? 0}</em>
                 </span>
                 <span>
-                  <strong>IDENTITY MATCH</strong>
-                  <em>{formatDebugConfidence(detectionDebug.identityConfidence)}</em>
+                  <strong>CONFIDENCE</strong>
+                  <em>{formatDebugConfidence(detectionDebug.personConfidence)}</em>
                 </span>
                 <span>
-                  <strong>{athleteMatchName ? "ATHLETE MATCHED" : "ATHLETE NOT MATCHED"}</strong>
-                  <em>{athleteMatchName ?? identityFailureReason}</em>
+                  <strong>IDENTITY LOCK</strong>
+                  <em>{isAthleteMatched ? "YES" : "NO"}</em>
                 </span>
                 <span>
-                  <strong>REASON</strong>
-                  <em>{identityFailureReason}</em>
+                  <strong>FRAME RATE</strong>
+                  <em>{`${frameRate} FPS`}</em>
                 </span>
               </div>
             </div>
