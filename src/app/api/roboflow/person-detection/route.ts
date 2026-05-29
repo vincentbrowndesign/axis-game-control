@@ -48,10 +48,17 @@ export async function POST(request: Request) {
     const image = getImagePayload(body.image);
 
     if (!image) {
+      console.log("Calibration aborted", { reason: "api_missing_image" });
       return Response.json({ error: "Camera frame missing." }, { status: 400 });
     }
 
     const endpoint = `https://detect.roboflow.com/${modelId}?api_key=${apiKey}&confidence=35&overlap=30`;
+    console.log("Request built", {
+      endpoint: `https://detect.roboflow.com/${modelId}?api_key=<redacted>&confidence=35&overlap=30`,
+      imageBytesApprox: Math.ceil(image.length * 0.75),
+      modelId,
+    });
+    console.log("Request sent");
     const roboflowResponse = await fetch(endpoint, {
       body: image,
       headers: {
@@ -60,13 +67,19 @@ export async function POST(request: Request) {
       method: "POST",
     });
     const result = (await roboflowResponse.json()) as RoboflowDetectionResponse & { error?: string };
+    console.log("Response received", {
+      ok: roboflowResponse.ok,
+      status: roboflowResponse.status,
+    });
 
     if (!roboflowResponse.ok) {
       console.error("Roboflow detection error", result);
+      console.log("Calibration aborted", { reason: "roboflow_non_ok", status: roboflowResponse.status });
       return Response.json({ error: "Person detection failed." }, { status: 502 });
     }
 
     const predictions = Array.isArray(result.predictions) ? result.predictions : [];
+    console.log("Prediction count", { predictions: predictions.length });
 
     return Response.json({
       model: modelId,
@@ -74,6 +87,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Person detection route failed", error);
+    console.log("Calibration aborted", { error, reason: "api_exception" });
     return Response.json({ error: "Person detection failed." }, { status: 500 });
   }
 }

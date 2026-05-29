@@ -1081,16 +1081,52 @@ export function RitualHome() {
   }
 
   async function startCameraCalibration() {
-    if (!save.activeSession || cameraState !== "attached" || !selectedCalibrationAthlete) return;
+    console.log("Calibration started");
+
+    if (!save.activeSession) {
+      console.log("Calibration aborted", { reason: "missing_active_session" });
+      return;
+    }
+
+    if (cameraState !== "attached") {
+      console.log("Calibration aborted", { cameraState, reason: "camera_not_attached" });
+      return;
+    }
+
+    if (!selectedCalibrationAthlete) {
+      console.log("Calibration aborted", { reason: "missing_selected_athlete" });
+      return;
+    }
+
+    console.log("Athlete selected", {
+      athleteId: selectedCalibrationAthlete.id,
+      athleteName: selectedCalibrationAthlete.name,
+    });
+    console.log("Camera attached", {
+      cameraDirection: savedCameraDirection,
+      cameraState,
+    });
 
     setDetectionStatus("capturing");
     const image = captureCameraFrame();
     if (!image) {
       const video = cameraPreviewRef.current;
+      console.log("Calibration aborted", {
+        reason: video && (!video.videoWidth || !video.videoHeight) ? "camera_not_ready" : "frame_capture_failed",
+      });
       setDetectionStatus(video && (!video.videoWidth || !video.videoHeight) ? "camera_not_ready" : "capture_failed");
       setVisiblePeople(null);
       return;
     }
+
+    console.log("Frame captured");
+    console.log("Frame dimensions", {
+      videoHeight: cameraPreviewRef.current?.videoHeight ?? 0,
+      videoWidth: cameraPreviewRef.current?.videoWidth ?? 0,
+    });
+    console.log("Frame byte size", {
+      bytes: Math.ceil((image.split(",")[1] ?? image).length * 0.75),
+    });
 
     setDetectionStatus("frame_captured");
     setVisiblePeople(null);
@@ -1098,6 +1134,11 @@ export function RitualHome() {
     setDetectionStatus("sending");
 
     try {
+      console.log("Request built", {
+        endpoint: "/api/roboflow/person-detection",
+        hasImage: Boolean(image),
+      });
+      console.log("Request sent");
       const response = await fetch("/api/roboflow/person-detection", {
         method: "POST",
         headers: {
@@ -1106,36 +1147,55 @@ export function RitualHome() {
         body: JSON.stringify({ image }),
       });
       const result = (await response.json()) as { visiblePeople?: number; error?: string };
+      console.log("Response received", {
+        ok: response.ok,
+        status: response.status,
+      });
       setDetectionStatus("response_received");
 
       if (!response.ok) {
         console.error("Roboflow person detection failed", result.error);
+        console.log("Calibration aborted", { reason: "roboflow_request_failed", status: response.status });
         setDetectionStatus("request_failed");
         return;
       }
 
       if (typeof result.visiblePeople !== "number" || !Number.isFinite(result.visiblePeople)) {
+        console.log("Calibration aborted", { reason: "invalid_visible_people", visiblePeople: result.visiblePeople });
         setDetectionStatus("invalid_response");
         return;
       }
 
       const people = result.visiblePeople;
+      console.log("Prediction count", { visiblePeople: people });
       setVisiblePeople(people);
 
       if (people !== 1) {
+        console.log("Calibration validation failed", { visiblePeople: people });
         setDetectionStatus("not_one");
         return;
       }
 
+      console.log("Calibration validation passed", { visiblePeople: people });
       setDetectionStatus("ready");
     } catch (error) {
       console.error("Unable to run person detection", error);
+      console.log("Calibration aborted", { error, reason: "request_exception" });
       setDetectionStatus("request_failed");
     }
   }
 
   function captureCalibrationEvidence() {
-    if (!save.activeSession || !identity || !selectedCalibrationAthlete || visiblePeople !== 1) return;
+    if (!save.activeSession || !identity || !selectedCalibrationAthlete || visiblePeople !== 1) {
+      console.log("Calibration aborted", {
+        hasActiveSession: Boolean(save.activeSession),
+        hasIdentity: Boolean(identity),
+        hasSelectedAthlete: Boolean(selectedCalibrationAthlete),
+        reason: "capture_evidence_guard",
+        visiblePeople,
+      });
+      return;
+    }
 
     const completedAt = new Date().toISOString();
     const evidence: CalibrationEvidence = {
@@ -1201,6 +1261,10 @@ export function RitualHome() {
     setCalibrationEvidence(evidence);
     setDetectionStatus("idle");
     setVisiblePeople(null);
+    console.log("Calibration completed", {
+      athleteId: evidence.athlete_id,
+      sessionId: evidence.session_id,
+    });
   }
 
   function removeParticipant(participantId: string) {
