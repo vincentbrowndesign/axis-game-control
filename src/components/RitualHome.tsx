@@ -27,7 +27,6 @@ type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
 type ParticipationWindowStatus = "open" | "closed";
 type ParticipationMode = "Training" | "Practice" | "Game" | "Workout" | "Challenge";
-type ProductSurface = "film" | "results" | "work";
 type WorkOperatorMode = "coach" | "director" | "player";
 type WorkDetectionState = "ACTIVE" | "IDLE" | "MOVING" | "SHOOTING";
 type WatchEventType = "assist" | "make" | "miss" | "rebound" | "turnover";
@@ -36,6 +35,12 @@ const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
 const participationModes: ParticipationMode[] = ["Training", "Practice", "Game", "Workout", "Challenge"];
 const coachParticipationModes: ParticipationMode[] = ["Practice", "Training", "Game"];
 const defaultParticipationMode: ParticipationMode = "Training";
+const rimGuideBox = {
+  height: 0.08,
+  width: 0.14,
+  x: 0.43,
+  y: 0.055,
+};
 const filmWatchGroups: Array<{ label: string; type: WatchEventType }> = [
   { label: "WATCH MAKES", type: "make" },
   { label: "WATCH MISSES", type: "miss" },
@@ -1846,7 +1851,6 @@ export function RitualHome() {
   const [now, setNow] = useState(() => Date.now());
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("session");
-  const [productSurface, setProductSurface] = useState<ProductSurface>("work");
   const [workOperatorMode, setWorkOperatorMode] = useState<WorkOperatorMode>("player");
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<ParticipationMode>(defaultParticipationMode);
@@ -2217,6 +2221,16 @@ export function RitualHome() {
     return athleteId ? presentParticipants.find((participant) => participant.id === athleteId) : undefined;
   };
   const activeShotSummary = summarizeShots(save.activeSession?.shotEvents ?? []);
+  const cameraOverlayShotSummary = save.activeSession
+    ? activeShotSummary
+    : latestSession?.shotSummary ?? summarizeShots(latestSession?.shotEvents ?? []);
+  const cameraOverlayConfidence = Math.round(
+    Math.max(
+      shotSuggestion?.confidence ?? 0,
+      ballTracking.confidence,
+      primaryTrackingTrack && primaryTrackingTrack.status !== "lost" ? 0.86 : 0,
+    ) * 100,
+  );
   const canRecordShot = Boolean(save.activeSession && primaryTrackingTrack && primaryTrackingTrack.status !== "lost");
   const shotActionLabel = shotSuggestion ? "Possible shot detected" : formatShotSummary(activeShotSummary);
   const workDetectionState = getWorkDetectionState({
@@ -2228,7 +2242,11 @@ export function RitualHome() {
   const latestReviewAnchors = latestSession?.replayAnchors?.slice(0, 6) ?? [];
   const latestFilmTimelineAnchors = latestSession?.replayAnchors?.filter(shouldShowFilmTimelineAnchor) ?? [];
   const latestReviewClips = latestSession?.replayClips?.slice(0, 4) ?? [];
+  const latestClipAnchors = latestReviewClips
+    .map((clip) => latestSession?.replayAnchors?.find((anchor) => anchor.eventId === clip.eventId))
+    .filter((anchor): anchor is ReplayAnchor => Boolean(anchor));
   const latestShotAttempts = latestSession?.replayAnchors?.filter((anchor) => anchor.eventType === "shot_attempt") ?? [];
+  const latestReboundCount = latestSession?.replayEvents?.filter((event) => event.type === "rebound").length ?? 0;
   const latestSessionReview = latestSession?.review;
   const latestFilmPlaybackId = getFilmPlaybackId(latestSession);
   const latestFilmPreviewUrl = latestSession ? filmPreviewUrls[latestSession.id] : undefined;
@@ -2278,14 +2296,12 @@ export function RitualHome() {
       : "Session waiting";
   const isCoachMode = workOperatorMode === "coach";
   const isDirectorMode = workOperatorMode === "director";
-  const shouldShowReviewPanel = Boolean(
-    latestSession && (showAxisDebug ? isReviewOpen : productSurface !== "work" && !(isDirectorMode && productSurface === "results")),
-  );
-  const shouldShowFilmSurface = showAxisDebug || productSurface === "film";
-  const shouldShowResultsSurface = showAxisDebug || productSurface === "results";
+  const shouldShowReviewPanel = Boolean(latestSession && (showAxisDebug ? isReviewOpen : true));
+  const shouldShowFilmSurface = true;
+  const shouldShowResultsSurface = true;
   const activeTimerLabel = save.activeSession ? `${formatDuration(elapsedSeconds)} preserved` : null;
   const cameraOperatingState = save.activeSession ? (isRecordingAttached ? "Recording" : "Ready") : "Camera";
-  const cameraOperatingContext = save.activeSession ? `${currentMode} / ${formatDuration(elapsedSeconds)}` : productSurface;
+  const cameraOperatingContext = save.activeSession ? `${currentMode} / ${formatDuration(elapsedSeconds)}` : "Work / Film / Results";
   const availableParticipationModes = isCoachMode || isDirectorMode ? coachParticipationModes : participationModes;
   const visibleWorkActions = showAxisDebug || isCoachMode ? gameActions : (["make", "miss"] as GameActionType[]);
   const compactPresence = `BRIDGE • ${currentStreak} ${currentStreak === 1 ? "DAY" : "DAYS"} • ${lastCheckIn.toUpperCase()} • ${currentMode.toUpperCase()}`;
@@ -2838,7 +2854,6 @@ export function RitualHome() {
     setRitualState("active");
     setLatestSavedSessionId(null);
     setActiveView("session");
-    setProductSurface("work");
     setIsReviewOpen(false);
     setIsModePickerOpen(false);
     setSelectedCalibrationAthleteId(checkedInAthlete.id);
@@ -2895,9 +2910,6 @@ export function RitualHome() {
       setPendingMode("Practice");
     }
 
-    if (mode === "director") {
-      setProductSurface("results");
-    }
   }
 
   function toggleRecordingAttachment() {
@@ -3726,7 +3738,6 @@ export function RitualHome() {
 
   function jumpToReplayAnchor(anchor: ReplayAnchor) {
     setSelectedReplayAnchor(anchor);
-    setProductSurface("film");
   }
 
   function createFinalizeWorkPayload(session: SavedSession) {
@@ -3906,7 +3917,6 @@ export function RitualHome() {
     setSave(nextSave);
     setLatestSavedSessionId(completedSession.id);
     setActiveView("session");
-    setProductSurface("film");
     setIsReviewOpen(false);
     setDetectionStatus("idle");
     setVisiblePeople(null);
@@ -4018,26 +4028,32 @@ export function RitualHome() {
               {cameraStream ? null : <span>Camera offline</span>}
               {!showAxisDebug && personDetection.tracks.length ? (
                 <div className="axis-player-tracking-overlay axis-player-tracking-overlay-live" aria-label="Player tracking">
-                  {personDetection.tracks.map((track) => (
-                    <div
-                      className="axis-player-track-box axis-player-track-box-simple"
-                      data-status={track.status}
-                      key={track.id}
-                      style={{
-                        height: `${track.boundingBox.height * 100}%`,
-                        left: `${track.boundingBox.x * 100}%`,
-                        top: `${track.boundingBox.y * 100}%`,
-                        width: `${track.boundingBox.width * 100}%`,
-                      }}
-                    >
-                      <div className="axis-player-track-label axis-player-track-label-simple">
-                        <strong>{track.id}</strong>
-                        <span>{formatPlayerTrackStatus(track)}</span>
-                        <span>{formatPlayerMovementState(track)}</span>
-                        <span>{formatPlayerVisibilityState(track)}</span>
+                  {personDetection.tracks.map((track) => {
+                    const trackAthlete = getTrackAthlete(track.id);
+
+                    return (
+                      <div
+                        className="axis-player-track-box axis-player-track-box-simple"
+                        data-status={track.status}
+                        key={track.id}
+                        style={{
+                          height: `${track.boundingBox.height * 100}%`,
+                          left: `${track.boundingBox.x * 100}%`,
+                          top: `${track.boundingBox.y * 100}%`,
+                          width: `${track.boundingBox.width * 100}%`,
+                        }}
+                      >
+                        <div className="axis-player-track-label axis-player-track-label-simple">
+                          <strong>{trackAthlete?.name ?? selectedCalibrationAthlete?.name ?? track.displayName}</strong>
+                          <span>{formatPlayerTrackStatus(track)}</span>
+                          <span>{formatPlayerMovementState(track)}</span>
+                          <span>{`${cameraOverlayShotSummary.attempts} shots`}</span>
+                          <span>{`${cameraOverlayShotSummary.makes} makes / ${cameraOverlayShotSummary.misses} misses`}</span>
+                          <span>{`${cameraOverlayConfidence}% confidence`}</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : null}
               {!showAxisDebug && ballTracking.boundingBox ? (
@@ -4057,6 +4073,24 @@ export function RitualHome() {
                       <span>{`${Math.round(ballTracking.confidence * 100)}%`}</span>
                       <span>{`LOST ${ballTracking.lostCount}`}</span>
                       <span>{`RECOVERED ${ballTracking.recoveryCount}`}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {isVisionTrackingEnabled ? (
+                <div className="axis-rim-tracking-overlay" aria-label="Rim tracking">
+                  <div
+                    className="axis-rim-track-box"
+                    style={{
+                      height: `${rimGuideBox.height * 100}%`,
+                      left: `${rimGuideBox.x * 100}%`,
+                      top: `${rimGuideBox.y * 100}%`,
+                      width: `${rimGuideBox.width * 100}%`,
+                    }}
+                  >
+                    <div className="axis-rim-track-label">
+                      <strong>RIM</strong>
+                      <span>{`${cameraOverlayConfidence}% confidence`}</span>
                     </div>
                   </div>
                 </div>
@@ -4377,26 +4411,32 @@ export function RitualHome() {
               {cameraStream ? null : <span>Camera</span>}
               {isVisionTrackingEnabled && personDetection.tracks.length ? (
                 <div className="axis-player-tracking-overlay axis-player-tracking-overlay-live" aria-label="Player tracking">
-                  {personDetection.tracks.map((track) => (
-                    <div
-                      className="axis-player-track-box axis-player-track-box-simple"
-                      data-status={track.status}
-                      key={track.id}
-                      style={{
-                        height: `${track.boundingBox.height * 100}%`,
-                        left: `${track.boundingBox.x * 100}%`,
-                        top: `${track.boundingBox.y * 100}%`,
-                        width: `${track.boundingBox.width * 100}%`,
-                      }}
-                    >
-                      <div className="axis-player-track-label axis-player-track-label-simple">
-                        <strong>{track.id}</strong>
-                        <span>{formatPlayerTrackStatus(track)}</span>
-                        <span>{formatPlayerMovementState(track)}</span>
-                        <span>{formatPlayerVisibilityState(track)}</span>
+                  {personDetection.tracks.map((track) => {
+                    const trackAthlete = getTrackAthlete(track.id);
+
+                    return (
+                      <div
+                        className="axis-player-track-box axis-player-track-box-simple"
+                        data-status={track.status}
+                        key={track.id}
+                        style={{
+                          height: `${track.boundingBox.height * 100}%`,
+                          left: `${track.boundingBox.x * 100}%`,
+                          top: `${track.boundingBox.y * 100}%`,
+                          width: `${track.boundingBox.width * 100}%`,
+                        }}
+                      >
+                        <div className="axis-player-track-label axis-player-track-label-simple">
+                          <strong>{trackAthlete?.name ?? selectedCalibrationAthlete?.name ?? track.displayName}</strong>
+                          <span>{formatPlayerTrackStatus(track)}</span>
+                          <span>{formatPlayerMovementState(track)}</span>
+                          <span>{`${cameraOverlayShotSummary.attempts} shots`}</span>
+                          <span>{`${cameraOverlayShotSummary.makes} makes / ${cameraOverlayShotSummary.misses} misses`}</span>
+                          <span>{`${cameraOverlayConfidence}% confidence`}</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : null}
               {isVisionTrackingEnabled && ballTracking.boundingBox ? (
@@ -4420,38 +4460,32 @@ export function RitualHome() {
                   </div>
                 </div>
               ) : null}
+              {isVisionTrackingEnabled ? (
+                <div className="axis-rim-tracking-overlay" aria-label="Rim tracking">
+                  <div
+                    className="axis-rim-track-box"
+                    style={{
+                      height: `${rimGuideBox.height * 100}%`,
+                      left: `${rimGuideBox.x * 100}%`,
+                      top: `${rimGuideBox.y * 100}%`,
+                      width: `${rimGuideBox.width * 100}%`,
+                    }}
+                  >
+                    <div className="axis-rim-track-label">
+                      <strong>RIM</strong>
+                      <span>{`${cameraOverlayConfidence}% confidence`}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="axis-camera-os-overlay" aria-label="Camera status">
                 <strong>{cameraOperatingState}</strong>
                 <em>{cameraOperatingContext}</em>
               </div>
             </div>
-            <div className="axis-product-strip" aria-label="Axis product loop">
-              <button
-                aria-pressed={productSurface === "work"}
-                onClick={() => setProductSurface("work")}
-                type="button"
-              >
-                Work
-              </button>
-              <button
-                aria-pressed={productSurface === "film"}
-                onClick={() => setProductSurface("film")}
-                type="button"
-              >
-                Film
-              </button>
-              <button
-                aria-pressed={productSurface === "results"}
-                onClick={() => setProductSurface("results")}
-                type="button"
-              >
-                Results
-              </button>
-            </div>
           </section>
         ) : null}
 
-        {(showAxisDebug || productSurface === "work") ? (
         <section className="axis-ritual" aria-label="Work" data-state={ritualState}>
           {showAxisDebug ? <p className="axis-meta">Axis</p> : null}
           {save.activeSession ? (
@@ -4655,15 +4689,12 @@ export function RitualHome() {
               )}
               <div className="axis-complete-actions">
                 <button
-                  aria-expanded={showAxisDebug ? isReviewOpen : productSurface === "film"}
+                  aria-expanded={showAxisDebug ? isReviewOpen : true}
                   aria-controls="axis-session-review"
                   onClick={() => {
                     if (showAxisDebug) {
                       setIsReviewOpen((isOpen) => !isOpen);
-                      return;
                     }
-
-                    setProductSurface("film");
                   }}
                   type="button"
                 >
@@ -4679,9 +4710,8 @@ export function RitualHome() {
             </section>
           ) : null}
         </section>
-        ) : null}
 
-        {!showAxisDebug && productSurface === "results" && isDirectorMode ? (
+        {!showAxisDebug && isDirectorMode ? (
           <section className="axis-review-panel" aria-label="Organization results">
             <div className="axis-review-grid">
               <section className="axis-review-block axis-results-stage" aria-label="Director results">
@@ -4770,6 +4800,57 @@ export function RitualHome() {
                     latestSession.replayClips?.length ?? 0
                   } clips`}</em>
                 </div>
+                <section className="axis-film-strip" aria-label="Latest clips">
+                  <span>Highlights</span>
+                  <div>
+                    {latestClipAnchors.length ? (
+                      latestClipAnchors.map((anchor) => (
+                        <button
+                          className="axis-review-row"
+                          data-selected={selectedReplayAnchor?.eventId === anchor.eventId}
+                          key={anchor.eventId}
+                          onClick={() => jumpToReplayAnchor(anchor)}
+                          type="button"
+                        >
+                          <strong>{formatDuration(anchor.videoTimestamp)}</strong>
+                          <em>{formatHumanMomentLabel(anchor)}</em>
+                        </button>
+                      ))
+                    ) : (
+                      <article className="axis-review-row">
+                        <strong>--</strong>
+                        <em>Clips appear after recorded events</em>
+                      </article>
+                    )}
+                  </div>
+                </section>
+                {!showAxisDebug ? (
+                  <section className="axis-watch-surface" aria-label="Watch moments">
+                    <span>Watch</span>
+                    <div className="axis-watch-list">
+                      {filmWatchGroups.map((group) => {
+                        const anchors = getFilmAnchorsByType(latestFilmTimelineAnchors, group.type);
+                        const firstAnchor = anchors[0];
+
+                        return (
+                          <button
+                            className="axis-watch-button"
+                            data-active={Boolean(firstAnchor)}
+                            disabled={!firstAnchor}
+                            key={group.type}
+                            onClick={() => {
+                              if (firstAnchor) jumpToReplayAnchor(firstAnchor);
+                            }}
+                            type="button"
+                          >
+                            <strong>{group.label}</strong>
+                            <em>{anchors.length ? `${anchors.length} moments` : "None yet"}</em>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
                 {showAxisDebug ? (
                   <em>
                   {selectedReplayAnchor
@@ -4786,44 +4867,67 @@ export function RitualHome() {
                 <section className="axis-review-block axis-results-stage" aria-label="Results">
                   <span>Results</span>
                   <div className="axis-results-grid">
-                    <article>
-                      <strong>{formatDuration(latestSession.durationSeconds)}</strong>
-                      <em>Work Time</em>
-                    </article>
-                    <article>
-                      <strong>{`${latestReviewAnchors.length} moments`}</strong>
-                      <em>Film</em>
-                    </article>
-                    <article>
-                      <strong>{formatActivePeriod(latestSession)}</strong>
-                      <em>Most Active Period</em>
-                    </article>
-                    <article>
-                      <strong>{`${currentStreak} ${currentStreak === 1 ? "day" : "days"}`}</strong>
-                      <em>Streaks</em>
-                    </article>
-                    <article>
-                      <strong>{formatShotResults(latestSession.shotSummary)}</strong>
-                      <em>Shot Results</em>
-                    </article>
-                    <article>
-                      <strong>{`${latestShotAttempts.length} attempts`}</strong>
-                      <em>Shot Chart</em>
-                    </article>
-                    <article>
-                      <strong>{formatShotScience(latestSession.shotEvents?.[0]?.shotScience)}</strong>
-                      <em>Shot Science</em>
-                    </article>
-                    <article>
-                      <strong>
-                        {formatCount(
-                          latestSession.activeParticipantCount || latestSession.participantCount || 1,
-                          "athlete",
-                          "athletes",
-                        )}
-                      </strong>
-                      <em>Attendance</em>
-                    </article>
+                    {!showAxisDebug ? (
+                      <>
+                        <article>
+                          <strong>{latestSession.shotSummary?.makes ?? 0}</strong>
+                          <em>Makes</em>
+                        </article>
+                        <article>
+                          <strong>{latestSession.shotSummary?.misses ?? 0}</strong>
+                          <em>Misses</em>
+                        </article>
+                        <article>
+                          <strong>{`${latestSession.shotSummary?.fieldGoalPercentage ?? 0}%`}</strong>
+                          <em>FG%</em>
+                        </article>
+                        <article>
+                          <strong>{latestReboundCount}</strong>
+                          <em>Rebounds</em>
+                        </article>
+                      </>
+                    ) : (
+                      <>
+                        <article>
+                          <strong>{formatDuration(latestSession.durationSeconds)}</strong>
+                          <em>Work Time</em>
+                        </article>
+                        <article>
+                          <strong>{`${latestReviewAnchors.length} moments`}</strong>
+                          <em>Film</em>
+                        </article>
+                        <article>
+                          <strong>{formatActivePeriod(latestSession)}</strong>
+                          <em>Most Active Period</em>
+                        </article>
+                        <article>
+                          <strong>{`${currentStreak} ${currentStreak === 1 ? "day" : "days"}`}</strong>
+                          <em>Streaks</em>
+                        </article>
+                        <article>
+                          <strong>{formatShotResults(latestSession.shotSummary)}</strong>
+                          <em>Shot Results</em>
+                        </article>
+                        <article>
+                          <strong>{`${latestShotAttempts.length} attempts`}</strong>
+                          <em>Shot Chart</em>
+                        </article>
+                        <article>
+                          <strong>{formatShotScience(latestSession.shotEvents?.[0]?.shotScience)}</strong>
+                          <em>Shot Science</em>
+                        </article>
+                        <article>
+                          <strong>
+                            {formatCount(
+                              latestSession.activeParticipantCount || latestSession.participantCount || 1,
+                              "athlete",
+                              "athletes",
+                            )}
+                          </strong>
+                          <em>Attendance</em>
+                        </article>
+                      </>
+                    )}
                   </div>
                 </section>
               ) : null}
@@ -4889,7 +4993,7 @@ export function RitualHome() {
               </section>
               ) : null}
 
-              {shouldShowFilmSurface ? (
+              {showAxisDebug && shouldShowFilmSurface ? (
               <section className="axis-review-block" aria-label="Review moments">
                 <span>{showAxisDebug ? "Moments" : "Watch Film"}</span>
                 {showAxisDebug ? (

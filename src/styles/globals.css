@@ -350,40 +350,6 @@ h1 {
   text-transform: uppercase;
 }
 
-.axis-product-strip {
-  border: 1px solid var(--axis-line);
-  display: grid;
-  gap: 1px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.axis-product-strip button {
-  appearance: none;
-  background: rgba(244, 244, 240, 0.035);
-  border: 0;
-  color: var(--axis-muted);
-  cursor: pointer;
-  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  min-height: 2.35rem;
-  padding: 0.82rem 0.75rem;
-  text-align: center;
-  text-transform: uppercase;
-  touch-action: manipulation;
-}
-
-.axis-product-strip button[aria-pressed="true"] {
-  background: rgba(168, 217, 51, 0.08);
-  color: var(--axis-live);
-}
-
-.axis-product-strip button:focus-visible {
-  outline: 1px solid var(--axis-live);
-  outline-offset: -1px;
-}
-
 .axis-active-state strong,
 .axis-bridge-state strong,
 .axis-live-strip strong,
@@ -1118,6 +1084,61 @@ h1 {
   color: var(--axis-muted);
 }
 
+.axis-rim-tracking-overlay {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.axis-rim-track-box {
+  border: 1px solid rgba(244, 244, 240, 0.74);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(6, 6, 6, 0.34);
+  min-height: 1.6rem;
+  min-width: 2.6rem;
+  position: absolute;
+}
+
+.axis-rim-track-box::before {
+  background: rgba(168, 217, 51, 0.72);
+  content: "";
+  height: 1px;
+  left: 18%;
+  position: absolute;
+  right: 18%;
+  top: 50%;
+}
+
+.axis-rim-track-label {
+  background: rgba(6, 6, 6, 0.78);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  color: var(--axis-ink);
+  display: grid;
+  gap: 0.18rem;
+  left: 50%;
+  min-width: max-content;
+  padding: 0.34rem 0.42rem;
+  position: absolute;
+  top: 100%;
+  transform: translateX(-50%);
+}
+
+.axis-rim-track-label strong,
+.axis-rim-track-label span {
+  color: inherit;
+  font-size: 0.52rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  position: static;
+  text-transform: uppercase;
+}
+
+.axis-rim-track-label span {
+  color: var(--axis-muted);
+}
+
 .axis-outdoor-tracking-readout {
   background: rgba(6, 6, 6, 0.72);
   border: 1px solid rgba(244, 244, 240, 0.12);
@@ -1659,6 +1680,28 @@ h1 {
   text-transform: uppercase;
 }
 
+.axis-film-strip {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.55rem;
+}
+
+.axis-film-strip > span {
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.axis-film-strip > div {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+
 .axis-results-grid {
   display: grid;
   gap: 0.5rem;
@@ -1701,6 +1744,71 @@ h1 {
 .axis-watch-list {
   display: grid;
   gap: 0.6rem;
+}
+
+.axis-watch-surface {
+  border: 1px solid rgba(168, 217, 51, 0.18);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.55rem;
+}
+
+.axis-watch-surface > span {
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.axis-watch-surface .axis-watch-list {
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+}
+
+.axis-watch-button {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.025);
+  border: 1px solid var(--axis-line);
+  color: var(--axis-muted);
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 3.2rem;
+  padding: 0.58rem 0.65rem;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.axis-watch-button[data-active="true"] {
+  border-color: rgba(168, 217, 51, 0.38);
+  color: var(--axis-live);
+}
+
+.axis-watch-button:disabled {
+  cursor: default;
+}
+
+.axis-watch-button strong,
+.axis-watch-button em {
+  color: inherit;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-watch-button em {
+  color: var(--axis-muted);
+  font-size: 0.58rem;
+}
+
+.axis-watch-button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.18rem;
 }
 
 .axis-watch-group {
