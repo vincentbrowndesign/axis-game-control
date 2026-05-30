@@ -305,7 +305,65 @@ h1 {
 
 .axis-camera-home-preview {
   aspect-ratio: 4 / 5;
-  min-height: clamp(17rem, 58dvh, 32rem);
+  min-height: 70dvh;
+}
+
+.axis-primary-film-player {
+  background: var(--axis-bg);
+  display: block;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-film-event-overlay {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 5;
+}
+
+.axis-film-event-overlay button {
+  appearance: none;
+  background: rgba(6, 6, 6, 0.7);
+  border: 1px solid rgba(244, 244, 240, 0.16);
+  color: var(--axis-ink);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.45rem;
+  left: clamp(0.75rem, 2vw, 1rem);
+  min-height: 2rem;
+  padding: 0.42rem 0.54rem;
+  pointer-events: auto;
+  position: absolute;
+  touch-action: manipulation;
+}
+
+.axis-film-event-overlay button[data-selected="true"] {
+  border-color: rgba(168, 217, 51, 0.55);
+  color: var(--axis-live);
+}
+
+.axis-film-event-overlay strong,
+.axis-film-event-overlay em {
+  color: inherit;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-film-event-overlay em {
+  color: var(--axis-muted);
+}
+
+.axis-film-event-overlay button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.16rem;
 }
 
 .axis-camera-home-preview::after {
@@ -391,27 +449,6 @@ h1 {
   font-weight: 900;
 }
 
-.axis-camera-shot-feedback {
-  background: rgba(6, 6, 6, 0.58);
-  border: 1px solid rgba(168, 217, 51, 0.28);
-  left: clamp(0.65rem, 2vw, 1rem);
-  padding: 0.52rem 0.62rem;
-  position: absolute;
-  right: clamp(0.65rem, 2vw, 1rem);
-  top: clamp(4.25rem, 12vw, 5.3rem);
-  z-index: 3;
-}
-
-.axis-camera-shot-feedback strong {
-  color: var(--axis-live);
-  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: clamp(0.82rem, 3vw, 1.2rem);
-  font-weight: 900;
-  letter-spacing: 0.07em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 .axis-camera-control-overlay {
   align-items: end;
   bottom: clamp(0.65rem, 2vw, 1rem);
@@ -463,6 +500,147 @@ h1 {
 .axis-camera-primary-action:focus-visible {
   outline: 1px solid var(--axis-live);
   outline-offset: 0.16rem;
+}
+
+.axis-product-tabs {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-product-tabs button {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.026);
+  border: 0;
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-height: 2.35rem;
+  padding: 0.65rem 0.7rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-product-tabs button[aria-pressed="true"] {
+  background: rgba(168, 217, 51, 0.08);
+  color: var(--axis-live);
+}
+
+.axis-product-tabs button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: -1px;
+}
+
+.axis-tab-surface {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.55rem;
+}
+
+.axis-tab-row {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+}
+
+.axis-tab-row span {
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.55rem;
+  position: static;
+}
+
+.axis-tab-row em,
+.axis-tab-row strong {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-tab-row em {
+  color: var(--axis-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.axis-tab-row strong {
+  color: var(--axis-ink);
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.axis-results-summary {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.axis-results-summary header {
+  align-items: end;
+  border-block-end: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0.25rem 0.65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-block-end: 0.5rem;
+}
+
+.axis-results-summary header span,
+.axis-results-summary header em,
+.axis-results-summary-list em,
+.axis-results-summary-section em {
+  color: var(--axis-muted);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.axis-results-summary header span {
+  color: var(--axis-live);
+  grid-column: 1 / -1;
+}
+
+.axis-results-summary header strong,
+.axis-results-summary-list strong,
+.axis-results-summary-section strong {
+  color: var(--axis-ink);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.axis-results-summary header em {
+  justify-self: end;
+}
+
+.axis-results-summary-list {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.axis-results-summary-list span,
+.axis-results-summary-section {
+  align-items: baseline;
+  border-block-end: 1px solid rgba(244, 244, 240, 0.08);
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.05rem;
+  padding-block: 0.35rem;
+}
+
+.axis-results-summary-section {
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .axis-active-state strong,
