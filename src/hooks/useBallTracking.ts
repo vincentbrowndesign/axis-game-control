@@ -13,13 +13,27 @@ export type BallVelocity = {
 };
 
 export type BallTrackingState = {
+  confidence: number;
+  lostCount: number;
   position?: BallPosition;
+  recoveryCount: number;
+  status: "lost" | "recovered" | "tracked";
   trajectory: BallPosition[];
   velocity?: BallVelocity;
   visible: boolean;
+  boundingBox?: {
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  };
 };
 
 const defaultBallTrackingState: BallTrackingState = {
+  confidence: 0,
+  lostCount: 0,
+  recoveryCount: 0,
+  status: "lost",
   trajectory: [],
   visible: false,
 };
@@ -29,6 +43,7 @@ const sampleHeight = 90;
 const ballDetectionIntervalMs = 120;
 const minimumOrangePixels = 10;
 const maximumTrajectoryPoints = 18;
+const recoveredStateMs = 900;
 
 function isBasketballPixel(red: number, green: number, blue: number) {
   return red > 105 && green > 38 && green < 185 && blue < 130 && red > green * 1.08 && red > blue * 1.45;
@@ -81,6 +96,13 @@ function detectBasketball(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
   if (aspectRatio < 0.45 || aspectRatio > 2.2) return null;
 
   return {
+    boundingBox: {
+      height: height / sampleHeight,
+      width: width / sampleWidth,
+      x: minX / sampleWidth,
+      y: minY / sampleHeight,
+    },
+    confidence: Math.min(1, count / 90),
     position: {
       x: totalX / count / sampleWidth,
       y: totalY / count / sampleHeight,
@@ -92,6 +114,10 @@ export function useBallTracking(videoRef: RefObject<HTMLVideoElement | null>, en
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const previousPositionRef = useRef<BallPosition | null>(null);
   const previousTimestampRef = useRef<number | null>(null);
+  const previousVisibleRef = useRef(false);
+  const recoveredUntilRef = useRef(0);
+  const lostCountRef = useRef(0);
+  const recoveryCountRef = useRef(0);
   const trajectoryRef = useRef<BallPosition[]>([]);
   const [state, setState] = useState<BallTrackingState>(defaultBallTrackingState);
 
@@ -99,6 +125,10 @@ export function useBallTracking(videoRef: RefObject<HTMLVideoElement | null>, en
     if (!enabled) {
       previousPositionRef.current = null;
       previousTimestampRef.current = null;
+      previousVisibleRef.current = false;
+      recoveredUntilRef.current = 0;
+      lostCountRef.current = 0;
+      recoveryCountRef.current = 0;
       trajectoryRef.current = [];
       setState(defaultBallTrackingState);
       return;
@@ -119,10 +149,17 @@ export function useBallTracking(videoRef: RefObject<HTMLVideoElement | null>, en
         const detection = canvasRef.current ? detectBasketball(video, canvasRef.current) : null;
 
         if (!detection) {
+          if (previousVisibleRef.current) {
+            lostCountRef.current += 1;
+          }
           previousPositionRef.current = null;
           previousTimestampRef.current = timestamp;
+          previousVisibleRef.current = false;
           setState((current) => ({
             ...current,
+            confidence: 0,
+            lostCount: lostCountRef.current,
+            status: "lost",
             visible: false,
           }));
           animationFrame = requestAnimationFrame(detect);
@@ -144,11 +181,21 @@ export function useBallTracking(videoRef: RefObject<HTMLVideoElement | null>, en
               };
 
         trajectoryRef.current = [...trajectoryRef.current, detection.position].slice(-maximumTrajectoryPoints);
+        if (!previousVisibleRef.current) {
+          recoveryCountRef.current += 1;
+          recoveredUntilRef.current = timestamp + recoveredStateMs;
+        }
         previousPositionRef.current = detection.position;
         previousTimestampRef.current = timestamp;
+        previousVisibleRef.current = true;
 
         setState({
+          boundingBox: detection.boundingBox,
+          confidence: detection.confidence,
+          lostCount: lostCountRef.current,
           position: detection.position,
+          recoveryCount: recoveryCountRef.current,
+          status: timestamp <= recoveredUntilRef.current ? "recovered" : "tracked",
           trajectory: trajectoryRef.current,
           velocity,
           visible: true,

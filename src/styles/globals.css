@@ -618,6 +618,15 @@ h1 {
   text-transform: uppercase;
 }
 
+.axis-layer-value {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
 .axis-shot-bar div {
   display: grid;
   gap: 0.4rem;
@@ -992,6 +1001,12 @@ h1 {
   border-color: rgba(168, 217, 51, 0.95);
 }
 
+.axis-player-track-box-simple {
+  border-width: 1px;
+  min-height: 3rem;
+  min-width: 3rem;
+}
+
 .axis-player-track-label,
 .axis-player-track-metrics {
   background: rgba(6, 6, 6, 0.72);
@@ -1007,6 +1022,12 @@ h1 {
 
 .axis-player-track-label {
   top: 0;
+}
+
+.axis-player-track-label-simple {
+  background: rgba(6, 6, 6, 0.78);
+  gap: 0.2rem;
+  min-width: max-content;
 }
 
 .axis-player-track-metrics {
@@ -1028,8 +1049,72 @@ h1 {
   text-transform: uppercase;
 }
 
+.axis-player-track-label-simple span:nth-of-type(2) {
+  color: var(--axis-ink);
+}
+
+.axis-player-track-label-simple span:nth-of-type(3) {
+  color: var(--axis-muted);
+}
+
 .axis-player-track-box[data-status="lost"] .axis-player-track-label,
 .axis-player-track-box[data-status="lost"] .axis-player-track-metrics {
+  color: var(--axis-muted);
+}
+
+.axis-ball-tracking-overlay {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.axis-ball-track-box {
+  border: 1px solid rgba(244, 244, 240, 0.9);
+  border-radius: 999px;
+  min-height: 1.2rem;
+  min-width: 1.2rem;
+  position: absolute;
+}
+
+.axis-ball-track-box[data-status="lost"] {
+  border-color: rgba(244, 244, 240, 0.38);
+}
+
+.axis-ball-track-box[data-status="recovered"] {
+  border-color: rgba(168, 217, 51, 0.95);
+}
+
+.axis-ball-track-label {
+  background: rgba(6, 6, 6, 0.78);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  color: var(--axis-ink);
+  display: grid;
+  gap: 0.18rem;
+  left: 50%;
+  min-width: max-content;
+  padding: 0.34rem 0.42rem;
+  position: absolute;
+  top: 100%;
+  transform: translateX(-50%);
+}
+
+.axis-ball-track-label strong,
+.axis-ball-track-label span {
+  color: inherit;
+  font-size: 0.52rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  position: static;
+  text-transform: uppercase;
+}
+
+.axis-ball-track-label span {
+  color: var(--axis-muted);
+}
+
+.axis-ball-track-box[data-status="lost"] .axis-ball-track-label {
   color: var(--axis-muted);
 }
 

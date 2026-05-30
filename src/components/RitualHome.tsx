@@ -186,6 +186,16 @@ type ActionEventType = "assist" | "foul" | "rebound" | "turnover";
 type GameActionType = ActionEventType | ShotType;
 const gameActions: GameActionType[] = ["make", "miss", "rebound", "assist", "turnover", "foul"];
 
+type ShotScience = {
+  arc: number;
+  hangTime: number;
+  releaseAngle: number;
+  releaseHeight: number;
+  releaseSpeed: number;
+  shotDistance: number;
+  source: "single_camera_estimate";
+};
+
 type ShotEvent = {
   athleteId?: string;
   athleteName: string;
@@ -198,6 +208,7 @@ type ShotEvent = {
   suggestionId?: string;
   suggestionReason?: string;
   suggested?: boolean;
+  shotScience?: ShotScience;
   timestamp: string;
   trackId?: string;
   trackedTimeSeconds: number;
@@ -212,8 +223,15 @@ type ShotSuggestion = {
   id: string;
   reason: string;
   replayTimestamp: number;
+  shotScience?: ShotScience;
   timestamp: string;
   trackId?: string;
+};
+
+type PendingShotAttempt = ShotSuggestion & {
+  attemptId: string;
+  createdAtMs: number;
+  resultSaved: boolean;
 };
 
 type ShotSummary = {
@@ -225,6 +243,9 @@ type ShotSummary = {
 
 type ReplayEventType =
   | "assist"
+  | "ball_lost"
+  | "ball_recovered"
+  | "ball_visible"
   | "coach_voice"
   | "foul"
   | "left_frame"
@@ -233,15 +254,21 @@ type ReplayEventType =
   | "movement_spike"
   | "rebound"
   | "recovered"
+  | "shot_attempt"
   | "tracking_interruption"
   | "turnover";
-type TrackingReplayEventType = Exclude<ReplayEventType, ActionEventType | "coach_voice" | "make" | "miss">;
+type BallReplayEventType = "ball_lost" | "ball_recovered" | "ball_visible";
+type TrackingReplayEventType = Exclude<
+  ReplayEventType,
+  ActionEventType | BallReplayEventType | "coach_voice" | "make" | "miss" | "shot_attempt"
+>;
 
 type ReplayEvent = {
   athleteId?: string;
   athleteName: string;
   cameraDirection: CameraDirection;
   cameraId: string;
+  confidence?: number;
   id: string;
   label: string;
   movementDistance?: number;
@@ -456,6 +483,94 @@ function formatTrackingStatus(status: string) {
   return "TRACKING";
 }
 
+function formatPlayerTrackStatus(track: PlayerTrack) {
+  return track.status === "lost" ? "LOST" : "TRACKED";
+}
+
+function formatPlayerMovementState(track: PlayerTrack) {
+  return track.movement.moving ? "MOVING" : "IDLE";
+}
+
+function formatPlayerVisibilityState(track: PlayerTrack) {
+  return track.status === "lost" ? "NOT VISIBLE" : "VISIBLE";
+}
+
+function formatBallTrackStatus(ball: BallTrackingState) {
+  if (ball.status === "lost") return "BALL LOST";
+  if (ball.status === "recovered") return "BALL RECOVERED";
+
+  return "BALL";
+}
+
+function getPointDistance(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function getShotAttemptConfidence(track: PlayerTrack, ball: BallTrackingState) {
+  if (!ball.visible || !ball.position || !ball.velocity) return 0;
+
+  const hoop = { x: 0.5, y: 0.08 };
+  const ballToPlayer = getPointDistance(ball.position, track.location);
+  const ballToHoop = getPointDistance(ball.position, hoop);
+  const gather = ballToPlayer <= 0.24;
+  const shotMotion = track.movement.direction === "up" || ball.velocity.y < -0.12;
+  const ballRelease = ball.position.y < track.location.y && ball.velocity.y < -0.1;
+  const towardHoop = ball.velocity.y < -0.08 && ballToHoop < 0.78;
+
+  if (!gather || !shotMotion || !ballRelease) return 0;
+
+  return Math.min(
+    0.97,
+    0.42 +
+      ball.confidence * 0.22 +
+      (towardHoop ? 0.14 : 0) +
+      Math.min(0.12, Math.abs(ball.velocity.y) * 0.06) +
+      Math.min(0.07, track.movement.distanceTraveled * 1.2),
+  );
+}
+
+function getShotResultFromBall(ball: BallTrackingState) {
+  if (!ball.visible || !ball.position || !ball.velocity) return null;
+
+  const hoop = { x: 0.5, y: 0.08 };
+  const rimWindowX = Math.abs(ball.position.x - hoop.x);
+  const rimWindowY = Math.abs(ball.position.y - hoop.y);
+  const nearRim = rimWindowX <= 0.14 && rimWindowY <= 0.16;
+  const descendingNearRim = nearRim && ball.velocity.y > 0.02;
+
+  if (descendingNearRim) {
+    return {
+      confidence: Math.min(0.92, 0.56 + ball.confidence * 0.28 + Math.max(0, 0.08 - rimWindowX) * 1.2),
+      type: "make" as const,
+    };
+  }
+
+  return null;
+}
+
+function createShotScience(track: PlayerTrack | null, ball: BallTrackingState): ShotScience | undefined {
+  if (!ball.visible || !ball.position || !ball.velocity) return undefined;
+
+  const hoop = { x: 0.5, y: 0.08 };
+  const releaseSpeed = Math.hypot(ball.velocity.x, ball.velocity.y);
+  const releaseAngle = Math.round((Math.atan2(Math.max(0, -ball.velocity.y), Math.max(0.001, Math.abs(ball.velocity.x))) * 180) / Math.PI);
+  const releaseHeight = Math.round((1 - ball.position.y) * 100);
+  const shotDistance = Math.round(getPointDistance(track?.location ?? ball.position, hoop) * 50 * 10) / 10;
+  const highestPoint = ball.trajectory.length ? Math.min(...ball.trajectory.map((point) => point.y)) : ball.position.y;
+  const arc = Math.round(Math.max(0, ball.position.y - highestPoint) * 100);
+  const hangTime = Math.round(ball.trajectory.length * 0.12 * 10) / 10;
+
+  return {
+    arc,
+    hangTime,
+    releaseAngle,
+    releaseHeight,
+    releaseSpeed: Math.round(releaseSpeed * 100) / 100,
+    shotDistance,
+    source: "single_camera_estimate",
+  };
+}
+
 function getCameraId(direction: CameraDirection) {
   return `camera:${organizationSlug}:${direction}`;
 }
@@ -553,6 +668,7 @@ function normalizeReplayEvent(event: unknown): ReplayEvent | null {
     athleteName: typeof candidate.athleteName === "string" ? candidate.athleteName : "Athlete",
     cameraDirection,
     cameraId: typeof candidate.cameraId === "string" ? candidate.cameraId : getCameraId(cameraDirection),
+    confidence: typeof candidate.confidence === "number" ? candidate.confidence : undefined,
     id: candidate.id,
     label: typeof candidate.label === "string" ? candidate.label : "Replay event",
     movementDistance: typeof candidate.movementDistance === "number" ? candidate.movementDistance : undefined,
@@ -569,6 +685,9 @@ function normalizeReplayEvent(event: unknown): ReplayEvent | null {
     type:
       candidate.type === "left_frame" ||
       candidate.type === "assist" ||
+      candidate.type === "ball_lost" ||
+      candidate.type === "ball_recovered" ||
+      candidate.type === "ball_visible" ||
       candidate.type === "coach_voice" ||
       candidate.type === "foul" ||
       candidate.type === "make" ||
@@ -576,6 +695,7 @@ function normalizeReplayEvent(event: unknown): ReplayEvent | null {
       candidate.type === "movement_spike" ||
       candidate.type === "rebound" ||
       candidate.type === "recovered" ||
+      candidate.type === "shot_attempt" ||
       candidate.type === "tracking_interruption" ||
       candidate.type === "turnover"
         ? candidate.type
@@ -687,6 +807,28 @@ function normalizeShotEvent(event: unknown): ShotEvent | null {
   if (candidate.type !== "make" && candidate.type !== "miss") return null;
   if (typeof candidate.timestamp !== "string" || typeof candidate.sessionId !== "string") return null;
   const cameraDirection = normalizeCameraDirection(candidate.cameraDirection);
+  const shotScience =
+    candidate.shotScience && typeof candidate.shotScience === "object"
+      ? (candidate.shotScience as Partial<ShotScience>)
+      : undefined;
+  const normalizedShotScience =
+    shotScience &&
+    typeof shotScience.releaseAngle === "number" &&
+    typeof shotScience.releaseHeight === "number" &&
+    typeof shotScience.releaseSpeed === "number" &&
+    typeof shotScience.arc === "number" &&
+    typeof shotScience.shotDistance === "number" &&
+    typeof shotScience.hangTime === "number"
+      ? {
+          arc: shotScience.arc,
+          hangTime: shotScience.hangTime,
+          releaseAngle: shotScience.releaseAngle,
+          releaseHeight: shotScience.releaseHeight,
+          releaseSpeed: shotScience.releaseSpeed,
+          shotDistance: shotScience.shotDistance,
+          source: "single_camera_estimate" as const,
+        }
+      : undefined;
 
   return {
     athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
@@ -701,6 +843,7 @@ function normalizeShotEvent(event: unknown): ShotEvent | null {
     suggestionId: typeof candidate.suggestionId === "string" ? candidate.suggestionId : undefined,
     suggestionReason: typeof candidate.suggestionReason === "string" ? candidate.suggestionReason : undefined,
     suggested: Boolean(candidate.suggested),
+    shotScience: normalizedShotScience,
     timestamp: candidate.timestamp,
     trackId: typeof candidate.trackId === "string" ? candidate.trackId : undefined,
     trackedTimeSeconds: typeof candidate.trackedTimeSeconds === "number" ? candidate.trackedTimeSeconds : 0,
@@ -942,6 +1085,10 @@ function shouldCreateClip(anchor: ReplayAnchor) {
     anchor.eventType === "recovered" ||
     anchor.eventType === "identity_locked" ||
     anchor.eventType === "coach_voice" ||
+    anchor.eventType === "shot_attempt" ||
+    anchor.eventType === "ball_visible" ||
+    anchor.eventType === "ball_lost" ||
+    anchor.eventType === "ball_recovered" ||
     gameActions.includes(anchor.eventType as GameActionType)
   );
 }
@@ -1154,6 +1301,10 @@ function formatHumanMomentLabel(anchor: ReplayAnchor) {
   if (anchor.eventType === "assist") return "Assist";
   if (anchor.eventType === "turnover") return "Turnover";
   if (anchor.eventType === "foul") return "Foul";
+  if (anchor.eventType === "shot_attempt") return "Shot attempt";
+  if (anchor.eventType === "ball_visible") return "Ball visible";
+  if (anchor.eventType === "ball_lost") return "Ball lost";
+  if (anchor.eventType === "ball_recovered") return "Ball recovered";
   if (anchor.eventType === "coach_voice") return "Coach note";
   if (anchor.eventType === "recovered") return "Back in view";
   if (anchor.eventType === "left_frame") return "Left frame";
@@ -1172,6 +1323,10 @@ function shouldShowFilmTimelineAnchor(anchor: ReplayAnchor) {
     anchor.eventType === "possession" ||
     anchor.eventType === "foul" ||
     anchor.eventType === "turnover" ||
+    anchor.eventType === "shot_attempt" ||
+    anchor.eventType === "ball_visible" ||
+    anchor.eventType === "ball_lost" ||
+    anchor.eventType === "ball_recovered" ||
     anchor.eventType === "coach_voice"
   );
 }
@@ -1230,7 +1385,17 @@ function formatTrackingTimelineEvent(sample: SessionTimelineSample) {
 }
 
 function formatShotEvent(event: ShotEvent) {
-  return `${formatDuration(event.replayTimestamp)} / ${event.athleteName} / ${event.cameraDirection} camera`;
+  const science = event.shotScience
+    ? ` / ${event.shotScience.releaseAngle} deg / ${event.shotScience.shotDistance} ft`
+    : "";
+
+  return `${formatDuration(event.replayTimestamp)} / ${event.athleteName} / ${event.cameraDirection} camera${science}`;
+}
+
+function formatShotScience(science?: ShotScience) {
+  if (!science) return "Shot science waiting";
+
+  return `${science.releaseAngle} deg / ${science.releaseHeight}% high / ${science.releaseSpeed} speed / ${science.arc}% arc / ${science.shotDistance} ft / ${science.hangTime}s`;
 }
 
 function normalizeRawMeasurements(raw: unknown, fallback: SessionRawMeasurements): SessionRawMeasurements {
@@ -1658,9 +1823,16 @@ export function RitualHome() {
     totalDistanceTraveled: 0,
   });
   const latestBallTrackingRef = useRef<BallTrackingState>({
+    confidence: 0,
+    lostCount: 0,
+    recoveryCount: 0,
+    status: "lost",
     trajectory: [],
     visible: false,
   });
+  const previousBallEventStateRef = useRef<"lost" | "tracked" | null>(null);
+  const lastShotAttemptAtRef = useRef(0);
+  const pendingShotAttemptRef = useRef<PendingShotAttempt | null>(null);
   const filmChunksRef = useRef<Blob[]>([]);
   const filmRecorderRef = useRef<MediaRecorder | null>(null);
   const filmRecordingSessionIdRef = useRef<string | null>(null);
@@ -2005,13 +2177,14 @@ export function RitualHome() {
     Boolean(calibrationEvidence?.athlete_id && calibrationEvidence.athlete_id === selectedCalibrationAthlete?.id) ||
     selectedAthleteCalibrationStatus === "calibrated" ||
     identityLocked;
+  const isVisionTrackingEnabled = cameraState === "attached" && Boolean(cameraStream) && Boolean(save.activeSession);
   const personDetection = usePersonDetection(
     cameraPreviewRef,
-    activeView === "camera" && cameraState === "attached" && Boolean(cameraStream),
+    isVisionTrackingEnabled,
   );
   const ballTracking = useBallTracking(
     cameraPreviewRef,
-    activeView === "camera" && cameraState === "attached" && Boolean(cameraStream),
+    isVisionTrackingEnabled,
   );
   const latestPersonDetectionRef = useRef(personDetection);
   const athleteDetected = personDetection.visiblePeople === 1;
@@ -2055,6 +2228,7 @@ export function RitualHome() {
   const latestReviewAnchors = latestSession?.replayAnchors?.slice(0, 6) ?? [];
   const latestFilmTimelineAnchors = latestSession?.replayAnchors?.filter(shouldShowFilmTimelineAnchor) ?? [];
   const latestReviewClips = latestSession?.replayClips?.slice(0, 4) ?? [];
+  const latestShotAttempts = latestSession?.replayAnchors?.filter((anchor) => anchor.eventType === "shot_attempt") ?? [];
   const latestSessionReview = latestSession?.review;
   const latestFilmPlaybackId = getFilmPlaybackId(latestSession);
   const latestFilmPreviewUrl = latestSession ? filmPreviewUrls[latestSession.id] : undefined;
@@ -2138,17 +2312,89 @@ export function RitualHome() {
   }, [ballTracking]);
 
   useEffect(() => {
+    if (!save.activeSession || !isVisionTrackingEnabled) {
+      previousBallEventStateRef.current = null;
+      return;
+    }
+
+    const nextBallState = ballTracking.visible ? "tracked" : "lost";
+    const previousBallState = previousBallEventStateRef.current;
+
+    if (previousBallState === nextBallState) return;
+
+    previousBallEventStateRef.current = nextBallState;
+
+    if (previousBallState === null && nextBallState === "lost") return;
+
+    const eventType: ReplayEventType =
+      nextBallState === "tracked"
+        ? previousBallState === "lost"
+          ? "ball_recovered"
+          : "ball_visible"
+        : "ball_lost";
+    const timestamp = new Date().toISOString();
+    const label =
+      eventType === "ball_lost" ? "Ball lost" : eventType === "ball_recovered" ? "Ball recovered" : "Ball visible";
+    const cameraDirection = savedCameraDirection;
+
+    setSave((currentSave) => {
+      if (!currentSave.activeSession) return currentSave;
+
+      const replayEvent: ReplayEvent = {
+        athleteName: "Ball",
+        cameraDirection,
+        cameraId: getCameraId(cameraDirection),
+        id: `replay:${timestamp}:${eventType}`,
+        label,
+        timestamp,
+        trackState: {
+          status: eventType === "ball_lost" ? "interrupted" : eventType === "ball_recovered" ? "recovered" : "tracked",
+          tracked: ballTracking.visible,
+          visible: ballTracking.visible,
+        },
+        type: eventType,
+      };
+      const replayAnchor = createReplayAnchor(
+        replayEvent.id,
+        replayEvent.type,
+        replayEvent.timestamp,
+        currentSave.activeSession.id,
+        currentSave.activeSession.startedAt,
+        currentSave.activeSession.muxAssetId,
+        replayEvent.label,
+        {
+          cameraDirection: replayEvent.cameraDirection,
+          cameraId: replayEvent.cameraId,
+        },
+      );
+      const nextSave = {
+        ...currentSave,
+        activeSession: {
+          ...currentSave.activeSession,
+          replayAnchors: [...(currentSave.activeSession.replayAnchors ?? []), replayAnchor],
+          replayEvents: [...(currentSave.activeSession.replayEvents ?? []), replayEvent],
+        },
+      };
+
+      writeSave(nextSave);
+      return nextSave;
+    });
+  }, [ballTracking.visible, isVisionTrackingEnabled, save.activeSession, savedCameraDirection]);
+
+  useEffect(() => {
     if (!save.activeSession || !primaryTrackingTrack || primaryTrackingTrack.status === "lost") {
       setShotSuggestion(null);
       return;
     }
 
+    const attemptConfidence = getShotAttemptConfidence(primaryTrackingTrack, ballTracking);
     const movement = primaryTrackingTrack.movement;
     const isLikelyShotMotion =
-      movement.moving &&
-      movement.direction === "up" &&
-      movement.distanceTraveled >= 0.035 &&
-      primaryTrackingTrack.visibleTimeMs >= 900;
+      attemptConfidence >= 0.62 ||
+      (movement.moving &&
+        movement.direction === "up" &&
+        movement.distanceTraveled >= 0.035 &&
+        primaryTrackingTrack.visibleTimeMs >= 900);
 
     if (!isLikelyShotMotion) return;
 
@@ -2166,15 +2412,79 @@ export function RitualHome() {
       0,
       Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000),
     );
+    const shotScience = createShotScience(primaryTrackingTrack, ballTracking);
 
     lastShotSuggestionAtRef.current = nowMs;
+    if (attemptConfidence >= 0.62 && nowMs - lastShotAttemptAtRef.current >= 4500) {
+      const timestamp = new Date(nowMs).toISOString();
+      const attemptId = `shot-attempt:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`;
+      const replayEvent: ReplayEvent = {
+        athleteId: athlete.id,
+        athleteName: athlete.name,
+        cameraDirection: savedCameraDirection,
+        cameraId: getCameraId(savedCameraDirection),
+        confidence: attemptConfidence,
+        id: `replay:${timestamp}:shot_attempt:${primaryTrackingTrack.id}`,
+        label: "Shot attempt",
+        timestamp,
+        trackState: {
+          status: "tracked",
+          trackId: primaryTrackingTrack.id,
+          tracked: true,
+          visible: true,
+        },
+        type: "shot_attempt",
+      };
+      const replayAnchor = createReplayAnchor(
+        replayEvent.id,
+        replayEvent.type,
+        replayEvent.timestamp,
+        save.activeSession.id,
+        save.activeSession.startedAt,
+        save.activeSession.muxAssetId,
+        replayEvent.label,
+        {
+          athleteId: replayEvent.athleteId,
+          athleteName: replayEvent.athleteName,
+          cameraDirection: replayEvent.cameraDirection,
+          cameraId: replayEvent.cameraId,
+        },
+      );
+      const nextSave = {
+        ...save,
+        activeSession: {
+          ...save.activeSession,
+          replayAnchors: [...(save.activeSession.replayAnchors ?? []), replayAnchor],
+          replayEvents: [...(save.activeSession.replayEvents ?? []), replayEvent],
+        },
+      };
+
+      lastShotAttemptAtRef.current = nowMs;
+      pendingShotAttemptRef.current = {
+        athleteId: athlete.id,
+        athleteName: athlete.name,
+        attemptId,
+        confidence: attemptConfidence,
+        createdAtMs: nowMs,
+        id: attemptId,
+        reason: "Shot attempt",
+        replayTimestamp,
+        resultSaved: false,
+        shotScience,
+        timestamp,
+        trackId: primaryTrackingTrack.id,
+      };
+      writeSave(nextSave);
+      setSave(nextSave);
+    }
     setShotSuggestion({
       athleteId: athlete.id,
       athleteName: athlete.name,
-      confidence: Math.min(0.96, 0.72 + movement.distanceTraveled * 3),
+      confidence: Math.max(attemptConfidence, Math.min(0.96, 0.72 + movement.distanceTraveled * 3)),
       id: `shot-suggestion:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`,
-      reason: "Upward shooting motion",
+      reason: attemptConfidence >= 0.62 ? "Ball release" : "Upward shooting motion",
       replayTimestamp,
+      shotScience: shotScience ?? createShotScience(primaryTrackingTrack, ballTracking),
       timestamp: new Date(nowMs).toISOString(),
       trackId: primaryTrackingTrack.id,
     });
@@ -2188,8 +2498,50 @@ export function RitualHome() {
     primaryTrackingTrack?.status,
     primaryTrackingTrack?.visibleTimeMs,
     save.activeSession,
+    savedCameraDirection,
     selectedCalibrationAthlete,
     presentParticipants,
+    ballTracking,
+    ballTracking.confidence,
+    ballTracking.position,
+    ballTracking.velocity,
+    ballTracking.visible,
+  ]);
+
+  useEffect(() => {
+    if (!save.activeSession || !pendingShotAttemptRef.current || pendingShotAttemptRef.current.resultSaved) return;
+
+    const pendingAttempt = pendingShotAttemptRef.current;
+    const nowMs = Date.now();
+    const automaticResult = getShotResultFromBall(ballTracking);
+    const timedOut = nowMs - pendingAttempt.createdAtMs >= 2600;
+
+    if (!automaticResult && !timedOut) return;
+
+    const resultType: ShotType = automaticResult?.type ?? "miss";
+    const confidence = automaticResult?.confidence ?? Math.max(0.52, pendingAttempt.confidence - 0.16);
+    pendingShotAttemptRef.current = {
+      ...pendingAttempt,
+      resultSaved: true,
+    };
+
+    recordShot(resultType, {
+      athleteId: pendingAttempt.athleteId,
+      athleteName: pendingAttempt.athleteName,
+      confidence,
+      id: `${pendingAttempt.attemptId}:${resultType}`,
+      reason: automaticResult ? "Ball crossed rim area" : "Shot attempt ended",
+      replayTimestamp: Math.max(0, Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000)),
+      shotScience: pendingAttempt.shotScience ?? createShotScience(primaryTrackingTrack, ballTracking),
+      timestamp: new Date(nowMs).toISOString(),
+      trackId: pendingAttempt.trackId,
+    });
+  }, [
+    ballTracking.confidence,
+    ballTracking.position,
+    ballTracking.velocity,
+    ballTracking.visible,
+    save.activeSession,
   ]);
 
   useEffect(() => {
@@ -3278,6 +3630,7 @@ export function RitualHome() {
       suggestionId: suggestion?.id,
       suggestionReason: suggestion?.reason,
       suggested: Boolean(suggestion),
+      shotScience: suggestion?.shotScience ?? createShotScience(activeTrack, ballTracking),
       timestamp,
       trackId: suggestion?.trackId ?? activeTrack?.id,
       trackedTimeSeconds: activeTrack ? activeTrack.visibleTimeMs / 1000 : 0,
@@ -3663,6 +4016,51 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-preview-large" data-state={cameraState}>
               <video aria-label="Live camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera offline</span>}
+              {!showAxisDebug && personDetection.tracks.length ? (
+                <div className="axis-player-tracking-overlay axis-player-tracking-overlay-live" aria-label="Player tracking">
+                  {personDetection.tracks.map((track) => (
+                    <div
+                      className="axis-player-track-box axis-player-track-box-simple"
+                      data-status={track.status}
+                      key={track.id}
+                      style={{
+                        height: `${track.boundingBox.height * 100}%`,
+                        left: `${track.boundingBox.x * 100}%`,
+                        top: `${track.boundingBox.y * 100}%`,
+                        width: `${track.boundingBox.width * 100}%`,
+                      }}
+                    >
+                      <div className="axis-player-track-label axis-player-track-label-simple">
+                        <strong>{track.id}</strong>
+                        <span>{formatPlayerTrackStatus(track)}</span>
+                        <span>{formatPlayerMovementState(track)}</span>
+                        <span>{formatPlayerVisibilityState(track)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {!showAxisDebug && ballTracking.boundingBox ? (
+                <div className="axis-ball-tracking-overlay" aria-label="Ball tracking">
+                  <div
+                    className="axis-ball-track-box"
+                    data-status={ballTracking.status}
+                    style={{
+                      height: `${ballTracking.boundingBox.height * 100}%`,
+                      left: `${ballTracking.boundingBox.x * 100}%`,
+                      top: `${ballTracking.boundingBox.y * 100}%`,
+                      width: `${ballTracking.boundingBox.width * 100}%`,
+                    }}
+                  >
+                    <div className="axis-ball-track-label">
+                      <strong>{formatBallTrackStatus(ballTracking)}</strong>
+                      <span>{`${Math.round(ballTracking.confidence * 100)}%`}</span>
+                      <span>{`LOST ${ballTracking.lostCount}`}</span>
+                      <span>{`RECOVERED ${ballTracking.recoveryCount}`}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               {showAxisDebug ? (
                 <div className="axis-player-tracking-overlay" aria-label="Player tracking overlay">
                   {personDetection.tracks.map((track) => (
@@ -3977,6 +4375,51 @@ export function RitualHome() {
             <div className="axis-camera-preview axis-camera-home-preview" data-state={cameraStream ? "attached" : "offline"}>
               <video aria-label="Camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               {cameraStream ? null : <span>Camera</span>}
+              {isVisionTrackingEnabled && personDetection.tracks.length ? (
+                <div className="axis-player-tracking-overlay axis-player-tracking-overlay-live" aria-label="Player tracking">
+                  {personDetection.tracks.map((track) => (
+                    <div
+                      className="axis-player-track-box axis-player-track-box-simple"
+                      data-status={track.status}
+                      key={track.id}
+                      style={{
+                        height: `${track.boundingBox.height * 100}%`,
+                        left: `${track.boundingBox.x * 100}%`,
+                        top: `${track.boundingBox.y * 100}%`,
+                        width: `${track.boundingBox.width * 100}%`,
+                      }}
+                    >
+                      <div className="axis-player-track-label axis-player-track-label-simple">
+                        <strong>{track.id}</strong>
+                        <span>{formatPlayerTrackStatus(track)}</span>
+                        <span>{formatPlayerMovementState(track)}</span>
+                        <span>{formatPlayerVisibilityState(track)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {isVisionTrackingEnabled && ballTracking.boundingBox ? (
+                <div className="axis-ball-tracking-overlay" aria-label="Ball tracking">
+                  <div
+                    className="axis-ball-track-box"
+                    data-status={ballTracking.status}
+                    style={{
+                      height: `${ballTracking.boundingBox.height * 100}%`,
+                      left: `${ballTracking.boundingBox.x * 100}%`,
+                      top: `${ballTracking.boundingBox.y * 100}%`,
+                      width: `${ballTracking.boundingBox.width * 100}%`,
+                    }}
+                  >
+                    <div className="axis-ball-track-label">
+                      <strong>{formatBallTrackStatus(ballTracking)}</strong>
+                      <span>{`${Math.round(ballTracking.confidence * 100)}%`}</span>
+                      <span>{`LOST ${ballTracking.lostCount}`}</span>
+                      <span>{`RECOVERED ${ballTracking.recoveryCount}`}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="axis-camera-os-overlay" aria-label="Camera status">
                 <strong>{cameraOperatingState}</strong>
                 <em>{cameraOperatingContext}</em>
@@ -4170,6 +4613,11 @@ export function RitualHome() {
           {ritualState === "active" ? (
             <section className="axis-shot-bar" aria-label="Shot confirmation">
               <span>{shotActionLabel}</span>
+              <p className="axis-layer-value">
+                {`Player ${primaryTrackingTrack?.status !== "lost" ? "tracked" : "waiting"} / Ball ${
+                  ballTracking.visible ? "tracked" : "waiting"
+                } / Shot ${shotSuggestion ? "detected" : "waiting"}`}
+              </p>
               <div>
                 {visibleWorkActions.map((action) => (
                   <button
@@ -4318,9 +4766,9 @@ export function RitualHome() {
                 )}
                 <div className="axis-film-meta" aria-label="Latest film">
                   <strong>Latest Film</strong>
-                  <em>{`${latestFilmAvailability} / ${formatDuration(latestSession.durationSeconds)} / ${formatTime(
-                    latestSession.endedAt,
-                  )}`}</em>
+                  <em>{`${latestFilmAvailability} / ${latestFilmTimelineAnchors.length} anchors / ${
+                    latestSession.replayClips?.length ?? 0
+                  } clips`}</em>
                 </div>
                 {showAxisDebug ? (
                   <em>
@@ -4357,6 +4805,14 @@ export function RitualHome() {
                     <article>
                       <strong>{formatShotResults(latestSession.shotSummary)}</strong>
                       <em>Shot Results</em>
+                    </article>
+                    <article>
+                      <strong>{`${latestShotAttempts.length} attempts`}</strong>
+                      <em>Shot Chart</em>
+                    </article>
+                    <article>
+                      <strong>{formatShotScience(latestSession.shotEvents?.[0]?.shotScience)}</strong>
+                      <em>Shot Science</em>
                     </article>
                     <article>
                       <strong>
