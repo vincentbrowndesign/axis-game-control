@@ -2,7 +2,7 @@
 
 import MuxPlayer from "@mux/mux-player-react/lazy";
 import * as tus from "tus-js-client";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { type BallTrackingState, useBallTracking } from "../hooks/useBallTracking";
 import { type PlayerTrack, usePersonDetection } from "../hooks/usePersonDetection";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase-browser";
@@ -106,6 +106,8 @@ const sessionExportLabels: Record<SessionExportType, string> = {
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
+const highConfidenceShotThreshold = 0.62;
+const lowConfidenceShotThreshold = 0.46;
 const showAxisDebug = process.env.NEXT_PUBLIC_AXIS_DEBUG === "true";
 const defaultDetectionDebug: DetectionDebug = {
   athleteMatchedName: null,
@@ -137,6 +139,7 @@ type SavedSession = {
   muxAssetId?: string;
   muxPlaybackId?: string;
   thumbnailUrl?: string;
+  rimLock?: RimLock;
   participationWindow?: ParticipationWindow;
   clipContinuityContext?: ClipContinuityContext;
   participants?: SessionParticipant[];
@@ -242,6 +245,23 @@ type BallTimelineSample = {
   visible: boolean;
 };
 
+type RimLock = {
+  cameraDirection: CameraDirection;
+  center: {
+    x: number;
+    y: number;
+  };
+  createdAt: string;
+  height: number;
+  id: string;
+  polygon: Array<{
+    x: number;
+    y: number;
+  }>;
+  sessionId: string;
+  width: number;
+};
+
 type ShotType = "make" | "miss";
 type ActionEventType = "assist" | "block" | "foul" | "rebound" | "steal" | "turnover";
 type GameActionType = ActionEventType | ShotType;
@@ -318,20 +338,31 @@ type ShotScience = {
 
 type ShotEvent = {
   attemptNumber: number;
+  apexFrame: number;
+  arcHeight: number;
   athleteId?: string;
   athleteName: string;
   cameraDirection: CameraDirection;
   cameraId: string;
+  distance: number;
+  entryAngle: number;
+  flightTime: number;
   makeStreak: number;
   movementState: "moving" | "stationary" | "unknown";
   replayTimestamp: number;
+  releaseFrame: number;
+  releaseTime: number;
+  resultFrame: number;
+  rimFrame: number;
   sessionId: string;
+  shotId: string;
   suggestionConfidence?: number;
   suggestionId?: string;
   suggestionReason?: string;
   suggested?: boolean;
   shotScience?: ShotScience;
   shotEndTimestamp: string;
+  startFrame: number;
   shotStartTimestamp: string;
   timestamp: string;
   trackId?: string;
@@ -345,8 +376,10 @@ type ShotSuggestion = {
   athleteName: string;
   confidence: number;
   id: string;
+  needsConfirmation?: boolean;
   reason: string;
   replayTimestamp: number;
+  shotId: string;
   shotScience?: ShotScience;
   timestamp: string;
   trackId?: string;
@@ -664,6 +697,7 @@ type AxisSave = {
     muxAssetId?: string;
     muxPlaybackId?: string;
     thumbnailUrl?: string;
+    rimLock?: RimLock;
     calibrationRecords?: CalibrationEvidence[];
     participationWindow?: ParticipationWindow;
     clipContinuityContext?: ClipContinuityContext;
@@ -777,10 +811,44 @@ function getPointDistance(a: { x: number; y: number }, b: { x: number; y: number
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function getShotAttemptConfidence(track: PlayerTrack, ball: BallTrackingState) {
+function getRimTarget(rimLock?: RimLock | null) {
+  return rimLock
+    ? {
+        height: rimLock.height,
+        width: rimLock.width,
+        x: rimLock.center.x,
+        y: rimLock.center.y,
+      }
+    : {
+        height: rimGuideBox.height,
+        width: rimGuideBox.width,
+        x: rimGuideBox.x + rimGuideBox.width / 2,
+        y: rimGuideBox.y + rimGuideBox.height / 2,
+      };
+}
+
+function getRimProbability(ball: BallTrackingState, rimLock?: RimLock | null) {
   if (!ball.visible || !ball.position || !ball.velocity) return 0;
 
-  const hoop = { x: 0.5, y: 0.08 };
+  const rim = getRimTarget(rimLock);
+  const horizontalWindow = Math.max(0.08, rim.width * 0.75);
+  const verticalWindow = Math.max(0.08, rim.height * 1.1);
+  const rimWindowX = Math.abs(ball.position.x - rim.x);
+  const rimWindowY = Math.abs(ball.position.y - rim.y);
+  const nearRim = rimWindowX <= horizontalWindow && rimWindowY <= verticalWindow;
+  const descendingNearRim = nearRim && ball.velocity.y > 0.02;
+
+  if (!descendingNearRim) return 0;
+
+  const centerScore = Math.max(0, 1 - rimWindowX / horizontalWindow) * 0.54 + Math.max(0, 1 - rimWindowY / verticalWindow) * 0.24;
+
+  return Math.min(0.96, 0.18 + ball.confidence * 0.22 + centerScore);
+}
+
+function getShotAttemptConfidence(track: PlayerTrack, ball: BallTrackingState, rimLock?: RimLock | null) {
+  if (!ball.visible || !ball.position || !ball.velocity) return 0;
+
+  const hoop = getRimTarget(rimLock);
   const ballToPlayer = getPointDistance(ball.position, track.location);
   const ballToHoop = getPointDistance(ball.position, hoop);
   const gather = ballToPlayer <= 0.24;
@@ -800,18 +868,18 @@ function getShotAttemptConfidence(track: PlayerTrack, ball: BallTrackingState) {
   );
 }
 
-function getShotResultFromBall(ball: BallTrackingState) {
+function getShotResultFromBall(ball: BallTrackingState, rimLock?: RimLock | null) {
   if (!ball.visible || !ball.position || !ball.velocity) return null;
 
-  const hoop = { x: 0.5, y: 0.08 };
-  const rimWindowX = Math.abs(ball.position.x - hoop.x);
-  const rimWindowY = Math.abs(ball.position.y - hoop.y);
-  const nearRim = rimWindowX <= 0.14 && rimWindowY <= 0.16;
+  const rim = getRimTarget(rimLock);
+  const rimWindowX = Math.abs(ball.position.x - rim.x);
+  const rimWindowY = Math.abs(ball.position.y - rim.y);
+  const nearRim = rimWindowX <= Math.max(0.08, rim.width * 0.75) && rimWindowY <= Math.max(0.08, rim.height * 1.1);
   const descendingNearRim = nearRim && ball.velocity.y > 0.02;
 
   if (descendingNearRim) {
     return {
-      confidence: Math.min(0.92, 0.56 + ball.confidence * 0.28 + Math.max(0, 0.08 - rimWindowX) * 1.2),
+      confidence: getRimProbability(ball, rimLock),
       type: "make" as const,
     };
   }
@@ -858,10 +926,10 @@ function createShotPhaseReplayEvent(
   };
 }
 
-function createShotScience(track: PlayerTrack | null, ball: BallTrackingState): ShotScience | undefined {
+function createShotScience(track: PlayerTrack | null, ball: BallTrackingState, rimLock?: RimLock | null): ShotScience | undefined {
   if (!ball.visible || !ball.position || !ball.velocity) return undefined;
 
-  const hoop = { x: 0.5, y: 0.08 };
+  const hoop = getRimTarget(rimLock);
   const trajectory = ball.trajectory.length ? ball.trajectory : [ball.position];
   const releaseFrame = 0;
   const apexFrame = trajectory.reduce(
@@ -1234,21 +1302,85 @@ function normalizeShotEvent(event: unknown): ShotEvent | null {
 
   return {
     attemptNumber: typeof candidate.attemptNumber === "number" ? candidate.attemptNumber : 1,
+    apexFrame:
+      typeof candidate.apexFrame === "number"
+        ? candidate.apexFrame
+        : typeof normalizedShotScience?.apexFrame === "number"
+          ? normalizedShotScience.apexFrame
+          : 0,
+    arcHeight:
+      typeof candidate.arcHeight === "number"
+        ? candidate.arcHeight
+        : typeof normalizedShotScience?.arcHeightFeet === "number"
+          ? normalizedShotScience.arcHeightFeet
+          : 0,
     athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
     athleteName: typeof candidate.athleteName === "string" ? candidate.athleteName : "Athlete",
     cameraDirection,
     cameraId: typeof candidate.cameraId === "string" ? candidate.cameraId : getCameraId(cameraDirection),
+    distance:
+      typeof candidate.distance === "number"
+        ? candidate.distance
+        : typeof normalizedShotScience?.shotDistance === "number"
+          ? normalizedShotScience.shotDistance
+          : 0,
+    entryAngle:
+      typeof candidate.entryAngle === "number"
+        ? candidate.entryAngle
+        : typeof normalizedShotScience?.entryAngle === "number"
+          ? normalizedShotScience.entryAngle
+          : 0,
+    flightTime:
+      typeof candidate.flightTime === "number"
+        ? candidate.flightTime
+        : typeof normalizedShotScience?.flightTime === "number"
+          ? normalizedShotScience.flightTime
+          : 0,
     makeStreak: typeof candidate.makeStreak === "number" ? candidate.makeStreak : 0,
     movementState:
       candidate.movementState === "moving" || candidate.movementState === "stationary" ? candidate.movementState : "unknown",
     replayTimestamp: typeof candidate.replayTimestamp === "number" ? candidate.replayTimestamp : 0,
+    releaseFrame:
+      typeof candidate.releaseFrame === "number"
+        ? candidate.releaseFrame
+        : typeof normalizedShotScience?.releaseFrame === "number"
+          ? normalizedShotScience.releaseFrame
+          : 0,
+    releaseTime:
+      typeof candidate.releaseTime === "number"
+        ? candidate.releaseTime
+        : typeof normalizedShotScience?.releaseTime === "number"
+          ? normalizedShotScience.releaseTime
+          : 0,
+    resultFrame:
+      typeof candidate.resultFrame === "number"
+        ? candidate.resultFrame
+        : typeof normalizedShotScience?.shotEndFrame === "number"
+          ? normalizedShotScience.shotEndFrame
+          : 0,
+    rimFrame:
+      typeof candidate.rimFrame === "number"
+        ? candidate.rimFrame
+        : typeof normalizedShotScience?.rimEntryFrame === "number"
+          ? normalizedShotScience.rimEntryFrame
+          : 0,
     sessionId: candidate.sessionId,
+    shotId:
+      typeof candidate.shotId === "string"
+        ? candidate.shotId
+        : `shot:${candidate.sessionId}:${candidate.timestamp}`,
     suggestionConfidence: typeof candidate.suggestionConfidence === "number" ? candidate.suggestionConfidence : undefined,
     suggestionId: typeof candidate.suggestionId === "string" ? candidate.suggestionId : undefined,
     suggestionReason: typeof candidate.suggestionReason === "string" ? candidate.suggestionReason : undefined,
     suggested: Boolean(candidate.suggested),
     shotScience: normalizedShotScience,
     shotEndTimestamp: typeof candidate.shotEndTimestamp === "string" ? candidate.shotEndTimestamp : candidate.timestamp,
+    startFrame:
+      typeof candidate.startFrame === "number"
+        ? candidate.startFrame
+        : typeof normalizedShotScience?.shotStartFrame === "number"
+          ? normalizedShotScience.shotStartFrame
+          : 0,
     shotStartTimestamp: typeof candidate.shotStartTimestamp === "string" ? candidate.shotStartTimestamp : candidate.timestamp,
     timestamp: candidate.timestamp,
     trackId: typeof candidate.trackId === "string" ? candidate.trackId : undefined,
@@ -2108,6 +2240,18 @@ function formatShotScienceEntry(science?: ShotScience) {
   return `${science.entryAngle}\u00b0 entry`;
 }
 
+function formatShotScienceDistance(science?: ShotScience) {
+  if (!science) return "--";
+
+  return `${science.shotDistance.toFixed(0)} ft distance`;
+}
+
+function formatShotConfidence(confidence?: number) {
+  if (typeof confidence !== "number" || !Number.isFinite(confidence)) return "-- confidence";
+
+  return `${Math.round(Math.max(0, Math.min(1, confidence)) * 100)}% confidence`;
+}
+
 function averageNumbers(values: Array<number | undefined>) {
   const realValues = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   if (!realValues.length) return null;
@@ -2535,6 +2679,49 @@ function normalizeCameraDirection(direction: unknown): CameraDirection {
   return direction === "front" ? "front" : "back";
 }
 
+function normalizeRimLock(lock: unknown): RimLock | undefined {
+  if (!lock || typeof lock !== "object") return undefined;
+
+  const candidate = lock as Partial<RimLock>;
+  const center =
+    candidate.center && typeof candidate.center.x === "number" && typeof candidate.center.y === "number"
+      ? candidate.center
+      : null;
+  const width = typeof candidate.width === "number" && Number.isFinite(candidate.width) ? candidate.width : 0;
+  const height = typeof candidate.height === "number" && Number.isFinite(candidate.height) ? candidate.height : 0;
+  if (!center || width <= 0 || height <= 0 || typeof candidate.sessionId !== "string") return undefined;
+
+  const polygon = Array.isArray(candidate.polygon)
+    ? candidate.polygon
+        .filter(
+          (point): point is { x: number; y: number } =>
+            Boolean(point) && typeof point.x === "number" && typeof point.y === "number",
+        )
+        .slice(0, 8)
+    : [];
+
+  return {
+    cameraDirection: normalizeCameraDirection(candidate.cameraDirection),
+    center: {
+      x: Math.max(0, Math.min(1, center.x)),
+      y: Math.max(0, Math.min(1, center.y)),
+    },
+    createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : new Date().toISOString(),
+    height: Math.max(0.025, Math.min(0.3, height)),
+    id: typeof candidate.id === "string" ? candidate.id : `rim:${candidate.sessionId}`,
+    polygon: polygon.length
+      ? polygon
+      : [
+          { x: Math.max(0, center.x - width / 2), y: Math.max(0, center.y - height / 2) },
+          { x: Math.min(1, center.x + width / 2), y: Math.max(0, center.y - height / 2) },
+          { x: Math.min(1, center.x + width / 2), y: Math.min(1, center.y + height / 2) },
+          { x: Math.max(0, center.x - width / 2), y: Math.min(1, center.y + height / 2) },
+        ],
+    sessionId: candidate.sessionId,
+    width: Math.max(0.04, Math.min(0.4, width)),
+  };
+}
+
 function formatCameraState(state: unknown) {
   const normalizedState = normalizeCameraState(state);
 
@@ -2655,6 +2842,7 @@ function readSave(): AxisSave {
           muxAssetId: parsed.activeSession.muxAssetId,
           muxPlaybackId: parsed.activeSession.muxPlaybackId,
           thumbnailUrl: parsed.activeSession.thumbnailUrl,
+          rimLock: normalizeRimLock(parsed.activeSession.rimLock),
           calibrationRecords: Array.isArray(parsed.activeSession.calibrationRecords)
             ? parsed.activeSession.calibrationRecords
             : [],
@@ -2738,6 +2926,7 @@ function readSave(): AxisSave {
               muxAssetId: session.muxAssetId,
               muxPlaybackId: session.muxPlaybackId,
               thumbnailUrl: session.thumbnailUrl,
+              rimLock: normalizeRimLock(session.rimLock),
               participationWindow: sessionParticipationWindow,
               clipContinuityContext: createClipContinuityContext(
                 session.id,
@@ -3290,6 +3479,8 @@ export function RitualHome() {
     };
   });
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
+  const currentRimLock = save.activeSession?.rimLock ?? latestSession?.rimLock;
+  const rimLockLabel = currentRimLock ? "Rim locked" : save.activeSession ? "Tap rim once" : "Rim waiting";
   const sessionPrimaryActionLabel = "Record";
   const bridgeSessionLabel = save.activeSession ? "Session live" : "Session active";
   const bridgeRosterLabel = save.activeSession
@@ -3447,10 +3638,10 @@ export function RitualHome() {
       return;
     }
 
-    const attemptConfidence = getShotAttemptConfidence(primaryTrackingTrack, ballTracking);
+    const attemptConfidence = getShotAttemptConfidence(primaryTrackingTrack, ballTracking, save.activeSession.rimLock);
     const movement = primaryTrackingTrack.movement;
     const isLikelyShotMotion =
-      attemptConfidence >= 0.62 ||
+      attemptConfidence >= lowConfidenceShotThreshold ||
       (movement.moving &&
         movement.direction === "up" &&
         movement.distanceTraveled >= 0.035 &&
@@ -3472,16 +3663,17 @@ export function RitualHome() {
       0,
       Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000),
     );
-    const shotScience = createShotScience(primaryTrackingTrack, ballTracking);
+    const shotScience = createShotScience(primaryTrackingTrack, ballTracking, save.activeSession.rimLock);
     const activeSession = save.activeSession;
+    const shotId = `shot:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`;
 
     lastShotSuggestionAtRef.current = nowMs;
-    if (attemptConfidence >= 0.62 && nowMs - lastShotAttemptAtRef.current >= 4500) {
+    if (attemptConfidence >= highConfidenceShotThreshold && nowMs - lastShotAttemptAtRef.current >= 4500) {
       const gatherTimestamp = getShotPhaseTimestamp(nowMs, -520);
       const releaseTimestamp = getShotPhaseTimestamp(nowMs, -120);
       const arcTimestamp = getShotPhaseTimestamp(nowMs, 260);
       const timestamp = new Date(nowMs).toISOString();
-      const attemptId = `shot-attempt:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`;
+      const attemptId = `shot-attempt:${shotId}`;
       const shotPhaseEvents = [
         createShotPhaseReplayEvent("shot_gather", gatherTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
         createShotPhaseReplayEvent("shot_release", releaseTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
@@ -3526,6 +3718,8 @@ export function RitualHome() {
         reason: "Shot attempt",
         replayTimestamp,
         resultSaved: false,
+        needsConfirmation: false,
+        shotId,
         shotScience,
         timestamp,
         trackId: primaryTrackingTrack.id,
@@ -3538,9 +3732,11 @@ export function RitualHome() {
       athleteName: athlete.name,
       confidence: Math.max(attemptConfidence, Math.min(0.96, 0.72 + movement.distanceTraveled * 3)),
       id: `shot-suggestion:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`,
-      reason: attemptConfidence >= 0.62 ? "Ball release" : "Upward shooting motion",
+      needsConfirmation: attemptConfidence < highConfidenceShotThreshold,
+      reason: attemptConfidence >= highConfidenceShotThreshold ? "Shot detected" : "Confirm shot result",
       replayTimestamp,
-      shotScience: shotScience ?? createShotScience(primaryTrackingTrack, ballTracking),
+      shotId,
+      shotScience: shotScience ?? createShotScience(primaryTrackingTrack, ballTracking, save.activeSession.rimLock),
       timestamp: new Date(nowMs).toISOString(),
       trackId: primaryTrackingTrack.id,
     });
@@ -3569,7 +3765,7 @@ export function RitualHome() {
 
     const pendingAttempt = pendingShotAttemptRef.current;
     const nowMs = Date.now();
-    const automaticResult = getShotResultFromBall(ballTracking);
+    const automaticResult = getShotResultFromBall(ballTracking, save.activeSession.rimLock);
     const timedOut = nowMs - pendingAttempt.createdAtMs >= 2600;
 
     if (!automaticResult && !timedOut) return;
@@ -3588,7 +3784,8 @@ export function RitualHome() {
       id: `${pendingAttempt.attemptId}:${resultType}`,
       reason: automaticResult ? "Ball crossed rim area" : "Shot attempt ended",
       replayTimestamp: Math.max(0, Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000)),
-      shotScience: pendingAttempt.shotScience ?? createShotScience(primaryTrackingTrack, ballTracking),
+      shotId: pendingAttempt.shotId,
+      shotScience: pendingAttempt.shotScience ?? createShotScience(primaryTrackingTrack, ballTracking, save.activeSession.rimLock),
       timestamp: new Date(nowMs).toISOString(),
       trackId: pendingAttempt.trackId,
     });
@@ -4690,7 +4887,12 @@ export function RitualHome() {
       Math.floor((new Date(timestamp).getTime() - new Date(activeSession.startedAt).getTime()) / 1000),
     );
     const existingShotEvents = normalizeShotEvents(activeSession.shotEvents);
-    const shotScience = suggestion?.shotScience ?? createShotScience(activeTrack, ballTracking);
+    const shotScience = suggestion?.shotScience ?? createShotScience(activeTrack, ballTracking, activeSession.rimLock);
+    const startFrame = shotScience?.shotStartFrame ?? 0;
+    const releaseFrame = shotScience?.releaseFrame ?? startFrame;
+    const apexFrame = shotScience?.apexFrame ?? releaseFrame;
+    const rimFrame = shotScience?.rimEntryFrame ?? apexFrame;
+    const resultFrame = shotScience?.shotEndFrame ?? rimFrame;
     const shotEndTimestamp = timestamp;
     const shotStartTimestamp = getShotPhaseTimestamp(
       new Date(timestamp).getTime(),
@@ -4698,10 +4900,15 @@ export function RitualHome() {
     );
     const shotEvent: ShotEvent = {
       attemptNumber: existingShotEvents.length + 1,
+      apexFrame,
+      arcHeight: shotScience?.arcHeightFeet ?? shotScience?.arcHeight ?? 0,
       athleteId: athlete.id,
       athleteName: athlete.name,
       cameraDirection: savedCameraDirection,
       cameraId: getCameraId(savedCameraDirection),
+      distance: shotScience?.shotDistance ?? 0,
+      entryAngle: shotScience?.entryAngle ?? 0,
+      flightTime: shotScience?.flightTime ?? 0,
       makeStreak: getNextMakeStreak(existingShotEvents, type),
       movementState: activeTrack?.movement.moving
         ? "moving"
@@ -4709,13 +4916,19 @@ export function RitualHome() {
           ? "stationary"
           : "unknown",
       replayTimestamp: suggestion?.replayTimestamp ?? replayTimestamp,
+      releaseFrame,
+      releaseTime: shotScience?.releaseTime ?? 0,
+      resultFrame,
+      rimFrame,
       sessionId: activeSession.id,
+      shotId: suggestion?.shotId ?? suggestion?.id ?? `shot:${activeSession.id}:${new Date(timestamp).getTime()}`,
       suggestionConfidence: suggestion?.confidence,
       suggestionId: suggestion?.id,
       suggestionReason: suggestion?.reason,
       suggested: Boolean(suggestion),
       shotScience,
       shotEndTimestamp,
+      startFrame,
       shotStartTimestamp,
       timestamp,
       trackId: suggestion?.trackId ?? activeTrack?.id,
@@ -4885,6 +5098,46 @@ export function RitualHome() {
     }));
   }
 
+  function handleRimLockTap(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!save.activeSession || save.activeSession.rimLock || shouldShowPrimaryFilm) return;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+
+    const center = {
+      x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
+    };
+    const width = rimGuideBox.width;
+    const height = rimGuideBox.height;
+    const polygon = [
+      { x: Math.max(0, center.x - width / 2), y: Math.max(0, center.y - height / 2) },
+      { x: Math.min(1, center.x + width / 2), y: Math.max(0, center.y - height / 2) },
+      { x: Math.min(1, center.x + width / 2), y: Math.min(1, center.y + height / 2) },
+      { x: Math.max(0, center.x - width / 2), y: Math.min(1, center.y + height / 2) },
+    ];
+    const rimLock: RimLock = {
+      cameraDirection: savedCameraDirection,
+      center,
+      createdAt: new Date().toISOString(),
+      height,
+      id: `rim:${save.activeSession.id}:${Date.now()}`,
+      polygon,
+      sessionId: save.activeSession.id,
+      width,
+    };
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        rimLock,
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
+  }
+
   function renderAxisOverlayLayer(surface: OverlaySurface) {
     const isReplaySurface = surface === "replay";
     const isLiveSurface = surface === "live";
@@ -4900,6 +5153,9 @@ export function RitualHome() {
       overlaySettings.playerName ? overlayPlayerName : null,
       overlaySettings.sessionType ? resultsModeLabel : null,
     ].filter((item): item is string => Boolean(item));
+    const liveShotScience = overlayShot?.shotScience ?? shotSuggestion?.shotScience;
+    const liveShotConfidence = overlayShot?.suggestionConfidence ?? shotSuggestion?.confidence;
+    const shotScienceLabel = overlayShot ? (overlayShot.type === "make" ? "MAKE" : "MISS") : shotSuggestion ? "SHOT DETECTED" : null;
 
     return (
       <div className="axis-overlay-engine" data-surface={surface}>
@@ -4959,8 +5215,31 @@ export function RitualHome() {
             </div>
           </div>
         ) : null}
+        {currentRimLock ? (
+          <div className="axis-rim-tracking-overlay axis-overlay-layer" aria-label="Rim lock">
+            <div
+              className="axis-rim-track-box"
+              data-locked="true"
+              style={{
+                height: `${currentRimLock.height * 100}%`,
+                left: `${(currentRimLock.center.x - currentRimLock.width / 2) * 100}%`,
+                top: `${(currentRimLock.center.y - currentRimLock.height / 2) * 100}%`,
+                width: `${currentRimLock.width * 100}%`,
+              }}
+            >
+              <div className="axis-rim-track-label">
+                <strong>RIM LOCK</strong>
+                <span>{`${Math.round(currentRimLock.width * 100)} x ${Math.round(currentRimLock.height * 100)}`}</span>
+              </div>
+            </div>
+          </div>
+        ) : isLiveSurface && save.activeSession ? (
+          <div className="axis-rim-lock-prompt axis-overlay-layer" aria-label="Rim lock prompt">
+            Tap rim once
+          </div>
+        ) : null}
         <div className="axis-camera-os-overlay axis-overlay-layer" aria-label="Overlay status">
-          <strong>{isReplaySurface ? "Replay" : cameraOperatingState}</strong>
+          <strong>{isReplaySurface ? "Replay" : shotSuggestion ? "Shot Detected" : cameraOperatingState}</strong>
           <em>{isReplaySurface ? latestFilmAvailability : contextItems.join(" / ")}</em>
         </div>
         {scoreItems.length ? (
@@ -4973,13 +5252,14 @@ export function RitualHome() {
             ))}
           </div>
         ) : null}
-        {overlaySettings.shotScience && overlayShot?.shotScience ? (
+        {overlaySettings.shotScience && liveShotScience && shotScienceLabel ? (
           <div className="axis-shot-science-overlay axis-overlay-layer" aria-label="Shot science">
-            <strong>{overlayShot.type === "make" ? "MAKE" : "MISS"}</strong>
-            <span>{`${overlayShot.shotScience.releaseAngle}\u00b0`}</span>
-            <span>{formatShotScienceArc(overlayShot.shotScience)}</span>
-            <span>{formatShotScienceReleaseTime(overlayShot.shotScience)}</span>
-            <span>{`${overlayShot.makeStreak} streak`}</span>
+            <strong>{shotScienceLabel}</strong>
+            <span>{`${liveShotScience.releaseAngle}\u00b0`}</span>
+            <span>{formatShotScienceArc(liveShotScience)}</span>
+            <span>{formatShotScienceReleaseTime(liveShotScience)}</span>
+            <span>{formatShotScienceDistance(liveShotScience)}</span>
+            <span>{formatShotConfidence(liveShotConfidence)}</span>
           </div>
         ) : null}
         {isReplaySurface &&
@@ -5070,21 +5350,30 @@ export function RitualHome() {
       },
       shots: exportObject.shots.map((shot) => ({
         attemptNumber: shot.attemptNumber,
+        apexFrame: shot.apexFrame,
         athleteId: shot.athleteId,
         athleteName: shot.athleteName,
+        arcHeight: shot.arcHeight,
         entryAngle: shot.shotScience?.entryAngle,
         apexPoint: shot.shotScience?.apexPoint,
+        distance: shot.distance,
         entryPoint: shot.shotScience?.entryPoint,
+        flightTime: shot.flightTime,
         filmTimeSeconds: shot.replayTimestamp,
         makeStreak: shot.makeStreak,
+        releaseFrame: shot.releaseFrame,
         releaseAngle: shot.shotScience?.releaseAngle,
         releasePoint: shot.shotScience?.releasePoint,
         releaseSpeed: shot.shotScience?.releaseSpeed,
         releaseTime: shot.shotScience?.releaseTime,
+        resultFrame: shot.resultFrame,
+        rimFrame: shot.rimFrame,
         shotArcFeet: shot.shotScience?.arcHeightFeet,
         shotDistance: shot.shotScience?.shotDistance,
         shotEndTimestamp: shot.shotEndTimestamp,
+        shotId: shot.shotId,
         shotStartTimestamp: shot.shotStartTimestamp,
+        startFrame: shot.startFrame,
         timestamp: shot.timestamp,
         trajectorySpline: shot.shotScience?.trajectorySpline,
         type: shot.type,
@@ -5093,6 +5382,7 @@ export function RitualHome() {
         endedAt: exportObject.session.endedAt,
         id: exportObject.session.id,
         participantIds: (session.participants ?? []).map((participant) => participant.id),
+        rimLock: session.rimLock,
         startedAt: exportObject.session.startedAt,
         status: "complete" as const,
         type: exportObject.session.type,
@@ -5190,6 +5480,7 @@ export function RitualHome() {
       muxAssetId: save.activeSession.muxAssetId,
       muxPlaybackId: save.activeSession.muxPlaybackId,
       thumbnailUrl: save.activeSession.thumbnailUrl ?? localThumbnailUrl,
+      rimLock: save.activeSession.rimLock,
       participationWindow,
       clipContinuityContext: createClipContinuityContext(
         save.activeSession.id,
@@ -5720,7 +6011,12 @@ export function RitualHome() {
                   <span>Live Film</span>
                   <em>{cameraOperatingContext}</em>
                 </div>
-                <div className="axis-camera-preview axis-camera-home-preview" data-state={cameraStream ? "attached" : "offline"}>
+                <div
+                  className="axis-camera-preview axis-camera-home-preview"
+                  data-rim-lock={currentRimLock ? "locked" : save.activeSession ? "waiting" : "off"}
+                  data-state={cameraStream ? "attached" : "offline"}
+                  onPointerDown={handleRimLockTap}
+                >
                   {shouldShowPrimaryFilm && latestFilmPlaybackId && latestSession ? (
                     <MuxPlayer
                       className="axis-primary-film-player"
@@ -5754,7 +6050,7 @@ export function RitualHome() {
                 <section className="axis-live-overlay-panel" aria-label="Live overlay">
                   <div>
                     <span>Live Overlay</span>
-                    <strong>{save.activeSession ? "Rep To Clip" : latestSession ? "Film Ready" : "Ready"}</strong>
+                    <strong>{shotSuggestion ? "Shot Detected" : save.activeSession ? "Rep To Clip" : latestSession ? "Film Ready" : "Ready"}</strong>
                   </div>
                   <div>
                     <span>Clips</span>
@@ -5765,8 +6061,8 @@ export function RitualHome() {
                     <strong>{cameraReportState}</strong>
                   </div>
                   <div>
-                    <span>Progress</span>
-                    <strong>{cameraProgressState}</strong>
+                    <span>Rim</span>
+                    <strong>{rimLockLabel}</strong>
                   </div>
                 </section>
                 <section className="axis-camera-action-dock" aria-label="Actions">
@@ -5779,9 +6075,9 @@ export function RitualHome() {
                         onClick={() => recordGameAction(action)}
                         type="button"
                       >
-                        {shotSuggestion && action === "make"
+                        {shotSuggestion?.needsConfirmation && action === "make"
                           ? "Confirm make"
-                          : shotSuggestion && action === "miss"
+                          : shotSuggestion?.needsConfirmation && action === "miss"
                             ? "Confirm miss"
                             : formatGameActionLabel(action)}
                       </button>
@@ -6037,9 +6333,9 @@ export function RitualHome() {
                     onClick={() => recordGameAction(action)}
                     type="button"
                   >
-                    {shotSuggestion && action === "make"
+                    {shotSuggestion?.needsConfirmation && action === "make"
                       ? "Confirm make"
-                      : shotSuggestion && action === "miss"
+                      : shotSuggestion?.needsConfirmation && action === "miss"
                         ? "Confirm miss"
                         : formatGameActionLabel(action)}
                   </button>

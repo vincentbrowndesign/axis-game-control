@@ -125,8 +125,11 @@ type FinalizeWorkPayload = {
   };
   shots?: {
     attemptNumber: number;
+    apexFrame: number;
+    arcHeight: number;
     athleteId?: string;
     athleteName: string;
+    distance: number;
     apexPoint?: {
       x: number;
       y: number;
@@ -136,8 +139,10 @@ type FinalizeWorkPayload = {
       y: number;
     };
     entryAngle: number;
+    flightTime: number;
     filmTimeSeconds: number;
     makeStreak: number;
+    releaseFrame: number;
     releaseAngle: number;
     releasePoint?: {
       x: number;
@@ -145,10 +150,14 @@ type FinalizeWorkPayload = {
     };
     releaseSpeed: number;
     releaseTime: number;
+    resultFrame: number;
+    rimFrame: number;
     shotArcFeet: number;
     shotDistance: number;
     shotEndTimestamp: string;
+    shotId: string;
     shotStartTimestamp: string;
+    startFrame: number;
     timestamp: string;
     trajectorySpline: {
       x: number;
@@ -160,6 +169,22 @@ type FinalizeWorkPayload = {
     endedAt: string;
     id: string;
     participantIds: string[];
+    rimLock?: {
+      cameraDirection: string;
+      center: {
+        x: number;
+        y: number;
+      };
+      createdAt: string;
+      height: number;
+      id: string;
+      polygon: {
+        x: number;
+        y: number;
+      }[];
+      sessionId: string;
+      width: number;
+    };
     startedAt: string;
     status: "complete";
     type: string;

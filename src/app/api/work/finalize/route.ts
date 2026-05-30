@@ -26,6 +26,15 @@ function getNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function sanitizePoint(value: unknown) {
+  const candidate = isRecord(value) ? value : {};
+
+  return {
+    x: getNumber(candidate.x),
+    y: getNumber(candidate.y),
+  };
+}
+
 function sanitizeFinalizePayload(body: FinalizeRequestBody) {
   const work = isRecord(body.work) ? body.work : {};
   const film = isRecord(body.film) ? body.film : {};
@@ -260,8 +269,11 @@ function sanitizeFinalizePayload(body: FinalizeRequestBody) {
 
       return {
         attemptNumber: getNumber(candidate.attemptNumber),
+        apexFrame: getNumber(candidate.apexFrame),
         athleteId: getString(candidate.athleteId) || undefined,
         athleteName: getString(candidate.athleteName, "Athlete"),
+        arcHeight: getNumber(candidate.arcHeight),
+        distance: getNumber(candidate.distance),
         apexPoint: isRecord(candidate.apexPoint)
           ? {
               x: getNumber(candidate.apexPoint.x),
@@ -275,8 +287,10 @@ function sanitizeFinalizePayload(body: FinalizeRequestBody) {
             }
           : undefined,
         entryAngle: getNumber(candidate.entryAngle),
+        flightTime: getNumber(candidate.flightTime),
         filmTimeSeconds: getNumber(candidate.filmTimeSeconds),
         makeStreak: getNumber(candidate.makeStreak),
+        releaseFrame: getNumber(candidate.releaseFrame),
         releaseAngle: getNumber(candidate.releaseAngle),
         releasePoint: isRecord(candidate.releasePoint)
           ? {
@@ -286,10 +300,14 @@ function sanitizeFinalizePayload(body: FinalizeRequestBody) {
           : undefined,
         releaseSpeed: getNumber(candidate.releaseSpeed),
         releaseTime: getNumber(candidate.releaseTime),
+        resultFrame: getNumber(candidate.resultFrame),
+        rimFrame: getNumber(candidate.rimFrame),
         shotArcFeet: getNumber(candidate.shotArcFeet),
         shotDistance: getNumber(candidate.shotDistance),
         shotEndTimestamp: getString(candidate.shotEndTimestamp, new Date().toISOString()),
+        shotId: getString(candidate.shotId, crypto.randomUUID()),
         shotStartTimestamp: getString(candidate.shotStartTimestamp, new Date().toISOString()),
+        startFrame: getNumber(candidate.startFrame),
         timestamp: getString(candidate.timestamp, new Date().toISOString()),
         trajectorySpline: Array.isArray(candidate.trajectorySpline)
           ? candidate.trajectorySpline.slice(0, 32).map((point) => {
@@ -310,6 +328,18 @@ function sanitizeFinalizePayload(body: FinalizeRequestBody) {
       participantIds: Array.isArray(work.participantIds)
         ? work.participantIds.filter((participantId): participantId is string => typeof participantId === "string")
         : [],
+      rimLock: isRecord(work.rimLock)
+        ? {
+            cameraDirection: getString(work.rimLock.cameraDirection, "back"),
+            center: sanitizePoint(work.rimLock.center),
+            createdAt: getString(work.rimLock.createdAt, new Date().toISOString()),
+            height: getNumber(work.rimLock.height),
+            id: getString(work.rimLock.id, crypto.randomUUID()),
+            polygon: Array.isArray(work.rimLock.polygon) ? work.rimLock.polygon.slice(0, 8).map(sanitizePoint) : [],
+            sessionId: getString(work.rimLock.sessionId, workId),
+            width: getNumber(work.rimLock.width),
+          }
+        : undefined,
       startedAt: getString(work.startedAt, new Date().toISOString()),
       status: "complete" as const,
       type: getString(work.type, "work"),

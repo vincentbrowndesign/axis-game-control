@@ -374,6 +374,10 @@ h1 {
   width: 100%;
 }
 
+.axis-camera-home-preview[data-rim-lock="waiting"] {
+  cursor: crosshair;
+}
+
 .axis-primary-film-player {
   background: var(--axis-bg);
   display: block;
@@ -538,7 +542,7 @@ h1 {
   flex-wrap: wrap;
   gap: 0.38rem 0.55rem;
   left: clamp(0.65rem, 2vw, 1rem);
-  max-width: min(26rem, calc(100% - 2rem));
+  max-width: min(34rem, calc(100% - 2rem));
   padding: 0.52rem 0.62rem;
   position: absolute;
   z-index: 4;
@@ -548,7 +552,7 @@ h1 {
 .axis-shot-science-overlay span {
   color: var(--axis-ink);
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: 0.72rem;
+  font-size: clamp(0.66rem, 1.7vw, 0.86rem);
   font-weight: 900;
   letter-spacing: 0.07em;
   line-height: 1;
@@ -1728,6 +1732,10 @@ h1 {
   position: absolute;
 }
 
+.axis-rim-track-box[data-locked="true"] {
+  border-color: rgba(168, 217, 51, 0.82);
+}
+
 .axis-rim-track-box::before {
   background: rgba(168, 217, 51, 0.72);
   content: "";
@@ -1765,6 +1773,23 @@ h1 {
 
 .axis-rim-track-label span {
   color: var(--axis-muted);
+}
+
+.axis-rim-lock-prompt {
+  background: rgba(6, 6, 6, 0.68);
+  border: 1px solid rgba(168, 217, 51, 0.24);
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 900;
+  left: 50%;
+  letter-spacing: 0.08em;
+  padding: 0.46rem 0.58rem;
+  position: absolute;
+  text-transform: uppercase;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
 }
 
 .axis-outdoor-tracking-readout {
