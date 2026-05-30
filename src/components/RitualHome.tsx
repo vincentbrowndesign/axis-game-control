@@ -27,9 +27,9 @@ type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
 type ParticipationWindowStatus = "open" | "closed";
 type ParticipationMode = "Training" | "Practice" | "Game" | "Workout" | "Challenge";
-type WorkOperatorMode = "coach" | "director" | "player";
+type WorkOperatorMode = "coach" | "director" | "parent" | "player";
 type WorkDetectionState = "ACTIVE" | "IDLE" | "MOVING" | "SHOOTING";
-type WatchEventType = "assist" | "make" | "miss" | "rebound" | "turnover";
+type WatchEventType = "assist" | "make" | "miss" | "rebound" | "shot_attempt" | "turnover";
 
 const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
 const participationModes: ParticipationMode[] = ["Training", "Practice", "Game", "Workout", "Challenge"];
@@ -42,6 +42,7 @@ const rimGuideBox = {
   y: 0.055,
 };
 const filmWatchGroups: Array<{ label: string; type: WatchEventType }> = [
+  { label: "WATCH SHOTS", type: "shot_attempt" },
   { label: "WATCH MAKES", type: "make" },
   { label: "WATCH MISSES", type: "miss" },
   { label: "WATCH REBOUNDS", type: "rebound" },
@@ -193,10 +194,14 @@ const gameActions: GameActionType[] = ["make", "miss", "rebound", "assist", "tur
 
 type ShotScience = {
   arc: number;
+  gatherTime: number;
   hangTime: number;
+  jumpHeight: number;
   releaseAngle: number;
   releaseHeight: number;
+  releaseTime: number;
   releaseSpeed: number;
+  shotArc: number;
   shotDistance: number;
   source: "single_camera_estimate";
 };
@@ -246,6 +251,43 @@ type ShotSummary = {
   misses: number;
 };
 
+type GameResults = {
+  assists: number;
+  fieldGoalPercentage: number;
+  makes: number;
+  misses: number;
+  points: number;
+  rebounds: number;
+  turnovers: number;
+};
+
+type OrganizationRollups = {
+  coach: {
+    athletes: number;
+    development: string;
+    sessions: number;
+    wins: number;
+  };
+  director: {
+    athletes: number;
+    film: number;
+    hours: number;
+    sessions: number;
+  };
+  parent: {
+    attendance: number;
+    film: number;
+    makes: number;
+    misses: number;
+  };
+  player: {
+    attendance: number;
+    hours: number;
+    makes: number;
+    misses: number;
+  };
+};
+
 type ReplayEventType =
   | "assist"
   | "ball_lost"
@@ -259,13 +301,26 @@ type ReplayEventType =
   | "movement_spike"
   | "rebound"
   | "recovered"
+  | "rim_contact"
+  | "shot_arc"
   | "shot_attempt"
+  | "shot_gather"
+  | "shot_release"
   | "tracking_interruption"
   | "turnover";
 type BallReplayEventType = "ball_lost" | "ball_recovered" | "ball_visible";
 type TrackingReplayEventType = Exclude<
   ReplayEventType,
-  ActionEventType | BallReplayEventType | "coach_voice" | "make" | "miss" | "shot_attempt"
+  | ActionEventType
+  | BallReplayEventType
+  | "coach_voice"
+  | "make"
+  | "miss"
+  | "rim_contact"
+  | "shot_arc"
+  | "shot_attempt"
+  | "shot_gather"
+  | "shot_release"
 >;
 
 type ReplayEvent = {
@@ -503,6 +558,10 @@ function formatPlayerVisibilityState(track: PlayerTrack) {
 function formatBallTrackStatus(ball: BallTrackingState) {
   if (ball.status === "lost") return "BALL LOST";
   if (ball.status === "recovered") return "BALL RECOVERED";
+  if (ball.status === "shot") return "BALL SHOT";
+  if (ball.status === "make") return "MAKE";
+  if (ball.status === "miss") return "MISS";
+  if (ball.status === "rebound") return "REBOUND";
 
   return "BALL";
 }
@@ -553,6 +612,45 @@ function getShotResultFromBall(ball: BallTrackingState) {
   return null;
 }
 
+function getShotPhaseTimestamp(baseMs: number, offsetMs: number) {
+  return new Date(Math.max(0, baseMs + offsetMs)).toISOString();
+}
+
+function createShotPhaseReplayEvent(
+  type: Extract<ReplayEventType, "rim_contact" | "shot_arc" | "shot_attempt" | "shot_gather" | "shot_release">,
+  timestamp: string,
+  athlete: Pick<AthleteIdentity, "id" | "name">,
+  track: PlayerTrack,
+  cameraDirection: CameraDirection,
+  confidence: number,
+): ReplayEvent {
+  const labels = {
+    rim_contact: "Rim contact",
+    shot_arc: "Shot arc",
+    shot_attempt: "Shot attempt",
+    shot_gather: "Gather",
+    shot_release: "Release",
+  };
+
+  return {
+    athleteId: athlete.id,
+    athleteName: athlete.name,
+    cameraDirection,
+    cameraId: getCameraId(cameraDirection),
+    confidence,
+    id: `replay:${timestamp}:${type}:${track.id}`,
+    label: labels[type],
+    timestamp,
+    trackState: {
+      status: "tracked",
+      trackId: track.id,
+      tracked: true,
+      visible: true,
+    },
+    type,
+  };
+}
+
 function createShotScience(track: PlayerTrack | null, ball: BallTrackingState): ShotScience | undefined {
   if (!ball.visible || !ball.position || !ball.velocity) return undefined;
 
@@ -564,13 +662,20 @@ function createShotScience(track: PlayerTrack | null, ball: BallTrackingState): 
   const highestPoint = ball.trajectory.length ? Math.min(...ball.trajectory.map((point) => point.y)) : ball.position.y;
   const arc = Math.round(Math.max(0, ball.position.y - highestPoint) * 100);
   const hangTime = Math.round(ball.trajectory.length * 0.12 * 10) / 10;
+  const gatherTime = Math.max(0.3, Math.min(1.2, Math.round((0.42 + (track?.movement.distanceTraveled ?? 0) * 4) * 10) / 10));
+  const releaseTime = Math.max(0.2, Math.min(1.6, Math.round((hangTime || 0.7) * 10) / 10));
+  const jumpHeight = Math.max(0, Math.round((track?.movement.direction === "up" ? track.movement.distanceTraveled * 100 : 0) * 10) / 10);
 
   return {
     arc,
+    gatherTime,
     hangTime,
+    jumpHeight,
     releaseAngle,
     releaseHeight,
+    releaseTime,
     releaseSpeed: Math.round(releaseSpeed * 100) / 100,
+    shotArc: arc,
     shotDistance,
     source: "single_camera_estimate",
   };
@@ -700,7 +805,11 @@ function normalizeReplayEvent(event: unknown): ReplayEvent | null {
       candidate.type === "movement_spike" ||
       candidate.type === "rebound" ||
       candidate.type === "recovered" ||
+      candidate.type === "rim_contact" ||
+      candidate.type === "shot_arc" ||
       candidate.type === "shot_attempt" ||
+      candidate.type === "shot_gather" ||
+      candidate.type === "shot_release" ||
       candidate.type === "tracking_interruption" ||
       candidate.type === "turnover"
         ? candidate.type
@@ -826,10 +935,14 @@ function normalizeShotEvent(event: unknown): ShotEvent | null {
     typeof shotScience.hangTime === "number"
       ? {
           arc: shotScience.arc,
+          gatherTime: typeof shotScience.gatherTime === "number" ? shotScience.gatherTime : 0.5,
           hangTime: shotScience.hangTime,
+          jumpHeight: typeof shotScience.jumpHeight === "number" ? shotScience.jumpHeight : 0,
           releaseAngle: shotScience.releaseAngle,
           releaseHeight: shotScience.releaseHeight,
+          releaseTime: typeof shotScience.releaseTime === "number" ? shotScience.releaseTime : shotScience.hangTime,
           releaseSpeed: shotScience.releaseSpeed,
+          shotArc: typeof shotScience.shotArc === "number" ? shotScience.shotArc : shotScience.arc,
           shotDistance: shotScience.shotDistance,
           source: "single_camera_estimate" as const,
         }
@@ -948,7 +1061,7 @@ function createShotReplayEvent(shot: ShotEvent, index: number): ReplayEvent {
     cameraDirection: shot.cameraDirection,
     cameraId: shot.cameraId,
     id: `replay:${shot.timestamp}:${shot.type}:${shot.trackId ?? "track"}:${index}`,
-    label: shot.type === "make" ? "Make" : "Miss",
+    label: shot.type === "make" ? "Shot made" : "Shot missed",
     timestamp: shot.timestamp,
     trackState: {
       status: shot.trackId ? "tracked" : "visible",
@@ -1084,23 +1197,12 @@ function createReplayAnchorsForSession(session: {
 }
 
 function shouldCreateClip(anchor: ReplayAnchor) {
-  return (
-    anchor.eventType === "movement_spike" ||
-    anchor.eventType === "tracking_interruption" ||
-    anchor.eventType === "recovered" ||
-    anchor.eventType === "identity_locked" ||
-    anchor.eventType === "coach_voice" ||
-    anchor.eventType === "shot_attempt" ||
-    anchor.eventType === "ball_visible" ||
-    anchor.eventType === "ball_lost" ||
-    anchor.eventType === "ball_recovered" ||
-    gameActions.includes(anchor.eventType as GameActionType)
-  );
+  return anchor.eventType !== "session_start" && anchor.eventType !== "session_end";
 }
 
 function createReplayClip(anchor: ReplayAnchor): ReplayClip {
   return {
-    clipEnd: anchor.videoTimestamp + 10,
+    clipEnd: anchor.videoTimestamp + 5,
     clipStart: Math.max(0, anchor.videoTimestamp - 5),
     eventId: anchor.eventId,
     eventType: anchor.eventType,
@@ -1125,6 +1227,83 @@ function summarizeShots(events: ShotEvent[]): ShotSummary {
     fieldGoalPercentage: attempts > 0 ? Math.round((makes / attempts) * 100) : 0,
     makes,
     misses,
+  };
+}
+
+function summarizeGameResults(shotEvents: ShotEvent[], replayEvents: ReplayEvent[]): GameResults {
+  const shotSummary = summarizeShots(shotEvents);
+
+  return {
+    assists: replayEvents.filter((event) => event.type === "assist").length,
+    fieldGoalPercentage: shotSummary.fieldGoalPercentage,
+    makes: shotSummary.makes,
+    misses: shotSummary.misses,
+    points: shotSummary.makes * 2,
+    rebounds: replayEvents.filter((event) => event.type === "rebound").length,
+    turnovers: replayEvents.filter((event) => event.type === "turnover").length,
+  };
+}
+
+function summarizeOrganizationRollups(
+  sessions: SavedSession[],
+  activeSession: AxisSave["activeSession"],
+  activeParticipantCount: number,
+  now: number,
+  fallbackAthleteCount: number,
+): OrganizationRollups {
+  const athleteIds = new Set<string>();
+  let attendance = activeSession ? activeParticipantCount : 0;
+  let film = activeSession?.recordingAttached ? 1 : 0;
+  let makes = 0;
+  let misses = 0;
+  let totalSeconds = activeSession ? Math.max(0, Math.floor((now - new Date(activeSession.startedAt).getTime()) / 1000)) : 0;
+  let wins = 0;
+
+  (activeSession?.participants ?? []).forEach((participant) => athleteIds.add(participant.id));
+
+  sessions.forEach((session) => {
+    const shotSummary = session.shotSummary ?? summarizeShots(normalizeShotEvents(session.shotEvents));
+    const sessionResults = summarizeGameResults(normalizeShotEvents(session.shotEvents), normalizeReplayEvents(session.replayEvents));
+
+    makes += shotSummary.makes;
+    misses += shotSummary.misses;
+    totalSeconds += session.durationSeconds;
+    attendance += session.activeParticipantCount || session.participantCount || session.participants?.length || 1;
+    film += session.recordingAttached ? 1 : 0;
+    wins += session.mode === "Game" && sessionResults.points > 0 ? 1 : 0;
+    (session.participants ?? []).forEach((participant) => athleteIds.add(participant.id));
+  });
+
+  const sessionsCount = sessions.length + (activeSession ? 1 : 0);
+  const athletes = athleteIds.size || fallbackAthleteCount;
+  const hours = totalSeconds / 3600;
+  const development = sessionsCount > 0 ? `${sessionsCount} sessions / ${makes + misses} attempts` : "Waiting";
+
+  return {
+    coach: {
+      athletes,
+      development,
+      sessions: sessionsCount,
+      wins,
+    },
+    director: {
+      athletes,
+      film,
+      hours,
+      sessions: sessionsCount,
+    },
+    parent: {
+      attendance,
+      film,
+      makes,
+      misses,
+    },
+    player: {
+      attendance,
+      hours,
+      makes,
+      misses,
+    },
   };
 }
 
@@ -1306,6 +1485,10 @@ function formatHumanMomentLabel(anchor: ReplayAnchor) {
   if (anchor.eventType === "assist") return "Assist";
   if (anchor.eventType === "turnover") return "Turnover";
   if (anchor.eventType === "foul") return "Foul";
+  if (anchor.eventType === "shot_gather") return "Gather";
+  if (anchor.eventType === "shot_release") return "Release";
+  if (anchor.eventType === "shot_arc") return "Arc";
+  if (anchor.eventType === "rim_contact") return "Rim contact";
   if (anchor.eventType === "shot_attempt") return "Shot attempt";
   if (anchor.eventType === "ball_visible") return "Ball visible";
   if (anchor.eventType === "ball_lost") return "Ball lost";
@@ -1328,6 +1511,10 @@ function shouldShowFilmTimelineAnchor(anchor: ReplayAnchor) {
     anchor.eventType === "possession" ||
     anchor.eventType === "foul" ||
     anchor.eventType === "turnover" ||
+    anchor.eventType === "shot_gather" ||
+    anchor.eventType === "shot_release" ||
+    anchor.eventType === "shot_arc" ||
+    anchor.eventType === "rim_contact" ||
     anchor.eventType === "shot_attempt" ||
     anchor.eventType === "ball_visible" ||
     anchor.eventType === "ball_lost" ||
@@ -1400,7 +1587,13 @@ function formatShotEvent(event: ShotEvent) {
 function formatShotScience(science?: ShotScience) {
   if (!science) return "Shot science waiting";
 
-  return `${science.releaseAngle} deg / ${science.releaseHeight}% high / ${science.releaseSpeed} speed / ${science.arc}% arc / ${science.shotDistance} ft / ${science.hangTime}s`;
+  return `${science.releaseAngle} deg / ${science.releaseHeight}% high / ${science.releaseTime}s release / ${science.jumpHeight}% jump / ${science.shotArc}% arc`;
+}
+
+function formatShotFeedback(event?: ShotEvent) {
+  if (!event?.shotScience) return "Shot feedback waiting";
+
+  return `${event.type === "make" ? "MAKE" : "MISS"} / ${event.shotScience.releaseAngle}° / ${event.shotScience.releaseTime}s / Release`;
 }
 
 function normalizeRawMeasurements(raw: unknown, fallback: SessionRawMeasurements): SessionRawMeasurements {
@@ -2138,6 +2331,17 @@ export function RitualHome() {
   const presentParticipants = activeParticipants.filter((participant) => !participant.leftAt);
   const activeParticipantCount = presentParticipants.length;
   const participantCount = activeParticipants.length;
+  const organizationRollups = useMemo(
+    () =>
+      summarizeOrganizationRollups(
+        save.sessions,
+        save.activeSession,
+        activeParticipantCount,
+        now,
+        identity ? 1 : 0,
+      ),
+    [activeParticipantCount, identity, now, save.activeSession, save.sessions],
+  );
   const organizationResults = useMemo(() => {
     const athleteIds = new Set<string>();
     let attendance = save.activeSession ? activeParticipantCount : 0;
@@ -2161,12 +2365,13 @@ export function RitualHome() {
       attendance,
       athletes: athleteIds.size || (identity ? 1 : 0),
       coaches: save.sessions.length || save.activeSession ? 1 : 0,
+      film: organizationRollups.director.film,
       hours: totalSeconds / 3600,
       makes,
       misses,
       sessions: save.sessions.length + (save.activeSession ? 1 : 0),
     };
-  }, [activeParticipantCount, activeParticipants, identity, now, save.activeSession, save.sessions]);
+  }, [activeParticipantCount, activeParticipants, identity, now, organizationRollups.director.film, save.activeSession, save.sessions]);
   const calibratedParticipantCount = presentParticipants.filter(
     (participant) => normalizeCalibrationStatus(participant.calibrationStatus) === "calibrated",
   ).length;
@@ -2189,6 +2394,7 @@ export function RitualHome() {
   const ballTracking = useBallTracking(
     cameraPreviewRef,
     isVisionTrackingEnabled,
+    personDetection.tracks,
   );
   const latestPersonDetectionRef = useRef(personDetection);
   const athleteDetected = personDetection.visiblePeople === 1;
@@ -2221,6 +2427,15 @@ export function RitualHome() {
     return athleteId ? presentParticipants.find((participant) => participant.id === athleteId) : undefined;
   };
   const activeShotSummary = summarizeShots(save.activeSession?.shotEvents ?? []);
+  const activeGameResults = summarizeGameResults(save.activeSession?.shotEvents ?? [], save.activeSession?.replayEvents ?? []);
+  const activeShotEvents = save.activeSession?.shotEvents ?? [];
+  const latestShotEvents = latestSession?.shotEvents ?? [];
+  const latestShotFeedbackEvent =
+    activeShotEvents.length > 0
+      ? activeShotEvents[activeShotEvents.length - 1]
+      : latestShotEvents.length > 0
+        ? latestShotEvents[0]
+        : undefined;
   const cameraOverlayShotSummary = save.activeSession
     ? activeShotSummary
     : latestSession?.shotSummary ?? summarizeShots(latestSession?.shotEvents ?? []);
@@ -2246,6 +2461,7 @@ export function RitualHome() {
     .map((clip) => latestSession?.replayAnchors?.find((anchor) => anchor.eventId === clip.eventId))
     .filter((anchor): anchor is ReplayAnchor => Boolean(anchor));
   const latestShotAttempts = latestSession?.replayAnchors?.filter((anchor) => anchor.eventType === "shot_attempt") ?? [];
+  const latestGameResults = summarizeGameResults(latestSession?.shotEvents ?? [], latestSession?.replayEvents ?? []);
   const latestReboundCount = latestSession?.replayEvents?.filter((event) => event.type === "rebound").length ?? 0;
   const latestSessionReview = latestSession?.review;
   const latestFilmPlaybackId = getFilmPlaybackId(latestSession);
@@ -2296,14 +2512,23 @@ export function RitualHome() {
       : "Session waiting";
   const isCoachMode = workOperatorMode === "coach";
   const isDirectorMode = workOperatorMode === "director";
-  const shouldShowReviewPanel = Boolean(latestSession && (showAxisDebug ? isReviewOpen : true));
+  const isParentMode = workOperatorMode === "parent";
+  const shouldShowReviewPanel = Boolean(latestSession && showAxisDebug && isReviewOpen);
   const shouldShowFilmSurface = true;
   const shouldShowResultsSurface = true;
   const activeTimerLabel = save.activeSession ? `${formatDuration(elapsedSeconds)} preserved` : null;
   const cameraOperatingState = save.activeSession ? (isRecordingAttached ? "Recording" : "Ready") : "Camera";
   const cameraOperatingContext = save.activeSession ? `${currentMode} / ${formatDuration(elapsedSeconds)}` : "Work / Film / Results";
-  const availableParticipationModes = isCoachMode || isDirectorMode ? coachParticipationModes : participationModes;
-  const visibleWorkActions = showAxisDebug || isCoachMode ? gameActions : (["make", "miss"] as GameActionType[]);
+  const cameraTimeLabel = save.activeSession
+    ? formatDuration(elapsedSeconds)
+    : latestSession
+      ? formatDuration(latestSession.durationSeconds)
+      : "0:00";
+  const cameraMakes = save.activeSession ? activeShotSummary.makes : latestSession?.shotSummary?.makes ?? 0;
+  const cameraMisses = save.activeSession ? activeShotSummary.misses : latestSession?.shotSummary?.misses ?? 0;
+  const availableParticipationModes = isCoachMode || isDirectorMode || isParentMode ? coachParticipationModes : participationModes;
+  const isGameMode = (save.activeSession?.mode ?? pendingMode) === "Game";
+  const visibleWorkActions = showAxisDebug || isCoachMode || isGameMode ? gameActions : (["make", "miss"] as GameActionType[]);
   const compactPresence = `BRIDGE • ${currentStreak} ${currentStreak === 1 ? "DAY" : "DAYS"} • ${lastCheckIn.toUpperCase()} • ${currentMode.toUpperCase()}`;
   const historyStatus =
     ritualState === "complete" && latestSession
@@ -2388,6 +2613,7 @@ export function RitualHome() {
         activeSession: {
           ...currentSave.activeSession,
           replayAnchors: [...(currentSave.activeSession.replayAnchors ?? []), replayAnchor],
+          replayClips: [...(currentSave.activeSession.replayClips ?? []), createReplayClip(replayAnchor)],
           replayEvents: [...(currentSave.activeSession.replayEvents ?? []), replayEvent],
         },
       };
@@ -2429,49 +2655,45 @@ export function RitualHome() {
       Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000),
     );
     const shotScience = createShotScience(primaryTrackingTrack, ballTracking);
+    const activeSession = save.activeSession;
 
     lastShotSuggestionAtRef.current = nowMs;
     if (attemptConfidence >= 0.62 && nowMs - lastShotAttemptAtRef.current >= 4500) {
+      const gatherTimestamp = getShotPhaseTimestamp(nowMs, -520);
+      const releaseTimestamp = getShotPhaseTimestamp(nowMs, -120);
+      const arcTimestamp = getShotPhaseTimestamp(nowMs, 260);
       const timestamp = new Date(nowMs).toISOString();
       const attemptId = `shot-attempt:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`;
-      const replayEvent: ReplayEvent = {
-        athleteId: athlete.id,
-        athleteName: athlete.name,
-        cameraDirection: savedCameraDirection,
-        cameraId: getCameraId(savedCameraDirection),
-        confidence: attemptConfidence,
-        id: `replay:${timestamp}:shot_attempt:${primaryTrackingTrack.id}`,
-        label: "Shot attempt",
-        timestamp,
-        trackState: {
-          status: "tracked",
-          trackId: primaryTrackingTrack.id,
-          tracked: true,
-          visible: true,
-        },
-        type: "shot_attempt",
-      };
-      const replayAnchor = createReplayAnchor(
-        replayEvent.id,
-        replayEvent.type,
-        replayEvent.timestamp,
-        save.activeSession.id,
-        save.activeSession.startedAt,
-        save.activeSession.muxAssetId,
-        replayEvent.label,
-        {
-          athleteId: replayEvent.athleteId,
-          athleteName: replayEvent.athleteName,
-          cameraDirection: replayEvent.cameraDirection,
-          cameraId: replayEvent.cameraId,
-        },
+      const shotPhaseEvents = [
+        createShotPhaseReplayEvent("shot_gather", gatherTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
+        createShotPhaseReplayEvent("shot_release", releaseTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
+        createShotPhaseReplayEvent("shot_arc", arcTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
+        createShotPhaseReplayEvent("shot_attempt", timestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
+      ];
+      const replayAnchors = shotPhaseEvents.map((event) =>
+        createReplayAnchor(
+          event.id,
+          event.type,
+          event.timestamp,
+          activeSession.id,
+          activeSession.startedAt,
+          activeSession.muxAssetId,
+          event.label,
+          {
+            athleteId: event.athleteId,
+            athleteName: event.athleteName,
+            cameraDirection: event.cameraDirection,
+            cameraId: event.cameraId,
+          },
+        ),
       );
       const nextSave = {
         ...save,
         activeSession: {
-          ...save.activeSession,
-          replayAnchors: [...(save.activeSession.replayAnchors ?? []), replayAnchor],
-          replayEvents: [...(save.activeSession.replayEvents ?? []), replayEvent],
+          ...activeSession,
+          replayAnchors: [...(activeSession.replayAnchors ?? []), ...replayAnchors],
+          replayClips: [...(activeSession.replayClips ?? []), ...replayAnchors.map(createReplayClip)],
+          replayEvents: [...(activeSession.replayEvents ?? []), ...shotPhaseEvents],
         },
       };
 
@@ -2906,10 +3128,9 @@ export function RitualHome() {
   function changeWorkOperatorMode(mode: WorkOperatorMode) {
     setWorkOperatorMode(mode);
 
-    if ((mode === "coach" || mode === "director") && !coachParticipationModes.includes(pendingMode)) {
+    if ((mode === "coach" || mode === "director" || mode === "parent") && !coachParticipationModes.includes(pendingMode)) {
       setPendingMode("Practice");
     }
-
   }
 
   function toggleRecordingAttachment() {
@@ -3615,6 +3836,7 @@ export function RitualHome() {
   function recordShot(type: ShotType, suggestion = shotSuggestion) {
     if (!save.activeSession || !identity) return;
 
+    const activeSession = save.activeSession;
     const activeTrack = primaryTrackingTrack?.status !== "lost" ? primaryTrackingTrack : null;
     const trackedAthlete = activeTrack ? getTrackAthlete(activeTrack.id) : undefined;
     const fallbackAthlete = selectedCalibrationAthlete ?? presentParticipants[0] ?? identityFromAxisIdentity(identity);
@@ -3624,7 +3846,7 @@ export function RitualHome() {
     const timestamp = new Date().toISOString();
     const replayTimestamp = Math.max(
       0,
-      Math.floor((new Date(timestamp).getTime() - new Date(save.activeSession.startedAt).getTime()) / 1000),
+      Math.floor((new Date(timestamp).getTime() - new Date(activeSession.startedAt).getTime()) / 1000),
     );
     const shotEvent: ShotEvent = {
       athleteId: athlete.id,
@@ -3637,7 +3859,7 @@ export function RitualHome() {
           ? "stationary"
           : "unknown",
       replayTimestamp: suggestion?.replayTimestamp ?? replayTimestamp,
-      sessionId: save.activeSession.id,
+      sessionId: activeSession.id,
       suggestionConfidence: suggestion?.confidence,
       suggestionId: suggestion?.id,
       suggestionReason: suggestion?.reason,
@@ -3649,14 +3871,14 @@ export function RitualHome() {
       type,
       visibleTimeSeconds: activeTrack ? activeTrack.visibleTimeMs / 1000 : 0,
     };
-    const replayEvent = createShotReplayEvent(shotEvent, save.activeSession.replayEvents?.length ?? 0);
+    const replayEvent = createShotReplayEvent(shotEvent, activeSession.replayEvents?.length ?? 0);
     const replayAnchor = createReplayAnchor(
       replayEvent.id,
       replayEvent.type,
       replayEvent.timestamp,
-      save.activeSession.id,
-      save.activeSession.startedAt,
-      save.activeSession.muxAssetId,
+      activeSession.id,
+      activeSession.startedAt,
+      activeSession.muxAssetId,
       replayEvent.label,
       {
         athleteId: replayEvent.athleteId,
@@ -3665,13 +3887,75 @@ export function RitualHome() {
         cameraId: replayEvent.cameraId,
       },
     );
+    const extraReplayEvents: ReplayEvent[] = [];
+
+    if (activeTrack && suggestion) {
+      extraReplayEvents.push(
+        createShotPhaseReplayEvent(
+          "rim_contact",
+          timestamp,
+          { id: athlete.id, name: athlete.name },
+          activeTrack,
+          savedCameraDirection,
+          suggestion.confidence,
+        ),
+      );
+    }
+
+    if (
+      type === "miss" &&
+      activeTrack &&
+      ballTracking.visible &&
+      ballTracking.position &&
+      getPointDistance(ballTracking.position, activeTrack.location) <= 0.34
+    ) {
+      extraReplayEvents.push({
+        athleteId: athlete.id,
+        athleteName: athlete.name,
+        cameraDirection: savedCameraDirection,
+        cameraId: getCameraId(savedCameraDirection),
+        confidence: Math.max(0.62, ballTracking.confidence),
+        id: `replay:${timestamp}:rebound:${activeTrack.id}`,
+        label: "Rebound",
+        timestamp,
+        trackState: {
+          status: "tracked",
+          trackId: activeTrack.id,
+          tracked: true,
+          visible: true,
+        },
+        type: "rebound",
+      });
+    }
+
+    const extraReplayAnchors = extraReplayEvents.map((event) =>
+      createReplayAnchor(
+        event.id,
+        event.type,
+        event.timestamp,
+        activeSession.id,
+        activeSession.startedAt,
+        activeSession.muxAssetId,
+        event.label,
+        {
+          athleteId: event.athleteId,
+          athleteName: event.athleteName,
+          cameraDirection: event.cameraDirection,
+          cameraId: event.cameraId,
+        },
+      ),
+    );
     const nextSave = {
       ...save,
       activeSession: {
-        ...save.activeSession,
-        replayAnchors: [...(save.activeSession.replayAnchors ?? []), replayAnchor],
-        replayEvents: [...(save.activeSession.replayEvents ?? []), replayEvent],
-        shotEvents: [...(save.activeSession.shotEvents ?? []), shotEvent],
+          ...activeSession,
+        replayAnchors: [...(activeSession.replayAnchors ?? []), ...extraReplayAnchors, replayAnchor],
+        replayClips: [
+          ...(activeSession.replayClips ?? []),
+          ...[...extraReplayAnchors, replayAnchor].filter(shouldCreateClip).map(createReplayClip),
+        ],
+        replayEvents: [...(activeSession.replayEvents ?? []), ...extraReplayEvents, replayEvent],
+        shotEvents: [...(activeSession.shotEvents ?? []), shotEvent],
       },
     };
 
@@ -3728,6 +4012,7 @@ export function RitualHome() {
       activeSession: {
         ...save.activeSession,
         replayAnchors: [...(save.activeSession.replayAnchors ?? []), replayAnchor],
+        replayClips: [...(save.activeSession.replayClips ?? []), createReplayClip(replayAnchor)],
         replayEvents: [...(save.activeSession.replayEvents ?? []), replayEvent],
       },
     };
@@ -4482,10 +4767,84 @@ export function RitualHome() {
                 <strong>{cameraOperatingState}</strong>
                 <em>{cameraOperatingContext}</em>
               </div>
+              <div className="axis-camera-score-overlay" aria-label="Live results">
+                <span>
+                  <em>Time</em>
+                  <strong>{cameraTimeLabel}</strong>
+                </span>
+                <span>
+                  <em>Makes</em>
+                  <strong>{cameraMakes}</strong>
+                </span>
+                <span>
+                  <em>Misses</em>
+                  <strong>{cameraMisses}</strong>
+                </span>
+                {isGameMode ? (
+                  <>
+                    <span>
+                      <em>PTS</em>
+                      <strong>{save.activeSession ? activeGameResults.points : latestGameResults.points}</strong>
+                    </span>
+                    <span>
+                      <em>REB</em>
+                      <strong>{save.activeSession ? activeGameResults.rebounds : latestGameResults.rebounds}</strong>
+                    </span>
+                    <span>
+                      <em>AST</em>
+                      <strong>{save.activeSession ? activeGameResults.assists : latestGameResults.assists}</strong>
+                    </span>
+                  </>
+                ) : null}
+              </div>
+              <div className="axis-camera-shot-feedback" aria-label="Shot feedback">
+                <strong>{formatShotFeedback(latestShotFeedbackEvent)}</strong>
+              </div>
+              <div className="axis-camera-control-overlay" aria-label="Camera controls">
+                {ritualState === "active" ? (
+                  <>
+                    <div className="axis-camera-event-bar">
+                      {visibleWorkActions.map((action) => (
+                        <button
+                          disabled={!save.activeSession}
+                          key={action}
+                          onClick={() => recordGameAction(action)}
+                          type="button"
+                        >
+                          {shotSuggestion && action === "make"
+                            ? "Confirm make"
+                            : shotSuggestion && action === "miss"
+                              ? "Confirm miss"
+                              : formatGameActionLabel(action)}
+                        </button>
+                      ))}
+                    </div>
+                    {isRecordingAttached ? (
+                      <button className="axis-camera-primary-action" onClick={checkOut} type="button">
+                        End
+                      </button>
+                    ) : (
+                      <button className="axis-camera-primary-action" onClick={handleSessionPrimaryAction} type="button">
+                        Record
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    className="axis-camera-primary-action"
+                    disabled={ritualState === "saving"}
+                    onClick={ritualState === "saving" ? undefined : checkIn}
+                    type="button"
+                  >
+                    {ritualState === "saving" ? "Saving" : "Start"}
+                  </button>
+                )}
+              </div>
             </div>
           </section>
         ) : null}
 
+        {showAxisDebug ? (
         <section className="axis-ritual" aria-label="Work" data-state={ritualState}>
           {showAxisDebug ? <p className="axis-meta">Axis</p> : null}
           {save.activeSession ? (
@@ -4525,6 +4884,13 @@ export function RitualHome() {
                       type="button"
                     >
                       Coach
+                    </button>
+                    <button
+                      aria-pressed={workOperatorMode === "parent"}
+                      onClick={() => changeWorkOperatorMode("parent")}
+                      type="button"
+                    >
+                      Parent
                     </button>
                     <button
                       aria-pressed={workOperatorMode === "director"}
@@ -4710,8 +5076,9 @@ export function RitualHome() {
             </section>
           ) : null}
         </section>
+        ) : null}
 
-        {!showAxisDebug && isDirectorMode ? (
+        {showAxisDebug && isDirectorMode ? (
           <section className="axis-review-panel" aria-label="Organization results">
             <div className="axis-review-grid">
               <section className="axis-review-block axis-results-stage" aria-label="Director results">
@@ -4744,6 +5111,100 @@ export function RitualHome() {
                   <article>
                     <strong>{organizationResults.attendance}</strong>
                     <em>Attendance</em>
+                  </article>
+                </div>
+              </section>
+            </div>
+          </section>
+        ) : null}
+
+        {showAxisDebug ? (
+          <section className="axis-review-panel" aria-label="Organization rollups">
+            <div className="axis-role-rollups">
+              <section className="axis-review-block axis-results-stage" aria-label="Player rollup">
+                <span>Player</span>
+                <div className="axis-results-grid">
+                  <article>
+                    <strong>{organizationRollups.player.makes}</strong>
+                    <em>Makes</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.player.misses}</strong>
+                    <em>Misses</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.player.hours.toFixed(1)}</strong>
+                    <em>Hours</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.player.attendance}</strong>
+                    <em>Attendance</em>
+                  </article>
+                </div>
+              </section>
+
+              <section className="axis-review-block axis-results-stage" aria-label="Coach rollup">
+                <span>Coach</span>
+                <div className="axis-results-grid">
+                  <article>
+                    <strong>{organizationRollups.coach.athletes}</strong>
+                    <em>Athletes</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.coach.sessions}</strong>
+                    <em>Sessions</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.coach.wins}</strong>
+                    <em>Wins</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.coach.development}</strong>
+                    <em>Development</em>
+                  </article>
+                </div>
+              </section>
+
+              <section className="axis-review-block axis-results-stage" aria-label="Parent rollup">
+                <span>Parent</span>
+                <div className="axis-results-grid">
+                  <article>
+                    <strong>{organizationRollups.parent.makes}</strong>
+                    <em>Makes</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.parent.misses}</strong>
+                    <em>Misses</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.parent.attendance}</strong>
+                    <em>Attendance</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.parent.film}</strong>
+                    <em>Film</em>
+                  </article>
+                </div>
+              </section>
+
+              <section className="axis-review-block axis-results-stage" aria-label="Director rollup">
+                <span>Director</span>
+                <div className="axis-results-grid">
+                  <article>
+                    <strong>{organizationRollups.director.sessions}</strong>
+                    <em>Sessions</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.director.athletes}</strong>
+                    <em>Athletes</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.director.hours.toFixed(1)}</strong>
+                    <em>Hours</em>
+                  </article>
+                  <article>
+                    <strong>{organizationRollups.director.film}</strong>
+                    <em>Film</em>
                   </article>
                 </div>
               </section>
@@ -4870,20 +5331,32 @@ export function RitualHome() {
                     {!showAxisDebug ? (
                       <>
                         <article>
+                          <strong>{latestGameResults.points}</strong>
+                          <em>PTS</em>
+                        </article>
+                        <article>
+                          <strong>{latestGameResults.fieldGoalPercentage}%</strong>
+                          <em>FG%</em>
+                        </article>
+                        <article>
+                          <strong>{latestGameResults.rebounds}</strong>
+                          <em>REB</em>
+                        </article>
+                        <article>
+                          <strong>{latestGameResults.assists}</strong>
+                          <em>AST</em>
+                        </article>
+                        <article>
+                          <strong>{latestGameResults.turnovers}</strong>
+                          <em>TO</em>
+                        </article>
+                        <article>
                           <strong>{latestSession.shotSummary?.makes ?? 0}</strong>
                           <em>Makes</em>
                         </article>
                         <article>
                           <strong>{latestSession.shotSummary?.misses ?? 0}</strong>
                           <em>Misses</em>
-                        </article>
-                        <article>
-                          <strong>{`${latestSession.shotSummary?.fieldGoalPercentage ?? 0}%`}</strong>
-                          <em>FG%</em>
-                        </article>
-                        <article>
-                          <strong>{latestReboundCount}</strong>
-                          <em>Rebounds</em>
                         </article>
                       </>
                     ) : (

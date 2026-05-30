@@ -320,7 +320,7 @@ h1 {
 
 .axis-camera-os-overlay {
   align-items: end;
-  bottom: 0;
+  bottom: clamp(6.9rem, 18vw, 8.6rem);
   display: flex;
   gap: 1rem;
   justify-content: space-between;
@@ -348,6 +348,121 @@ h1 {
   letter-spacing: 0.08em;
   text-align: right;
   text-transform: uppercase;
+}
+
+.axis-camera-score-overlay {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  left: clamp(0.65rem, 2vw, 1rem);
+  position: absolute;
+  right: clamp(0.65rem, 2vw, 1rem);
+  top: clamp(0.65rem, 2vw, 1rem);
+  z-index: 3;
+}
+
+.axis-camera-score-overlay span {
+  background: rgba(6, 6, 6, 0.54);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.46rem 0.52rem;
+  position: static;
+}
+
+.axis-camera-score-overlay em,
+.axis-camera-score-overlay strong {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.axis-camera-score-overlay em {
+  color: var(--axis-muted);
+  font-size: 0.52rem;
+  font-weight: 800;
+}
+
+.axis-camera-score-overlay strong {
+  color: var(--axis-ink);
+  font-size: clamp(0.9rem, 3vw, 1.35rem);
+  font-weight: 900;
+}
+
+.axis-camera-shot-feedback {
+  background: rgba(6, 6, 6, 0.58);
+  border: 1px solid rgba(168, 217, 51, 0.28);
+  left: clamp(0.65rem, 2vw, 1rem);
+  padding: 0.52rem 0.62rem;
+  position: absolute;
+  right: clamp(0.65rem, 2vw, 1rem);
+  top: clamp(4.25rem, 12vw, 5.3rem);
+  z-index: 3;
+}
+
+.axis-camera-shot-feedback strong {
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(0.82rem, 3vw, 1.2rem);
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.axis-camera-control-overlay {
+  align-items: end;
+  bottom: clamp(0.65rem, 2vw, 1rem);
+  display: grid;
+  gap: 0.55rem;
+  left: clamp(0.65rem, 2vw, 1rem);
+  position: absolute;
+  right: clamp(0.65rem, 2vw, 1rem);
+  z-index: 4;
+}
+
+.axis-camera-event-bar {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-camera-event-bar button,
+.axis-camera-primary-action {
+  appearance: none;
+  background: rgba(6, 6, 6, 0.66);
+  border: 1px solid rgba(168, 217, 51, 0.44);
+  color: var(--axis-live);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(0.72rem, 2.7vw, 1rem);
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  min-height: 2.65rem;
+  padding: 0.58rem 0.42rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-camera-primary-action {
+  background: rgba(168, 217, 51, 0.14);
+  color: var(--axis-ink);
+  justify-self: stretch;
+}
+
+.axis-camera-event-bar button:disabled,
+.axis-camera-primary-action:disabled {
+  border-color: rgba(244, 244, 240, 0.14);
+  color: rgba(244, 244, 240, 0.34);
+  cursor: default;
+}
+
+.axis-camera-event-bar button:focus-visible,
+.axis-camera-primary-action:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.16rem;
 }
 
 .axis-active-state strong,
@@ -386,7 +501,7 @@ h1 {
 .axis-operator-strip {
   border: 1px solid var(--axis-line);
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .axis-operator-strip button {
@@ -1714,6 +1829,12 @@ h1 {
   gap: 0.3rem;
   min-height: 4.2rem;
   padding: 0.6rem;
+}
+
+.axis-role-rollups {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .axis-film-library {
