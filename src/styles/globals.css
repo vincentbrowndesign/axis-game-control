@@ -297,11 +297,15 @@ h1 {
 .axis-camera-home {
   display: grid;
   gap: 0.65rem;
+  isolation: isolate;
+  position: sticky;
+  top: 0.75rem;
+  z-index: 4;
 }
 
 .axis-camera-home-preview {
   aspect-ratio: 4 / 5;
-  min-height: clamp(19rem, 70dvh, 34rem);
+  min-height: clamp(17rem, 58dvh, 32rem);
 }
 
 .axis-camera-home-preview::after {
@@ -312,6 +316,38 @@ h1 {
   inset: 0;
   pointer-events: none;
   position: absolute;
+}
+
+.axis-camera-os-overlay {
+  align-items: end;
+  bottom: 0;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  left: 0;
+  padding: clamp(0.85rem, 2.4vw, 1.15rem);
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: 2;
+}
+
+.axis-camera-os-overlay strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.4rem, 5vw, 2.35rem);
+  font-weight: 500;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.axis-camera-os-overlay em {
+  color: var(--axis-live);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
 }
 
 .axis-product-strip {
@@ -359,11 +395,12 @@ h1 {
 }
 
 .axis-ritual {
-  background: var(--axis-surface);
-  border: 1px solid var(--axis-line);
+  background: rgba(16, 17, 15, 0.86);
+  border: 1px solid rgba(244, 244, 240, 0.11);
   display: grid;
   gap: 1rem;
   padding: clamp(1rem, 3.2vw, 1.45rem);
+  position: relative;
   transition:
     border-color 180ms ease,
     background-color 180ms ease;
@@ -378,6 +415,41 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+}
+
+.axis-operator-strip {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-operator-strip button {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.03);
+  border: 0;
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  min-height: 2.1rem;
+  padding: 0.58rem 0.72rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-operator-strip button + button {
+  border-left: 1px solid var(--axis-line);
+}
+
+.axis-operator-strip button[aria-pressed="true"] {
+  background: rgba(168, 217, 51, 0.08);
+  color: var(--axis-live);
+}
+
+.axis-operator-strip button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: -1px;
 }
 
 .axis-kind-picker button {
@@ -530,11 +602,10 @@ h1 {
 }
 
 .axis-shot-bar {
-  align-items: center;
+  align-items: stretch;
   border: 1px solid rgba(244, 244, 240, 0.12);
-  display: flex;
+  display: grid;
   gap: 0.6rem;
-  justify-content: space-between;
   padding: 0.5rem;
   width: 100%;
 }
@@ -548,8 +619,9 @@ h1 {
 }
 
 .axis-shot-bar div {
-  display: flex;
+  display: grid;
   gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
 }
 
 .axis-shot-bar button {
@@ -558,11 +630,11 @@ h1 {
   border: 1px solid rgba(168, 217, 51, 0.38);
   color: var(--axis-live);
   cursor: pointer;
-  font-size: clamp(1.15rem, 4.8vw, 2.1rem);
+  font-size: clamp(0.78rem, 3.2vw, 1.15rem);
   font-weight: 900;
-  min-height: 3rem;
-  min-width: 6.5rem;
-  padding: 0.55rem 0.8rem;
+  min-height: 2.7rem;
+  min-width: 0;
+  padding: 0.55rem 0.45rem;
   text-transform: uppercase;
   touch-action: manipulation;
 }
@@ -1360,7 +1432,8 @@ h1 {
 }
 
 .axis-review-panel {
-  border: 1px solid rgba(168, 217, 51, 0.24);
+  background: rgba(16, 17, 15, 0.86);
+  border: 1px solid rgba(244, 244, 240, 0.11);
   display: grid;
   gap: 0.8rem;
   padding: 0.75rem;
@@ -1538,6 +1611,62 @@ h1 {
   display: block;
   object-fit: cover;
   width: 100%;
+}
+
+.axis-watch-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.axis-watch-group {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 0;
+}
+
+.axis-watch-group header {
+  align-items: center;
+  border-bottom: 1px solid var(--axis-line);
+  display: flex;
+  justify-content: space-between;
+  min-height: 2.35rem;
+  padding: 0.48rem 0.55rem;
+}
+
+.axis-watch-group header strong,
+.axis-watch-group header em {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-watch-group header strong {
+  color: var(--axis-ink);
+}
+
+.axis-watch-group header em {
+  color: var(--axis-live);
+}
+
+.axis-watch-group .axis-review-row {
+  border-left: 0;
+  border-right: 0;
+}
+
+.axis-watch-group .axis-review-row:last-child {
+  border-bottom: 0;
+}
+
+.axis-review-row[data-selected="true"] {
+  border-color: rgba(168, 217, 51, 0.44);
+}
+
+.axis-review-row[data-selected="true"] strong,
+.axis-review-row[data-selected="true"] em {
+  color: var(--axis-live);
 }
 
 .axis-review-block > div {
@@ -1914,6 +2043,24 @@ button.axis-review-row:focus-visible {
 
   .axis-check-button {
     font-size: clamp(2.15rem, 16vw, 4.45rem);
+  }
+
+  .axis-camera-home {
+    top: 0.45rem;
+  }
+
+  .axis-camera-home-preview {
+    min-height: clamp(14rem, 48dvh, 25rem);
+  }
+
+  .axis-camera-os-overlay {
+    align-items: start;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .axis-camera-os-overlay em {
+    text-align: left;
   }
 
   .axis-ritual[data-state="active"] .axis-check-button {
