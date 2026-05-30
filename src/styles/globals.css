@@ -2355,6 +2355,70 @@ h1 {
   grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
 }
 
+.axis-film-feed {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+.axis-film-feed-item {
+  appearance: none;
+  background:
+    linear-gradient(180deg, rgba(244, 244, 240, 0.055), rgba(244, 244, 240, 0.02)),
+    rgba(6, 6, 6, 0.54);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  color: var(--axis-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 0.42rem;
+  min-height: 7.2rem;
+  padding: 0.72rem;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.axis-film-feed-item[data-active="true"] {
+  border-color: rgba(168, 217, 51, 0.26);
+}
+
+.axis-film-feed-item[data-selected="true"] {
+  background: rgba(168, 217, 51, 0.09);
+}
+
+.axis-film-feed-item:disabled {
+  color: rgba(244, 244, 240, 0.34);
+  cursor: default;
+}
+
+.axis-film-feed-item span,
+.axis-film-feed-item strong,
+.axis-film-feed-item em {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.axis-film-feed-item span {
+  color: var(--axis-live);
+  font-size: 0.58rem;
+  font-weight: 900;
+}
+
+.axis-film-feed-item strong {
+  align-self: end;
+  color: inherit;
+  font-size: clamp(1rem, 2.8vw, 1.5rem);
+  font-weight: 900;
+}
+
+.axis-film-feed-item em {
+  color: var(--axis-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
 .axis-results-grid {
   display: grid;
   gap: 0.5rem;

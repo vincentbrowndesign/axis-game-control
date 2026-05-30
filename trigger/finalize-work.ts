@@ -284,7 +284,7 @@ function exportOutputs(payload: FinalizeWorkPayload): FinalizeStageResult {
   const exportCount = payload.exportQueue?.length ?? 0;
 
   return {
-    detail: `${exportCount} outputs prepared${muxStage ? ` through ${muxStage.provider}` : ""}.`,
+    detail: `${exportCount} outputs queued through ${muxStage?.provider ?? "mux"} export factory.`,
     name: "export_outputs",
     status: payload.film.status === "unavailable" ? "queued" : "processing",
   };

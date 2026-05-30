@@ -49,22 +49,11 @@ type WorkDetectionState = "ACTIVE" | "IDLE" | "MOVING" | "SHOOTING";
 type WatchEventType = "assist" | "make" | "miss" | "rebound" | "shot_attempt" | "turnover";
 type SessionExportType =
   | "coach_report"
-  | "director_report"
-  | "game_highlights"
-  | "coach_film"
-  | "director_film"
-  | "highlights_film"
-  | "original_film"
-  | "overlay_film"
-  | "player_card"
-  | "player_pdf"
-  | "player_progress_graph"
-  | "player_reel"
-  | "player_timeline"
-  | "session_recap"
-  | "shot_science"
-  | "social_reel"
-  | "vertical_social_film";
+  | "player_report"
+  | "raw_video"
+  | "shot_science_video"
+  | "overlay_video"
+  | "vertical_social_clip";
 
 const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
 const participationModes: ParticipationMode[] = ["Training", "Practice", "Game", "Workout", "Challenge"];
@@ -85,23 +74,12 @@ const filmWatchGroups: Array<{ label: string; type: WatchEventType }> = [
   { label: "WATCH TURNOVERS", type: "turnover" },
 ];
 const sessionExportLabels: Record<SessionExportType, string> = {
-  coach_film: "Coach Film",
   coach_report: "Coach Report",
-  director_film: "Director Film",
-  director_report: "Director Report",
-  game_highlights: "Game Highlights",
-  highlights_film: "Highlights Film",
-  original_film: "Original Film",
-  overlay_film: "Overlay Film",
-  player_card: "Player Card",
-  player_pdf: "Player PDF",
-  player_progress_graph: "Player Progress Graph",
-  player_reel: "Player Reel",
-  player_timeline: "Player Timeline",
-  session_recap: "Session Recap",
-  shot_science: "Shot Science",
-  social_reel: "Social Reel",
-  vertical_social_film: "Vertical Social Film",
+  overlay_video: "Overlay Video",
+  player_report: "Player Report",
+  raw_video: "Raw Video",
+  shot_science_video: "Shot Science Video",
+  vertical_social_clip: "Vertical Social Clip",
 };
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
@@ -2278,34 +2256,10 @@ function createPlayerReport(session: SavedSession, shots: ShotEvent[], shotSumma
   });
   const reportOutputs: SessionExportOutput[] = [
     {
-      label: sessionExportLabels.player_card,
-      sourceCount: hasShots ? 1 : 0,
-      status: hasShots ? "available" : "waiting",
-      type: "player_card",
-    },
-    {
-      label: sessionExportLabels.player_pdf,
-      sourceCount: hasShots ? 1 : 0,
-      status: hasShots ? "available" : "waiting",
-      type: "player_pdf",
-    },
-    {
-      label: sessionExportLabels.player_reel,
-      sourceCount: clips.length,
-      status: hasFilm && clips.length ? "available" : hasFilm ? "processing" : "waiting",
-      type: "player_reel",
-    },
-    {
-      label: sessionExportLabels.player_timeline,
-      sourceCount: shots.length,
-      status: shots.length ? "available" : "waiting",
-      type: "player_timeline",
-    },
-    {
-      label: sessionExportLabels.player_progress_graph,
-      sourceCount: progressGraph.length,
-      status: progressGraph.length ? "available" : "waiting",
-      type: "player_progress_graph",
+      label: sessionExportLabels.player_report,
+      sourceCount: shots.length + clips.length,
+      status: hasFilm ? "processing" : hasShots ? "processing" : "waiting",
+      type: "player_report",
     },
   ];
 
@@ -2380,7 +2334,7 @@ function createAxisCapabilityPipeline({
   return [
     {
       capability: "Interpretation, summaries, reports",
-      outputs: ["Work Summary", "Results", "Player Report", "Coach Report"],
+      outputs: ["Player Report", "Coach Report"],
       provider: "openai",
       sourceCount: events.length + shots.length,
       status: hasEvents ? "processing" : "waiting",
@@ -2407,15 +2361,15 @@ function createAxisCapabilityPipeline({
       status: detectionStatus(hasTrackedPlayer),
     },
     {
-      capability: "Video pipeline, playback, exports",
-      outputs: ["Original Film", "Overlay Film", "Highlights Film", "Vertical Social Film"],
+      capability: "Video pipeline, playback, export factory",
+      outputs: ["Raw Video", "Overlay Video", "Shot Science Video", "Vertical Social Clip", "Player Report", "Coach Report"],
       provider: "mux",
       sourceCount: Number(hasMuxAsset) + clips.length,
       status: videoStatus,
     },
     {
       capability: "Storage, session objects",
-      outputs: ["Work", "Film", "Events", "Results"],
+      outputs: ["Work", "Film", "Events", "Intelligent Film"],
       provider: "supabase",
       sourceCount: Number(Boolean(session.id)) + events.length + shots.length,
       status: session.id ? "available" : "waiting",
@@ -2433,52 +2387,51 @@ function createSessionExportObject(session: SavedSession): SessionExportObject {
   const playerReport = createPlayerReport(session, shots, shotSummary, clips);
   const hasMuxAsset = Boolean(session.muxAssetId);
   const hasPlayableFilm = Boolean(session.muxPlaybackId);
+  const hasMuxExportSource = hasPlayableFilm || hasMuxAsset || session.recordingAttached;
   const hasEvents = events.length > 0 || overlays.length > 0;
-  const hasClips = clips.length > 0;
   const getExportStatus = (hasSource: boolean): SessionExportOutput["status"] => {
     if (hasPlayableFilm && hasSource) return "available";
-    if (hasMuxAsset && hasSource) return "processing";
+    if (hasMuxExportSource && hasSource) return "processing";
 
     return "waiting";
   };
   const exports: SessionExportOutput[] = [
     {
-      label: sessionExportLabels.original_film,
-      sourceCount: hasPlayableFilm || hasMuxAsset ? 1 : 0,
+      label: sessionExportLabels.raw_video,
+      sourceCount: hasMuxExportSource ? 1 : 0,
       status: getExportStatus(true),
-      type: "original_film",
+      type: "raw_video",
     },
     {
-      label: sessionExportLabels.overlay_film,
+      label: sessionExportLabels.overlay_video,
       sourceCount: overlays.length,
-      status: getExportStatus(hasEvents),
-      type: "overlay_film",
+      status: getExportStatus(true),
+      type: "overlay_video",
     },
     {
-      label: sessionExportLabels.highlights_film,
+      label: sessionExportLabels.shot_science_video,
+      sourceCount: shots.length,
+      status: getExportStatus(true),
+      type: "shot_science_video",
+    },
+    {
+      label: sessionExportLabels.vertical_social_clip,
       sourceCount: clips.length,
-      status: getExportStatus(hasClips),
-      type: "highlights_film",
+      status: getExportStatus(true),
+      type: "vertical_social_clip",
     },
     {
-      label: sessionExportLabels.vertical_social_film,
-      sourceCount: clips.length,
-      status: getExportStatus(hasClips),
-      type: "vertical_social_film",
+      label: sessionExportLabels.player_report,
+      sourceCount: shots.length + clips.length,
+      status: hasMuxExportSource || hasEvents || shots.length ? "processing" : "waiting",
+      type: "player_report",
     },
     {
-      label: sessionExportLabels.coach_film,
-      sourceCount: events.length,
-      status: getExportStatus(hasEvents),
-      type: "coach_film",
+      label: sessionExportLabels.coach_report,
+      sourceCount: events.length + shots.length,
+      status: hasMuxExportSource || hasEvents || shots.length ? "processing" : "waiting",
+      type: "coach_report",
     },
-    {
-      label: sessionExportLabels.director_film,
-      sourceCount: events.length,
-      status: getExportStatus(hasEvents),
-      type: "director_film",
-    },
-    ...playerReport.outputs,
   ];
 
   return {
@@ -3039,6 +2992,7 @@ export function RitualHome() {
   const [isInterpretingMovement, setIsInterpretingMovement] = useState(false);
   const [shotSuggestion, setShotSuggestion] = useState<ShotSuggestion | null>(null);
   const [selectedReplayAnchor, setSelectedReplayAnchor] = useState<ReplayAnchor | null>(null);
+  const [selectedFilmSessionId, setSelectedFilmSessionId] = useState<string | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [reviewMessage, setReviewMessage] = useState("");
@@ -3323,15 +3277,24 @@ export function RitualHome() {
     let attendance = save.activeSession ? activeParticipantCount : 0;
     let makes = 0;
     let misses = 0;
+    let attempts = 0;
     let totalSeconds = save.activeSession
       ? Math.max(0, Math.floor((now - new Date(save.activeSession.startedAt).getTime()) / 1000))
       : 0;
+
+    if (save.activeSession) {
+      const activeSummary = summarizeShots(save.activeSession.shotEvents ?? []);
+      makes += activeSummary.makes;
+      misses += activeSummary.misses;
+      attempts += activeSummary.attempts;
+    }
 
     activeParticipants.forEach((participant) => athleteIds.add(participant.id));
     save.sessions.forEach((session) => {
       const shotSummary = session.shotSummary ?? summarizeShots(normalizeShotEvents(session.shotEvents));
       makes += shotSummary.makes;
       misses += shotSummary.misses;
+      attempts += shotSummary.attempts;
       totalSeconds += session.durationSeconds;
       attendance += session.activeParticipantCount || session.participantCount || session.participants?.length || 1;
       (session.participants ?? []).forEach((participant) => athleteIds.add(participant.id));
@@ -3339,8 +3302,10 @@ export function RitualHome() {
 
     return {
       attendance,
+      attempts,
       athletes: athleteIds.size || (identity ? 1 : 0),
       coaches: save.sessions.length || save.activeSession ? 1 : 0,
+      fg: attempts ? Math.round((makes / attempts) * 100) : 0,
       film: organizationRollups.director.film,
       hours: totalSeconds / 3600,
       makes,
@@ -3407,7 +3372,6 @@ export function RitualHome() {
     return athleteId ? presentParticipants.find((participant) => participant.id === athleteId) : undefined;
   };
   const activeShotSummary = summarizeShots(save.activeSession?.shotEvents ?? []);
-  const activeGameResults = summarizeGameResults(save.activeSession?.shotEvents ?? [], save.activeSession?.replayEvents ?? []);
   const latestLiveShot = save.activeSession?.shotEvents?.length
     ? save.activeSession.shotEvents[save.activeSession.shotEvents.length - 1]
     : null;
@@ -3421,63 +3385,150 @@ export function RitualHome() {
     isShooting: Boolean(shotSuggestion),
     track: primaryTrackingTrack,
   });
-  const latestReviewEvents = latestSession?.replayEvents?.slice(0, 6) ?? [];
-  const latestReviewAnchors = latestSession?.replayAnchors?.slice(0, 6) ?? [];
-  const latestFilmTimelineAnchors = latestSession?.replayAnchors?.filter(shouldShowFilmTimelineAnchor) ?? [];
-  const latestReviewClips = latestSession?.replayClips?.slice(0, 4) ?? [];
+  const filmSession = save.sessions.find((session) => session.id === selectedFilmSessionId) ?? latestSession;
+  const latestReviewEvents = filmSession?.replayEvents?.slice(0, 6) ?? [];
+  const latestReviewAnchors = filmSession?.replayAnchors?.slice(0, 6) ?? [];
+  const latestFilmTimelineAnchors = filmSession?.replayAnchors?.filter(shouldShowFilmTimelineAnchor) ?? [];
+  const latestReviewClips = filmSession?.replayClips?.slice(0, 4) ?? [];
   const latestClipAnchors = latestReviewClips
-    .map((clip) => latestSession?.replayAnchors?.find((anchor) => anchor.eventId === clip.eventId))
+    .map((clip) => filmSession?.replayAnchors?.find((anchor) => anchor.eventId === clip.eventId))
     .filter((anchor): anchor is ReplayAnchor => Boolean(anchor));
   const filmOverlayAnchors = latestFilmTimelineAnchors.filter(shouldShowFilmOverlayAnchor).slice(0, 12);
-  const latestShotAttempts = latestSession?.replayAnchors?.filter((anchor) => anchor.eventType === "shot_attempt") ?? [];
-  const latestGameResults = summarizeGameResults(latestSession?.shotEvents ?? [], latestSession?.replayEvents ?? []);
-  const latestReboundCount = latestSession?.replayEvents?.filter((event) => event.type === "rebound").length ?? 0;
-  const latestSessionReview = latestSession?.review;
-  const latestFilmPlaybackId = getFilmPlaybackId(latestSession);
-  const latestFilmPreviewUrl = latestSession ? filmPreviewUrls[latestSession.id] : undefined;
+  const latestSessionReview = filmSession?.review;
+  const latestFilmPlaybackId = getFilmPlaybackId(filmSession);
+  const latestFilmPreviewUrl = filmSession ? filmPreviewUrls[filmSession.id] : undefined;
   const selectedFilmTime =
-    selectedReplayAnchor && latestSession && selectedReplayAnchor.sessionId === latestSession.id
+    selectedReplayAnchor && filmSession && selectedReplayAnchor.sessionId === filmSession.id
       ? selectedReplayAnchor.videoTimestamp
       : 0;
   const localFilmSrc = latestFilmPreviewUrl ? `${latestFilmPreviewUrl}#t=${Math.max(0, selectedFilmTime).toFixed(1)}` : undefined;
-  const latestFilmThumbnailUrl = latestSession?.thumbnailUrl ?? getMuxThumbnailUrl(latestFilmPlaybackId);
-  const latestFilmAvailability = getFilmAvailability(latestSession);
-  const latestExportObject = latestSession ? createSessionExportObject(latestSession) : null;
-  const resultsSession = latestSession ?? save.activeSession ?? null;
+  const latestFilmThumbnailUrl = filmSession?.thumbnailUrl ?? getMuxThumbnailUrl(latestFilmPlaybackId);
+  const latestFilmAvailability = getFilmAvailability(filmSession);
+  const latestExportObject = filmSession ? createSessionExportObject(filmSession) : null;
+  const resultsSession = filmSession ?? save.activeSession ?? null;
   const resultsShotEvents = resultsSession?.shotEvents ?? [];
   const resultsShotSummary =
     latestExportObject?.metrics.shotSummary ?? (save.activeSession ? activeShotSummary : summarizeShots(resultsShotEvents));
   const resultsModeLabel = resultsSession?.mode ?? pendingMode;
-  const resultsTimeLabel = latestSession
-    ? formatTime(latestSession.endedAt)
+  const resultsTimeLabel = filmSession
+    ? formatTime(filmSession.endedAt)
     : save.activeSession
       ? formatTime(save.activeSession.startedAt)
       : "--";
-  const resultsWorkTime = latestSession
-    ? formatWorkMinutes(latestExportObject?.metrics.workTimeSeconds ?? latestSession.durationSeconds)
-    : save.activeSession
-      ? formatWorkMinutes(Math.max(0, Math.floor((now - new Date(save.activeSession.startedAt).getTime()) / 1000)))
-      : "0m";
   const resultsLongestMakeStreak = latestExportObject?.metrics.longestMakeStreak ?? getLongestMakeStreak(resultsShotEvents);
-  const resultsBestClipAnchor =
-    latestFilmTimelineAnchors.find((anchor) => anchor.eventType === "make") ?? filmOverlayAnchors[0] ?? latestClipAnchors[0];
   const resultsShotScience = resultsShotEvents.find((event) => event.shotScience)?.shotScience;
-  const resultsFilmLabel = latestSession?.recordingAttached || save.activeSession?.recordingAttached ? "Available" : "No film";
-  const visibleExportOutputs = latestExportObject?.exports ?? [];
   const shouldShowPrimaryFilm =
-    !showAxisDebug && productSurface === "overlay" && Boolean(latestSession && (latestFilmPlaybackId || localFilmSrc));
-  const filmLibrary = save.sessions.slice(0, 5).map((session) => {
-    const playbackId = getFilmPlaybackId(session);
+    !showAxisDebug && productSurface === "overlay" && Boolean(filmSession && (latestFilmPlaybackId || localFilmSrc));
+  const findShotAnchor = (session: SavedSession, shot?: ShotEvent) =>
+    shot
+      ? normalizeReplayAnchors(session.replayAnchors).find(
+          (anchor) => anchor.eventType === shot.type && Math.abs(anchor.videoTimestamp - shot.replayTimestamp) <= 1,
+        )
+      : undefined;
+  const filmShots = normalizeShotEvents(filmSession?.shotEvents);
+  const filmMakeAnchors = latestFilmTimelineAnchors.filter((anchor) => anchor.eventType === "make");
+  const filmMissAnchors = latestFilmTimelineAnchors.filter((anchor) => anchor.eventType === "miss");
+  const longestStreakShot = filmShots.reduce<ShotEvent | undefined>(
+    (best, shot) => (!best || shot.makeStreak > best.makeStreak ? shot : best),
+    undefined,
+  );
+  const fastestReleaseShot = filmShots.reduce<ShotEvent | undefined>(
+    (best, shot) =>
+      !best || (shot.shotScience?.releaseTime ?? Number.POSITIVE_INFINITY) < (best.shotScience?.releaseTime ?? Number.POSITIVE_INFINITY)
+        ? shot
+        : best,
+    undefined,
+  );
+  const highestArcShot = filmShots.reduce<ShotEvent | undefined>(
+    (best, shot) => (!best || (shot.shotScience?.arcHeightFeet ?? 0) > (best.shotScience?.arcHeightFeet ?? 0) ? shot : best),
+    undefined,
+  );
+  const bestPerformanceSession =
+    save.sessions.reduce<SavedSession | undefined>((best, session) => {
+      const bestSummary = best ? best.shotSummary ?? summarizeShots(best.shotEvents ?? []) : undefined;
+      const sessionSummary = session.shotSummary ?? summarizeShots(session.shotEvents ?? []);
+      const bestScore = bestSummary ? bestSummary.fieldGoalPercentage * 100 + bestSummary.attempts : -1;
+      const sessionScore = sessionSummary.fieldGoalPercentage * 100 + sessionSummary.attempts;
 
-    return {
-      availability: getFilmAvailability(session),
-      duration: formatDuration(session.durationSeconds),
-      id: session.id,
-      mode: session.mode ?? defaultParticipationMode,
-      playbackId,
-      thumbnailUrl: session.thumbnailUrl ?? getMuxThumbnailUrl(playbackId),
-    };
-  });
+      return sessionScore > bestScore ? session : best;
+    }, undefined) ?? filmSession;
+  const bestPerformanceAnchor =
+    bestPerformanceSession?.replayAnchors?.find((anchor) => anchor.eventType === "make") ??
+    bestPerformanceSession?.replayAnchors?.find(shouldShowFilmTimelineAnchor);
+  const filmSessionIndex = filmSession ? save.sessions.findIndex((session) => session.id === filmSession.id) : -1;
+  const previousPerformanceSession = filmSessionIndex >= 0 ? save.sessions[filmSessionIndex + 1] : undefined;
+  const previousShotSummary = previousPerformanceSession
+    ? previousPerformanceSession.shotSummary ?? summarizeShots(previousPerformanceSession.shotEvents ?? [])
+    : null;
+  const performanceImprovement =
+    previousShotSummary && previousShotSummary.attempts > 0 && resultsShotSummary.attempts > 0
+      ? resultsShotSummary.fieldGoalPercentage - previousShotSummary.fieldGoalPercentage
+      : null;
+  const performanceImprovementLabel =
+    performanceImprovement === null ? "Baseline" : `${performanceImprovement >= 0 ? "+" : ""}${performanceImprovement}% FG`;
+  const performanceImprovementAnchor =
+    filmSession?.replayAnchors?.find((anchor) => anchor.eventType === "make") ?? latestFilmTimelineAnchors[0];
+  const latestClipAnchor = latestClipAnchors[0] ?? latestFilmTimelineAnchors[0];
+  const filmFeedItems = [
+    {
+      anchor: latestClipAnchor,
+      kicker: latestClipAnchor ? formatFilmTimestamp(latestClipAnchor.videoTimestamp) : "--",
+      label: "Latest Clip",
+      sessionId: filmSession?.id,
+      value: latestClipAnchor ? formatHumanMomentLabel(latestClipAnchor) : "Waiting for film",
+    },
+    {
+      anchor: filmMakeAnchors[0],
+      kicker: `${filmMakeAnchors.length} clips`,
+      label: "Recent Makes",
+      sessionId: filmSession?.id,
+      value: filmMakeAnchors[0] ? formatHumanMomentLabel(filmMakeAnchors[0]) : "No makes yet",
+    },
+    {
+      anchor: filmMissAnchors[0],
+      kicker: `${filmMissAnchors.length} clips`,
+      label: "Recent Misses",
+      sessionId: filmSession?.id,
+      value: filmMissAnchors[0] ? formatHumanMomentLabel(filmMissAnchors[0]) : "No misses yet",
+    },
+    {
+      anchor: filmSession ? findShotAnchor(filmSession, longestStreakShot) : undefined,
+      kicker: `${longestStreakShot?.makeStreak ?? 0} streak`,
+      label: "Longest Streak",
+      sessionId: filmSession?.id,
+      value: longestStreakShot ? formatFilmTimestamp(longestStreakShot.replayTimestamp) : "Waiting",
+    },
+    {
+      anchor: filmSession ? findShotAnchor(filmSession, fastestReleaseShot) : undefined,
+      kicker: fastestReleaseShot?.shotScience ? formatShotScienceReleaseTime(fastestReleaseShot.shotScience) : "--",
+      label: "Fastest Shot",
+      sessionId: filmSession?.id,
+      value: fastestReleaseShot ? formatFilmTimestamp(fastestReleaseShot.replayTimestamp) : "Waiting",
+    },
+    {
+      anchor: filmSession ? findShotAnchor(filmSession, highestArcShot) : undefined,
+      kicker: highestArcShot?.shotScience ? formatShotScienceArc(highestArcShot.shotScience) : "--",
+      label: "Highest Arc",
+      sessionId: filmSession?.id,
+      value: highestArcShot ? formatFilmTimestamp(highestArcShot.replayTimestamp) : "Waiting",
+    },
+    {
+      anchor: performanceImprovementAnchor,
+      kicker: previousShotSummary ? `${previousShotSummary.fieldGoalPercentage}% previous` : "First baseline",
+      label: "Most Improved",
+      sessionId: filmSession?.id,
+      value: performanceImprovementLabel,
+    },
+    {
+      anchor: bestPerformanceAnchor,
+      kicker: bestPerformanceSession ? `${(bestPerformanceSession.shotSummary ?? summarizeShots(bestPerformanceSession.shotEvents ?? [])).attempts} attempts` : "--",
+      label: "Best FG%",
+      sessionId: bestPerformanceSession?.id,
+      value: bestPerformanceSession
+        ? `${(bestPerformanceSession.shotSummary ?? summarizeShots(bestPerformanceSession.shotEvents ?? [])).fieldGoalPercentage}%`
+        : "Waiting",
+    },
+  ];
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const currentRimLock = save.activeSession?.rimLock ?? latestSession?.rimLock;
   const rimLockLabel = currentRimLock ? "Rim locked" : save.activeSession ? "Tap rim once" : "Rim waiting";
@@ -3519,11 +3570,6 @@ export function RitualHome() {
     : latestSession
       ? formatDuration(latestSession.durationSeconds)
       : "0:00";
-  const cameraClipCount = save.activeSession
-    ? save.activeSession.replayClips?.length ?? 0
-    : latestExportObject?.clips.length ?? latestSession?.replayClips?.length ?? 0;
-  const cameraReportState = save.activeSession ? "Building" : latestSession ? "Ready" : "Waiting";
-  const cameraProgressState = latestSession ? "Updated" : save.activeSession ? "Live" : `${save.sessions.length} saved`;
   const cameraMakes = save.activeSession ? activeShotSummary.makes : latestSession?.shotSummary?.makes ?? 0;
   const cameraMisses = save.activeSession ? activeShotSummary.misses : latestSession?.shotSummary?.misses ?? 0;
   const cameraAttempts = save.activeSession ? activeShotSummary.attempts : latestSession?.shotSummary?.attempts ?? 0;
@@ -5091,6 +5137,12 @@ export function RitualHome() {
     setProductSurface("overlay");
   }
 
+  function jumpToFilmAnchor(sessionId: string, anchor?: ReplayAnchor | null) {
+    setSelectedFilmSessionId(sessionId);
+    if (anchor) setSelectedReplayAnchor(anchor);
+    setProductSurface("overlay");
+  }
+
   function toggleOverlay(key: OverlayKey) {
     setOverlaySettings((current) => ({
       ...current,
@@ -5547,6 +5599,7 @@ export function RitualHome() {
         ...current,
         [completedSessionWithExportQueue.id]: filmPreviewUrl,
       }));
+      void queueFinalizeWork(completedSessionWithExportQueue);
       void uploadSessionFilm(completedSessionWithExportQueue, filmCapture.blob);
     } else {
       void queueFinalizeWork(completedSessionWithExportQueue);
@@ -5995,7 +6048,7 @@ export function RitualHome() {
             <div>
               <p className="axis-meta">Axis</p>
               <h1>Camera</h1>
-              <span>Work Time. Film.</span>
+              <span>Record. Axis sees.</span>
             </div>
             <button className="axis-sign-out" onClick={signOut} type="button">
               Sign out
@@ -6017,13 +6070,13 @@ export function RitualHome() {
                   data-state={cameraStream ? "attached" : "offline"}
                   onPointerDown={handleRimLockTap}
                 >
-                  {shouldShowPrimaryFilm && latestFilmPlaybackId && latestSession ? (
+                  {shouldShowPrimaryFilm && latestFilmPlaybackId && filmSession ? (
                     <MuxPlayer
                       className="axis-primary-film-player"
                       key={`${latestFilmPlaybackId}:${selectedReplayAnchor?.eventId ?? "start"}`}
                       metadata={{
-                        video_id: latestSession.id,
-                        video_title: `${latestSession.mode ?? defaultParticipationMode} film`,
+                        video_id: filmSession.id,
+                        video_title: `${filmSession.mode ?? defaultParticipationMode} film`,
                         viewer_user_id: identity.id,
                       }}
                       playbackId={latestFilmPlaybackId}
@@ -6037,7 +6090,7 @@ export function RitualHome() {
                     <video
                       className="axis-primary-film-player"
                       controls
-                      key={`${latestSession?.id ?? "film"}:${selectedReplayAnchor?.eventId ?? "start"}`}
+                      key={`${filmSession?.id ?? "film"}:${selectedReplayAnchor?.eventId ?? "start"}`}
                       playsInline
                       src={localFilmSrc}
                     />
@@ -6049,20 +6102,20 @@ export function RitualHome() {
                 </div>
                 <section className="axis-live-overlay-panel" aria-label="Live overlay">
                   <div>
-                    <span>Live Overlay</span>
-                    <strong>{shotSuggestion ? "Shot Detected" : save.activeSession ? "Rep To Clip" : latestSession ? "Film Ready" : "Ready"}</strong>
+                    <span>Sees</span>
+                    <strong>{shotSuggestion ? "Shot Detected" : save.activeSession ? "Tracking Work" : latestSession ? "Film Ready" : "Ready"}</strong>
                   </div>
                   <div>
-                    <span>Clips</span>
-                    <strong>{cameraClipCount}</strong>
+                    <span>Measures</span>
+                    <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
                   </div>
                   <div>
-                    <span>Report</span>
-                    <strong>{cameraReportState}</strong>
+                    <span>Tracks</span>
+                    <strong>{resultsShotSummary.attempts}</strong>
                   </div>
                   <div>
-                    <span>Rim</span>
-                    <strong>{rimLockLabel}</strong>
+                    <span>Exports</span>
+                    <strong>{latestFilmAvailability}</strong>
                   </div>
                 </section>
                 <section className="axis-camera-action-dock" aria-label="Actions">
@@ -6107,43 +6160,32 @@ export function RitualHome() {
               </div>
               <aside className="axis-camera-right-rail" aria-label="Film clips reports">
                 <section>
-                  <span>Film</span>
-                  <strong>{latestFilmAvailability}</strong>
-                  <em>{resultsWorkTime}</em>
+                  <span>Axis Sees</span>
+                  <strong>{shotSuggestion ? "Shot Detected" : save.activeSession ? "Tracking Work" : "Ready"}</strong>
+                  <em>Camera to intelligence</em>
                 </section>
                 <section>
-                  <span>Clips</span>
-                  <strong>{cameraClipCount}</strong>
+                  <span>Axis Measures</span>
+                  <strong>{formatShotScienceReleaseTime(resultsShotScience)}</strong>
                   <div className="axis-rail-clip-list">
-                    {filmWatchGroups.slice(0, 4).map((group) => {
-                      const anchors = getFilmAnchorsByType(latestFilmTimelineAnchors, group.type);
-                      const firstAnchor = anchors[0];
-
-                      return (
-                        <button
-                          data-active={Boolean(firstAnchor)}
-                          disabled={!firstAnchor}
-                          key={group.type}
-                          onClick={() => {
-                            if (firstAnchor) jumpToReplayAnchor(firstAnchor);
-                          }}
-                          type="button"
-                        >
-                          {group.label.replace("WATCH ", "")}
-                        </button>
-                      );
-                    })}
+                    <button data-active={Boolean(fastestReleaseShot)} disabled={!fastestReleaseShot} type="button">
+                      Fastest Shot
+                    </button>
+                    <button data-active={Boolean(highestArcShot)} disabled={!highestArcShot} type="button">
+                      Highest Arc
+                    </button>
+                    <button data-active={Boolean(resultsShotScience)} disabled={!resultsShotScience} type="button">
+                      Distance
+                    </button>
                   </div>
                 </section>
                 <section>
-                  <span>Reports</span>
-                  <strong>{cameraReportState}</strong>
+                  <span>Intelligent Film</span>
+                  <strong>{latestFilmAvailability}</strong>
                   <div className="axis-rail-export-list">
-                    {visibleExportOutputs.slice(0, 4).map((output) => (
-                      <em data-status={output.status} key={output.type}>
-                        {output.label}
-                      </em>
-                    ))}
+                    <em data-status={resultsShotSummary.makes ? "available" : "waiting"}>{`${resultsShotSummary.makes} makes`}</em>
+                    <em data-status={resultsShotSummary.misses ? "available" : "waiting"}>{`${resultsShotSummary.misses} misses`}</em>
+                    <em data-status={resultsShotSummary.attempts ? "available" : "waiting"}>{`${resultsShotSummary.attempts} attempts`}</em>
                   </div>
                 </section>
               </aside>
@@ -6375,7 +6417,6 @@ export function RitualHome() {
                 </button>
                 {showAxisDebug ? (
                   <>
-                    <button type="button">Export</button>
                     <button type="button">Share</button>
                   </>
                 ) : null}
@@ -6392,16 +6433,8 @@ export function RitualHome() {
                 <span>Organization</span>
                 <div className="axis-results-grid">
                   <article>
-                    <strong>{organizationResults.sessions}</strong>
-                    <em>Sessions</em>
-                  </article>
-                  <article>
-                    <strong>{organizationResults.athletes}</strong>
-                    <em>Athletes</em>
-                  </article>
-                  <article>
-                    <strong>{organizationResults.coaches}</strong>
-                    <em>Coaches</em>
+                    <strong>{organizationResults.fg}%</strong>
+                    <em>FG%</em>
                   </article>
                   <article>
                     <strong>{organizationResults.makes}</strong>
@@ -6412,12 +6445,20 @@ export function RitualHome() {
                     <em>Misses</em>
                   </article>
                   <article>
-                    <strong>{organizationResults.hours.toFixed(1)}</strong>
-                    <em>Hours</em>
+                    <strong>{organizationResults.attempts}</strong>
+                    <em>Attempts</em>
                   </article>
                   <article>
-                    <strong>{organizationResults.attendance}</strong>
-                    <em>Attendance</em>
+                    <strong>{formatShotScienceReleaseTime(resultsShotScience)}</strong>
+                    <em>Release</em>
+                  </article>
+                  <article>
+                    <strong>{formatShotScienceArc(resultsShotScience)}</strong>
+                    <em>Arc</em>
+                  </article>
+                  <article>
+                    <strong>{resultsLongestMakeStreak}</strong>
+                    <em>Streak</em>
                   </article>
                 </div>
               </section>
@@ -6440,12 +6481,12 @@ export function RitualHome() {
                     <em>Misses</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.player.hours.toFixed(1)}</strong>
-                    <em>Hours</em>
+                    <strong>{resultsShotSummary.attempts}</strong>
+                    <em>Attempts</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.player.attendance}</strong>
-                    <em>Attendance</em>
+                    <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
+                    <em>FG%</em>
                   </article>
                 </div>
               </section>
@@ -6454,20 +6495,20 @@ export function RitualHome() {
                 <span>Coach</span>
                 <div className="axis-results-grid">
                   <article>
-                    <strong>{organizationRollups.coach.athletes}</strong>
-                    <em>Athletes</em>
+                    <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
+                    <em>FG%</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.coach.sessions}</strong>
-                    <em>Sessions</em>
+                    <strong>{resultsShotSummary.attempts}</strong>
+                    <em>Attempts</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.coach.wins}</strong>
-                    <em>Wins</em>
+                    <strong>{resultsLongestMakeStreak}</strong>
+                    <em>Streak</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.coach.development}</strong>
-                    <em>Development</em>
+                    <strong>{formatShotScienceReleaseTime(fastestReleaseShot?.shotScience)}</strong>
+                    <em>Fastest Shot</em>
                   </article>
                 </div>
               </section>
@@ -6484,12 +6525,12 @@ export function RitualHome() {
                     <em>Misses</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.parent.attendance}</strong>
-                    <em>Attendance</em>
+                    <strong>{resultsShotSummary.attempts}</strong>
+                    <em>Attempts</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.parent.film}</strong>
-                    <em>Film</em>
+                    <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
+                    <em>FG%</em>
                   </article>
                 </div>
               </section>
@@ -6498,20 +6539,20 @@ export function RitualHome() {
                 <span>Director</span>
                 <div className="axis-results-grid">
                   <article>
-                    <strong>{organizationRollups.director.sessions}</strong>
-                    <em>Sessions</em>
+                    <strong>{organizationResults.fg}%</strong>
+                    <em>FG%</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.director.athletes}</strong>
-                    <em>Athletes</em>
+                    <strong>{organizationResults.makes}</strong>
+                    <em>Makes</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.director.hours.toFixed(1)}</strong>
-                    <em>Hours</em>
+                    <strong>{organizationResults.misses}</strong>
+                    <em>Misses</em>
                   </article>
                   <article>
-                    <strong>{organizationRollups.director.film}</strong>
-                    <em>Film</em>
+                    <strong>{organizationResults.attempts}</strong>
+                    <em>Attempts</em>
                   </article>
                 </div>
               </section>
@@ -6532,13 +6573,13 @@ export function RitualHome() {
               {shouldShowFilmSurface ? (
               <section className="axis-review-block axis-replay-stage axis-film-stage" aria-label="Film">
                 <span>Film</span>
-                {latestFilmPlaybackId ? (
+                {latestFilmPlaybackId && filmSession ? (
                   <MuxPlayer
                     className="axis-film-player"
                     key={`${latestFilmPlaybackId}:${selectedReplayAnchor?.eventId ?? "start"}`}
                     metadata={{
-                      video_id: latestSession.id,
-                      video_title: `${latestSession.mode ?? defaultParticipationMode} film`,
+                      video_id: filmSession.id,
+                      video_title: `${filmSession.mode ?? defaultParticipationMode} film`,
                       viewer_user_id: identity.id,
                     }}
                     playbackId={latestFilmPlaybackId}
@@ -6552,7 +6593,7 @@ export function RitualHome() {
                   <video
                     className="axis-film-player"
                     controls
-                    key={`${latestSession.id}:${selectedReplayAnchor?.eventId ?? "start"}`}
+                    key={`${filmSession?.id ?? "film"}:${selectedReplayAnchor?.eventId ?? "start"}`}
                     playsInline
                     src={localFilmSrc}
                   />
@@ -6562,61 +6603,29 @@ export function RitualHome() {
                     <em>Film will appear here when recording is available.</em>
                   </div>
                 )}
-                <div className="axis-film-meta" aria-label="Latest film">
-                  <strong>Film</strong>
-                  <em>{latestFilmAvailability}</em>
+                <div className="axis-film-meta" aria-label="Latest clip">
+                  <strong>Latest Clip</strong>
+                  <em>{latestClipAnchor ? formatHumanMomentLabel(latestClipAnchor) : latestFilmAvailability}</em>
                 </div>
-                <section className="axis-film-strip" aria-label="Latest clips">
-                  <span>Highlights</span>
-                  <div>
-                    {latestClipAnchors.length ? (
-                      latestClipAnchors.map((anchor) => (
-                        <button
-                          className="axis-review-row"
-                          data-selected={selectedReplayAnchor?.eventId === anchor.eventId}
-                          key={anchor.eventId}
-                          onClick={() => jumpToReplayAnchor(anchor)}
-                          type="button"
-                        >
-                          <strong>{formatDuration(anchor.videoTimestamp)}</strong>
-                          <em>{formatHumanMomentLabel(anchor)}</em>
-                        </button>
-                      ))
-                    ) : (
-                      <article className="axis-review-row">
-                        <strong>--</strong>
-                        <em>No film yet</em>
-                      </article>
-                    )}
-                  </div>
+                <section className="axis-film-feed" aria-label="Training clips">
+                  {filmFeedItems.map((item) => (
+                    <button
+                      className="axis-film-feed-item"
+                      data-active={Boolean(item.anchor && item.sessionId)}
+                      data-selected={selectedReplayAnchor?.eventId === item.anchor?.eventId}
+                      disabled={!item.anchor || !item.sessionId}
+                      key={item.label}
+                      onClick={() => {
+                        if (item.sessionId && item.anchor) jumpToFilmAnchor(item.sessionId, item.anchor);
+                      }}
+                      type="button"
+                    >
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                      <em>{item.kicker}</em>
+                    </button>
+                  ))}
                 </section>
-                {!showAxisDebug ? (
-                  <section className="axis-watch-surface" aria-label="Watch moments">
-                    <span>Watch</span>
-                    <div className="axis-watch-list">
-                      {filmWatchGroups.map((group) => {
-                        const anchors = getFilmAnchorsByType(latestFilmTimelineAnchors, group.type);
-                        const firstAnchor = anchors[0];
-
-                        return (
-                          <button
-                            className="axis-watch-button"
-                            data-active={Boolean(firstAnchor)}
-                            disabled={!firstAnchor}
-                            key={group.type}
-                            onClick={() => {
-                              if (firstAnchor) jumpToReplayAnchor(firstAnchor);
-                            }}
-                            type="button"
-                          >
-                            <strong>{group.label}</strong>
-                            <em>{firstAnchor ? "Film" : "None yet"}</em>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ) : null}
                 {showAxisDebug ? (
                   <em>
                   {selectedReplayAnchor
@@ -6630,83 +6639,101 @@ export function RitualHome() {
               ) : null}
 
               {shouldShowResultsSurface ? (
-                <section className="axis-review-block axis-results-stage" aria-label="Results">
-                  <span>Results</span>
+                <section className="axis-review-block axis-results-stage" aria-label="Intelligent film">
+                  <span>Intelligent Film</span>
                   <div className="axis-results-grid">
                     {!showAxisDebug ? (
                       <>
                         <article>
-                          <strong>{formatDuration(latestSession.durationSeconds)}</strong>
-                          <em>Work Time</em>
+                          <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
+                          <em>FG%</em>
                         </article>
                         <article>
-                          <strong>{latestFilmAvailability}</strong>
-                          <em>Film</em>
-                        </article>
-                        <article>
-                          <strong>{latestSession.shotSummary?.makes ?? 0}</strong>
+                          <strong>{resultsShotSummary.makes}</strong>
                           <em>Makes</em>
                         </article>
                         <article>
-                          <strong>{latestSession.shotSummary?.misses ?? 0}</strong>
+                          <strong>{resultsShotSummary.misses}</strong>
                           <em>Misses</em>
                         </article>
                         <article>
-                          <strong>{latestGameResults.rebounds}</strong>
-                          <em>Rebounds</em>
+                          <strong>{resultsShotSummary.attempts}</strong>
+                          <em>Attempts</em>
                         </article>
                         <article>
-                          <strong>{latestGameResults.assists}</strong>
-                          <em>Assists</em>
+                          <strong>{formatShotScienceReleaseTime(resultsShotScience)}</strong>
+                          <em>Release</em>
                         </article>
                         <article>
-                          <strong>{latestGameResults.turnovers}</strong>
-                          <em>Turnovers</em>
+                          <strong>{formatShotScienceArc(resultsShotScience)}</strong>
+                          <em>Arc</em>
                         </article>
                         <article>
-                          <strong>{latestGameResults.fouls}</strong>
-                          <em>Fouls</em>
+                          <strong>{formatShotScienceDistance(resultsShotScience)}</strong>
+                          <em>Distance</em>
+                        </article>
+                        <article>
+                          <strong>{resultsLongestMakeStreak}</strong>
+                          <em>Streak</em>
+                        </article>
+                        <article>
+                          <strong>{performanceImprovementLabel}</strong>
+                          <em>Most Improved</em>
+                        </article>
+                        <article>
+                          <strong>{formatShotScienceReleaseTime(fastestReleaseShot?.shotScience)}</strong>
+                          <em>Fastest Shot</em>
+                        </article>
+                        <article>
+                          <strong>{formatShotScienceArc(highestArcShot?.shotScience)}</strong>
+                          <em>Highest Arc</em>
                         </article>
                       </>
                     ) : (
                       <>
                         <article>
-                          <strong>{formatDuration(latestSession.durationSeconds)}</strong>
-                          <em>Work Time</em>
+                          <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
+                          <em>FG%</em>
                         </article>
                         <article>
-                          <strong>{`${latestReviewAnchors.length} moments`}</strong>
-                          <em>Film</em>
+                          <strong>{resultsShotSummary.makes}</strong>
+                          <em>Makes</em>
                         </article>
                         <article>
-                          <strong>{formatActivePeriod(latestSession)}</strong>
-                          <em>Most Active Period</em>
+                          <strong>{resultsShotSummary.misses}</strong>
+                          <em>Misses</em>
                         </article>
                         <article>
-                          <strong>{`${currentStreak} ${currentStreak === 1 ? "day" : "days"}`}</strong>
-                          <em>Streaks</em>
+                          <strong>{resultsShotSummary.attempts}</strong>
+                          <em>Attempts</em>
                         </article>
                         <article>
-                          <strong>{formatShotResults(latestSession.shotSummary)}</strong>
-                          <em>Shot Results</em>
+                          <strong>{formatShotScienceReleaseTime(resultsShotScience)}</strong>
+                          <em>Release</em>
                         </article>
                         <article>
-                          <strong>{`${latestShotAttempts.length} attempts`}</strong>
-                          <em>Shot Chart</em>
+                          <strong>{formatShotScienceArc(resultsShotScience)}</strong>
+                          <em>Arc</em>
                         </article>
                         <article>
-                          <strong>{formatShotScience(latestSession.shotEvents?.[0]?.shotScience)}</strong>
-                          <em>Shot Science</em>
+                          <strong>{formatShotScienceDistance(resultsShotScience)}</strong>
+                          <em>Distance</em>
                         </article>
                         <article>
-                          <strong>
-                            {formatCount(
-                              latestSession.activeParticipantCount || latestSession.participantCount || 1,
-                              "athlete",
-                              "athletes",
-                            )}
-                          </strong>
-                          <em>Attendance</em>
+                          <strong>{resultsLongestMakeStreak}</strong>
+                          <em>Streak</em>
+                        </article>
+                        <article>
+                          <strong>{performanceImprovementLabel}</strong>
+                          <em>Most Improved</em>
+                        </article>
+                        <article>
+                          <strong>{formatShotScienceReleaseTime(fastestReleaseShot?.shotScience)}</strong>
+                          <em>Fastest Shot</em>
+                        </article>
+                        <article>
+                          <strong>{formatShotScienceArc(highestArcShot?.shotScience)}</strong>
+                          <em>Highest Arc</em>
                         </article>
                       </>
                     )}
@@ -6865,32 +6892,6 @@ export function RitualHome() {
               </section>
               ) : null}
 
-              {shouldShowFilmSurface ? (
-                <section className="axis-review-block" aria-label="Film library">
-                  <span>Film Library</span>
-                  <div className="axis-film-library">
-                    {filmLibrary.length ? (
-                      filmLibrary.map((film) => (
-                        <article className="axis-film-library-row" key={film.id}>
-                          {film.thumbnailUrl ? (
-                            <img alt="" src={film.thumbnailUrl} />
-                          ) : (
-                            <div aria-hidden="true" />
-                          )}
-                          <strong>{film.mode}</strong>
-                          <em>{`${film.availability} / ${film.duration}`}</em>
-                        </article>
-                      ))
-                    ) : (
-                      <article className="axis-review-row">
-                        <strong>No film yet</strong>
-                        <em>Finish work to build the library</em>
-                      </article>
-                    )}
-                  </div>
-                </section>
-              ) : null}
-
               {showAxisDebug ? (
               <section className="axis-review-block" aria-label="Who did it">
                 <span>Who</span>
@@ -6959,20 +6960,22 @@ export function RitualHome() {
               </header>
 
               <div className="axis-athlete-memory-grid">
-                <section className="axis-memory-block" aria-label="All sessions">
-                  <span>Sessions</span>
+                <section className="axis-memory-block" aria-label="Intelligent film history">
+                  <span>Intelligent Film</span>
                   <div>
                     {athleteMemory.sessions.length ? (
                       athleteMemory.sessions.map((session) => (
                         <article className="axis-memory-row" key={`memory-session-${session.id}`}>
-                          <strong>{formatStamp(session.endedAt)}</strong>
-                          <em>{`${formatDuration(session.durationSeconds)} / ${session.mode ?? defaultParticipationMode}`}</em>
+                          <strong>{`${(session.shotSummary ?? summarizeShots(session.shotEvents ?? [])).fieldGoalPercentage}% FG`}</strong>
+                          <em>{`${(session.shotSummary ?? summarizeShots(session.shotEvents ?? [])).makes} makes / ${
+                            (session.shotSummary ?? summarizeShots(session.shotEvents ?? [])).attempts
+                          } attempts`}</em>
                         </article>
                       ))
                     ) : (
                       <article className="axis-memory-row">
-                        <strong>No sessions yet</strong>
-                        <em>Start session to begin</em>
+                        <strong>No attempts yet</strong>
+                        <em>Start recording to begin</em>
                       </article>
                     )}
                   </div>
