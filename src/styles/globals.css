@@ -1568,6 +1568,7 @@ button.axis-review-row {
   font-size: 0.62rem;
   font-style: normal;
   text-align: right;
+  text-transform: uppercase;
 }
 
 button.axis-review-row:focus-visible {

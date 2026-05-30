@@ -1,6 +1,7 @@
 "use client";
 
 import MuxPlayer from "@mux/mux-player-react/lazy";
+import * as tus from "tus-js-client";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { type BallTrackingState, useBallTracking } from "../hooks/useBallTracking";
 import { type PlayerTrack, usePersonDetection } from "../hooks/usePersonDetection";
@@ -34,7 +35,6 @@ const defaultParticipationMode: ParticipationMode = "Training";
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
-const publicMuxPlaybackId = process.env.NEXT_PUBLIC_MUX_PLAYBACK_ID;
 const showAxisDebug = process.env.NEXT_PUBLIC_AXIS_DEBUG === "true";
 const defaultDetectionDebug: DetectionDebug = {
   athleteMatchedName: null,
@@ -1112,8 +1112,8 @@ function formatReplayAnchor(anchor: ReplayAnchor) {
 }
 
 function formatHumanMomentLabel(anchor: ReplayAnchor) {
-  if (anchor.eventType === "session_start") return "Started";
-  if (anchor.eventType === "session_end") return "Finished";
+  if (anchor.eventType === "session_start") return "Start";
+  if (anchor.eventType === "session_end") return "End";
   if (anchor.eventType === "identity_locked") return "Ready";
   if (anchor.eventType === "make") return "Make";
   if (anchor.eventType === "miss") return "Miss";
@@ -1124,6 +1124,18 @@ function formatHumanMomentLabel(anchor: ReplayAnchor) {
   return "Moment";
 }
 
+function shouldShowFilmTimelineAnchor(anchor: ReplayAnchor) {
+  return (
+    anchor.eventType === "session_start" ||
+    anchor.eventType === "session_end" ||
+    anchor.eventType === "make" ||
+    anchor.eventType === "miss" ||
+    anchor.eventType === "possession" ||
+    anchor.eventType === "turnover" ||
+    anchor.eventType === "coach_voice"
+  );
+}
+
 function getMuxThumbnailUrl(playbackId?: string) {
   return playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : undefined;
 }
@@ -1131,7 +1143,7 @@ function getMuxThumbnailUrl(playbackId?: string) {
 function getFilmPlaybackId(session?: Pick<SavedSession, "muxPlaybackId" | "recordingAttached"> | null) {
   if (!session?.recordingAttached) return undefined;
 
-  return session.muxPlaybackId ?? publicMuxPlaybackId;
+  return session.muxPlaybackId;
 }
 
 function getFilmAvailability(session?: Pick<SavedSession, "muxPlaybackId" | "recordingAttached"> | null) {
@@ -1139,6 +1151,14 @@ function getFilmAvailability(session?: Pick<SavedSession, "muxPlaybackId" | "rec
   if (getFilmPlaybackId(session)) return "Film ready";
 
   return "Film processing";
+}
+
+function getSupportedVideoMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+
+  const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
 }
 
 function formatReplayClip(clip: ReplayClip) {
@@ -1597,6 +1617,9 @@ export function RitualHome() {
     trajectory: [],
     visible: false,
   });
+  const filmChunksRef = useRef<Blob[]>([]);
+  const filmRecorderRef = useRef<MediaRecorder | null>(null);
+  const filmRecordingSessionIdRef = useRef<string | null>(null);
   const [authPhase, setAuthPhase] = useState<AuthPhase>("checking");
   const [identity, setIdentity] = useState<AxisIdentity | null>(null);
   const [email, setEmail] = useState("");
@@ -1614,6 +1637,7 @@ export function RitualHome() {
   const [visiblePeople, setVisiblePeople] = useState<number | null>(null);
   const [detectionDebug, setDetectionDebug] = useState<DetectionDebug>(defaultDetectionDebug);
   const [frameRate, setFrameRate] = useState(0);
+  const [filmPreviewUrls, setFilmPreviewUrls] = useState<Record<string, string>>({});
   const [identityLocked, setIdentityLocked] = useState(false);
   const [calibrationEvidence, setCalibrationEvidence] = useState<CalibrationEvidence | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -1833,10 +1857,40 @@ export function RitualHome() {
   }, [cameraStream]);
 
   useEffect(() => {
+    return () => {
+      Object.values(filmPreviewUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [filmPreviewUrls]);
+
+  useEffect(() => {
     if (authPhase !== "authenticated" || cameraStream || showAxisDebug) return;
 
     void requestCameraPreview(cameraDirection);
   }, [authPhase, cameraDirection, cameraStream]);
+
+  useEffect(() => {
+    if (!save.activeSession || !cameraStream) return;
+    if (
+      filmRecorderRef.current?.state === "recording" &&
+      filmRecordingSessionIdRef.current === save.activeSession.id
+    ) {
+      return;
+    }
+
+    if (!startFilmRecording(save.activeSession.id, cameraStream)) return;
+    if (save.activeSession.recordingAttached) return;
+
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...save.activeSession,
+        recordingAttached: true,
+      },
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
+  }, [cameraStream, save]);
 
   const participationLabel = useMemo(() => {
     if (ritualState === "active") return "Session live";
@@ -1924,9 +1978,11 @@ export function RitualHome() {
   });
   const latestReviewEvents = latestSession?.replayEvents?.slice(0, 6) ?? [];
   const latestReviewAnchors = latestSession?.replayAnchors?.slice(0, 6) ?? [];
+  const latestFilmTimelineAnchors = latestSession?.replayAnchors?.filter(shouldShowFilmTimelineAnchor) ?? [];
   const latestReviewClips = latestSession?.replayClips?.slice(0, 4) ?? [];
   const latestSessionReview = latestSession?.review;
   const latestFilmPlaybackId = getFilmPlaybackId(latestSession);
+  const latestFilmPreviewUrl = latestSession ? filmPreviewUrls[latestSession.id] : undefined;
   const latestFilmThumbnailUrl = latestSession?.thumbnailUrl ?? getMuxThumbnailUrl(latestFilmPlaybackId);
   const latestFilmAvailability = getFilmAvailability(latestSession);
   const filmLibrary = save.sessions.slice(0, 5).map((session) => {
@@ -2403,6 +2459,161 @@ export function RitualHome() {
     setSave(nextSave);
   }
 
+  function startFilmRecording(sessionId: string, stream: MediaStream) {
+    if (typeof MediaRecorder === "undefined") return false;
+    if (filmRecorderRef.current?.state === "recording") return true;
+
+    try {
+      const mimeType = getSupportedVideoMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+      filmChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) filmChunksRef.current.push(event.data);
+      };
+      recorder.start(1000);
+      filmRecorderRef.current = recorder;
+      filmRecordingSessionIdRef.current = sessionId;
+
+      return true;
+    } catch (error) {
+      console.error("Unable to start film recording", error);
+
+      return false;
+    }
+  }
+
+  function stopFilmRecording() {
+    const recorder = filmRecorderRef.current;
+    const sessionId = filmRecordingSessionIdRef.current;
+
+    if (!recorder || !sessionId) return Promise.resolve(null);
+
+    return new Promise<{ blob: Blob; sessionId: string } | null>((resolve) => {
+      const finish = () => {
+        const type = recorder.mimeType || getSupportedVideoMimeType() || "video/webm";
+        const blob = filmChunksRef.current.length ? new Blob(filmChunksRef.current, { type }) : null;
+
+        filmChunksRef.current = [];
+        filmRecorderRef.current = null;
+        filmRecordingSessionIdRef.current = null;
+
+        resolve(blob?.size ? { blob, sessionId } : null);
+      };
+
+      recorder.onstop = finish;
+      recorder.onerror = () => finish();
+
+      if (recorder.state === "inactive") {
+        finish();
+        return;
+      }
+
+      recorder.requestData();
+      recorder.stop();
+    });
+  }
+
+  async function uploadBlobToMux(uploadUrl: string, blob: Blob) {
+    return new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(blob, {
+        endpoint: uploadUrl,
+        metadata: {
+          filetype: blob.type || "video/webm",
+          filename: "axis-work.webm",
+        },
+        onError: reject,
+        onSuccess: () => resolve(),
+      });
+
+      upload.start();
+    });
+  }
+
+  function captureFilmThumbnail() {
+    const video = cameraPreviewRef.current;
+    if (!video?.videoWidth || !video.videoHeight) return undefined;
+
+    try {
+      const canvas = document.createElement("canvas");
+      const width = Math.min(640, video.videoWidth);
+      const height = Math.round((width / video.videoWidth) * video.videoHeight);
+      const context = canvas.getContext("2d");
+
+      canvas.width = width;
+      canvas.height = height;
+      context?.drawImage(video, 0, 0, width, height);
+
+      return canvas.toDataURL("image/jpeg", 0.72);
+    } catch (error) {
+      console.error("Unable to create film thumbnail", error);
+
+      return undefined;
+    }
+  }
+
+  async function pollFilmUpload(uploadId: string) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await fetch(`/api/film/uploads/${uploadId}`);
+      const result = (await response.json().catch(() => null)) as
+        | {
+            muxAssetId?: string;
+            playbackId?: string;
+            status?: string;
+            thumbnailUrl?: string;
+          }
+        | null;
+
+      if (response.ok && result?.playbackId) return result;
+      await new Promise((resolve) => window.setTimeout(resolve, 2500));
+    }
+
+    return null;
+  }
+
+  async function uploadSessionFilm(sessionId: string, blob: Blob) {
+    try {
+      const uploadResponse = await fetch("/api/film/uploads", {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const upload = (await uploadResponse.json().catch(() => null)) as { uploadId?: string; uploadUrl?: string } | null;
+
+      if (!uploadResponse.ok || !upload?.uploadId || !upload.uploadUrl) {
+        console.error("Unable to create film upload", { status: uploadResponse.status });
+        return;
+      }
+
+      await uploadBlobToMux(upload.uploadUrl, blob);
+      const film = await pollFilmUpload(upload.uploadId);
+      if (!film?.playbackId) return;
+
+      setSave((currentSave) => {
+        const nextSave = {
+          ...currentSave,
+          sessions: currentSave.sessions.map((session) =>
+            session.id === sessionId
+              ? {
+                  ...session,
+                  muxAssetId: film.muxAssetId,
+                  muxPlaybackId: film.playbackId,
+                  recordingAttached: true,
+                  thumbnailUrl: film.thumbnailUrl ?? getMuxThumbnailUrl(film.playbackId),
+                }
+              : session,
+          ),
+        };
+
+        writeSave(nextSave);
+        return nextSave;
+      });
+    } catch (error) {
+      console.error("Unable to upload film", error);
+    }
+  }
+
   function buildCameraSessionState(
     activeSave: AxisSave,
     nextCameraState: CameraState,
@@ -2786,9 +2997,8 @@ export function RitualHome() {
         replayAnchors: [...(activeSave.activeSession.replayAnchors ?? []), identityAnchor],
         replayClips: [...(activeSave.activeSession.replayClips ?? []), createReplayClip(identityAnchor)],
         recordingAttached: true,
-        muxPlaybackId: activeSave.activeSession.muxPlaybackId ?? publicMuxPlaybackId,
-        thumbnailUrl:
-          activeSave.activeSession.thumbnailUrl ?? getMuxThumbnailUrl(activeSave.activeSession.muxPlaybackId ?? publicMuxPlaybackId),
+        muxPlaybackId: activeSave.activeSession.muxPlaybackId,
+        thumbnailUrl: activeSave.activeSession.thumbnailUrl,
       },
     };
   }
@@ -3028,7 +3238,7 @@ export function RitualHome() {
         moments: filmMoments,
         muxAssetId: session.muxAssetId,
         playbackId: session.muxPlaybackId,
-        status: session.recordingAttached ? ("processing" as const) : ("unavailable" as const),
+        status: session.muxPlaybackId ? ("ready" as const) : session.recordingAttached ? ("processing" as const) : ("unavailable" as const),
         thumbnailUrl: session.thumbnailUrl,
         workId: session.id,
       },
@@ -3069,9 +3279,12 @@ export function RitualHome() {
     }
   }
 
-  function checkOut() {
+  async function checkOut() {
     if (!save.activeSession) return;
 
+    setRitualState("saving");
+    const localThumbnailUrl = captureFilmThumbnail();
+    const filmCapture = await stopFilmRecording();
     const endedAt = new Date().toISOString();
     const durationSeconds = Math.max(
       0,
@@ -3124,14 +3337,14 @@ export function RitualHome() {
       endedAt,
       durationSeconds,
       mode: sessionMode,
-      recordingAttached: Boolean(save.activeSession.recordingAttached),
+      recordingAttached: Boolean(save.activeSession.recordingAttached || filmCapture?.blob.size),
       calibrationStatus: normalizeCalibrationStatus(save.activeSession.calibrationStatus),
       cameraState: sessionCameraState,
       cameraDirection: sessionCameraDirection,
       cameraAttachedAt: save.activeSession.cameraAttachedAt,
       muxAssetId: save.activeSession.muxAssetId,
-      muxPlaybackId: save.activeSession.muxPlaybackId ?? publicMuxPlaybackId,
-      thumbnailUrl: save.activeSession.thumbnailUrl ?? getMuxThumbnailUrl(save.activeSession.muxPlaybackId ?? publicMuxPlaybackId),
+      muxPlaybackId: save.activeSession.muxPlaybackId,
+      thumbnailUrl: save.activeSession.thumbnailUrl ?? localThumbnailUrl,
       participationWindow,
       clipContinuityContext: createClipContinuityContext(
         save.activeSession.id,
@@ -3174,7 +3387,6 @@ export function RitualHome() {
       sessions: [completedSession, ...save.sessions].slice(0, 40),
     };
 
-    setRitualState("saving");
     writeSave(nextSave);
     setSave(nextSave);
     setLatestSavedSessionId(completedSession.id);
@@ -3189,6 +3401,14 @@ export function RitualHome() {
     window.setTimeout(() => {
       setRitualState("complete");
     }, 520);
+    if (filmCapture?.blob.size) {
+      const filmPreviewUrl = URL.createObjectURL(filmCapture.blob);
+      setFilmPreviewUrls((current) => ({
+        ...current,
+        [completedSession.id]: filmPreviewUrl,
+      }));
+      void uploadSessionFilm(completedSession.id, filmCapture.blob);
+    }
     void queueFinalizeWork(completedSession);
   }
 
@@ -3808,6 +4028,8 @@ export function RitualHome() {
                     secondaryColor="#030303"
                     streamType="on-demand"
                   />
+                ) : latestFilmPreviewUrl ? (
+                  <video className="axis-film-player" controls playsInline src={latestFilmPreviewUrl} />
                 ) : (
                   <div className="axis-film-empty">
                     <strong>{latestFilmAvailability}</strong>
@@ -3816,7 +4038,9 @@ export function RitualHome() {
                 )}
                 <div className="axis-film-meta" aria-label="Latest film">
                   <strong>Latest Film</strong>
-                  <em>{`${latestFilmAvailability} / ${formatDuration(latestSession.durationSeconds)}`}</em>
+                  <em>{`${latestFilmAvailability} / ${formatDuration(latestSession.durationSeconds)} / ${formatTime(
+                    latestSession.endedAt,
+                  )}`}</em>
                 </div>
                 {showAxisDebug ? (
                   <em>
@@ -3931,16 +4155,16 @@ export function RitualHome() {
               <section className="axis-review-block" aria-label="Review moments">
                 <span>{showAxisDebug ? "Moments" : "Film Timeline"}</span>
                 <div>
-                  {latestReviewAnchors.length ? (
-                    latestReviewAnchors.map((anchor) => (
+                  {(showAxisDebug ? latestReviewAnchors : latestFilmTimelineAnchors).length ? (
+                    (showAxisDebug ? latestReviewAnchors : latestFilmTimelineAnchors).map((anchor) => (
                       <button
                         className="axis-review-row"
                         key={anchor.eventId}
                         onClick={() => jumpToReplayAnchor(anchor)}
                         type="button"
                       >
-                        <strong>{showAxisDebug ? anchor.replayLabel : formatHumanMomentLabel(anchor)}</strong>
-                        <em>{formatDuration(anchor.videoTimestamp)}</em>
+                        <strong>{formatDuration(anchor.videoTimestamp)}</strong>
+                        <em>{showAxisDebug ? anchor.replayLabel : formatHumanMomentLabel(anchor)}</em>
                       </button>
                     ))
                   ) : (
