@@ -2,6 +2,80 @@
 
 Axis is a personal athletic continuity system.
 
+Axis exports intelligent sports film.
+
+Axis is sports overlay infrastructure, not a stats app.
+
+Input:
+
+- Camera
+
+Output:
+
+- Film with intelligence
+
+The user-facing loop should feel like:
+
+rep
+-> clip
+-> report
+-> progress
+
+The active export loop is:
+
+camera
+-> detection
+-> event
+-> overlay
+-> export
+
+Every session resolves into one object:
+
+- session
+- video
+- events
+- hidden derived results
+- clips
+- shots
+- overlays
+
+Surfaces should pull from that object instead of recalculating separate outputs.
+
+Mux is the source of truth for film. Session end automatically starts Mux upload and export processing:
+
+upload recording
+-> store playback id
+-> generate event timeline
+-> generate clip anchors
+-> generate overlays
+-> create export queue
+
+The current full-stack map is:
+
+- OpenAI: interpretation, summaries, reports
+- Roboflow: detection
+- RF-DETR: ball, player, hoop
+- ByteTrack: identity persistence
+- Mux: video pipeline, playback, exports
+- Supabase: storage, session objects
+
+The product should still feel like:
+
+one phone
+-> one tripod
+-> one athlete
+-> automatic track, shoot, analyze, export, share
+
+Player reports are generated from the same session object:
+
+attempts
+-> makes/misses
+-> shot locations
+-> release metrics
+-> hours
+-> attendance
+-> player card/pdf/reel/timeline/progress graph
+
 The active product loop is:
 
 show up

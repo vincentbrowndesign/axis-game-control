@@ -41,7 +41,7 @@ const defaultBallTrackingState: BallTrackingState = {
 
 const sampleWidth = 160;
 const sampleHeight = 90;
-const ballDetectionIntervalMs = 120;
+const ballDetectionIntervalMs = 16;
 const minimumOrangePixels = 14;
 const maximumTrajectoryPoints = 18;
 const recoveredStateMs = 900;

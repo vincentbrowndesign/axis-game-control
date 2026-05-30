@@ -27,10 +27,44 @@ type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
 type ParticipationWindowStatus = "open" | "closed";
 type ParticipationMode = "Training" | "Practice" | "Game" | "Workout" | "Challenge";
-type ProductSurface = "film" | "results" | "work";
+type ProductSurface = "capture" | "export" | "overlay";
+type OverlaySurface = "export" | "live" | "replay";
+type OverlayKey =
+  | "attempts"
+  | "ballLabels"
+  | "fg"
+  | "makes"
+  | "misses"
+  | "organization"
+  | "flightPath"
+  | "playerLabels"
+  | "playerName"
+  | "sessionType"
+  | "shotScience"
+  | "timer"
+  | "trackingBoxes";
+type OverlaySettings = Record<OverlayKey, boolean>;
 type WorkOperatorMode = "coach" | "director" | "parent" | "player";
 type WorkDetectionState = "ACTIVE" | "IDLE" | "MOVING" | "SHOOTING";
 type WatchEventType = "assist" | "make" | "miss" | "rebound" | "shot_attempt" | "turnover";
+type SessionExportType =
+  | "coach_report"
+  | "director_report"
+  | "game_highlights"
+  | "coach_film"
+  | "director_film"
+  | "highlights_film"
+  | "original_film"
+  | "overlay_film"
+  | "player_card"
+  | "player_pdf"
+  | "player_progress_graph"
+  | "player_reel"
+  | "player_timeline"
+  | "session_recap"
+  | "shot_science"
+  | "social_reel"
+  | "vertical_social_film";
 
 const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
 const participationModes: ParticipationMode[] = ["Training", "Practice", "Game", "Workout", "Challenge"];
@@ -50,6 +84,25 @@ const filmWatchGroups: Array<{ label: string; type: WatchEventType }> = [
   { label: "WATCH ASSISTS", type: "assist" },
   { label: "WATCH TURNOVERS", type: "turnover" },
 ];
+const sessionExportLabels: Record<SessionExportType, string> = {
+  coach_film: "Coach Film",
+  coach_report: "Coach Report",
+  director_film: "Director Film",
+  director_report: "Director Report",
+  game_highlights: "Game Highlights",
+  highlights_film: "Highlights Film",
+  original_film: "Original Film",
+  overlay_film: "Overlay Film",
+  player_card: "Player Card",
+  player_pdf: "Player PDF",
+  player_progress_graph: "Player Progress Graph",
+  player_reel: "Player Reel",
+  player_timeline: "Player Timeline",
+  session_recap: "Session Recap",
+  shot_science: "Shot Science",
+  social_reel: "Social Reel",
+  vertical_social_film: "Vertical Social Film",
+};
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
@@ -97,6 +150,7 @@ type SavedSession = {
   replayEvents?: ReplayEvent[];
   replayAnchors?: ReplayAnchor[];
   replayClips?: ReplayClip[];
+  exportQueue?: SessionExportOutput[];
   review?: SessionReview;
   shotEvents?: ShotEvent[];
   shotSummary?: ShotSummary;
@@ -189,14 +243,54 @@ type BallTimelineSample = {
 };
 
 type ShotType = "make" | "miss";
-type ActionEventType = "assist" | "foul" | "rebound" | "turnover";
+type ActionEventType = "assist" | "block" | "foul" | "rebound" | "steal" | "turnover";
 type GameActionType = ActionEventType | ShotType;
-const gameActions: GameActionType[] = ["make", "miss", "rebound", "assist", "turnover", "foul"];
+const gameActions: GameActionType[] = ["make", "miss", "rebound", "assist", "turnover", "steal", "block"];
+const defaultOverlaySettings: OverlaySettings = {
+  attempts: true,
+  ballLabels: true,
+  fg: true,
+  makes: true,
+  misses: true,
+  organization: true,
+  flightPath: true,
+  playerLabels: true,
+  playerName: true,
+  sessionType: true,
+  shotScience: true,
+  timer: true,
+  trackingBoxes: true,
+};
+const overlayControls: Array<{ key: OverlayKey; label: string }> = [
+  { key: "trackingBoxes", label: "Boxes" },
+  { key: "playerLabels", label: "Player labels" },
+  { key: "ballLabels", label: "Ball labels" },
+  { key: "makes", label: "Makes" },
+  { key: "misses", label: "Misses" },
+  { key: "attempts", label: "Attempts" },
+  { key: "fg", label: "FG%" },
+  { key: "timer", label: "Timer" },
+  { key: "sessionType", label: "Session" },
+  { key: "organization", label: "Organization" },
+  { key: "flightPath", label: "Flight path" },
+  { key: "playerName", label: "Player" },
+  { key: "shotScience", label: "Shot science" },
+];
 
 type ShotScience = {
   arc: number;
   apexFrame: number;
+  apexPoint: {
+    x: number;
+    y: number;
+  };
   arcHeight: number;
+  arcHeightFeet: number;
+  entryPoint: {
+    x: number;
+    y: number;
+  };
+  entryAngle: number;
   flightTime: number;
   gatherTime: number;
   hangTime: number;
@@ -204,19 +298,31 @@ type ShotScience = {
   releaseAngle: number;
   releaseFrame: number;
   releaseHeight: number;
+  releasePoint: {
+    x: number;
+    y: number;
+  };
   releaseTime: number;
   releaseSpeed: number;
   rimEntryFrame: number;
+  shotEndFrame: number;
   shotArc: number;
   shotDistance: number;
+  shotStartFrame: number;
   source: "single_camera_estimate";
+  trajectorySpline: Array<{
+    x: number;
+    y: number;
+  }>;
 };
 
 type ShotEvent = {
+  attemptNumber: number;
   athleteId?: string;
   athleteName: string;
   cameraDirection: CameraDirection;
   cameraId: string;
+  makeStreak: number;
   movementState: "moving" | "stationary" | "unknown";
   replayTimestamp: number;
   sessionId: string;
@@ -225,6 +331,8 @@ type ShotEvent = {
   suggestionReason?: string;
   suggested?: boolean;
   shotScience?: ShotScience;
+  shotEndTimestamp: string;
+  shotStartTimestamp: string;
   timestamp: string;
   trackId?: string;
   trackedTimeSeconds: number;
@@ -259,10 +367,12 @@ type ShotSummary = {
 
 type GameResults = {
   assists: number;
+  blocks: number;
   fouls: number;
   makes: number;
   misses: number;
   rebounds: number;
+  steals: number;
   turnovers: number;
 };
 
@@ -298,6 +408,7 @@ type ReplayEventType =
   | "ball_lost"
   | "ball_recovered"
   | "ball_visible"
+  | "block"
   | "coach_voice"
   | "foul"
   | "left_frame"
@@ -311,6 +422,7 @@ type ReplayEventType =
   | "shot_attempt"
   | "shot_gather"
   | "shot_release"
+  | "steal"
   | "tracking_interruption"
   | "turnover";
 type BallReplayEventType = "ball_lost" | "ball_recovered" | "ball_visible";
@@ -363,13 +475,103 @@ type ReplayAnchor = {
 
 type ReplayClip = {
   clipEnd: number;
+  clipKind?: string;
   clipStart: number;
   eventId: string;
   eventType: string;
   id: string;
+  leadInSeconds?: number;
+  leadOutSeconds?: number;
   muxAssetId: string;
+  playlistOrder?: number;
   replayLabel: string;
   sessionId: string;
+  sourceLabel?: string;
+};
+
+type SessionExportOutput = {
+  label: string;
+  sourceCount: number;
+  status: "available" | "processing" | "waiting";
+  type: SessionExportType;
+};
+
+type AxisCapabilityProvider = "bytetrack" | "mux" | "openai" | "rf_detr" | "roboflow" | "supabase";
+
+type AxisCapabilityStage = {
+  capability: string;
+  outputs: string[];
+  provider: AxisCapabilityProvider;
+  sourceCount: number;
+  status: SessionExportOutput["status"];
+};
+
+type SessionExportObject = {
+  clips: ReplayClip[];
+  events: ReplayEvent[];
+  exports: SessionExportOutput[];
+  metrics: {
+    game: GameResults;
+    longestMakeStreak: number;
+    shotSummary: ShotSummary;
+    workTimeSeconds: number;
+  };
+  overlays: ReplayAnchor[];
+  pipeline: AxisCapabilityStage[];
+  playerReport: PlayerReport;
+  session: {
+    endedAt: string;
+    id: string;
+    startedAt: string;
+    type: ParticipationMode;
+  };
+  shots: ShotEvent[];
+  video: {
+    available: boolean;
+    muxAssetId?: string;
+    playbackId?: string;
+    thumbnailUrl?: string;
+  };
+};
+
+type PlayerReport = {
+  attendance: number;
+  averageReleaseAngle: number | null;
+  averageReleaseSpeed: number | null;
+  averageReleaseTime: number | null;
+  fieldGoalPercentage: number;
+  makes: number;
+  misses: number;
+  outputs: SessionExportOutput[];
+  playerId?: string;
+  playerName: string;
+  progressGraph: Array<{
+    attempts: number;
+    fieldGoalPercentage: number;
+    makes: number;
+    timestamp: string;
+  }>;
+  releaseMetrics: Array<{
+    attemptNumber: number;
+    arcHeightFeet?: number;
+    entryAngle?: number;
+    releaseAngle?: number;
+    releaseSpeed?: number;
+    releaseTime?: number;
+  }>;
+  sessionHours: number;
+  shotLocations: Array<{
+    attemptNumber: number;
+    distance?: number;
+    x?: number;
+    y?: number;
+  }>;
+  timeline: Array<{
+    label: string;
+    timestamp: string;
+    videoTimestamp: number;
+  }>;
+  totalAttempts: number;
 };
 
 type SessionReview = {
@@ -678,16 +880,28 @@ function createShotScience(track: PlayerTrack | null, ball: BallTrackingState): 
   const shotDistance = Math.round(getPointDistance(track?.location ?? ball.position, hoop) * 50 * 10) / 10;
   const highestPoint = trajectory[apexFrame].y;
   const arc = Math.round(Math.max(0, ball.position.y - highestPoint) * 100);
+  const arcHeightFeet = Math.round(Math.max(0, ball.position.y - highestPoint) * 12 * 10) / 10;
   const hangTime = Math.round(trajectory.length * 0.12 * 10) / 10;
   const gatherTime = Math.max(0.3, Math.min(1.2, Math.round((0.42 + (track?.movement.distanceTraveled ?? 0) * 4) * 10) / 10));
   const releaseTime = Math.max(0.2, Math.min(1.6, Math.round((hangTime || 0.7) * 10) / 10));
   const jumpHeight = Math.max(0, Math.round((track?.movement.direction === "up" ? track.movement.distanceTraveled * 100 : 0) * 10) / 10);
   const flightTime = Math.max(0.1, Math.round(Math.max(1, rimEntryFrame - releaseFrame) * 0.12 * 10) / 10);
+  const entryPoint = trajectory[rimEntryFrame] ?? ball.position;
+  const previousEntryPoint = trajectory[Math.max(0, rimEntryFrame - 1)] ?? ball.position;
+  const entryVelocity = {
+    x: entryPoint.x - previousEntryPoint.x,
+    y: entryPoint.y - previousEntryPoint.y,
+  };
+  const entryAngle = Math.round((Math.atan2(Math.max(0, entryVelocity.y), Math.max(0.001, Math.abs(entryVelocity.x))) * 180) / Math.PI);
 
   return {
     arc,
     apexFrame,
+    apexPoint: trajectory[apexFrame],
     arcHeight: arc,
+    arcHeightFeet,
+    entryPoint,
+    entryAngle,
     flightTime,
     gatherTime,
     hangTime,
@@ -695,12 +909,16 @@ function createShotScience(track: PlayerTrack | null, ball: BallTrackingState): 
     releaseAngle,
     releaseFrame,
     releaseHeight,
+    releasePoint: ball.position,
     releaseTime,
     releaseSpeed: Math.round(releaseSpeed * 100) / 100,
     rimEntryFrame,
+    shotEndFrame: Math.max(0, trajectory.length - 1),
     shotArc: arc,
     shotDistance,
+    shotStartFrame: releaseFrame,
     source: "single_camera_estimate",
+    trajectorySpline: trajectory,
   };
 }
 
@@ -895,13 +1113,18 @@ function normalizeReplayClip(clip: unknown): ReplayClip | null {
 
   return {
     clipEnd: typeof candidate.clipEnd === "number" ? candidate.clipEnd : 0,
+    clipKind: typeof candidate.clipKind === "string" ? candidate.clipKind : undefined,
     clipStart: typeof candidate.clipStart === "number" ? candidate.clipStart : 0,
     eventId: candidate.eventId,
     eventType: candidate.eventType,
     id: candidate.id,
+    leadInSeconds: typeof candidate.leadInSeconds === "number" ? candidate.leadInSeconds : undefined,
+    leadOutSeconds: typeof candidate.leadOutSeconds === "number" ? candidate.leadOutSeconds : undefined,
     muxAssetId: typeof candidate.muxAssetId === "string" ? candidate.muxAssetId : "pending",
+    playlistOrder: typeof candidate.playlistOrder === "number" ? candidate.playlistOrder : undefined,
     replayLabel: typeof candidate.replayLabel === "string" ? candidate.replayLabel : candidate.eventType,
     sessionId: candidate.sessionId,
+    sourceLabel: typeof candidate.sourceLabel === "string" ? candidate.sourceLabel : undefined,
   };
 }
 
@@ -956,10 +1179,27 @@ function normalizeShotEvent(event: unknown): ShotEvent | null {
     typeof shotScience.arc === "number" &&
     typeof shotScience.shotDistance === "number" &&
     typeof shotScience.hangTime === "number"
-      ? {
+        ? {
           arc: shotScience.arc,
           apexFrame: typeof shotScience.apexFrame === "number" ? shotScience.apexFrame : 0,
+          apexPoint:
+            shotScience.apexPoint &&
+            typeof shotScience.apexPoint.x === "number" &&
+            typeof shotScience.apexPoint.y === "number"
+              ? shotScience.apexPoint
+              : { x: 0, y: 0 },
           arcHeight: typeof shotScience.arcHeight === "number" ? shotScience.arcHeight : shotScience.arc,
+          arcHeightFeet:
+            typeof shotScience.arcHeightFeet === "number"
+              ? shotScience.arcHeightFeet
+              : Math.round(Math.max(0, shotScience.arc) * 0.12 * 10) / 10,
+          entryPoint:
+            shotScience.entryPoint &&
+            typeof shotScience.entryPoint.x === "number" &&
+            typeof shotScience.entryPoint.y === "number"
+              ? shotScience.entryPoint
+              : { x: 0, y: 0 },
+          entryAngle: typeof shotScience.entryAngle === "number" ? shotScience.entryAngle : shotScience.releaseAngle,
           flightTime: typeof shotScience.flightTime === "number" ? shotScience.flightTime : shotScience.hangTime,
           gatherTime: typeof shotScience.gatherTime === "number" ? shotScience.gatherTime : 0.5,
           hangTime: shotScience.hangTime,
@@ -967,20 +1207,38 @@ function normalizeShotEvent(event: unknown): ShotEvent | null {
           releaseAngle: shotScience.releaseAngle,
           releaseFrame: typeof shotScience.releaseFrame === "number" ? shotScience.releaseFrame : 0,
           releaseHeight: shotScience.releaseHeight,
+          releasePoint:
+            shotScience.releasePoint &&
+            typeof shotScience.releasePoint.x === "number" &&
+            typeof shotScience.releasePoint.y === "number"
+              ? shotScience.releasePoint
+              : { x: 0, y: 0 },
           releaseTime: typeof shotScience.releaseTime === "number" ? shotScience.releaseTime : shotScience.hangTime,
           releaseSpeed: shotScience.releaseSpeed,
           rimEntryFrame: typeof shotScience.rimEntryFrame === "number" ? shotScience.rimEntryFrame : 0,
+          shotEndFrame: typeof shotScience.shotEndFrame === "number" ? shotScience.shotEndFrame : 0,
           shotArc: typeof shotScience.shotArc === "number" ? shotScience.shotArc : shotScience.arc,
           shotDistance: shotScience.shotDistance,
+          shotStartFrame: typeof shotScience.shotStartFrame === "number" ? shotScience.shotStartFrame : 0,
           source: "single_camera_estimate" as const,
+          trajectorySpline: Array.isArray(shotScience.trajectorySpline)
+            ? shotScience.trajectorySpline
+                .filter(
+                  (point): point is { x: number; y: number } =>
+                    Boolean(point) && typeof point.x === "number" && typeof point.y === "number",
+                )
+                .slice(-24)
+            : [],
         }
       : undefined;
 
   return {
+    attemptNumber: typeof candidate.attemptNumber === "number" ? candidate.attemptNumber : 1,
     athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
     athleteName: typeof candidate.athleteName === "string" ? candidate.athleteName : "Athlete",
     cameraDirection,
     cameraId: typeof candidate.cameraId === "string" ? candidate.cameraId : getCameraId(cameraDirection),
+    makeStreak: typeof candidate.makeStreak === "number" ? candidate.makeStreak : 0,
     movementState:
       candidate.movementState === "moving" || candidate.movementState === "stationary" ? candidate.movementState : "unknown",
     replayTimestamp: typeof candidate.replayTimestamp === "number" ? candidate.replayTimestamp : 0,
@@ -990,6 +1248,8 @@ function normalizeShotEvent(event: unknown): ShotEvent | null {
     suggestionReason: typeof candidate.suggestionReason === "string" ? candidate.suggestionReason : undefined,
     suggested: Boolean(candidate.suggested),
     shotScience: normalizedShotScience,
+    shotEndTimestamp: typeof candidate.shotEndTimestamp === "string" ? candidate.shotEndTimestamp : candidate.timestamp,
+    shotStartTimestamp: typeof candidate.shotStartTimestamp === "string" ? candidate.shotStartTimestamp : candidate.timestamp,
     timestamp: candidate.timestamp,
     trackId: typeof candidate.trackId === "string" ? candidate.trackId : undefined,
     trackedTimeSeconds: typeof candidate.trackedTimeSeconds === "number" ? candidate.trackedTimeSeconds : 0,
@@ -1107,6 +1367,8 @@ function formatGameActionLabel(type: GameActionType) {
   if (type === "rebound") return "Rebound";
   if (type === "assist") return "Assist";
   if (type === "turnover") return "Turnover";
+  if (type === "steal") return "Steal";
+  if (type === "block") return "Block";
 
   return "Foul";
 }
@@ -1228,21 +1490,166 @@ function shouldCreateClip(anchor: ReplayAnchor) {
   return anchor.eventType !== "session_start" && anchor.eventType !== "session_end";
 }
 
-function createReplayClip(anchor: ReplayAnchor): ReplayClip {
+function createReplayClip(
+  anchor: ReplayAnchor,
+  options: {
+    clipKind?: string;
+    leadInSeconds?: number;
+    leadOutSeconds?: number;
+    playlistOrder?: number;
+    sourceLabel?: string;
+  } = {},
+): ReplayClip {
+  const leadInSeconds = options.leadInSeconds ?? 5;
+  const leadOutSeconds = options.leadOutSeconds ?? 5;
+
   return {
-    clipEnd: anchor.videoTimestamp + 5,
-    clipStart: Math.max(0, anchor.videoTimestamp - 5),
+    clipEnd: anchor.videoTimestamp + leadOutSeconds,
+    clipKind: options.clipKind,
+    clipStart: Math.max(0, anchor.videoTimestamp - leadInSeconds),
     eventId: anchor.eventId,
     eventType: anchor.eventType,
-    id: `clip:${anchor.eventId}`,
+    id: `clip:${options.clipKind ?? anchor.eventType}:${anchor.eventId}`,
+    leadInSeconds,
+    leadOutSeconds,
     muxAssetId: anchor.muxAssetId,
+    playlistOrder: options.playlistOrder,
     replayLabel: anchor.replayLabel,
     sessionId: anchor.sessionId,
+    sourceLabel: options.sourceLabel,
   };
 }
 
 function createReplayClips(anchors: ReplayAnchor[]) {
-  return anchors.filter(shouldCreateClip).map(createReplayClip);
+  return anchors.filter(shouldCreateClip).map((anchor) => createReplayClip(anchor));
+}
+
+function findShotAnchor(shot: ShotEvent | undefined, anchors: ReplayAnchor[]) {
+  if (!shot) return undefined;
+
+  return anchors.find(
+    (anchor) =>
+      anchor.eventType === shot.type &&
+      anchor.sessionId === shot.sessionId &&
+      Math.abs(new Date(anchor.timestamp).getTime() - new Date(shot.timestamp).getTime()) < 1200,
+  );
+}
+
+function createSyntheticClipAnchor({
+  eventId,
+  eventType,
+  label,
+  muxAssetId,
+  sessionId,
+  sessionStartedAt,
+  timestamp,
+}: {
+  eventId: string;
+  eventType: string;
+  label: string;
+  muxAssetId?: string;
+  sessionId: string;
+  sessionStartedAt: string;
+  timestamp: string;
+}) {
+  return createReplayAnchor(eventId, eventType, timestamp, sessionId, sessionStartedAt, muxAssetId, label);
+}
+
+function createAutomaticReplayClips({
+  anchors,
+  muxAssetId,
+  sessionId,
+  sessionStartedAt,
+  shotEvents,
+  timeline,
+}: {
+  anchors: ReplayAnchor[];
+  muxAssetId?: string;
+  sessionId: string;
+  sessionStartedAt: string;
+  shotEvents: ShotEvent[];
+  timeline: SessionTimelineSample[];
+}) {
+  const clips: ReplayClip[] = [];
+  const addClip = (anchor: ReplayAnchor | undefined, clipKind: string, sourceLabel: string, leadInSeconds = 5, leadOutSeconds = 5) => {
+    if (!anchor) return;
+    clips.push(
+      createReplayClip(anchor, {
+        clipKind,
+        leadInSeconds,
+        leadOutSeconds,
+        playlistOrder: clips.length + 1,
+        sourceLabel,
+      }),
+    );
+  };
+
+  anchors
+    .filter((anchor) => anchor.eventType === "make")
+    .forEach((anchor) => addClip(anchor, "make", "Make"));
+  anchors
+    .filter((anchor) => anchor.eventType === "miss")
+    .forEach((anchor) => addClip(anchor, "miss", "Miss"));
+
+  const longestStreakShot = shotEvents.reduce<ShotEvent | undefined>(
+    (best, shot) => (shot.makeStreak > (best?.makeStreak ?? 0) ? shot : best),
+    undefined,
+  );
+  addClip(findShotAnchor(longestStreakShot, anchors), "longest_streak", "Longest streak", 6, 6);
+
+  const fastestReleaseShot = shotEvents
+    .filter((shot) => shot.shotScience)
+    .reduce<ShotEvent | undefined>(
+      (best, shot) =>
+        !best || (shot.shotScience?.releaseTime ?? Number.POSITIVE_INFINITY) < (best.shotScience?.releaseTime ?? Number.POSITIVE_INFINITY)
+          ? shot
+          : best,
+      undefined,
+    );
+  addClip(findShotAnchor(fastestReleaseShot, anchors), "fastest_release", "Fastest release", 5, 5);
+
+  const highestArcShot = shotEvents
+    .filter((shot) => shot.shotScience)
+    .reduce<ShotEvent | undefined>(
+      (best, shot) =>
+        !best || (shot.shotScience?.arcHeightFeet ?? 0) > (best.shotScience?.arcHeightFeet ?? 0) ? shot : best,
+      undefined,
+    );
+  addClip(findShotAnchor(highestArcShot, anchors), "highest_arc", "Highest arc", 5, 5);
+
+  const mostActiveSample = timeline.reduce<SessionTimelineSample | undefined>(
+    (best, sample) => (!best || sample.distanceTraveled > best.distanceTraveled ? sample : best),
+    undefined,
+  );
+  if (mostActiveSample && mostActiveSample.distanceTraveled > 0) {
+    addClip(
+      createSyntheticClipAnchor({
+        eventId: `auto:${sessionId}:most-active-period`,
+        eventType: "most_active_period",
+        label: "Most active period",
+        muxAssetId,
+        sessionId,
+        sessionStartedAt,
+        timestamp: mostActiveSample.timestamp,
+      }),
+      "most_active_period",
+      "Most active period",
+      8,
+      8,
+    );
+  }
+
+  anchors
+    .filter((anchor) => ["left_frame", "recovered", "tracking_interruption"].includes(anchor.eventType))
+    .forEach((anchor) => addClip(anchor, "tracking_event", "Tracking event", 4, 4));
+  anchors
+    .filter((anchor) => ["assist", "coach_voice", "foul", "rebound", "turnover"].includes(anchor.eventType))
+    .forEach((anchor) => addClip(anchor, "tagged_event", "Tagged event", 5, 5));
+
+  return clips.filter(
+    (clip, index, allClips) =>
+      allClips.findIndex((candidate) => candidate.id === clip.id && candidate.clipKind === clip.clipKind) === index,
+  );
 }
 
 function summarizeShots(events: ShotEvent[]): ShotSummary {
@@ -1263,10 +1670,12 @@ function summarizeGameResults(shotEvents: ShotEvent[], replayEvents: ReplayEvent
 
   return {
     assists: replayEvents.filter((event) => event.type === "assist").length,
+    blocks: replayEvents.filter((event) => event.type === "block").length,
     fouls: replayEvents.filter((event) => event.type === "foul").length,
     makes: shotSummary.makes,
     misses: shotSummary.misses,
     rebounds: replayEvents.filter((event) => event.type === "rebound").length,
+    steals: replayEvents.filter((event) => event.type === "steal").length,
     turnovers: replayEvents.filter((event) => event.type === "turnover").length,
   };
 }
@@ -1655,6 +2064,18 @@ function getLongestMakeStreak(events?: ShotEvent[]) {
   ).longest;
 }
 
+function getNextMakeStreak(events: ShotEvent[], type: ShotType) {
+  if (type === "miss") return 0;
+
+  let streak = 1;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index].type !== "make") break;
+    streak += 1;
+  }
+
+  return streak;
+}
+
 function formatShotScienceRelease(science?: ShotScience) {
   if (!science) return "--";
 
@@ -1664,9 +2085,293 @@ function formatShotScienceRelease(science?: ShotScience) {
 function formatShotScienceApex(science?: ShotScience) {
   if (!science) return "--";
 
-  const apexFeet = Math.max(0, ((science.releaseHeight + science.arcHeight) / 100) * 10);
+  const apexFeet = science.arcHeightFeet ?? Math.max(0, ((science.releaseHeight + science.arcHeight) / 100) * 10);
 
   return `${apexFeet.toFixed(1)}ft apex`;
+}
+
+function formatShotScienceArc(science?: ShotScience) {
+  if (!science) return "--";
+
+  return `${science.arcHeightFeet.toFixed(1)} ft arc`;
+}
+
+function formatShotScienceReleaseTime(science?: ShotScience) {
+  if (!science) return "--";
+
+  return `${science.releaseTime.toFixed(2)} release`;
+}
+
+function formatShotScienceEntry(science?: ShotScience) {
+  if (!science) return "--";
+
+  return `${science.entryAngle}\u00b0 entry`;
+}
+
+function averageNumbers(values: Array<number | undefined>) {
+  const realValues = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (!realValues.length) return null;
+
+  return Math.round((realValues.reduce((total, value) => total + value, 0) / realValues.length) * 100) / 100;
+}
+
+function createPlayerReport(session: SavedSession, shots: ShotEvent[], shotSummary: ShotSummary, clips: ReplayClip[]): PlayerReport {
+  const primaryParticipant = session.participants?.[0];
+  const playerId = primaryParticipant?.id ?? shots.find((shot) => shot.athleteId)?.athleteId;
+  const playerName = primaryParticipant?.name ?? shots.find((shot) => shot.athleteName)?.athleteName ?? "Athlete";
+  const hasShots = shots.length > 0;
+  const hasFilm = Boolean(session.muxPlaybackId || session.muxAssetId || session.recordingAttached);
+  const progressGraph = shots.map((shot, index) => {
+    const shotSlice = shots.slice(0, index + 1);
+    const summary = summarizeShots(shotSlice);
+
+    return {
+      attempts: summary.attempts,
+      fieldGoalPercentage: summary.fieldGoalPercentage,
+      makes: summary.makes,
+      timestamp: shot.timestamp,
+    };
+  });
+  const reportOutputs: SessionExportOutput[] = [
+    {
+      label: sessionExportLabels.player_card,
+      sourceCount: hasShots ? 1 : 0,
+      status: hasShots ? "available" : "waiting",
+      type: "player_card",
+    },
+    {
+      label: sessionExportLabels.player_pdf,
+      sourceCount: hasShots ? 1 : 0,
+      status: hasShots ? "available" : "waiting",
+      type: "player_pdf",
+    },
+    {
+      label: sessionExportLabels.player_reel,
+      sourceCount: clips.length,
+      status: hasFilm && clips.length ? "available" : hasFilm ? "processing" : "waiting",
+      type: "player_reel",
+    },
+    {
+      label: sessionExportLabels.player_timeline,
+      sourceCount: shots.length,
+      status: shots.length ? "available" : "waiting",
+      type: "player_timeline",
+    },
+    {
+      label: sessionExportLabels.player_progress_graph,
+      sourceCount: progressGraph.length,
+      status: progressGraph.length ? "available" : "waiting",
+      type: "player_progress_graph",
+    },
+  ];
+
+  return {
+    attendance: session.participantCount ?? session.participants?.length ?? 1,
+    averageReleaseAngle: averageNumbers(shots.map((shot) => shot.shotScience?.releaseAngle)),
+    averageReleaseSpeed: averageNumbers(shots.map((shot) => shot.shotScience?.releaseSpeed)),
+    averageReleaseTime: averageNumbers(shots.map((shot) => shot.shotScience?.releaseTime)),
+    fieldGoalPercentage: shotSummary.fieldGoalPercentage,
+    makes: shotSummary.makes,
+    misses: shotSummary.misses,
+    outputs: reportOutputs,
+    playerId,
+    playerName,
+    progressGraph,
+    releaseMetrics: shots.map((shot) => ({
+      attemptNumber: shot.attemptNumber,
+      arcHeightFeet: shot.shotScience?.arcHeightFeet,
+      entryAngle: shot.shotScience?.entryAngle,
+      releaseAngle: shot.shotScience?.releaseAngle,
+      releaseSpeed: shot.shotScience?.releaseSpeed,
+      releaseTime: shot.shotScience?.releaseTime,
+    })),
+    sessionHours: Math.round((session.durationSeconds / 3600) * 100) / 100,
+    shotLocations: shots.map((shot) => ({
+      attemptNumber: shot.attemptNumber,
+      distance: shot.shotScience?.shotDistance,
+      x: shot.shotScience?.releasePoint.x,
+      y: shot.shotScience?.releasePoint.y,
+    })),
+    timeline: shots.map((shot) => ({
+      label: shot.type === "make" ? "Make" : "Miss",
+      timestamp: shot.timestamp,
+      videoTimestamp: shot.replayTimestamp,
+    })),
+    totalAttempts: shotSummary.attempts,
+  };
+}
+
+function createAxisCapabilityPipeline({
+  clips,
+  events,
+  hasMuxAsset,
+  hasPlayableFilm,
+  overlays,
+  session,
+  shots,
+}: {
+  clips: ReplayClip[];
+  events: ReplayEvent[];
+  hasMuxAsset: boolean;
+  hasPlayableFilm: boolean;
+  overlays: ReplayAnchor[];
+  session: SavedSession;
+  shots: ShotEvent[];
+}): AxisCapabilityStage[] {
+  const timeline = normalizeTimeline(session.timeline);
+  const ballTimeline = normalizeBallTimeline(session.ballTimeline);
+  const hasTrackedPlayer = timeline.some((sample) => sample.tracked || sample.visible);
+  const hasBallSignal = ballTimeline.some((sample) => sample.visible);
+  const hasHoopSignal = shots.some((shot) => Boolean(shot.shotScience?.entryPoint));
+  const hasEvents = events.length > 0 || overlays.length > 0 || shots.length > 0;
+  const participantCount = session.participants?.length ?? session.participantCount ?? 0;
+  const videoStatus: SessionExportOutput["status"] = hasPlayableFilm ? "available" : hasMuxAsset ? "processing" : "waiting";
+  const detectionStatus = (ready: boolean): SessionExportOutput["status"] => {
+    if (ready) return "available";
+    if (hasPlayableFilm || hasMuxAsset) return "processing";
+
+    return "waiting";
+  };
+
+  return [
+    {
+      capability: "Interpretation, summaries, reports",
+      outputs: ["Work Summary", "Results", "Player Report", "Coach Report"],
+      provider: "openai",
+      sourceCount: events.length + shots.length,
+      status: hasEvents ? "processing" : "waiting",
+    },
+    {
+      capability: "Detection",
+      outputs: ["Player", "Ball", "Hoop"],
+      provider: "roboflow",
+      sourceCount: Number(hasPlayableFilm || hasMuxAsset),
+      status: videoStatus,
+    },
+    {
+      capability: "Ball, player, hoop",
+      outputs: ["Ball Location", "Player Location", "Hoop Location", "Shot Evidence"],
+      provider: "rf_detr",
+      sourceCount: Number(hasTrackedPlayer) + Number(hasBallSignal) + Number(hasHoopSignal),
+      status: detectionStatus(hasTrackedPlayer || hasBallSignal || hasHoopSignal),
+    },
+    {
+      capability: "Identity persistence",
+      outputs: ["Stable Athlete Track", "Tracking Recovery", "Session Measurements"],
+      provider: "bytetrack",
+      sourceCount: participantCount || Number(hasTrackedPlayer),
+      status: detectionStatus(hasTrackedPlayer),
+    },
+    {
+      capability: "Video pipeline, playback, exports",
+      outputs: ["Original Film", "Overlay Film", "Highlights Film", "Vertical Social Film"],
+      provider: "mux",
+      sourceCount: Number(hasMuxAsset) + clips.length,
+      status: videoStatus,
+    },
+    {
+      capability: "Storage, session objects",
+      outputs: ["Work", "Film", "Events", "Results"],
+      provider: "supabase",
+      sourceCount: Number(Boolean(session.id)) + events.length + shots.length,
+      status: session.id ? "available" : "waiting",
+    },
+  ];
+}
+
+function createSessionExportObject(session: SavedSession): SessionExportObject {
+  const events = normalizeReplayEvents(session.replayEvents);
+  const shots = normalizeShotEvents(session.shotEvents);
+  const overlays = normalizeReplayAnchors(session.replayAnchors);
+  const clips = normalizeReplayClips(session.replayClips);
+  const shotSummary = session.shotSummary ?? summarizeShots(shots);
+  const game = summarizeGameResults(shots, events);
+  const playerReport = createPlayerReport(session, shots, shotSummary, clips);
+  const hasMuxAsset = Boolean(session.muxAssetId);
+  const hasPlayableFilm = Boolean(session.muxPlaybackId);
+  const hasEvents = events.length > 0 || overlays.length > 0;
+  const hasClips = clips.length > 0;
+  const getExportStatus = (hasSource: boolean): SessionExportOutput["status"] => {
+    if (hasPlayableFilm && hasSource) return "available";
+    if (hasMuxAsset && hasSource) return "processing";
+
+    return "waiting";
+  };
+  const exports: SessionExportOutput[] = [
+    {
+      label: sessionExportLabels.original_film,
+      sourceCount: hasPlayableFilm || hasMuxAsset ? 1 : 0,
+      status: getExportStatus(true),
+      type: "original_film",
+    },
+    {
+      label: sessionExportLabels.overlay_film,
+      sourceCount: overlays.length,
+      status: getExportStatus(hasEvents),
+      type: "overlay_film",
+    },
+    {
+      label: sessionExportLabels.highlights_film,
+      sourceCount: clips.length,
+      status: getExportStatus(hasClips),
+      type: "highlights_film",
+    },
+    {
+      label: sessionExportLabels.vertical_social_film,
+      sourceCount: clips.length,
+      status: getExportStatus(hasClips),
+      type: "vertical_social_film",
+    },
+    {
+      label: sessionExportLabels.coach_film,
+      sourceCount: events.length,
+      status: getExportStatus(hasEvents),
+      type: "coach_film",
+    },
+    {
+      label: sessionExportLabels.director_film,
+      sourceCount: events.length,
+      status: getExportStatus(hasEvents),
+      type: "director_film",
+    },
+    ...playerReport.outputs,
+  ];
+
+  return {
+    clips,
+    events,
+    exports,
+    metrics: {
+      game,
+      longestMakeStreak: getLongestMakeStreak(shots),
+      shotSummary,
+      workTimeSeconds: session.durationSeconds,
+    },
+    overlays,
+    pipeline: createAxisCapabilityPipeline({
+      clips,
+      events,
+      hasMuxAsset,
+      hasPlayableFilm,
+      overlays,
+      session,
+      shots,
+    }),
+    playerReport,
+    session: {
+      endedAt: session.endedAt,
+      id: session.id,
+      startedAt: session.startedAt,
+      type: session.mode ?? defaultParticipationMode,
+    },
+    shots,
+    video: {
+      available: hasPlayableFilm,
+      muxAssetId: session.muxAssetId,
+      playbackId: session.muxPlaybackId,
+      thumbnailUrl: session.thumbnailUrl,
+    },
+  };
 }
 
 function normalizeRawMeasurements(raw: unknown, fallback: SessionRawMeasurements): SessionRawMeasurements {
@@ -2014,7 +2719,14 @@ function readSave(): AxisSave {
             const replayClips =
               normalizeReplayClips(session.replayClips).length > 0
                 ? normalizeReplayClips(session.replayClips)
-                : createReplayClips(replayAnchors);
+                : createAutomaticReplayClips({
+                    anchors: replayAnchors,
+                    muxAssetId: session.muxAssetId,
+                    sessionId: session.id,
+                    sessionStartedAt: session.startedAt,
+                    shotEvents,
+                    timeline,
+                  });
 
             return {
               ...session,
@@ -2117,7 +2829,8 @@ export function RitualHome() {
   const [now, setNow] = useState(() => Date.now());
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("session");
-  const [productSurface, setProductSurface] = useState<ProductSurface>("work");
+  const [productSurface, setProductSurface] = useState<ProductSurface>("capture");
+  const [overlaySettings, setOverlaySettings] = useState<OverlaySettings>(defaultOverlaySettings);
   const [workOperatorMode, setWorkOperatorMode] = useState<WorkOperatorMode>("player");
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<ParticipationMode>(defaultParticipationMode);
@@ -2506,6 +3219,9 @@ export function RitualHome() {
   };
   const activeShotSummary = summarizeShots(save.activeSession?.shotEvents ?? []);
   const activeGameResults = summarizeGameResults(save.activeSession?.shotEvents ?? [], save.activeSession?.replayEvents ?? []);
+  const latestLiveShot = save.activeSession?.shotEvents?.length
+    ? save.activeSession.shotEvents[save.activeSession.shotEvents.length - 1]
+    : null;
   const cameraOverlayShotSummary = save.activeSession
     ? activeShotSummary
     : latestSession?.shotSummary ?? summarizeShots(latestSession?.shotEvents ?? []);
@@ -2537,10 +3253,11 @@ export function RitualHome() {
   const localFilmSrc = latestFilmPreviewUrl ? `${latestFilmPreviewUrl}#t=${Math.max(0, selectedFilmTime).toFixed(1)}` : undefined;
   const latestFilmThumbnailUrl = latestSession?.thumbnailUrl ?? getMuxThumbnailUrl(latestFilmPlaybackId);
   const latestFilmAvailability = getFilmAvailability(latestSession);
+  const latestExportObject = latestSession ? createSessionExportObject(latestSession) : null;
   const resultsSession = latestSession ?? save.activeSession ?? null;
   const resultsShotEvents = resultsSession?.shotEvents ?? [];
   const resultsShotSummary =
-    latestSession?.shotSummary ?? (save.activeSession ? activeShotSummary : summarizeShots(resultsShotEvents));
+    latestExportObject?.metrics.shotSummary ?? (save.activeSession ? activeShotSummary : summarizeShots(resultsShotEvents));
   const resultsModeLabel = resultsSession?.mode ?? pendingMode;
   const resultsTimeLabel = latestSession
     ? formatTime(latestSession.endedAt)
@@ -2548,17 +3265,18 @@ export function RitualHome() {
       ? formatTime(save.activeSession.startedAt)
       : "--";
   const resultsWorkTime = latestSession
-    ? formatWorkMinutes(latestSession.durationSeconds)
+    ? formatWorkMinutes(latestExportObject?.metrics.workTimeSeconds ?? latestSession.durationSeconds)
     : save.activeSession
       ? formatWorkMinutes(Math.max(0, Math.floor((now - new Date(save.activeSession.startedAt).getTime()) / 1000)))
       : "0m";
-  const resultsLongestMakeStreak = getLongestMakeStreak(resultsShotEvents);
+  const resultsLongestMakeStreak = latestExportObject?.metrics.longestMakeStreak ?? getLongestMakeStreak(resultsShotEvents);
   const resultsBestClipAnchor =
     latestFilmTimelineAnchors.find((anchor) => anchor.eventType === "make") ?? filmOverlayAnchors[0] ?? latestClipAnchors[0];
   const resultsShotScience = resultsShotEvents.find((event) => event.shotScience)?.shotScience;
   const resultsFilmLabel = latestSession?.recordingAttached || save.activeSession?.recordingAttached ? "Available" : "No film";
+  const visibleExportOutputs = latestExportObject?.exports ?? [];
   const shouldShowPrimaryFilm =
-    !showAxisDebug && productSurface === "film" && Boolean(latestSession && (latestFilmPlaybackId || localFilmSrc));
+    !showAxisDebug && productSurface === "overlay" && Boolean(latestSession && (latestFilmPlaybackId || localFilmSrc));
   const filmLibrary = save.sessions.slice(0, 5).map((session) => {
     const playbackId = getFilmPlaybackId(session);
 
@@ -2610,11 +3328,25 @@ export function RitualHome() {
     : latestSession
       ? formatDuration(latestSession.durationSeconds)
       : "0:00";
+  const cameraClipCount = save.activeSession
+    ? save.activeSession.replayClips?.length ?? 0
+    : latestExportObject?.clips.length ?? latestSession?.replayClips?.length ?? 0;
+  const cameraReportState = save.activeSession ? "Building" : latestSession ? "Ready" : "Waiting";
+  const cameraProgressState = latestSession ? "Updated" : save.activeSession ? "Live" : `${save.sessions.length} saved`;
   const cameraMakes = save.activeSession ? activeShotSummary.makes : latestSession?.shotSummary?.makes ?? 0;
   const cameraMisses = save.activeSession ? activeShotSummary.misses : latestSession?.shotSummary?.misses ?? 0;
+  const cameraAttempts = save.activeSession ? activeShotSummary.attempts : latestSession?.shotSummary?.attempts ?? 0;
+  const cameraFieldGoalPercentage = save.activeSession
+    ? activeShotSummary.fieldGoalPercentage
+    : latestSession?.shotSummary?.fieldGoalPercentage ?? 0;
+  const overlayPlayerName =
+    (soloAthleteTrack ? getTrackAthlete(soloAthleteTrack.id)?.name : undefined) ??
+    selectedCalibrationAthlete?.name ??
+    athleteLabel;
+  const overlayShot = latestLiveShot ?? latestSession?.shotEvents?.[0] ?? null;
   const availableParticipationModes = isCoachMode || isDirectorMode || isParentMode ? coachParticipationModes : participationModes;
   const isGameMode = (save.activeSession?.mode ?? pendingMode) === "Game";
-  const visibleWorkActions = showAxisDebug || isCoachMode || isGameMode ? gameActions : (["make", "miss"] as GameActionType[]);
+  const visibleWorkActions = gameActions;
   const compactPresence = `BRIDGE • ${currentStreak} ${currentStreak === 1 ? "DAY" : "DAYS"} • ${lastCheckIn.toUpperCase()} • ${currentMode.toUpperCase()}`;
   const historyStatus =
     ritualState === "complete" && latestSession
@@ -2778,7 +3510,7 @@ export function RitualHome() {
         activeSession: {
           ...activeSession,
           replayAnchors: [...(activeSession.replayAnchors ?? []), ...replayAnchors],
-          replayClips: [...(activeSession.replayClips ?? []), ...replayAnchors.map(createReplayClip)],
+          replayClips: [...(activeSession.replayClips ?? []), ...replayAnchors.map((anchor) => createReplayClip(anchor))],
           replayEvents: [...(activeSession.replayEvents ?? []), ...shotPhaseEvents],
         },
       };
@@ -3328,6 +4060,15 @@ export function RitualHome() {
   }
 
   async function pollFilmUpload(uploadId: string) {
+    let latestFilm:
+      | {
+          muxAssetId?: string;
+          playbackId?: string;
+          status?: string;
+          thumbnailUrl?: string;
+        }
+      | null = null;
+
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const response = await fetch(`/api/film/uploads/${uploadId}`);
       const result = (await response.json().catch(() => null)) as
@@ -3339,14 +4080,15 @@ export function RitualHome() {
           }
         | null;
 
+      if (response.ok && result) latestFilm = result;
       if (response.ok && result?.playbackId) return result;
       await new Promise((resolve) => window.setTimeout(resolve, 2500));
     }
 
-    return null;
+    return latestFilm;
   }
 
-  async function uploadSessionFilm(sessionId: string, blob: Blob) {
+  async function uploadSessionFilm(session: SavedSession, blob: Blob) {
     try {
       const uploadResponse = await fetch("/api/film/uploads", {
         headers: {
@@ -3363,27 +4105,40 @@ export function RitualHome() {
 
       await uploadBlobToMux(upload.uploadUrl, blob);
       const film = await pollFilmUpload(upload.uploadId);
-      if (!film?.playbackId) return;
+      const muxAssetId = film?.muxAssetId ?? session.muxAssetId;
+      const updatedSession = {
+        ...session,
+        muxAssetId,
+        muxPlaybackId: film?.playbackId ?? session.muxPlaybackId,
+        recordingAttached: true,
+        replayAnchors: (session.replayAnchors ?? []).map((anchor) => ({
+          ...anchor,
+          muxAssetId: muxAssetId ?? anchor.muxAssetId,
+        })),
+        replayClips: (session.replayClips ?? []).map((clip) => ({
+          ...clip,
+          muxAssetId: muxAssetId ?? clip.muxAssetId,
+        })),
+        thumbnailUrl: film?.thumbnailUrl ?? (film?.playbackId ? getMuxThumbnailUrl(film.playbackId) : session.thumbnailUrl),
+      };
+      const exportReadySession = {
+        ...updatedSession,
+        exportQueue: createSessionExportObject(updatedSession).exports,
+      };
 
       setSave((currentSave) => {
         const nextSave = {
           ...currentSave,
           sessions: currentSave.sessions.map((session) =>
-            session.id === sessionId
-              ? {
-                  ...session,
-                  muxAssetId: film.muxAssetId,
-                  muxPlaybackId: film.playbackId,
-                  recordingAttached: true,
-                  thumbnailUrl: film.thumbnailUrl ?? getMuxThumbnailUrl(film.playbackId),
-                }
-              : session,
+            session.id === exportReadySession.id ? { ...session, ...exportReadySession } : session,
           ),
         };
 
         writeSave(nextSave);
         return nextSave;
       });
+
+      void queueFinalizeWork(exportReadySession);
     } catch (error) {
       console.error("Unable to upload film", error);
     }
@@ -3934,11 +4689,20 @@ export function RitualHome() {
       0,
       Math.floor((new Date(timestamp).getTime() - new Date(activeSession.startedAt).getTime()) / 1000),
     );
+    const existingShotEvents = normalizeShotEvents(activeSession.shotEvents);
+    const shotScience = suggestion?.shotScience ?? createShotScience(activeTrack, ballTracking);
+    const shotEndTimestamp = timestamp;
+    const shotStartTimestamp = getShotPhaseTimestamp(
+      new Date(timestamp).getTime(),
+      -Math.round((shotScience?.releaseTime ?? 0.7) * 1000),
+    );
     const shotEvent: ShotEvent = {
+      attemptNumber: existingShotEvents.length + 1,
       athleteId: athlete.id,
       athleteName: athlete.name,
       cameraDirection: savedCameraDirection,
       cameraId: getCameraId(savedCameraDirection),
+      makeStreak: getNextMakeStreak(existingShotEvents, type),
       movementState: activeTrack?.movement.moving
         ? "moving"
         : activeTrack?.movement.stationary
@@ -3950,7 +4714,9 @@ export function RitualHome() {
       suggestionId: suggestion?.id,
       suggestionReason: suggestion?.reason,
       suggested: Boolean(suggestion),
-      shotScience: suggestion?.shotScience ?? createShotScience(activeTrack, ballTracking),
+      shotScience,
+      shotEndTimestamp,
+      shotStartTimestamp,
       timestamp,
       trackId: suggestion?.trackId ?? activeTrack?.id,
       trackedTimeSeconds: activeTrack ? activeTrack.visibleTimeMs / 1000 : 0,
@@ -4038,10 +4804,10 @@ export function RitualHome() {
         replayAnchors: [...(activeSession.replayAnchors ?? []), ...extraReplayAnchors, replayAnchor],
         replayClips: [
           ...(activeSession.replayClips ?? []),
-          ...[...extraReplayAnchors, replayAnchor].filter(shouldCreateClip).map(createReplayClip),
+          ...[...extraReplayAnchors, replayAnchor].filter(shouldCreateClip).map((anchor) => createReplayClip(anchor)),
         ],
         replayEvents: [...(activeSession.replayEvents ?? []), ...extraReplayEvents, replayEvent],
-        shotEvents: [...(activeSession.shotEvents ?? []), shotEvent],
+        shotEvents: [...existingShotEvents, shotEvent],
       },
     };
 
@@ -4109,18 +4875,141 @@ export function RitualHome() {
 
   function jumpToReplayAnchor(anchor: ReplayAnchor) {
     setSelectedReplayAnchor(anchor);
-    setProductSurface("film");
+    setProductSurface("overlay");
+  }
+
+  function toggleOverlay(key: OverlayKey) {
+    setOverlaySettings((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  }
+
+  function renderAxisOverlayLayer(surface: OverlaySurface) {
+    const isReplaySurface = surface === "replay";
+    const isLiveSurface = surface === "live";
+    const scoreItems = [
+      overlaySettings.timer ? { label: "Timer", value: cameraTimeLabel } : null,
+      overlaySettings.makes ? { label: "Makes", value: cameraMakes } : null,
+      overlaySettings.misses ? { label: "Misses", value: cameraMisses } : null,
+      overlaySettings.attempts ? { label: "Attempts", value: cameraAttempts } : null,
+      overlaySettings.fg ? { label: "FG%", value: `${cameraFieldGoalPercentage}%` } : null,
+    ].filter(Boolean) as Array<{ label: string; value: number | string }>;
+    const contextItems = [
+      overlaySettings.organization ? "BRIDGE" : null,
+      overlaySettings.playerName ? overlayPlayerName : null,
+      overlaySettings.sessionType ? resultsModeLabel : null,
+    ].filter((item): item is string => Boolean(item));
+
+    return (
+      <div className="axis-overlay-engine" data-surface={surface}>
+        {isReplaySurface && filmOverlayAnchors.length ? (
+          <div className="axis-film-event-overlay axis-overlay-layer" aria-label="Film events">
+            {filmOverlayAnchors.map((anchor, index) => (
+              <button
+                data-selected={selectedReplayAnchor?.eventId === anchor.eventId}
+                key={anchor.eventId}
+                onClick={() => jumpToReplayAnchor(anchor)}
+                style={{
+                  top: `${14 + (index % 6) * 11}%`,
+                }}
+                type="button"
+              >
+                <strong>{formatFilmTimestamp(anchor.videoTimestamp)}</strong>
+                <em>{formatHumanMomentLabel(anchor)}</em>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {isLiveSurface && overlaySettings.trackingBoxes && isVisionTrackingEnabled && soloAthleteTrack ? (
+          <div className="axis-player-tracking-overlay axis-player-tracking-overlay-live axis-overlay-layer" aria-label="Player tracking">
+            <div
+              className="axis-player-track-box axis-player-track-box-simple"
+              data-status={soloAthleteTrack.status}
+              style={{
+                height: `${soloAthleteTrack.boundingBox.height * 100}%`,
+                left: `${soloAthleteTrack.boundingBox.x * 100}%`,
+                top: `${soloAthleteTrack.boundingBox.y * 100}%`,
+                width: `${soloAthleteTrack.boundingBox.width * 100}%`,
+              }}
+            >
+              {overlaySettings.playerLabels ? (
+                <div className="axis-player-track-label axis-player-track-label-simple">
+                  <strong>{overlayPlayerName}</strong>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {isLiveSurface && overlaySettings.ballLabels && isVisionTrackingEnabled && ballTracking.visible && ballTracking.boundingBox ? (
+          <div className="axis-ball-tracking-overlay axis-overlay-layer" aria-label="Ball tracking">
+            <div
+              className="axis-ball-track-box"
+              data-status={ballTracking.status}
+              style={{
+                height: `${ballTracking.boundingBox.height * 100}%`,
+                left: `${ballTracking.boundingBox.x * 100}%`,
+                top: `${ballTracking.boundingBox.y * 100}%`,
+                width: `${ballTracking.boundingBox.width * 100}%`,
+              }}
+            >
+              <div className="axis-ball-track-label">
+                <strong>{formatBallTrackStatus(ballTracking)}</strong>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        <div className="axis-camera-os-overlay axis-overlay-layer" aria-label="Overlay status">
+          <strong>{isReplaySurface ? "Replay" : cameraOperatingState}</strong>
+          <em>{isReplaySurface ? latestFilmAvailability : contextItems.join(" / ")}</em>
+        </div>
+        {scoreItems.length ? (
+          <div className="axis-camera-score-overlay axis-overlay-layer" aria-label="Overlay results">
+            {scoreItems.map((item) => (
+              <span key={item.label}>
+                <em>{item.label}</em>
+                <strong>{item.value}</strong>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {overlaySettings.shotScience && overlayShot?.shotScience ? (
+          <div className="axis-shot-science-overlay axis-overlay-layer" aria-label="Shot science">
+            <strong>{overlayShot.type === "make" ? "MAKE" : "MISS"}</strong>
+            <span>{`${overlayShot.shotScience.releaseAngle}\u00b0`}</span>
+            <span>{formatShotScienceArc(overlayShot.shotScience)}</span>
+            <span>{formatShotScienceReleaseTime(overlayShot.shotScience)}</span>
+            <span>{`${overlayShot.makeStreak} streak`}</span>
+          </div>
+        ) : null}
+        {isReplaySurface &&
+        overlaySettings.flightPath &&
+        overlayShot?.shotScience?.trajectorySpline &&
+        overlayShot.shotScience.trajectorySpline.length > 1 ? (
+          <svg className="axis-ball-flight-overlay axis-overlay-layer" aria-label="Ball flight path" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polyline
+              points={overlayShot.shotScience.trajectorySpline
+                .map((point) => `${Math.max(0, Math.min(100, point.x * 100))},${Math.max(0, Math.min(100, point.y * 100))}`)
+                .join(" ")}
+            />
+            <circle cx={overlayShot.shotScience.releasePoint.x * 100} cy={overlayShot.shotScience.releasePoint.y * 100} r="1.1" />
+            <circle cx={overlayShot.shotScience.apexPoint.x * 100} cy={overlayShot.shotScience.apexPoint.y * 100} r="1.1" />
+            <circle cx={overlayShot.shotScience.entryPoint.x * 100} cy={overlayShot.shotScience.entryPoint.y * 100} r="1.1" />
+          </svg>
+        ) : null}
+      </div>
+    );
   }
 
   function createFinalizeWorkPayload(session: SavedSession) {
-    const shotSummary = summarizeShots(session.shotEvents ?? []);
-    const filmMoments = (session.replayAnchors ?? []).map((anchor) => ({
+    const exportObject = createSessionExportObject(session);
+    const filmMoments = exportObject.overlays.map((anchor) => ({
       filmTimeSeconds: anchor.videoTimestamp,
       id: anchor.eventId,
       label: formatHumanMomentLabel(anchor),
       type: anchor.eventType,
     }));
-    const events = (session.replayEvents ?? []).map((event) => ({
+    const events = exportObject.events.map((event) => ({
       filmTimeSeconds: getVideoTimestamp(event.timestamp, session.startedAt),
       id: event.id,
       label: event.label,
@@ -4131,31 +5020,82 @@ export function RitualHome() {
 
     return {
       events,
+      exportQueue: exportObject.exports,
       film: {
+        clips: exportObject.clips.map((clip) => ({
+          clipEnd: clip.clipEnd,
+          clipKind: clip.clipKind,
+          clipStart: clip.clipStart,
+          eventId: clip.eventId,
+          id: clip.id,
+          leadInSeconds: clip.leadInSeconds,
+          leadOutSeconds: clip.leadOutSeconds,
+          playlistOrder: clip.playlistOrder,
+          sourceLabel: clip.sourceLabel,
+          type: clip.eventType,
+        })),
         id: session.muxAssetId ? `film:${session.muxAssetId}` : undefined,
         moments: filmMoments,
-        muxAssetId: session.muxAssetId,
-        playbackId: session.muxPlaybackId,
-        status: session.muxPlaybackId ? ("ready" as const) : session.recordingAttached ? ("processing" as const) : ("unavailable" as const),
-        thumbnailUrl: session.thumbnailUrl,
+        muxAssetId: exportObject.video.muxAssetId,
+        overlays: filmMoments,
+        playbackId: exportObject.video.playbackId,
+        playlist: exportObject.clips
+          .slice()
+          .sort((a, b) => (a.playlistOrder ?? 0) - (b.playlistOrder ?? 0))
+          .map((clip) => ({
+            clipEnd: clip.clipEnd,
+            clipKind: clip.clipKind,
+            clipStart: clip.clipStart,
+            eventId: clip.eventId,
+            id: clip.id,
+            label: clip.sourceLabel ?? clip.replayLabel,
+            order: clip.playlistOrder ?? 0,
+          })),
+        status: exportObject.video.playbackId ? ("ready" as const) : exportObject.video.muxAssetId ? ("processing" as const) : ("unavailable" as const),
+        thumbnailUrl: exportObject.video.thumbnailUrl,
+        timeline: filmMoments,
         workId: session.id,
       },
+      overlayProfile: overlaySettings,
+      pipeline: exportObject.pipeline,
+      playerReport: exportObject.playerReport,
       results: {
-        attempts: shotSummary.attempts,
-        durationSeconds: session.durationSeconds,
+        attempts: exportObject.metrics.shotSummary.attempts,
+        durationSeconds: exportObject.metrics.workTimeSeconds,
         eventsCount: events.length,
-        fieldGoalPercentage: shotSummary.attempts ? shotSummary.fieldGoalPercentage : null,
+        fieldGoalPercentage: exportObject.metrics.shotSummary.attempts ? exportObject.metrics.shotSummary.fieldGoalPercentage : null,
         filmMomentsCount: filmMoments.length,
-        makes: shotSummary.makes,
-        misses: shotSummary.misses,
+        makes: exportObject.metrics.shotSummary.makes,
+        misses: exportObject.metrics.shotSummary.misses,
       },
+      shots: exportObject.shots.map((shot) => ({
+        attemptNumber: shot.attemptNumber,
+        athleteId: shot.athleteId,
+        athleteName: shot.athleteName,
+        entryAngle: shot.shotScience?.entryAngle,
+        apexPoint: shot.shotScience?.apexPoint,
+        entryPoint: shot.shotScience?.entryPoint,
+        filmTimeSeconds: shot.replayTimestamp,
+        makeStreak: shot.makeStreak,
+        releaseAngle: shot.shotScience?.releaseAngle,
+        releasePoint: shot.shotScience?.releasePoint,
+        releaseSpeed: shot.shotScience?.releaseSpeed,
+        releaseTime: shot.shotScience?.releaseTime,
+        shotArcFeet: shot.shotScience?.arcHeightFeet,
+        shotDistance: shot.shotScience?.shotDistance,
+        shotEndTimestamp: shot.shotEndTimestamp,
+        shotStartTimestamp: shot.shotStartTimestamp,
+        timestamp: shot.timestamp,
+        trajectorySpline: shot.shotScience?.trajectorySpline,
+        type: shot.type,
+      })),
       work: {
-        endedAt: session.endedAt,
-        id: session.id,
+        endedAt: exportObject.session.endedAt,
+        id: exportObject.session.id,
         participantIds: (session.participants ?? []).map((participant) => participant.id),
-        startedAt: session.startedAt,
+        startedAt: exportObject.session.startedAt,
         status: "complete" as const,
-        type: session.mode ?? defaultParticipationMode,
+        type: exportObject.session.type,
       },
     };
   }
@@ -4228,7 +5168,14 @@ export function RitualHome() {
       shotEvents,
       startedAt: save.activeSession.startedAt,
     });
-    const replayClips = createReplayClips(replayAnchors);
+    const replayClips = createAutomaticReplayClips({
+      anchors: replayAnchors,
+      muxAssetId: save.activeSession.muxAssetId,
+      sessionId: save.activeSession.id,
+      sessionStartedAt: save.activeSession.startedAt,
+      shotEvents,
+      timeline,
+    });
     const completedSession = {
       id: save.activeSession.id,
       startedAt: save.activeSession.startedAt,
@@ -4280,14 +5227,18 @@ export function RitualHome() {
       shotEvents,
       shotSummary,
     };
+    const completedSessionWithExportQueue = {
+      ...completedSession,
+      exportQueue: createSessionExportObject(completedSession).exports,
+    };
     const nextSave = {
       activeSession: null,
-      sessions: [completedSession, ...save.sessions].slice(0, 40),
+      sessions: [completedSessionWithExportQueue, ...save.sessions].slice(0, 40),
     };
 
     writeSave(nextSave);
     setSave(nextSave);
-    setLatestSavedSessionId(completedSession.id);
+    setLatestSavedSessionId(completedSessionWithExportQueue.id);
     setActiveView("session");
     setIsReviewOpen(false);
     setDetectionStatus("idle");
@@ -4303,11 +5254,12 @@ export function RitualHome() {
       const filmPreviewUrl = URL.createObjectURL(filmCapture.blob);
       setFilmPreviewUrls((current) => ({
         ...current,
-        [completedSession.id]: filmPreviewUrl,
+        [completedSessionWithExportQueue.id]: filmPreviewUrl,
       }));
-      void uploadSessionFilm(completedSession.id, filmCapture.blob);
+      void uploadSessionFilm(completedSessionWithExportQueue, filmCapture.blob);
+    } else {
+      void queueFinalizeWork(completedSessionWithExportQueue);
     }
-    void queueFinalizeWork(completedSession);
   }
 
   if (authPhase === "checking" || authPhase === "restoring") {
@@ -4762,167 +5714,81 @@ export function RitualHome() {
 
         {!showAxisDebug ? (
           <section className="axis-camera-home" aria-label="Camera">
-            <div className="axis-camera-preview axis-camera-home-preview" data-state={cameraStream ? "attached" : "offline"}>
-              {shouldShowPrimaryFilm && latestFilmPlaybackId && latestSession ? (
-                <MuxPlayer
-                  className="axis-primary-film-player"
-                  key={`${latestFilmPlaybackId}:${selectedReplayAnchor?.eventId ?? "start"}`}
-                  metadata={{
-                    video_id: latestSession.id,
-                    video_title: `${latestSession.mode ?? defaultParticipationMode} film`,
-                    viewer_user_id: identity.id,
-                  }}
-                  playbackId={latestFilmPlaybackId}
-                  poster={latestFilmThumbnailUrl}
-                  primaryColor="#a8d933"
-                  secondaryColor="#030303"
-                  startTime={Math.max(0, selectedFilmTime)}
-                  streamType="on-demand"
-                />
-              ) : shouldShowPrimaryFilm && localFilmSrc ? (
-                <video
-                  className="axis-primary-film-player"
-                  controls
-                  key={`${latestSession?.id ?? "film"}:${selectedReplayAnchor?.eventId ?? "start"}`}
-                  playsInline
-                  src={localFilmSrc}
-                />
-              ) : (
-                <video aria-label="Camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
-              )}
-              {shouldShowPrimaryFilm && filmOverlayAnchors.length ? (
-                <div className="axis-film-event-overlay" aria-label="Film events">
-                  {filmOverlayAnchors.map((anchor, index) => (
-                    <button
-                      data-selected={selectedReplayAnchor?.eventId === anchor.eventId}
-                      key={anchor.eventId}
-                      onClick={() => jumpToReplayAnchor(anchor)}
-                      style={{
-                        top: `${14 + (index % 6) * 11}%`,
+            <div className="axis-camera-workspace">
+              <div className="axis-camera-live-column">
+                <div className="axis-camera-section-label">
+                  <span>Live Film</span>
+                  <em>{cameraOperatingContext}</em>
+                </div>
+                <div className="axis-camera-preview axis-camera-home-preview" data-state={cameraStream ? "attached" : "offline"}>
+                  {shouldShowPrimaryFilm && latestFilmPlaybackId && latestSession ? (
+                    <MuxPlayer
+                      className="axis-primary-film-player"
+                      key={`${latestFilmPlaybackId}:${selectedReplayAnchor?.eventId ?? "start"}`}
+                      metadata={{
+                        video_id: latestSession.id,
+                        video_title: `${latestSession.mode ?? defaultParticipationMode} film`,
+                        viewer_user_id: identity.id,
                       }}
-                      type="button"
-                    >
-                      <strong>{formatDuration(anchor.videoTimestamp)}</strong>
-                      <em>{formatHumanMomentLabel(anchor)}</em>
-                    </button>
-                  ))}
+                      playbackId={latestFilmPlaybackId}
+                      poster={latestFilmThumbnailUrl}
+                      primaryColor="#a8d933"
+                      secondaryColor="#030303"
+                      startTime={Math.max(0, selectedFilmTime)}
+                      streamType="on-demand"
+                    />
+                  ) : shouldShowPrimaryFilm && localFilmSrc ? (
+                    <video
+                      className="axis-primary-film-player"
+                      controls
+                      key={`${latestSession?.id ?? "film"}:${selectedReplayAnchor?.eventId ?? "start"}`}
+                      playsInline
+                      src={localFilmSrc}
+                    />
+                  ) : (
+                    <video aria-label="Camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
+                  )}
+                  {!shouldShowPrimaryFilm && !cameraStream ? <span>Camera</span> : null}
+                  {renderAxisOverlayLayer(shouldShowPrimaryFilm ? "replay" : "live")}
                 </div>
-              ) : null}
-              {!shouldShowPrimaryFilm && !cameraStream ? <span>Camera</span> : null}
-              {!shouldShowPrimaryFilm && isVisionTrackingEnabled && soloAthleteTrack ? (
-                <div className="axis-player-tracking-overlay axis-player-tracking-overlay-live" aria-label="Player tracking">
-                  <div
-                    className="axis-player-track-box axis-player-track-box-simple"
-                    data-status={soloAthleteTrack.status}
-                    style={{
-                      height: `${soloAthleteTrack.boundingBox.height * 100}%`,
-                      left: `${soloAthleteTrack.boundingBox.x * 100}%`,
-                      top: `${soloAthleteTrack.boundingBox.y * 100}%`,
-                      width: `${soloAthleteTrack.boundingBox.width * 100}%`,
-                    }}
-                  >
-                    <div className="axis-player-track-label axis-player-track-label-simple">
-                      <strong>{getTrackAthlete(soloAthleteTrack.id)?.name ?? selectedCalibrationAthlete?.name ?? "ATHLETE"}</strong>
-                    </div>
+                <section className="axis-live-overlay-panel" aria-label="Live overlay">
+                  <div>
+                    <span>Live Overlay</span>
+                    <strong>{save.activeSession ? "Rep To Clip" : latestSession ? "Film Ready" : "Ready"}</strong>
                   </div>
-                </div>
-              ) : null}
-              {!shouldShowPrimaryFilm && isVisionTrackingEnabled && ballTracking.visible && ballTracking.boundingBox ? (
-                <div className="axis-ball-tracking-overlay" aria-label="Ball tracking">
-                  <div
-                    className="axis-ball-track-box"
-                    data-status={ballTracking.status}
-                    style={{
-                      height: `${ballTracking.boundingBox.height * 100}%`,
-                      left: `${ballTracking.boundingBox.x * 100}%`,
-                      top: `${ballTracking.boundingBox.y * 100}%`,
-                      width: `${ballTracking.boundingBox.width * 100}%`,
-                    }}
-                  >
-                    <div className="axis-ball-track-label">
-                      <strong>{formatBallTrackStatus(ballTracking)}</strong>
-                    </div>
+                  <div>
+                    <span>Clips</span>
+                    <strong>{cameraClipCount}</strong>
                   </div>
-                </div>
-              ) : null}
-              {!shouldShowPrimaryFilm && isVisionTrackingEnabled ? (
-                <div className="axis-rim-tracking-overlay" aria-label="Rim tracking">
-                  <div
-                    className="axis-rim-track-box"
-                    style={{
-                      height: `${rimGuideBox.height * 100}%`,
-                      left: `${rimGuideBox.x * 100}%`,
-                      top: `${rimGuideBox.y * 100}%`,
-                      width: `${rimGuideBox.width * 100}%`,
-                    }}
-                  >
-                    <div className="axis-rim-track-label">
-                      <strong>RIM</strong>
-                    </div>
+                  <div>
+                    <span>Report</span>
+                    <strong>{cameraReportState}</strong>
                   </div>
-                </div>
-              ) : null}
-              <div className="axis-camera-os-overlay" aria-label="Camera status">
-                <strong>{shouldShowPrimaryFilm ? "Film" : cameraOperatingState}</strong>
-                <em>{shouldShowPrimaryFilm ? latestFilmAvailability : cameraOperatingContext}</em>
-              </div>
-              {!shouldShowPrimaryFilm ? (
-              <div className="axis-camera-score-overlay" aria-label="Live results">
-                <span>
-                  <em>Work Time</em>
-                  <strong>{cameraTimeLabel}</strong>
-                </span>
-                <span>
-                  <em>Makes</em>
-                  <strong>{cameraMakes}</strong>
-                </span>
-                <span>
-                  <em>Misses</em>
-                  <strong>{cameraMisses}</strong>
-                </span>
-                {isGameMode ? (
-                  <>
-                    <span>
-                      <em>REB</em>
-                      <strong>{save.activeSession ? activeGameResults.rebounds : latestGameResults.rebounds}</strong>
-                    </span>
-                    <span>
-                      <em>AST</em>
-                      <strong>{save.activeSession ? activeGameResults.assists : latestGameResults.assists}</strong>
-                    </span>
-                    <span>
-                      <em>TO</em>
-                      <strong>{save.activeSession ? activeGameResults.turnovers : latestGameResults.turnovers}</strong>
-                    </span>
-                    <span>
-                      <em>Fouls</em>
-                      <strong>{save.activeSession ? activeGameResults.fouls : latestGameResults.fouls}</strong>
-                    </span>
-                  </>
-                ) : null}
-              </div>
-              ) : null}
-              {!shouldShowPrimaryFilm ? (
-              <div className="axis-camera-control-overlay" aria-label="Camera controls">
-                {ritualState === "active" ? (
-                  <>
-                    <div className="axis-camera-event-bar">
-                      {visibleWorkActions.map((action) => (
-                        <button
-                          disabled={!save.activeSession}
-                          key={action}
-                          onClick={() => recordGameAction(action)}
-                          type="button"
-                        >
-                          {shotSuggestion && action === "make"
-                            ? "Confirm make"
-                            : shotSuggestion && action === "miss"
-                              ? "Confirm miss"
-                              : formatGameActionLabel(action)}
-                        </button>
-                      ))}
-                    </div>
-                    {isRecordingAttached ? (
+                  <div>
+                    <span>Progress</span>
+                    <strong>{cameraProgressState}</strong>
+                  </div>
+                </section>
+                <section className="axis-camera-action-dock" aria-label="Actions">
+                  <span>Actions</span>
+                  <div className="axis-camera-event-bar">
+                    {visibleWorkActions.map((action) => (
+                      <button
+                        disabled={!save.activeSession}
+                        key={action}
+                        onClick={() => recordGameAction(action)}
+                        type="button"
+                      >
+                        {shotSuggestion && action === "make"
+                          ? "Confirm make"
+                          : shotSuggestion && action === "miss"
+                            ? "Confirm miss"
+                            : formatGameActionLabel(action)}
+                      </button>
+                    ))}
+                  </div>
+                  {ritualState === "active" ? (
+                    isRecordingAttached ? (
                       <button className="axis-camera-primary-action" onClick={checkOut} type="button">
                         End
                       </button>
@@ -4930,114 +5796,62 @@ export function RitualHome() {
                       <button className="axis-camera-primary-action" onClick={handleSessionPrimaryAction} type="button">
                         Record
                       </button>
-                    )}
-                  </>
-                ) : (
-                  <button
-                    className="axis-camera-primary-action"
-                    disabled={ritualState === "saving"}
-                    onClick={ritualState === "saving" ? undefined : checkIn}
-                    type="button"
-                  >
-                    {ritualState === "saving" ? "Saving" : "Start"}
-                  </button>
-                )}
+                    )
+                  ) : (
+                    <button
+                      className="axis-camera-primary-action"
+                      disabled={ritualState === "saving"}
+                      onClick={ritualState === "saving" ? undefined : checkIn}
+                      type="button"
+                    >
+                      {ritualState === "saving" ? "Saving" : "Start"}
+                    </button>
+                  )}
+                </section>
               </div>
-              ) : null}
-            </div>
-            <nav className="axis-product-tabs" aria-label="Axis surfaces">
-              <button aria-pressed={productSurface === "work"} onClick={() => setProductSurface("work")} type="button">
-                Work
-              </button>
-              <button aria-pressed={productSurface === "film"} onClick={() => setProductSurface("film")} type="button">
-                Film
-              </button>
-              <button aria-pressed={productSurface === "results"} onClick={() => setProductSurface("results")} type="button">
-                Results
-              </button>
-            </nav>
-            <section className="axis-tab-surface" aria-label={`${productSurface} surface`}>
-              {productSurface === "work" ? (
-                <div className="axis-tab-row">
-                  <span>
-                    <em>Work Time</em>
-                    <strong>{cameraTimeLabel}</strong>
-                  </span>
-                  <span>
-                    <em>Film</em>
-                    <strong>{latestFilmAvailability}</strong>
-                  </span>
-                </div>
-              ) : null}
-              {productSurface === "film" ? (
-                <div className="axis-watch-list">
-                  {filmWatchGroups.map((group) => {
-                    const anchors = getFilmAnchorsByType(latestFilmTimelineAnchors, group.type);
-                    const firstAnchor = anchors[0];
+              <aside className="axis-camera-right-rail" aria-label="Film clips reports">
+                <section>
+                  <span>Film</span>
+                  <strong>{latestFilmAvailability}</strong>
+                  <em>{resultsWorkTime}</em>
+                </section>
+                <section>
+                  <span>Clips</span>
+                  <strong>{cameraClipCount}</strong>
+                  <div className="axis-rail-clip-list">
+                    {filmWatchGroups.slice(0, 4).map((group) => {
+                      const anchors = getFilmAnchorsByType(latestFilmTimelineAnchors, group.type);
+                      const firstAnchor = anchors[0];
 
-                    return (
-                      <button
-                        className="axis-watch-button"
-                        data-active={Boolean(firstAnchor)}
-                        disabled={!firstAnchor}
-                        key={group.type}
-                        onClick={() => {
-                          if (firstAnchor) jumpToReplayAnchor(firstAnchor);
-                        }}
-                        type="button"
-                      >
-                        <strong>{group.label}</strong>
-                        <em>{firstAnchor ? "Film" : "None yet"}</em>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-              {productSurface === "results" ? (
-                <div className="axis-results-summary" aria-label="What happened">
-                  <header>
-                    <span>What happened?</span>
-                    <strong>{resultsModeLabel}</strong>
-                    <em>{resultsTimeLabel}</em>
-                  </header>
-                  <div className="axis-results-summary-list">
-                    <span>
-                      <em>Makes:</em>
-                      <strong>{resultsShotSummary.makes}</strong>
-                    </span>
-                    <span>
-                      <em>Misses:</em>
-                      <strong>{resultsShotSummary.misses}</strong>
-                    </span>
-                    <span>
-                      <em>FG:</em>
-                      <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
-                    </span>
-                    <span>
-                      <em>Longest make streak:</em>
-                      <strong>{resultsLongestMakeStreak}</strong>
-                    </span>
-                    <span>
-                      <em>Work time:</em>
-                      <strong>{resultsWorkTime}</strong>
-                    </span>
-                    <span>
-                      <em>Best clip:</em>
-                      <strong>{formatFilmTimestamp(resultsBestClipAnchor?.videoTimestamp)}</strong>
-                    </span>
+                      return (
+                        <button
+                          data-active={Boolean(firstAnchor)}
+                          disabled={!firstAnchor}
+                          key={group.type}
+                          onClick={() => {
+                            if (firstAnchor) jumpToReplayAnchor(firstAnchor);
+                          }}
+                          type="button"
+                        >
+                          {group.label.replace("WATCH ", "")}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <section className="axis-results-summary-section">
-                    <em>Shot Science:</em>
-                    <strong>{formatShotScienceRelease(resultsShotScience)}</strong>
-                    <strong>{formatShotScienceApex(resultsShotScience)}</strong>
-                  </section>
-                  <section className="axis-results-summary-section">
-                    <em>Film:</em>
-                    <strong>{resultsFilmLabel}</strong>
-                  </section>
-                </div>
-              ) : null}
-            </section>
+                </section>
+                <section>
+                  <span>Reports</span>
+                  <strong>{cameraReportState}</strong>
+                  <div className="axis-rail-export-list">
+                    {visibleExportOutputs.slice(0, 4).map((output) => (
+                      <em data-status={output.status} key={output.type}>
+                        {output.label}
+                      </em>
+                    ))}
+                  </div>
+                </section>
+              </aside>
+            </div>
           </section>
         ) : null}
 

@@ -2,6 +2,62 @@
 
 Axis is a personal athletic continuity system.
 
+Axis is also sports overlay infrastructure.
+
+The product is not a stats app.
+
+Input:
+
+* Camera
+
+Output:
+
+* Film with intelligence
+
+The user should feel:
+
+* Every rep becomes a clip.
+* Every clip becomes a report.
+* Every report becomes progress.
+
+The export loop is:
+
+camera
+-> detection
+-> event
+-> overlay
+-> export
+
+Every completed session should become one export object:
+
+* session
+* video
+* events
+* hidden derived results
+* clips
+* shots
+* overlays
+
+All future surfaces must pull from this object. Nothing should be calculated twice for separate screens.
+
+Mux is the film source of truth. When recording ends, Axis uploads the recording to Mux, stores the playback id, generates the event timeline, clip anchors, overlays, and export queue from that session object, then starts processing automatically.
+
+The full-stack capability map is:
+
+* OpenAI interprets recorded facts into summaries and reports.
+* Roboflow provides detection infrastructure.
+* RF-DETR identifies ball, player, and hoop evidence.
+* ByteTrack preserves identity across frames.
+* Mux owns video, playback, and exports.
+* Supabase stores session objects and the generated work record.
+
+The visible promise remains:
+
+one phone
+-> one tripod
+-> one athlete
+-> automatic track, shoot, analyze, export, share
+
 The stabilized product direction is:
 
 identity
@@ -24,6 +80,7 @@ identity
 * Streak, last check-in, effort hours, uploads, replay memories, and sessions are save data.
 * Organizations are living athletic communities inside one shared Axis world.
 * Replay, upload, media, and intelligence layers exist to support continuity and memory, not replace the ritual loop.
+* Exports are the product output. Original Film, Overlay Film, Highlights Film, Vertical Social Film, Coach Film, Director Film, Player Card, Player PDF, Player Reel, Player Timeline, and Player Progress Graph are different outputs from the same session object.
 
 ## Core Loop
 

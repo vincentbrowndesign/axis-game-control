@@ -296,16 +296,82 @@ h1 {
 
 .axis-camera-home {
   display: grid;
-  gap: 0.65rem;
+  gap: 0;
+  height: min(48rem, calc(100dvh - 7.4rem));
   isolation: isolate;
+  min-height: 34rem;
   position: sticky;
   top: 0.75rem;
   z-index: 4;
 }
 
+.axis-camera-workspace {
+  border: 1px solid var(--axis-line);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: minmax(0, 1fr) clamp(8.25rem, 18vw, 12.5rem);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.axis-camera-live-column {
+  background: rgba(8, 9, 8, 0.82);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.axis-camera-section-label {
+  align-items: center;
+  border-block-end: 1px solid rgba(244, 244, 240, 0.08);
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  min-height: 2.15rem;
+  padding: 0.45rem 0.65rem;
+}
+
+.axis-camera-section-label span,
+.axis-camera-section-label em,
+.axis-live-overlay-panel span,
+.axis-live-overlay-panel strong,
+.axis-camera-action-dock > span,
+.axis-camera-right-rail span,
+.axis-camera-right-rail strong,
+.axis-camera-right-rail em,
+.axis-rail-clip-list button {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.axis-camera-section-label span,
+.axis-camera-action-dock > span,
+.axis-camera-right-rail span {
+  color: var(--axis-live);
+  font-size: 0.6rem;
+  font-weight: 900;
+}
+
+.axis-camera-section-label em {
+  color: var(--axis-muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .axis-camera-home-preview {
-  aspect-ratio: 4 / 5;
-  min-height: 70dvh;
+  aspect-ratio: auto;
+  border: 0;
+  min-height: 0;
+  width: 100%;
 }
 
 .axis-primary-film-player {
@@ -364,6 +430,21 @@ h1 {
 .axis-film-event-overlay button:focus-visible {
   outline: 1px solid var(--axis-live);
   outline-offset: 0.16rem;
+}
+
+.axis-overlay-engine {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 4;
+}
+
+.axis-overlay-layer {
+  pointer-events: none;
+}
+
+.axis-overlay-layer button {
+  pointer-events: auto;
 }
 
 .axis-camera-home-preview::after {
@@ -449,6 +530,58 @@ h1 {
   font-weight: 900;
 }
 
+.axis-shot-science-overlay {
+  background: rgba(6, 6, 6, 0.7);
+  border: 1px solid rgba(168, 217, 51, 0.22);
+  bottom: clamp(8.2rem, 21vw, 10.2rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem 0.55rem;
+  left: clamp(0.65rem, 2vw, 1rem);
+  max-width: min(26rem, calc(100% - 2rem));
+  padding: 0.52rem 0.62rem;
+  position: absolute;
+  z-index: 4;
+}
+
+.axis-shot-science-overlay strong,
+.axis-shot-science-overlay span {
+  color: var(--axis-ink);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.axis-shot-science-overlay strong {
+  color: var(--axis-live);
+}
+
+.axis-ball-flight-overlay {
+  inset: 0;
+  overflow: visible;
+  position: absolute;
+  z-index: 3;
+}
+
+.axis-ball-flight-overlay polyline {
+  fill: none;
+  stroke: rgba(168, 217, 51, 0.86);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 0.42;
+  vector-effect: non-scaling-stroke;
+}
+
+.axis-ball-flight-overlay circle {
+  fill: var(--axis-live);
+  stroke: rgba(6, 6, 6, 0.72);
+  stroke-width: 0.26;
+  vector-effect: non-scaling-stroke;
+}
+
 .axis-camera-control-overlay {
   align-items: end;
   bottom: clamp(0.65rem, 2vw, 1rem);
@@ -463,7 +596,7 @@ h1 {
 .axis-camera-event-bar {
   display: grid;
   gap: 0.35rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .axis-camera-event-bar button,
@@ -474,11 +607,11 @@ h1 {
   color: var(--axis-live);
   cursor: pointer;
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: clamp(0.72rem, 2.7vw, 1rem);
+  font-size: clamp(0.56rem, 1.45vw, 0.82rem);
   font-weight: 900;
   letter-spacing: 0.07em;
-  min-height: 2.65rem;
-  padding: 0.58rem 0.42rem;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.36rem;
   text-transform: uppercase;
   touch-action: manipulation;
 }
@@ -487,6 +620,123 @@ h1 {
   background: rgba(168, 217, 51, 0.14);
   color: var(--axis-ink);
   justify-self: stretch;
+}
+
+.axis-live-overlay-panel {
+  border-block-start: 1px solid rgba(244, 244, 240, 0.08);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: 1.25fr repeat(3, minmax(0, 0.75fr));
+}
+
+.axis-live-overlay-panel div {
+  background: rgba(244, 244, 240, 0.025);
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+  padding: 0.55rem 0.62rem;
+}
+
+.axis-live-overlay-panel span {
+  color: var(--axis-muted);
+  font-size: 0.54rem;
+  font-weight: 800;
+}
+
+.axis-live-overlay-panel strong {
+  color: var(--axis-ink);
+  font-size: clamp(0.74rem, 2vw, 1.05rem);
+  font-weight: 900;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-camera-action-dock {
+  border-block-start: 1px solid rgba(244, 244, 240, 0.08);
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: auto minmax(0, 1fr) clamp(5.4rem, 12vw, 7.5rem);
+  padding: 0.5rem;
+}
+
+.axis-camera-action-dock > span {
+  align-self: center;
+  writing-mode: vertical-rl;
+}
+
+.axis-camera-right-rail {
+  background: rgba(14, 15, 13, 0.92);
+  border-inline-start: 1px solid rgba(244, 244, 240, 0.08);
+  display: grid;
+  gap: 1px;
+  grid-template-rows: 0.72fr 1.1fr 1fr;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.axis-camera-right-rail section {
+  align-content: start;
+  background: rgba(244, 244, 240, 0.025);
+  display: grid;
+  gap: 0.45rem;
+  min-height: 0;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.axis-camera-right-rail strong {
+  color: var(--axis-ink);
+  font-size: clamp(0.88rem, 2vw, 1.25rem);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.axis-camera-right-rail em {
+  color: var(--axis-muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+}
+
+.axis-rail-clip-list,
+.axis-rail-export-list {
+  display: grid;
+  gap: 0.34rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.axis-rail-clip-list button {
+  appearance: none;
+  background: rgba(6, 6, 6, 0.36);
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  color: var(--axis-muted);
+  cursor: pointer;
+  font-size: 0.56rem;
+  font-weight: 900;
+  min-height: 1.85rem;
+  padding: 0.36rem 0.4rem;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.axis-rail-clip-list button[data-active="true"] {
+  border-color: rgba(168, 217, 51, 0.28);
+  color: var(--axis-live);
+}
+
+.axis-rail-clip-list button:disabled {
+  cursor: default;
+}
+
+.axis-rail-export-list em {
+  border-block-end: 1px solid rgba(244, 244, 240, 0.07);
+  display: block;
+  overflow: hidden;
+  padding-block-end: 0.28rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .axis-camera-event-bar button:disabled,
@@ -533,6 +783,40 @@ h1 {
 .axis-product-tabs button:focus-visible {
   outline: 1px solid var(--axis-live);
   outline-offset: -1px;
+}
+
+.axis-overlay-toggle-strip {
+  border-inline: 1px solid var(--axis-line);
+  display: flex;
+  gap: 1px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.axis-overlay-toggle-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.axis-overlay-toggle-strip button {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.024);
+  border: 0;
+  color: var(--axis-muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-height: 2.1rem;
+  padding: 0.55rem 0.62rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-overlay-toggle-strip button[aria-pressed="true"] {
+  background: rgba(168, 217, 51, 0.07);
+  color: var(--axis-live);
 }
 
 .axis-tab-surface {
@@ -641,6 +925,57 @@ h1 {
 
 .axis-results-summary-section {
   grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.axis-export-output-list {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  padding-block-start: 0.25rem;
+}
+
+.axis-export-output-list span {
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  display: grid;
+  gap: 0.24rem;
+  min-height: 2.65rem;
+  padding: 0.5rem;
+}
+
+.axis-export-output-list span[data-status="available"] {
+  border-color: rgba(168, 217, 51, 0.25);
+}
+
+.axis-export-output-list span[data-status="processing"] {
+  border-color: rgba(168, 217, 51, 0.16);
+}
+
+.axis-export-output-list em,
+.axis-export-output-list strong {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-export-output-list em {
+  color: var(--axis-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.axis-export-output-list strong {
+  color: var(--axis-ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.axis-export-output-list span[data-status="available"] strong {
+  color: var(--axis-live);
+}
+
+.axis-export-output-list span[data-status="processing"] strong {
+  color: rgba(168, 217, 51, 0.72);
 }
 
 .axis-active-state strong,
@@ -2538,11 +2873,67 @@ button.axis-review-row:focus-visible {
   }
 
   .axis-camera-home {
+    height: calc(100dvh - 6.9rem);
+    min-height: 28rem;
     top: 0.45rem;
   }
 
+  .axis-camera-workspace {
+    grid-template-columns: minmax(0, 1fr) 5.85rem;
+  }
+
   .axis-camera-home-preview {
-    min-height: clamp(14rem, 48dvh, 25rem);
+    min-height: 0;
+  }
+
+  .axis-live-overlay-panel {
+    grid-template-columns: 1fr repeat(3, minmax(0, 0.64fr));
+  }
+
+  .axis-live-overlay-panel div {
+    padding: 0.42rem;
+  }
+
+  .axis-camera-action-dock {
+    gap: 0.34rem;
+    grid-template-columns: minmax(0, 1fr) 4.9rem;
+    padding: 0.38rem;
+  }
+
+  .axis-camera-action-dock > span {
+    display: none;
+  }
+
+  .axis-camera-event-bar {
+    gap: 0.24rem;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .axis-camera-event-bar button,
+  .axis-camera-primary-action {
+    font-size: 0.46rem;
+    min-height: 1.9rem;
+    padding: 0.32rem 0.18rem;
+  }
+
+  .axis-camera-right-rail section {
+    gap: 0.34rem;
+    padding: 0.42rem;
+  }
+
+  .axis-camera-right-rail span,
+  .axis-camera-right-rail em,
+  .axis-rail-clip-list button {
+    font-size: 0.48rem;
+  }
+
+  .axis-camera-right-rail strong {
+    font-size: 0.68rem;
+  }
+
+  .axis-rail-clip-list button {
+    min-height: 1.52rem;
+    padding: 0.24rem;
   }
 
   .axis-camera-os-overlay {
