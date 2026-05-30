@@ -2991,12 +2991,20 @@ export function RitualHome() {
   const [movementInsightMessage, setMovementInsightMessage] = useState("");
   const [isInterpretingMovement, setIsInterpretingMovement] = useState(false);
   const [shotSuggestion, setShotSuggestion] = useState<ShotSuggestion | null>(null);
+  const [broadcastMessage, setBroadcastMessage] = useState<{ text: string; subtext?: string; id: number } | null>(null);
+  const broadcastTimerRef = useRef<number | null>(null);
   const [selectedReplayAnchor, setSelectedReplayAnchor] = useState<ReplayAnchor | null>(null);
   const [selectedFilmSessionId, setSelectedFilmSessionId] = useState<string | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [reviewMessage, setReviewMessage] = useState("");
   const lastShotSuggestionAtRef = useRef(0);
+
+  function triggerBroadcastMessage(text: string, subtext?: string) {
+    if (broadcastTimerRef.current) window.clearTimeout(broadcastTimerRef.current);
+    setBroadcastMessage({ text, subtext, id: Date.now() });
+    broadcastTimerRef.current = window.setTimeout(() => setBroadcastMessage(null), 2000);
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -3426,8 +3434,6 @@ export function RitualHome() {
         )
       : undefined;
   const filmShots = normalizeShotEvents(filmSession?.shotEvents);
-  const filmMakeAnchors = latestFilmTimelineAnchors.filter((anchor) => anchor.eventType === "make");
-  const filmMissAnchors = latestFilmTimelineAnchors.filter((anchor) => anchor.eventType === "miss");
   const longestStreakShot = filmShots.reduce<ShotEvent | undefined>(
     (best, shot) => (!best || shot.makeStreak > best.makeStreak ? shot : best),
     undefined,
@@ -3443,18 +3449,6 @@ export function RitualHome() {
     (best, shot) => (!best || (shot.shotScience?.arcHeightFeet ?? 0) > (best.shotScience?.arcHeightFeet ?? 0) ? shot : best),
     undefined,
   );
-  const bestPerformanceSession =
-    save.sessions.reduce<SavedSession | undefined>((best, session) => {
-      const bestSummary = best ? best.shotSummary ?? summarizeShots(best.shotEvents ?? []) : undefined;
-      const sessionSummary = session.shotSummary ?? summarizeShots(session.shotEvents ?? []);
-      const bestScore = bestSummary ? bestSummary.fieldGoalPercentage * 100 + bestSummary.attempts : -1;
-      const sessionScore = sessionSummary.fieldGoalPercentage * 100 + sessionSummary.attempts;
-
-      return sessionScore > bestScore ? session : best;
-    }, undefined) ?? filmSession;
-  const bestPerformanceAnchor =
-    bestPerformanceSession?.replayAnchors?.find((anchor) => anchor.eventType === "make") ??
-    bestPerformanceSession?.replayAnchors?.find(shouldShowFilmTimelineAnchor);
   const filmSessionIndex = filmSession ? save.sessions.findIndex((session) => session.id === filmSession.id) : -1;
   const previousPerformanceSession = filmSessionIndex >= 0 ? save.sessions[filmSessionIndex + 1] : undefined;
   const previousShotSummary = previousPerformanceSession
@@ -3466,69 +3460,33 @@ export function RitualHome() {
       : null;
   const performanceImprovementLabel =
     performanceImprovement === null ? "Baseline" : `${performanceImprovement >= 0 ? "+" : ""}${performanceImprovement}% FG`;
-  const performanceImprovementAnchor =
-    filmSession?.replayAnchors?.find((anchor) => anchor.eventType === "make") ?? latestFilmTimelineAnchors[0];
   const latestClipAnchor = latestClipAnchors[0] ?? latestFilmTimelineAnchors[0];
-  const filmFeedItems = [
-    {
-      anchor: latestClipAnchor,
-      kicker: latestClipAnchor ? formatFilmTimestamp(latestClipAnchor.videoTimestamp) : "--",
-      label: "Latest Clip",
-      sessionId: filmSession?.id,
-      value: latestClipAnchor ? formatHumanMomentLabel(latestClipAnchor) : "Waiting for film",
-    },
-    {
-      anchor: filmMakeAnchors[0],
-      kicker: `${filmMakeAnchors.length} clips`,
-      label: "Recent Makes",
-      sessionId: filmSession?.id,
-      value: filmMakeAnchors[0] ? formatHumanMomentLabel(filmMakeAnchors[0]) : "No makes yet",
-    },
-    {
-      anchor: filmMissAnchors[0],
-      kicker: `${filmMissAnchors.length} clips`,
-      label: "Recent Misses",
-      sessionId: filmSession?.id,
-      value: filmMissAnchors[0] ? formatHumanMomentLabel(filmMissAnchors[0]) : "No misses yet",
-    },
-    {
-      anchor: filmSession ? findShotAnchor(filmSession, longestStreakShot) : undefined,
-      kicker: `${longestStreakShot?.makeStreak ?? 0} streak`,
-      label: "Longest Streak",
-      sessionId: filmSession?.id,
-      value: longestStreakShot ? formatFilmTimestamp(longestStreakShot.replayTimestamp) : "Waiting",
-    },
-    {
-      anchor: filmSession ? findShotAnchor(filmSession, fastestReleaseShot) : undefined,
-      kicker: fastestReleaseShot?.shotScience ? formatShotScienceReleaseTime(fastestReleaseShot.shotScience) : "--",
-      label: "Fastest Shot",
-      sessionId: filmSession?.id,
-      value: fastestReleaseShot ? formatFilmTimestamp(fastestReleaseShot.replayTimestamp) : "Waiting",
-    },
-    {
-      anchor: filmSession ? findShotAnchor(filmSession, highestArcShot) : undefined,
-      kicker: highestArcShot?.shotScience ? formatShotScienceArc(highestArcShot.shotScience) : "--",
-      label: "Highest Arc",
-      sessionId: filmSession?.id,
-      value: highestArcShot ? formatFilmTimestamp(highestArcShot.replayTimestamp) : "Waiting",
-    },
-    {
-      anchor: performanceImprovementAnchor,
-      kicker: previousShotSummary ? `${previousShotSummary.fieldGoalPercentage}% previous` : "First baseline",
-      label: "Most Improved",
-      sessionId: filmSession?.id,
-      value: performanceImprovementLabel,
-    },
-    {
-      anchor: bestPerformanceAnchor,
-      kicker: bestPerformanceSession ? `${(bestPerformanceSession.shotSummary ?? summarizeShots(bestPerformanceSession.shotEvents ?? [])).attempts} attempts` : "--",
-      label: "Best FG%",
-      sessionId: bestPerformanceSession?.id,
-      value: bestPerformanceSession
-        ? `${(bestPerformanceSession.shotSummary ?? summarizeShots(bestPerformanceSession.shotEvents ?? [])).fieldGoalPercentage}%`
-        : "Waiting",
-    },
-  ];
+  const getShotForMoment = (anchor: ReplayAnchor) =>
+    filmShots.find(
+      (shot) =>
+        shot.sessionId === anchor.sessionId &&
+        (anchor.eventType === shot.type || anchor.eventType === "shot_attempt") &&
+        Math.abs(anchor.videoTimestamp - shot.replayTimestamp) <= 1.5,
+    );
+  const momentCards = latestFilmTimelineAnchors
+    .filter((anchor) => ["assist", "block", "foul", "make", "miss", "rebound", "shot_attempt", "steal", "turnover"].includes(anchor.eventType))
+    .map((anchor) => {
+      const shot = getShotForMoment(anchor);
+      const metrics = shot?.shotScience
+        ? [
+            `${shot.shotScience.releaseAngle}\u00b0`,
+            formatShotScienceReleaseTime(shot.shotScience),
+            formatShotScienceDistance(shot.shotScience),
+          ]
+        : [];
+
+      return {
+        anchor,
+        metrics,
+        thumbnailUrl: latestFilmThumbnailUrl,
+        title: formatHumanMomentLabel(anchor),
+      };
+    });
   const sessionCameraStatusLabel = cameraState === "attached" ? "Camera attached" : "Camera ready";
   const currentRimLock = save.activeSession?.rimLock ?? latestSession?.rimLock;
   const rimLockLabel = currentRimLock ? "Rim locked" : save.activeSession ? "Tap rim once" : "Rim waiting";
@@ -3773,7 +3731,7 @@ export function RitualHome() {
       writeSave(nextSave);
       setSave(nextSave);
     }
-    setShotSuggestion({
+    const nextSuggestion = {
       athleteId: athlete.id,
       athleteName: athlete.name,
       confidence: Math.max(attemptConfidence, Math.min(0.96, 0.72 + movement.distanceTraveled * 3)),
@@ -3785,7 +3743,9 @@ export function RitualHome() {
       shotScience: shotScience ?? createShotScience(primaryTrackingTrack, ballTracking, save.activeSession.rimLock),
       timestamp: new Date(nowMs).toISOString(),
       trackId: primaryTrackingTrack.id,
-    });
+    };
+    setShotSuggestion(nextSuggestion);
+    triggerBroadcastMessage("SHOT DETECTED", `${Math.round(nextSuggestion.confidence * 100)}% confidence`);
   }, [
     identity,
     primaryTrackingTrack,
@@ -5073,6 +5033,7 @@ export function RitualHome() {
     writeSave(nextSave);
     setSave(nextSave);
     setShotSuggestion(null);
+    triggerBroadcastMessage(type === "make" ? "MAKE CONFIRMED" : "MISS CONFIRMED");
   }
 
   function recordGameAction(type: GameActionType) {
@@ -5130,6 +5091,7 @@ export function RitualHome() {
 
     writeSave(nextSave);
     setSave(nextSave);
+    triggerBroadcastMessage(formatGameActionLabel(type).toUpperCase());
   }
 
   function jumpToReplayAnchor(anchor: ReplayAnchor) {
@@ -5193,24 +5155,11 @@ export function RitualHome() {
   function renderAxisOverlayLayer(surface: OverlaySurface) {
     const isReplaySurface = surface === "replay";
     const isLiveSurface = surface === "live";
-    const scoreItems = [
-      overlaySettings.timer ? { label: "Timer", value: cameraTimeLabel } : null,
-      overlaySettings.makes ? { label: "Makes", value: cameraMakes } : null,
-      overlaySettings.misses ? { label: "Misses", value: cameraMisses } : null,
-      overlaySettings.attempts ? { label: "Attempts", value: cameraAttempts } : null,
-      overlaySettings.fg ? { label: "FG%", value: `${cameraFieldGoalPercentage}%` } : null,
-    ].filter(Boolean) as Array<{ label: string; value: number | string }>;
-    const contextItems = [
-      overlaySettings.organization ? "BRIDGE" : null,
-      overlaySettings.playerName ? overlayPlayerName : null,
-      overlaySettings.sessionType ? resultsModeLabel : null,
-    ].filter((item): item is string => Boolean(item));
-    const liveShotScience = overlayShot?.shotScience ?? shotSuggestion?.shotScience;
-    const liveShotConfidence = overlayShot?.suggestionConfidence ?? shotSuggestion?.confidence;
-    const shotScienceLabel = overlayShot ? (overlayShot.type === "make" ? "MAKE" : "MISS") : shotSuggestion ? "SHOT DETECTED" : null;
+    const sessionLabel = save.activeSession?.mode ?? resultsModeLabel;
 
     return (
       <div className="axis-overlay-engine" data-surface={surface}>
+        {/* Replay: film moment navigation buttons */}
         {isReplaySurface && filmOverlayAnchors.length ? (
           <div className="axis-film-event-overlay axis-overlay-layer" aria-label="Film events">
             {filmOverlayAnchors.map((anchor, index) => (
@@ -5218,9 +5167,7 @@ export function RitualHome() {
                 data-selected={selectedReplayAnchor?.eventId === anchor.eventId}
                 key={anchor.eventId}
                 onClick={() => jumpToReplayAnchor(anchor)}
-                style={{
-                  top: `${14 + (index % 6) * 11}%`,
-                }}
+                style={{ top: `${14 + (index % 6) * 11}%` }}
                 type="button"
               >
                 <strong>{formatFilmTimestamp(anchor.videoTimestamp)}</strong>
@@ -5229,10 +5176,12 @@ export function RitualHome() {
             ))}
           </div>
         ) : null}
-        {isLiveSurface && overlaySettings.trackingBoxes && isVisionTrackingEnabled && soloAthleteTrack ? (
+
+        {/* Player tracking box \u2014 live only, no label */}
+        {isLiveSurface && isVisionTrackingEnabled && soloAthleteTrack ? (
           <div className="axis-player-tracking-overlay axis-player-tracking-overlay-live axis-overlay-layer" aria-label="Player tracking">
             <div
-              className="axis-player-track-box axis-player-track-box-simple"
+              className="axis-player-track-box axis-player-track-box-broadcast"
               data-status={soloAthleteTrack.status}
               style={{
                 height: `${soloAthleteTrack.boundingBox.height * 100}%`,
@@ -5240,19 +5189,15 @@ export function RitualHome() {
                 top: `${soloAthleteTrack.boundingBox.y * 100}%`,
                 width: `${soloAthleteTrack.boundingBox.width * 100}%`,
               }}
-            >
-              {overlaySettings.playerLabels ? (
-                <div className="axis-player-track-label axis-player-track-label-simple">
-                  <strong>{overlayPlayerName}</strong>
-                </div>
-              ) : null}
-            </div>
+            />
           </div>
         ) : null}
-        {isLiveSurface && overlaySettings.ballLabels && isVisionTrackingEnabled && ballTracking.visible && ballTracking.boundingBox ? (
+
+        {/* Ball dot \u2014 live only, no label */}
+        {isLiveSurface && isVisionTrackingEnabled && ballTracking.visible && ballTracking.boundingBox ? (
           <div className="axis-ball-tracking-overlay axis-overlay-layer" aria-label="Ball tracking">
             <div
-              className="axis-ball-track-box"
+              className="axis-ball-track-dot"
               data-status={ballTracking.status}
               style={{
                 height: `${ballTracking.boundingBox.height * 100}%`,
@@ -5260,17 +5205,15 @@ export function RitualHome() {
                 top: `${ballTracking.boundingBox.y * 100}%`,
                 width: `${ballTracking.boundingBox.width * 100}%`,
               }}
-            >
-              <div className="axis-ball-track-label">
-                <strong>{formatBallTrackStatus(ballTracking)}</strong>
-              </div>
-            </div>
+            />
           </div>
         ) : null}
+
+        {/* Rim ring \u2014 no label, no dimensions */}
         {currentRimLock ? (
-          <div className="axis-rim-tracking-overlay axis-overlay-layer" aria-label="Rim lock">
+          <div className="axis-rim-tracking-overlay axis-overlay-layer" aria-label="Rim">
             <div
-              className="axis-rim-track-box"
+              className="axis-rim-track-ring"
               data-locked="true"
               style={{
                 height: `${currentRimLock.height * 100}%`,
@@ -5278,44 +5221,16 @@ export function RitualHome() {
                 top: `${(currentRimLock.center.y - currentRimLock.height / 2) * 100}%`,
                 width: `${currentRimLock.width * 100}%`,
               }}
-            >
-              <div className="axis-rim-track-label">
-                <strong>RIM LOCK</strong>
-                <span>{`${Math.round(currentRimLock.width * 100)} x ${Math.round(currentRimLock.height * 100)}`}</span>
-              </div>
-            </div>
+            />
           </div>
         ) : isLiveSurface && save.activeSession ? (
           <div className="axis-rim-lock-prompt axis-overlay-layer" aria-label="Rim lock prompt">
-            Tap rim once
+            Tap rim
           </div>
         ) : null}
-        <div className="axis-camera-os-overlay axis-overlay-layer" aria-label="Overlay status">
-          <strong>{isReplaySurface ? "Replay" : shotSuggestion ? "Shot Detected" : cameraOperatingState}</strong>
-          <em>{isReplaySurface ? latestFilmAvailability : contextItems.join(" / ")}</em>
-        </div>
-        {scoreItems.length ? (
-          <div className="axis-camera-score-overlay axis-overlay-layer" aria-label="Overlay results">
-            {scoreItems.map((item) => (
-              <span key={item.label}>
-                <em>{item.label}</em>
-                <strong>{item.value}</strong>
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {overlaySettings.shotScience && liveShotScience && shotScienceLabel ? (
-          <div className="axis-shot-science-overlay axis-overlay-layer" aria-label="Shot science">
-            <strong>{shotScienceLabel}</strong>
-            <span>{`${liveShotScience.releaseAngle}\u00b0`}</span>
-            <span>{formatShotScienceArc(liveShotScience)}</span>
-            <span>{formatShotScienceReleaseTime(liveShotScience)}</span>
-            <span>{formatShotScienceDistance(liveShotScience)}</span>
-            <span>{formatShotConfidence(liveShotConfidence)}</span>
-          </div>
-        ) : null}
+
+        {/* Replay: shot trajectory */}
         {isReplaySurface &&
-        overlaySettings.flightPath &&
         overlayShot?.shotScience?.trajectorySpline &&
         overlayShot.shotScience.trajectorySpline.length > 1 ? (
           <svg className="axis-ball-flight-overlay axis-overlay-layer" aria-label="Ball flight path" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -5328,6 +5243,41 @@ export function RitualHome() {
             <circle cx={overlayShot.shotScience.apexPoint.x * 100} cy={overlayShot.shotScience.apexPoint.y * 100} r="1.1" />
             <circle cx={overlayShot.shotScience.entryPoint.x * 100} cy={overlayShot.shotScience.entryPoint.y * 100} r="1.1" />
           </svg>
+        ) : null}
+
+        {/* Broadcast HUD \u2014 top left: time + stats */}
+        {isLiveSurface && save.activeSession ? (
+          <div className="axis-broadcast-hud-left axis-overlay-layer" aria-label="Live stats">
+            <span className="axis-broadcast-timer">{cameraTimeLabel}</span>
+            <span className="axis-broadcast-stat"><em>ATT</em><strong>{cameraAttempts}</strong></span>
+            <span className="axis-broadcast-stat"><em>M</em><strong>{cameraMakes}</strong></span>
+            <span className="axis-broadcast-stat"><em>MS</em><strong>{cameraMisses}</strong></span>
+            {cameraAttempts > 0 ? (
+              <span className="axis-broadcast-stat"><em>FG%</em><strong>{cameraFieldGoalPercentage}%</strong></span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Broadcast HUD \u2014 top right: session name */}
+        {isLiveSurface && sessionLabel ? (
+          <div className="axis-broadcast-hud-right axis-overlay-layer" aria-label="Session">
+            <span>{sessionLabel.toUpperCase()}</span>
+          </div>
+        ) : null}
+
+        {/* Bottom left: player name */}
+        {isLiveSurface && overlayPlayerName ? (
+          <div className="axis-broadcast-player-label axis-overlay-layer" aria-label="Player">
+            <strong>{overlayPlayerName}</strong>
+          </div>
+        ) : null}
+
+        {/* Bottom center: temporary detection messages */}
+        {isLiveSurface && broadcastMessage ? (
+          <div className="axis-broadcast-message axis-overlay-layer" key={broadcastMessage.id} aria-live="polite" aria-label="Detection event">
+            <strong>{broadcastMessage.text}</strong>
+            {broadcastMessage.subtext ? <em>{broadcastMessage.subtext}</em> : null}
+          </div>
         ) : null}
       </div>
     );
@@ -5879,11 +5829,7 @@ export function RitualHome() {
                     </span>
                   ))}
                 </div>
-              ) : (
-                <div className="axis-work-state-overlay" aria-label="Work state">
-                  <strong>{workDetectionState}</strong>
-                </div>
-              )}
+              ) : null}
             </div>
 
             <section className="axis-camera-page-controls" aria-label="Camera controls">
@@ -6058,138 +6004,80 @@ export function RitualHome() {
 
         {!showAxisDebug ? (
           <section className="axis-camera-home" aria-label="Camera">
-            <div className="axis-camera-workspace">
-              <div className="axis-camera-live-column">
-                <div className="axis-camera-section-label">
-                  <span>Live Film</span>
-                  <em>{cameraOperatingContext}</em>
-                </div>
-                <div
-                  className="axis-camera-preview axis-camera-home-preview"
-                  data-rim-lock={currentRimLock ? "locked" : save.activeSession ? "waiting" : "off"}
-                  data-state={cameraStream ? "attached" : "offline"}
-                  onPointerDown={handleRimLockTap}
-                >
-                  {shouldShowPrimaryFilm && latestFilmPlaybackId && filmSession ? (
-                    <MuxPlayer
-                      className="axis-primary-film-player"
-                      key={`${latestFilmPlaybackId}:${selectedReplayAnchor?.eventId ?? "start"}`}
-                      metadata={{
-                        video_id: filmSession.id,
-                        video_title: `${filmSession.mode ?? defaultParticipationMode} film`,
-                        viewer_user_id: identity.id,
-                      }}
-                      playbackId={latestFilmPlaybackId}
-                      poster={latestFilmThumbnailUrl}
-                      primaryColor="#a8d933"
-                      secondaryColor="#030303"
-                      startTime={Math.max(0, selectedFilmTime)}
-                      streamType="on-demand"
-                    />
-                  ) : shouldShowPrimaryFilm && localFilmSrc ? (
-                    <video
-                      className="axis-primary-film-player"
-                      controls
-                      key={`${filmSession?.id ?? "film"}:${selectedReplayAnchor?.eventId ?? "start"}`}
-                      playsInline
-                      src={localFilmSrc}
-                    />
-                  ) : (
-                    <video aria-label="Camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
-                  )}
-                  {!shouldShowPrimaryFilm && !cameraStream ? <span>Camera</span> : null}
-                  {renderAxisOverlayLayer(shouldShowPrimaryFilm ? "replay" : "live")}
-                </div>
-                <section className="axis-live-overlay-panel" aria-label="Live overlay">
-                  <div>
-                    <span>Sees</span>
-                    <strong>{shotSuggestion ? "Shot Detected" : save.activeSession ? "Tracking Work" : latestSession ? "Film Ready" : "Ready"}</strong>
-                  </div>
-                  <div>
-                    <span>Measures</span>
-                    <strong>{resultsShotSummary.fieldGoalPercentage}%</strong>
-                  </div>
-                  <div>
-                    <span>Tracks</span>
-                    <strong>{resultsShotSummary.attempts}</strong>
-                  </div>
-                  <div>
-                    <span>Exports</span>
-                    <strong>{latestFilmAvailability}</strong>
-                  </div>
-                </section>
-                <section className="axis-camera-action-dock" aria-label="Actions">
-                  <span>Actions</span>
-                  <div className="axis-camera-event-bar">
-                    {visibleWorkActions.map((action) => (
-                      <button
-                        disabled={!save.activeSession}
-                        key={action}
-                        onClick={() => recordGameAction(action)}
-                        type="button"
-                      >
-                        {shotSuggestion?.needsConfirmation && action === "make"
-                          ? "Confirm make"
-                          : shotSuggestion?.needsConfirmation && action === "miss"
-                            ? "Confirm miss"
-                            : formatGameActionLabel(action)}
-                      </button>
-                    ))}
-                  </div>
-                  {ritualState === "active" ? (
-                    isRecordingAttached ? (
-                      <button className="axis-camera-primary-action" onClick={checkOut} type="button">
-                        End
-                      </button>
-                    ) : (
-                      <button className="axis-camera-primary-action" onClick={handleSessionPrimaryAction} type="button">
-                        Record
-                      </button>
-                    )
-                  ) : (
-                    <button
-                      className="axis-camera-primary-action"
-                      disabled={ritualState === "saving"}
-                      onClick={ritualState === "saving" ? undefined : checkIn}
-                      type="button"
-                    >
-                      {ritualState === "saving" ? "Saving" : "Start"}
-                    </button>
-                  )}
-                </section>
-              </div>
-              <aside className="axis-camera-right-rail" aria-label="Film clips reports">
-                <section>
-                  <span>Axis Sees</span>
-                  <strong>{shotSuggestion ? "Shot Detected" : save.activeSession ? "Tracking Work" : "Ready"}</strong>
-                  <em>Camera to intelligence</em>
-                </section>
-                <section>
-                  <span>Axis Measures</span>
-                  <strong>{formatShotScienceReleaseTime(resultsShotScience)}</strong>
-                  <div className="axis-rail-clip-list">
-                    <button data-active={Boolean(fastestReleaseShot)} disabled={!fastestReleaseShot} type="button">
-                      Fastest Shot
-                    </button>
-                    <button data-active={Boolean(highestArcShot)} disabled={!highestArcShot} type="button">
-                      Highest Arc
-                    </button>
-                    <button data-active={Boolean(resultsShotScience)} disabled={!resultsShotScience} type="button">
-                      Distance
-                    </button>
-                  </div>
-                </section>
-                <section>
-                  <span>Intelligent Film</span>
-                  <strong>{latestFilmAvailability}</strong>
-                  <div className="axis-rail-export-list">
-                    <em data-status={resultsShotSummary.makes ? "available" : "waiting"}>{`${resultsShotSummary.makes} makes`}</em>
-                    <em data-status={resultsShotSummary.misses ? "available" : "waiting"}>{`${resultsShotSummary.misses} misses`}</em>
-                    <em data-status={resultsShotSummary.attempts ? "available" : "waiting"}>{`${resultsShotSummary.attempts} attempts`}</em>
-                  </div>
-                </section>
-              </aside>
+            <div
+              className="axis-camera-preview axis-camera-broadcast"
+              data-rim-lock={currentRimLock ? "locked" : save.activeSession ? "waiting" : "off"}
+              data-state={cameraStream ? "attached" : "offline"}
+              onPointerDown={handleRimLockTap}
+            >
+              {shouldShowPrimaryFilm && latestFilmPlaybackId && filmSession ? (
+                <MuxPlayer
+                  className="axis-primary-film-player"
+                  key={`${latestFilmPlaybackId}:${selectedReplayAnchor?.eventId ?? "start"}`}
+                  metadata={{
+                    video_id: filmSession.id,
+                    video_title: `${filmSession.mode ?? defaultParticipationMode} film`,
+                    viewer_user_id: identity.id,
+                  }}
+                  playbackId={latestFilmPlaybackId}
+                  poster={latestFilmThumbnailUrl}
+                  primaryColor="#a8d933"
+                  secondaryColor="#030303"
+                  startTime={Math.max(0, selectedFilmTime)}
+                  streamType="on-demand"
+                />
+              ) : shouldShowPrimaryFilm && localFilmSrc ? (
+                <video
+                  className="axis-primary-film-player"
+                  controls
+                  key={`${filmSession?.id ?? "film"}:${selectedReplayAnchor?.eventId ?? "start"}`}
+                  playsInline
+                  src={localFilmSrc}
+                />
+              ) : (
+                <video aria-label="Camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
+              )}
+              {!shouldShowPrimaryFilm && !cameraStream ? <span className="axis-camera-offline-label">Camera</span> : null}
+              {renderAxisOverlayLayer(shouldShowPrimaryFilm ? "replay" : "live")}
             </div>
+            <section className="axis-broadcast-dock" aria-label="Actions">
+              <div className="axis-broadcast-event-bar">
+                {visibleWorkActions.map((action) => (
+                  <button
+                    disabled={!save.activeSession}
+                    key={action}
+                    onClick={() => recordGameAction(action)}
+                    type="button"
+                  >
+                    {shotSuggestion?.needsConfirmation && action === "make"
+                      ? "Confirm Make"
+                      : shotSuggestion?.needsConfirmation && action === "miss"
+                        ? "Confirm Miss"
+                        : formatGameActionLabel(action)}
+                  </button>
+                ))}
+              </div>
+              {ritualState === "active" ? (
+                isRecordingAttached ? (
+                  <button className="axis-broadcast-primary" onClick={checkOut} type="button">
+                    End
+                  </button>
+                ) : (
+                  <button className="axis-broadcast-primary" onClick={handleSessionPrimaryAction} type="button">
+                    Record
+                  </button>
+                )
+              ) : (
+                <button
+                  className="axis-broadcast-primary"
+                  disabled={ritualState === "saving"}
+                  onClick={ritualState === "saving" ? undefined : checkIn}
+                  type="button"
+                >
+                  {ritualState === "saving" ? "Saving" : "Start"}
+                </button>
+              )}
+            </section>
           </section>
         ) : null}
 
@@ -6607,24 +6495,38 @@ export function RitualHome() {
                   <strong>Latest Clip</strong>
                   <em>{latestClipAnchor ? formatHumanMomentLabel(latestClipAnchor) : latestFilmAvailability}</em>
                 </div>
-                <section className="axis-film-feed" aria-label="Training clips">
-                  {filmFeedItems.map((item) => (
-                    <button
-                      className="axis-film-feed-item"
-                      data-active={Boolean(item.anchor && item.sessionId)}
-                      data-selected={selectedReplayAnchor?.eventId === item.anchor?.eventId}
-                      disabled={!item.anchor || !item.sessionId}
-                      key={item.label}
-                      onClick={() => {
-                        if (item.sessionId && item.anchor) jumpToFilmAnchor(item.sessionId, item.anchor);
-                      }}
-                      type="button"
-                    >
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                      <em>{item.kicker}</em>
-                    </button>
-                  ))}
+                <section className="axis-moment-card-grid" aria-label="Moments">
+                  {momentCards.length ? (
+                    momentCards.map((moment) => (
+                      <button
+                        className="axis-moment-card"
+                        data-selected={selectedReplayAnchor?.eventId === moment.anchor.eventId}
+                        key={moment.anchor.eventId}
+                        onClick={() => jumpToFilmAnchor(moment.anchor.sessionId, moment.anchor)}
+                        type="button"
+                      >
+                        <span className="axis-moment-thumb">
+                          {moment.thumbnailUrl ? <img alt="" src={moment.thumbnailUrl} /> : <span aria-hidden="true" />}
+                        </span>
+                        <span className="axis-moment-body">
+                          <strong>{moment.title}</strong>
+                          <em>{formatFilmTimestamp(moment.anchor.videoTimestamp)}</em>
+                          {moment.metrics.length ? (
+                            <span className="axis-moment-metrics">
+                              {moment.metrics.map((metric) => (
+                                <small key={metric}>{metric}</small>
+                              ))}
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <article className="axis-moment-empty">
+                      <strong>No moments yet</strong>
+                      <em>Confirmed events become film cards.</em>
+                    </article>
+                  )}
                 </section>
                 {showAxisDebug ? (
                   <em>
@@ -6867,8 +6769,8 @@ export function RitualHome() {
               ) : null}
 
               {showAxisDebug && shouldShowFilmSurface ? (
-              <section className="axis-review-block" aria-label="Film Timeline">
-                <span>Film Timeline</span>
+              <section className="axis-review-block" aria-label="Moment cards">
+                <span>Moment Cards</span>
                 <div>
                   {latestFilmTimelineAnchors.length ? (
                     (showAxisDebug ? latestReviewAnchors : latestFilmTimelineAnchors).map((anchor) => (
