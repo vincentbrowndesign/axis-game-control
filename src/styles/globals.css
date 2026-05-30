@@ -321,9 +321,12 @@ h1 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.axis-product-strip span {
+.axis-product-strip button {
+  appearance: none;
   background: rgba(244, 244, 240, 0.035);
+  border: 0;
   color: var(--axis-muted);
+  cursor: pointer;
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
   font-size: 0.66rem;
   font-weight: 700;
@@ -332,6 +335,17 @@ h1 {
   padding: 0.82rem 0.75rem;
   text-align: center;
   text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-product-strip button[aria-pressed="true"] {
+  background: rgba(168, 217, 51, 0.08);
+  color: var(--axis-live);
+}
+
+.axis-product-strip button:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: -1px;
 }
 
 .axis-active-state strong,

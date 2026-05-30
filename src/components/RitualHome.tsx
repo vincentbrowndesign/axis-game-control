@@ -27,6 +27,7 @@ type CameraState = "offline" | "ready" | "attached";
 type CameraDirection = "front" | "back";
 type ParticipationWindowStatus = "open" | "closed";
 type ParticipationMode = "Training" | "Practice" | "Game" | "Workout" | "Challenge";
+type ProductSurface = "film" | "results" | "work";
 type WorkDetectionState = "ACTIVE" | "IDLE" | "MOVING" | "SHOOTING";
 
 const streakDays = ["M", "T", "W", "T", "F", "S", "S"];
@@ -1630,6 +1631,7 @@ export function RitualHome() {
   const [now, setNow] = useState(() => Date.now());
   const [latestSavedSessionId, setLatestSavedSessionId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("session");
+  const [productSurface, setProductSurface] = useState<ProductSurface>("work");
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<ParticipationMode>(defaultParticipationMode);
   const [selectedCalibrationAthleteId, setSelectedCalibrationAthleteId] = useState<string | null>(null);
@@ -2022,6 +2024,9 @@ export function RitualHome() {
     : latestSession
       ? `${formatDuration(latestSession.durationSeconds)} saved`
       : "Session waiting";
+  const shouldShowReviewPanel = Boolean(latestSession && (showAxisDebug ? isReviewOpen : productSurface !== "work"));
+  const shouldShowFilmSurface = showAxisDebug || productSurface === "film";
+  const shouldShowResultsSurface = showAxisDebug || productSurface === "results";
   const activeTimerLabel = save.activeSession ? `${formatDuration(elapsedSeconds)} preserved` : null;
   const compactPresence = `BRIDGE • ${currentStreak} ${currentStreak === 1 ? "DAY" : "DAYS"} • ${lastCheckIn.toUpperCase()} • ${currentMode.toUpperCase()}`;
   const historyStatus =
@@ -2395,6 +2400,7 @@ export function RitualHome() {
     setRitualState("active");
     setLatestSavedSessionId(null);
     setActiveView("session");
+    setProductSurface("work");
     setIsReviewOpen(false);
     setIsModePickerOpen(false);
     setSelectedCalibrationAthleteId(checkedInAthlete.id);
@@ -3391,6 +3397,7 @@ export function RitualHome() {
     setSave(nextSave);
     setLatestSavedSessionId(completedSession.id);
     setActiveView("session");
+    setProductSurface("film");
     setIsReviewOpen(false);
     setDetectionStatus("idle");
     setVisiblePeople(null);
@@ -3816,14 +3823,33 @@ export function RitualHome() {
               {cameraStream ? null : <span>Camera</span>}
             </div>
             <div className="axis-product-strip" aria-label="Axis product loop">
-              <span>Work</span>
-              <span>Film</span>
-              <span>Results</span>
+              <button
+                aria-pressed={productSurface === "work"}
+                onClick={() => setProductSurface("work")}
+                type="button"
+              >
+                Work
+              </button>
+              <button
+                aria-pressed={productSurface === "film"}
+                onClick={() => setProductSurface("film")}
+                type="button"
+              >
+                Film
+              </button>
+              <button
+                aria-pressed={productSurface === "results"}
+                onClick={() => setProductSurface("results")}
+                type="button"
+              >
+                Results
+              </button>
             </div>
           </section>
         ) : null}
 
-        <section className="axis-ritual" aria-label="Check in ritual" data-state={ritualState}>
+        {(showAxisDebug || productSurface === "work") ? (
+        <section className="axis-ritual" aria-label="Work" data-state={ritualState}>
           {showAxisDebug ? <p className="axis-meta">Axis</p> : null}
           {save.activeSession ? (
             <section className="axis-live-command" aria-label="Session live">
@@ -3952,7 +3978,7 @@ export function RitualHome() {
               </details>
             </section>
           ) : null}
-          {showAxisDebug && ritualState === "active" ? (
+          {ritualState === "active" ? (
             <section className="axis-shot-bar" aria-label="Shot confirmation">
               <span>{shotActionLabel}</span>
               <div>
@@ -3984,9 +4010,16 @@ export function RitualHome() {
               )}
               <div className="axis-complete-actions">
                 <button
-                  aria-expanded={isReviewOpen}
+                  aria-expanded={showAxisDebug ? isReviewOpen : productSurface === "film"}
                   aria-controls="axis-session-review"
-                  onClick={() => setIsReviewOpen((isOpen) => !isOpen)}
+                  onClick={() => {
+                    if (showAxisDebug) {
+                      setIsReviewOpen((isOpen) => !isOpen);
+                      return;
+                    }
+
+                    setProductSurface("film");
+                  }}
                   type="button"
                 >
                   Review
@@ -4001,8 +4034,9 @@ export function RitualHome() {
             </section>
           ) : null}
         </section>
+        ) : null}
 
-        {isReviewOpen && latestSession ? (
+        {shouldShowReviewPanel && latestSession ? (
           <section className="axis-review-panel" id="axis-session-review" aria-label="Session review">
             {showAxisDebug ? (
               <header>
@@ -4012,6 +4046,7 @@ export function RitualHome() {
             ) : null}
 
             <div className="axis-review-grid">
+              {shouldShowFilmSurface ? (
               <section className="axis-review-block axis-replay-stage axis-film-stage" aria-label="Film">
                 <span>Film</span>
                 {latestFilmPlaybackId ? (
@@ -4052,8 +4087,9 @@ export function RitualHome() {
                   </em>
                 ) : null}
               </section>
+              ) : null}
 
-              {!showAxisDebug ? (
+              {shouldShowResultsSurface ? (
                 <section className="axis-review-block axis-results-stage" aria-label="Results">
                   <span>Results</span>
                   <div className="axis-results-grid">
@@ -4152,6 +4188,7 @@ export function RitualHome() {
               </section>
               ) : null}
 
+              {shouldShowFilmSurface ? (
               <section className="axis-review-block" aria-label="Review moments">
                 <span>{showAxisDebug ? "Moments" : "Film Timeline"}</span>
                 <div>
@@ -4175,8 +4212,9 @@ export function RitualHome() {
                   )}
                 </div>
               </section>
+              ) : null}
 
-              {!showAxisDebug ? (
+              {shouldShowFilmSurface ? (
                 <section className="axis-review-block" aria-label="Film library">
                   <span>Film Library</span>
                   <div className="axis-film-library">
