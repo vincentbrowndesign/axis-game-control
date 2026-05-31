@@ -3005,6 +3005,8 @@ export function RitualHome() {
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [reviewMessage, setReviewMessage] = useState("");
+  const [cameraMenuOpen, setCameraMenuOpen] = useState(false);
+  const [cameraPermissionState, setCameraPermissionState] = useState<"unknown" | "granted" | "denied" | "unavailable">("unknown");
   const lastShotSuggestionAtRef = useRef(0);
   const [rimEditMode, setRimEditMode] = useState(false);
   const [rimEditModeRim, setRimEditModeRim] = useState<RimLock | null>(null);
@@ -3236,8 +3238,9 @@ export function RitualHome() {
   useEffect(() => {
     if (authPhase !== "authenticated" || cameraStream || showAxisDebug) return;
 
-    void requestCameraPreview(cameraDirection);
-  }, [authPhase, cameraDirection, cameraStream]);
+    void requestCameraPreview(savedCameraDirection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authPhase, cameraStream]);
 
   useEffect(() => {
     if (!save.activeSession || !cameraStream) return;
@@ -4424,7 +4427,7 @@ export function RitualHome() {
     setCameraMessage("");
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraMessage("Camera unavailable.");
+      setCameraPermissionState("unavailable");
       return false;
     }
 
@@ -4441,10 +4444,14 @@ export function RitualHome() {
         return stream;
       });
       setCameraDirection(normalizedDirection);
+      setCameraPermissionState("granted");
+      setCameraMenuOpen(false);
 
       return true;
     } catch (error) {
-      console.error("Unable to start camera", error);
+      const isPermissionDenied =
+        error instanceof Error && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError");
+      setCameraPermissionState(isPermissionDenied ? "denied" : "unavailable");
       setCameraMessage("Camera unavailable.");
 
       return false;
@@ -4497,6 +4504,12 @@ export function RitualHome() {
     }
 
     updateCameraSessionState(cameraState === "attached" ? "ready" : cameraState, normalizedDirection);
+  }
+
+  function switchCamera() {
+    const next: CameraDirection = savedCameraDirection === "front" ? "back" : "front";
+    setCameraDirection(next);
+    void requestCameraPreview(next);
   }
 
   function handleSessionPrimaryAction() {
@@ -6221,7 +6234,86 @@ export function RitualHome() {
               ) : (
                 <video aria-label="Camera preview" autoPlay muted playsInline ref={cameraPreviewRef} />
               )}
-              {!shouldShowPrimaryFilm && !cameraStream ? <span className="axis-camera-offline-label">Camera</span> : null}
+              {!shouldShowPrimaryFilm && !cameraStream ? (
+                <div className="axis-camera-menu axis-overlay-layer" aria-label="Camera">
+                  <span className="axis-camera-menu-status">
+                    {cameraPermissionState === "denied" || cameraPermissionState === "unavailable"
+                      ? "CAMERA UNAVAILABLE"
+                      : "CAMERA READY"}
+                  </span>
+                  {cameraPermissionState === "denied" ? (
+                    <span className="axis-camera-menu-hint">Enable camera access in device settings.</span>
+                  ) : cameraPermissionState === "unavailable" ? (
+                    <span className="axis-camera-menu-hint">Camera not available on this device.</span>
+                  ) : (
+                    <div className="axis-camera-menu-options">
+                      <button
+                        className="axis-camera-menu-btn"
+                        data-active={savedCameraDirection === "front"}
+                        onClick={(e) => { e.stopPropagation(); void requestCameraPreview("front"); }}
+                        type="button"
+                      >
+                        Front Camera
+                      </button>
+                      <button
+                        className="axis-camera-menu-btn"
+                        data-active={savedCameraDirection === "back"}
+                        onClick={(e) => { e.stopPropagation(); void requestCameraPreview("back"); }}
+                        type="button"
+                      >
+                        Rear Camera
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+              {!shouldShowPrimaryFilm && cameraStream ? (
+                cameraMenuOpen ? (
+                  <div className="axis-camera-menu axis-camera-menu-live axis-overlay-layer" aria-label="Camera">
+                    <span className="axis-camera-menu-status">CAMERA ACTIVE</span>
+                    <div className="axis-camera-menu-options">
+                      <button
+                        className="axis-camera-menu-btn"
+                        data-active={savedCameraDirection === "front"}
+                        onClick={(e) => { e.stopPropagation(); void requestCameraPreview("front"); }}
+                        type="button"
+                      >
+                        Front Camera
+                      </button>
+                      <button
+                        className="axis-camera-menu-btn"
+                        data-active={savedCameraDirection === "back"}
+                        onClick={(e) => { e.stopPropagation(); void requestCameraPreview("back"); }}
+                        type="button"
+                      >
+                        Rear Camera
+                      </button>
+                      <button
+                        className="axis-camera-menu-btn"
+                        onClick={(e) => { e.stopPropagation(); switchCamera(); }}
+                        type="button"
+                      >
+                        Switch Camera
+                      </button>
+                    </div>
+                    <button
+                      className="axis-camera-live-dismiss"
+                      onClick={(e) => { e.stopPropagation(); setCameraMenuOpen(false); }}
+                      type="button"
+                    >
+                      CAMERA ACTIVE
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="axis-camera-live-control"
+                    onClick={(e) => { e.stopPropagation(); setCameraMenuOpen(true); }}
+                    type="button"
+                  >
+                    CAMERA ACTIVE
+                  </button>
+                )
+              ) : null}
               {renderAxisOverlayLayer(shouldShowPrimaryFilm ? "replay" : "live")}
             </div>
             <section className="axis-broadcast-dock" aria-label="Actions">
