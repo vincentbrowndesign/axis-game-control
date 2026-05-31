@@ -799,25 +799,42 @@ function getPointDistance(a: { x: number; y: number }, b: { x: number; y: number
 }
 
 function getRimTarget(rimLock?: RimLock | null) {
-  return rimLock
-    ? {
-        height: rimLock.height,
-        width: rimLock.width,
-        x: rimLock.center.x,
-        y: rimLock.center.y,
-      }
-    : {
-        height: rimGuideBox.height,
-        width: rimGuideBox.width,
-        x: rimGuideBox.x + rimGuideBox.width / 2,
-        y: rimGuideBox.y + rimGuideBox.height / 2,
-      };
+  if (!rimLock) return null;
+
+  return {
+    height: rimLock.height,
+    width: rimLock.width,
+    x: rimLock.center.x,
+    y: rimLock.center.y,
+  };
+}
+
+function hasBallCandidate(ball: BallTrackingState): ball is BallTrackingState & {
+  position: NonNullable<BallTrackingState["position"]>;
+  velocity: NonNullable<BallTrackingState["velocity"]>;
+} {
+  return Boolean(ball.visible && ball.position && ball.velocity && ball.confidence >= 0.8);
+}
+
+function hasReleaseCandidate(
+  track: PlayerTrack,
+  ball: BallTrackingState & {
+    position: NonNullable<BallTrackingState["position"]>;
+    velocity: NonNullable<BallTrackingState["velocity"]>;
+  },
+) {
+  const shotMotion = track.movement.direction === "up" || ball.velocity.y < -0.12;
+  const ballRelease = ball.position.y < track.location.y && ball.velocity.y < -0.1;
+
+  return shotMotion && ballRelease;
 }
 
 function getRimProbability(ball: BallTrackingState, rimLock?: RimLock | null) {
-  if (!ball.visible || !ball.position || !ball.velocity) return 0;
+  if (!hasBallCandidate(ball)) return 0;
 
   const rim = getRimTarget(rimLock);
+  if (!rim) return 0;
+
   const horizontalWindow = Math.max(0.08, rim.width * 0.75);
   const verticalWindow = Math.max(0.08, rim.height * 1.1);
   const rimWindowX = Math.abs(ball.position.x - rim.x);
@@ -833,17 +850,17 @@ function getRimProbability(ball: BallTrackingState, rimLock?: RimLock | null) {
 }
 
 function getShotAttemptConfidence(track: PlayerTrack, ball: BallTrackingState, rimLock?: RimLock | null) {
-  if (!ball.visible || !ball.position || !ball.velocity) return 0;
+  if (!hasBallCandidate(ball) || !hasReleaseCandidate(track, ball)) return 0;
 
   const hoop = getRimTarget(rimLock);
+  if (!hoop) return 0;
+
   const ballToPlayer = getPointDistance(ball.position, track.location);
   const ballToHoop = getPointDistance(ball.position, hoop);
   const gather = ballToPlayer <= 0.24;
-  const shotMotion = track.movement.direction === "up" || ball.velocity.y < -0.12;
-  const ballRelease = ball.position.y < track.location.y && ball.velocity.y < -0.1;
   const towardHoop = ball.velocity.y < -0.08 && ballToHoop < 0.78;
 
-  if (!gather || !shotMotion || !ballRelease) return 0;
+  if (!gather) return 0;
 
   return Math.min(
     0.97,
@@ -856,9 +873,11 @@ function getShotAttemptConfidence(track: PlayerTrack, ball: BallTrackingState, r
 }
 
 function getShotResultFromBall(ball: BallTrackingState, rimLock?: RimLock | null) {
-  if (!ball.visible || !ball.position || !ball.velocity) return null;
+  if (!hasBallCandidate(ball)) return null;
 
   const rim = getRimTarget(rimLock);
+  if (!rim) return null;
+
   const rimWindowX = Math.abs(ball.position.x - rim.x);
   const rimWindowY = Math.abs(ball.position.y - rim.y);
   const nearRim = rimWindowX <= Math.max(0.08, rim.width * 0.75) && rimWindowY <= Math.max(0.08, rim.height * 1.1);
@@ -914,9 +933,11 @@ function createShotPhaseReplayEvent(
 }
 
 function createShotScience(track: PlayerTrack | null, ball: BallTrackingState, rimLock?: RimLock | null): ShotScience | undefined {
-  if (!ball.visible || !ball.position || !ball.velocity) return undefined;
+  if (!hasBallCandidate(ball)) return undefined;
 
   const hoop = getRimTarget(rimLock);
+  if (!hoop) return undefined;
+
   const trajectory = ball.trajectory.length ? ball.trajectory : [ball.position];
   const releaseFrame = 0;
   const apexFrame = trajectory.reduce(
@@ -3785,7 +3806,7 @@ export function RitualHome() {
     ? activeShotSummary
     : latestSession?.shotSummary ?? summarizeShots(latestSession?.shotEvents ?? []);
   const canRecordShot = Boolean(save.activeSession && primaryTrackingTrack && primaryTrackingTrack.status !== "lost");
-  const shotActionLabel = shotSuggestion ? "Possible shot detected" : formatShotSummary(activeShotSummary);
+  const shotActionLabel = shotSuggestion ? "Moment found" : formatShotSummary(activeShotSummary);
   const workDetectionState = getWorkDetectionState({
     athleteDetected,
     isShooting: Boolean(shotSuggestion),
@@ -4071,19 +4092,14 @@ export function RitualHome() {
   }, [ballTracking.visible, isVisionTrackingEnabled, save.activeSession, savedCameraDirection]);
 
   useEffect(() => {
-    if (!save.activeSession || !primaryTrackingTrack || primaryTrackingTrack.status === "lost") {
+    if (!save.activeSession?.rimLock || !primaryTrackingTrack || primaryTrackingTrack.status === "lost") {
       setShotSuggestion(null);
+      pendingShotAttemptRef.current = null;
       return;
     }
 
     const attemptConfidence = getShotAttemptConfidence(primaryTrackingTrack, ballTracking, save.activeSession.rimLock);
-    const movement = primaryTrackingTrack.movement;
-    const isLikelyShotMotion =
-      attemptConfidence >= lowConfidenceShotThreshold ||
-      (movement.moving &&
-        movement.direction === "up" &&
-        movement.distanceTraveled >= 0.035 &&
-        primaryTrackingTrack.visibleTimeMs >= 900);
+    const isLikelyShotMotion = attemptConfidence >= lowConfidenceShotThreshold;
 
     if (!isLikelyShotMotion) return;
 
@@ -4153,7 +4169,7 @@ export function RitualHome() {
         confidence: attemptConfidence,
         createdAtMs: nowMs,
         id: attemptId,
-        reason: "Shot attempt",
+        reason: "Moment found",
         replayTimestamp,
         resultSaved: false,
         needsConfirmation: false,
@@ -4168,13 +4184,13 @@ export function RitualHome() {
     const nextSuggestion = {
       athleteId: athlete.id,
       athleteName: athlete.name,
-      confidence: Math.max(attemptConfidence, Math.min(0.96, 0.72 + movement.distanceTraveled * 3)),
+      confidence: attemptConfidence,
       id: `shot-suggestion:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`,
       needsConfirmation: attemptConfidence < highConfidenceShotThreshold,
-      reason: attemptConfidence >= highConfidenceShotThreshold ? "Shot detected" : "Confirm shot result",
+      reason: attemptConfidence >= highConfidenceShotThreshold ? "Moment found" : "Confirm moment",
       replayTimestamp,
       shotId,
-      shotScience: shotScience ?? createShotScience(primaryTrackingTrack, ballTracking, save.activeSession.rimLock),
+      shotScience,
       timestamp: new Date(nowMs).toISOString(),
       trackId: primaryTrackingTrack.id,
     };
@@ -4201,17 +4217,16 @@ export function RitualHome() {
   ]);
 
   useEffect(() => {
-    if (!save.activeSession || !pendingShotAttemptRef.current || pendingShotAttemptRef.current.resultSaved) return;
+    if (!save.activeSession?.rimLock || !pendingShotAttemptRef.current || pendingShotAttemptRef.current.resultSaved) return;
 
     const pendingAttempt = pendingShotAttemptRef.current;
     const nowMs = Date.now();
     const automaticResult = getShotResultFromBall(ballTracking, save.activeSession.rimLock);
-    const timedOut = nowMs - pendingAttempt.createdAtMs >= 2600;
 
-    if (!automaticResult && !timedOut) return;
+    if (!automaticResult) return;
 
-    const resultType: ShotType = automaticResult?.type ?? "miss";
-    const confidence = automaticResult?.confidence ?? Math.max(0.52, pendingAttempt.confidence - 0.16);
+    const resultType: ShotType = automaticResult.type;
+    const confidence = automaticResult.confidence;
     pendingShotAttemptRef.current = {
       ...pendingAttempt,
       resultSaved: true,
@@ -4222,10 +4237,10 @@ export function RitualHome() {
       athleteName: pendingAttempt.athleteName,
       confidence,
       id: `${pendingAttempt.attemptId}:${resultType}`,
-      reason: automaticResult ? "Ball crossed rim area" : "Shot attempt ended",
+      reason: "Ball crossed saved rim",
       replayTimestamp: Math.max(0, Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000)),
       shotId: pendingAttempt.shotId,
-      shotScience: pendingAttempt.shotScience ?? createShotScience(primaryTrackingTrack, ballTracking, save.activeSession.rimLock),
+      shotScience: pendingAttempt.shotScience,
       timestamp: new Date(nowMs).toISOString(),
       trackId: pendingAttempt.trackId,
     });
@@ -7267,7 +7282,7 @@ export function RitualHome() {
               <p className="axis-layer-value">
                 {`Player ${primaryTrackingTrack?.status !== "lost" ? "tracked" : "waiting"} / Ball ${
                   ballTracking.visible ? "tracked" : "waiting"
-                } / Shot ${shotSuggestion ? "detected" : "waiting"}`}
+                } / Moment ${shotSuggestion ? "found" : "waiting"}`}
               </p>
               <div>
                 {visibleWorkActions.map((action) => (
