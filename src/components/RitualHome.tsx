@@ -775,9 +775,6 @@ function formatPlayerVisibilityState(track: PlayerTrack) {
 }
 
 function formatBallTrackStatus(ball: BallTrackingState) {
-  if (ball.status === "lost") return "BALL LOST";
-  if (ball.status === "recovered") return "BALL RECOVERED";
-  if (ball.status === "shot") return "BALL SHOT";
   if (ball.status === "make") return "MAKE";
   if (ball.status === "miss") return "MISS";
   if (ball.status === "rebound") return "REBOUND";
@@ -2024,24 +2021,24 @@ function formatReplayAnchor(anchor: ReplayAnchor) {
 function formatHumanMomentLabel(anchor: ReplayAnchor) {
   if (anchor.eventType === "session_start") return "Start";
   if (anchor.eventType === "session_end") return "End";
-  if (anchor.eventType === "identity_locked") return "Ready";
+  if (anchor.eventType === "identity_locked") return "Player Ready";
   if (anchor.eventType === "make") return "Make";
   if (anchor.eventType === "miss") return "Miss";
   if (anchor.eventType === "rebound") return "Rebound";
   if (anchor.eventType === "assist") return "Assist";
   if (anchor.eventType === "turnover") return "Turnover";
   if (anchor.eventType === "foul") return "Foul";
-  if (anchor.eventType === "shot_gather") return "Gather";
+  if (anchor.eventType === "shot_gather") return "Shot Taken";
   if (anchor.eventType === "shot_release") return "Release";
   if (anchor.eventType === "shot_arc") return "Arc";
-  if (anchor.eventType === "rim_contact") return "Rim contact";
-  if (anchor.eventType === "shot_attempt") return "Shot attempt";
-  if (anchor.eventType === "ball_visible") return "Ball visible";
-  if (anchor.eventType === "ball_lost") return "Ball lost";
-  if (anchor.eventType === "ball_recovered") return "Ball recovered";
-  if (anchor.eventType === "coach_voice") return "Coach note";
-  if (anchor.eventType === "recovered") return "Back in view";
-  if (anchor.eventType === "left_frame") return "Left frame";
+  if (anchor.eventType === "rim_contact") return "Rim";
+  if (anchor.eventType === "shot_attempt") return "Shot";
+  if (anchor.eventType === "ball_visible") return "Ball in Play";
+  if (anchor.eventType === "ball_lost") return "Ball Out of Frame";
+  if (anchor.eventType === "ball_recovered") return "Ball Back";
+  if (anchor.eventType === "coach_voice") return "Coach Note";
+  if (anchor.eventType === "recovered") return "Back in Frame";
+  if (anchor.eventType === "left_frame") return "Out of Frame";
 
   return "Moment";
 }
@@ -3745,7 +3742,7 @@ export function RitualHome() {
       trackId: primaryTrackingTrack.id,
     };
     setShotSuggestion(nextSuggestion);
-    triggerBroadcastMessage("SHOT DETECTED", `${Math.round(nextSuggestion.confidence * 100)}% confidence`);
+    triggerBroadcastMessage("SHOT DETECTED");
   }, [
     identity,
     primaryTrackingTrack,
