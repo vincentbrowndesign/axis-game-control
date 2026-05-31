@@ -3959,7 +3959,10 @@ export function RitualHome() {
   const resultsLongestMakeStreak = latestExportObject?.metrics.longestMakeStreak ?? getLongestMakeStreak(resultsShotEvents);
   const resultsShotScience = resultsShotEvents.find((event) => event.shotScience)?.shotScience;
   const shouldShowPrimaryFilm =
-    !showAxisDebug && productSurface === "overlay" && Boolean(filmSession && (latestFilmPlaybackId || localFilmSrc));
+    !showAxisDebug &&
+    ritualState === "complete" &&
+    productSurface === "overlay" &&
+    Boolean(filmSession && (latestFilmPlaybackId || localFilmSrc));
   const findShotAnchor = (session: SavedSession, shot?: ShotEvent) =>
     shot
       ? normalizeReplayAnchors(session.replayAnchors).find(
@@ -4623,6 +4626,8 @@ export function RitualHome() {
     setSave(nextSave);
     setNow(Date.now());
     setRitualState("active");
+    setProductSurface("capture");
+    setSelectedReplayAnchor(null);
     setRimEditMode(false);
     setRimEditModeRim(null);
     setLatestSavedSessionId(null);
