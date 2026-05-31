@@ -7221,9 +7221,7 @@ export function RitualHome() {
               <section className="axis-share-surface" aria-label="Session complete">
                 <header className="axis-share-header">
                   <span className="axis-share-label">SESSION COMPLETE</span>
-                  <span className="axis-share-meta">{`${totalTimelineMomentCount} ${
-                    totalTimelineMomentCount === 1 ? "Moment" : "Moments"
-                  } Found`}</span>
+                  <span className="axis-share-meta">{`${totalTimelineMomentCount} Moments Found`}</span>
                 </header>
                 <div className="axis-story-readiness" data-ready={storyVideoAvailable ? "true" : summaryReady ? "summary" : "false"}>
                   <strong>{storyStateLabel}</strong>
