@@ -801,6 +801,96 @@ h1 {
   background: rgba(168, 217, 51, 0.18);
 }
 
+/* ─── Timeline Rail ─────────────────────────── */
+
+.axis-timeline-rail {
+  border-top: 1px solid rgba(244, 244, 240, 0.06);
+  padding: 0.6rem clamp(0.7rem, 2.5vw, 1rem) 0.75rem;
+}
+
+.axis-timeline-header {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.axis-timeline-label {
+  color: rgba(244, 244, 240, 0.75);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(0.55rem, 1.3vw, 0.62rem);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.axis-timeline-meta {
+  color: rgba(244, 244, 240, 0.38);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(0.52rem, 1.2vw, 0.58rem);
+  letter-spacing: 0.1em;
+  margin-left: auto;
+  text-transform: uppercase;
+}
+
+.axis-timeline-track {
+  background: rgba(244, 244, 240, 0.09);
+  border-radius: 2px;
+  height: 2px;
+  position: relative;
+  width: 100%;
+}
+
+.axis-timeline-marker {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.4);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  height: 10px;
+  padding: 0;
+  position: absolute;
+  top: -4px;
+  transform: translateX(-50%);
+  transition: transform 0.1s ease, background 0.1s ease, box-shadow 0.1s ease;
+  width: 10px;
+}
+
+.axis-timeline-marker::after {
+  bottom: -10px;
+  content: "";
+  left: -10px;
+  position: absolute;
+  right: -10px;
+  top: -10px;
+}
+
+.axis-timeline-marker[data-event="make"] {
+  background: var(--axis-live);
+  box-shadow: 0 0 8px rgba(168, 217, 51, 0.45);
+}
+
+.axis-timeline-marker[data-event="miss"] {
+  background: rgba(244, 244, 240, 0.22);
+}
+
+.axis-timeline-marker[data-event="assist"],
+.axis-timeline-marker[data-event="rebound"],
+.axis-timeline-marker[data-event="turnover"],
+.axis-timeline-marker[data-event="foul"] {
+  background: rgba(244, 244, 240, 0.38);
+}
+
+.axis-timeline-marker[data-selected="true"] {
+  box-shadow: 0 0 0 2px rgba(168, 217, 51, 0.6), 0 0 10px rgba(168, 217, 51, 0.3);
+  transform: translateX(-50%) scale(1.45);
+  z-index: 1;
+}
+
+.axis-timeline-marker:active {
+  transform: translateX(-50%) scale(0.85);
+}
+
 /* ─── Moments Section ────────────────────────── */
 
 .axis-moments-section {

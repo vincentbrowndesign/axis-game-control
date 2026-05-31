@@ -6998,6 +6998,41 @@ export function RitualHome() {
               )}
             </section>
 
+            {/* Timeline rail — exposes existing ReplayAnchor architecture */}
+            {ritualState === "complete" && filmOverlayAnchors.length > 0 && filmSession ? (
+              <section className="axis-timeline-rail" aria-label="Session timeline">
+                <header className="axis-timeline-header">
+                  <span className="axis-timeline-label">
+                    {selectedReplayAnchor ? formatHumanMomentLabel(selectedReplayAnchor).toUpperCase() : "TIMELINE"}
+                  </span>
+                  <span className="axis-timeline-meta">
+                    {selectedReplayAnchor
+                      ? formatDuration(selectedReplayAnchor.videoTimestamp)
+                      : formatDuration(filmSession.durationSeconds)}
+                  </span>
+                </header>
+                <div className="axis-timeline-track" role="list">
+                  {filmOverlayAnchors.map((anchor) => {
+                    const duration = Math.max(1, filmSession.durationSeconds ?? 1);
+                    const pct = Math.max(1, Math.min(99, (anchor.videoTimestamp / duration) * 100));
+                    return (
+                      <button
+                        aria-label={formatHumanMomentLabel(anchor)}
+                        className="axis-timeline-marker"
+                        data-event={anchor.eventType}
+                        data-selected={selectedReplayAnchor?.eventId === anchor.eventId ? "true" : undefined}
+                        key={anchor.eventId}
+                        onClick={() => jumpToReplayAnchor(anchor)}
+                        role="listitem"
+                        style={{ left: `${pct}%` }}
+                        type="button"
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
             {/* Moments — first, before stats */}
             {ritualState === "complete" && filmShots.length > 0 ? (
               <section className="axis-moments-section" aria-label="Moments">
