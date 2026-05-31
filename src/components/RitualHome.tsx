@@ -1626,6 +1626,122 @@ function drawOverlayFrame(
   ctx.restore();
 }
 
+function generateSessionCard(session: SavedSession, playerName: string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    if (typeof document === "undefined") { resolve(null); return; }
+
+    const W = 1080;
+    const H = 1350;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { resolve(null); return; }
+
+    const shots = normalizeShotEvents(session.shotEvents);
+    const summary = session.shotSummary ?? summarizeShots(shots);
+    const streak = getLongestMakeStreak(shots);
+    const makes = summary.makes;
+    const attempts = summary.attempts;
+    const fg = attempts > 0 ? Math.round(summary.fieldGoalPercentage) : 0;
+    const date = new Date(session.endedAt);
+    const dateLabel = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }).toUpperCase();
+    const mode = (session.mode ?? "Training").toUpperCase();
+
+    // Background
+    ctx.fillStyle = "#060606";
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle top glow
+    if (makes > 0) {
+      const glow = ctx.createRadialGradient(W / 2, H * 0.5, 0, W / 2, H * 0.5, W * 0.75);
+      glow.addColorStop(0, "rgba(168,217,51,0.06)");
+      glow.addColorStop(1, "rgba(6,6,6,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Axis wordmark — top left
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    ctx.font = `900 30px "Arial Narrow",Arial,sans-serif`;
+    ctx.fillStyle = "rgba(244,244,240,0.22)";
+    ctx.fillText("AXIS", 72, 80);
+    ctx.font = `400 24px "Arial Narrow",Arial,sans-serif`;
+    ctx.fillStyle = "rgba(244,244,240,0.14)";
+    ctx.fillText(`·  ${dateLabel}  ·  ${mode}`, 128, 84);
+
+    // Player name — upper center
+    const nameSize = Math.min(96, Math.max(54, Math.round(1600 / Math.max(playerName.length, 4))));
+    ctx.font = `900 ${nameSize}px "Arial Narrow",Arial,sans-serif`;
+    ctx.fillStyle = "rgba(244,244,240,0.88)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(playerName.toUpperCase(), W / 2, H * 0.30);
+
+    // Big makes number — center
+    const numY = H * 0.515;
+    const numSize = makes >= 100 ? 280 : makes >= 10 ? 340 : 380;
+    ctx.font = `900 ${numSize}px "Arial Narrow",Arial,sans-serif`;
+    if (makes > 0) {
+      ctx.shadowBlur = 90;
+      ctx.shadowColor = "rgba(168,217,51,0.28)";
+      ctx.fillStyle = "rgb(168,217,51)";
+    } else {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(244,244,240,0.12)";
+    }
+    ctx.fillText(String(makes), W / 2, numY);
+    ctx.shadowBlur = 0;
+
+    // "MAKES TODAY" label
+    const tagY = numY + numSize * 0.54;
+    ctx.font = `900 30px "Arial Narrow",Arial,sans-serif`;
+    ctx.fillStyle = makes > 0 ? "rgba(168,217,51,0.6)" : "rgba(244,244,240,0.16)";
+    ctx.fillText("MAKES TODAY", W / 2, tagY);
+
+    // Stats row — three columns
+    const statsY = H * 0.805;
+    const cols = [
+      { label: "ATTEMPTS", value: String(attempts) },
+      { label: "FG%", value: attempts > 0 ? `${fg}%` : "—" },
+      { label: "STREAK", value: String(streak) },
+    ];
+    const colW = W / 3;
+
+    // Dividers
+    ctx.strokeStyle = "rgba(244,244,240,0.07)";
+    ctx.lineWidth = 1;
+    [colW, colW * 2].forEach((x) => {
+      ctx.beginPath();
+      ctx.moveTo(x, statsY - 62);
+      ctx.lineTo(x, statsY + 72);
+      ctx.stroke();
+    });
+
+    cols.forEach((col, i) => {
+      const cx = colW * i + colW / 2;
+      ctx.font = `900 70px "Arial Narrow",Arial,sans-serif`;
+      ctx.fillStyle = "rgba(244,244,240,0.88)";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(col.value, cx, statsY);
+      ctx.font = `700 22px "Arial Narrow",Arial,sans-serif`;
+      ctx.fillStyle = "rgba(244,244,240,0.28)";
+      ctx.fillText(col.label, cx, statsY + 56);
+    });
+
+    // Bottom Axis mark
+    ctx.font = `900 28px "Arial Narrow",Arial,sans-serif`;
+    ctx.fillStyle = "rgba(244,244,240,0.10)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("AXIS", W / 2, H - 52);
+
+    canvas.toBlob((blob) => resolve(blob), "image/png");
+  });
+}
+
 async function generateOverlayFilm(rawBlob: Blob, session: SavedSession): Promise<Blob | null> {
   return new Promise((resolve) => {
     if (typeof MediaRecorder === "undefined" || typeof document === "undefined") {
@@ -3247,6 +3363,8 @@ export function RitualHome() {
   const [cameraMenuOpen, setCameraMenuOpen] = useState(false);
   const [cameraPermissionState, setCameraPermissionState] = useState<"unknown" | "granted" | "denied" | "unavailable">("unknown");
   const [copiedFilmType, setCopiedFilmType] = useState<SessionExportType | null>(null);
+  const [sessionCardUrl, setSessionCardUrl] = useState<string | null>(null);
+  const [sessionCardGenerating, setSessionCardGenerating] = useState(false);
   const lastShotSuggestionAtRef = useRef(0);
   const [rimEditMode, setRimEditMode] = useState(false);
   const [rimEditModeRim, setRimEditModeRim] = useState<RimLock | null>(null);
@@ -3481,6 +3599,25 @@ export function RitualHome() {
     void requestCameraPreview(savedCameraDirection);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authPhase, cameraStream]);
+
+  useEffect(() => {
+    const session = save.sessions[0] ?? null;
+    if (!session) return;
+    const name =
+      session.participants?.[0]?.name ??
+      (identity?.email ? identity.email.split("@")[0] || "Athlete" : "Athlete");
+    setSessionCardGenerating(true);
+    void generateSessionCard(session, name).then((blob) => {
+      setSessionCardGenerating(false);
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      setSessionCardUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save.sessions[0]?.id]);
 
   useEffect(() => {
     if (!save.activeSession || !cameraStream) return;
@@ -5941,6 +6078,52 @@ export function RitualHome() {
     };
   }
 
+  async function shareSessionItem(type: "card" | "best_shots" | "highlight_reel") {
+    const session = latestSession;
+    if (!session) return;
+
+    const name = session.participants?.[0]?.name ?? athleteLabel;
+    const makes = resultsShotSummary.makes;
+    const fg = resultsShotSummary.attempts > 0 ? Math.round(resultsShotSummary.fieldGoalPercentage) : 0;
+
+    if (type === "card") {
+      if (!sessionCardUrl) return;
+      try {
+        const response = await fetch(sessionCardUrl);
+        const blob = await response.blob();
+        const file = new File([blob], "axis-session.png", { type: "image/png" });
+        const text = `${name.toUpperCase()} — ${makes} ${makes === 1 ? "MAKE" : "MAKES"} · ${fg}% FG`;
+        if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "Axis Session", text });
+        } else {
+          const a = document.createElement("a");
+          a.href = sessionCardUrl;
+          a.download = "axis-session.png";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      } catch { /* dismissed */ }
+      return;
+    }
+
+    const filmUrl =
+      type === "highlight_reel"
+        ? (getMuxStreamUrl(session.overlayMuxPlaybackId) ?? getMuxStreamUrl(latestFilmPlaybackId))
+        : getMuxStreamUrl(latestFilmPlaybackId) ?? getMuxStreamUrl(session.overlayMuxPlaybackId);
+
+    if (!filmUrl) return;
+
+    const text =
+      type === "best_shots"
+        ? `${name.toUpperCase()} — ${makes} ${makes === 1 ? "MAKE" : "MAKES"} · ${fg}% FG`
+        : `${name.toUpperCase()} HIGHLIGHT REEL · ${makes} ${makes === 1 ? "MAKE" : "MAKES"}`;
+
+    try {
+      await navigator.share({ title: "Axis Film", text, url: filmUrl });
+    } catch { /* dismissed */ }
+  }
+
   async function handleFilmAction(
     action: "share" | "save" | "copy" | "download",
     filmType: SessionExportType,
@@ -6775,6 +6958,61 @@ export function RitualHome() {
                 </button>
               )}
             </section>
+
+            {/* Share Surface */}
+            {latestSession && resultsShotSummary.attempts > 0 ? (
+              <section className="axis-share-surface" aria-label="Share">
+                <header className="axis-share-header">
+                  <span className="axis-share-label">SHARE</span>
+                  <span className="axis-share-meta">
+                    {resultsShotSummary.makes} {resultsShotSummary.makes === 1 ? "MAKE" : "MAKES"} · {resultsShotSummary.attempts > 0 ? `${Math.round(resultsShotSummary.fieldGoalPercentage)}% FG` : null}
+                  </span>
+                </header>
+                <div className="axis-share-card-area">
+                  {sessionCardGenerating ? (
+                    <div className="axis-share-card-loading" aria-label="Generating session card">
+                      <span>GENERATING</span>
+                    </div>
+                  ) : sessionCardUrl ? (
+                    <button
+                      className="axis-share-card-preview"
+                      onClick={() => void shareSessionItem("card")}
+                      type="button"
+                      aria-label="Share session card"
+                    >
+                      <img alt="Session card" className="axis-share-card-img" src={sessionCardUrl} />
+                      <span className="axis-share-card-tap">TAP TO SHARE</span>
+                    </button>
+                  ) : null}
+                </div>
+                <div className="axis-share-actions">
+                  <button
+                    className="axis-share-action axis-share-action-primary"
+                    disabled={!sessionCardUrl}
+                    onClick={() => void shareSessionItem("card")}
+                    type="button"
+                  >
+                    SESSION CARD
+                  </button>
+                  <button
+                    className="axis-share-action"
+                    disabled={!latestFilmPlaybackId && !latestSession.overlayMuxPlaybackId}
+                    onClick={() => void shareSessionItem("best_shots")}
+                    type="button"
+                  >
+                    BEST SHOTS
+                  </button>
+                  <button
+                    className="axis-share-action"
+                    disabled={!latestFilmPlaybackId && !latestSession.overlayMuxPlaybackId}
+                    onClick={() => void shareSessionItem("highlight_reel")}
+                    type="button"
+                  >
+                    HIGHLIGHT REEL
+                  </button>
+                </div>
+              </section>
+            ) : null}
 
             {/* Export Center */}
             {exportCenterFilms.length > 0 ? (

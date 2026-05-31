@@ -523,6 +523,140 @@ h1 {
   touch-action: none;
 }
 
+/* ─── Share Surface ──────────────────────────── */
+
+.axis-share-surface {
+  border-top: 1px solid rgba(244, 244, 240, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.axis-share-header {
+  align-items: baseline;
+  display: flex;
+  gap: 0.75rem;
+  padding: clamp(0.9rem, 2.5vw, 1.1rem) clamp(0.9rem, 2.5vw, 1.25rem) 0;
+}
+
+.axis-share-label {
+  color: rgba(244, 244, 240, 0.35);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.axis-share-meta {
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.axis-share-card-area {
+  padding: clamp(0.65rem, 2vw, 0.9rem) clamp(0.9rem, 2.5vw, 1.25rem);
+}
+
+.axis-share-card-preview {
+  background: none;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+
+.axis-share-card-img {
+  border-radius: 5px;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.axis-share-card-tap {
+  backdrop-filter: blur(6px);
+  background: rgba(6, 6, 6, 0.52);
+  border-radius: 2px;
+  bottom: 12px;
+  color: rgba(244, 244, 240, 0.5);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.52rem;
+  font-weight: 900;
+  left: 50%;
+  letter-spacing: 0.22em;
+  padding: 4px 12px;
+  pointer-events: none;
+  position: absolute;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+}
+
+.axis-share-card-loading {
+  align-items: center;
+  background: rgba(244, 244, 240, 0.03);
+  border-radius: 5px;
+  display: flex;
+  height: clamp(120px, 30vw, 200px);
+  justify-content: center;
+  width: 100%;
+}
+
+.axis-share-card-loading span {
+  color: rgba(244, 244, 240, 0.2);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.axis-share-actions {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  padding: 0 clamp(0.9rem, 2.5vw, 1.25rem) clamp(0.9rem, 2.5vw, 1.1rem);
+}
+
+.axis-share-action {
+  background: transparent;
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  border-radius: 3px;
+  color: rgba(244, 244, 240, 0.55);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(0.5rem, 1.5vw, 0.62rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-height: 46px;
+  padding: 0.5rem 0.4rem;
+  text-transform: uppercase;
+  transition: background 100ms, color 100ms;
+}
+
+.axis-share-action:not(:disabled):active {
+  background: rgba(244, 244, 240, 0.05);
+}
+
+.axis-share-action:disabled {
+  color: rgba(244, 244, 240, 0.18);
+  cursor: default;
+}
+
+.axis-share-action-primary {
+  border-color: rgba(168, 217, 51, 0.4);
+  color: var(--axis-live);
+}
+
+.axis-share-action-primary:not(:disabled):active {
+  background: rgba(168, 217, 51, 0.07);
+}
+
 /* ─── Export Center ──────────────────────────── */
 
 .axis-export-center {
