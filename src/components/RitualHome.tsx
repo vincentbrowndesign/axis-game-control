@@ -5840,7 +5840,7 @@ export function RitualHome() {
           if (!displayRim && save.activeSession) {
             return (
               <div className="axis-rim-lock-prompt axis-overlay-layer" aria-label="Rim">
-                RIM NOT SET
+                TAP RIM
               </div>
             );
           }
@@ -5866,8 +5866,36 @@ export function RitualHome() {
                     <span className="axis-rim-handle axis-rim-handle-ne" />
                     <span className="axis-rim-handle axis-rim-handle-sw" />
                     <span className="axis-rim-handle axis-rim-handle-se" />
+                    <div className="axis-rim-ring-label">
+                      <span className="axis-rim-ring-label-text">RIM READY</span>
+                      <button
+                        className="axis-rim-ring-label-btn"
+                        onClick={(e) => { e.stopPropagation(); lockRim(); }}
+                        type="button"
+                      >
+                        LOCK
+                      </button>
+                      <button
+                        className="axis-rim-ring-label-btn axis-rim-ring-label-btn-muted"
+                        onClick={(e) => { e.stopPropagation(); clearRim(); }}
+                        type="button"
+                      >
+                        CLEAR
+                      </button>
+                    </div>
                   </>
-                ) : null}
+                ) : (
+                  <div className="axis-rim-ring-label">
+                    <span className="axis-rim-ring-label-text">RIM LOCKED</span>
+                    <button
+                      className="axis-rim-ring-label-btn axis-rim-ring-label-btn-muted"
+                      onClick={(e) => { e.stopPropagation(); adjustRim(); }}
+                      type="button"
+                    >
+                      ADJUST
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -6898,32 +6926,6 @@ export function RitualHome() {
               {renderAxisOverlayLayer(shouldShowPrimaryFilm ? "replay" : "live")}
             </div>
             <section className="axis-broadcast-dock" aria-label="Actions">
-              {save.activeSession ? (
-                <div className="axis-rim-strip">
-                  <span
-                    className="axis-rim-strip-label"
-                    data-state={rimEditMode ? "ready" : currentRimLock ? "locked" : "not-set"}
-                  >
-                    {rimEditMode ? "RIM READY" : currentRimLock ? "RIM LOCKED" : "RIM NOT SET"}
-                  </span>
-                  <div className="axis-rim-strip-actions">
-                    {rimEditMode ? (
-                      <>
-                        <button className="axis-rim-strip-btn axis-rim-strip-btn-primary" onClick={lockRim} type="button">
-                          Lock Rim
-                        </button>
-                        <button className="axis-rim-strip-btn" onClick={clearRim} type="button">
-                          Clear
-                        </button>
-                      </>
-                    ) : currentRimLock ? (
-                      <button className="axis-rim-strip-btn" onClick={adjustRim} type="button">
-                        Adjust
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
               <div className="axis-broadcast-event-bar" data-shot-pending={shotSuggestion?.needsConfirmation ? "true" : undefined}>
                 {visibleWorkActions.map((action) => (
                   <button
@@ -7025,49 +7027,46 @@ export function RitualHome() {
                     </span>
                   ) : null}
                 </header>
-                <div className="axis-export-grid">
+                <div className="axis-film-strip">
                   {exportCenterFilms.map((film) => (
                     <article
-                      className="axis-export-card"
+                      className="axis-film-card"
                       data-status={film.status}
                       key={film.type}
                     >
-                      <span className="axis-export-card-readiness">{film.readinessLabel}</span>
+                      <span className="axis-film-card-name">{film.label}</span>
+                      <span className="axis-film-card-status">{film.status === "available" ? "READY" : film.status === "processing" ? "PROCESSING" : "PREPARING"}</span>
                       {film.status === "available" ? (
-                        <div className="axis-export-card-actions">
-                          <button
-                            className="axis-export-action"
-                            onClick={() => void handleFilmAction("save", film.type, film.shareUrl, film.downloadUrl)}
-                            type="button"
-                          >
-                            Save to Device
-                          </button>
-                          <button
-                            className="axis-export-action"
-                            onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
-                            type="button"
-                          >
-                            Share
-                          </button>
-                          <button
-                            className="axis-export-action"
-                            onClick={() => void handleFilmAction("copy", film.type, film.shareUrl, film.downloadUrl)}
-                            type="button"
-                          >
-                            {copiedFilmType === film.type ? "Copied" : "Copy Link"}
-                          </button>
-                          <button
-                            className="axis-export-action"
-                            onClick={() => void handleFilmAction("download", film.type, film.shareUrl, film.downloadUrl)}
-                            type="button"
-                          >
-                            Download
-                          </button>
-                        </div>
+                        <button
+                          className="axis-film-card-action"
+                          onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
+                          type="button"
+                        >
+                          SHARE
+                        </button>
                       ) : null}
                     </article>
                   ))}
                 </div>
+                {filmShots.length > 0 ? (
+                  <div className="axis-moments-strip">
+                    {filmShots.map((shot, index) => {
+                      const anchor = filmSession ? findShotAnchor(filmSession, shot) : undefined;
+                      return (
+                        <button
+                          className="axis-moment-item"
+                          data-type={shot.type}
+                          key={shot.shotId}
+                          onClick={() => anchor ? jumpToReplayAnchor(anchor) : undefined}
+                          type="button"
+                        >
+                          <span className="axis-moment-number">{index + 1}</span>
+                          <span className="axis-moment-label">{shot.type === "make" ? "M" : "MS"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </section>
             ) : null}
           </section>
