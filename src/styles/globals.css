@@ -523,6 +523,115 @@ h1 {
   touch-action: none;
 }
 
+/* ─── Export Center ──────────────────────────── */
+
+.axis-export-center {
+  border-top: 1px solid rgba(244, 244, 240, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.axis-export-center-header {
+  align-items: baseline;
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.6rem 0.5rem 0.4rem;
+}
+
+.axis-export-center-label {
+  color: var(--axis-ink);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.axis-export-center-meta {
+  color: rgba(244, 244, 240, 0.3);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.axis-export-grid {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.axis-export-card {
+  background: rgba(6, 6, 6, 0.4);
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.5rem;
+}
+
+.axis-export-card[data-status="available"] {
+  border-color: rgba(168, 217, 51, 0.1);
+}
+
+.axis-export-card[data-status="processing"] {
+  border-color: rgba(244, 244, 240, 0.05);
+}
+
+.axis-export-card-readiness {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.axis-export-card[data-status="available"] .axis-export-card-readiness {
+  color: var(--axis-live);
+}
+
+.axis-export-card[data-status="processing"] .axis-export-card-readiness {
+  color: rgba(244, 244, 240, 0.38);
+}
+
+.axis-export-card[data-status="waiting"] .axis-export-card-readiness {
+  color: rgba(244, 244, 240, 0.2);
+}
+
+.axis-export-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.axis-export-action {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.04);
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  color: rgba(244, 244, 240, 0.55);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.4rem;
+  text-align: left;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  transition: border-color 120ms ease, color 120ms ease;
+  width: 100%;
+}
+
+.axis-export-action:hover,
+.axis-export-action:focus-visible {
+  border-color: rgba(244, 244, 240, 0.24);
+  color: var(--axis-ink);
+}
+
 /* ─── Broadcast HUD overlays ─────────────────── */
 
 .axis-broadcast-hud-left {

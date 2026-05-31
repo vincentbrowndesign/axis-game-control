@@ -2079,6 +2079,21 @@ function getMuxThumbnailUrl(playbackId?: string) {
   return playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : undefined;
 }
 
+function getMuxStreamUrl(playbackId?: string) {
+  return playbackId ? `https://stream.mux.com/${playbackId}` : undefined;
+}
+
+function getMuxDownloadUrl(playbackId?: string) {
+  return playbackId ? `https://stream.mux.com/${playbackId}/download.mp4` : undefined;
+}
+
+const exportFilmTypes: Array<{ type: SessionExportType; label: string }> = [
+  { type: "raw_video", label: "ORIGINAL FILM" },
+  { type: "overlay_video", label: "OVERLAY FILM" },
+  { type: "shot_science_video", label: "HIGHLIGHTS" },
+  { type: "vertical_social_clip", label: "SOCIAL" },
+];
+
 function getFilmPlaybackId(session?: Pick<SavedSession, "muxPlaybackId" | "recordingAttached"> | null) {
   if (!session?.recordingAttached) return undefined;
 
@@ -3007,6 +3022,7 @@ export function RitualHome() {
   const [reviewMessage, setReviewMessage] = useState("");
   const [cameraMenuOpen, setCameraMenuOpen] = useState(false);
   const [cameraPermissionState, setCameraPermissionState] = useState<"unknown" | "granted" | "denied" | "unavailable">("unknown");
+  const [copiedFilmType, setCopiedFilmType] = useState<SessionExportType | null>(null);
   const lastShotSuggestionAtRef = useRef(0);
   const [rimEditMode, setRimEditMode] = useState(false);
   const [rimEditModeRim, setRimEditModeRim] = useState<RimLock | null>(null);
@@ -3434,6 +3450,18 @@ export function RitualHome() {
   const latestFilmThumbnailUrl = filmSession?.thumbnailUrl ?? getMuxThumbnailUrl(latestFilmPlaybackId);
   const latestFilmAvailability = getFilmAvailability(filmSession);
   const latestExportObject = filmSession ? createSessionExportObject(filmSession) : null;
+  const exportCenterFilms = latestSession
+    ? exportFilmTypes.map(({ type, label }) => {
+        const exportOutput = latestExportObject?.exports.find((e) => e.type === type);
+        const status: SessionExportOutput["status"] = exportOutput?.status ?? "waiting";
+        const playbackId = latestFilmPlaybackId;
+        const shareUrl = getMuxStreamUrl(playbackId);
+        const downloadUrl = getMuxDownloadUrl(playbackId);
+        const statusLabel = status === "available" ? "READY" : status === "processing" ? "PROCESSING" : "PREPARING";
+        const readinessLabel = `${label} ${statusLabel}`;
+        return { type, label, status, shareUrl, downloadUrl, readinessLabel };
+      })
+    : [];
   const resultsSession = filmSession ?? save.activeSession ?? null;
   const resultsShotEvents = resultsSession?.shotEvents ?? [];
   const resultsShotSummary =
@@ -5586,6 +5614,43 @@ export function RitualHome() {
     };
   }
 
+  async function handleFilmAction(
+    action: "share" | "save" | "copy" | "download",
+    filmType: SessionExportType,
+    shareUrl: string | undefined,
+    downloadUrl: string | undefined,
+  ) {
+    if ((action === "share" || action === "save") && shareUrl) {
+      if (typeof navigator.share === "function") {
+        try {
+          await navigator.share({ title: "Axis Film", url: shareUrl });
+        } catch {
+          // user cancelled
+        }
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedFilmType(filmType);
+        window.setTimeout(() => setCopiedFilmType(null), 2000);
+      }
+    } else if (action === "copy" && shareUrl) {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedFilmType(filmType);
+        window.setTimeout(() => setCopiedFilmType(null), 2000);
+      } catch {
+        // clipboard unavailable
+      }
+    } else if (action === "download" && downloadUrl) {
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  }
+
   async function queueFinalizeWork(session: SavedSession) {
     try {
       const response = await fetch("/api/work/finalize", {
@@ -6380,6 +6445,63 @@ export function RitualHome() {
                 </button>
               )}
             </section>
+
+            {/* Export Center */}
+            {exportCenterFilms.length > 0 ? (
+              <section className="axis-export-center" aria-label="Export">
+                <header className="axis-export-center-header">
+                  <span className="axis-export-center-label">EXPORT</span>
+                  {latestSession ? (
+                    <span className="axis-export-center-meta">
+                      {latestSession.mode ?? "Training"} · {formatDuration(latestSession.durationSeconds)}
+                    </span>
+                  ) : null}
+                </header>
+                <div className="axis-export-grid">
+                  {exportCenterFilms.map((film) => (
+                    <article
+                      className="axis-export-card"
+                      data-status={film.status}
+                      key={film.type}
+                    >
+                      <span className="axis-export-card-readiness">{film.readinessLabel}</span>
+                      {film.status === "available" ? (
+                        <div className="axis-export-card-actions">
+                          <button
+                            className="axis-export-action"
+                            onClick={() => void handleFilmAction("save", film.type, film.shareUrl, film.downloadUrl)}
+                            type="button"
+                          >
+                            Save to Device
+                          </button>
+                          <button
+                            className="axis-export-action"
+                            onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
+                            type="button"
+                          >
+                            Share
+                          </button>
+                          <button
+                            className="axis-export-action"
+                            onClick={() => void handleFilmAction("copy", film.type, film.shareUrl, film.downloadUrl)}
+                            type="button"
+                          >
+                            {copiedFilmType === film.type ? "Copied" : "Copy Link"}
+                          </button>
+                          <button
+                            className="axis-export-action"
+                            onClick={() => void handleFilmAction("download", film.type, film.shareUrl, film.downloadUrl)}
+                            type="button"
+                          >
+                            Download
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </section>
         ) : null}
 
