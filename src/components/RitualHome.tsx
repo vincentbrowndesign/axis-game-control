@@ -48,6 +48,14 @@ type WorkOperatorMode = "coach" | "director" | "parent" | "player";
 type WorkDetectionState = "ACTIVE" | "IDLE" | "MOVING" | "SHOOTING";
 type RimDragAction = "move" | "resize-nw" | "resize-ne" | "resize-sw" | "resize-se";
 type WatchEventType = "assist" | "make" | "miss" | "rebound" | "shot_attempt" | "turnover";
+type HighlightClip = {
+  attemptNumber: number;
+  clipEnd: number;
+  clipStart: number;
+  shotId: string;
+  type: ShotType;
+};
+
 type SessionExportType =
   | "coach_report"
   | "player_report"
@@ -136,6 +144,9 @@ type SavedSession = {
   review?: SessionReview;
   shotEvents?: ShotEvent[];
   shotSummary?: ShotSummary;
+  overlayMuxAssetId?: string;
+  overlayMuxPlaybackId?: string;
+  highlightClips?: HighlightClip[];
 };
 
 type ActiveParticipant = AthleteIdentity & {
@@ -1483,6 +1494,217 @@ function formatGameActionLabel(type: GameActionType) {
 
 function getVideoTimestamp(timestamp: string, sessionStartedAt: string) {
   return Math.max(0, (new Date(timestamp).getTime() - new Date(sessionStartedAt).getTime()) / 1000);
+}
+
+function buildRunningStats(shots: ShotEvent[], videoTime: number) {
+  const past = shots.filter((s) => s.replayTimestamp <= videoTime + 0.5);
+  const makes = past.filter((s) => s.type === "make").length;
+  const misses = past.filter((s) => s.type === "miss").length;
+  const attempts = makes + misses;
+  return { attempts, makes, misses, fg: attempts > 0 ? Math.round((makes / attempts) * 100) : 0 };
+}
+
+function buildHighlightClips(shots: ShotEvent[], leadIn = 2.5, leadOut = 4): HighlightClip[] {
+  return shots.map((s) => ({
+    attemptNumber: s.attemptNumber,
+    clipEnd: Math.max(0, s.replayTimestamp + leadOut),
+    clipStart: Math.max(0, s.replayTimestamp - leadIn),
+    shotId: s.shotId,
+    type: s.type,
+  }));
+}
+
+function canvasRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(x, y, w, h, r);
+  } else {
+    ctx.rect(x, y, w, h);
+  }
+}
+
+function drawOverlayFrame(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  stats: { attempts: number; makes: number; misses: number; fg: number },
+  activeShot: ShotEvent | null,
+  shotElapsed: number,
+) {
+  const sc = width / 390;
+  ctx.save();
+
+  // Running score strip — top right
+  const sw = 170 * sc;
+  const sh = 27 * sc;
+  const sx = width - sw - 8 * sc;
+  const sy = 8 * sc;
+  ctx.fillStyle = "rgba(6,6,6,0.78)";
+  ctx.beginPath();
+  canvasRoundRect(ctx, sx, sy, sw, sh, 3 * sc);
+  ctx.fill();
+
+  const lfs = Math.round(9.5 * sc);
+  ctx.font = `900 ${lfs}px "Arial Narrow",Arial,sans-serif`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  const my = sy + sh / 2;
+  const c1 = sx + 7 * sc;
+  const c2 = sx + 52 * sc;
+  const c3 = sx + 90 * sc;
+  const c4 = sx + 128 * sc;
+  ctx.fillStyle = "rgba(244,244,240,0.55)";
+  ctx.fillText("ATT", c1, my);
+  ctx.fillText("M", c2, my);
+  ctx.fillText("MS", c3, my);
+  ctx.fillStyle = stats.fg >= 50 ? "rgba(168,217,51,0.75)" : "rgba(244,244,240,0.55)";
+  ctx.fillText("FG%", c4, my);
+  const vfs = Math.round(11 * sc);
+  ctx.font = `900 ${vfs}px "Arial Narrow",Arial,sans-serif`;
+  ctx.fillStyle = "rgba(244,244,240,0.95)";
+  ctx.fillText(String(stats.attempts), c1 + 22 * sc, my);
+  ctx.fillText(String(stats.makes), c2 + 12 * sc, my);
+  ctx.fillText(String(stats.misses), c3 + 16 * sc, my);
+  ctx.fillStyle = stats.fg >= 50 ? "rgb(168,217,51)" : "rgba(244,244,240,0.95)";
+  ctx.fillText(`${stats.fg}%`, c4 + 22 * sc, my);
+
+  // Active shot overlay
+  if (activeShot && shotElapsed >= -0.1 && shotElapsed <= 3.5) {
+    const fadeIn = Math.min(1, shotElapsed < 0 ? 0 : shotElapsed < 0.25 ? shotElapsed / 0.25 : 1);
+    const fadeOut = shotElapsed > 3.0 ? 1 - (shotElapsed - 3.0) / 0.5 : 1;
+    const alpha = Math.max(0, Math.min(1, fadeIn * fadeOut));
+    const isMake = activeShot.type === "make";
+    const cx = width / 2;
+    const ry = height * 0.44;
+
+    ctx.globalAlpha = alpha;
+
+    // Result label
+    const rfs = Math.round(68 * sc);
+    ctx.font = `900 ${rfs}px "Arial Narrow",Arial,sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (isMake) {
+      ctx.shadowBlur = 36 * sc;
+      ctx.shadowColor = "rgba(168,217,51,0.45)";
+      ctx.fillStyle = "rgb(168,217,51)";
+    } else {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(244,244,240,0.92)";
+    }
+    ctx.fillText(isMake ? "MAKE" : "MISS", cx, ry);
+    ctx.shadowBlur = 0;
+
+    // Attempt number
+    const afs = Math.round(9 * sc);
+    ctx.font = `700 ${afs}px "Arial Narrow",Arial,sans-serif`;
+    ctx.fillStyle = "rgba(244,244,240,0.4)";
+    ctx.fillText(`SHOT ${activeShot.attemptNumber}`, cx, ry + rfs * 0.72);
+
+    // Metrics bar
+    const science = activeShot.shotScience;
+    const metrics: string[] = [];
+    if (science?.releaseAngle) metrics.push(`RELEASE ${Math.round(science.releaseAngle)}°`);
+    if (science?.arcHeightFeet) metrics.push(`ARC ${science.arcHeightFeet.toFixed(1)}ft`);
+    if (activeShot.distance) metrics.push(`${Math.round(activeShot.distance)}ft`);
+    if (metrics.length) {
+      const mfs = Math.round(9.5 * sc);
+      ctx.font = `700 ${mfs}px "Arial Narrow",Arial,sans-serif`;
+      const mtext = metrics.join("  ·  ");
+      const mw = ctx.measureText(mtext).width + 24 * sc;
+      const mbottom = height - 48 * sc;
+      ctx.fillStyle = "rgba(6,6,6,0.78)";
+      ctx.beginPath();
+      canvasRoundRect(ctx, cx - mw / 2, mbottom - 13 * sc, mw, 24 * sc, 3 * sc);
+      ctx.fill();
+      ctx.fillStyle = "rgba(244,244,240,0.88)";
+      ctx.fillText(mtext, cx, mbottom);
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+async function generateOverlayFilm(rawBlob: Blob, session: SavedSession): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    if (typeof MediaRecorder === "undefined" || typeof document === "undefined") {
+      resolve(null);
+      return;
+    }
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    const objectUrl = URL.createObjectURL(rawBlob);
+    video.src = objectUrl;
+
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+
+    video.onerror = () => { cleanup(); resolve(null); };
+
+    video.onloadedmetadata = () => {
+      const width = video.videoWidth || 1280;
+      const height = video.videoHeight || 720;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctxOrNull = canvas.getContext("2d");
+      if (!ctxOrNull) { cleanup(); resolve(null); return; }
+      const ctx: CanvasRenderingContext2D = ctxOrNull;
+
+      let stream: MediaStream;
+      try {
+        stream = canvas.captureStream(30);
+      } catch {
+        cleanup(); resolve(null); return;
+      }
+
+      const mimeType = getSupportedVideoMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+      const shots = normalizeShotEvents(session.shotEvents);
+      let rafId: number | null = null;
+
+      function renderFrame() {
+        if (video.ended || video.paused) return;
+        const t = video.currentTime;
+        ctx.drawImage(video, 0, 0, width, height);
+        const stats = buildRunningStats(shots, t);
+        let activeShot: ShotEvent | null = null;
+        let shotElapsed = -1;
+        for (const s of shots) {
+          const elapsed = t - s.replayTimestamp;
+          if (elapsed >= -0.1 && elapsed <= 3.5) {
+            activeShot = s;
+            shotElapsed = elapsed;
+            break;
+          }
+        }
+        drawOverlayFrame(ctx, width, height, stats, activeShot, shotElapsed);
+        rafId = requestAnimationFrame(renderFrame);
+      }
+
+      recorder.start(1000);
+      video.play().then(() => { rafId = requestAnimationFrame(renderFrame); }).catch(() => {
+        recorder.stop(); cleanup(); resolve(null);
+      });
+
+      video.onended = () => {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        recorder.onstop = () => {
+          const blob = chunks.length ? new Blob(chunks, { type: mimeType || "video/webm" }) : null;
+          cleanup();
+          resolve(blob?.size ? blob : null);
+        };
+        recorder.requestData();
+        recorder.stop();
+      };
+    };
+
+    video.load();
+  });
 }
 
 function createReplayAnchor(
@@ -3454,9 +3676,33 @@ export function RitualHome() {
   const latestExportObject = filmSession ? createSessionExportObject(filmSession) : null;
   const exportCenterFilms = latestSession
     ? exportFilmTypes.map(({ type, label }) => {
-        const exportOutput = latestExportObject?.exports.find((e) => e.type === type);
-        const status: SessionExportOutput["status"] = exportOutput?.status ?? "waiting";
-        const playbackId = latestFilmPlaybackId;
+        let playbackId: string | undefined;
+        let status: SessionExportOutput["status"];
+
+        if (type === "raw_video") {
+          playbackId = latestFilmPlaybackId;
+          status = latestFilmPlaybackId ? "available" : latestSession.muxAssetId ? "processing" : "waiting";
+        } else if (type === "overlay_video") {
+          playbackId = latestSession.overlayMuxPlaybackId;
+          status = latestSession.overlayMuxPlaybackId
+            ? "available"
+            : latestFilmPlaybackId
+              ? "processing"
+              : "waiting";
+        } else if (type === "shot_science_video") {
+          const hasMakes = (latestSession.highlightClips ?? []).some((c) => c.type === "make");
+          playbackId = hasMakes ? latestFilmPlaybackId : undefined;
+          status = hasMakes && latestFilmPlaybackId ? "available" : hasMakes ? "processing" : "waiting";
+        } else {
+          // vertical_social_clip: uses overlay film
+          playbackId = latestSession.overlayMuxPlaybackId;
+          status = latestSession.overlayMuxPlaybackId
+            ? "available"
+            : latestFilmPlaybackId
+              ? "processing"
+              : "waiting";
+        }
+
         const shareUrl = getMuxStreamUrl(playbackId);
         const downloadUrl = getMuxDownloadUrl(playbackId);
         const statusLabel = status === "available" ? "READY" : status === "processing" ? "PROCESSING" : "PREPARING";
@@ -4398,6 +4644,40 @@ export function RitualHome() {
       void queueFinalizeWork(exportReadySession);
     } catch (error) {
       console.error("Unable to upload film", error);
+    }
+  }
+
+  async function uploadOverlayFilm(session: SavedSession, blob: Blob) {
+    try {
+      const uploadResponse = await fetch("/api/film/uploads", {
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const upload = (await uploadResponse.json().catch(() => null)) as { uploadId?: string; uploadUrl?: string } | null;
+
+      if (!uploadResponse.ok || !upload?.uploadId || !upload.uploadUrl) {
+        console.error("Unable to create overlay film upload");
+        return;
+      }
+
+      await uploadBlobToMux(upload.uploadUrl, blob);
+      const film = await pollFilmUpload(upload.uploadId);
+      if (!film?.playbackId) return;
+
+      setSave((currentSave) => {
+        const nextSave = {
+          ...currentSave,
+          sessions: currentSave.sessions.map((s) =>
+            s.id === session.id
+              ? { ...s, overlayMuxAssetId: film.muxAssetId, overlayMuxPlaybackId: film.playbackId }
+              : s,
+          ),
+        };
+        writeSave(nextSave);
+        return nextSave;
+      });
+    } catch (error) {
+      console.error("Unable to upload overlay film", error);
     }
   }
 
@@ -5602,7 +5882,11 @@ export function RitualHome() {
         timeline: filmMoments,
         workId: session.id,
       },
-      overlayProfile: overlaySettings,
+      overlayProfile: {
+        ...overlaySettings,
+        hasOverlayFilm: Boolean(session.overlayMuxPlaybackId),
+        hasHighlights: Boolean((session.highlightClips ?? []).some((c) => c.type === "make")),
+      },
       pipeline: exportObject.pipeline,
       playerReport: exportObject.playerReport,
       results: {
@@ -5647,6 +5931,7 @@ export function RitualHome() {
       work: {
         endedAt: exportObject.session.endedAt,
         id: exportObject.session.id,
+        overlayMuxPlaybackId: session.overlayMuxPlaybackId,
         participantIds: (session.participants ?? []).map((participant) => participant.id),
         rimLock: session.rimLock,
         startedAt: exportObject.session.startedAt,
@@ -5820,6 +6105,7 @@ export function RitualHome() {
       },
       shotEvents,
       shotSummary,
+      highlightClips: buildHighlightClips(shotEvents),
     };
     const completedSessionWithExportQueue = {
       ...completedSession,
@@ -5852,6 +6138,11 @@ export function RitualHome() {
       }));
       void queueFinalizeWork(completedSessionWithExportQueue);
       void uploadSessionFilm(completedSessionWithExportQueue, filmCapture.blob);
+      const capturedBlob = filmCapture.blob;
+      const capturedSession = completedSessionWithExportQueue;
+      void generateOverlayFilm(capturedBlob, capturedSession).then((overlayBlob) => {
+        if (overlayBlob) void uploadOverlayFilm(capturedSession, overlayBlob);
+      });
     } else {
       void queueFinalizeWork(completedSessionWithExportQueue);
     }
