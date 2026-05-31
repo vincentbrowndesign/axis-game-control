@@ -29,6 +29,7 @@ type ParticipationWindowStatus = "open" | "closed";
 type ParticipationMode = "Training" | "Practice" | "Game" | "Workout" | "Challenge";
 type ProductSurface = "capture" | "export" | "overlay";
 type OverlaySurface = "export" | "live" | "replay";
+type TimelineMomentFilter = "all" | "assists" | "rebounds" | "shots" | "turnovers";
 type OverlayKey =
   | "attempts"
   | "ballLabels"
@@ -2403,6 +2404,67 @@ function formatHumanMomentLabel(anchor: ReplayAnchor) {
   return "Moment";
 }
 
+const timelineMomentFilters: Array<{ label: string; value: TimelineMomentFilter }> = [
+  { label: "All", value: "all" },
+  { label: "Shots", value: "shots" },
+  { label: "Rebounds", value: "rebounds" },
+  { label: "Assists", value: "assists" },
+  { label: "Turnovers", value: "turnovers" },
+];
+
+function getTimelineMomentGroup(anchor: ReplayAnchor) {
+  if (anchor.eventType === "make" || anchor.eventType === "miss" || anchor.eventType === "shot_attempt") return "shots";
+  if (anchor.eventType === "rebound") return "rebounds";
+  if (anchor.eventType === "assist") return "assists";
+  if (anchor.eventType === "turnover") return "turnovers";
+  if (anchor.eventType === "foul") return "fouls";
+
+  return null;
+}
+
+function getTimelineMomentGroupLabel(group: string) {
+  if (group === "shots") return "Shots";
+  if (group === "rebounds") return "Rebounds";
+  if (group === "assists") return "Assists";
+  if (group === "turnovers") return "Turnovers";
+  if (group === "fouls") return "Fouls";
+
+  return "Moments";
+}
+
+function getFilteredTimelineMoments(anchors: ReplayAnchor[], filter: TimelineMomentFilter) {
+  return anchors.filter((anchor) => {
+    const group = getTimelineMomentGroup(anchor);
+    if (!group) return false;
+    if (filter === "all") return true;
+
+    return group === filter;
+  });
+}
+
+function getGroupedTimelineMoments(anchors: ReplayAnchor[]) {
+  const groups: Array<{ anchors: ReplayAnchor[]; key: string; label: string }> = [];
+
+  anchors.forEach((anchor) => {
+    const groupKey = getTimelineMomentGroup(anchor);
+    if (!groupKey) return;
+
+    const existingGroup = groups.find((group) => group.key === groupKey);
+    if (existingGroup) {
+      existingGroup.anchors.push(anchor);
+      return;
+    }
+
+    groups.push({
+      anchors: [anchor],
+      key: groupKey,
+      label: getTimelineMomentGroupLabel(groupKey),
+    });
+  });
+
+  return groups;
+}
+
 function shouldShowFilmTimelineAnchor(anchor: ReplayAnchor) {
   return (
     anchor.eventType === "session_start" ||
@@ -3394,6 +3456,7 @@ export function RitualHome() {
   const [broadcastMessage, setBroadcastMessage] = useState<{ text: string; subtext?: string; id: number; variant?: "shot" | "make" | "miss" } | null>(null);
   const broadcastTimerRef = useRef<number | null>(null);
   const [selectedReplayAnchor, setSelectedReplayAnchor] = useState<ReplayAnchor | null>(null);
+  const [timelineMomentFilter, setTimelineMomentFilter] = useState<TimelineMomentFilter>("all");
   const [selectedFilmSessionId, setSelectedFilmSessionId] = useState<string | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
@@ -3838,6 +3901,9 @@ export function RitualHome() {
     .map((clip) => filmSession?.replayAnchors?.find((anchor) => anchor.eventId === clip.eventId))
     .filter((anchor): anchor is ReplayAnchor => Boolean(anchor));
   const filmOverlayAnchors = latestFilmTimelineAnchors.filter(shouldShowFilmOverlayAnchor).slice(0, 12);
+  const timelineMomentAnchors = getFilteredTimelineMoments(latestFilmTimelineAnchors, timelineMomentFilter);
+  const groupedTimelineMoments = getGroupedTimelineMoments(timelineMomentAnchors);
+  const totalTimelineMomentCount = getFilteredTimelineMoments(latestFilmTimelineAnchors, "all").length;
   const latestSessionReview = filmSession?.review;
   const latestFilmPlaybackId = getFilmPlaybackId(filmSession);
   const latestFilmPreviewUrl = filmSession ? filmPreviewUrls[filmSession.id] : undefined;
@@ -6999,25 +7065,39 @@ export function RitualHome() {
             </section>
 
             {/* Timeline rail — exposes existing ReplayAnchor architecture */}
-            {ritualState === "complete" && filmOverlayAnchors.length > 0 && filmSession ? (
+            {ritualState === "complete" && totalTimelineMomentCount > 0 && filmSession ? (
               <section className="axis-timeline-rail" aria-label="Session timeline">
                 <header className="axis-timeline-header">
-                  <span className="axis-timeline-label">
-                    {selectedReplayAnchor ? formatHumanMomentLabel(selectedReplayAnchor).toUpperCase() : "TIMELINE"}
-                  </span>
+                  <span className="axis-timeline-label">{`${totalTimelineMomentCount} ${
+                    totalTimelineMomentCount === 1 ? "Moment" : "Moments"
+                  }`}</span>
                   <span className="axis-timeline-meta">
                     {selectedReplayAnchor
-                      ? formatDuration(selectedReplayAnchor.videoTimestamp)
+                      ? `${formatHumanMomentLabel(selectedReplayAnchor).toUpperCase()} • ${formatDuration(selectedReplayAnchor.videoTimestamp)}`
                       : formatDuration(filmSession.durationSeconds)}
                   </span>
                 </header>
+                <div className="axis-timeline-filter" aria-label="Moment filters">
+                  {timelineMomentFilters.map((filter) => (
+                    <button
+                      aria-pressed={timelineMomentFilter === filter.value}
+                      className="axis-timeline-filter-button"
+                      data-active={timelineMomentFilter === filter.value ? "true" : undefined}
+                      key={filter.value}
+                      onClick={() => setTimelineMomentFilter(filter.value)}
+                      type="button"
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="axis-timeline-track" role="list">
-                  {filmOverlayAnchors.map((anchor) => {
+                  {timelineMomentAnchors.map((anchor) => {
                     const duration = Math.max(1, filmSession.durationSeconds ?? 1);
                     const pct = Math.max(1, Math.min(99, (anchor.videoTimestamp / duration) * 100));
                     return (
                       <button
-                        aria-label={formatHumanMomentLabel(anchor)}
+                        aria-label={`${formatHumanMomentLabel(anchor)} at ${formatDuration(anchor.videoTimestamp)}`}
                         className="axis-timeline-marker"
                         data-event={anchor.eventType}
                         data-selected={selectedReplayAnchor?.eventId === anchor.eventId ? "true" : undefined}
@@ -7026,10 +7106,37 @@ export function RitualHome() {
                         role="listitem"
                         style={{ left: `${pct}%` }}
                         type="button"
-                      />
+                      >
+                        <span className="axis-timeline-marker-label">{formatHumanMomentLabel(anchor).toUpperCase()}</span>
+                      </button>
                     );
                   })}
                 </div>
+                {groupedTimelineMoments.length ? (
+                  <div className="axis-timeline-groups" aria-label="Grouped moments">
+                    {groupedTimelineMoments.map((group) => (
+                      <section className="axis-timeline-group" key={group.key}>
+                        <header className="axis-timeline-group-header">
+                          <span>{`${group.label.toUpperCase()} (${group.anchors.length})`}</span>
+                        </header>
+                        <div className="axis-timeline-group-list">
+                          {group.anchors.map((anchor) => (
+                            <button
+                              className="axis-timeline-group-item"
+                              data-selected={selectedReplayAnchor?.eventId === anchor.eventId ? "true" : undefined}
+                              key={anchor.eventId}
+                              onClick={() => jumpToReplayAnchor(anchor)}
+                              type="button"
+                            >
+                              <span>{formatHumanMomentLabel(anchor)}</span>
+                              <em>{formatDuration(anchor.videoTimestamp)}</em>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : null}
               </section>
             ) : null}
 
