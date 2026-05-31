@@ -624,6 +624,10 @@ h1 {
   color: var(--axis-live);
 }
 
+.axis-story-readiness[data-ready="summary"] strong {
+  color: rgba(244, 244, 240, 0.72);
+}
+
 .axis-story-readiness em {
   color: rgba(244, 244, 240, 0.36);
   font-size: 0.58rem;

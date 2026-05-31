@@ -3970,9 +3970,24 @@ export function RitualHome() {
   const storyShareUrl = getMuxStreamUrl(storyPlaybackId);
   const storyDownloadUrl = getMuxDownloadUrl(storyPlaybackId) ?? localFilmSrc;
   const storyVideoAvailable = Boolean(storyPlaybackId || localFilmSrc);
+  const summaryReady = Boolean(sessionCardUrl);
+  const storyStateLabel = storyVideoAvailable
+    ? "Story Ready"
+    : summaryReady
+      ? "Summary Ready"
+      : sessionCardGenerating
+        ? "Story Preparing"
+        : "Failed";
+  const storyDetailLabel = storyVideoAvailable
+    ? "Watch, share, or save"
+    : summaryReady
+      ? "Video not ready yet. Summary ready."
+      : sessionCardGenerating
+        ? "Summary preparing"
+        : "Video not ready yet. Summary unavailable.";
   const storyCanWatch = Boolean(storyVideoAvailable || totalTimelineMomentCount);
-  const storyCanShare = Boolean(storyShareUrl || sessionCardUrl);
-  const storyCanSave = Boolean(storyDownloadUrl || sessionCardUrl);
+  const storyCanShare = Boolean(storyShareUrl || summaryReady);
+  const storyCanSave = Boolean(storyDownloadUrl || summaryReady);
   const getShotForMoment = (anchor: ReplayAnchor) =>
     filmShots.find(
       (shot) =>
@@ -7210,21 +7225,13 @@ export function RitualHome() {
                     totalTimelineMomentCount === 1 ? "Moment" : "Moments"
                   } Found`}</span>
                 </header>
-                <div className="axis-story-readiness" data-ready={storyVideoAvailable ? "true" : "false"}>
-                  <strong>{storyVideoAvailable ? "Story Ready" : "Story preparing"}</strong>
-                  <em>
-                    {storyVideoAvailable
-                      ? "Watch, share, or save"
-                      : sessionCardUrl
-                        ? "Summary card ready"
-                        : sessionCardGenerating
-                          ? "Summary card preparing"
-                          : "Summary card ready"}
-                  </em>
+                <div className="axis-story-readiness" data-ready={storyVideoAvailable ? "true" : summaryReady ? "summary" : "false"}>
+                  <strong>{storyStateLabel}</strong>
+                  <em>{storyDetailLabel}</em>
                 </div>
                 <div className="axis-share-card-area">
                   {sessionCardGenerating ? (
-                    <div className="axis-share-card-loading" aria-label="Generating session card">
+                    <div className="axis-share-card-loading" aria-label="Preparing summary card">
                       <span>SUMMARY CARD</span>
                     </div>
                   ) : sessionCardUrl ? (
