@@ -26,6 +26,14 @@ function getNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function getExportStatus(value: unknown) {
+  const status = getString(value, "ready");
+
+  return status === "available" || status === "building" || status === "failed" || status === "ready" || status === "rendering"
+    ? status
+    : "ready";
+}
+
 function sanitizePoint(value: unknown) {
   const candidate = isRecord(value) ? value : {};
 
@@ -69,12 +77,11 @@ function sanitizeFinalizePayload(body: FinalizeRequestBody) {
     }),
     exportQueue: exportQueue.slice(0, 12).map((output) => {
       const candidate = isRecord(output) ? output : {};
-      const status = getString(candidate.status, "waiting");
 
       return {
         label: getString(candidate.label, "Export"),
         sourceCount: getNumber(candidate.sourceCount),
-        status: status === "available" || status === "processing" || status === "waiting" ? status : "waiting",
+        status: getExportStatus(candidate.status),
         type: getString(candidate.type, "export"),
       };
     }),
@@ -158,14 +165,13 @@ function sanitizeFinalizePayload(body: FinalizeRequestBody) {
       const outputs = Array.isArray(candidate.outputs)
         ? candidate.outputs.filter((output): output is string => typeof output === "string").slice(0, 8)
         : [];
-      const status = getString(candidate.status, "waiting");
 
       return {
         capability: getString(candidate.capability, "Capability"),
         outputs,
         provider: getString(candidate.provider, "system"),
         sourceCount: getNumber(candidate.sourceCount),
-        status: status === "available" || status === "processing" || status === "waiting" ? status : "waiting",
+        status: getExportStatus(candidate.status),
       };
     }),
     playerReport: {
@@ -188,12 +194,11 @@ function sanitizeFinalizePayload(body: FinalizeRequestBody) {
       outputs: Array.isArray(playerReport.outputs)
         ? playerReport.outputs.slice(0, 12).map((output) => {
             const candidate = isRecord(output) ? output : {};
-            const status = getString(candidate.status, "waiting");
 
             return {
               label: getString(candidate.label, "Player Output"),
               sourceCount: getNumber(candidate.sourceCount),
-              status: status === "available" || status === "processing" || status === "waiting" ? status : "waiting",
+              status: getExportStatus(candidate.status),
               type: getString(candidate.type, "player_output"),
             };
           })

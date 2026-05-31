@@ -735,6 +735,17 @@ h1 {
   border-color: rgba(168, 217, 51, 0.22);
 }
 
+.axis-film-card[data-status="building"],
+.axis-film-card[data-status="rendering"],
+.axis-film-card[data-status="ready"] {
+  border-color: rgba(244, 244, 240, 0.12);
+}
+
+.axis-film-card[data-status="failed"] {
+  border-color: rgba(244, 244, 240, 0.05);
+  opacity: 0.58;
+}
+
 .axis-film-card-name {
   color: rgba(244, 244, 240, 0.45);
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
@@ -756,6 +767,15 @@ h1 {
 
 .axis-film-card[data-status="available"] .axis-film-card-status {
   color: var(--axis-live);
+}
+
+.axis-film-card[data-status="building"] .axis-film-card-status,
+.axis-film-card[data-status="rendering"] .axis-film-card-status {
+  color: rgba(168, 217, 51, 0.72);
+}
+
+.axis-film-card[data-status="ready"] .axis-film-card-status {
+  color: rgba(244, 244, 240, 0.42);
 }
 
 .axis-film-card-action {
@@ -930,7 +950,9 @@ h1 {
   border-color: rgba(168, 217, 51, 0.1);
 }
 
-.axis-export-card[data-status="processing"] {
+.axis-export-card[data-status="building"],
+.axis-export-card[data-status="rendering"],
+.axis-export-card[data-status="ready"] {
   border-color: rgba(244, 244, 240, 0.05);
 }
 
@@ -947,11 +969,16 @@ h1 {
   color: var(--axis-live);
 }
 
-.axis-export-card[data-status="processing"] .axis-export-card-readiness {
+.axis-export-card[data-status="building"] .axis-export-card-readiness,
+.axis-export-card[data-status="rendering"] .axis-export-card-readiness {
+  color: rgba(168, 217, 51, 0.72);
+}
+
+.axis-export-card[data-status="ready"] .axis-export-card-readiness {
   color: rgba(244, 244, 240, 0.38);
 }
 
-.axis-export-card[data-status="waiting"] .axis-export-card-readiness {
+.axis-export-card[data-status="failed"] .axis-export-card-readiness {
   color: rgba(244, 244, 240, 0.2);
 }
 
@@ -1990,7 +2017,9 @@ h1 {
   border-color: rgba(168, 217, 51, 0.25);
 }
 
-.axis-export-output-list span[data-status="processing"] {
+.axis-export-output-list span[data-status="building"],
+.axis-export-output-list span[data-status="rendering"],
+.axis-export-output-list span[data-status="ready"] {
   border-color: rgba(168, 217, 51, 0.16);
 }
 
@@ -2018,8 +2047,13 @@ h1 {
   color: var(--axis-live);
 }
 
-.axis-export-output-list span[data-status="processing"] strong {
+.axis-export-output-list span[data-status="building"] strong,
+.axis-export-output-list span[data-status="rendering"] strong {
   color: rgba(168, 217, 51, 0.72);
+}
+
+.axis-export-output-list span[data-status="ready"] strong {
+  color: rgba(244, 244, 240, 0.62);
 }
 
 .axis-active-state strong,

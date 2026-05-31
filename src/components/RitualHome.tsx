@@ -515,7 +515,7 @@ type ReplayClip = {
 type SessionExportOutput = {
   label: string;
   sourceCount: number;
-  status: "available" | "processing" | "waiting";
+  status: "available" | "building" | "failed" | "ready" | "rendering";
   type: SessionExportType;
 };
 
@@ -2446,6 +2446,21 @@ function getMuxDownloadUrl(playbackId?: string) {
   return playbackId ? `https://stream.mux.com/${playbackId}/download.mp4` : undefined;
 }
 
+function formatExportStatus(status: SessionExportOutput["status"]) {
+  if (status === "available") return "AVAILABLE";
+  if (status === "building") return "BUILDING";
+  if (status === "rendering") return "RENDERING";
+  if (status === "failed") return "FAILED";
+
+  return "READY";
+}
+
+function canDownloadExport(type: SessionExportType, playbackId?: string, localFilmSrc?: string) {
+  if (type !== "raw_video" && type !== "overlay_video") return false;
+
+  return Boolean(playbackId || (type === "raw_video" && localFilmSrc));
+}
+
 const exportFilmTypes: Array<{ type: SessionExportType; label: string }> = [
   { type: "shot_science_video", label: "HIGHLIGHT REEL" },
   { type: "vertical_social_clip", label: "STORY REEL" },
@@ -2630,7 +2645,7 @@ function createPlayerReport(session: SavedSession, shots: ShotEvent[], shotSumma
     {
       label: sessionExportLabels.player_report,
       sourceCount: shots.length + clips.length,
-      status: hasFilm ? "processing" : hasShots ? "processing" : "waiting",
+      status: hasFilm || hasShots ? "ready" : "failed",
       type: "player_report",
     },
   ];
@@ -2695,12 +2710,12 @@ function createAxisCapabilityPipeline({
   const hasHoopSignal = shots.some((shot) => Boolean(shot.shotScience?.entryPoint));
   const hasEvents = events.length > 0 || overlays.length > 0 || shots.length > 0;
   const participantCount = session.participants?.length ?? session.participantCount ?? 0;
-  const videoStatus: SessionExportOutput["status"] = hasPlayableFilm ? "available" : hasMuxAsset ? "processing" : "waiting";
+  const videoStatus: SessionExportOutput["status"] = hasPlayableFilm ? "available" : hasMuxAsset ? "building" : "ready";
   const detectionStatus = (ready: boolean): SessionExportOutput["status"] => {
     if (ready) return "available";
-    if (hasPlayableFilm || hasMuxAsset) return "processing";
+    if (hasMuxAsset) return "building";
 
-    return "waiting";
+    return "ready";
   };
 
   return [
@@ -2709,7 +2724,7 @@ function createAxisCapabilityPipeline({
       outputs: ["Player Report", "Coach Report"],
       provider: "openai",
       sourceCount: events.length + shots.length,
-      status: hasEvents ? "processing" : "waiting",
+      status: hasEvents ? "ready" : "failed",
     },
     {
       capability: "Detection",
@@ -2744,7 +2759,7 @@ function createAxisCapabilityPipeline({
       outputs: ["Work", "Film", "Events", "Intelligent Film"],
       provider: "supabase",
       sourceCount: Number(Boolean(session.id)) + events.length + shots.length,
-      status: session.id ? "available" : "waiting",
+      status: session.id ? "available" : "failed",
     },
   ];
 }
@@ -2759,49 +2774,51 @@ function createSessionExportObject(session: SavedSession): SessionExportObject {
   const playerReport = createPlayerReport(session, shots, shotSummary, clips);
   const hasMuxAsset = Boolean(session.muxAssetId);
   const hasPlayableFilm = Boolean(session.muxPlaybackId);
+  const hasOverlayFilm = Boolean(session.overlayMuxPlaybackId);
   const hasMuxExportSource = hasPlayableFilm || hasMuxAsset || session.recordingAttached;
   const hasEvents = events.length > 0 || overlays.length > 0;
-  const getExportStatus = (hasSource: boolean): SessionExportOutput["status"] => {
-    if (hasPlayableFilm && hasSource) return "available";
-    if (hasMuxExportSource && hasSource) return "processing";
+  const rawVideoStatus: SessionExportOutput["status"] = hasPlayableFilm ? "available" : hasMuxAsset ? "building" : "ready";
+  const overlayVideoStatus: SessionExportOutput["status"] = hasOverlayFilm ? "available" : overlays.length ? "ready" : "failed";
+  const derivedFilmStatus = (hasSource: boolean): SessionExportOutput["status"] => {
+    if (!hasSource) return "failed";
 
-    return "waiting";
+    return "ready";
   };
   const exports: SessionExportOutput[] = [
     {
       label: sessionExportLabels.raw_video,
       sourceCount: hasMuxExportSource ? 1 : 0,
-      status: getExportStatus(true),
+      status: rawVideoStatus,
       type: "raw_video",
     },
     {
       label: sessionExportLabels.overlay_video,
       sourceCount: overlays.length,
-      status: getExportStatus(true),
+      status: overlayVideoStatus,
       type: "overlay_video",
     },
     {
       label: sessionExportLabels.shot_science_video,
       sourceCount: shots.length,
-      status: getExportStatus(true),
+      status: derivedFilmStatus(Boolean(shots.length)),
       type: "shot_science_video",
     },
     {
       label: sessionExportLabels.vertical_social_clip,
       sourceCount: clips.length,
-      status: getExportStatus(true),
+      status: derivedFilmStatus(Boolean(clips.length)),
       type: "vertical_social_clip",
     },
     {
       label: sessionExportLabels.player_report,
       sourceCount: shots.length + clips.length,
-      status: hasMuxExportSource || hasEvents || shots.length ? "processing" : "waiting",
+      status: hasMuxExportSource || hasEvents || shots.length ? "ready" : "failed",
       type: "player_report",
     },
     {
       label: sessionExportLabels.coach_report,
       sourceCount: events.length + shots.length,
-      status: hasMuxExportSource || hasEvents || shots.length ? "processing" : "waiting",
+      status: hasMuxExportSource || hasEvents || shots.length ? "ready" : "failed",
       type: "coach_report",
     },
   ];
@@ -3839,33 +3856,28 @@ export function RitualHome() {
 
         if (type === "raw_video") {
           playbackId = latestFilmPlaybackId;
-          status = latestFilmPlaybackId ? "available" : latestSession.muxAssetId ? "processing" : "waiting";
+          status = latestFilmPlaybackId ? "available" : latestSession.muxAssetId ? "building" : localFilmSrc ? "available" : "ready";
         } else if (type === "overlay_video") {
           playbackId = latestSession.overlayMuxPlaybackId;
           status = latestSession.overlayMuxPlaybackId
             ? "available"
-            : latestFilmPlaybackId
-              ? "processing"
-              : "waiting";
+            : latestSession.replayAnchors?.length
+              ? "ready"
+              : "failed";
         } else if (type === "shot_science_video") {
           const hasMakes = (latestSession.highlightClips ?? []).some((c) => c.type === "make");
-          playbackId = hasMakes ? latestFilmPlaybackId : undefined;
-          status = hasMakes && latestFilmPlaybackId ? "available" : hasMakes ? "processing" : "waiting";
+          playbackId = undefined;
+          status = hasMakes ? "ready" : "failed";
         } else {
-          // vertical_social_clip: uses overlay film
-          playbackId = latestSession.overlayMuxPlaybackId;
-          status = latestSession.overlayMuxPlaybackId
-            ? "available"
-            : latestFilmPlaybackId
-              ? "processing"
-              : "waiting";
+          playbackId = undefined;
+          status = latestSession.replayClips?.length ? "ready" : "failed";
         }
 
         const shareUrl = getMuxStreamUrl(playbackId);
-        const downloadUrl = getMuxDownloadUrl(playbackId);
-        const statusLabel = status === "available" ? "READY" : status === "processing" ? "PROCESSING" : "PREPARING";
+        const downloadUrl = getMuxDownloadUrl(playbackId) ?? (type === "raw_video" ? localFilmSrc : undefined);
+        const statusLabel = formatExportStatus(status);
         const readinessLabel = `${label} ${statusLabel}`;
-        return { type, label, status, shareUrl, downloadUrl, readinessLabel };
+        return { type, label, status, shareUrl, downloadUrl, readinessLabel, canDownload: canDownloadExport(type, playbackId, localFilmSrc) };
       })
     : [];
   const resultsSession = filmSession ?? save.activeSession ?? null;
@@ -7027,7 +7039,7 @@ export function RitualHome() {
                 <div className="axis-share-card-area">
                   {sessionCardGenerating ? (
                     <div className="axis-share-card-loading" aria-label="Generating session card">
-                      <span>GENERATING</span>
+                      <span>BUILDING</span>
                     </div>
                   ) : sessionCardUrl ? (
                     <button
@@ -7090,15 +7102,17 @@ export function RitualHome() {
                     >
                       <span className="axis-film-card-name">{film.label}</span>
                       <span className="axis-film-card-status">
-                        {film.status === "available" ? "READY" : film.status === "processing" ? "BUILDING" : "GENERATING"}
+                        {formatExportStatus(film.status)}
                       </span>
                       {film.status === "available" ? (
                         <button
                           className="axis-film-card-action"
-                          onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
+                          onClick={() =>
+                            void handleFilmAction(film.canDownload ? "download" : "share", film.type, film.shareUrl, film.downloadUrl)
+                          }
                           type="button"
                         >
-                          SHARE
+                          {film.canDownload ? "DOWNLOAD" : "SHARE"}
                         </button>
                       ) : null}
                     </article>
