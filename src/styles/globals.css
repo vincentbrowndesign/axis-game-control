@@ -599,6 +599,37 @@ h1 {
   text-transform: uppercase;
 }
 
+.axis-story-readiness {
+  border-block-start: 1px solid rgba(244, 244, 240, 0.06);
+  display: grid;
+  gap: 0.24rem;
+  padding: clamp(0.8rem, 2.2vw, 1rem) clamp(0.9rem, 2.5vw, 1.25rem) 0;
+}
+
+.axis-story-readiness strong,
+.axis-story-readiness em {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.axis-story-readiness strong {
+  color: rgba(244, 244, 240, 0.62);
+  font-size: clamp(1.1rem, 4vw, 1.8rem);
+  font-weight: 900;
+}
+
+.axis-story-readiness[data-ready="true"] strong {
+  color: var(--axis-live);
+}
+
+.axis-story-readiness em {
+  color: rgba(244, 244, 240, 0.36);
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
 .axis-share-card-area {
   padding: clamp(0.65rem, 2vw, 0.9rem) clamp(0.9rem, 2.5vw, 1.25rem);
 }
