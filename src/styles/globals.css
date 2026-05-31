@@ -306,6 +306,49 @@ h1 {
   z-index: 4;
 }
 
+/* Session panel: dock + post-session content */
+.axis-session-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Recording state: camera fills full available height, nothing else competes */
+.axis-camera-home[data-ritual-state="active"] {
+  grid-template-rows: 1fr auto;
+}
+
+/* Desktop: side-by-side — camera left, session panel right */
+@media (min-width: 768px) {
+  .axis-camera-home {
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: 1fr;
+    height: calc(100dvh - 1.5rem);
+    min-height: 0;
+  }
+
+  .axis-camera-broadcast {
+    grid-column: 1;
+    grid-row: 1;
+    height: 100%;
+  }
+
+  .axis-session-panel {
+    border-left: 1px solid rgba(244, 244, 240, 0.06);
+    grid-column: 2;
+    grid-row: 1;
+    height: 100%;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .axis-session-panel::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .axis-camera-broadcast {
   background: #000;
   border: 0;

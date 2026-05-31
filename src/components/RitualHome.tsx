@@ -2426,10 +2426,10 @@ function getMuxDownloadUrl(playbackId?: string) {
 }
 
 const exportFilmTypes: Array<{ type: SessionExportType; label: string }> = [
-  { type: "raw_video", label: "ORIGINAL FILM" },
-  { type: "overlay_video", label: "OVERLAY FILM" },
-  { type: "shot_science_video", label: "HIGHLIGHTS" },
-  { type: "vertical_social_clip", label: "SOCIAL" },
+  { type: "shot_science_video", label: "HIGHLIGHT REEL" },
+  { type: "vertical_social_clip", label: "STORY REEL" },
+  { type: "overlay_video", label: "OVERLAY REPLAY" },
+  { type: "raw_video", label: "FULL SESSION" },
 ];
 
 function getFilmPlaybackId(session?: Pick<SavedSession, "muxPlaybackId" | "recordingAttached"> | null) {
@@ -4179,7 +4179,7 @@ export function RitualHome() {
       trackId: primaryTrackingTrack.id,
     };
     setShotSuggestion(nextSuggestion);
-    triggerBroadcastMessage("SHOT DETECTED", undefined, "shot");
+    triggerBroadcastMessage("MOMENT FOUND", undefined, "shot");
   }, [
     identity,
     primaryTrackingTrack,
@@ -5517,7 +5517,7 @@ export function RitualHome() {
     if (shotFeedbackTimerRef.current) window.clearTimeout(shotFeedbackTimerRef.current);
     setShotFeedback(type === "make" ? "make" : "miss");
     shotFeedbackTimerRef.current = window.setTimeout(() => setShotFeedback(null), 2200);
-    triggerBroadcastMessage(type === "make" ? "MAKE" : "MISS", "SHOT SAVED", type === "make" ? "make" : "miss");
+    triggerBroadcastMessage(type === "make" ? "MAKE" : "MISS", "MOMENT SAVED", type === "make" ? "make" : "miss");
   }
 
   function recordGameAction(type: GameActionType) {
@@ -5962,14 +5962,14 @@ export function RitualHome() {
         {isLiveSurface && shotFeedback ? (
           <div className="axis-shot-result axis-overlay-layer" data-result={shotFeedback} key={`shot-result-${shotFeedback}`} aria-live="assertive">
             <strong className="axis-shot-result-label">{shotFeedback === "make" ? "MAKE" : "MISS"}</strong>
-            <span className="axis-shot-result-sub">SHOT SAVED</span>
+            <span className="axis-shot-result-sub">MOMENT SAVED</span>
           </div>
         ) : null}
 
         {/* Shot confirmation panel — slides up when confirmation needed */}
         {isLiveSurface && shotSuggestion?.needsConfirmation ? (
           <div className="axis-shot-panel axis-overlay-layer" aria-label="Shot confirmation">
-            <span className="axis-shot-panel-label">SHOT DETECTED</span>
+            <span className="axis-shot-panel-label">MOMENT FOUND</span>
             <div className="axis-shot-panel-actions">
               <button
                 className="axis-shot-panel-btn axis-shot-panel-btn-make"
@@ -6815,7 +6815,7 @@ export function RitualHome() {
         )}
 
         {!showAxisDebug ? (
-          <section className="axis-camera-home" aria-label="Camera">
+          <section className="axis-camera-home" aria-label="Camera" data-ritual-state={ritualState}>
             <div
               className="axis-camera-preview axis-camera-broadcast"
               data-rim-lock={rimEditMode ? "editing" : currentRimLock ? "locked" : save.activeSession ? "waiting" : "off"}
@@ -6934,6 +6934,7 @@ export function RitualHome() {
               ) : null}
               {renderAxisOverlayLayer(shouldShowPrimaryFilm ? "replay" : "live")}
             </div>
+            <div className="axis-session-panel">
             <section className="axis-broadcast-dock" aria-label="Actions">
               <div className="axis-broadcast-event-bar" data-shot-pending={shotSuggestion?.needsConfirmation ? "true" : undefined}>
                 {visibleWorkActions.map((action) => (
@@ -6971,7 +6972,7 @@ export function RitualHome() {
             </section>
 
             {/* Moments — first, before stats */}
-            {filmShots.length > 0 ? (
+            {ritualState === "complete" && filmShots.length > 0 ? (
               <section className="axis-moments-section" aria-label="Moments">
                 <header className="axis-moments-section-header">
                   <span className="axis-moments-section-label">MOMENTS</span>
@@ -7000,7 +7001,7 @@ export function RitualHome() {
             ) : null}
 
             {/* Story surface */}
-            {latestSession && resultsShotSummary.attempts > 0 ? (
+            {ritualState === "complete" && latestSession && resultsShotSummary.attempts > 0 ? (
               <section className="axis-share-surface" aria-label="Story">
                 <header className="axis-share-header">
                   <span className="axis-share-label">STORY</span>
@@ -7028,14 +7029,6 @@ export function RitualHome() {
                 <div className="axis-share-actions">
                   <button
                     className="axis-share-action axis-share-action-primary"
-                    disabled={!sessionCardUrl}
-                    onClick={() => void shareSessionItem("card")}
-                    type="button"
-                  >
-                    MY SESSION
-                  </button>
-                  <button
-                    className="axis-share-action"
                     disabled={!latestFilmPlaybackId && !latestSession.overlayMuxPlaybackId}
                     onClick={() => void shareSessionItem("highlight_reel")}
                     type="button"
@@ -7050,12 +7043,20 @@ export function RitualHome() {
                   >
                     DOWNLOAD
                   </button>
+                  <button
+                    className="axis-share-action"
+                    disabled={!sessionCardUrl}
+                    onClick={() => void shareSessionItem("card")}
+                    type="button"
+                  >
+                    SUMMARY CARD
+                  </button>
                 </div>
               </section>
             ) : null}
 
-            {/* Film — secondary, user-facing outputs only */}
-            {exportCenterFilms.filter((f) => f.type !== "overlay_video").length > 0 ? (
+            {/* Film — secondary, all export types */}
+            {ritualState === "complete" && exportCenterFilms.length > 0 ? (
               <section className="axis-export-center" aria-label="Film">
                 <header className="axis-export-center-header">
                   <span className="axis-export-center-label">FILM</span>
@@ -7066,34 +7067,31 @@ export function RitualHome() {
                   ) : null}
                 </header>
                 <div className="axis-film-strip">
-                  {exportCenterFilms
-                    .filter((film) => film.type !== "overlay_video")
-                    .map((film) => (
-                      <article
-                        className="axis-film-card"
-                        data-status={film.status}
-                        key={film.type}
-                      >
-                        <span className="axis-film-card-name">
-                          {film.type === "raw_video" ? "WATCH" : film.type === "shot_science_video" ? "MOMENTS" : "SHARE REEL"}
-                        </span>
-                        <span className="axis-film-card-status">
-                          {film.status === "available" ? "READY" : film.status === "processing" ? "PROCESSING" : "PREPARING"}
-                        </span>
-                        {film.status === "available" ? (
-                          <button
-                            className="axis-film-card-action"
-                            onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
-                            type="button"
-                          >
-                            SHARE
-                          </button>
-                        ) : null}
-                      </article>
-                    ))}
+                  {exportCenterFilms.map((film) => (
+                    <article
+                      className="axis-film-card"
+                      data-status={film.status}
+                      key={film.type}
+                    >
+                      <span className="axis-film-card-name">{film.label}</span>
+                      <span className="axis-film-card-status">
+                        {film.status === "available" ? "READY" : film.status === "processing" ? "BUILDING" : "GENERATING"}
+                      </span>
+                      {film.status === "available" ? (
+                        <button
+                          className="axis-film-card-action"
+                          onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
+                          type="button"
+                        >
+                          SHARE
+                        </button>
+                      ) : null}
+                    </article>
+                  ))}
                 </div>
               </section>
             ) : null}
+            </div>
           </section>
         ) : null}
 
