@@ -298,11 +298,11 @@ h1 {
   display: grid;
   gap: 0;
   grid-template-rows: minmax(0, 1fr) auto;
-  height: min(54rem, calc(100dvh - 6rem));
+  height: min(66rem, calc(100dvh - 1.5rem));
   isolation: isolate;
-  min-height: 34rem;
+  min-height: 36rem;
   position: sticky;
-  top: 0.75rem;
+  top: 0.5rem;
   z-index: 4;
 }
 
@@ -386,9 +386,9 @@ h1 {
 .axis-broadcast-dock {
   border-top: 1px solid rgba(244, 244, 240, 0.08);
   display: grid;
-  gap: 0.4rem;
-  grid-template-columns: minmax(0, 1fr) clamp(5.4rem, 12vw, 7.5rem);
-  padding: 0.5rem;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr) clamp(5rem, 11vw, 7rem);
+  padding: 0.3rem 0.45rem;
 }
 
 .axis-broadcast-event-bar {
@@ -400,15 +400,15 @@ h1 {
 .axis-broadcast-event-bar button {
   appearance: none;
   background: rgba(6, 6, 6, 0.6);
-  border: 1px solid rgba(244, 244, 240, 0.12);
-  color: var(--axis-muted);
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  color: rgba(244, 244, 240, 0.45);
   cursor: pointer;
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: clamp(0.6rem, 1.5vw, 0.82rem);
+  font-size: clamp(0.58rem, 1.4vw, 0.78rem);
   font-weight: 900;
   letter-spacing: 0.06em;
-  min-height: 2.35rem;
-  padding: 0.5rem 0.36rem;
+  min-height: 1.9rem;
+  padding: 0.35rem 0.32rem;
   text-transform: uppercase;
   touch-action: manipulation;
   transition: color 140ms ease, border-color 140ms ease;
@@ -437,11 +437,11 @@ h1 {
   color: var(--axis-ink);
   cursor: pointer;
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: clamp(0.7rem, 1.8vw, 0.95rem);
+  font-size: clamp(0.68rem, 1.7vw, 0.9rem);
   font-weight: 900;
   letter-spacing: 0.07em;
-  min-height: 2.35rem;
-  padding: 0.5rem 0.75rem;
+  min-height: 1.9rem;
+  padding: 0.35rem 0.7rem;
   text-transform: uppercase;
   touch-action: manipulation;
 }
@@ -655,6 +655,183 @@ h1 {
 
 .axis-share-action-primary:not(:disabled):active {
   background: rgba(168, 217, 51, 0.07);
+}
+
+/* ─── Film Strip ────────────────────────────── */
+
+.axis-film-strip {
+  border-top: 1px solid rgba(244, 244, 240, 0.07);
+  display: flex;
+  gap: 0.5rem;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  padding: clamp(0.65rem, 2vw, 0.9rem) clamp(0.7rem, 2.5vw, 1rem);
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.axis-film-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.axis-film-card {
+  background: rgba(244, 244, 240, 0.03);
+  border: 1px solid rgba(244, 244, 240, 0.09);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 clamp(140px, 42vw, 190px);
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: clamp(0.55rem, 1.5vw, 0.75rem);
+  scroll-snap-align: start;
+  transition: border-color 140ms;
+}
+
+.axis-film-card[data-status="available"] {
+  border-color: rgba(168, 217, 51, 0.22);
+}
+
+.axis-film-card-name {
+  color: rgba(244, 244, 240, 0.45);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.axis-film-card-status {
+  color: rgba(244, 244, 240, 0.25);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.axis-film-card[data-status="available"] .axis-film-card-status {
+  color: var(--axis-live);
+}
+
+.axis-film-card-action {
+  appearance: none;
+  background: rgba(168, 217, 51, 0.1);
+  border: 1px solid rgba(168, 217, 51, 0.4);
+  border-radius: 3px;
+  color: var(--axis-live);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin-top: auto;
+  padding: 0.3rem 0.5rem;
+  text-align: center;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  width: 100%;
+}
+
+.axis-film-card-action:active {
+  background: rgba(168, 217, 51, 0.18);
+}
+
+/* ─── Moments Section ────────────────────────── */
+
+.axis-moments-section {
+  border-top: 1px solid rgba(244, 244, 240, 0.06);
+}
+
+.axis-moments-section-header {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  padding: clamp(0.5rem, 1.5vw, 0.65rem) clamp(0.7rem, 2.5vw, 1rem) 0;
+}
+
+.axis-moments-section-label {
+  color: rgba(244, 244, 240, 0.9);
+  font-size: clamp(0.6rem, 1.4vw, 0.68rem);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.axis-moments-section-meta {
+  color: var(--axis-live);
+  font-size: clamp(0.55rem, 1.2vw, 0.62rem);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ─── Moments Strip ──────────────────────────── */
+
+.axis-moments-strip {
+  display: flex;
+  gap: 0.35rem;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  padding: clamp(0.55rem, 1.5vw, 0.75rem) clamp(0.7rem, 2.5vw, 1rem);
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.axis-moments-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.axis-moment-item {
+  align-items: center;
+  appearance: none;
+  background: rgba(244, 244, 240, 0.04);
+  border: 1px solid rgba(244, 244, 240, 0.09);
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 clamp(52px, 13vw, 64px);
+  flex-direction: column;
+  gap: 0.18rem;
+  justify-content: center;
+  min-height: clamp(56px, 14vw, 68px);
+  padding: 0.3rem 0.2rem;
+  scroll-snap-align: start;
+  touch-action: manipulation;
+  transition: border-color 120ms, background 120ms;
+}
+
+.axis-moment-item[data-type="make"] {
+  border-color: rgba(168, 217, 51, 0.28);
+}
+
+.axis-moment-item:active {
+  background: rgba(244, 244, 240, 0.08);
+}
+
+.axis-moment-number {
+  color: rgba(244, 244, 240, 0.85);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.axis-moment-item[data-type="make"] .axis-moment-number {
+  color: var(--axis-live);
+}
+
+.axis-moment-label {
+  color: rgba(244, 244, 240, 0.3);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.45rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.axis-moment-item[data-type="make"] .axis-moment-label {
+  color: rgba(168, 217, 51, 0.55);
 }
 
 /* ─── Export Center ──────────────────────────── */
@@ -2596,20 +2773,79 @@ h1 {
 }
 
 .axis-rim-lock-prompt {
-  background: rgba(6, 6, 6, 0.68);
-  border: 1px solid rgba(168, 217, 51, 0.24);
+  animation: axis-rim-pulse 2.4s ease-in-out infinite;
+  background: rgba(6, 6, 6, 0.72);
+  border: 1px solid rgba(168, 217, 51, 0.35);
+  border-radius: 3px;
   color: var(--axis-live);
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 900;
   left: 50%;
-  letter-spacing: 0.08em;
-  padding: 0.46rem 0.58rem;
+  letter-spacing: 0.18em;
+  padding: 0.52rem 0.9rem;
+  pointer-events: none;
   position: absolute;
   text-transform: uppercase;
-  top: 50%;
+  top: 35%;
   transform: translate(-50%, -50%);
   z-index: 3;
+}
+
+@keyframes axis-rim-pulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
+/* Rim label — attached below rim ring */
+.axis-rim-ring-label {
+  align-items: center;
+  display: flex;
+  gap: 0.3rem;
+  left: 50%;
+  pointer-events: all;
+  position: absolute;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 4;
+}
+
+.axis-rim-ring-label-text {
+  background: rgba(6, 6, 6, 0.82);
+  border-radius: 2px;
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.axis-rim-ring-label-text[data-state="locked"] {
+  color: rgba(244, 244, 240, 0.6);
+}
+
+.axis-rim-ring-label-btn {
+  appearance: none;
+  background: rgba(6, 6, 6, 0.82);
+  border: 1px solid rgba(168, 217, 51, 0.45);
+  border-radius: 2px;
+  color: var(--axis-live);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.48rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  padding: 3px 7px;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-rim-ring-label-btn-muted {
+  border-color: rgba(244, 244, 240, 0.2);
+  color: rgba(244, 244, 240, 0.55);
 }
 
 .axis-outdoor-tracking-readout {

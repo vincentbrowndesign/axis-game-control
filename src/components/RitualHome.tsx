@@ -6347,6 +6347,7 @@ export function RitualHome() {
         ...current,
         [completedSessionWithExportQueue.id]: filmPreviewUrl,
       }));
+      setProductSurface("overlay");
       void queueFinalizeWork(completedSessionWithExportQueue);
       void uploadSessionFilm(completedSessionWithExportQueue, filmCapture.blob);
       const capturedBlob = filmCapture.blob;
@@ -6796,8 +6797,16 @@ export function RitualHome() {
           <header className="axis-app-store-intro">
             <div>
               <p className="axis-meta">Axis</p>
-              <h1>Camera</h1>
-              <span>Record. Axis sees.</span>
+              <h1>{athleteLabel}</h1>
+              {latestSession ? (
+                <span>
+                  {currentStreak > 0 ? `${currentStreak} day streak` : "Start your streak"}
+                  {" · "}
+                  {formatDuration(latestSession.durationSeconds)} last session
+                </span>
+              ) : (
+                <span>Your work starts here.</span>
+              )}
             </div>
             <button className="axis-sign-out" onClick={signOut} type="button">
               Sign out
@@ -6942,7 +6951,7 @@ export function RitualHome() {
               {ritualState === "active" ? (
                 isRecordingAttached ? (
                   <button className="axis-broadcast-primary" onClick={checkOut} type="button">
-                    End
+                    CHECK OUT
                   </button>
                 ) : (
                   <button className="axis-broadcast-primary" onClick={handleSessionPrimaryAction} type="button">
@@ -6956,16 +6965,45 @@ export function RitualHome() {
                   onClick={ritualState === "saving" ? undefined : checkIn}
                   type="button"
                 >
-                  {ritualState === "saving" ? "Saving" : "Start"}
+                  {ritualState === "saving" ? "Saving" : "CHECK IN"}
                 </button>
               )}
             </section>
 
-            {/* Share Surface */}
+            {/* Moments — first, before stats */}
+            {filmShots.length > 0 ? (
+              <section className="axis-moments-section" aria-label="Moments">
+                <header className="axis-moments-section-header">
+                  <span className="axis-moments-section-label">MOMENTS</span>
+                  <span className="axis-moments-section-meta">
+                    {filmShots.filter((s) => s.type === "make").length} MAKES
+                  </span>
+                </header>
+                <div className="axis-moments-strip">
+                  {filmShots.map((shot, index) => {
+                    const anchor = filmSession ? findShotAnchor(filmSession, shot) : undefined;
+                    return (
+                      <button
+                        className="axis-moment-item"
+                        data-type={shot.type}
+                        key={shot.shotId}
+                        onClick={() => { if (anchor) jumpToReplayAnchor(anchor); }}
+                        type="button"
+                      >
+                        <span className="axis-moment-number">{index + 1}</span>
+                        <span className="axis-moment-label">{shot.type === "make" ? "MAKE" : "MISS"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            {/* Story surface */}
             {latestSession && resultsShotSummary.attempts > 0 ? (
-              <section className="axis-share-surface" aria-label="Share">
+              <section className="axis-share-surface" aria-label="Story">
                 <header className="axis-share-header">
-                  <span className="axis-share-label">SHARE</span>
+                  <span className="axis-share-label">STORY</span>
                   <span className="axis-share-meta">
                     {resultsShotSummary.makes} {resultsShotSummary.makes === 1 ? "MAKE" : "MAKES"} · {resultsShotSummary.attempts > 0 ? `${Math.round(resultsShotSummary.fieldGoalPercentage)}% FG` : null}
                   </span>
@@ -6994,15 +7032,7 @@ export function RitualHome() {
                     onClick={() => void shareSessionItem("card")}
                     type="button"
                   >
-                    SESSION CARD
-                  </button>
-                  <button
-                    className="axis-share-action"
-                    disabled={!latestFilmPlaybackId && !latestSession.overlayMuxPlaybackId}
-                    onClick={() => void shareSessionItem("best_shots")}
-                    type="button"
-                  >
-                    BEST SHOTS
+                    MY SESSION
                   </button>
                   <button
                     className="axis-share-action"
@@ -7012,15 +7042,23 @@ export function RitualHome() {
                   >
                     HIGHLIGHT REEL
                   </button>
+                  <button
+                    className="axis-share-action"
+                    disabled={!getMuxDownloadUrl(latestFilmPlaybackId) && !localFilmSrc}
+                    onClick={() => void handleFilmAction("download", "raw_video", undefined, getMuxDownloadUrl(latestFilmPlaybackId) ?? localFilmSrc)}
+                    type="button"
+                  >
+                    DOWNLOAD
+                  </button>
                 </div>
               </section>
             ) : null}
 
-            {/* Export Center */}
-            {exportCenterFilms.length > 0 ? (
-              <section className="axis-export-center" aria-label="Export">
+            {/* Film — secondary, user-facing outputs only */}
+            {exportCenterFilms.filter((f) => f.type !== "overlay_video").length > 0 ? (
+              <section className="axis-export-center" aria-label="Film">
                 <header className="axis-export-center-header">
-                  <span className="axis-export-center-label">EXPORT</span>
+                  <span className="axis-export-center-label">FILM</span>
                   {latestSession ? (
                     <span className="axis-export-center-meta">
                       {latestSession.mode ?? "Training"} · {formatDuration(latestSession.durationSeconds)}
@@ -7028,45 +7066,32 @@ export function RitualHome() {
                   ) : null}
                 </header>
                 <div className="axis-film-strip">
-                  {exportCenterFilms.map((film) => (
-                    <article
-                      className="axis-film-card"
-                      data-status={film.status}
-                      key={film.type}
-                    >
-                      <span className="axis-film-card-name">{film.label}</span>
-                      <span className="axis-film-card-status">{film.status === "available" ? "READY" : film.status === "processing" ? "PROCESSING" : "PREPARING"}</span>
-                      {film.status === "available" ? (
-                        <button
-                          className="axis-film-card-action"
-                          onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
-                          type="button"
-                        >
-                          SHARE
-                        </button>
-                      ) : null}
-                    </article>
-                  ))}
+                  {exportCenterFilms
+                    .filter((film) => film.type !== "overlay_video")
+                    .map((film) => (
+                      <article
+                        className="axis-film-card"
+                        data-status={film.status}
+                        key={film.type}
+                      >
+                        <span className="axis-film-card-name">
+                          {film.type === "raw_video" ? "WATCH" : film.type === "shot_science_video" ? "MOMENTS" : "SHARE REEL"}
+                        </span>
+                        <span className="axis-film-card-status">
+                          {film.status === "available" ? "READY" : film.status === "processing" ? "PROCESSING" : "PREPARING"}
+                        </span>
+                        {film.status === "available" ? (
+                          <button
+                            className="axis-film-card-action"
+                            onClick={() => void handleFilmAction("share", film.type, film.shareUrl, film.downloadUrl)}
+                            type="button"
+                          >
+                            SHARE
+                          </button>
+                        ) : null}
+                      </article>
+                    ))}
                 </div>
-                {filmShots.length > 0 ? (
-                  <div className="axis-moments-strip">
-                    {filmShots.map((shot, index) => {
-                      const anchor = filmSession ? findShotAnchor(filmSession, shot) : undefined;
-                      return (
-                        <button
-                          className="axis-moment-item"
-                          data-type={shot.type}
-                          key={shot.shotId}
-                          onClick={() => anchor ? jumpToReplayAnchor(anchor) : undefined}
-                          type="button"
-                        >
-                          <span className="axis-moment-number">{index + 1}</span>
-                          <span className="axis-moment-label">{shot.type === "make" ? "M" : "MS"}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
               </section>
             ) : null}
           </section>
