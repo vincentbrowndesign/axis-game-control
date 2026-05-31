@@ -3966,10 +3966,30 @@ export function RitualHome() {
   const performanceImprovementLabel =
     performanceImprovement === null ? "Baseline" : `${performanceImprovement >= 0 ? "+" : ""}${performanceImprovement}% FG`;
   const latestClipAnchor = latestClipAnchors[0] ?? latestFilmTimelineAnchors[0];
-  const storyPlaybackId = filmSession?.overlayMuxPlaybackId ?? latestFilmPlaybackId;
-  const storyShareUrl = getMuxStreamUrl(storyPlaybackId);
-  const storyDownloadUrl = getMuxDownloadUrl(storyPlaybackId) ?? localFilmSrc;
-  const storyVideoAvailable = Boolean(storyPlaybackId || localFilmSrc);
+  const storyAsset =
+    filmSession?.overlayMuxPlaybackId
+      ? {
+          downloadUrl: getMuxDownloadUrl(filmSession.overlayMuxPlaybackId),
+          kind: "video" as const,
+          label: "Overlay Replay",
+          shareUrl: getMuxStreamUrl(filmSession.overlayMuxPlaybackId),
+        }
+      : latestFilmPlaybackId
+        ? {
+            downloadUrl: getMuxDownloadUrl(latestFilmPlaybackId),
+            kind: "video" as const,
+            label: "Story Reel",
+            shareUrl: getMuxStreamUrl(latestFilmPlaybackId),
+          }
+        : sessionCardUrl
+          ? {
+              downloadUrl: sessionCardUrl,
+              kind: "summary" as const,
+              label: "Summary Card",
+              shareUrl: sessionCardUrl,
+            }
+          : null;
+  const storyVideoAvailable = storyAsset?.kind === "video";
   const summaryReady = Boolean(sessionCardUrl);
   const storyStateLabel = storyVideoAvailable
     ? "Story Ready"
@@ -3981,13 +4001,13 @@ export function RitualHome() {
   const storyDetailLabel = storyVideoAvailable
     ? "Watch, share, or save"
     : summaryReady
-      ? "Video not ready yet. Summary ready."
+      ? "Video not ready yet. Summary Card ready."
       : sessionCardGenerating
         ? "Summary preparing"
-        : "Video not ready yet. Summary unavailable.";
+        : "Video not ready yet. Summary Card unavailable.";
   const storyCanWatch = Boolean(storyVideoAvailable || totalTimelineMomentCount);
-  const storyCanShare = Boolean(storyShareUrl || summaryReady);
-  const storyCanSave = Boolean(storyDownloadUrl || summaryReady);
+  const storyCanShare = Boolean(storyAsset);
+  const storyCanSave = Boolean(storyAsset);
   const getShotForMoment = (anchor: ReplayAnchor) =>
     filmShots.find(
       (shot) =>
@@ -6264,7 +6284,7 @@ export function RitualHome() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "axis-session.png";
+      a.download = "axis-summary-card.png";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -6275,17 +6295,59 @@ export function RitualHome() {
   }
 
   async function shareCompletedStory() {
-    if (storyShareUrl) {
-      await handleFilmAction("share", "raw_video", storyShareUrl, undefined);
+    if (!storyAsset) return;
+
+    if (storyAsset.kind === "video" && storyAsset.shareUrl) {
+      if (typeof navigator.share === "function") {
+        try {
+          await navigator.share({ title: "Axis Story", url: storyAsset.shareUrl });
+          return;
+        } catch {
+          // user cancelled
+          return;
+        }
+      }
+
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(storyAsset.shareUrl);
+        setCopiedFilmType("raw_video");
+        window.setTimeout(() => setCopiedFilmType(null), 2000);
+        return;
+      }
+
+      if (storyAsset.downloadUrl) {
+        await handleFilmAction("download", "raw_video", undefined, storyAsset.downloadUrl);
+      }
       return;
     }
 
-    if (sessionCardUrl) await shareSessionItem("card");
+    if (!sessionCardUrl) return;
+
+    try {
+      const response = await fetch(sessionCardUrl);
+      const blob = await response.blob();
+      const file = new File([blob], "axis-summary-card.png", { type: "image/png" });
+      const text = "Axis Summary Card";
+
+      if (
+        typeof navigator.share === "function" &&
+        (typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] }))
+      ) {
+        await navigator.share({ files: [file], title: "Axis Summary Card", text });
+        return;
+      }
+    } catch {
+      // fallback below
+    }
+
+    await downloadSessionCard();
   }
 
   async function saveCompletedStory() {
-    if (storyDownloadUrl) {
-      await handleFilmAction("download", "raw_video", undefined, storyDownloadUrl);
+    if (!storyAsset) return;
+
+    if (storyAsset.kind === "video" && storyAsset.downloadUrl) {
+      await handleFilmAction("download", "raw_video", undefined, storyAsset.downloadUrl);
       return;
     }
 
