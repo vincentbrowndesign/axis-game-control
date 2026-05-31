@@ -46,6 +46,7 @@ type OverlayKey =
 type OverlaySettings = Record<OverlayKey, boolean>;
 type WorkOperatorMode = "coach" | "director" | "parent" | "player";
 type WorkDetectionState = "ACTIVE" | "IDLE" | "MOVING" | "SHOOTING";
+type RimDragAction = "move" | "resize-nw" | "resize-ne" | "resize-sw" | "resize-se";
 type WatchEventType = "assist" | "make" | "miss" | "rebound" | "shot_attempt" | "turnover";
 type SessionExportType =
   | "coach_report"
@@ -2672,6 +2673,15 @@ function normalizeRimLock(lock: unknown): RimLock | undefined {
   };
 }
 
+function buildRimPolygon(center: { x: number; y: number }, width: number, height: number) {
+  return [
+    { x: Math.max(0, center.x - width / 2), y: Math.max(0, center.y - height / 2) },
+    { x: Math.min(1, center.x + width / 2), y: Math.max(0, center.y - height / 2) },
+    { x: Math.min(1, center.x + width / 2), y: Math.min(1, center.y + height / 2) },
+    { x: Math.max(0, center.x - width / 2), y: Math.min(1, center.y + height / 2) },
+  ];
+}
+
 function formatCameraState(state: unknown) {
   const normalizedState = normalizeCameraState(state);
 
@@ -2996,6 +3006,17 @@ export function RitualHome() {
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [reviewMessage, setReviewMessage] = useState("");
   const lastShotSuggestionAtRef = useRef(0);
+  const [rimEditMode, setRimEditMode] = useState(false);
+  const [rimEditModeRim, setRimEditModeRim] = useState<RimLock | null>(null);
+  const rimDragRef = useRef<{
+    action: RimDragAction;
+    pointerId: number;
+    startPointerX: number;
+    startPointerY: number;
+    startRimCenter: { x: number; y: number };
+    startRimWidth: number;
+    startRimHeight: number;
+  } | null>(null);
 
   function triggerBroadcastMessage(text: string, subtext?: string) {
     if (broadcastTimerRef.current) window.clearTimeout(broadcastTimerRef.current);
@@ -4083,6 +4104,7 @@ export function RitualHome() {
         replayAnchors: [sessionStartAnchor],
         replayClips: [],
         replayEvents: [],
+        rimLock: save.sessions[0]?.rimLock,
         shotEvents: [],
         timeline: [],
       },
@@ -4092,6 +4114,8 @@ export function RitualHome() {
     setSave(nextSave);
     setNow(Date.now());
     setRitualState("active");
+    setRimEditMode(false);
+    setRimEditModeRim(null);
     setLatestSavedSessionId(null);
     setActiveView("session");
     setIsReviewOpen(false);
@@ -5109,42 +5133,182 @@ export function RitualHome() {
     }));
   }
 
-  function handleRimLockTap(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!save.activeSession || save.activeSession.rimLock || shouldShowPrimaryFilm) return;
+  function handleCameraPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!save.activeSession || shouldShowPrimaryFilm) return;
 
     const bounds = event.currentTarget.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
 
-    const center = {
-      x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
-      y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
-    };
-    const width = rimGuideBox.width;
-    const height = rimGuideBox.height;
-    const polygon = [
-      { x: Math.max(0, center.x - width / 2), y: Math.max(0, center.y - height / 2) },
-      { x: Math.min(1, center.x + width / 2), y: Math.max(0, center.y - height / 2) },
-      { x: Math.min(1, center.x + width / 2), y: Math.min(1, center.y + height / 2) },
-      { x: Math.max(0, center.x - width / 2), y: Math.min(1, center.y + height / 2) },
+    const normX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    const normY = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
+
+    // No rim at all — place a new draft rim at tap position
+    if (!rimEditModeRim && !save.activeSession.rimLock) {
+      const center = { x: normX, y: normY };
+      const newRim: RimLock = {
+        cameraDirection: savedCameraDirection,
+        center,
+        createdAt: new Date().toISOString(),
+        height: rimGuideBox.height,
+        id: `rim:draft:${Date.now()}`,
+        polygon: buildRimPolygon(center, rimGuideBox.width, rimGuideBox.height),
+        sessionId: save.activeSession.id,
+        width: rimGuideBox.width,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      rimDragRef.current = {
+        action: "move",
+        pointerId: event.pointerId,
+        startPointerX: normX,
+        startPointerY: normY,
+        startRimCenter: center,
+        startRimWidth: rimGuideBox.width,
+        startRimHeight: rimGuideBox.height,
+      };
+      setRimEditMode(true);
+      setRimEditModeRim(newRim);
+      return;
+    }
+
+    // In edit mode — detect drag zone (corner handles vs body)
+    if (!rimEditMode || !rimEditModeRim) return;
+
+    const rim = rimEditModeRim;
+    const cx = rim.center.x;
+    const cy = rim.center.y;
+    const hw = rim.width / 2;
+    const hh = rim.height / 2;
+    const handleThreshold = Math.max(0.04, rim.width * 0.22);
+
+    const corners: Array<[RimDragAction, number, number]> = [
+      ["resize-nw", cx - hw, cy - hh],
+      ["resize-ne", cx + hw, cy - hh],
+      ["resize-sw", cx - hw, cy + hh],
+      ["resize-se", cx + hw, cy + hh],
     ];
+
+    for (const [action, cornerX, cornerY] of corners) {
+      if (Math.abs(normX - cornerX) < handleThreshold && Math.abs(normY - cornerY) < handleThreshold) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        rimDragRef.current = {
+          action,
+          pointerId: event.pointerId,
+          startPointerX: normX,
+          startPointerY: normY,
+          startRimCenter: rim.center,
+          startRimWidth: rim.width,
+          startRimHeight: rim.height,
+        };
+        return;
+      }
+    }
+
+    // Hit the rim body — drag to move
+    const bodyPad = 0.025;
+    if (
+      normX > cx - hw - bodyPad &&
+      normX < cx + hw + bodyPad &&
+      normY > cy - hh - bodyPad &&
+      normY < cy + hh + bodyPad
+    ) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      rimDragRef.current = {
+        action: "move",
+        pointerId: event.pointerId,
+        startPointerX: normX,
+        startPointerY: normY,
+        startRimCenter: rim.center,
+        startRimWidth: rim.width,
+        startRimHeight: rim.height,
+      };
+    }
+  }
+
+  function handleCameraPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!rimDragRef.current || rimDragRef.current.pointerId !== event.pointerId) return;
+    if (!rimEditModeRim) return;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+
+    const normX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    const normY = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
+    const { action, startPointerX, startPointerY, startRimCenter, startRimWidth, startRimHeight } = rimDragRef.current;
+    const dx = normX - startPointerX;
+    const dy = normY - startPointerY;
+
+    let newCenter = { ...startRimCenter };
+    let newWidth = startRimWidth;
+    let newHeight = startRimHeight;
+
+    if (action === "move") {
+      newCenter = {
+        x: Math.max(newWidth / 2, Math.min(1 - newWidth / 2, startRimCenter.x + dx)),
+        y: Math.max(newHeight / 2, Math.min(1 - newHeight / 2, startRimCenter.y + dy)),
+      };
+    } else if (action === "resize-se") {
+      newWidth = Math.max(0.04, Math.min(0.5, startRimWidth + dx * 2));
+      newHeight = Math.max(0.02, Math.min(0.3, startRimHeight + dy * 2));
+    } else if (action === "resize-sw") {
+      newWidth = Math.max(0.04, Math.min(0.5, startRimWidth - dx * 2));
+      newHeight = Math.max(0.02, Math.min(0.3, startRimHeight + dy * 2));
+    } else if (action === "resize-nw") {
+      newWidth = Math.max(0.04, Math.min(0.5, startRimWidth - dx * 2));
+      newHeight = Math.max(0.02, Math.min(0.3, startRimHeight - dy * 2));
+    } else if (action === "resize-ne") {
+      newWidth = Math.max(0.04, Math.min(0.5, startRimWidth + dx * 2));
+      newHeight = Math.max(0.02, Math.min(0.3, startRimHeight - dy * 2));
+    }
+
+    setRimEditModeRim({
+      ...rimEditModeRim,
+      center: newCenter,
+      width: newWidth,
+      height: newHeight,
+      polygon: buildRimPolygon(newCenter, newWidth, newHeight),
+    });
+  }
+
+  function handleCameraPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    if (rimDragRef.current?.pointerId === event.pointerId) {
+      rimDragRef.current = null;
+    }
+  }
+
+  function lockRim() {
+    if (!rimEditModeRim || !save.activeSession) return;
+    const rim = rimEditModeRim;
     const rimLock: RimLock = {
       cameraDirection: savedCameraDirection,
-      center,
+      center: rim.center,
       createdAt: new Date().toISOString(),
-      height,
+      height: rim.height,
       id: `rim:${save.activeSession.id}:${Date.now()}`,
-      polygon,
+      polygon: buildRimPolygon(rim.center, rim.width, rim.height),
       sessionId: save.activeSession.id,
-      width,
+      width: rim.width,
     };
-    const nextSave = {
-      ...save,
-      activeSession: {
-        ...save.activeSession,
-        rimLock,
-      },
-    };
+    const nextSave = { ...save, activeSession: { ...save.activeSession, rimLock } };
+    writeSave(nextSave);
+    setSave(nextSave);
+    setRimEditModeRim(null);
+    setRimEditMode(false);
+    triggerBroadcastMessage("RIM LOCATED");
+  }
 
+  function adjustRim() {
+    const rim = save.activeSession?.rimLock;
+    if (!rim) return;
+    setRimEditModeRim({ ...rim });
+    setRimEditMode(true);
+  }
+
+  function clearRim() {
+    rimDragRef.current = null;
+    setRimEditModeRim(null);
+    setRimEditMode(false);
+    if (!save.activeSession) return;
+    const nextSave = { ...save, activeSession: { ...save.activeSession, rimLock: undefined } };
     writeSave(nextSave);
     setSave(nextSave);
   }
@@ -5206,25 +5370,45 @@ export function RitualHome() {
           </div>
         ) : null}
 
-        {/* Rim ring \u2014 no label, no dimensions */}
-        {currentRimLock ? (
-          <div className="axis-rim-tracking-overlay axis-overlay-layer" aria-label="Rim">
-            <div
-              className="axis-rim-track-ring"
-              data-locked="true"
-              style={{
-                height: `${currentRimLock.height * 100}%`,
-                left: `${(currentRimLock.center.x - currentRimLock.width / 2) * 100}%`,
-                top: `${(currentRimLock.center.y - currentRimLock.height / 2) * 100}%`,
-                width: `${currentRimLock.width * 100}%`,
-              }}
-            />
-          </div>
-        ) : isLiveSurface && save.activeSession ? (
-          <div className="axis-rim-lock-prompt axis-overlay-layer" aria-label="Rim lock prompt">
-            Tap rim
-          </div>
-        ) : null}
+        {/* Rim ring \u2014 three states: not-set / ready (editing) / locked */}
+        {isLiveSurface && (() => {
+          const displayRim = rimEditMode && rimEditModeRim ? rimEditModeRim : currentRimLock;
+
+          if (!displayRim && save.activeSession) {
+            return (
+              <div className="axis-rim-lock-prompt axis-overlay-layer" aria-label="Rim">
+                RIM NOT SET
+              </div>
+            );
+          }
+
+          if (!displayRim) return null;
+
+          return (
+            <div className="axis-rim-tracking-overlay axis-overlay-layer" aria-label="Rim">
+              <div
+                className="axis-rim-track-ring"
+                data-edit={rimEditMode ? "true" : undefined}
+                data-locked={!rimEditMode ? "true" : undefined}
+                style={{
+                  height: `${displayRim.height * 100}%`,
+                  left: `${(displayRim.center.x - displayRim.width / 2) * 100}%`,
+                  top: `${(displayRim.center.y - displayRim.height / 2) * 100}%`,
+                  width: `${displayRim.width * 100}%`,
+                }}
+              >
+                {rimEditMode ? (
+                  <>
+                    <span className="axis-rim-handle axis-rim-handle-nw" />
+                    <span className="axis-rim-handle axis-rim-handle-ne" />
+                    <span className="axis-rim-handle axis-rim-handle-sw" />
+                    <span className="axis-rim-handle axis-rim-handle-se" />
+                  </>
+                ) : null}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Replay: shot trajectory */}
         {isReplaySurface &&
@@ -6003,9 +6187,12 @@ export function RitualHome() {
           <section className="axis-camera-home" aria-label="Camera">
             <div
               className="axis-camera-preview axis-camera-broadcast"
-              data-rim-lock={currentRimLock ? "locked" : save.activeSession ? "waiting" : "off"}
+              data-rim-lock={rimEditMode ? "editing" : currentRimLock ? "locked" : save.activeSession ? "waiting" : "off"}
               data-state={cameraStream ? "attached" : "offline"}
-              onPointerDown={handleRimLockTap}
+              onPointerDown={handleCameraPointerDown}
+              onPointerMove={handleCameraPointerMove}
+              onPointerUp={handleCameraPointerUp}
+              onPointerCancel={handleCameraPointerUp}
             >
               {shouldShowPrimaryFilm && latestFilmPlaybackId && filmSession ? (
                 <MuxPlayer
@@ -6038,6 +6225,32 @@ export function RitualHome() {
               {renderAxisOverlayLayer(shouldShowPrimaryFilm ? "replay" : "live")}
             </div>
             <section className="axis-broadcast-dock" aria-label="Actions">
+              {save.activeSession ? (
+                <div className="axis-rim-strip">
+                  <span
+                    className="axis-rim-strip-label"
+                    data-state={rimEditMode ? "ready" : currentRimLock ? "locked" : "not-set"}
+                  >
+                    {rimEditMode ? "RIM READY" : currentRimLock ? "RIM LOCKED" : "RIM NOT SET"}
+                  </span>
+                  <div className="axis-rim-strip-actions">
+                    {rimEditMode ? (
+                      <>
+                        <button className="axis-rim-strip-btn axis-rim-strip-btn-primary" onClick={lockRim} type="button">
+                          Lock Rim
+                        </button>
+                        <button className="axis-rim-strip-btn" onClick={clearRim} type="button">
+                          Clear
+                        </button>
+                      </>
+                    ) : currentRimLock ? (
+                      <button className="axis-rim-strip-btn" onClick={adjustRim} type="button">
+                        Adjust
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               <div className="axis-broadcast-event-bar">
                 {visibleWorkActions.map((action) => (
                   <button
