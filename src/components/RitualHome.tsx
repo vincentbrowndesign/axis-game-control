@@ -84,12 +84,12 @@ const filmWatchGroups: Array<{ label: string; type: WatchEventType }> = [
   { label: "WATCH TURNOVERS", type: "turnover" },
 ];
 const sessionExportLabels: Record<SessionExportType, string> = {
-  coach_report: "Coach Report",
-  overlay_video: "Overlay Video",
-  player_report: "Player Report",
-  raw_video: "Raw Video",
-  shot_science_video: "Shot Science Video",
-  vertical_social_clip: "Vertical Social Clip",
+  coach_report: "Share",
+  overlay_video: "Story Ready",
+  player_report: "Save",
+  raw_video: "Watch",
+  shot_science_video: "Story Ready",
+  vertical_social_clip: "Share",
 };
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
@@ -769,14 +769,14 @@ function formatCount(count: number, singular: string, plural = `${singular}s`) {
 }
 
 function formatTrackingStatus(status: string) {
-  if (status === "lost") return "TRACK LOST";
-  if (status === "recovered") return "TRACK RECOVERED";
+  if (status === "lost") return "LOST";
+  if (status === "recovered") return "SAVED";
 
-  return "TRACKING";
+  return "ACTIVE";
 }
 
 function formatPlayerTrackStatus(track: PlayerTrack) {
-  return track.status === "lost" ? "LOST" : "TRACKED";
+  return track.status === "lost" ? "LOST" : "ACTIVE";
 }
 
 function formatPlayerMovementState(track: PlayerTrack) {
@@ -1435,7 +1435,7 @@ function createReplayEvent(
     left_frame: "Left frame",
     movement_spike: "Movement spike",
     recovered: "Track recovered",
-    tracking_interruption: "Tracking interrupted",
+    tracking_interruption: "Moment interrupted",
   };
 
   return {
@@ -2268,14 +2268,14 @@ function createSessionSummaryLayer(durationSeconds: number, raw: SessionRawMeasu
     sessionLength: formatDuration(safeDuration),
     trackingQuality:
       trackingRatio >= 0.9 && raw.lost === 0
-        ? "Tracking stable"
+        ? "Movement saved"
         : trackingRatio >= 0.6
-          ? "Tracking partial"
+          ? "Movement saved"
         : raw.recovered > 0
-          ? "Tracking recovered"
-          : raw.lost > 0
-            ? "Tracking interrupted"
-            : "Tracking waiting",
+          ? "Moment saved"
+        : raw.lost > 0
+            ? "Moment interrupted"
+            : "Movement waiting",
     visibility:
       visibilityRatio >= 0.8
         ? "Visible most of session"
@@ -2524,10 +2524,10 @@ function canDownloadExport(type: SessionExportType, playbackId?: string, localFi
 }
 
 const exportFilmTypes: Array<{ type: SessionExportType; label: string }> = [
-  { type: "shot_science_video", label: "HIGHLIGHT REEL" },
-  { type: "vertical_social_clip", label: "STORY REEL" },
-  { type: "overlay_video", label: "OVERLAY REPLAY" },
-  { type: "raw_video", label: "FULL SESSION" },
+  { type: "shot_science_video", label: "Story Ready" },
+  { type: "vertical_social_clip", label: "Share" },
+  { type: "overlay_video", label: "Story Ready" },
+  { type: "raw_video", label: "Watch" },
 ];
 
 function getFilmPlaybackId(session?: Pick<SavedSession, "muxPlaybackId" | "recordingAttached"> | null) {
@@ -2567,12 +2567,12 @@ function formatAthleteGrowth(memory: AthleteMemory) {
 }
 
 function formatTrackingTimelineEvent(sample: SessionTimelineSample) {
-  if (sample.trackingLost) return "Track lost";
-  if (sample.trackingRecovered) return "Track recovered";
+  if (sample.trackingLost) return "Moment interrupted";
+  if (sample.trackingRecovered) return "Moment saved";
   if (sample.entered) return "Entered frame";
   if (sample.exited) return "Exited frame";
 
-  return "Tracking saved";
+  return "Saved";
 }
 
 function formatShotEvent(event: ShotEvent) {
@@ -2783,13 +2783,13 @@ function createAxisCapabilityPipeline({
   return [
     {
       capability: "Interpretation, summaries, reports",
-      outputs: ["Player Report", "Coach Report"],
+      outputs: ["Story Ready", "Share"],
       provider: "openai",
       sourceCount: events.length + shots.length,
       status: hasEvents ? "ready" : "failed",
     },
     {
-      capability: "Detection",
+      capability: "Moments Found",
       outputs: ["Player", "Ball", "Hoop"],
       provider: "roboflow",
       sourceCount: Number(hasPlayableFilm || hasMuxAsset),
@@ -2803,15 +2803,15 @@ function createAxisCapabilityPipeline({
       status: detectionStatus(hasTrackedPlayer || hasBallSignal || hasHoopSignal),
     },
     {
-      capability: "Identity persistence",
-      outputs: ["Stable Athlete Track", "Tracking Recovery", "Session Measurements"],
+      capability: "Moments",
+      outputs: ["Saved", "Ready"],
       provider: "bytetrack",
       sourceCount: participantCount || Number(hasTrackedPlayer),
       status: detectionStatus(hasTrackedPlayer),
     },
     {
       capability: "Video pipeline, playback, export factory",
-      outputs: ["Raw Video", "Overlay Video", "Shot Science Video", "Vertical Social Clip", "Player Report", "Coach Report"],
+      outputs: ["Watch", "Story Ready", "Share", "Save"],
       provider: "mux",
       sourceCount: Number(hasMuxAsset) + clips.length,
       status: videoStatus,
@@ -3971,14 +3971,14 @@ export function RitualHome() {
       ? {
           downloadUrl: getMuxDownloadUrl(filmSession.overlayMuxPlaybackId),
           kind: "video" as const,
-          label: "Overlay Replay",
+          label: "Story Ready",
           shareUrl: getMuxStreamUrl(filmSession.overlayMuxPlaybackId),
         }
       : latestFilmPlaybackId
         ? {
             downloadUrl: getMuxDownloadUrl(latestFilmPlaybackId),
             kind: "video" as const,
-            label: "Story Reel",
+            label: "Story Ready",
             shareUrl: getMuxStreamUrl(latestFilmPlaybackId),
           }
         : sessionCardUrl
@@ -5626,7 +5626,7 @@ export function RitualHome() {
     if (shotFeedbackTimerRef.current) window.clearTimeout(shotFeedbackTimerRef.current);
     setShotFeedback(type === "make" ? "make" : "miss");
     shotFeedbackTimerRef.current = window.setTimeout(() => setShotFeedback(null), 2200);
-    triggerBroadcastMessage(type === "make" ? "MAKE" : "MISS", "MOMENT SAVED", type === "make" ? "make" : "miss");
+    triggerBroadcastMessage(type === "make" ? "MAKE" : "MISS", "SAVED", type === "make" ? "make" : "miss");
   }
 
   function recordGameAction(type: GameActionType) {
@@ -6060,7 +6060,7 @@ export function RitualHome() {
             key={broadcastMessage.id}
             data-variant={broadcastMessage.variant ?? undefined}
             aria-live="polite"
-            aria-label="Detection event"
+            aria-label="Moment"
           >
             <strong>{broadcastMessage.text}</strong>
             {broadcastMessage.subtext ? <em>{broadcastMessage.subtext}</em> : null}
@@ -6071,7 +6071,7 @@ export function RitualHome() {
         {isLiveSurface && shotFeedback ? (
           <div className="axis-shot-result axis-overlay-layer" data-result={shotFeedback} key={`shot-result-${shotFeedback}`} aria-live="assertive">
             <strong className="axis-shot-result-label">{shotFeedback === "make" ? "MAKE" : "MISS"}</strong>
-            <span className="axis-shot-result-sub">MOMENT SAVED</span>
+            <span className="axis-shot-result-sub">SAVED</span>
           </div>
         ) : null}
 
@@ -6254,7 +6254,7 @@ export function RitualHome() {
     const text =
       type === "best_shots"
         ? `${name.toUpperCase()} — ${makes} ${makes === 1 ? "MAKE" : "MAKES"} · ${fg}% FG`
-        : `${name.toUpperCase()} HIGHLIGHT REEL · ${makes} ${makes === 1 ? "MAKE" : "MAKES"}`;
+        : `${name.toUpperCase()} STORY READY · ${makes} ${makes === 1 ? "MAKE" : "MAKES"}`;
 
     try {
       await navigator.share({ title: "Axis Film", text, url: filmUrl });
@@ -6506,7 +6506,7 @@ export function RitualHome() {
       review: {
         generatedAt: endedAt,
         largestInterruption: replayEvents.some((event) => event.type === "tracking_interruption")
-          ? "Tracking interruption recorded."
+          ? "Interruption recorded."
           : "No interruption recorded.",
         mostActiveMoment: replayEvents.find((event) => event.type === "movement_spike")?.label ?? "Session recorded.",
         notableEvents: replayEvents.slice(0, 5).map((event) => `${event.label} / ${formatTime(event.timestamp)}`),
@@ -7090,7 +7090,7 @@ export function RitualHome() {
               {!shouldShowPrimaryFilm && cameraStream ? (
                 cameraMenuOpen ? (
                   <div className="axis-camera-menu axis-camera-menu-live axis-overlay-layer" aria-label="Camera">
-                    <span className="axis-camera-menu-status">CAMERA ACTIVE</span>
+                    <span className="axis-camera-menu-status">READY</span>
                     <div className="axis-camera-menu-options">
                       <button
                         className="axis-camera-menu-btn"
@@ -7121,7 +7121,7 @@ export function RitualHome() {
                       onClick={(e) => { e.stopPropagation(); setCameraMenuOpen(false); }}
                       type="button"
                     >
-                      CAMERA ACTIVE
+                      READY
                     </button>
                   </div>
                 ) : (
@@ -7130,7 +7130,7 @@ export function RitualHome() {
                     onClick={(e) => { e.stopPropagation(); setCameraMenuOpen(true); }}
                     type="button"
                   >
-                    CAMERA ACTIVE
+                    READY
                   </button>
                 )
               ) : null}
@@ -7508,8 +7508,8 @@ export function RitualHome() {
             <section className="axis-shot-bar" aria-label="Shot confirmation">
               <span>{shotActionLabel}</span>
               <p className="axis-layer-value">
-                {`Player ${primaryTrackingTrack?.status !== "lost" ? "tracked" : "waiting"} / Ball ${
-                  ballTracking.visible ? "tracked" : "waiting"
+                {`Player ${primaryTrackingTrack?.status !== "lost" ? "ready" : "waiting"} / Ball ${
+                  ballTracking.visible ? "ready" : "waiting"
                 } / Moment ${shotSuggestion ? "found" : "waiting"}`}
               </p>
               <div>
@@ -8174,8 +8174,8 @@ export function RitualHome() {
                   </div>
                 </section>
 
-                <section className="axis-memory-block" aria-label="Tracking history">
-                  <span>Tracking</span>
+                <section className="axis-memory-block" aria-label="Moment history">
+                  <span>Moments</span>
                   <div>
                     {athleteMemory.trackingEvents.length ? (
                       athleteMemory.trackingEvents.slice(0, 12).map((sample, index) => (
@@ -8186,7 +8186,7 @@ export function RitualHome() {
                       ))
                     ) : (
                       <article className="axis-memory-row">
-                        <strong>No tracking events</strong>
+                        <strong>No saved moments</strong>
                         <em>Visible movement will appear here</em>
                       </article>
                     )}
