@@ -760,6 +760,149 @@ h1 {
   text-transform: uppercase;
 }
 
+/* ─── Broadcast message variants ──────────────── */
+
+.axis-broadcast-message[data-variant="shot"] strong {
+  color: var(--axis-live);
+  text-shadow: 0 0 24px rgba(168, 217, 51, 0.45), 0 1px 12px rgba(0, 0, 0, 0.9);
+}
+
+.axis-broadcast-message[data-variant="make"] strong {
+  color: var(--axis-live);
+  text-shadow: 0 0 24px rgba(168, 217, 51, 0.45), 0 1px 12px rgba(0, 0, 0, 0.9);
+}
+
+.axis-broadcast-message[data-variant="miss"] strong {
+  color: var(--axis-ink);
+}
+
+/* ─── Shot confirmation panel ──────────────────── */
+
+.axis-shot-panel {
+  animation: axis-shot-panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  left: 0;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  pointer-events: all;
+  right: 0;
+  z-index: 10;
+}
+
+@keyframes axis-shot-panel-in {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.axis-shot-panel-label {
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(0.65rem, 2vw, 0.8rem);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-align: center;
+  text-shadow: 0 0 20px rgba(168, 217, 51, 0.35);
+  text-transform: uppercase;
+}
+
+.axis-shot-panel-actions {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+.axis-shot-panel-btn {
+  background: rgba(6, 6, 6, 0.72);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(244, 244, 240, 0.18);
+  border-radius: 4px;
+  color: var(--axis-ink);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(1rem, 3.5vw, 1.35rem);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  min-height: 52px;
+  padding: 0.6rem 1rem;
+  text-transform: uppercase;
+  transition: background 120ms, border-color 120ms;
+}
+
+.axis-shot-panel-btn:active {
+  background: rgba(20, 20, 20, 0.9);
+}
+
+.axis-shot-panel-btn-make {
+  border-color: rgba(168, 217, 51, 0.55);
+  color: var(--axis-live);
+}
+
+.axis-shot-panel-btn-make:active {
+  background: rgba(168, 217, 51, 0.12);
+}
+
+/* ─── Shot result flash ────────────────────────── */
+
+.axis-shot-result {
+  align-items: center;
+  animation: axis-shot-result-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  inset: 0;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 12;
+}
+
+@keyframes axis-shot-result-in {
+  from { opacity: 0; transform: scale(0.82); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.axis-shot-result-label {
+  display: block;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(3.5rem, 18vw, 7rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 0.9;
+  text-shadow: 0 2px 32px rgba(0, 0, 0, 0.8);
+  text-transform: uppercase;
+}
+
+.axis-shot-result[data-result="make"] .axis-shot-result-label {
+  color: var(--axis-live);
+  text-shadow: 0 0 60px rgba(168, 217, 51, 0.35), 0 2px 32px rgba(0, 0, 0, 0.8);
+}
+
+.axis-shot-result[data-result="miss"] .axis-shot-result-label {
+  color: var(--axis-ink);
+}
+
+.axis-shot-result-sub {
+  color: rgba(244, 244, 240, 0.5);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(0.55rem, 1.8vw, 0.75rem);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* ─── Event bar shot-pending state ─────────────── */
+
+.axis-broadcast-event-bar[data-shot-pending="true"] button[data-shot-action="make"] {
+  border-color: rgba(168, 217, 51, 0.6);
+  color: var(--axis-live);
+}
+
+.axis-broadcast-event-bar[data-shot-pending="true"] button[data-shot-action="miss"] {
+  border-color: rgba(244, 244, 240, 0.3);
+  color: rgba(244, 244, 240, 0.75);
+}
+
 /* ─── Tracking elements (broadcast — no labels) ─ */
 
 .axis-player-track-box-broadcast {

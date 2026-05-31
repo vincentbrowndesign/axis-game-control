@@ -3013,7 +3013,9 @@ export function RitualHome() {
   const [movementInsightMessage, setMovementInsightMessage] = useState("");
   const [isInterpretingMovement, setIsInterpretingMovement] = useState(false);
   const [shotSuggestion, setShotSuggestion] = useState<ShotSuggestion | null>(null);
-  const [broadcastMessage, setBroadcastMessage] = useState<{ text: string; subtext?: string; id: number } | null>(null);
+  const [shotFeedback, setShotFeedback] = useState<"make" | "miss" | null>(null);
+  const shotFeedbackTimerRef = useRef<number | null>(null);
+  const [broadcastMessage, setBroadcastMessage] = useState<{ text: string; subtext?: string; id: number; variant?: "shot" | "make" | "miss" } | null>(null);
   const broadcastTimerRef = useRef<number | null>(null);
   const [selectedReplayAnchor, setSelectedReplayAnchor] = useState<ReplayAnchor | null>(null);
   const [selectedFilmSessionId, setSelectedFilmSessionId] = useState<string | null>(null);
@@ -3036,9 +3038,9 @@ export function RitualHome() {
     startRimHeight: number;
   } | null>(null);
 
-  function triggerBroadcastMessage(text: string, subtext?: string) {
+  function triggerBroadcastMessage(text: string, subtext?: string, variant?: "shot" | "make" | "miss") {
     if (broadcastTimerRef.current) window.clearTimeout(broadcastTimerRef.current);
-    setBroadcastMessage({ text, subtext, id: Date.now() });
+    setBroadcastMessage({ text, subtext, id: Date.now(), variant });
     broadcastTimerRef.current = window.setTimeout(() => setBroadcastMessage(null), 2000);
   }
 
@@ -3794,7 +3796,7 @@ export function RitualHome() {
       trackId: primaryTrackingTrack.id,
     };
     setShotSuggestion(nextSuggestion);
-    triggerBroadcastMessage("SHOT DETECTED");
+    triggerBroadcastMessage("SHOT DETECTED", undefined, "shot");
   }, [
     identity,
     primaryTrackingTrack,
@@ -5095,7 +5097,10 @@ export function RitualHome() {
     writeSave(nextSave);
     setSave(nextSave);
     setShotSuggestion(null);
-    triggerBroadcastMessage(type === "make" ? "MAKE CONFIRMED" : "MISS CONFIRMED");
+    if (shotFeedbackTimerRef.current) window.clearTimeout(shotFeedbackTimerRef.current);
+    setShotFeedback(type === "make" ? "make" : "miss");
+    shotFeedbackTimerRef.current = window.setTimeout(() => setShotFeedback(null), 2200);
+    triggerBroadcastMessage(type === "make" ? "MAKE" : "MISS", "SHOT SAVED", type === "make" ? "make" : "miss");
   }
 
   function recordGameAction(type: GameActionType) {
@@ -5496,9 +5501,46 @@ export function RitualHome() {
 
         {/* Bottom center: temporary detection messages */}
         {isLiveSurface && broadcastMessage ? (
-          <div className="axis-broadcast-message axis-overlay-layer" key={broadcastMessage.id} aria-live="polite" aria-label="Detection event">
+          <div
+            className="axis-broadcast-message axis-overlay-layer"
+            key={broadcastMessage.id}
+            data-variant={broadcastMessage.variant ?? undefined}
+            aria-live="polite"
+            aria-label="Detection event"
+          >
             <strong>{broadcastMessage.text}</strong>
             {broadcastMessage.subtext ? <em>{broadcastMessage.subtext}</em> : null}
+          </div>
+        ) : null}
+
+        {/* Shot result flash — fills camera when make/miss confirmed */}
+        {isLiveSurface && shotFeedback ? (
+          <div className="axis-shot-result axis-overlay-layer" data-result={shotFeedback} key={`shot-result-${shotFeedback}`} aria-live="assertive">
+            <strong className="axis-shot-result-label">{shotFeedback === "make" ? "MAKE" : "MISS"}</strong>
+            <span className="axis-shot-result-sub">SHOT SAVED</span>
+          </div>
+        ) : null}
+
+        {/* Shot confirmation panel — slides up when confirmation needed */}
+        {isLiveSurface && shotSuggestion?.needsConfirmation ? (
+          <div className="axis-shot-panel axis-overlay-layer" aria-label="Shot confirmation">
+            <span className="axis-shot-panel-label">SHOT DETECTED</span>
+            <div className="axis-shot-panel-actions">
+              <button
+                className="axis-shot-panel-btn axis-shot-panel-btn-make"
+                onClick={(e) => { e.stopPropagation(); recordShot("make"); }}
+                type="button"
+              >
+                MAKE
+              </button>
+              <button
+                className="axis-shot-panel-btn axis-shot-panel-btn-miss"
+                onClick={(e) => { e.stopPropagation(); recordShot("miss"); }}
+                type="button"
+              >
+                MISS
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -6408,19 +6450,16 @@ export function RitualHome() {
                   </div>
                 </div>
               ) : null}
-              <div className="axis-broadcast-event-bar">
+              <div className="axis-broadcast-event-bar" data-shot-pending={shotSuggestion?.needsConfirmation ? "true" : undefined}>
                 {visibleWorkActions.map((action) => (
                   <button
+                    data-shot-action={shotSuggestion?.needsConfirmation && (action === "make" || action === "miss") ? action : undefined}
                     disabled={!save.activeSession}
                     key={action}
                     onClick={() => recordGameAction(action)}
                     type="button"
                   >
-                    {shotSuggestion?.needsConfirmation && action === "make"
-                      ? "Confirm Make"
-                      : shotSuggestion?.needsConfirmation && action === "miss"
-                        ? "Confirm Miss"
-                        : formatGameActionLabel(action)}
+                    {formatGameActionLabel(action)}
                   </button>
                 ))}
               </div>
@@ -6687,11 +6726,7 @@ export function RitualHome() {
                     onClick={() => recordGameAction(action)}
                     type="button"
                   >
-                    {shotSuggestion?.needsConfirmation && action === "make"
-                      ? "Confirm make"
-                      : shotSuggestion?.needsConfirmation && action === "miss"
-                        ? "Confirm miss"
-                        : formatGameActionLabel(action)}
+                    {formatGameActionLabel(action)}
                   </button>
                 ))}
               </div>
