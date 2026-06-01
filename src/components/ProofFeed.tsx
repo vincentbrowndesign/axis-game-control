@@ -71,6 +71,17 @@ type ProofImportSession = {
   uploadId?: string;
 };
 
+type MomentCandidate = {
+  duration: number;
+  id: string;
+  label: string;
+  selected: boolean;
+  thumbnail: string;
+  timestamp: number;
+};
+
+type MomentAnalysisStatus = "idle" | "extracting" | "analyzing" | "done" | "failed";
+
 const temporaryProofs: ProofCard[] = [
   {
     clip: "",
@@ -166,6 +177,19 @@ const proofStacks: ProofStack[] = [
     title: "GOT THERE FIRST",
   },
 ];
+
+const labelToProofTitle: Record<string, string> = {
+  Assist: "You made the pass before the basket.",
+  "Ball Recovered": "You got it back.",
+  Block: "You blocked it.",
+  "Loose Ball": "You got there first.",
+  "Pass Before Basket": "You made the pass before the basket.",
+  Rebound: "You got there first.",
+  "Second Effort": "You took the shot after a miss.",
+  "Shot After Miss": "You took the shot after a miss.",
+  "Shot Made": "You made it.",
+  Steal: "You took it.",
+};
 
 const manualProofTitles = [
   "You took the shot after a miss.",
@@ -558,6 +582,76 @@ function waitForVideoFrame(video: HTMLVideoElement) {
   });
 }
 
+async function extractVideoFrames(
+  sourceUrl: string,
+  maxFrames = 15,
+): Promise<Array<{ dataUrl: string; thumbnail: string; time: number }>> {
+  if (typeof document === "undefined") return [];
+
+  const video = document.createElement("video");
+  video.src = sourceUrl;
+  video.muted = true;
+  video.preload = "auto";
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      if (video.readyState >= 2) { resolve(); return; }
+      const timeout = window.setTimeout(() => reject(new Error("metadata timeout")), 8000);
+      video.addEventListener("loadeddata", () => { window.clearTimeout(timeout); resolve(); }, { once: true });
+      video.addEventListener("error", () => { window.clearTimeout(timeout); reject(new Error("video error")); }, { once: true });
+      video.load();
+    });
+  } catch {
+    video.src = "";
+    return [];
+  }
+
+  const duration = video.duration;
+  if (!Number.isFinite(duration) || duration <= 0) { video.src = ""; return []; }
+
+  const count = Math.min(maxFrames, Math.max(1, Math.ceil(duration / 3)));
+  const interval = duration / count;
+  const canvas = document.createElement("canvas");
+  canvas.width = 320;
+  canvas.height = 180;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) { video.src = ""; return []; }
+
+  const frames: Array<{ dataUrl: string; thumbnail: string; time: number }> = [];
+
+  for (let i = 0; i < count; i++) {
+    const time = Math.min(i * interval + interval / 2, duration - 0.1);
+    try {
+      await waitForVideoSeek(video, time);
+      ctx.drawImage(video, 0, 0, 320, 180);
+      frames.push({
+        dataUrl: canvas.toDataURL("image/jpeg", 0.7),
+        thumbnail: canvas.toDataURL("image/jpeg", 0.85),
+        time,
+      });
+    } catch {
+      // skip frame
+    }
+  }
+
+  video.src = "";
+  return frames;
+}
+
+function findNearestThumbnail(
+  frames: Array<{ thumbnail: string; time: number }>,
+  timestamp: number,
+): string {
+  if (!frames.length) return "";
+  let nearest = frames[0];
+  let minDiff = Math.abs((frames[0].time) - timestamp);
+  for (const frame of frames) {
+    const diff = Math.abs(frame.time - timestamp);
+    if (diff < minDiff) { minDiff = diff; nearest = frame; }
+  }
+  return nearest.thumbnail;
+}
+
 export function ProofFeed() {
   const [proofData, setProofData] = useState<ProofData>({
     proofs: temporaryProofs,
@@ -575,6 +669,10 @@ export function ProofFeed() {
   const [reviewMode, setReviewMode] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [proofEnded, setProofEnded] = useState(false);
+  const [momentCandidates, setMomentCandidates] = useState<MomentCandidate[]>([]);
+  const [momentAnalysisStatus, setMomentAnalysisStatus] = useState<MomentAnalysisStatus>("idle");
+  const [previewingCandidateId, setPreviewingCandidateId] = useState<string | null>(null);
+  const [showManualControls, setShowManualControls] = useState(false);
   const manualVideoRef = useRef<HTMLVideoElement | null>(null);
   const proofVideoRef = useRef<HTMLVideoElement | null>(null);
   const manualVideoUrlsRef = useRef<string[]>([]);
@@ -650,7 +748,10 @@ export function ProofFeed() {
     setManualScrubTime(0);
     setManualStartTime(null);
     setManualEndTime(null);
-    setManualMessage("Review ready.");
+    setManualMessage("");
+    setMomentCandidates([]);
+    setMomentAnalysisStatus("idle");
+    setShowManualControls(false);
     setReviewMode(true);
     setImportSession({
       id: sessionId,
@@ -708,6 +809,102 @@ export function ProofFeed() {
     } catch {
       setImportSession((current) => (current?.id === sessionId ? { ...current, status: "review" } : current));
     }
+  }
+
+  async function analyzeMoments(videoUrl: string, duration: number) {
+    setMomentAnalysisStatus("extracting");
+    setMomentCandidates([]);
+
+    const frames = await extractVideoFrames(videoUrl).catch(() => []);
+    if (!frames.length) { setMomentAnalysisStatus("failed"); return; }
+
+    setMomentAnalysisStatus("analyzing");
+
+    try {
+      const response = await fetch("/api/moments/suggest", {
+        body: JSON.stringify({ frames: frames.map((f) => ({ dataUrl: f.dataUrl, time: f.time })), videoDuration: duration }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      if (!response.ok) { setMomentAnalysisStatus("failed"); return; }
+
+      const result = (await response.json()) as {
+        suggestions?: Array<{ confidence: number; duration: number; label: string; timestamp: number }>;
+      };
+
+      const suggestions = Array.isArray(result.suggestions) ? result.suggestions : [];
+      const candidates: MomentCandidate[] = suggestions
+        .filter((s) => typeof s.timestamp === "number" && typeof s.label === "string")
+        .map((s, i) => ({
+          duration: Math.min(Math.max(4, s.duration || 6), 10),
+          id: `candidate-${Date.now()}-${i}`,
+          label: s.label,
+          selected: true,
+          thumbnail: findNearestThumbnail(frames, s.timestamp),
+          timestamp: Math.max(0, Math.min(s.timestamp, duration - 1)),
+        }));
+
+      setMomentCandidates(candidates);
+      setMomentAnalysisStatus("done");
+    } catch {
+      setMomentAnalysisStatus("failed");
+    }
+  }
+
+  function toggleCandidate(id: string) {
+    setMomentCandidates((current) => current.map((c) => c.id === id ? { ...c, selected: !c.selected } : c));
+  }
+
+  function previewCandidate(candidate: MomentCandidate) {
+    const video = manualVideoRef.current;
+    if (!video) return;
+
+    setPreviewingCandidateId(candidate.id);
+    const stopAt = candidate.timestamp + candidate.duration;
+    video.currentTime = Math.max(0, candidate.timestamp - 0.2);
+
+    function onTimeUpdate() {
+      if (!video) return;
+      if (video.currentTime >= stopAt) {
+        video.pause();
+        video.removeEventListener("timeupdate", onTimeUpdate);
+        setPreviewingCandidateId(null);
+      }
+    }
+
+    video.addEventListener("timeupdate", onTimeUpdate);
+    void video.play().catch(() => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      setPreviewingCandidateId(null);
+    });
+  }
+
+  async function saveSelectedCandidates() {
+    const selected = momentCandidates.filter((c) => c.selected);
+    if (!selected.length) return;
+
+    const newProofs: ProofCard[] = selected.map((candidate, i) => {
+      const endTime = candidate.timestamp + candidate.duration;
+      const title = labelToProofTitle[candidate.label] ?? candidate.label;
+      return {
+        clip: manualVideoUrl,
+        duration: formatDurationFromSeconds(candidate.duration),
+        endTime,
+        id: `proof-${Date.now()}-${i}`,
+        poster: candidate.thumbnail,
+        sessionId: importSession?.id,
+        stackId: getProofStackId(title),
+        startTime: candidate.timestamp,
+        timestamp: new Date().toISOString(),
+        title,
+        tone: getFallbackTone(manualProofs.length + i),
+      };
+    });
+
+    setManualProofs((current) => [...newProofs, ...current]);
+    setMomentCandidates((current) => current.filter((c) => !c.selected));
+    setManualMessage(`${newProofs.length} proof${newProofs.length !== 1 ? "s" : ""} saved.`);
   }
 
   function updateManualScrub(time: number) {
@@ -854,7 +1051,9 @@ export function ProofFeed() {
               className="proof-create-video"
               controls
               onLoadedMetadata={(event) => {
-                setManualDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0);
+                const dur = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0;
+                setManualDuration(dur);
+                if (dur > 0) void analyzeMoments(event.currentTarget.src, dur);
               }}
               onTimeUpdate={(event) => setManualScrubTime(event.currentTarget.currentTime)}
               playsInline
@@ -862,49 +1061,119 @@ export function ProofFeed() {
               src={manualVideoUrl}
             />
 
-            <label className="proof-scrub">
-              <span>SCRUB TIMELINE</span>
-              <input
-                max={manualDuration || 0}
-                min={0}
-                onChange={(event) => updateManualScrub(Number(event.currentTarget.value))}
-                step={0.1}
-                type="range"
-                value={manualScrubTime}
-              />
-            </label>
-
-            <div className="proof-mark-row">
-              <button onClick={markManualStart} type="button">
-                MARK START
-              </button>
-              <button onClick={markManualEnd} type="button">
-                MARK END
-              </button>
-            </div>
-
-            <div className="proof-time-row" aria-label="Proof range">
-              <span>NOW {formatDurationFromSeconds(manualScrubTime)}</span>
-              <span>START {manualStartTime === null ? "--" : formatDurationFromSeconds(manualStartTime)}</span>
-              <span>END {manualEndTime === null ? "--" : formatDurationFromSeconds(manualEndTime)}</span>
-            </div>
-
-            <div className="proof-title-list" aria-label="Choose proof title">
-              {manualProofTitles.map((title) => (
+            {/* Moment queue — primary workflow after analysis */}
+            {momentAnalysisStatus === "extracting" && (
+              <p className="moment-status">READING VIDEO</p>
+            )}
+            {momentAnalysisStatus === "analyzing" && (
+              <p className="moment-status">FINDING MOMENTS</p>
+            )}
+            {momentAnalysisStatus === "done" && momentCandidates.length > 0 && (
+              <div className="moment-queue">
+                <div className="moment-queue-header">
+                  <span>{momentCandidates.length} MOMENT{momentCandidates.length !== 1 ? "S" : ""} FOUND</span>
+                  <strong>{momentCandidates.filter((c) => c.selected).length} SELECTED</strong>
+                </div>
+                {momentCandidates.map((candidate) => (
+                  <label className="moment-card" key={candidate.id}>
+                    <input
+                      checked={candidate.selected}
+                      className="moment-check"
+                      onChange={() => toggleCandidate(candidate.id)}
+                      type="checkbox"
+                    />
+                    {candidate.thumbnail ? (
+                      <img alt="" className="moment-thumb" src={candidate.thumbnail} />
+                    ) : (
+                      <div className="moment-thumb moment-thumb-empty" />
+                    )}
+                    <div className="moment-card-body">
+                      <strong>{labelToProofTitle[candidate.label] ?? candidate.label}</strong>
+                      <span>{formatDurationFromSeconds(candidate.timestamp)} · {candidate.duration}s</span>
+                    </div>
+                    <button
+                      className="moment-preview-btn"
+                      data-active={previewingCandidateId === candidate.id ? "true" : undefined}
+                      onClick={(e) => { e.preventDefault(); previewCandidate(candidate); }}
+                      type="button"
+                    >
+                      {previewingCandidateId === candidate.id ? "●" : "PREVIEW"}
+                    </button>
+                  </label>
+                ))}
                 <button
-                  data-selected={manualTitle === title}
-                  key={title}
-                  onClick={() => setManualTitle(title)}
+                  className="proof-save"
+                  disabled={momentCandidates.filter((c) => c.selected).length === 0}
+                  onClick={() => void saveSelectedCandidates()}
                   type="button"
                 >
-                  {title}
+                  {(() => {
+                    const n = momentCandidates.filter((c) => c.selected).length;
+                    return n > 0 ? `SAVE ${n} PROOF${n !== 1 ? "S" : ""}` : "SELECT MOMENTS";
+                  })()}
                 </button>
-              ))}
-            </div>
+              </div>
+            )}
+            {momentAnalysisStatus === "done" && momentCandidates.length === 0 && (
+              <p className="moment-status">NO MOMENTS DETECTED</p>
+            )}
 
-            <button className="proof-save" onClick={saveManualProof} type="button">
-              SAVE PROOF
-            </button>
+            {/* Manual controls toggle */}
+            {(momentAnalysisStatus === "done" || momentAnalysisStatus === "failed") && (
+              <button
+                className="moment-manual-toggle"
+                onClick={() => setShowManualControls((v) => !v)}
+                type="button"
+              >
+                {showManualControls ? "HIDE MANUAL" : "ADD MANUALLY"}
+              </button>
+            )}
+
+            {/* Manual fallback controls */}
+            {(showManualControls || momentAnalysisStatus === "failed") && (
+              <>
+                <label className="proof-scrub">
+                  <span>SCRUB</span>
+                  <input
+                    max={manualDuration || 0}
+                    min={0}
+                    onChange={(event) => updateManualScrub(Number(event.currentTarget.value))}
+                    step={0.1}
+                    type="range"
+                    value={manualScrubTime}
+                  />
+                </label>
+
+                <div className="proof-mark-row">
+                  <button onClick={markManualStart} type="button">MARK START</button>
+                  <button onClick={markManualEnd} type="button">MARK END</button>
+                </div>
+
+                <div className="proof-time-row" aria-label="Proof range">
+                  <span>NOW {formatDurationFromSeconds(manualScrubTime)}</span>
+                  <span>START {manualStartTime === null ? "--" : formatDurationFromSeconds(manualStartTime)}</span>
+                  <span>END {manualEndTime === null ? "--" : formatDurationFromSeconds(manualEndTime)}</span>
+                </div>
+
+                <div className="proof-title-list" aria-label="Choose proof title">
+                  {manualProofTitles.map((title) => (
+                    <button
+                      data-selected={manualTitle === title}
+                      key={title}
+                      onClick={() => setManualTitle(title)}
+                      type="button"
+                    >
+                      {title}
+                    </button>
+                  ))}
+                </div>
+
+                <button className="proof-save" onClick={saveManualProof} type="button">
+                  SAVE PROOF
+                </button>
+              </>
+            )}
+
             {manualMessage ? <em className="proof-create-message">{manualMessage}</em> : null}
           </div>
         ) : null}

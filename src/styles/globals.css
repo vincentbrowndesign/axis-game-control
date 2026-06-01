@@ -308,6 +308,162 @@ body {
   font-style: normal;
 }
 
+/* Moment queue */
+.moment-status {
+  color: rgba(244, 244, 240, 0.44);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  margin: 0;
+  padding: 0.5rem 0;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.moment-queue {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.moment-queue-header {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.moment-queue-header span {
+  color: rgba(244, 244, 240, 0.48);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.moment-queue-header strong {
+  color: var(--axis-live);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.moment-card {
+  align-items: center;
+  background: rgba(244, 244, 240, 0.025);
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 20px 5rem 1fr auto;
+  min-height: 3.8rem;
+  overflow: hidden;
+  padding: 0 0.6rem 0 0.5rem;
+  touch-action: manipulation;
+  transition: border-color 0.12s;
+}
+
+.moment-card:has(.moment-check:checked) {
+  border-color: rgba(168, 217, 51, 0.35);
+}
+
+.moment-check {
+  accent-color: var(--axis-live);
+  cursor: pointer;
+  height: 18px;
+  width: 18px;
+}
+
+.moment-thumb {
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  display: block;
+  height: 3rem;
+  object-fit: cover;
+  width: 100%;
+}
+
+.moment-thumb-empty {
+  background: rgba(168, 217, 51, 0.07);
+  border-radius: 4px;
+  height: 3rem;
+}
+
+.moment-card-body {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.moment-card-body strong {
+  color: var(--axis-ink);
+  display: block;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.moment-card-body span {
+  color: rgba(244, 244, 240, 0.44);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.moment-preview-btn {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.05);
+  border: 1px solid rgba(244, 244, 240, 0.16);
+  border-radius: 6px;
+  color: rgba(244, 244, 240, 0.6);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  min-height: 32px;
+  padding: 0 0.55rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+
+.moment-preview-btn[data-active="true"] {
+  border-color: rgba(168, 217, 51, 0.5);
+  color: var(--axis-live);
+}
+
+.moment-manual-toggle {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 999px;
+  color: rgba(244, 244, 240, 0.44);
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.6rem;
+  font-weight: 900;
+  justify-self: center;
+  letter-spacing: 0.07em;
+  min-height: 36px;
+  padding: 0 1rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
 .proof-card {
   appearance: none;
   background: rgba(244, 244, 240, 0.03);
