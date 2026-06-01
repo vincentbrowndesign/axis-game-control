@@ -30,6 +30,387 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.proof-shell {
+  background:
+    linear-gradient(180deg, rgba(244, 244, 240, 0.035), transparent 22rem),
+    #030303;
+  color: var(--axis-ink);
+  display: grid;
+  gap: 1rem;
+  min-height: 100dvh;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+}
+
+.proof-header {
+  align-content: end;
+  border-bottom: 1px solid rgba(244, 244, 240, 0.12);
+  display: grid;
+  gap: 0.5rem;
+  min-height: 7rem;
+  padding-bottom: 0.8rem;
+}
+
+.proof-header span,
+.proof-card strong,
+.proof-card em,
+.proof-play,
+.proof-player-close,
+.proof-player-nav,
+.proof-player-copy span,
+.proof-player-copy strong,
+.proof-player-time {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.proof-header span {
+  color: var(--axis-live);
+  font-size: 0.64rem;
+  font-weight: 900;
+}
+
+.proof-header h1 {
+  font-size: clamp(2.35rem, 13vw, 5.6rem);
+  font-weight: 900;
+  line-height: 0.86;
+  max-width: 7ch;
+}
+
+.proof-feed {
+  display: grid;
+  gap: 0.82rem;
+}
+
+.proof-stack-section {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.2rem;
+}
+
+.proof-stack {
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.9rem;
+}
+
+.proof-stack strong,
+.proof-stack span,
+.proof-stack em {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.proof-stack strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.1rem, 5vw, 1.65rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.proof-stack span {
+  color: var(--axis-live);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.proof-stack em {
+  color: rgba(244, 244, 240, 0.56);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.proof-card {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.03);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(7.5rem, 38vw) minmax(0, 1fr);
+  min-height: 8.5rem;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.proof-card:focus-visible,
+.proof-player-close:focus-visible,
+.proof-player-nav:focus-visible {
+  outline: 1px solid var(--axis-live);
+  outline-offset: 0.2rem;
+}
+
+.proof-thumb {
+  background:
+    radial-gradient(circle at 72% 18%, rgba(168, 217, 51, 0.18), transparent 24%),
+    linear-gradient(135deg, rgba(244, 244, 240, 0.16), rgba(244, 244, 240, 0.02) 42%, rgba(0, 0, 0, 0.8)),
+    #090909;
+  overflow: hidden;
+  position: relative;
+}
+
+.proof-thumb[data-tone="cut"] {
+  background:
+    linear-gradient(115deg, rgba(168, 217, 51, 0.2), transparent 22%),
+    linear-gradient(155deg, rgba(244, 244, 240, 0.13), transparent 34%),
+    #050505;
+}
+
+.proof-thumb[data-tone="glass"] {
+  background:
+    radial-gradient(circle at 26% 38%, rgba(244, 244, 240, 0.2), transparent 20%),
+    linear-gradient(145deg, rgba(168, 217, 51, 0.14), transparent 38%),
+    #070707;
+}
+
+.proof-thumb::before {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 34px 34px;
+  content: "";
+  inset: 0;
+  opacity: 0.34;
+  position: absolute;
+}
+
+.proof-thumb::after {
+  border: 1px solid rgba(168, 217, 51, 0.42);
+  border-radius: 999px;
+  content: "";
+  height: 36%;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 46%;
+}
+
+.proof-play {
+  align-items: center;
+  background: rgba(3, 3, 3, 0.68);
+  border: 1px solid rgba(244, 244, 240, 0.18);
+  border-radius: 999px;
+  color: var(--axis-live);
+  display: grid;
+  font-size: 0.58rem;
+  font-weight: 900;
+  height: 3rem;
+  left: 50%;
+  place-items: center;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 3rem;
+  z-index: 1;
+}
+
+.proof-card-body {
+  align-content: space-between;
+  display: grid;
+  gap: 1rem;
+  padding: 0.85rem;
+}
+
+.proof-card strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.05rem, 5.4vw, 1.75rem);
+  font-weight: 900;
+  line-height: 0.96;
+}
+
+.proof-card em {
+  color: var(--axis-live);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.proof-player {
+  background: #000;
+  display: grid;
+  inset: 0;
+  padding: max(0.8rem, env(safe-area-inset-top)) 0.8rem max(0.8rem, env(safe-area-inset-bottom));
+  position: fixed;
+  z-index: 100;
+}
+
+.proof-player-frame {
+  align-content: center;
+  background: #000;
+  border-radius: 0;
+  display: grid;
+  gap: clamp(1.4rem, 4dvh, 2.4rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding: clamp(4rem, 12dvh, 7rem) 0 clamp(4.6rem, 12dvh, 6.5rem);
+}
+
+.proof-player-close,
+.proof-player-nav {
+  appearance: none;
+  background: rgba(3, 3, 3, 0.62);
+  border: 1px solid rgba(244, 244, 240, 0.16);
+  border-radius: 999px;
+  color: rgba(244, 244, 240, 0.72);
+  cursor: pointer;
+  font-size: 0.58rem;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  position: absolute;
+  touch-action: manipulation;
+  z-index: 2;
+}
+
+.proof-player-close {
+  right: 1.3rem;
+  top: max(1.3rem, env(safe-area-inset-top));
+}
+
+.proof-player-nav {
+  bottom: max(1.2rem, env(safe-area-inset-bottom));
+}
+
+.proof-player-next {
+  right: 1.3rem;
+}
+
+.proof-player-copy {
+  align-self: end;
+  display: grid;
+  justify-items: center;
+  margin: 0 auto;
+  max-width: min(34rem, calc(100% - 1.6rem));
+  position: relative;
+  text-align: center;
+  z-index: 1;
+}
+
+.proof-player-copy strong {
+  color: var(--axis-ink);
+  font-size: clamp(2.1rem, 10.5vw, 5rem);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.95;
+  text-transform: none;
+}
+
+.proof-player-video {
+  align-self: start;
+  background: #050505;
+  border: 1px solid rgba(244, 244, 240, 0.08);
+  border-radius: 14px;
+  display: block;
+  height: min(58dvh, 44rem);
+  justify-self: center;
+  max-width: min(100%, 34rem);
+  object-fit: cover;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.proof-player-video-placeholder {
+  background:
+    radial-gradient(circle at 68% 18%, rgba(168, 217, 51, 0.18), transparent 24%),
+    linear-gradient(135deg, rgba(244, 244, 240, 0.14), rgba(244, 244, 240, 0.02) 42%, rgba(0, 0, 0, 0.84)),
+    #050505;
+}
+
+.proof-player-video-placeholder[data-tone="cut"] {
+  background:
+    linear-gradient(115deg, rgba(168, 217, 51, 0.18), transparent 22%),
+    linear-gradient(155deg, rgba(244, 244, 240, 0.12), transparent 34%),
+    #050505;
+}
+
+.proof-player-video-placeholder[data-tone="glass"] {
+  background:
+    radial-gradient(circle at 26% 38%, rgba(244, 244, 240, 0.16), transparent 20%),
+    linear-gradient(145deg, rgba(168, 217, 51, 0.12), transparent 38%),
+    #050505;
+}
+
+.proof-player-video-placeholder::before {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 34px 34px;
+  content: "";
+  inset: 0;
+  opacity: 0.32;
+  position: absolute;
+}
+
+.proof-player-video-placeholder::after {
+  border: 1px solid rgba(168, 217, 51, 0.38);
+  border-radius: 999px;
+  content: "";
+  height: 24%;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 38%;
+}
+
+@media (min-width: 760px) {
+  .proof-shell {
+    gap: 1.35rem;
+    padding: 2rem;
+  }
+
+  .proof-header {
+    align-items: end;
+    display: flex;
+    justify-content: space-between;
+    min-height: 8.5rem;
+  }
+
+  .proof-header h1 {
+    max-width: none;
+  }
+
+  .proof-feed {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .proof-stack-section {
+    max-width: 28rem;
+  }
+
+  .proof-card {
+    grid-template-columns: 1fr;
+    min-height: 24rem;
+  }
+
+  .proof-card-body {
+    min-height: 10rem;
+  }
+
+  .proof-player {
+    padding: 1.2rem;
+  }
+
+  .proof-player-frame {
+    padding-inline: 1rem;
+  }
+
+  .proof-player-video {
+    height: min(58dvh, 42rem);
+    max-width: min(56rem, 100%);
+  }
+}
+
 .axis-shell {
   display: grid;
   min-height: 100dvh;
