@@ -1,5 +1,5 @@
-import { RitualHome } from "../components/RitualHome";
+import { ProofFeed } from "../components/ProofFeed";
 
 export default function Home() {
-  return <RitualHome />;
+  return <ProofFeed />;
 }

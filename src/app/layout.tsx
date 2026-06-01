@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "../styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "Axis",
-  description: "Athletic continuity operating system.",
+  title: "PROOF",
+  description: "Today's proof.",
 };
 
 export default function RootLayout({
