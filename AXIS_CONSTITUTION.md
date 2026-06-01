@@ -2,9 +2,50 @@
 
 Axis is a personal athletic continuity system.
 
-Axis is also sports overlay infrastructure.
+Axis is a presence product.
 
-The product is not a stats app.
+Axis is not a camera product.
+
+Axis is not a replay product.
+
+Axis is not a detection product.
+
+Axis is not an analytics product.
+
+The purpose of Axis is:
+
+identity
+-> presence
+-> participation
+-> progression
+-> history
+-> leaderboard
+-> return
+
+The system hierarchy is:
+
+Axis
+-> Session
+-> Timeline
+-> Moments
+-> Story
+-> Share
+
+Axis is the continuity system.
+
+Session is the active ritual and the container for work.
+
+Camera is a session tool. It is not the destination and not the product.
+
+Timeline is the memory rail. Every meaningful event becomes a marker.
+
+Moments are replay objects generated from timeline markers.
+
+Story is the human outcome. Stories are what get watched and shared.
+
+The user never buys detection.
+
+The user buys: Find me the moment worth watching.
 
 Input:
 
@@ -81,6 +122,101 @@ identity
 * Organizations are living athletic communities inside one shared Axis world.
 * Replay, upload, media, and intelligence layers exist to support continuity and memory, not replace the ritual loop.
 * Exports are the product output. Original Film, Overlay Film, Highlights Film, Vertical Social Film, Coach Film, Director Film, Player Card, Player PDF, Player Reel, Player Timeline, and Player Progress Graph are different outputs from the same session object.
+
+## Home Screen Rules
+
+Home is never camera-first.
+
+Home always prioritizes:
+
+* Today
+* Check In
+* Streak
+* Last Session
+* Continue
+* History
+* Leaderboard
+
+Camera may be launched from a session.
+
+Camera may never become the home screen.
+
+## Recording Rules
+
+Recording screens should never display:
+
+* confidence
+* track ids
+* processing states
+* detections
+* technical measurements
+* engineering language
+
+Recording should communicate:
+
+* Moment Found
+* Confirm
+* Moment Saved
+* Continue
+
+## Replay Rules
+
+Replay is not the product.
+
+Replay is memory.
+
+Replay is accessed through:
+
+Timeline
+-> Moment
+-> Replay
+
+Not:
+
+Film
+-> Scrub
+-> Search manually
+
+## Export Rules
+
+Exports must be outcome-oriented.
+
+Never:
+
+* Original Film
+* Overlay Film
+* Social Film
+* Vertical Film
+
+Instead:
+
+* Story Ready
+* 3 Moments Ready
+* Watch
+* Share
+* Download
+
+## Detection Rules
+
+Detection is infrastructure.
+
+Detection exists only to generate timeline markers.
+
+Detection should remain mostly invisible.
+
+Users buy moments, not detections.
+
+## Rim Rules
+
+Rim state must be visual.
+
+Green Ring = Ready
+
+Red Ring = Adjust
+
+No "RIM LOCKED" status language.
+
+The interface should communicate readiness without reading.
 
 ## Core Loop
 

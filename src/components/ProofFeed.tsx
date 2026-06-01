@@ -68,10 +68,10 @@ const temporaryProofs: ProofCard[] = [
   {
     clip: "",
     duration: "0:09",
-    id: "back-after-turnover",
+    id: "you-blocked-it",
     poster:
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1600'%3E%3Crect width='1200' height='1600' fill='%23030303'/%3E%3Cpath d='M180 1300 980 160M320 1420 1120 280M40 1040 820 40' stroke='%23f4f4f0' stroke-opacity='.08' stroke-width='12'/%3E%3Crect x='420' y='560' width='360' height='520' rx='180' fill='none' stroke='%23a8d933' stroke-opacity='.38' stroke-width='10'/%3E%3C/svg%3E",
-    title: "You got back after the turnover.",
+    title: "You blocked it.",
     tone: "cut",
   },
   {
@@ -86,10 +86,10 @@ const temporaryProofs: ProofCard[] = [
   {
     clip: "",
     duration: "0:10",
-    id: "called-for-ball",
+    id: "you-made-it",
     poster:
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1600'%3E%3Crect width='1200' height='1600' fill='%23030303'/%3E%3Cpath d='M160 1180 C360 780 600 760 1010 410' fill='none' stroke='%23a8d933' stroke-opacity='.42' stroke-width='12'/%3E%3Ccircle cx='250' cy='1110' r='132' fill='none' stroke='%23f4f4f0' stroke-opacity='.12' stroke-width='8'/%3E%3Ccircle cx='980' cy='390' r='92' fill='%23a8d933' fill-opacity='.12'/%3E%3C/svg%3E",
-    title: "You called for the ball.",
+    title: "You made it.",
     tone: "glass",
   },
   {
@@ -143,16 +143,16 @@ function getFallbackTone(index: number): ProofCard["tone"] {
 function getProofTitle(type: string, fallback: string) {
   const normalized = type.toLowerCase();
 
-  if (normalized === "make") return "You took the shot after a miss.";
-  if (normalized === "miss") return "You kept shooting.";
+  if (normalized === "make") return "You made it.";
+  if (normalized === "miss") return "";
   if (normalized === "rebound") return "You got there first.";
   if (normalized === "assist") return "You made the pass before the basket.";
-  if (normalized === "turnover") return "You got back after the turnover.";
-  if (normalized === "foul") return "You stayed in the play.";
-  if (normalized === "steal") return "You got there first.";
-  if (normalized === "block") return "You met the shot.";
+  if (normalized === "turnover") return "";
+  if (normalized === "foul") return "";
+  if (normalized === "steal") return "You took it.";
+  if (normalized === "block") return "You blocked it.";
 
-  return fallback || "You made the moment count.";
+  return fallback || "You were there.";
 }
 
 function formatDurationFromSeconds(seconds: number) {
@@ -304,6 +304,21 @@ function getNextIndex(currentIndex: number, direction: 1 | -1, proofCount: numbe
   return (currentIndex + direction + proofCount) % proofCount;
 }
 
+async function shareProof(proof: ProofCard) {
+  const shareUrl = proof.clip || (typeof window !== "undefined" ? window.location.href : "");
+  const shareData: ShareData = { text: proof.title, title: "PROOF", url: shareUrl };
+
+  try {
+    if (typeof navigator !== "undefined" && navigator.share && navigator.canShare?.(shareData)) {
+      await navigator.share(shareData);
+    } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(`${proof.title}\n${shareUrl}`);
+    }
+  } catch {
+    // dismissed
+  }
+}
+
 export function ProofFeed() {
   const [proofData, setProofData] = useState<ProofData>({
     proofs: temporaryProofs,
@@ -384,10 +399,9 @@ export function ProofFeed() {
       <section className="proof-stack-section" aria-label="Proof stack">
         <article className="proof-stack">
           <strong>{proofData.stack.title}</strong>
-          <span>{`${proofData.stack.proofCount} Proofs`}</span>
-          <span>{`Current Streak: ${proofData.stack.currentStreak}`}</span>
-          <span>{`Longest Streak: ${proofData.stack.longestStreak}`}</span>
-          <em>{`Next Unlock: ${proofData.stack.nextUnlock}`}</em>
+          <span>{proofData.stack.proofCount} {proofData.stack.proofCount === 1 ? "PROOF" : "PROOFS"}</span>
+          <span>{proofData.stack.currentStreak} {proofData.stack.currentStreak === 1 ? "DAY" : "DAYS"} RUNNING · {proofData.stack.longestStreak} BEST</span>
+          {proofData.stack.nextUnlock ? <em>NEXT: {proofData.stack.nextUnlock}</em> : null}
         </article>
       </section>
 
@@ -424,6 +438,9 @@ export function ProofFeed() {
                 role="img"
               />
             )}
+            <button aria-label="Share proof" className="proof-player-nav proof-player-share" onClick={() => void shareProof(activeProof)} type="button">
+              SHARE
+            </button>
             <button aria-label="Next proof" className="proof-player-nav proof-player-next" onClick={() => goToProof(1)} type="button">
               NEXT
             </button>

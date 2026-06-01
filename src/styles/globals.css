@@ -284,6 +284,10 @@ body {
   right: 1.3rem;
 }
 
+.proof-player-share {
+  left: 1.3rem;
+}
+
 .proof-player-copy {
   align-self: end;
   display: grid;
