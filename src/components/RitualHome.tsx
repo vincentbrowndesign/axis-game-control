@@ -94,8 +94,6 @@ const sessionExportLabels: Record<SessionExportType, string> = {
 const storageKey = "axis-ritual-save";
 const identityStorageKey = "axis-identity-save";
 const organizationSlug = "bridge";
-const highConfidenceShotThreshold = 0.62;
-const lowConfidenceShotThreshold = 0.46;
 const showAxisDebug = process.env.NEXT_PUBLIC_AXIS_DEBUG === "true";
 const defaultDetectionDebug: DetectionDebug = {
   athleteMatchedName: null,
@@ -141,6 +139,7 @@ type SavedSession = {
   replayEvents?: ReplayEvent[];
   replayAnchors?: ReplayAnchor[];
   replayClips?: ReplayClip[];
+  falseMomentReviewQueue?: FalseMomentReviewItem[];
   exportQueue?: SessionExportOutput[];
   review?: SessionReview;
   shotEvents?: ShotEvent[];
@@ -382,6 +381,13 @@ type PendingShotAttempt = ShotSuggestion & {
   resultSaved: boolean;
 };
 
+type ShotDetectionPipeline = {
+  ballFound: boolean;
+  releaseCandidate: boolean;
+  rimInteraction: boolean;
+  momentCandidate: boolean;
+};
+
 type ShotSummary = {
   attempts: number;
   fieldGoalPercentage: number;
@@ -511,6 +517,27 @@ type ReplayClip = {
   replayLabel: string;
   sessionId: string;
   sourceLabel?: string;
+};
+
+type FalseMomentReviewResult = "false" | "real";
+
+type FalseMomentReviewItem = {
+  athleteId?: string;
+  athleteName?: string;
+  cameraDirection?: CameraDirection;
+  cameraId?: string;
+  clipEnd: number;
+  clipStart: number;
+  createdAt: string;
+  eventType: string;
+  id: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  result?: FalseMomentReviewResult;
+  sessionId: string;
+  sourceEventId: string;
+  timestamp: string;
+  videoTimestamp: number;
 };
 
 type SessionExportOutput = {
@@ -696,6 +723,7 @@ type AxisSave = {
     replayEvents?: ReplayEvent[];
     replayAnchors?: ReplayAnchor[];
     replayClips?: ReplayClip[];
+    falseMomentReviewQueue?: FalseMomentReviewItem[];
     shotEvents?: ShotEvent[];
     timeline?: SessionTimelineSample[];
     ballTimeline?: BallTimelineSample[];
@@ -873,25 +901,17 @@ function getShotAttemptConfidence(track: PlayerTrack, ball: BallTrackingState, r
   );
 }
 
-function getShotResultFromBall(ball: BallTrackingState, rimLock?: RimLock | null) {
-  if (!hasBallCandidate(ball)) return null;
+function getShotDetectionPipeline(track: PlayerTrack, ball: BallTrackingState, rimLock?: RimLock | null): ShotDetectionPipeline {
+  const ballFound = hasBallCandidate(ball);
+  const releaseCandidate = ballFound ? hasReleaseCandidate(track, ball) : false;
+  const rimInteraction = getRimProbability(ball, rimLock) >= 0.32;
 
-  const rim = getRimTarget(rimLock);
-  if (!rim) return null;
-
-  const rimWindowX = Math.abs(ball.position.x - rim.x);
-  const rimWindowY = Math.abs(ball.position.y - rim.y);
-  const nearRim = rimWindowX <= Math.max(0.08, rim.width * 0.75) && rimWindowY <= Math.max(0.08, rim.height * 1.1);
-  const descendingNearRim = nearRim && ball.velocity.y > 0.02;
-
-  if (descendingNearRim) {
-    return {
-      confidence: getRimProbability(ball, rimLock),
-      type: "make" as const,
-    };
-  }
-
-  return null;
+  return {
+    ballFound,
+    releaseCandidate,
+    rimInteraction,
+    momentCandidate: ballFound && rimInteraction,
+  };
 }
 
 function getShotPhaseTimestamp(baseMs: number, offsetMs: number) {
@@ -1209,6 +1229,45 @@ function normalizeReplayClips(clips: unknown) {
   if (!Array.isArray(clips)) return [];
 
   return clips.map(normalizeReplayClip).filter((clip): clip is ReplayClip => Boolean(clip));
+}
+
+function normalizeFalseMomentReviewItem(item: unknown): FalseMomentReviewItem | null {
+  if (!item || typeof item !== "object") return null;
+
+  const candidate = item as Partial<FalseMomentReviewItem>;
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.sessionId !== "string" ||
+    typeof candidate.sourceEventId !== "string" ||
+    typeof candidate.timestamp !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    athleteId: typeof candidate.athleteId === "string" ? candidate.athleteId : undefined,
+    athleteName: typeof candidate.athleteName === "string" ? candidate.athleteName : undefined,
+    cameraDirection: candidate.cameraDirection ? normalizeCameraDirection(candidate.cameraDirection) : undefined,
+    cameraId: typeof candidate.cameraId === "string" ? candidate.cameraId : undefined,
+    clipEnd: typeof candidate.clipEnd === "number" ? Math.max(0, candidate.clipEnd) : 0,
+    clipStart: typeof candidate.clipStart === "number" ? Math.max(0, candidate.clipStart) : 0,
+    createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : candidate.timestamp,
+    eventType: typeof candidate.eventType === "string" ? candidate.eventType : "moment",
+    id: candidate.id,
+    reviewedAt: typeof candidate.reviewedAt === "string" ? candidate.reviewedAt : undefined,
+    reviewedBy: typeof candidate.reviewedBy === "string" ? candidate.reviewedBy : undefined,
+    result: candidate.result === "real" || candidate.result === "false" ? candidate.result : undefined,
+    sessionId: candidate.sessionId,
+    sourceEventId: candidate.sourceEventId,
+    timestamp: candidate.timestamp,
+    videoTimestamp: typeof candidate.videoTimestamp === "number" ? Math.max(0, candidate.videoTimestamp) : 0,
+  };
+}
+
+function normalizeFalseMomentReviewQueue(queue: unknown) {
+  if (!Array.isArray(queue)) return [];
+
+  return queue.map(normalizeFalseMomentReviewItem).filter((item): item is FalseMomentReviewItem => Boolean(item));
 }
 
 function normalizeSessionReview(review: unknown): SessionReview | undefined {
@@ -1990,6 +2049,73 @@ function createReplayClip(
 
 function createReplayClips(anchors: ReplayAnchor[]) {
   return anchors.filter(shouldCreateClip).map((anchor) => createReplayClip(anchor));
+}
+
+function createFalseMomentReviewItem(
+  anchor: ReplayAnchor,
+  options: {
+    createdAt?: string;
+    leadInSeconds?: number;
+    leadOutSeconds?: number;
+  } = {},
+): FalseMomentReviewItem {
+  const leadInSeconds = options.leadInSeconds ?? 5;
+  const leadOutSeconds = options.leadOutSeconds ?? 5;
+
+  return {
+    athleteId: anchor.athleteId,
+    athleteName: anchor.athleteName,
+    cameraDirection: anchor.cameraDirection,
+    cameraId: anchor.cameraId,
+    clipEnd: anchor.videoTimestamp + leadOutSeconds,
+    clipStart: Math.max(0, anchor.videoTimestamp - leadInSeconds),
+    createdAt: options.createdAt ?? new Date().toISOString(),
+    eventType: anchor.eventType,
+    id: `false-moment:${anchor.eventId}`,
+    sessionId: anchor.sessionId,
+    sourceEventId: anchor.eventId,
+    timestamp: anchor.timestamp,
+    videoTimestamp: anchor.videoTimestamp,
+  };
+}
+
+function appendFalseMomentReviewItems(
+  queue: FalseMomentReviewItem[] | undefined,
+  items: FalseMomentReviewItem[],
+) {
+  const existing = normalizeFalseMomentReviewQueue(queue);
+  const next = [...existing];
+
+  items.forEach((item) => {
+    const currentIndex = next.findIndex((candidate) => candidate.id === item.id);
+    if (currentIndex >= 0) {
+      next[currentIndex] = { ...next[currentIndex], ...item, result: next[currentIndex].result };
+    } else {
+      next.push(item);
+    }
+  });
+
+  return next;
+}
+
+function reviewFalseMomentQueue(
+  queue: FalseMomentReviewItem[] | undefined,
+  reviewId: string,
+  result: FalseMomentReviewResult,
+  reviewedBy?: string,
+) {
+  const reviewedAt = new Date().toISOString();
+
+  return normalizeFalseMomentReviewQueue(queue).map((item) =>
+    item.id === reviewId || item.sourceEventId === reviewId
+      ? {
+          ...item,
+          result,
+          reviewedAt,
+          reviewedBy,
+        }
+      : item,
+  );
 }
 
 function findShotAnchor(shot: ShotEvent | undefined, anchors: ReplayAnchor[]) {
@@ -3275,6 +3401,7 @@ function readSave(): AxisSave {
           replayAnchors: normalizeReplayAnchors(parsed.activeSession.replayAnchors),
           replayClips: normalizeReplayClips(parsed.activeSession.replayClips),
           replayEvents: normalizeReplayEvents(parsed.activeSession.replayEvents),
+          falseMomentReviewQueue: normalizeFalseMomentReviewQueue(parsed.activeSession.falseMomentReviewQueue),
           shotEvents: normalizeShotEvents(parsed.activeSession.shotEvents),
         }
       : null;
@@ -3359,6 +3486,7 @@ function readSave(): AxisSave {
               replayAnchors,
               replayClips,
               replayEvents,
+              falseMomentReviewQueue: normalizeFalseMomentReviewQueue(session.falseMomentReviewQueue),
               review: normalizeSessionReview(session.review),
               shotEvents,
               shotSummary: session.shotSummary ?? summarizeShots(shotEvents),
@@ -3904,6 +4032,7 @@ export function RitualHome() {
   const timelineMomentAnchors = getFilteredTimelineMoments(latestFilmTimelineAnchors, timelineMomentFilter);
   const groupedTimelineMoments = getGroupedTimelineMoments(timelineMomentAnchors);
   const totalTimelineMomentCount = getFilteredTimelineMoments(latestFilmTimelineAnchors, "all").length;
+  const falseMomentReviewQueue = normalizeFalseMomentReviewQueue(filmSession?.falseMomentReviewQueue);
   const latestSessionReview = filmSession?.review;
   const latestFilmPlaybackId = getFilmPlaybackId(filmSession);
   const latestFilmPreviewUrl = filmSession ? filmPreviewUrls[filmSession.id] : undefined;
@@ -4190,14 +4319,11 @@ export function RitualHome() {
       return;
     }
 
-    const attemptConfidence = getShotAttemptConfidence(primaryTrackingTrack, ballTracking, save.activeSession.rimLock);
-    const isLikelyShotMotion = attemptConfidence >= lowConfidenceShotThreshold;
+    const pipeline = getShotDetectionPipeline(primaryTrackingTrack, ballTracking, save.activeSession.rimLock);
 
-    if (!isLikelyShotMotion) return;
+    if (!pipeline.ballFound) return;
 
     const nowMs = Date.now();
-    if (nowMs - lastShotSuggestionAtRef.current < 4500) return;
-
     const trackedAthlete = getTrackAthlete(primaryTrackingTrack.id);
     const fallbackAthlete = selectedCalibrationAthlete ?? presentParticipants[0] ?? identityFromAxisIdentity(identity ?? {
       email: "athlete@axis.local",
@@ -4211,49 +4337,19 @@ export function RitualHome() {
     );
     const shotScience = createShotScience(primaryTrackingTrack, ballTracking, save.activeSession.rimLock);
     const activeSession = save.activeSession;
-    const shotId = `shot:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`;
+    const pendingAttempt = pendingShotAttemptRef.current;
 
-    lastShotSuggestionAtRef.current = nowMs;
-    if (attemptConfidence >= highConfidenceShotThreshold && nowMs - lastShotAttemptAtRef.current >= 4500) {
-      const gatherTimestamp = getShotPhaseTimestamp(nowMs, -520);
-      const releaseTimestamp = getShotPhaseTimestamp(nowMs, -120);
-      const arcTimestamp = getShotPhaseTimestamp(nowMs, 260);
+    if (pendingAttempt && nowMs - pendingAttempt.createdAtMs > 7000) {
+      pendingShotAttemptRef.current = null;
+      setShotSuggestion(null);
+    }
+
+    if (pipeline.releaseCandidate && !pendingShotAttemptRef.current) {
       const timestamp = new Date(nowMs).toISOString();
+      const attemptConfidence = getShotAttemptConfidence(primaryTrackingTrack, ballTracking, activeSession.rimLock);
+      const shotId = `shot:${activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`;
       const attemptId = `shot-attempt:${shotId}`;
-      const shotPhaseEvents = [
-        createShotPhaseReplayEvent("shot_gather", gatherTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
-        createShotPhaseReplayEvent("shot_release", releaseTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
-        createShotPhaseReplayEvent("shot_arc", arcTimestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
-        createShotPhaseReplayEvent("shot_attempt", timestamp, athlete, primaryTrackingTrack, savedCameraDirection, attemptConfidence),
-      ];
-      const replayAnchors = shotPhaseEvents.map((event) =>
-        createReplayAnchor(
-          event.id,
-          event.type,
-          event.timestamp,
-          activeSession.id,
-          activeSession.startedAt,
-          activeSession.muxAssetId,
-          event.label,
-          {
-            athleteId: event.athleteId,
-            athleteName: event.athleteName,
-            cameraDirection: event.cameraDirection,
-            cameraId: event.cameraId,
-          },
-        ),
-      );
-      const nextSave = {
-        ...save,
-        activeSession: {
-          ...activeSession,
-          replayAnchors: [...(activeSession.replayAnchors ?? []), ...replayAnchors],
-          replayClips: [...(activeSession.replayClips ?? []), ...replayAnchors.map((anchor) => createReplayClip(anchor))],
-          replayEvents: [...(activeSession.replayEvents ?? []), ...shotPhaseEvents],
-        },
-      };
 
-      lastShotAttemptAtRef.current = nowMs;
       pendingShotAttemptRef.current = {
         athleteId: athlete.id,
         athleteName: athlete.name,
@@ -4261,31 +4357,75 @@ export function RitualHome() {
         confidence: attemptConfidence,
         createdAtMs: nowMs,
         id: attemptId,
-        reason: "Moment found",
+        reason: "Release candidate",
         replayTimestamp,
         resultSaved: false,
-        needsConfirmation: false,
+        needsConfirmation: true,
         shotId,
         shotScience,
         timestamp,
         trackId: primaryTrackingTrack.id,
       };
-      writeSave(nextSave);
-      setSave(nextSave);
+
+      return;
     }
+
+    if (!pendingShotAttemptRef.current || !pipeline.rimInteraction || !pipeline.momentCandidate) return;
+    if (nowMs - lastShotSuggestionAtRef.current < 4500 || nowMs - lastShotAttemptAtRef.current < 4500) return;
+
+    const confirmedAttempt = pendingShotAttemptRef.current;
+    const momentTimestamp = new Date(nowMs).toISOString();
+    const momentConfidence = Math.max(confirmedAttempt.confidence, getRimProbability(ballTracking, activeSession.rimLock));
     const nextSuggestion = {
-      athleteId: athlete.id,
-      athleteName: athlete.name,
-      confidence: attemptConfidence,
-      id: `shot-suggestion:${save.activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`,
-      needsConfirmation: attemptConfidence < highConfidenceShotThreshold,
-      reason: attemptConfidence >= highConfidenceShotThreshold ? "Moment found" : "Confirm moment",
-      replayTimestamp,
-      shotId,
-      shotScience,
-      timestamp: new Date(nowMs).toISOString(),
-      trackId: primaryTrackingTrack.id,
+      athleteId: confirmedAttempt.athleteId,
+      athleteName: confirmedAttempt.athleteName,
+      confidence: momentConfidence,
+      id: `shot-suggestion:${activeSession.id}:${primaryTrackingTrack.id}:${nowMs}`,
+      needsConfirmation: true,
+      reason: "Moment found",
+      replayTimestamp: Math.max(0, Math.floor((nowMs - new Date(activeSession.startedAt).getTime()) / 1000)),
+      shotId: confirmedAttempt.shotId,
+      shotScience: confirmedAttempt.shotScience ?? shotScience,
+      timestamp: momentTimestamp,
+      trackId: confirmedAttempt.trackId,
     };
+    const reviewAnchor = createReplayAnchor(
+      nextSuggestion.id,
+      "shot_attempt",
+      nextSuggestion.timestamp,
+      activeSession.id,
+      activeSession.startedAt,
+      activeSession.muxAssetId,
+      "Moment found",
+      {
+        athleteId: nextSuggestion.athleteId,
+        athleteName: nextSuggestion.athleteName,
+        cameraDirection: savedCameraDirection,
+        cameraId: getCameraId(savedCameraDirection),
+      },
+    );
+    const nextSave = {
+      ...save,
+      activeSession: {
+        ...activeSession,
+        falseMomentReviewQueue: appendFalseMomentReviewItems(activeSession.falseMomentReviewQueue, [
+          {
+            ...createFalseMomentReviewItem(reviewAnchor, { createdAt: nextSuggestion.timestamp }),
+            id: `false-moment:${nextSuggestion.shotId}`,
+            sourceEventId: nextSuggestion.shotId,
+          },
+        ]),
+      },
+    };
+
+    lastShotAttemptAtRef.current = nowMs;
+    lastShotSuggestionAtRef.current = nowMs;
+    pendingShotAttemptRef.current = {
+      ...confirmedAttempt,
+      ...nextSuggestion,
+    };
+    writeSave(nextSave);
+    setSave(nextSave);
     setShotSuggestion(nextSuggestion);
     triggerBroadcastMessage("MOMENT FOUND", undefined, "shot");
   }, [
@@ -4306,42 +4446,6 @@ export function RitualHome() {
     ballTracking.position,
     ballTracking.velocity,
     ballTracking.visible,
-  ]);
-
-  useEffect(() => {
-    if (!save.activeSession?.rimLock || !pendingShotAttemptRef.current || pendingShotAttemptRef.current.resultSaved) return;
-
-    const pendingAttempt = pendingShotAttemptRef.current;
-    const nowMs = Date.now();
-    const automaticResult = getShotResultFromBall(ballTracking, save.activeSession.rimLock);
-
-    if (!automaticResult) return;
-
-    const resultType: ShotType = automaticResult.type;
-    const confidence = automaticResult.confidence;
-    pendingShotAttemptRef.current = {
-      ...pendingAttempt,
-      resultSaved: true,
-    };
-
-    recordShot(resultType, {
-      athleteId: pendingAttempt.athleteId,
-      athleteName: pendingAttempt.athleteName,
-      confidence,
-      id: `${pendingAttempt.attemptId}:${resultType}`,
-      reason: "Ball crossed saved rim",
-      replayTimestamp: Math.max(0, Math.floor((nowMs - new Date(save.activeSession.startedAt).getTime()) / 1000)),
-      shotId: pendingAttempt.shotId,
-      shotScience: pendingAttempt.shotScience,
-      timestamp: new Date(nowMs).toISOString(),
-      trackId: pendingAttempt.trackId,
-    });
-  }, [
-    ballTracking.confidence,
-    ballTracking.position,
-    ballTracking.velocity,
-    ballTracking.visible,
-    save.activeSession,
   ]);
 
   useEffect(() => {
@@ -4627,6 +4731,7 @@ export function RitualHome() {
         replayAnchors: [sessionStartAnchor],
         replayClips: [],
         replayEvents: [],
+        falseMomentReviewQueue: [],
         rimLock: save.sessions[0]?.rimLock,
         shotEvents: [],
         timeline: [],
@@ -5606,6 +5711,32 @@ export function RitualHome() {
         },
       ),
     );
+    const suggestionReviewQueue = suggestion
+      ? appendFalseMomentReviewItems(activeSession.falseMomentReviewQueue, [
+          {
+            ...createFalseMomentReviewItem(
+              createReplayAnchor(
+                suggestion.id,
+                "shot_attempt",
+                suggestion.timestamp,
+                activeSession.id,
+                activeSession.startedAt,
+                activeSession.muxAssetId,
+                "Moment found",
+                {
+                  athleteId: athlete.id,
+                  athleteName: athlete.name,
+                  cameraDirection: savedCameraDirection,
+                  cameraId: getCameraId(savedCameraDirection),
+                },
+              ),
+              { createdAt: suggestion.timestamp },
+            ),
+            id: `false-moment:${suggestion.shotId}`,
+            sourceEventId: suggestion.shotId,
+          },
+        ])
+      : activeSession.falseMomentReviewQueue;
     const nextSave = {
       ...save,
       activeSession: {
@@ -5616,6 +5747,14 @@ export function RitualHome() {
           ...[...extraReplayAnchors, replayAnchor].filter(shouldCreateClip).map((anchor) => createReplayClip(anchor)),
         ],
         replayEvents: [...(activeSession.replayEvents ?? []), ...extraReplayEvents, replayEvent],
+        falseMomentReviewQueue: suggestion
+          ? reviewFalseMomentQueue(
+              suggestionReviewQueue,
+              suggestion.shotId,
+              "real",
+              athlete.id,
+            )
+          : suggestionReviewQueue,
         shotEvents: [...existingShotEvents, shotEvent],
       },
     };
@@ -5696,6 +5835,41 @@ export function RitualHome() {
     setSelectedFilmSessionId(sessionId);
     if (anchor) setSelectedReplayAnchor(anchor);
     setProductSurface("overlay");
+  }
+
+  function markFalseMomentReview(sessionId: string, reviewId: string, result: FalseMomentReviewResult) {
+    const reviewedBy = identity?.id;
+    const nextSave = {
+      ...save,
+      activeSession:
+        save.activeSession?.id === sessionId
+          ? {
+              ...save.activeSession,
+              falseMomentReviewQueue: reviewFalseMomentQueue(
+                save.activeSession.falseMomentReviewQueue,
+                reviewId,
+                result,
+                reviewedBy,
+              ),
+            }
+          : save.activeSession,
+      sessions: save.sessions.map((session) =>
+        session.id === sessionId
+          ? {
+              ...session,
+              falseMomentReviewQueue: reviewFalseMomentQueue(
+                session.falseMomentReviewQueue,
+                reviewId,
+                result,
+                reviewedBy,
+              ),
+            }
+          : session,
+      ),
+    };
+
+    writeSave(nextSave);
+    setSave(nextSave);
   }
 
   function toggleOverlay(key: OverlayKey) {
@@ -6503,6 +6677,7 @@ export function RitualHome() {
       replayAnchors,
       replayClips,
       replayEvents,
+      falseMomentReviewQueue: normalizeFalseMomentReviewQueue(save.activeSession.falseMomentReviewQueue),
       review: {
         generatedAt: endedAt,
         largestInterruption: replayEvents.some((event) => event.type === "tracking_interruption")
@@ -7781,6 +7956,35 @@ export function RitualHome() {
                     </article>
                   )}
                 </section>
+                {falseMomentReviewQueue.length ? (
+                  <section className="axis-review-block" aria-label="False moment review queue">
+                    <span>Moment review</span>
+                    <div>
+                      {falseMomentReviewQueue.slice(0, 6).map((item) => (
+                        <article className="axis-review-row" key={item.id}>
+                          <strong>{item.result === "real" ? "Real Moment" : item.result === "false" ? "False Moment" : "Moment Found"}</strong>
+                          <em>{`${formatFilmTimestamp(item.videoTimestamp)} / ${formatDuration(item.clipStart)}-${formatDuration(item.clipEnd)}`}</em>
+                          <div className="axis-review-actions">
+                            <button
+                              disabled={item.result === "real"}
+                              onClick={() => markFalseMomentReview(item.sessionId, item.id, "real")}
+                              type="button"
+                            >
+                              Real Moment
+                            </button>
+                            <button
+                              disabled={item.result === "false"}
+                              onClick={() => markFalseMomentReview(item.sessionId, item.id, "false")}
+                              type="button"
+                            >
+                              False Moment
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
                 {showAxisDebug ? (
                   <em>
                   {selectedReplayAnchor

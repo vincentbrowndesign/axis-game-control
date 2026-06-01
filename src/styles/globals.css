@@ -4082,6 +4082,33 @@ button.axis-review-row:focus-visible {
   outline-offset: 0.16rem;
 }
 
+.axis-review-actions {
+  display: flex;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.axis-review-actions button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.3);
+  color: var(--axis-live);
+  cursor: pointer;
+  font-size: 0.58rem;
+  font-weight: 800;
+  min-height: 2rem;
+  padding: 0.42rem 0.55rem;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.axis-review-actions button:disabled {
+  border-color: var(--axis-line);
+  color: var(--axis-muted);
+  cursor: default;
+}
+
 .axis-review-action {
   appearance: none;
   background: transparent;
