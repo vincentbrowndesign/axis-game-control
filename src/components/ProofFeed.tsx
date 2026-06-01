@@ -169,10 +169,10 @@ const proofStacks: ProofStack[] = [
 
 const manualProofTitles = [
   "You took the shot after a miss.",
-  "You got back after the turnover.",
   "You made the pass before the basket.",
-  "You called for the ball.",
   "You got there first.",
+  "You blocked it.",
+  "You took it.",
 ] as const;
 
 const storageKey = "axis-ritual-save";
@@ -225,7 +225,11 @@ function getProofTitle(type: string, fallback: string) {
   if (normalized === "steal") return "You took it.";
   if (normalized === "block") return "You blocked it.";
 
-  return fallback || "You were there.";
+  // Reject all-caps event labels from the recording pipeline (SESSION START, BALL RECOVERED, etc.)
+  const cleanFallback = fallback.trim();
+  if (cleanFallback && cleanFallback === cleanFallback.toUpperCase()) return "";
+
+  return cleanFallback || "You were there.";
 }
 
 function formatDurationFromSeconds(seconds: number) {
@@ -337,12 +341,16 @@ function createProofsFromStoredSessions(sessions: StoredSession[]) {
         const type = getString(anchor.eventType);
         const title = getProofTitle(type, getString(anchor.replayLabel));
         const videoTimestamp = getNumber(anchor.videoTimestamp);
+        // Use time-indexed Mux frame for this specific proof moment — never the session thumbnail
+        const poster = playbackId && videoTimestamp
+          ? `https://image.mux.com/${playbackId}/thumbnail.jpg?time=${videoTimestamp}&width=640`
+          : "";
 
         return {
           clip,
           duration: formatDurationFromSeconds(videoTimestamp || 8),
           id: getString(anchor.eventId) || `${sessionId}-anchor-${anchorIndex}`,
-          poster: thumbnail,
+          poster,
           stackId: getProofStackId(title),
           timestamp: getString(anchor.timestamp),
           title,
@@ -354,12 +362,15 @@ function createProofsFromStoredSessions(sessions: StoredSession[]) {
         const type = getString(shot.type);
         const filmTimeSeconds = getNumber(shot.filmTimeSeconds);
         const title = getProofTitle(type, "");
+        const poster = playbackId && filmTimeSeconds
+          ? `https://image.mux.com/${playbackId}/thumbnail.jpg?time=${filmTimeSeconds}&width=640`
+          : "";
 
         return {
           clip,
           duration: formatDurationFromSeconds(filmTimeSeconds || 8),
           id: getString(shot.shotId) || `${sessionId}-shot-${shotIndex}`,
-          poster: thumbnail,
+          poster,
           stackId: getProofStackId(title),
           timestamp: getString(shot.timestamp),
           title,
@@ -433,12 +444,16 @@ async function createProofShareFiles(proof: ProofCard) {
   const basename = getSafeProofName(proof.title);
   const files: File[] = [];
 
-  if (proof.clip && !proof.clip.endsWith(".m3u8")) {
+  // HLS streams (.m3u8) cannot be fetched or shared as standalone files
+  const isHls = proof.clip.includes(".m3u8");
+  if (proof.clip && !isHls) {
     const clipFile = await createFileFromUrl(proof.clip, `${basename}-clip.mp4`).catch(() => null);
     if (clipFile) files.push(clipFile);
   }
 
-  if (proof.poster) {
+  // SVG data URIs are not accepted by navigator.share on most platforms
+  const isSvg = proof.poster.startsWith("data:image/svg") || proof.poster.includes("%3Csvg");
+  if (proof.poster && !isSvg) {
     const thumbnailFile = await createFileFromUrl(proof.poster, `${basename}-thumbnail.jpg`).catch(() => null);
     if (thumbnailFile) files.push(thumbnailFile);
   }
@@ -459,10 +474,14 @@ async function shareProof(proof: ProofCard) {
         return;
       }
 
-      if (proof.clip) {
+      // HLS stream URLs are useless to recipients — share title only
+      if (proof.clip && !proof.clip.includes(".m3u8")) {
         await navigator.share({ text, title: proof.title, url: proof.clip });
         return;
       }
+
+      await navigator.share({ text, title: proof.title });
+      return;
 
       if (files.length) {
         await navigator.share({ text, title: proof.title });
@@ -814,7 +833,6 @@ export function ProofFeed() {
 
       <section className="proof-create" aria-label="Create proof">
         <div className="proof-create-head">
-          <span>MANUAL PROOF</span>
           <strong>Import. Mark. Save.</strong>
         </div>
 
@@ -830,8 +848,7 @@ export function ProofFeed() {
         {manualVideoUrl && reviewMode ? (
           <div className="proof-create-workflow">
             <div className="proof-review-head">
-              <span>REVIEW MODE</span>
-              <strong>{importSession?.status === "saved" ? "VIDEO SAVED" : "MAKE PROOF"}</strong>
+              <strong>{importSession?.status === "saved" ? "VIDEO SAVED" : "MARK PROOF"}</strong>
             </div>
             <video
               className="proof-create-video"
@@ -910,17 +927,20 @@ export function ProofFeed() {
         ))}
       </section>
 
-      <section className="proof-stack-section" aria-label="Proof stack">
-        {visibleStacks.map((stack) => (
-          <article className="proof-stack" key={stack.id}>
-          <strong>{stack.title}</strong>
-          <span>{stack.proofCount} {stack.proofCount === 1 ? "Proof" : "Proofs"}</span>
-          <span>Current Streak: {stack.currentStreak}</span>
-          <span>Longest Streak: {stack.longestStreak}</span>
-          {stack.nextUnlock ? <em>Next Unlock:<br />{stack.nextUnlock}</em> : null}
-          </article>
-        ))}
-      </section>
+      {visibleStacks.some((stack) => stack.proofCount > 0) ? (
+        <section className="proof-stack-section" aria-label="Proof stack">
+          {visibleStacks
+            .filter((stack) => stack.proofCount > 0)
+            .map((stack) => (
+              <article className="proof-stack" key={stack.id}>
+                <strong>{stack.title}</strong>
+                <span>{stack.proofCount} {stack.proofCount === 1 ? "PROOF" : "PROOFS"}</span>
+                <span>{stack.currentStreak} {stack.currentStreak === 1 ? "DAY" : "DAYS"} RUNNING · {stack.longestStreak} BEST</span>
+                {stack.nextUnlock ? <em>NEXT: {stack.nextUnlock}</em> : null}
+              </article>
+            ))}
+        </section>
+      ) : null}
 
       {activeProof ? (
         <section
