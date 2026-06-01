@@ -394,15 +394,84 @@ function getNextIndex(currentIndex: number, direction: 1 | -1, proofCount: numbe
   return (currentIndex + direction + proofCount) % proofCount;
 }
 
+function getAssetExtension(type: string, fallback: string) {
+  if (type.includes("png")) return "png";
+  if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
+  if (type.includes("webm")) return "webm";
+  if (type.includes("quicktime")) return "mov";
+  if (type.includes("mp4")) return "mp4";
+
+  return fallback;
+}
+
+function getSafeProofName(title: string) {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+
+  return slug || "proof";
+}
+
+async function createFileFromUrl(url: string, filename: string) {
+  const response = await fetch(url);
+  if (!response.ok) return null;
+
+  const blob = await response.blob();
+  if (!blob.size) return null;
+
+  const extension = getAssetExtension(blob.type, filename.split(".").pop() || "bin");
+  const basename = filename.replace(/\.[^.]+$/, "");
+
+  return new File([blob], `${basename}.${extension}`, {
+    type: blob.type || "application/octet-stream",
+  });
+}
+
+async function createProofShareFiles(proof: ProofCard) {
+  const basename = getSafeProofName(proof.title);
+  const files: File[] = [];
+
+  if (proof.clip && !proof.clip.endsWith(".m3u8")) {
+    const clipFile = await createFileFromUrl(proof.clip, `${basename}-clip.mp4`).catch(() => null);
+    if (clipFile) files.push(clipFile);
+  }
+
+  if (proof.poster) {
+    const thumbnailFile = await createFileFromUrl(proof.poster, `${basename}-thumbnail.jpg`).catch(() => null);
+    if (thumbnailFile) files.push(thumbnailFile);
+  }
+
+  return files;
+}
+
 async function shareProof(proof: ProofCard) {
-  const shareUrl = proof.clip || (typeof window !== "undefined" ? window.location.href : "");
-  const shareData: ShareData = { text: proof.title, title: "PROOF", url: shareUrl };
+  const files = await createProofShareFiles(proof);
+  const text = proof.title;
 
   try {
-    if (typeof navigator !== "undefined" && navigator.share && navigator.canShare?.(shareData)) {
-      await navigator.share(shareData);
-    } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-      await navigator.clipboard.writeText(`${proof.title}\n${shareUrl}`);
+    if (typeof navigator !== "undefined" && navigator.share) {
+      const fileShareData: ShareData = { files, text, title: proof.title };
+
+      if (files.length && navigator.canShare?.(fileShareData)) {
+        await navigator.share(fileShareData);
+        return;
+      }
+
+      if (proof.clip) {
+        await navigator.share({ text, title: proof.title, url: proof.clip });
+        return;
+      }
+
+      if (files.length) {
+        await navigator.share({ text, title: proof.title });
+        return;
+      }
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(proof.clip ? `${proof.title}\n${proof.clip}` : proof.title);
     }
   } catch {
     // dismissed
@@ -486,7 +555,9 @@ export function ProofFeed() {
   const [importSession, setImportSession] = useState<ProofImportSession | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [proofEnded, setProofEnded] = useState(false);
   const manualVideoRef = useRef<HTMLVideoElement | null>(null);
+  const proofVideoRef = useRef<HTMLVideoElement | null>(null);
   const manualVideoUrlsRef = useRef<string[]>([]);
   const touchStartX = useRef<number | null>(null);
   const visibleProofs = useMemo(() => [...manualProofs, ...proofData.proofs], [manualProofs, proofData.proofs]);
@@ -496,6 +567,10 @@ export function ProofFeed() {
   useEffect(() => {
     setProofData(getProofData());
   }, []);
+
+  useEffect(() => {
+    setProofEnded(Boolean(activeProof && !activeProof.clip));
+  }, [activeProof]);
 
   useEffect(() => {
     return () => {
@@ -531,6 +606,18 @@ export function ProofFeed() {
 
   function goToProof(direction: 1 | -1) {
     setActiveIndex((current) => (current === null ? current : getNextIndex(current, direction, visibleProofs.length)));
+  }
+
+  function replayProof() {
+    const video = proofVideoRef.current;
+    if (!video || !activeProof) return;
+
+    const startTime = typeof activeProof.startTime === "number" ? activeProof.startTime : 0;
+    setProofEnded(false);
+    video.currentTime = startTime;
+    void video.play().catch(() => {
+      setProofEnded(false);
+    });
   }
 
   function importManualVideo(file: File | undefined) {
@@ -855,18 +942,20 @@ export function ProofFeed() {
                 autoPlay
                 className="proof-player-video"
                 muted
-                onEnded={() => goToProof(1)}
+                onEnded={() => setProofEnded(true)}
                 onLoadedMetadata={(event) => {
                   if (typeof activeProof.startTime === "number") event.currentTarget.currentTime = activeProof.startTime;
                 }}
                 onTimeUpdate={(event) => {
                   if (typeof activeProof.endTime === "number" && event.currentTarget.currentTime >= activeProof.endTime) {
                     event.currentTarget.pause();
-                    goToProof(1);
+                    event.currentTarget.currentTime = activeProof.endTime;
+                    setProofEnded(true);
                   }
                 }}
                 playsInline
                 poster={activeProof.poster}
+                ref={proofVideoRef}
                 src={activeProof.clip}
               />
             ) : (
@@ -879,12 +968,21 @@ export function ProofFeed() {
                 {activeProof.poster ? <img alt="" src={activeProof.poster} /> : null}
               </div>
             )}
-            <button aria-label="Share proof" className="proof-player-nav proof-player-share" onClick={() => void shareProof(activeProof)} type="button">
-              SHARE
-            </button>
-            <button aria-label="Next proof" className="proof-player-nav proof-player-next" onClick={() => goToProof(1)} type="button">
-              NEXT
-            </button>
+            {proofEnded ? (
+              <>
+                {activeProof.clip ? (
+                  <button aria-label="Replay proof" className="proof-player-nav proof-player-replay" onClick={replayProof} type="button">
+                    REPLAY
+                  </button>
+                ) : null}
+                <button aria-label="Share proof" className="proof-player-nav proof-player-share" onClick={() => void shareProof(activeProof)} type="button">
+                  SHARE
+                </button>
+                <button aria-label="Next proof" className="proof-player-nav proof-player-next" onClick={() => goToProof(1)} type="button">
+                  NEXT
+                </button>
+              </>
+            ) : null}
           </div>
         </section>
       ) : null}

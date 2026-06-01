@@ -447,6 +447,11 @@ body {
   right: 1.3rem;
 }
 
+.proof-player-replay {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 .proof-player-share {
   left: 1.3rem;
 }
