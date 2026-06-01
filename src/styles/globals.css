@@ -337,49 +337,25 @@ body {
 }
 
 .proof-thumb {
-  background:
-    radial-gradient(circle at 72% 18%, rgba(168, 217, 51, 0.18), transparent 24%),
-    linear-gradient(135deg, rgba(244, 244, 240, 0.16), rgba(244, 244, 240, 0.02) 42%, rgba(0, 0, 0, 0.8)),
-    #090909;
+  background: #050505;
   overflow: hidden;
   position: relative;
 }
 
 .proof-thumb[data-tone="cut"] {
-  background:
-    linear-gradient(115deg, rgba(168, 217, 51, 0.2), transparent 22%),
-    linear-gradient(155deg, rgba(244, 244, 240, 0.13), transparent 34%),
-    #050505;
+  background: #050505;
 }
 
 .proof-thumb[data-tone="glass"] {
-  background:
-    radial-gradient(circle at 26% 38%, rgba(244, 244, 240, 0.2), transparent 20%),
-    linear-gradient(145deg, rgba(168, 217, 51, 0.14), transparent 38%),
-    #070707;
+  background: #050505;
 }
 
-.proof-thumb::before {
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: 34px 34px;
-  content: "";
-  inset: 0;
-  opacity: 0.34;
-  position: absolute;
-}
-
-.proof-thumb::after {
-  border: 1px solid rgba(168, 217, 51, 0.42);
-  border-radius: 999px;
-  content: "";
-  height: 36%;
-  left: 50%;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 46%;
+.proof-thumb img,
+.proof-player-video-placeholder img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
 }
 
 .proof-play {
@@ -511,47 +487,15 @@ body {
 }
 
 .proof-player-video-placeholder {
-  background:
-    radial-gradient(circle at 68% 18%, rgba(168, 217, 51, 0.18), transparent 24%),
-    linear-gradient(135deg, rgba(244, 244, 240, 0.14), rgba(244, 244, 240, 0.02) 42%, rgba(0, 0, 0, 0.84)),
-    #050505;
+  background: #050505;
 }
 
 .proof-player-video-placeholder[data-tone="cut"] {
-  background:
-    linear-gradient(115deg, rgba(168, 217, 51, 0.18), transparent 22%),
-    linear-gradient(155deg, rgba(244, 244, 240, 0.12), transparent 34%),
-    #050505;
+  background: #050505;
 }
 
 .proof-player-video-placeholder[data-tone="glass"] {
-  background:
-    radial-gradient(circle at 26% 38%, rgba(244, 244, 240, 0.16), transparent 20%),
-    linear-gradient(145deg, rgba(168, 217, 51, 0.12), transparent 38%),
-    #050505;
-}
-
-.proof-player-video-placeholder::before {
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 34px 34px;
-  content: "";
-  inset: 0;
-  opacity: 0.32;
-  position: absolute;
-}
-
-.proof-player-video-placeholder::after {
-  border: 1px solid rgba(168, 217, 51, 0.38);
-  border-radius: 999px;
-  content: "";
-  height: 24%;
-  left: 50%;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 38%;
+  background: #050505;
 }
 
 @media (min-width: 760px) {

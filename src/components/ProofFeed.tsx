@@ -425,6 +425,51 @@ function uploadVideoWithTus(uploadUrl: string, file: File) {
   });
 }
 
+function waitForVideoSeek(video: HTMLVideoElement, time: number) {
+  return new Promise<void>((resolve, reject) => {
+    if (Math.abs(video.currentTime - time) < 0.05) {
+      resolve();
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      video.removeEventListener("seeked", onSeeked);
+      reject(new Error("Thumbnail seek timed out"));
+    }, 1200);
+
+    function onSeeked() {
+      window.clearTimeout(timeout);
+      video.removeEventListener("seeked", onSeeked);
+      resolve();
+    }
+
+    video.addEventListener("seeked", onSeeked, { once: true });
+    video.currentTime = time;
+  });
+}
+
+function waitForVideoFrame(video: HTMLVideoElement) {
+  return new Promise<void>((resolve, reject) => {
+    if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+      resolve();
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      video.removeEventListener("loadeddata", onLoadedData);
+      reject(new Error("Video frame unavailable"));
+    }, 1200);
+
+    function onLoadedData() {
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadeddata", onLoadedData);
+      resolve();
+    }
+
+    video.addEventListener("loadeddata", onLoadedData, { once: true });
+  });
+}
+
 export function ProofFeed() {
   const [proofData, setProofData] = useState<ProofData>({
     proofs: temporaryProofs,
@@ -587,7 +632,47 @@ export function ProofFeed() {
     setManualMessage("");
   }
 
-  function saveManualProof() {
+  async function captureProofThumbnail(startTime: number, endTime: number) {
+    const video = manualVideoRef.current;
+    if (!video) return "";
+
+    try {
+      await waitForVideoFrame(video);
+    } catch {
+      return "";
+    }
+
+    if (!video.videoWidth || !video.videoHeight) return "";
+
+    const originalTime = video.currentTime;
+    const midpoint = startTime + (endTime - startTime) / 2;
+    const captureTimes = [midpoint, startTime, 0];
+
+    for (const captureTime of captureTimes) {
+      try {
+        const safeTime = Math.min(Math.max(0, captureTime), Math.max(0, (video.duration || captureTime) - 0.05));
+        await waitForVideoSeek(video, safeTime);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext("2d");
+        if (!context) continue;
+
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const thumbnail = canvas.toDataURL("image/jpeg", 0.82);
+        video.currentTime = originalTime;
+        return thumbnail;
+      } catch {
+        // Try the next available frame.
+      }
+    }
+
+    video.currentTime = originalTime;
+    return "";
+  }
+
+  async function saveManualProof() {
     if (!manualVideoUrl) {
       setManualMessage("Import video first.");
       return;
@@ -599,12 +684,13 @@ export function ProofFeed() {
     }
 
     const fallbackProof = temporaryProofs[manualProofs.length % temporaryProofs.length];
+    const thumbnailUrl = await captureProofThumbnail(manualStartTime, manualEndTime);
     const proof: ProofCard = {
       clip: manualVideoUrl,
       duration: formatDurationFromSeconds(manualEndTime - manualStartTime),
       endTime: manualEndTime,
       id: `manual-proof-${Date.now()}`,
-      poster: fallbackProof.poster,
+      poster: thumbnailUrl || fallbackProof.poster,
       sessionId: importSession?.id,
       startTime: manualStartTime,
       timestamp: new Date().toISOString(),
@@ -724,6 +810,7 @@ export function ProofFeed() {
         {visibleProofs.map((proof, index) => (
           <button className="proof-card" key={proof.id} onClick={() => openProof(index)} type="button">
             <span className="proof-thumb" data-tone={proof.tone}>
+              {proof.poster ? <img alt="" src={proof.poster} /> : null}
               <span className="proof-play" aria-hidden="true">
                 PLAY
               </span>
@@ -788,7 +875,9 @@ export function ProofFeed() {
                 className="proof-player-video proof-player-video-placeholder"
                 data-tone={activeProof.tone}
                 role="img"
-              />
+              >
+                {activeProof.poster ? <img alt="" src={activeProof.poster} /> : null}
+              </div>
             )}
             <button aria-label="Share proof" className="proof-player-nav proof-player-share" onClick={() => void shareProof(activeProof)} type="button">
               SHARE
