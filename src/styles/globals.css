@@ -86,6 +86,7 @@ body {
 .proof-stack-section {
   display: grid;
   gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   margin-top: 0.2rem;
 }
 
@@ -125,6 +126,188 @@ body {
   font-weight: 900;
 }
 
+.proof-create {
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+}
+
+.proof-create-head {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.proof-create-head span,
+.proof-create-head strong,
+.proof-review-head span,
+.proof-review-head strong,
+.proof-import span,
+.proof-scrub span,
+.proof-mark-row button,
+.proof-time-row span,
+.proof-title-list button,
+.proof-save,
+.proof-create-message {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.proof-create-head span,
+.proof-review-head span,
+.proof-scrub span,
+.proof-time-row span,
+.proof-create-message {
+  color: rgba(244, 244, 240, 0.56);
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.proof-create-head strong {
+  color: var(--axis-live);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.proof-review-head {
+  align-items: center;
+  border-top: 1px solid rgba(244, 244, 240, 0.1);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-top: 0.7rem;
+}
+
+.proof-review-head strong {
+  color: var(--axis-live);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.proof-import {
+  align-items: center;
+  border: 1px solid rgba(168, 217, 51, 0.44);
+  border-radius: 999px;
+  color: var(--axis-live);
+  cursor: pointer;
+  display: grid;
+  min-height: 44px;
+  padding: 0 1rem;
+  place-items: center;
+  position: relative;
+  touch-action: manipulation;
+}
+
+.proof-import input {
+  block-size: 1px;
+  inline-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.proof-import span,
+.proof-save {
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.proof-create-workflow {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.proof-create-video {
+  aspect-ratio: 16 / 9;
+  background: #050505;
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  border-radius: 8px;
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.proof-scrub {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.proof-scrub input {
+  accent-color: var(--axis-live);
+  width: 100%;
+}
+
+.proof-mark-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proof-mark-row button,
+.proof-title-list button,
+.proof-save {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.025);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  color: rgba(244, 244, 240, 0.72);
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0.65rem;
+  touch-action: manipulation;
+}
+
+.proof-mark-row button,
+.proof-title-list button {
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.proof-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.proof-time-row span {
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  border-radius: 999px;
+  padding: 0.38rem 0.5rem;
+}
+
+.proof-title-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.proof-title-list button {
+  line-height: 1.1;
+  text-align: left;
+}
+
+.proof-title-list button[data-selected="true"] {
+  border-color: rgba(168, 217, 51, 0.5);
+  color: var(--axis-live);
+}
+
+.proof-save {
+  background: rgba(168, 217, 51, 0.12);
+  border-color: rgba(168, 217, 51, 0.52);
+  color: var(--axis-live);
+}
+
+.proof-create-message {
+  color: var(--axis-live);
+  font-style: normal;
+}
+
 .proof-card {
   appearance: none;
   background: rgba(244, 244, 240, 0.03);
@@ -143,8 +326,12 @@ body {
 }
 
 .proof-card:focus-visible,
+.proof-import:focus-within,
+.proof-mark-row button:focus-visible,
 .proof-player-close:focus-visible,
-.proof-player-nav:focus-visible {
+.proof-player-nav:focus-visible,
+.proof-save:focus-visible,
+.proof-title-list button:focus-visible {
   outline: 1px solid var(--axis-live);
   outline-offset: 0.2rem;
 }
@@ -388,8 +575,12 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .proof-create {
+    max-width: 42rem;
+  }
+
   .proof-stack-section {
-    max-width: 28rem;
+    max-width: none;
   }
 
   .proof-card {

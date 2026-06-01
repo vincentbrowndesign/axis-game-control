@@ -1,12 +1,17 @@
 "use client";
 
+import * as tus from "tus-js-client";
 import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type ProofCard = {
   clip: string;
   duration: string;
+  endTime?: number;
   id: string;
   poster: string;
+  sessionId?: string;
+  startTime?: number;
+  stackId?: string;
   timestamp?: string;
   title: string;
   tone: "cut" | "glass" | "paint";
@@ -55,6 +60,17 @@ type ProofData = {
   stack: ProofStack;
 };
 
+type ProofImportSession = {
+  id: string;
+  muxAssetId?: string;
+  muxPlaybackId?: string;
+  originalVideoUrl: string;
+  startedAt: string;
+  status: "creating" | "review" | "saved";
+  thumbnailUrl?: string;
+  uploadId?: string;
+};
+
 const temporaryProofs: ProofCard[] = [
   {
     clip: "",
@@ -62,6 +78,7 @@ const temporaryProofs: ProofCard[] = [
     id: "shot-after-miss",
     poster:
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1600'%3E%3Crect width='1200' height='1600' fill='%23030303'/%3E%3Cpath d='M0 250h1200M0 510h1200M0 770h1200M0 1030h1200M0 1290h1200M220 0v1600M600 0v1600M980 0v1600' stroke='%23f4f4f0' stroke-opacity='.08' stroke-width='2'/%3E%3Ccircle cx='600' cy='800' r='250' fill='none' stroke='%23a8d933' stroke-opacity='.42' stroke-width='10'/%3E%3Ccircle cx='600' cy='800' r='82' fill='%23a8d933' fill-opacity='.16'/%3E%3C/svg%3E",
+    stackId: "after-the-miss",
     title: "You took the shot after a miss.",
     tone: "paint",
   },
@@ -71,6 +88,7 @@ const temporaryProofs: ProofCard[] = [
     id: "you-blocked-it",
     poster:
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1600'%3E%3Crect width='1200' height='1600' fill='%23030303'/%3E%3Cpath d='M180 1300 980 160M320 1420 1120 280M40 1040 820 40' stroke='%23f4f4f0' stroke-opacity='.08' stroke-width='12'/%3E%3Crect x='420' y='560' width='360' height='520' rx='180' fill='none' stroke='%23a8d933' stroke-opacity='.38' stroke-width='10'/%3E%3C/svg%3E",
+    stackId: "got-there-first",
     title: "You blocked it.",
     tone: "cut",
   },
@@ -80,6 +98,7 @@ const temporaryProofs: ProofCard[] = [
     id: "pass-before-basket",
     poster:
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1600'%3E%3Crect width='1200' height='1600' fill='%23030303'/%3E%3Ccircle cx='280' cy='720' r='140' fill='none' stroke='%23f4f4f0' stroke-opacity='.12' stroke-width='8'/%3E%3Ccircle cx='875' cy='920' r='210' fill='none' stroke='%23a8d933' stroke-opacity='.34' stroke-width='10'/%3E%3Cpath d='M285 720 C460 560 690 1110 875 920' fill='none' stroke='%23a8d933' stroke-opacity='.5' stroke-width='12'/%3E%3C/svg%3E",
+    stackId: "pass-before-basket",
     title: "You made the pass before the basket.",
     tone: "glass",
   },
@@ -89,6 +108,7 @@ const temporaryProofs: ProofCard[] = [
     id: "you-made-it",
     poster:
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1600'%3E%3Crect width='1200' height='1600' fill='%23030303'/%3E%3Cpath d='M160 1180 C360 780 600 760 1010 410' fill='none' stroke='%23a8d933' stroke-opacity='.42' stroke-width='12'/%3E%3Ccircle cx='250' cy='1110' r='132' fill='none' stroke='%23f4f4f0' stroke-opacity='.12' stroke-width='8'/%3E%3Ccircle cx='980' cy='390' r='92' fill='%23a8d933' fill-opacity='.12'/%3E%3C/svg%3E",
+    stackId: "after-the-miss",
     title: "You made it.",
     tone: "glass",
   },
@@ -98,6 +118,7 @@ const temporaryProofs: ProofCard[] = [
     id: "there-first",
     poster:
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 1600'%3E%3Crect width='1200' height='1600' fill='%23030303'/%3E%3Cpath d='M260 240h680v1120H260z' fill='none' stroke='%23f4f4f0' stroke-opacity='.08' stroke-width='8'/%3E%3Cpath d='M250 1070h900' stroke='%23a8d933' stroke-opacity='.4' stroke-width='14'/%3E%3Ccircle cx='385' cy='1068' r='118' fill='none' stroke='%23a8d933' stroke-opacity='.38' stroke-width='10'/%3E%3C/svg%3E",
+    stackId: "got-there-first",
     title: "You got there first.",
     tone: "paint",
   },
@@ -105,14 +126,54 @@ const temporaryProofs: ProofCard[] = [
 
 const proofStacks: ProofStack[] = [
   {
-    currentStreak: 3,
+    currentStreak: 2,
     id: "after-the-miss",
-    longestStreak: 8,
+    longestStreak: 5,
     nextUnlock: "Still Shooting",
-    proofCount: temporaryProofs.length,
+    proofCount: 0,
     title: "AFTER THE MISS",
   },
+  {
+    currentStreak: 1,
+    id: "got-back",
+    longestStreak: 3,
+    nextUnlock: "First Step Back",
+    proofCount: 0,
+    title: "GOT BACK",
+  },
+  {
+    currentStreak: 1,
+    id: "pass-before-basket",
+    longestStreak: 4,
+    nextUnlock: "Early Pass",
+    proofCount: 0,
+    title: "PASS BEFORE BASKET",
+  },
+  {
+    currentStreak: 0,
+    id: "called-for-the-ball",
+    longestStreak: 2,
+    nextUnlock: "Keep Calling",
+    proofCount: 0,
+    title: "CALLED FOR THE BALL",
+  },
+  {
+    currentStreak: 1,
+    id: "got-there-first",
+    longestStreak: 5,
+    nextUnlock: "First Again",
+    proofCount: 0,
+    title: "GOT THERE FIRST",
+  },
 ];
+
+const manualProofTitles = [
+  "You took the shot after a miss.",
+  "You got back after the turnover.",
+  "You made the pass before the basket.",
+  "You called for the ball.",
+  "You got there first.",
+] as const;
 
 const storageKey = "axis-ritual-save";
 
@@ -138,6 +199,18 @@ function getMuxClip(playbackId: string) {
 
 function getFallbackTone(index: number): ProofCard["tone"] {
   return index % 3 === 0 ? "paint" : index % 3 === 1 ? "cut" : "glass";
+}
+
+function getProofStackId(title: string) {
+  const normalized = title.toLowerCase();
+
+  if (normalized.includes("after a miss") || normalized.includes("made it")) return "after-the-miss";
+  if (normalized.includes("got back") || normalized.includes("turnover")) return "got-back";
+  if (normalized.includes("pass before")) return "pass-before-basket";
+  if (normalized.includes("called for")) return "called-for-the-ball";
+  if (normalized.includes("there first") || normalized.includes("blocked")) return "got-there-first";
+
+  return "after-the-miss";
 }
 
 function getProofTitle(type: string, fallback: string) {
@@ -221,6 +294,19 @@ function calculateStreaks(sessions: StoredSession[]) {
   };
 }
 
+function buildProofStacks(proofs: ProofCard[]) {
+  return proofStacks.map((stack) => {
+    const proofCount = proofs.filter((proof) => (proof.stackId || getProofStackId(proof.title)) === stack.id).length;
+
+    return {
+      ...stack,
+      currentStreak: proofCount ? stack.currentStreak : 0,
+      longestStreak: proofCount ? Math.max(stack.longestStreak, stack.currentStreak) : 0,
+      proofCount,
+    };
+  });
+}
+
 function readStoredSessions() {
   if (typeof window === "undefined") return [];
 
@@ -249,6 +335,7 @@ function createProofsFromStoredSessions(sessions: StoredSession[]) {
 
       const anchorProofs = replayAnchors.map<ProofCard>((anchor, anchorIndex) => {
         const type = getString(anchor.eventType);
+        const title = getProofTitle(type, getString(anchor.replayLabel));
         const videoTimestamp = getNumber(anchor.videoTimestamp);
 
         return {
@@ -256,8 +343,9 @@ function createProofsFromStoredSessions(sessions: StoredSession[]) {
           duration: formatDurationFromSeconds(videoTimestamp || 8),
           id: getString(anchor.eventId) || `${sessionId}-anchor-${anchorIndex}`,
           poster: thumbnail,
+          stackId: getProofStackId(title),
           timestamp: getString(anchor.timestamp),
-          title: getProofTitle(type, getString(anchor.replayLabel)),
+          title,
           tone: getFallbackTone(anchorIndex),
         };
       });
@@ -265,14 +353,16 @@ function createProofsFromStoredSessions(sessions: StoredSession[]) {
       const shotProofs = shotEvents.map<ProofCard>((shot, shotIndex) => {
         const type = getString(shot.type);
         const filmTimeSeconds = getNumber(shot.filmTimeSeconds);
+        const title = getProofTitle(type, "");
 
         return {
           clip,
           duration: formatDurationFromSeconds(filmTimeSeconds || 8),
           id: getString(shot.shotId) || `${sessionId}-shot-${shotIndex}`,
           poster: thumbnail,
+          stackId: getProofStackId(title),
           timestamp: getString(shot.timestamp),
-          title: getProofTitle(type, ""),
+          title,
           tone: getFallbackTone(anchorProofs.length + shotIndex),
         };
       });
@@ -319,32 +409,72 @@ async function shareProof(proof: ProofCard) {
   }
 }
 
+function uploadVideoWithTus(uploadUrl: string, file: File) {
+  return new Promise<void>((resolve, reject) => {
+    const upload = new tus.Upload(file, {
+      endpoint: uploadUrl,
+      metadata: {
+        filetype: file.type || "video/mp4",
+        filename: file.name || "proof-video.mp4",
+      },
+      onError: reject,
+      onSuccess: () => resolve(),
+    });
+
+    upload.start();
+  });
+}
+
 export function ProofFeed() {
   const [proofData, setProofData] = useState<ProofData>({
     proofs: temporaryProofs,
     stack: proofStacks[0],
   });
+  const [manualProofs, setManualProofs] = useState<ProofCard[]>([]);
+  const [manualVideoUrl, setManualVideoUrl] = useState("");
+  const [manualDuration, setManualDuration] = useState(0);
+  const [manualScrubTime, setManualScrubTime] = useState(0);
+  const [manualStartTime, setManualStartTime] = useState<number | null>(null);
+  const [manualEndTime, setManualEndTime] = useState<number | null>(null);
+  const [manualTitle, setManualTitle] = useState<string>(manualProofTitles[0]);
+  const [manualMessage, setManualMessage] = useState("");
+  const [importSession, setImportSession] = useState<ProofImportSession | null>(null);
+  const [reviewMode, setReviewMode] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const manualVideoRef = useRef<HTMLVideoElement | null>(null);
+  const manualVideoUrlsRef = useRef<string[]>([]);
   const touchStartX = useRef<number | null>(null);
-  const activeProof = useMemo(() => (activeIndex === null ? null : proofData.proofs[activeIndex]), [activeIndex, proofData.proofs]);
+  const visibleProofs = useMemo(() => [...manualProofs, ...proofData.proofs], [manualProofs, proofData.proofs]);
+  const visibleStacks = useMemo(() => buildProofStacks(visibleProofs), [visibleProofs]);
+  const activeProof = useMemo(() => (activeIndex === null ? null : visibleProofs[activeIndex]), [activeIndex, visibleProofs]);
 
   useEffect(() => {
     setProofData(getProofData());
   }, []);
 
   useEffect(() => {
+    return () => {
+      manualVideoUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeIndex !== null && activeIndex >= visibleProofs.length) setActiveIndex(null);
+  }, [activeIndex, visibleProofs.length]);
+
+  useEffect(() => {
     if (activeIndex === null) return;
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setActiveIndex(null);
-      if (event.key === "ArrowLeft") setActiveIndex((current) => (current === null ? current : getNextIndex(current, -1, proofData.proofs.length)));
-      if (event.key === "ArrowRight") setActiveIndex((current) => (current === null ? current : getNextIndex(current, 1, proofData.proofs.length)));
+      if (event.key === "ArrowLeft") setActiveIndex((current) => (current === null ? current : getNextIndex(current, -1, visibleProofs.length)));
+      if (event.key === "ArrowRight") setActiveIndex((current) => (current === null ? current : getNextIndex(current, 1, visibleProofs.length)));
     }
 
     window.addEventListener("keydown", onKeyDown);
 
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeIndex, proofData.proofs.length]);
+  }, [activeIndex, visibleProofs.length]);
 
   function openProof(index: number) {
     setActiveIndex(index);
@@ -355,7 +485,136 @@ export function ProofFeed() {
   }
 
   function goToProof(direction: 1 | -1) {
-    setActiveIndex((current) => (current === null ? current : getNextIndex(current, direction, proofData.proofs.length)));
+    setActiveIndex((current) => (current === null ? current : getNextIndex(current, direction, visibleProofs.length)));
+  }
+
+  function importManualVideo(file: File | undefined) {
+    if (!file) return;
+
+    const nextUrl = URL.createObjectURL(file);
+    const sessionId = `proof-session-${Date.now()}`;
+    manualVideoUrlsRef.current.push(nextUrl);
+    setManualVideoUrl(nextUrl);
+    setManualDuration(0);
+    setManualScrubTime(0);
+    setManualStartTime(null);
+    setManualEndTime(null);
+    setManualMessage("Review ready.");
+    setReviewMode(true);
+    setImportSession({
+      id: sessionId,
+      originalVideoUrl: nextUrl,
+      startedAt: new Date().toISOString(),
+      status: "creating",
+    });
+    void uploadImportedVideo(file, sessionId);
+  }
+
+  async function uploadImportedVideo(file: File, sessionId: string) {
+    try {
+      const uploadResponse = await fetch("/api/film/uploads", {
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const upload = (await uploadResponse.json().catch(() => null)) as { uploadId?: string; uploadUrl?: string } | null;
+
+      if (!uploadResponse.ok || !upload?.uploadId || !upload.uploadUrl) {
+        setImportSession((current) => (current?.id === sessionId ? { ...current, status: "review" } : current));
+        return;
+      }
+
+      setImportSession((current) => (current?.id === sessionId ? { ...current, status: "review", uploadId: upload.uploadId } : current));
+      await uploadVideoWithTus(upload.uploadUrl, file);
+
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const filmResponse = await fetch(`/api/film/uploads/${upload.uploadId}`);
+        const film = (await filmResponse.json().catch(() => null)) as
+          | {
+              muxAssetId?: string;
+              playbackId?: string;
+              ready?: boolean;
+              thumbnailUrl?: string;
+            }
+          | null;
+
+        if (film?.playbackId) {
+          setImportSession((current) =>
+            current?.id === sessionId
+              ? {
+                  ...current,
+                  muxAssetId: film.muxAssetId,
+                  muxPlaybackId: film.playbackId,
+                  status: film.ready ? "saved" : "review",
+                  thumbnailUrl: film.thumbnailUrl,
+                }
+              : current,
+          );
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    } catch {
+      setImportSession((current) => (current?.id === sessionId ? { ...current, status: "review" } : current));
+    }
+  }
+
+  function updateManualScrub(time: number) {
+    const nextTime = Math.min(Math.max(0, time), manualDuration || 0);
+
+    setManualScrubTime(nextTime);
+    if (manualVideoRef.current) manualVideoRef.current.currentTime = nextTime;
+  }
+
+  function markManualStart() {
+    setManualStartTime(manualScrubTime);
+    if (manualEndTime !== null && manualEndTime <= manualScrubTime) setManualEndTime(null);
+    setManualMessage("");
+  }
+
+  function markManualEnd() {
+    if (manualStartTime === null) {
+      setManualMessage("Mark start first.");
+      return;
+    }
+
+    if (manualScrubTime <= manualStartTime) {
+      setManualMessage("Mark end after start.");
+      return;
+    }
+
+    setManualEndTime(manualScrubTime);
+    setManualMessage("");
+  }
+
+  function saveManualProof() {
+    if (!manualVideoUrl) {
+      setManualMessage("Import video first.");
+      return;
+    }
+
+    if (manualStartTime === null || manualEndTime === null || manualEndTime <= manualStartTime) {
+      setManualMessage("Mark start and end.");
+      return;
+    }
+
+    const fallbackProof = temporaryProofs[manualProofs.length % temporaryProofs.length];
+    const proof: ProofCard = {
+      clip: manualVideoUrl,
+      duration: formatDurationFromSeconds(manualEndTime - manualStartTime),
+      endTime: manualEndTime,
+      id: `manual-proof-${Date.now()}`,
+      poster: fallbackProof.poster,
+      sessionId: importSession?.id,
+      startTime: manualStartTime,
+      timestamp: new Date().toISOString(),
+      title: manualTitle,
+      stackId: getProofStackId(manualTitle),
+      tone: getFallbackTone(manualProofs.length),
+    };
+
+    setManualProofs((current) => [proof, ...current]);
+    setManualMessage("Proof saved.");
   }
 
   function onTouchStart(event: TouchEvent<HTMLElement>) {
@@ -380,8 +639,89 @@ export function ProofFeed() {
         <h1>TODAY&apos;S PROOF</h1>
       </header>
 
+      <section className="proof-create" aria-label="Create proof">
+        <div className="proof-create-head">
+          <span>MANUAL PROOF</span>
+          <strong>Import. Mark. Save.</strong>
+        </div>
+
+        <label className="proof-import">
+          <input
+            accept="video/*"
+            onChange={(event) => importManualVideo(event.currentTarget.files?.[0])}
+            type="file"
+          />
+          <span>IMPORT VIDEO</span>
+        </label>
+
+        {manualVideoUrl && reviewMode ? (
+          <div className="proof-create-workflow">
+            <div className="proof-review-head">
+              <span>REVIEW MODE</span>
+              <strong>{importSession?.status === "saved" ? "VIDEO SAVED" : "MAKE PROOF"}</strong>
+            </div>
+            <video
+              className="proof-create-video"
+              controls
+              onLoadedMetadata={(event) => {
+                setManualDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0);
+              }}
+              onTimeUpdate={(event) => setManualScrubTime(event.currentTarget.currentTime)}
+              playsInline
+              ref={manualVideoRef}
+              src={manualVideoUrl}
+            />
+
+            <label className="proof-scrub">
+              <span>SCRUB TIMELINE</span>
+              <input
+                max={manualDuration || 0}
+                min={0}
+                onChange={(event) => updateManualScrub(Number(event.currentTarget.value))}
+                step={0.1}
+                type="range"
+                value={manualScrubTime}
+              />
+            </label>
+
+            <div className="proof-mark-row">
+              <button onClick={markManualStart} type="button">
+                MARK START
+              </button>
+              <button onClick={markManualEnd} type="button">
+                MARK END
+              </button>
+            </div>
+
+            <div className="proof-time-row" aria-label="Proof range">
+              <span>NOW {formatDurationFromSeconds(manualScrubTime)}</span>
+              <span>START {manualStartTime === null ? "--" : formatDurationFromSeconds(manualStartTime)}</span>
+              <span>END {manualEndTime === null ? "--" : formatDurationFromSeconds(manualEndTime)}</span>
+            </div>
+
+            <div className="proof-title-list" aria-label="Choose proof title">
+              {manualProofTitles.map((title) => (
+                <button
+                  data-selected={manualTitle === title}
+                  key={title}
+                  onClick={() => setManualTitle(title)}
+                  type="button"
+                >
+                  {title}
+                </button>
+              ))}
+            </div>
+
+            <button className="proof-save" onClick={saveManualProof} type="button">
+              SAVE PROOF
+            </button>
+            {manualMessage ? <em className="proof-create-message">{manualMessage}</em> : null}
+          </div>
+        ) : null}
+      </section>
+
       <section className="proof-feed" aria-label="Today's proof">
-        {proofData.proofs.map((proof, index) => (
+        {visibleProofs.map((proof, index) => (
           <button className="proof-card" key={proof.id} onClick={() => openProof(index)} type="button">
             <span className="proof-thumb" data-tone={proof.tone}>
               <span className="proof-play" aria-hidden="true">
@@ -397,12 +737,15 @@ export function ProofFeed() {
       </section>
 
       <section className="proof-stack-section" aria-label="Proof stack">
-        <article className="proof-stack">
-          <strong>{proofData.stack.title}</strong>
-          <span>{proofData.stack.proofCount} {proofData.stack.proofCount === 1 ? "PROOF" : "PROOFS"}</span>
-          <span>{proofData.stack.currentStreak} {proofData.stack.currentStreak === 1 ? "DAY" : "DAYS"} RUNNING · {proofData.stack.longestStreak} BEST</span>
-          {proofData.stack.nextUnlock ? <em>NEXT: {proofData.stack.nextUnlock}</em> : null}
-        </article>
+        {visibleStacks.map((stack) => (
+          <article className="proof-stack" key={stack.id}>
+          <strong>{stack.title}</strong>
+          <span>{stack.proofCount} {stack.proofCount === 1 ? "Proof" : "Proofs"}</span>
+          <span>Current Streak: {stack.currentStreak}</span>
+          <span>Longest Streak: {stack.longestStreak}</span>
+          {stack.nextUnlock ? <em>Next Unlock:<br />{stack.nextUnlock}</em> : null}
+          </article>
+        ))}
       </section>
 
       {activeProof ? (
@@ -426,6 +769,15 @@ export function ProofFeed() {
                 className="proof-player-video"
                 muted
                 onEnded={() => goToProof(1)}
+                onLoadedMetadata={(event) => {
+                  if (typeof activeProof.startTime === "number") event.currentTarget.currentTime = activeProof.startTime;
+                }}
+                onTimeUpdate={(event) => {
+                  if (typeof activeProof.endTime === "number" && event.currentTarget.currentTime >= activeProof.endTime) {
+                    event.currentTarget.pause();
+                    goToProof(1);
+                  }
+                }}
                 playsInline
                 poster={activeProof.poster}
                 src={activeProof.clip}
