@@ -1,5 +1,5 @@
-import { LibraryHome } from "../components/AxisCloud";
+import { DatasetsHome } from "../components/AxisCloud";
 
 export default function Home() {
-  return <LibraryHome />;
+  return <DatasetsHome />;
 }

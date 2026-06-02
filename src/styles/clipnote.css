@@ -1912,6 +1912,21 @@
   cursor: default;
 }
 
+.axis-cloud-secondary {
+  align-items: center;
+  background: var(--axis-panel-2);
+  border: 1px solid var(--axis-line);
+  border-radius: 6px;
+  color: var(--axis-ink);
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 820;
+  justify-content: center;
+  min-height: 52px;
+  text-align: center;
+  text-decoration: none;
+}
+
 .axis-cloud-search {
   border-radius: 999px;
   gap: 0.2rem;
@@ -2043,6 +2058,35 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.axis-create-actions {
+  grid-template-columns: 1fr;
+}
+
+.axis-product-actions {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-product-actions a,
+.axis-product-actions button {
+  align-items: center;
+  background: var(--axis-panel-2);
+  border: 1px solid var(--axis-line);
+  border-radius: 6px;
+  color: var(--axis-ink);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--cn-font);
+  font-size: 0.78rem;
+  font-weight: 820;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 0.45rem;
+  text-align: center;
+  text-decoration: none;
+}
+
 .axis-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -2074,6 +2118,84 @@
   min-width: 0;
   padding: 0.86rem;
   text-decoration: none;
+}
+
+.axis-dataset-list {
+  display: grid;
+  gap: 0.68rem;
+}
+
+.axis-dataset-card {
+  background: var(--axis-panel-2);
+  border: 1px solid var(--axis-line);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.76rem;
+  padding: 0.86rem;
+}
+
+.axis-dataset-card span {
+  color: var(--axis-muted);
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.axis-dataset-card strong {
+  color: var(--axis-ink);
+  display: block;
+  font-size: 1rem;
+  font-weight: 820;
+  line-height: 1.12;
+  margin-top: 0.22rem;
+  overflow-wrap: anywhere;
+}
+
+.axis-dataset-fields {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-dataset-fields p {
+  margin: 0;
+  min-width: 0;
+}
+
+.axis-dataset-actions {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-dataset-actions a,
+.axis-dataset-actions button {
+  align-items: center;
+  background: var(--axis-panel);
+  border: 1px solid var(--axis-line);
+  border-radius: 6px;
+  color: var(--axis-ink);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--cn-font);
+  font-size: 0.78rem;
+  font-weight: 820;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 0.45rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.axis-dataset-actions button:disabled {
+  color: var(--axis-muted);
+  cursor: default;
+}
+
+.axis-dataset-detail-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .axis-cloud-nav {
@@ -2109,6 +2231,10 @@
 
 @media (max-width: 390px) {
   .axis-cloud-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-dataset-detail-actions {
     grid-template-columns: 1fr;
   }
 }

@@ -9,40 +9,28 @@ import {
   buildMyModel,
   createUploadedSessionAsset,
   exportProduct,
+  formatExportDestination,
   generateProduct,
   getAxisAsset,
   getAxisAssets,
   getAxisModel,
   getAxisModels,
+  getAxisProduct,
   getAxisProducts,
   getProductAssetId,
   getProductLabel,
+  getRegisteredProductsForDataset,
+  saveFavoriteAsset,
   toggleFavoriteAsset,
   type AxisAsset,
   type AxisModel,
   type AxisProduct,
-  type AxisProductKind,
   type ExportDestination,
 } from "../lib/axis-cloud-store";
 
-const productKinds: AxisProductKind[] = [
-  "highlight",
-  "practice",
-  "scout-report",
-  "film-study",
-  "playlist",
-  "story",
-  "curriculum",
-];
-
-const exportDestinations: Array<{ id: ExportDestination; label: string }> = [
-  { id: "camera-roll", label: "Camera Roll" },
-  { id: "instagram", label: "Instagram" },
-  { id: "tiktok", label: "TikTok" },
-  { id: "youtube", label: "YouTube" },
-];
-
 type UploadState = "idle" | "uploading" | "saving";
+
+const exportDestinations: ExportDestination[] = ["camera-roll", "instagram", "tiktok", "youtube"];
 
 function useCloudSnapshot() {
   const [assets, setAssets] = useState<AxisAsset[]>([]);
@@ -129,7 +117,7 @@ function Shell({
       </header>
       {children}
       <nav className="axis-cloud-nav" aria-label="Axis cloud navigation">
-        <Link href="/">Library</Link>
+        <Link href="/">Datasets</Link>
         <Link href="/models">Models</Link>
         <Link href="/create">Create</Link>
         <Link href="/account">Account</Link>
@@ -235,6 +223,208 @@ export function LibraryHome() {
           <strong>{filteredAssets.length}</strong>
         </div>
         <AssetGrid assets={filteredAssets} />
+      </section>
+    </Shell>
+  );
+}
+
+export function DatasetsHome() {
+  const { assets, models, refresh } = useCloudSnapshot();
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  async function handleFile(file: File) {
+    setUploadState("uploading");
+    try {
+      const film = await uploadToMux(file);
+      setUploadState("saving");
+      const assetId = createUploadedSessionAsset(file, film);
+      refresh();
+      router.push(`/asset/${assetId}`);
+    } catch {
+      const assetId = createUploadedSessionAsset(file);
+      refresh();
+      router.push(`/asset/${assetId}`);
+    } finally {
+      setUploadState("idle");
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  function getDatasetClipCount(model: AxisModel) {
+    const clipCount = model.assetIds.filter((assetId) => {
+      const asset = assets.find((item) => item.id === assetId);
+      return asset?.kind === "clipnote";
+    }).length;
+
+    return clipCount || model.assetIds.length;
+  }
+
+  function formatDatasetDate(value: string) {
+    return new Intl.DateTimeFormat("en-US", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(value));
+  }
+
+  return (
+    <Shell eyebrow="Datasets" title="Build from saved clips">
+      <section className="axis-cloud-panel axis-upload-panel">
+        <button
+          className="axis-cloud-primary"
+          disabled={uploadState !== "idle"}
+          onClick={() => inputRef.current?.click()}
+          type="button"
+        >
+          {uploadState === "idle" ? "Upload" : "Uploading"}
+        </button>
+        <input
+          ref={inputRef}
+          accept="video/*,image/*"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleFile(file);
+          }}
+          type="file"
+        />
+      </section>
+
+      <section className="axis-cloud-section">
+        <div className="axis-cloud-row">
+          <span>Dataset Cards</span>
+          <strong>{models.length}</strong>
+        </div>
+        <div className="axis-dataset-list">
+          {models.map((model) => (
+            <article className="axis-dataset-card" key={model.id}>
+              <div>
+                <span>Name</span>
+                <strong>{model.name}</strong>
+              </div>
+              <div className="axis-dataset-fields">
+                <p>
+                  <span>Clip Count</span>
+                  <strong>{getDatasetClipCount(model)}</strong>
+                </p>
+                <p>
+                  <span>Created Date</span>
+                  <strong>{formatDatasetDate(model.createdAt)}</strong>
+                </p>
+              </div>
+              <div className="axis-dataset-actions">
+                <Link href={`/dataset/${model.id}`}>Open Dataset</Link>
+                <Link href={`/create?dataset=${model.id}`}>Create</Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {models[0] ? (
+        <Link className="axis-cloud-primary" href={`/create?dataset=${models[0].id}`}>
+          Create
+        </Link>
+      ) : null}
+    </Shell>
+  );
+}
+
+export function DatasetDetail({ datasetId }: { datasetId: string }) {
+  const { assets, refresh } = useCloudSnapshot();
+  const [dataset, setDataset] = useState<AxisModel | null>(null);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    setDataset(getAxisModel(datasetId));
+  }, [datasetId, assets]);
+
+  async function handleFile(file: File) {
+    setUploadState("uploading");
+    try {
+      const film = await uploadToMux(file);
+      setUploadState("saving");
+      const assetId = createUploadedSessionAsset(file, film);
+      addAssetToModel(assetId, datasetId);
+      refresh();
+    } catch {
+      const assetId = createUploadedSessionAsset(file);
+      addAssetToModel(assetId, datasetId);
+      refresh();
+    } finally {
+      setUploadState("idle");
+      if (inputRef.current) inputRef.current.value = "";
+      setDataset(getAxisModel(datasetId));
+    }
+  }
+
+  function getDatasetAssets(model: AxisModel) {
+    return model.assetIds
+      .map((assetId) => assets.find((asset) => asset.id === assetId))
+      .filter((asset): asset is AxisAsset => Boolean(asset))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  if (!dataset) {
+    return (
+      <Shell eyebrow="Dataset" title="Not found">
+        <Link className="axis-cloud-primary" href="/">
+          Back
+        </Link>
+      </Shell>
+    );
+  }
+
+  const recentClips = getDatasetAssets(dataset);
+  const clipCount = recentClips.filter((asset) => asset.kind === "clipnote").length || recentClips.length;
+
+  return (
+    <Shell eyebrow="Dataset" title={dataset.name}>
+      <section className="axis-cloud-section">
+        <div className="axis-cloud-row">
+          <span>Dataset Name</span>
+          <strong>{dataset.name}</strong>
+        </div>
+        <div className="axis-cloud-row">
+          <span>Clip Count</span>
+          <strong>{clipCount}</strong>
+        </div>
+      </section>
+
+      <section className="axis-cloud-panel axis-upload-panel">
+        <div className="axis-dataset-actions axis-dataset-detail-actions">
+          <button
+            disabled={uploadState !== "idle"}
+            onClick={() => inputRef.current?.click()}
+            type="button"
+          >
+            {uploadState === "idle" ? "Add Clips" : "Uploading"}
+          </button>
+          <Link href={`/create?dataset=${dataset.id}`}>Generate</Link>
+          <Link href="/">Back</Link>
+        </div>
+        <input
+          ref={inputRef}
+          accept="video/*,image/*"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleFile(file);
+          }}
+          type="file"
+        />
+      </section>
+
+      <section className="axis-cloud-section">
+        <div className="axis-cloud-row">
+          <span>Recent Clips</span>
+          <strong>{recentClips.length}</strong>
+        </div>
+        <AssetGrid assets={recentClips.slice(0, 8)} />
       </section>
     </Shell>
   );
@@ -420,7 +610,7 @@ export function ModelDetail({ modelId }: { modelId: string }) {
           </div>
           <div className="axis-model-list">
             {modelProducts.map((product) => (
-              <Link className="axis-model-card" href={`/asset/${getProductAssetId(product.id)}`} key={product.id}>
+              <Link className="axis-model-card" href={`/product/${product.id}`} key={product.id}>
                 <strong>{product.title}</strong>
                 <span>{getProductLabel(product.kind)}</span>
                 <em>{product.exportDestination ? `Exported / ${product.exportDestination}` : "Ready to export"}</em>
@@ -435,17 +625,26 @@ export function ModelDetail({ modelId }: { modelId: string }) {
 
 export function CreateProduct({
   initialAssetId,
+  initialDatasetId,
   initialModelId,
 }: {
   initialAssetId?: string;
+  initialDatasetId?: string;
   initialModelId?: string;
 }) {
-  const { assets, models, products, refresh } = useCloudSnapshot();
+  const { assets, models, refresh } = useCloudSnapshot();
   const [selectedModelId, setSelectedModelId] = useState("");
-  const [latestProduct, setLatestProduct] = useState<AxisProduct | null>(null);
+  const [generatedProducts, setGeneratedProducts] = useState<AxisProduct[]>([]);
   const router = useRouter();
+  const selectedDataset = models.find((model) => model.id === selectedModelId) ?? null;
+  const allowedProducts = getRegisteredProductsForDataset(selectedDataset);
 
   useEffect(() => {
+    if (initialDatasetId && models.some((model) => model.id === initialDatasetId)) {
+      setSelectedModelId(initialDatasetId);
+      return;
+    }
+
     if (initialModelId && models.some((model) => model.id === initialModelId)) {
       setSelectedModelId(initialModelId);
       return;
@@ -464,88 +663,172 @@ export function CreateProduct({
       return;
     }
 
-    if (!selectedModelId && models[0]) setSelectedModelId(models[0].id);
-  }, [assets, initialAssetId, initialModelId, models, refresh, selectedModelId]);
+  }, [assets, initialAssetId, initialDatasetId, initialModelId, models, refresh, selectedModelId]);
 
-  function handleGenerate(kind: AxisProductKind) {
-    const product = generateProduct(kind, selectedModelId || models[0]?.id || buildMyModel(assets.map((asset) => asset.id)).id);
-    setLatestProduct(product);
+  function handleGenerate() {
+    if (!selectedDataset || !allowedProducts.length) return;
+
+    const products = allowedProducts.map((kind) => generateProduct(kind, selectedDataset.id));
+    setGeneratedProducts(products);
+    refresh();
+  }
+
+  return (
+    <Shell eyebrow="Create" title="Generate product">
+      {!selectedDataset ? (
+        <Link className="axis-cloud-primary" href="/">
+          Back
+        </Link>
+      ) : (
+        <>
+          <section className="axis-cloud-section">
+            <div className="axis-cloud-row">
+              <span>Dataset</span>
+              <strong>{selectedDataset.name}</strong>
+            </div>
+          </section>
+
+          <section className="axis-cloud-section">
+            <div className="axis-cloud-row">
+              <span>Allowed Products</span>
+              <strong>{allowedProducts.length}</strong>
+            </div>
+            <div className="axis-chip-list">
+              {allowedProducts.map((kind) => (
+                <span key={kind}>{getProductLabel(kind)}</span>
+              ))}
+            </div>
+          </section>
+
+          <section className="axis-cloud-panel axis-create-actions">
+            <button
+              className="axis-cloud-primary"
+              disabled={!allowedProducts.length}
+              onClick={handleGenerate}
+              type="button"
+            >
+              Generate Product
+            </button>
+            <Link className="axis-cloud-secondary" href={`/dataset/${selectedDataset.id}`}>
+              Back
+            </Link>
+          </section>
+
+          {generatedProducts.length ? (
+            <section className="axis-cloud-section">
+              <div className="axis-cloud-row">
+                <span>Generated</span>
+                <strong>{generatedProducts.length}</strong>
+              </div>
+              <div className="axis-model-list">
+                {generatedProducts.map((product) => (
+                  <Link className="axis-model-card" href={`/product/${product.id}`} key={product.id}>
+                    <strong>{product.title}</strong>
+                    <span>{getProductLabel(product.kind)}</span>
+                    <em>{product.confidenceTier ?? "Low"} confidence</em>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </>
+      )}
+    </Shell>
+  );
+}
+
+export function ProductDetail({ productId }: { productId: string }) {
+  const { models, refresh } = useCloudSnapshot();
+  const [product, setProduct] = useState<AxisProduct | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    setProduct(getAxisProduct(productId));
+  }, [productId]);
+
+  if (!product) {
+    return (
+      <Shell eyebrow="Product" title="Not found">
+        <Link className="axis-cloud-primary" href="/">
+          Back
+        </Link>
+      </Shell>
+    );
+  }
+
+  const dataset = models.find((model) => model.id === product.modelId) ?? null;
+  const backHref = dataset ? `/dataset/${dataset.id}` : "/";
+
+  function handleSave() {
+    if (!product) return;
+    saveFavoriteAsset(getProductAssetId(product.id));
     refresh();
   }
 
   function handleExport(destination: ExportDestination) {
-    if (!latestProduct) return;
-    exportProduct(latestProduct.id, destination);
+    if (!product) return;
+    exportProduct(product.id, destination);
     refresh();
     router.push("/");
   }
 
   return (
-    <Shell eyebrow="Create" title="Models generate products">
-      {models.length ? (
-        <label className="axis-cloud-search">
-          <span>Model</span>
-          <select onChange={(event) => setSelectedModelId(event.target.value)} value={selectedModelId}>
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
+    <Shell eyebrow="Product" title={product.title}>
+      <section className="axis-cloud-section">
+        <div className="axis-cloud-row">
+          <span>Generated Product</span>
+          <strong>{getProductLabel(product.kind)}</strong>
+        </div>
+        <div className="axis-cloud-row">
+          <span>Dataset</span>
+          <strong>{dataset?.name ?? "Dataset"}</strong>
+        </div>
+        <div className="axis-cloud-row">
+          <span>Sources</span>
+          <strong>{product.assetIds.length}</strong>
+        </div>
+        <div className="axis-cloud-row">
+          <span>Confidence</span>
+          <strong>{product.confidenceTier ?? "Low"}</strong>
+        </div>
+      </section>
 
-      {(models.length || assets.length) ? (
+      {product.summary?.length ? (
         <section className="axis-cloud-section">
           <div className="axis-cloud-row">
-            <span>Generate</span>
-            <strong>{productKinds.length}</strong>
+            <span>Aggregation</span>
+            <strong>{product.summary.length}</strong>
           </div>
-          <div className="axis-create-grid">
-            {productKinds.map((kind) => (
-              <button onClick={() => handleGenerate(kind)} type="button" key={kind}>
-                {getProductLabel(kind)}
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <Link className="axis-cloud-primary" href="/">
-          Upload to Library
-        </Link>
-      )}
-
-      {latestProduct ? (
-        <section className="axis-cloud-panel">
-          <div className="axis-cloud-row">
-            <span>Export</span>
-            <strong>{latestProduct.title}</strong>
-          </div>
-          <div className="axis-create-grid">
-            {exportDestinations.map((destination) => (
-              <button onClick={() => handleExport(destination.id)} type="button" key={destination.id}>
-                {destination.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : products.length ? (
-        <section className="axis-cloud-section">
-          <div className="axis-cloud-row">
-            <span>Recent products</span>
-            <strong>{products.length}</strong>
-          </div>
-          <div className="axis-model-list">
-            {products.slice(0, 3).map((product) => (
-              <Link className="axis-model-card" href={`/asset/${getProductAssetId(product.id)}`} key={product.id}>
-                <strong>{product.title}</strong>
-                <span>{getProductLabel(product.kind)}</span>
-                <em>{product.exportDestination ? `Exported / ${product.exportDestination}` : "Ready"}</em>
-              </Link>
+          <div className="axis-chip-list">
+            {product.summary.map((item) => (
+              <span key={item}>{item}</span>
             ))}
           </div>
         </section>
       ) : null}
+
+      <section className="axis-cloud-panel">
+        <div className="axis-product-actions">
+          <button onClick={handleSave} type="button">
+            Save
+          </button>
+          <Link href={backHref}>Back</Link>
+        </div>
+      </section>
+
+      <section className="axis-cloud-section">
+        <div className="axis-cloud-row">
+          <span>Export</span>
+          <strong>{exportDestinations.length}</strong>
+        </div>
+        <div className="axis-create-grid">
+          {exportDestinations.map((destination) => (
+            <button onClick={() => handleExport(destination)} type="button" key={destination}>
+              {formatExportDestination(destination)}
+            </button>
+          ))}
+        </div>
+      </section>
     </Shell>
   );
 }
