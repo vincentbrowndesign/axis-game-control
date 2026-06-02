@@ -1,5 +1,5 @@
-import { ProofFeed } from "../components/ProofFeed";
+import { ProofProduct } from "../components/ProofProduct";
 
 export default function Home() {
-  return <ProofFeed />;
+  return <ProofProduct view="home" />;
 }

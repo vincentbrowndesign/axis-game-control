@@ -94,6 +94,137 @@ body {
   text-transform: uppercase;
 }
 
+.proof-home-shell {
+  align-content: start;
+}
+
+.proof-primary-link,
+.proof-back-link,
+.proof-row,
+.proof-field span,
+.proof-field input,
+.proof-list-section h1,
+.proof-list-section h2 {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.proof-primary-link {
+  align-items: center;
+  background: rgba(168, 217, 51, 0.12);
+  border: 1px solid rgba(168, 217, 51, 0.52);
+  border-radius: 999px;
+  color: var(--axis-live);
+  display: grid;
+  font-size: 0.76rem;
+  font-weight: 900;
+  min-height: 52px;
+  padding: 0 1rem;
+  place-items: center;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.proof-back-link {
+  color: rgba(244, 244, 240, 0.58);
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.proof-list-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.proof-list-section h1,
+.proof-list-section h2 {
+  color: var(--axis-ink);
+  font-size: clamp(1.45rem, 8vw, 3rem);
+  font-weight: 900;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.proof-list {
+  display: grid;
+  gap: 0;
+}
+
+.proof-row {
+  align-items: center;
+  background: rgba(244, 244, 240, 0.025);
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  color: inherit;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 4rem;
+  padding: 0.7rem;
+  text-decoration: none;
+}
+
+.proof-row + .proof-row {
+  border-top: 0;
+}
+
+.proof-row strong {
+  color: var(--axis-ink);
+  font-size: clamp(0.95rem, 4.4vw, 1.35rem);
+  font-weight: 900;
+  line-height: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.proof-row span,
+.proof-row em {
+  color: var(--axis-live);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.proof-row em {
+  color: rgba(244, 244, 240, 0.48);
+  grid-column: 1 / -1;
+}
+
+.proof-field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.proof-field span {
+  color: rgba(244, 244, 240, 0.5);
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.proof-field input {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.035);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  color: var(--axis-ink);
+  font-size: 0.76rem;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 0 0.7rem;
+  width: 100%;
+}
+
+.proof-field input::placeholder {
+  color: rgba(244, 244, 240, 0.32);
+}
+
+.proof-session-surface {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .proof-stack-section {
   display: grid;
   gap: 0.7rem;
@@ -489,6 +620,7 @@ body {
   overflow: hidden;
   padding: 0;
   text-align: left;
+  text-decoration: none;
   touch-action: manipulation;
 }
 

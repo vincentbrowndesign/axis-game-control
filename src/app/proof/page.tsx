@@ -1,10 +1,10 @@
-import { ProofFeed } from "../../components/ProofFeed";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "PROOF",
-  description: "Today's proof.",
+  description: "Sessions.",
 };
 
 export default function ProofPage() {
-  return <ProofFeed />;
+  redirect("/");
 }
