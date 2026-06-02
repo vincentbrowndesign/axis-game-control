@@ -2062,6 +2062,21 @@
   grid-template-columns: 1fr;
 }
 
+.axis-create-locked {
+  align-items: center;
+  background: var(--axis-panel-2);
+  border: 1px solid var(--axis-line);
+  border-radius: 6px;
+  color: var(--axis-muted);
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 820;
+  justify-content: center;
+  margin: 0;
+  min-height: 52px;
+  text-align: center;
+}
+
 .axis-product-actions {
   display: grid;
   gap: 0.45rem;
@@ -2198,6 +2213,40 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.axis-insight-list {
+  display: grid;
+  gap: 0.56rem;
+}
+
+.axis-insight-row {
+  background: var(--axis-panel-2);
+  border: 1px solid var(--axis-line);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.64rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.78rem;
+}
+
+.axis-insight-row span {
+  color: var(--axis-muted);
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.axis-insight-row strong {
+  color: var(--axis-ink);
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 820;
+  line-height: 1.14;
+  margin-top: 0.22rem;
+  overflow-wrap: anywhere;
+}
+
 .axis-cloud-nav {
   background: rgba(16, 18, 17, 0.92);
   border: 1px solid var(--axis-line);
@@ -2235,6 +2284,10 @@
   }
 
   .axis-dataset-detail-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-insight-row {
     grid-template-columns: 1fr;
   }
 }

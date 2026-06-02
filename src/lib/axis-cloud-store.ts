@@ -65,12 +65,23 @@ export type AxisProduct = {
 };
 
 export type ExportDestination = "camera-roll" | "instagram" | "tiktok" | "youtube";
+export type AxisDatasetInsight = {
+  id: string;
+  datasetId: string;
+  name: string;
+  value: string;
+  confidence: ConfidenceTier;
+  sampleSize: number;
+  createdAt: string;
+};
+
 export type DatasetProductRegistration = {
   datasetId: string;
   products: AxisProductKind[];
 };
 
 const FAVORITES_KEY = "axis-cloud-favorites";
+const INSIGHTS_KEY = "axis-cloud-insights";
 const MODELS_KEY = "axis-cloud-models";
 const PRODUCTS_KEY = "axis-cloud-products";
 const MAKES_DATASET_ID = "dataset-makes";
@@ -92,6 +103,7 @@ const defaultDatasetProducts: AxisProductKind[] = ["highlight", "story"];
 const libraryDatasetProducts: AxisProductKind[] = ["highlight", "playlist", "story"];
 const patternDatasetProducts: AxisProductKind[] = ["highlight", "practice", "film-study"];
 const makesDatasetProducts: AxisProductKind[] = ["shot-profile", "hot-zones", "training-focus"];
+export const MINIMUM_DATASET_INSIGHT_CONFIDENCE: ConfidenceTier = "Medium";
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -225,12 +237,15 @@ export function addAssetToModel(assetId: string, modelId?: string) {
       : model,
   );
   saveAxisModels(next);
+  clearDatasetInsights(target.id);
   return next.find((model) => model.id === target.id) ?? target;
 }
 
 export function generateProduct(kind: AxisProductKind, modelId: string) {
   const model = getAxisModels().find((item) => item.id === modelId) ?? getAxisModels()[0];
-  const productEvidence = buildProductEvidence(kind, model?.assetIds ?? []);
+  if (!hasMinimumDatasetInsightConfidence(model)) return null;
+
+  const productEvidence = buildProductEvidence(kind, model);
   const product: AxisProduct = {
     assetIds: model?.assetIds ?? [],
     createdAt: new Date().toISOString(),
@@ -309,6 +324,7 @@ export function formatExportDestination(destination: ExportDestination) {
 
 export function getRegisteredProductsForDataset(dataset: AxisModel | null | undefined): AxisProductKind[] {
   if (!dataset) return [];
+  if (!hasMinimumDatasetInsightConfidence(dataset)) return [];
 
   if (dataset.id === MAKES_DATASET_ID) return makesDatasetProducts;
   if (!dataset.assetIds.length) return defaultDatasetProducts;
@@ -322,6 +338,86 @@ export function getConfidenceTier(assetCount: number): ConfidenceTier {
   if (assetCount >= 8) return "High";
   if (assetCount >= 3) return "Medium";
   return "Low";
+}
+
+export function getDatasetInsights(dataset: AxisModel | null | undefined): AxisDatasetInsight[] {
+  if (!dataset) return [];
+  return getAxisInsights().filter((insight) => insight.datasetId === dataset.id);
+}
+
+export function getAxisInsights() {
+  return read<AxisDatasetInsight[]>(INSIGHTS_KEY, []);
+}
+
+export function generateDatasetInsights(datasetId: string) {
+  const dataset = getAxisModel(datasetId);
+  if (!dataset) return [];
+
+  const insights = buildDatasetInsights(dataset);
+  const next = [
+    ...insights,
+    ...getAxisInsights().filter((insight) => insight.datasetId !== dataset.id),
+  ];
+  write(INSIGHTS_KEY, next);
+  return insights;
+}
+
+export function clearDatasetInsights(datasetId: string) {
+  write(
+    INSIGHTS_KEY,
+    getAxisInsights().filter((insight) => insight.datasetId !== datasetId),
+  );
+}
+
+function buildDatasetInsights(dataset: AxisModel): AxisDatasetInsight[] {
+  const clips = getAssetsForDataset(dataset).filter((asset) => asset.kind === "clipnote");
+  if (!clips.length) return [];
+
+  const zoneCounts = getTopCounts(clips.map((asset) => asset.detail || asset.meanings[0] || "Saved clip"));
+  const sourceCounts = getTopCounts(clips.map((asset) => asset.meanings[1]?.replace(/^From /, "") || "Session"));
+  const confidence = getConfidenceTier(clips.length);
+  const insights: AxisDatasetInsight[] = [];
+  const mostCommonZone = zoneCounts[0];
+  const mostCommonSource = sourceCounts[0];
+  const createdAt = new Date().toISOString();
+
+  if (mostCommonZone) {
+    insights.push({
+      confidence,
+      createdAt,
+      datasetId: dataset.id,
+      id: "most-common-zone",
+      name: "Most Common Zone",
+      sampleSize: clips.length,
+      value: mostCommonZone[0],
+    });
+  }
+
+  if (mostCommonSource && sourceCounts.length > 1) {
+    insights.push({
+      confidence,
+      createdAt,
+      datasetId: dataset.id,
+      id: "most-common-session",
+      name: "Most Common Session",
+      sampleSize: clips.length,
+      value: mostCommonSource[0],
+    });
+  }
+
+  return insights;
+}
+
+export function hasMinimumDatasetInsightConfidence(dataset: AxisModel | null | undefined) {
+  return getDatasetInsights(dataset).some(
+    (insight) => confidenceRank(insight.confidence) >= confidenceRank(MINIMUM_DATASET_INSIGHT_CONFIDENCE),
+  );
+}
+
+function confidenceRank(confidence: ConfidenceTier) {
+  if (confidence === "High") return 3;
+  if (confidence === "Medium") return 2;
+  return 1;
 }
 
 function sessionToAsset(session: Session, favorites: string[]): AxisAsset {
@@ -393,6 +489,11 @@ function getAssetsForPattern(pattern: DatasetBin) {
   return getAxisAssets().filter((asset) => asset.meanings.includes(pattern.tag_name));
 }
 
+function getAssetsForDataset(dataset: AxisModel) {
+  const assetIds = new Set(dataset.assetIds);
+  return getAxisAssets().filter((asset) => assetIds.has(asset.id));
+}
+
 function buildMakesDatasetFromFavorites(): AxisModel | null {
   const favoriteIds = new Set(getFavoriteAssetIds());
   const favoriteClips = getAxisAssets().filter((asset) => favoriteIds.has(asset.id) && asset.kind === "clipnote");
@@ -412,20 +513,23 @@ function buildMakesDatasetFromFavorites(): AxisModel | null {
   };
 }
 
-function buildProductEvidence(kind: AxisProductKind, assetIds: string[]) {
-  const assets = getAxisAssets().filter((asset) => assetIds.includes(asset.id));
-  const confidenceTier = getConfidenceTier(assets.length);
-  const zoneCounts = countBy(assets.map((asset) => asset.detail || asset.meanings[0] || "Saved clip"));
-  const topZones = Array.from(zoneCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+function buildProductEvidence(kind: AxisProductKind, model: AxisModel | undefined) {
+  const insights = getDatasetInsights(model);
+  const confidenceTier = insights.reduce<ConfidenceTier>(
+    (best, insight) => (confidenceRank(insight.confidence) > confidenceRank(best) ? insight.confidence : best),
+    "Low",
+  );
+  const leadingInsight = insights[0];
+  const insightSummary = insights.map(
+    (insight) => `${insight.name}: ${insight.value} / ${insight.confidence} / ${insight.sampleSize} clips`,
+  );
 
   if (kind === "shot-profile") {
     return {
       confidenceTier,
       summary: [
-        `${assets.length} favorited clips aggregated`,
-        `${topZones[0]?.[0] ?? "No dominant pattern"} leads the sample`,
+        `${leadingInsight?.sampleSize ?? 0} clips discovered`,
+        `${leadingInsight?.value ?? "No discovery"} leads the sample`,
         `${confidenceTier} confidence`,
       ],
     };
@@ -434,8 +538,8 @@ function buildProductEvidence(kind: AxisProductKind, assetIds: string[]) {
   if (kind === "hot-zones") {
     return {
       confidenceTier,
-      summary: topZones.length
-        ? topZones.map(([zone, count]) => `${zone}: ${count} clips`)
+      summary: insightSummary.length
+        ? insightSummary
         : ["No hot zones yet", `${confidenceTier} confidence`],
     };
   }
@@ -444,8 +548,10 @@ function buildProductEvidence(kind: AxisProductKind, assetIds: string[]) {
     return {
       confidenceTier,
       summary: [
-        topZones[0] ? `Keep building ${topZones[0][0]}` : "Add more makes",
-        assets.length >= 3 ? "Use repeated clips as the practice anchor" : "Favorite more clips to strengthen the dataset",
+        leadingInsight ? `Keep building ${leadingInsight.value}` : "Add more makes",
+        leadingInsight && leadingInsight.sampleSize >= 3
+          ? "Use repeated clips as the practice anchor"
+          : "Favorite more clips to strengthen the dataset",
         `${confidenceTier} confidence`,
       ],
     };
@@ -453,14 +559,14 @@ function buildProductEvidence(kind: AxisProductKind, assetIds: string[]) {
 
   return {
     confidenceTier,
-    summary: [`${assets.length} source assets`, `${confidenceTier} confidence`],
+    summary: insightSummary.length ? insightSummary : [`${confidenceTier} confidence`],
   };
 }
 
-function countBy(values: string[]) {
+function getTopCounts(values: string[]) {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
-  return counts;
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
 }
 
 function createDefaultModel(assetIds: string[]): AxisModel {

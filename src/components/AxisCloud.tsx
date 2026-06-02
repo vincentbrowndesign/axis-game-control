@@ -10,6 +10,7 @@ import {
   createUploadedSessionAsset,
   exportProduct,
   formatExportDestination,
+  generateDatasetInsights,
   generateProduct,
   getAxisAsset,
   getAxisAssets,
@@ -17,12 +18,15 @@ import {
   getAxisModels,
   getAxisProduct,
   getAxisProducts,
+  getDatasetInsights,
   getProductAssetId,
   getProductLabel,
   getRegisteredProductsForDataset,
+  hasMinimumDatasetInsightConfidence,
   saveFavoriteAsset,
   toggleFavoriteAsset,
   type AxisAsset,
+  type AxisDatasetInsight,
   type AxisModel,
   type AxisProduct,
   type ExportDestination,
@@ -335,6 +339,7 @@ export function DatasetsHome() {
 export function DatasetDetail({ datasetId }: { datasetId: string }) {
   const { assets, refresh } = useCloudSnapshot();
   const [dataset, setDataset] = useState<AxisModel | null>(null);
+  const [, setInsightRevision] = useState(0);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -350,10 +355,12 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
       setUploadState("saving");
       const assetId = createUploadedSessionAsset(file, film);
       addAssetToModel(assetId, datasetId);
+      setInsightRevision((value) => value + 1);
       refresh();
     } catch {
       const assetId = createUploadedSessionAsset(file);
       addAssetToModel(assetId, datasetId);
+      setInsightRevision((value) => value + 1);
       refresh();
     } finally {
       setUploadState("idle");
@@ -381,6 +388,20 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
 
   const recentClips = getDatasetAssets(dataset);
   const clipCount = recentClips.filter((asset) => asset.kind === "clipnote").length || recentClips.length;
+  const insights = getDatasetInsights(dataset);
+  const canGenerateProduct = hasMinimumDatasetInsightConfidence(dataset);
+
+  function discoverInsights() {
+    if (!clipCount) return;
+    generateDatasetInsights(datasetId);
+    setInsightRevision((value) => value + 1);
+    refresh();
+  }
+
+  function openCreate() {
+    if (!canGenerateProduct) return;
+    router.push(`/create?dataset=${datasetId}`);
+  }
 
   return (
     <Shell eyebrow="Dataset" title={dataset.name}>
@@ -404,7 +425,9 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
           >
             {uploadState === "idle" ? "Add Clips" : "Uploading"}
           </button>
-          <Link href={`/create?dataset=${dataset.id}`}>Generate</Link>
+          <button disabled={!clipCount} onClick={discoverInsights} type="button">
+            Discover Insights
+          </button>
           <Link href="/">Back</Link>
         </div>
         <input
@@ -421,12 +444,65 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
 
       <section className="axis-cloud-section">
         <div className="axis-cloud-row">
+          <span>What did we discover?</span>
+          <strong>{insights.length}</strong>
+        </div>
+        <div className="axis-insight-list">
+          {insights.length ? (
+            insights.map((insight) => <InsightRow insight={insight} key={`${insight.datasetId}-${insight.id}`} />)
+          ) : (
+            <p className="axis-create-locked">
+              {clipCount ? "Discover insights first." : "Add clips first."}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="axis-cloud-panel axis-upload-panel">
+        <div className="axis-cloud-row">
+          <span>What should we create?</span>
+          <strong>{canGenerateProduct ? "Ready" : "Locked"}</strong>
+        </div>
+        <div className="axis-dataset-actions">
+          <button disabled={!canGenerateProduct} onClick={openCreate} type="button">
+            Generate Product
+          </button>
+        </div>
+      </section>
+
+      <section className="axis-cloud-section">
+        <div className="axis-cloud-row">
           <span>Recent Clips</span>
           <strong>{recentClips.length}</strong>
         </div>
         <AssetGrid assets={recentClips.slice(0, 8)} />
       </section>
     </Shell>
+  );
+}
+
+function InsightRow({ insight }: { insight: AxisDatasetInsight }) {
+  return (
+    <article className="axis-insight-row">
+      <div>
+        <span>Insight Name</span>
+        <strong>{insight.name}</strong>
+      </div>
+      <div>
+        <span>Value</span>
+        <strong>{insight.value}</strong>
+      </div>
+      <div>
+        <span>Confidence</span>
+        <strong>{insight.confidence}</strong>
+      </div>
+      <div>
+        <span>Sample Size</span>
+        <strong>
+          {insight.sampleSize} {insight.sampleSize === 1 ? "Clip" : "Clips"}
+        </strong>
+      </div>
+    </article>
   );
 }
 
@@ -637,6 +713,7 @@ export function CreateProduct({
   const [generatedProducts, setGeneratedProducts] = useState<AxisProduct[]>([]);
   const router = useRouter();
   const selectedDataset = models.find((model) => model.id === selectedModelId) ?? null;
+  const hasDiscoverableInsights = hasMinimumDatasetInsightConfidence(selectedDataset);
   const allowedProducts = getRegisteredProductsForDataset(selectedDataset);
 
   useEffect(() => {
@@ -666,9 +743,11 @@ export function CreateProduct({
   }, [assets, initialAssetId, initialDatasetId, initialModelId, models, refresh, selectedModelId]);
 
   function handleGenerate() {
-    if (!selectedDataset || !allowedProducts.length) return;
+    if (!selectedDataset || !hasDiscoverableInsights || !allowedProducts.length) return;
 
-    const products = allowedProducts.map((kind) => generateProduct(kind, selectedDataset.id));
+    const products = allowedProducts
+      .map((kind) => generateProduct(kind, selectedDataset.id))
+      .filter((product): product is AxisProduct => Boolean(product));
     setGeneratedProducts(products);
     refresh();
   }
@@ -701,14 +780,13 @@ export function CreateProduct({
           </section>
 
           <section className="axis-cloud-panel axis-create-actions">
-            <button
-              className="axis-cloud-primary"
-              disabled={!allowedProducts.length}
-              onClick={handleGenerate}
-              type="button"
-            >
-              Generate Product
-            </button>
+            {hasDiscoverableInsights ? (
+              <button className="axis-cloud-primary" onClick={handleGenerate} type="button">
+                Generate Product
+              </button>
+            ) : (
+              <p className="axis-create-locked">Discover insights first.</p>
+            )}
             <Link className="axis-cloud-secondary" href={`/dataset/${selectedDataset.id}`}>
               Back
             </Link>
