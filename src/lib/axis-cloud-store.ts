@@ -103,6 +103,15 @@ const libraryDatasetProducts: AxisProductKind[] = ["highlight", "playlist", "sto
 const patternDatasetProducts: AxisProductKind[] = ["highlight", "practice", "film-study"];
 const makesDatasetProducts: AxisProductKind[] = ["shot-profile", "hot-zones", "training-focus"];
 export const MINIMUM_DATASET_INSIGHT_CONFIDENCE: ConfidenceTier = "Medium";
+export const axisDirectionProducts = {
+  Train: "practice",
+  Improve: "training-focus",
+  Teach: "curriculum",
+  Scout: "scout-report",
+  Recruit: "playlist",
+  Highlight: "highlight",
+  Custom: "story",
+} satisfies Record<string, AxisProductKind>;
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -241,7 +250,7 @@ export function addAssetToModel(assetId: string, modelId?: string) {
 
 export function generateProduct(kind: AxisProductKind, modelId: string) {
   const model = getAxisModels().find((item) => item.id === modelId) ?? getAxisModels()[0];
-  if (!hasMinimumDatasetInsightConfidence(model)) return null;
+  if (!model?.assetIds.length) return null;
 
   const productEvidence = buildProductEvidence(kind, model);
   const product: AxisProduct = {
@@ -324,7 +333,7 @@ export function getRegisteredProductsForDataset(dataset: AxisModel | null | unde
   if (!dataset) return [];
   if (!hasMinimumDatasetInsightConfidence(dataset)) return [];
 
-  if (dataset.id === MAKES_DATASET_ID) return makesDatasetProducts;
+  if (dataset.id === MAKES_DATASET_ID) return Object.values(axisDirectionProducts);
   if (!dataset.assetIds.length) return defaultDatasetProducts;
   if (dataset.id === "model-library" || dataset.patternLabels.includes("Library")) return libraryDatasetProducts;
   if (dataset.patternLabels.includes("Built from library")) return libraryDatasetProducts;
@@ -344,7 +353,7 @@ export function getDatasetInsights(dataset: AxisModel | null | undefined): AxisD
 }
 
 function buildDatasetInsights(dataset: AxisModel): AxisDatasetInsight[] {
-  const clips = getAssetsForDataset(dataset).filter((asset) => asset.kind === "clipnote");
+  const clips = getAssetsForDataset(dataset).filter((asset) => asset.kind !== "product");
   if (!clips.length) return [];
 
   const zoneCounts = getTopCounts(clips.map((asset) => asset.detail || asset.meanings[0] || "Saved clip"));
@@ -360,26 +369,52 @@ function buildDatasetInsights(dataset: AxisModel): AxisDatasetInsight[] {
       confidence,
       createdAt,
       datasetId: dataset.id,
-      id: "most-common-zone",
-      name: "Most Common Zone",
+      id: "most-makes",
+      name: "Most Makes",
       sampleSize: clips.length,
       value: mostCommonZone[0],
     });
   }
 
-  if (mostCommonSource && sourceCounts.length > 1) {
-    insights.push({
-      confidence,
-      createdAt,
-      datasetId: dataset.id,
-      id: "most-common-session",
-      name: "Most Common Session",
-      sampleSize: clips.length,
-      value: mostCommonSource[0],
-    });
-  }
+  insights.push({
+    confidence,
+    createdAt,
+    datasetId: dataset.id,
+    id: "most-common-shot",
+    name: "Most Common Shot",
+    sampleSize: clips.length,
+    value: inferShotType(mostCommonZone?.[0] ?? mostCommonSource?.[0]),
+  });
+
+  insights.push({
+    confidence,
+    createdAt,
+    datasetId: dataset.id,
+    id: "pressure",
+    name: "Pressure",
+    sampleSize: clips.length,
+    value: inferPressure(mostCommonZone?.[0] ?? mostCommonSource?.[0]),
+  });
 
   return insights;
+}
+
+function inferShotType(value?: string) {
+  if (!value) return "Catch & Shoot";
+  const normalized = value.toLowerCase();
+  if (normalized.includes("catch")) return "Catch & Shoot";
+  if (normalized.includes("pull")) return "Pull-Up";
+  if (normalized.includes("drive")) return "Drive";
+  if (normalized.includes("free")) return "Free Throw";
+  return "Catch & Shoot";
+}
+
+function inferPressure(value?: string) {
+  if (!value) return "Mostly Open";
+  const normalized = value.toLowerCase();
+  if (normalized.includes("contest") || normalized.includes("pressure")) return "Mostly Contested";
+  if (normalized.includes("open") || normalized.includes("wing") || normalized.includes("corner")) return "Mostly Open";
+  return "Mostly Open";
 }
 
 export function hasMinimumDatasetInsightConfidence(dataset: AxisModel | null | undefined) {

@@ -2058,6 +2058,72 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.axis-understanding-card {
+  background: var(--axis-panel);
+  border: 1px solid var(--axis-line);
+  border-radius: 8px;
+  display: grid;
+  gap: 1rem;
+  padding: 0.95rem;
+}
+
+.axis-understanding {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.axis-understanding > strong {
+  color: var(--axis-ink);
+  font-size: 1.28rem;
+  font-weight: 860;
+  letter-spacing: 0;
+}
+
+.axis-understanding div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.axis-understanding span {
+  color: var(--axis-muted);
+  font-size: 0.78rem;
+  font-weight: 790;
+}
+
+.axis-understanding p {
+  color: var(--axis-ink);
+  font-size: clamp(1.52rem, 10vw, 3.6rem);
+  font-weight: 860;
+  letter-spacing: 0;
+  line-height: 0.94;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.axis-direction-rule {
+  border-top: 1px solid var(--axis-line);
+  margin: 0.5rem 0;
+}
+
+.axis-direction-grid {
+  display: grid;
+  gap: 0.48rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-direction-grid button {
+  appearance: none;
+  background: var(--axis-panel-2);
+  border: 1px solid var(--axis-line);
+  border-radius: 6px;
+  color: var(--axis-ink);
+  cursor: pointer;
+  font-family: var(--cn-font);
+  font-size: 0.92rem;
+  font-weight: 820;
+  min-height: 52px;
+}
+
 .axis-create-actions {
   grid-template-columns: 1fr;
 }
@@ -2266,7 +2332,7 @@
   bottom: max(0.8rem, env(safe-area-inset-bottom));
   display: grid;
   gap: 0.2rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   left: 1rem;
   padding: 0.28rem;
   position: fixed;
