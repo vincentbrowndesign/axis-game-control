@@ -1,9 +1,9 @@
-import { ProofProduct } from "../../../components/ProofProduct";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Start Session | PROOF",
 };
 
 export default function NewSessionPage() {
-  return <ProofProduct view="new" />;
+  redirect("/proof/session/new");
 }

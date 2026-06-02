@@ -1,10 +1,10 @@
-import { redirect } from "next/navigation";
+import { ProofProduct } from "../../components/ProofProduct";
 
 export const metadata = {
   title: "PROOF",
-  description: "Sessions.",
+  description: "Session-first proof.",
 };
 
 export default function ProofPage() {
-  redirect("/");
+  return <ProofProduct view="home" />;
 }

@@ -1,5 +1,5 @@
-import { ProofProduct } from "../components/ProofProduct";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <ProofProduct view="home" />;
+  redirect("/proof");
 }

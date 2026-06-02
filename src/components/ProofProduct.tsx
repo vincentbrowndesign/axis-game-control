@@ -51,6 +51,7 @@ type ProofProductProps =
   | { stackId: string; proofId?: never; sessionId?: never; view: "stack" };
 
 const proofStoreKey = "proof-session-moment-store-v1";
+const proofBasePath = "/proof";
 
 const emptyStore: ProofStore = {
   moments: [],
@@ -252,7 +253,7 @@ export function ProofProduct(props: ProofProductProps) {
       sessions: [session, ...store.sessions],
     });
     setSessionFileName(file.name);
-    router.push(`/session/${id}`);
+    router.push(`${proofBasePath}/session/${id}`);
   }
 
   function markOpen() {
@@ -344,7 +345,7 @@ export function ProofProduct(props: ProofProductProps) {
           <span>PROOF</span>
         </header>
 
-        <Link className="proof-primary-link" href="/session/new">
+        <Link className="proof-primary-link" href={`${proofBasePath}/session/new`}>
           START SESSION
         </Link>
 
@@ -353,7 +354,7 @@ export function ProofProduct(props: ProofProductProps) {
           {store.sessions.length ? (
             <div className="proof-list">
               {store.sessions.map((session) => (
-                <Link className="proof-row" href={`/session/${session.id}`} key={session.id}>
+                <Link className="proof-row" href={`${proofBasePath}/session/${session.id}`} key={session.id}>
                   <strong>{session.name}</strong>
                   <span>{session.proofIds.length} {session.proofIds.length === 1 ? "Proof" : "Proofs"}</span>
                   <em>{formatDate(session.createdAt)}</em>
@@ -372,7 +373,7 @@ export function ProofProduct(props: ProofProductProps) {
     return (
       <main className="proof-shell">
         <header className="proof-header">
-          <Link className="proof-back-link" href="/">BACK</Link>
+          <Link className="proof-back-link" href={proofBasePath}>BACK</Link>
           <h1>START SESSION</h1>
         </header>
 
@@ -396,7 +397,7 @@ export function ProofProduct(props: ProofProductProps) {
       return (
         <main className="proof-shell">
           <header className="proof-header">
-            <Link className="proof-back-link" href="/">BACK</Link>
+            <Link className="proof-back-link" href={proofBasePath}>BACK</Link>
             <h1>SESSION NOT FOUND</h1>
           </header>
         </main>
@@ -406,7 +407,7 @@ export function ProofProduct(props: ProofProductProps) {
     return (
       <main className="proof-shell">
         <header className="proof-header">
-          <Link className="proof-back-link" href="/">BACK</Link>
+          <Link className="proof-back-link" href={proofBasePath}>BACK</Link>
           <span>{formatDate(currentSession.createdAt)}</span>
           <h1>{currentSession.name}</h1>
         </header>
@@ -458,7 +459,7 @@ export function ProofProduct(props: ProofProductProps) {
           {currentSessionProofs.length ? (
             <div className="proof-feed">
               {currentSessionProofs.map((proof) => (
-                <Link className="proof-card" href={`/proof/${proof.id}`} key={proof.id}>
+                <Link className="proof-card" href={`${proofBasePath}/proof/${proof.id}`} key={proof.id}>
                   <span className="proof-thumb">{proof.thumbnailUrl ? <img alt="" src={proof.thumbnailUrl} /> : null}<span className="proof-play">PLAY</span></span>
                   <span className="proof-card-body"><strong>{proof.title}</strong><em>{formatTime(proof.closeTime - proof.openTime)}</em></span>
                 </Link>
@@ -475,7 +476,7 @@ export function ProofProduct(props: ProofProductProps) {
       return (
         <main className="proof-shell">
           <header className="proof-header">
-            <Link className="proof-back-link" href="/">BACK</Link>
+            <Link className="proof-back-link" href={proofBasePath}>BACK</Link>
             <h1>PROOF NOT FOUND</h1>
           </header>
         </main>
@@ -484,7 +485,7 @@ export function ProofProduct(props: ProofProductProps) {
 
     return (
       <main className="proof-player proof-player-page">
-        <Link className="proof-player-close" href={`/session/${currentProof.sessionId}`}>BACK</Link>
+        <Link className="proof-player-close" href={`${proofBasePath}/session/${currentProof.sessionId}`}>BACK</Link>
         <div className="proof-player-frame">
           <div className="proof-player-copy">
             <strong>{currentProof.title}</strong>
@@ -512,7 +513,7 @@ export function ProofProduct(props: ProofProductProps) {
             <div className="proof-player-nav-row">
               <button className="proof-player-nav" onClick={replayProof} type="button">REPLAY</button>
               <button className="proof-player-nav" onClick={() => void shareProof(currentProof)} type="button">SHARE</button>
-              <Link className="proof-player-nav" href={`/proof/${nextProofId()}`}>NEXT</Link>
+              <Link className="proof-player-nav" href={`${proofBasePath}/proof/${nextProofId()}`}>NEXT</Link>
             </div>
           ) : null}
         </div>
@@ -524,12 +525,12 @@ export function ProofProduct(props: ProofProductProps) {
     return (
       <main className="proof-shell">
         <header className="proof-header">
-          <Link className="proof-back-link" href="/">BACK</Link>
+          <Link className="proof-back-link" href={proofBasePath}>BACK</Link>
           <h1>STACKS</h1>
         </header>
         <section className="proof-stack-section" aria-label="Stacks">
           {stackGroups.length ? stackGroups.map((stack) => (
-            <Link className="proof-stack" href={`/stack/${stack.id}`} key={stack.id}>
+            <Link className="proof-stack" href={`${proofBasePath}/stacks/${stack.id}`} key={stack.id}>
               <strong>{getStackTitle(stack.id, stack.proofs)}</strong>
               <span>{stack.proofs.length} {stack.proofs.length === 1 ? "Proof" : "Proofs"}</span>
             </Link>
@@ -544,14 +545,14 @@ export function ProofProduct(props: ProofProductProps) {
   return (
     <main className="proof-shell">
       <header className="proof-header">
-        <Link className="proof-back-link" href="/stacks">BACK</Link>
+        <Link className="proof-back-link" href={`${proofBasePath}/stacks`}>BACK</Link>
         <h1>{getStackTitle(activeStackId, store.proofs)}</h1>
       </header>
       <section className="proof-list-section" aria-label="Stack proofs">
         <h2>{stackProofs.length} {stackProofs.length === 1 ? "PROOF" : "PROOFS"}</h2>
         <div className="proof-feed">
           {stackProofs.map((proof) => (
-            <Link className="proof-card" href={`/proof/${proof.id}`} key={proof.id}>
+            <Link className="proof-card" href={`${proofBasePath}/proof/${proof.id}`} key={proof.id}>
               <span className="proof-thumb">{proof.thumbnailUrl ? <img alt="" src={proof.thumbnailUrl} /> : null}<span className="proof-play">PLAY</span></span>
               <span className="proof-card-body"><strong>{proof.title}</strong><em>{formatTime(proof.closeTime - proof.openTime)}</em></span>
             </Link>

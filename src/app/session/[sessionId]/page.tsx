@@ -1,4 +1,4 @@
-import { ProofProduct } from "../../../components/ProofProduct";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Session | PROOF",
@@ -11,5 +11,5 @@ export default async function SessionPage({
 }) {
   const { sessionId } = await params;
 
-  return <ProofProduct sessionId={sessionId} view="session" />;
+  redirect(`/proof/session/${sessionId}`);
 }

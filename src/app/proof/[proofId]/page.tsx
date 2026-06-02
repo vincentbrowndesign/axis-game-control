@@ -1,4 +1,4 @@
-import { ProofProduct } from "../../../components/ProofProduct";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Proof | PROOF",
@@ -11,5 +11,5 @@ export default async function ProofPage({
 }) {
   const { proofId } = await params;
 
-  return <ProofProduct proofId={proofId} view="proof" />;
+  redirect(`/proof/proof/${proofId}`);
 }
