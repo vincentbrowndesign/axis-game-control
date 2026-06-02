@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "../styles/globals.css";
+import "../styles/clipnote.css";
 
 export const metadata: Metadata = {
-  title: "PROOF",
-  description: "Today's proof.",
+  title: "Clipnote",
+  description: "Flag. Clip. Save.",
 };
 
 export default function RootLayout({

@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { ClipnoteHome } from "../components/ClipnoteHome";
 
 export default function Home() {
-  redirect("/proof");
+  return <ClipnoteHome />;
 }

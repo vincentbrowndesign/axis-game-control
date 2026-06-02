@@ -1,9 +1,5 @@
-import { redirect } from "next/navigation";
-
-export const metadata = {
-  title: "Stacks | PROOF",
-};
+import { ClipnoteStacks } from "../../components/ClipnoteStacks";
 
 export default function StacksPage() {
-  redirect("/proof/stacks");
+  return <ClipnoteStacks />;
 }

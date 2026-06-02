@@ -1,8 +1,4 @@
-import { redirect } from "next/navigation";
-
-export const metadata = {
-  title: "Session | PROOF",
-};
+import { ClipnoteSession } from "../../../components/ClipnoteSession";
 
 export default async function SessionPage({
   params,
@@ -10,6 +6,5 @@ export default async function SessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-
-  redirect(`/proof/session/${sessionId}`);
+  return <ClipnoteSession sessionId={sessionId} />;
 }
