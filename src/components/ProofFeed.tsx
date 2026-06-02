@@ -7,6 +7,7 @@ type ProofCard = {
   clip: string;
   duration: string;
   endTime?: number;
+  favorite?: boolean;
   id: string;
   poster: string;
   sessionId?: string;
@@ -200,6 +201,7 @@ const manualProofTitles = [
 ] as const;
 
 const storageKey = "axis-ritual-save";
+const manualProofsKey = "proof-manual-proofs";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -411,7 +413,7 @@ function createProofsFromStoredSessions(sessions: StoredSession[]) {
 function getProofData(): ProofData {
   const sessions = readStoredSessions();
   const storedProofs = createProofsFromStoredSessions(sessions);
-  const proofs = storedProofs.length ? storedProofs : temporaryProofs;
+  const proofs = storedProofs;
   const streaks = calculateStreaks(sessions);
 
   return {
@@ -498,19 +500,15 @@ async function shareProof(proof: ProofCard) {
         return;
       }
 
-      // HLS stream URLs are useless to recipients — share title only
-      if (proof.clip && !proof.clip.includes(".m3u8")) {
+      // Blob URLs and HLS streams are device-local — useless to recipients
+      const isLocalUrl = proof.clip.startsWith("blob:") || proof.clip.includes(".m3u8");
+      if (proof.clip && !isLocalUrl) {
         await navigator.share({ text, title: proof.title, url: proof.clip });
         return;
       }
 
       await navigator.share({ text, title: proof.title });
       return;
-
-      if (files.length) {
-        await navigator.share({ text, title: proof.title });
-        return;
-      }
     }
 
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -686,6 +684,23 @@ export function ProofFeed() {
   }, []);
 
   useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(manualProofsKey);
+      if (raw) setManualProofs(JSON.parse(raw) as ProofCard[]);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(manualProofsKey, JSON.stringify(manualProofs));
+    } catch {
+      // ignore
+    }
+  }, [manualProofs]);
+
+  useEffect(() => {
     setProofEnded(Boolean(activeProof && !activeProof.clip));
   }, [activeProof]);
 
@@ -719,6 +734,17 @@ export function ProofFeed() {
 
   function closeProof() {
     setActiveIndex(null);
+  }
+
+  function favoriteProof(proof: ProofCard) {
+    const next = { ...proof, favorite: !proof.favorite };
+    setManualProofs((current) =>
+      current.map((p) => (p.id === proof.id ? next : p)),
+    );
+    setProofData((current) => ({
+      ...current,
+      proofs: current.proofs.map((p) => (p.id === proof.id ? next : p)),
+    }));
   }
 
   function goToProof(direction: 1 | -1) {
@@ -1180,20 +1206,27 @@ export function ProofFeed() {
       </section>
 
       <section className="proof-feed" aria-label="Today's proof">
-        {visibleProofs.map((proof, index) => (
-          <button className="proof-card" key={proof.id} onClick={() => openProof(index)} type="button">
-            <span className="proof-thumb" data-tone={proof.tone}>
-              {proof.poster ? <img alt="" src={proof.poster} /> : null}
-              <span className="proof-play" aria-hidden="true">
-                PLAY
+        {visibleProofs.length === 0 ? (
+          <p className="proof-empty">Import your first game.</p>
+        ) : (
+          visibleProofs.map((proof, index) => (
+            <button className="proof-card" key={proof.id} onClick={() => openProof(index)} type="button">
+              <span className="proof-thumb" data-tone={proof.tone}>
+                {proof.poster ? <img alt="" src={proof.poster} /> : null}
+                <span className="proof-play" aria-hidden="true">
+                  PLAY
+                </span>
               </span>
-            </span>
-            <span className="proof-card-body">
-              <strong>{proof.title}</strong>
-              <em>{proof.duration}</em>
-            </span>
-          </button>
-        ))}
+              <span className="proof-card-body">
+                <strong>{proof.title}</strong>
+                <span className="proof-card-meta">
+                  <em>{proof.duration}</em>
+                  {proof.favorite ? <em className="proof-card-saved">SAVED</em> : null}
+                </span>
+              </span>
+            </button>
+          ))
+        )}
       </section>
 
       {visibleStacks.some((stack) => stack.proofCount > 0) ? (
@@ -1258,19 +1291,28 @@ export function ProofFeed() {
               </div>
             )}
             {proofEnded ? (
-              <>
+              <div className="proof-player-nav-row">
                 {activeProof.clip ? (
-                  <button aria-label="Replay proof" className="proof-player-nav proof-player-replay" onClick={replayProof} type="button">
+                  <button aria-label="Replay proof" className="proof-player-nav" onClick={replayProof} type="button">
                     REPLAY
                   </button>
-                ) : null}
-                <button aria-label="Share proof" className="proof-player-nav proof-player-share" onClick={() => void shareProof(activeProof)} type="button">
+                ) : <span />}
+                <button
+                  aria-label={activeProof.favorite ? "Unsave proof" : "Save proof"}
+                  className="proof-player-nav"
+                  data-saved={activeProof.favorite ? "true" : undefined}
+                  onClick={() => favoriteProof(activeProof)}
+                  type="button"
+                >
+                  {activeProof.favorite ? "SAVED" : "SAVE"}
+                </button>
+                <button aria-label="Share proof" className="proof-player-nav" onClick={() => void shareProof(activeProof)} type="button">
                   SHARE
                 </button>
-                <button aria-label="Next proof" className="proof-player-nav proof-player-next" onClick={() => goToProof(1)} type="button">
+                <button aria-label="Next proof" className="proof-player-nav" onClick={() => goToProof(1)} type="button">
                   NEXT
                 </button>
-              </>
+              </div>
             ) : null}
           </div>
         </section>
