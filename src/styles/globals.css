@@ -83,6 +83,17 @@ body {
   gap: 0.82rem;
 }
 
+.proof-empty {
+  color: rgba(244, 244, 240, 0.32);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  margin: 1.5rem auto;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 .proof-stack-section {
   display: grid;
   gap: 0.7rem;
@@ -553,6 +564,22 @@ body {
   font-weight: 900;
 }
 
+.proof-card-meta {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.proof-card-saved {
+  border: 1px solid rgba(168, 217, 51, 0.4);
+  border-radius: 999px;
+  color: var(--axis-live);
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+}
+
 .proof-player {
   background: #000;
   display: grid;
@@ -595,21 +622,21 @@ body {
   top: max(1.3rem, env(safe-area-inset-top));
 }
 
-.proof-player-nav {
+.proof-player-nav-row {
+  align-items: center;
   bottom: max(1.2rem, env(safe-area-inset-bottom));
-}
-
-.proof-player-next {
-  right: 1.3rem;
-}
-
-.proof-player-replay {
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.proof-player-share {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: space-between;
   left: 1.3rem;
+  position: absolute;
+  right: 1.3rem;
+  z-index: 2;
+}
+
+.proof-player-nav[data-saved="true"] {
+  border-color: rgba(168, 217, 51, 0.5);
+  color: var(--axis-live);
 }
 
 .proof-player-copy {
