@@ -1,4 +1,4 @@
-import { ProofProduct } from "../../components/ProofProduct";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "PROOF",
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function ProofPage() {
-  return <ProofProduct view="home" />;
+  redirect("/");
 }

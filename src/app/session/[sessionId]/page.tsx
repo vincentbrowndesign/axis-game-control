@@ -1,4 +1,4 @@
-import { ClipnoteSession } from "../../../components/ClipnoteSession";
+import { redirect } from "next/navigation";
 
 export default async function SessionPage({
   params,
@@ -6,5 +6,5 @@ export default async function SessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  return <ClipnoteSession sessionId={sessionId} />;
+  redirect(`/asset/session-${sessionId}`);
 }

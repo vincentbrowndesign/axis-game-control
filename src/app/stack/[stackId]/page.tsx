@@ -9,7 +9,6 @@ export default async function StackPage({
 }: {
   params: Promise<{ stackId: string }>;
 }) {
-  const { stackId } = await params;
-
-  redirect(`/proof/stacks/${stackId}`);
+  await params;
+  redirect("/models");
 }

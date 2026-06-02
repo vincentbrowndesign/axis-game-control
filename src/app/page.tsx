@@ -1,5 +1,5 @@
-import { ClipnoteHome } from "../components/ClipnoteHome";
+import { LibraryHome } from "../components/AxisCloud";
 
 export default function Home() {
-  return <ClipnoteHome />;
+  return <LibraryHome />;
 }

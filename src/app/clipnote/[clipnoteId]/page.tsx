@@ -1,4 +1,4 @@
-import { ClipnoteSingle } from "../../../components/ClipnoteSingle";
+import { redirect } from "next/navigation";
 
 export default async function ClipnotePage({
   params,
@@ -6,5 +6,5 @@ export default async function ClipnotePage({
   params: Promise<{ clipnoteId: string }>;
 }) {
   const { clipnoteId } = await params;
-  return <ClipnoteSingle clipnoteId={clipnoteId} />;
+  redirect(`/asset/clipnote-${clipnoteId}`);
 }

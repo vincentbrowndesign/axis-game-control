@@ -1,5 +1,5 @@
-import { ClipnoteStacks } from "../../components/ClipnoteStacks";
+import { redirect } from "next/navigation";
 
 export default function StacksPage() {
-  return <ClipnoteStacks />;
+  redirect("/models");
 }

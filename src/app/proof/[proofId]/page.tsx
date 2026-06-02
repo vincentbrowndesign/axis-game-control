@@ -9,7 +9,6 @@ export default async function ProofPage({
 }: {
   params: Promise<{ proofId: string }>;
 }) {
-  const { proofId } = await params;
-
-  redirect(`/proof/proof/${proofId}`);
+  await params;
+  redirect("/");
 }

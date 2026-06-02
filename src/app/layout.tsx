@@ -3,8 +3,8 @@ import "../styles/globals.css";
 import "../styles/clipnote.css";
 
 export const metadata: Metadata = {
-  title: "Clipnote",
-  description: "Flag. Clip. Save.",
+  title: "Axis",
+  description: "Assets build models. Models generate products.",
 };
 
 export default function RootLayout({
