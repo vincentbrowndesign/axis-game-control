@@ -81,7 +81,6 @@ export type DatasetProductRegistration = {
 };
 
 const FAVORITES_KEY = "axis-cloud-favorites";
-const INSIGHTS_KEY = "axis-cloud-insights";
 const MODELS_KEY = "axis-cloud-models";
 const PRODUCTS_KEY = "axis-cloud-products";
 const MAKES_DATASET_ID = "dataset-makes";
@@ -237,7 +236,6 @@ export function addAssetToModel(assetId: string, modelId?: string) {
       : model,
   );
   saveAxisModels(next);
-  clearDatasetInsights(target.id);
   return next.find((model) => model.id === target.id) ?? target;
 }
 
@@ -254,7 +252,7 @@ export function generateProduct(kind: AxisProductKind, modelId: string) {
     kind,
     modelId: model?.id ?? "model-library",
     summary: productEvidence.summary,
-    title: `${productLabels[kind]} / ${model?.name ?? "Library"}`,
+    title: productLabels[kind],
   };
   write(PRODUCTS_KEY, [product, ...getAxisProducts()]);
   return product;
@@ -335,38 +333,14 @@ export function getRegisteredProductsForDataset(dataset: AxisModel | null | unde
 }
 
 export function getConfidenceTier(assetCount: number): ConfidenceTier {
-  if (assetCount >= 8) return "High";
-  if (assetCount >= 3) return "Medium";
+  if (assetCount >= 25) return "High";
+  if (assetCount >= 10) return "Medium";
   return "Low";
 }
 
 export function getDatasetInsights(dataset: AxisModel | null | undefined): AxisDatasetInsight[] {
   if (!dataset) return [];
-  return getAxisInsights().filter((insight) => insight.datasetId === dataset.id);
-}
-
-export function getAxisInsights() {
-  return read<AxisDatasetInsight[]>(INSIGHTS_KEY, []);
-}
-
-export function generateDatasetInsights(datasetId: string) {
-  const dataset = getAxisModel(datasetId);
-  if (!dataset) return [];
-
-  const insights = buildDatasetInsights(dataset);
-  const next = [
-    ...insights,
-    ...getAxisInsights().filter((insight) => insight.datasetId !== dataset.id),
-  ];
-  write(INSIGHTS_KEY, next);
-  return insights;
-}
-
-export function clearDatasetInsights(datasetId: string) {
-  write(
-    INSIGHTS_KEY,
-    getAxisInsights().filter((insight) => insight.datasetId !== datasetId),
-  );
+  return buildDatasetInsights(dataset);
 }
 
 function buildDatasetInsights(dataset: AxisModel): AxisDatasetInsight[] {

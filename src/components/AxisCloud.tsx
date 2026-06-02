@@ -10,7 +10,6 @@ import {
   createUploadedSessionAsset,
   exportProduct,
   formatExportDestination,
-  generateDatasetInsights,
   generateProduct,
   getAxisAsset,
   getAxisAssets,
@@ -122,7 +121,6 @@ function Shell({
       {children}
       <nav className="axis-cloud-nav" aria-label="Axis cloud navigation">
         <Link href="/">Datasets</Link>
-        <Link href="/models">Models</Link>
         <Link href="/create">Create</Link>
         <Link href="/account">Account</Link>
       </nav>
@@ -274,7 +272,7 @@ export function DatasetsHome() {
   }
 
   return (
-    <Shell eyebrow="Datasets" title="Build from saved clips">
+    <Shell eyebrow="Datasets" title="What do you want to learn?">
       <section className="axis-cloud-panel axis-upload-panel">
         <button
           className="axis-cloud-primary"
@@ -297,41 +295,26 @@ export function DatasetsHome() {
       </section>
 
       <section className="axis-cloud-section">
-        <div className="axis-cloud-row">
-          <span>Dataset Cards</span>
-          <strong>{models.length}</strong>
-        </div>
         <div className="axis-dataset-list">
           {models.map((model) => (
             <article className="axis-dataset-card" key={model.id}>
-              <div>
-                <span>Name</span>
-                <strong>{model.name}</strong>
-              </div>
+              <strong className="axis-dataset-card-title">{model.name}</strong>
               <div className="axis-dataset-fields">
                 <p>
-                  <span>Clip Count</span>
-                  <strong>{getDatasetClipCount(model)}</strong>
+                  <strong>{getDatasetClipCount(model)} clips</strong>
                 </p>
                 <p>
-                  <span>Created Date</span>
-                  <strong>{formatDatasetDate(model.createdAt)}</strong>
+                  <span>{formatDatasetDate(model.createdAt)}</span>
                 </p>
               </div>
               <div className="axis-dataset-actions">
-                <Link href={`/dataset/${model.id}`}>Open Dataset</Link>
-                <Link href={`/create?dataset=${model.id}`}>Create</Link>
+                <Link href={`/dataset/${model.id}`}>View</Link>
+                <Link href={`/create?dataset=${model.id}`}>Generate</Link>
               </div>
             </article>
           ))}
         </div>
       </section>
-
-      {models[0] ? (
-        <Link className="axis-cloud-primary" href={`/create?dataset=${models[0].id}`}>
-          Create
-        </Link>
-      ) : null}
     </Shell>
   );
 }
@@ -339,7 +322,6 @@ export function DatasetsHome() {
 export function DatasetDetail({ datasetId }: { datasetId: string }) {
   const { assets, refresh } = useCloudSnapshot();
   const [dataset, setDataset] = useState<AxisModel | null>(null);
-  const [, setInsightRevision] = useState(0);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -355,12 +337,10 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
       setUploadState("saving");
       const assetId = createUploadedSessionAsset(file, film);
       addAssetToModel(assetId, datasetId);
-      setInsightRevision((value) => value + 1);
       refresh();
     } catch {
       const assetId = createUploadedSessionAsset(file);
       addAssetToModel(assetId, datasetId);
-      setInsightRevision((value) => value + 1);
       refresh();
     } finally {
       setUploadState("idle");
@@ -391,13 +371,6 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
   const insights = getDatasetInsights(dataset);
   const canGenerateProduct = hasMinimumDatasetInsightConfidence(dataset);
 
-  function discoverInsights() {
-    if (!clipCount) return;
-    generateDatasetInsights(datasetId);
-    setInsightRevision((value) => value + 1);
-    refresh();
-  }
-
   function openCreate() {
     if (!canGenerateProduct) return;
     router.push(`/create?dataset=${datasetId}`);
@@ -406,14 +379,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
   return (
     <Shell eyebrow="Dataset" title={dataset.name}>
       <section className="axis-cloud-section">
-        <div className="axis-cloud-row">
-          <span>Dataset Name</span>
-          <strong>{dataset.name}</strong>
-        </div>
-        <div className="axis-cloud-row">
-          <span>Clip Count</span>
-          <strong>{clipCount}</strong>
-        </div>
+        <p className="axis-dataset-clip-count">{clipCount} clips</p>
       </section>
 
       <section className="axis-cloud-panel axis-upload-panel">
@@ -424,9 +390,6 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
             type="button"
           >
             {uploadState === "idle" ? "Add Clips" : "Uploading"}
-          </button>
-          <button disabled={!clipCount} onClick={discoverInsights} type="button">
-            Discover Insights
           </button>
           <Link href="/">Back</Link>
         </div>
@@ -444,8 +407,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
 
       <section className="axis-cloud-section">
         <div className="axis-cloud-row">
-          <span>What did we discover?</span>
-          <strong>{insights.length}</strong>
+          <span>Discoveries</span>
         </div>
         <div className="axis-insight-list">
           {insights.length ? (
@@ -459,13 +421,9 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
       </section>
 
       <section className="axis-cloud-panel axis-upload-panel">
-        <div className="axis-cloud-row">
-          <span>What should we create?</span>
-          <strong>{canGenerateProduct ? "Ready" : "Locked"}</strong>
-        </div>
         <div className="axis-dataset-actions">
           <button disabled={!canGenerateProduct} onClick={openCreate} type="button">
-            Generate Product
+            Generate
           </button>
         </div>
       </section>
@@ -484,24 +442,17 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
 function InsightRow({ insight }: { insight: AxisDatasetInsight }) {
   return (
     <article className="axis-insight-row">
-      <div>
-        <span>Insight Name</span>
-        <strong>{insight.name}</strong>
-      </div>
-      <div>
-        <span>Value</span>
-        <strong>{insight.value}</strong>
-      </div>
-      <div>
-        <span>Confidence</span>
-        <strong>{insight.confidence}</strong>
-      </div>
-      <div>
-        <span>Sample Size</span>
-        <strong>
-          {insight.sampleSize} {insight.sampleSize === 1 ? "Clip" : "Clips"}
-        </strong>
-      </div>
+      <strong>{insight.name}</strong>
+      <span>{insight.value}</span>
+      <span className="axis-insight-confidence">
+        {insight.confidence === "High"
+          ? "reliable"
+          : insight.confidence === "Medium"
+            ? "pattern forming"
+            : "early signal"}
+        {" · "}
+        {insight.sampleSize} clips
+      </span>
     </article>
   );
 }
@@ -538,8 +489,20 @@ export function AssetDetail({ assetId }: { assetId: string }) {
 
   function handleAddToModel() {
     const model = addAssetToModel(currentAsset.id, models[0]?.id);
-    router.push(`/models/${model.id}`);
+    router.push(`/dataset/${model.id}`);
   }
+
+  const visibleMeanings = asset.meanings.filter(
+    (meaning) =>
+      ![
+        "Saved moment",
+        "Replay memory attached",
+        "Ready for model building",
+        "Returned to Library",
+        "Session complete",
+        "Session active",
+      ].includes(meaning),
+  );
 
   return (
     <Shell eyebrow="Asset" title={asset.title}>
@@ -549,32 +512,30 @@ export function AssetDetail({ assetId }: { assetId: string }) {
         ) : asset.thumbnailUrl ? (
           <img alt="" className="axis-cloud-hero-image" src={asset.thumbnailUrl} />
         ) : (
-          <div className="axis-cloud-hero-image axis-cloud-blank">{asset.kind}</div>
+          <div className="axis-cloud-hero-image axis-cloud-blank">No preview</div>
         )}
         <div className="axis-cloud-actions">
           <button onClick={handleFavorite} type="button">
             {asset.favorite ? "Saved favorite" : "Save favorite"}
           </button>
           <button onClick={handleAddToModel} type="button">
-            Add to model
+            Add to Dataset
           </button>
           <button onClick={() => router.push(`/create?asset=${asset.id}`)} type="button">
-            Create product
+            Generate
           </button>
         </div>
       </section>
 
-      <section className="axis-cloud-section">
-        <div className="axis-cloud-row">
-          <span>Meanings</span>
-          <strong>{asset.meanings.length}</strong>
-        </div>
+      {visibleMeanings.length ? (
+        <section className="axis-cloud-section">
         <div className="axis-chip-list">
-          {asset.meanings.map((meaning) => (
+          {visibleMeanings.map((meaning) => (
             <span key={meaning}>{meaning}</span>
           ))}
         </div>
-      </section>
+        </section>
+      ) : null}
 
       {related.length ? (
         <section className="axis-cloud-section">
@@ -767,25 +728,13 @@ export function CreateProduct({
             </div>
           </section>
 
-          <section className="axis-cloud-section">
-            <div className="axis-cloud-row">
-              <span>Allowed Products</span>
-              <strong>{allowedProducts.length}</strong>
-            </div>
-            <div className="axis-chip-list">
-              {allowedProducts.map((kind) => (
-                <span key={kind}>{getProductLabel(kind)}</span>
-              ))}
-            </div>
-          </section>
-
           <section className="axis-cloud-panel axis-create-actions">
             {hasDiscoverableInsights ? (
               <button className="axis-cloud-primary" onClick={handleGenerate} type="button">
                 Generate Product
               </button>
             ) : (
-              <p className="axis-create-locked">Discover insights first.</p>
+              <p className="axis-create-locked">Add more clips to unlock generation.</p>
             )}
             <Link className="axis-cloud-secondary" href={`/dataset/${selectedDataset.id}`}>
               Back
@@ -795,15 +744,14 @@ export function CreateProduct({
           {generatedProducts.length ? (
             <section className="axis-cloud-section">
               <div className="axis-cloud-row">
-                <span>Generated</span>
-                <strong>{generatedProducts.length}</strong>
+                <span>Ready</span>
               </div>
               <div className="axis-model-list">
                 {generatedProducts.map((product) => (
                   <Link className="axis-model-card" href={`/product/${product.id}`} key={product.id}>
                     <strong>{product.title}</strong>
                     <span>{getProductLabel(product.kind)}</span>
-                    <em>{product.confidenceTier ?? "Low"} confidence</em>
+                    <em>{product.assetIds.length} clips</em>
                   </Link>
                 ))}
               </div>
@@ -847,35 +795,28 @@ export function ProductDetail({ productId }: { productId: string }) {
     if (!product) return;
     exportProduct(product.id, destination);
     refresh();
-    router.push("/");
+    router.push(dataset ? `/dataset/${dataset.id}` : "/");
   }
 
   return (
     <Shell eyebrow="Product" title={product.title}>
       <section className="axis-cloud-section">
         <div className="axis-cloud-row">
-          <span>Generated Product</span>
-          <strong>{getProductLabel(product.kind)}</strong>
-        </div>
-        <div className="axis-cloud-row">
           <span>Dataset</span>
           <strong>{dataset?.name ?? "Dataset"}</strong>
         </div>
         <div className="axis-cloud-row">
-          <span>Sources</span>
-          <strong>{product.assetIds.length}</strong>
+          <span>{product.assetIds.length} clips</span>
         </div>
         <div className="axis-cloud-row">
-          <span>Confidence</span>
-          <strong>{product.confidenceTier ?? "Low"}</strong>
+          <span>Pattern detected from {product.assetIds.length} clips</span>
         </div>
       </section>
 
       {product.summary?.length ? (
         <section className="axis-cloud-section">
           <div className="axis-cloud-row">
-            <span>Aggregation</span>
-            <strong>{product.summary.length}</strong>
+            <span>What we found</span>
           </div>
           <div className="axis-chip-list">
             {product.summary.map((item) => (
@@ -896,8 +837,7 @@ export function ProductDetail({ productId }: { productId: string }) {
 
       <section className="axis-cloud-section">
         <div className="axis-cloud-row">
-          <span>Export</span>
-          <strong>{exportDestinations.length}</strong>
+          <span>Share</span>
         </div>
         <div className="axis-create-grid">
           {exportDestinations.map((destination) => (
@@ -912,24 +852,43 @@ export function ProductDetail({ productId }: { productId: string }) {
 }
 
 export function AccountSettings() {
+  const { assets, models, products } = useCloudSnapshot();
+
   return (
-    <Shell eyebrow="Account" title="Continuity settings">
+    <Shell eyebrow="Account" title="Your Axis">
       <section className="axis-cloud-panel">
         <div className="axis-cloud-row">
-          <span>Environment</span>
-          <strong>Preserved</strong>
+          <span>Datasets</span>
+          <strong>{models.length}</strong>
         </div>
-        <p className="axis-cloud-copy">
-          Supabase, auth, Mux, uploads, replay, APIs, exports, and check-in data remain underneath this frontend.
-        </p>
+        <div className="axis-cloud-row">
+          <span>Clips</span>
+          <strong>{assets.filter((asset) => asset.kind === "clipnote").length}</strong>
+        </div>
+        <div className="axis-cloud-row">
+          <span>Products</span>
+          <strong>{products.length}</strong>
+        </div>
       </section>
-      <section className="axis-cloud-section">
-        <div className="axis-chip-list">
-          <span>Library</span>
-          <span>Models</span>
-          <span>Create</span>
-          <span>Export loop</span>
-        </div>
+      <section className="axis-cloud-panel">
+        <button
+          className="axis-cloud-primary"
+          onClick={() => {
+            if (typeof window !== "undefined") {
+              [
+                "axis-cloud-favorites",
+                "axis-cloud-models",
+                "axis-cloud-products",
+                "cn-sessions",
+                "cn-tags",
+              ].forEach((key) => window.localStorage.removeItem(key));
+              window.location.href = "/";
+            }
+          }}
+          type="button"
+        >
+          Reset
+        </button>
       </section>
     </Shell>
   );
