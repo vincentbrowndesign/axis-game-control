@@ -42,6 +42,11 @@ export type AxisAsset = {
   favorite: boolean;
   meanings: string[];
   relatedIds: string[];
+  export_artifact_id?: string;
+  generated_timestamp?: string;
+  product_id?: string;
+  product_type?: AxisProductKind;
+  source_clips?: string[];
 };
 
 export type AxisModel = {
@@ -65,6 +70,32 @@ export type AxisProduct = {
 };
 
 export type ExportDestination = "camera-roll" | "instagram" | "tiktok" | "youtube";
+export type AxisAssetRecordAction = "save" | "share";
+export type AxisAssetRecord = {
+  id: string;
+  action: AxisAssetRecordAction;
+  created_at: string;
+  export_artifact_id?: string;
+  export_destination?: ExportDestination;
+  generated_timestamp: string;
+  product_id: string;
+  product_type: AxisProductKind;
+  source_clips: string[];
+  title: string;
+};
+
+export type AxisExportArtifact = {
+  id: string;
+  content: string;
+  content_type: string;
+  created_at: string;
+  destination: ExportDestination;
+  file_name: string;
+  product_id: string;
+  product_type: AxisProductKind;
+  source_clips: string[];
+};
+
 export type AxisDatasetInsight = {
   id: string;
   datasetId: string;
@@ -81,6 +112,8 @@ export type DatasetProductRegistration = {
 };
 
 const FAVORITES_KEY = "axis-cloud-favorites";
+const ASSET_RECORDS_KEY = "axis-cloud-asset-records";
+const EXPORT_ARTIFACTS_KEY = "axis-cloud-export-artifacts";
 const MODELS_KEY = "axis-cloud-models";
 const PRODUCTS_KEY = "axis-cloud-products";
 const MAKES_DATASET_ID = "dataset-makes";
@@ -189,6 +222,14 @@ export function getAxisProduct(id: string) {
   return getAxisProducts().find((product) => product.id === id) ?? null;
 }
 
+export function getAxisAssetRecords() {
+  return read<AxisAssetRecord[]>(ASSET_RECORDS_KEY, []);
+}
+
+export function getAxisExportArtifacts() {
+  return read<AxisExportArtifact[]>(EXPORT_ARTIFACTS_KEY, []);
+}
+
 export function getAxisModels() {
   const stored = read<AxisModel[]>(MODELS_KEY, []);
   const makesDataset = buildMakesDatasetFromFavorites();
@@ -267,11 +308,41 @@ export function generateProduct(kind: AxisProductKind, modelId: string) {
   return product;
 }
 
+export function saveProductAsAsset(productId: string) {
+  const product = getAxisProduct(productId);
+  if (!product) return null;
+
+  return createAxisAssetRecord(product, "save");
+}
+
+export function createProductExportArtifact(productId: string, destination: ExportDestination) {
+  const product = getAxisProduct(productId);
+  if (!product) return null;
+
+  const artifact: AxisExportArtifact = {
+    content: buildExportContent(product, destination),
+    content_type: "text/plain;charset=utf-8",
+    created_at: new Date().toISOString(),
+    destination,
+    file_name: `${slugify(product.title)}-${Date.now()}.txt`,
+    id: `artifact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    product_id: product.id,
+    product_type: product.kind,
+    source_clips: product.assetIds,
+  };
+
+  write(EXPORT_ARTIFACTS_KEY, [artifact, ...getAxisExportArtifacts()]);
+  return artifact;
+}
+
 export function exportProduct(productId: string, destination: ExportDestination) {
   const products = getAxisProducts();
   const source = products.find((product) => product.id === productId);
 
   if (!source) return null;
+
+  const artifact = createProductExportArtifact(productId, destination);
+  if (!artifact) return null;
 
   const exported: AxisProduct = {
     ...source,
@@ -282,7 +353,8 @@ export function exportProduct(productId: string, destination: ExportDestination)
   };
   const next = [exported, ...products];
   write(PRODUCTS_KEY, next);
-  return exported;
+  const assetRecord = createAxisAssetRecord(source, "share", destination, artifact.id);
+  return { artifact, assetRecord, product: exported };
 }
 
 export function createUploadedSessionAsset(file: File, film?: { muxPlaybackId?: string; thumbnailUrl?: string }) {
@@ -304,8 +376,9 @@ export function getAxisAssets(): AxisAsset[] {
     session.clipnotes.map((clipnote) => clipnoteToAsset(clipnote, session, favorites)),
   );
   const productAssets = getAxisProducts().map((product) => productToAsset(product, favorites));
+  const recordedAssets = getAxisAssetRecords().map((record) => assetRecordToAsset(record, favorites));
 
-  return [...productAssets, ...clipnoteAssets, ...sessionAssets].sort(
+  return [...recordedAssets, ...productAssets, ...clipnoteAssets, ...sessionAssets].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
@@ -492,6 +565,81 @@ function productToAsset(product: AxisProduct, favorites: string[]): AxisAsset {
     sourceId: product.id,
     title: product.title,
   };
+}
+
+function assetRecordToAsset(record: AxisAssetRecord, favorites: string[]): AxisAsset {
+  return {
+    createdAt: record.created_at,
+    detail:
+      record.action === "share" && record.export_destination
+        ? `Shared to ${formatExportDestination(record.export_destination)}`
+        : "Saved output",
+    durationLabel: "Axis Asset",
+    export_artifact_id: record.export_artifact_id,
+    favorite: favorites.includes(record.id),
+    generated_timestamp: record.generated_timestamp,
+    id: record.id,
+    kind: "product",
+    meanings: [
+      getProductLabel(record.product_type),
+      `${record.source_clips.length} source clips`,
+      record.action === "share" ? "Export artifact created" : "Saved to Axis",
+    ],
+    product_id: record.product_id,
+    product_type: record.product_type,
+    relatedIds: record.source_clips,
+    source_clips: record.source_clips,
+    sourceId: record.product_id,
+    title: record.title,
+  };
+}
+
+function createAxisAssetRecord(
+  product: AxisProduct,
+  action: AxisAssetRecordAction,
+  destination?: ExportDestination,
+  artifactId?: string,
+) {
+  const record: AxisAssetRecord = {
+    action,
+    created_at: new Date().toISOString(),
+    export_artifact_id: artifactId,
+    export_destination: destination,
+    generated_timestamp: product.createdAt,
+    id: `asset-record-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    product_id: product.id,
+    product_type: product.kind,
+    source_clips: product.assetIds,
+    title:
+      action === "share" && destination
+        ? `${product.title} / ${formatExportDestination(destination)}`
+        : product.title,
+  };
+
+  write(ASSET_RECORDS_KEY, [record, ...getAxisAssetRecords()]);
+  return record;
+}
+
+function buildExportContent(product: AxisProduct, destination: ExportDestination) {
+  return [
+    product.title,
+    "",
+    `Destination: ${formatExportDestination(destination)}`,
+    `Generated: ${product.createdAt}`,
+    `Product ID: ${product.id}`,
+    `Product Type: ${product.kind}`,
+    `Source Clips: ${product.assetIds.length}`,
+    "",
+    "What We Found",
+    ...(product.summary?.length ? product.summary : ["Generated output ready."]),
+  ].join("\n");
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
 function getAssetsForPattern(pattern: DatasetBin) {

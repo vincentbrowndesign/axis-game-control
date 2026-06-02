@@ -19,13 +19,13 @@ import {
   getAxisProduct,
   getAxisProducts,
   getDatasetInsights,
-  getProductAssetId,
   getProductLabel,
   getRegisteredProductsForDataset,
   hasMinimumDatasetInsightConfidence,
-  saveFavoriteAsset,
+  saveProductAsAsset,
   toggleFavoriteAsset,
   type AxisAsset,
+  type AxisExportArtifact,
   type AxisDatasetInsight,
   type AxisModel,
   type AxisProduct,
@@ -35,7 +35,7 @@ import {
 
 type UploadState = "idle" | "uploading" | "saving";
 
-const exportDestinations: ExportDestination[] = ["camera-roll", "instagram", "tiktok", "youtube"];
+const cameraRollDestination: ExportDestination = "camera-roll";
 
 function useCloudSnapshot() {
   const [assets, setAssets] = useState<AxisAsset[]>([]);
@@ -796,11 +796,18 @@ export function CreateProduct({
 export function ProductDetail({ productId }: { productId: string }) {
   const { refresh } = useCloudSnapshot();
   const [product, setProduct] = useState<AxisProduct | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saved">("idle");
+  const [shareState, setShareState] = useState<"idle" | "shared">("idle");
+  const [supportsNativeShare, setSupportsNativeShare] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     setProduct(getAxisProduct(productId));
   }, [productId]);
+
+  useEffect(() => {
+    setSupportsNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
 
   if (!product) {
     return (
@@ -814,13 +821,28 @@ export function ProductDetail({ productId }: { productId: string }) {
 
   function handleSave() {
     if (!product) return;
-    saveFavoriteAsset(getProductAssetId(product.id));
+    const record = saveProductAsAsset(product.id);
+    if (!record) return;
+    setSaveState("saved");
     refresh();
   }
 
-  function handleExport(destination: ExportDestination) {
+  async function handleCameraRollExport() {
     if (!product) return;
-    exportProduct(product.id, destination);
+    const result = exportProduct(product.id, cameraRollDestination);
+    if (!result) return;
+    downloadArtifact(result.artifact);
+    setShareState("shared");
+    refresh();
+    router.push("/");
+  }
+
+  async function handleNativeShare() {
+    if (!product || !supportsNativeShare) return;
+    const result = exportProduct(product.id, cameraRollDestination);
+    if (!result) return;
+    await shareArtifact(result.artifact);
+    setShareState("shared");
     refresh();
     router.push("/");
   }
@@ -854,7 +876,7 @@ export function ProductDetail({ productId }: { productId: string }) {
       <section className="axis-cloud-panel">
         <div className="axis-product-actions">
           <button onClick={handleSave} type="button">
-            Save
+            {saveState === "saved" ? "Saved" : "Save"}
           </button>
           <Link href="/">Back</Link>
         </div>
@@ -865,15 +887,45 @@ export function ProductDetail({ productId }: { productId: string }) {
           <span>Share</span>
         </div>
         <div className="axis-create-grid">
-          {exportDestinations.map((destination) => (
-            <button onClick={() => handleExport(destination)} type="button" key={destination}>
-              {formatExportDestination(destination)}
+          <button onClick={handleCameraRollExport} type="button">
+            {shareState === "shared" ? "Exported" : formatExportDestination(cameraRollDestination)}
+          </button>
+          {supportsNativeShare ? (
+            <button onClick={() => void handleNativeShare()} type="button">
+              Share
             </button>
-          ))}
+          ) : null}
         </div>
       </section>
     </Shell>
   );
+}
+
+function downloadArtifact(artifact: AxisExportArtifact) {
+  const blob = new Blob([artifact.content], { type: artifact.content_type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = artifact.file_name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function shareArtifact(artifact: AxisExportArtifact) {
+  const file = new File([artifact.content], artifact.file_name, { type: artifact.content_type });
+  const nav = navigator as Navigator & {
+    canShare?: (data: ShareData) => boolean;
+    share: (data: ShareData) => Promise<void>;
+  };
+  const shareData: ShareData =
+    nav.canShare?.({ files: [file] }) ? { files: [file], title: artifact.file_name } : {
+      text: artifact.content,
+      title: artifact.file_name,
+    };
+
+  await nav.share(shareData);
 }
 
 export function AccountSettings() {
@@ -898,6 +950,8 @@ export function AccountSettings() {
             if (typeof window !== "undefined") {
               [
                 "axis-cloud-favorites",
+                "axis-cloud-asset-records",
+                "axis-cloud-export-artifacts",
                 "axis-cloud-models",
                 "axis-cloud-products",
                 "cn-sessions",
