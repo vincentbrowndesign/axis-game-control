@@ -1039,6 +1039,132 @@
   font-weight: 650;
 }
 
+/* Tag pills — UPPERCASE_UNDERSCORE format */
+
+.cn-tag-pill {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+/* ─── Session Complete ────────────────────────────────────────────────────── */
+
+.cn-complete-screen {
+  display: grid;
+  gap: 2.25rem;
+  margin: 0 auto;
+  max-width: 480px;
+  padding: 2.5rem 1.25rem max(2rem, env(safe-area-inset-bottom));
+  width: 100%;
+}
+
+.cn-complete-hero {
+  text-align: center;
+}
+
+.cn-complete-count {
+  color: var(--cn-ink);
+  font-size: clamp(4rem, 22vw, 7rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin: 0;
+}
+
+.cn-complete-label {
+  color: var(--cn-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0.4rem 0 0;
+  text-transform: uppercase;
+}
+
+.cn-complete-bins {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.cn-complete-bin {
+  align-items: center;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-border);
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+
+.cn-complete-bin-name {
+  color: var(--cn-ink);
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.cn-complete-bin-count {
+  color: var(--cn-muted);
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.cn-complete-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.cn-complete-primary-btn {
+  appearance: none;
+  background: var(--cn-ink);
+  border: none;
+  border-radius: var(--cn-radius-pill);
+  color: #fff;
+  cursor: pointer;
+  display: block;
+  font-family: var(--cn-font);
+  font-size: 1rem;
+  font-weight: 700;
+  min-height: 58px;
+  text-align: center;
+  text-decoration: none;
+  line-height: 58px;
+  touch-action: manipulation;
+  width: 100%;
+}
+
+.cn-complete-primary-btn:active {
+  opacity: 0.88;
+}
+
+.cn-complete-secondary-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--cn-border);
+  border-radius: var(--cn-radius-pill);
+  color: var(--cn-muted);
+  cursor: pointer;
+  display: block;
+  font-family: var(--cn-font);
+  font-size: 0.92rem;
+  font-weight: 600;
+  min-height: 52px;
+  text-align: center;
+  text-decoration: none;
+  line-height: 52px;
+  touch-action: manipulation;
+  width: 100%;
+}
+
+.cn-complete-secondary-btn:active {
+  border-color: var(--cn-border-focus);
+  color: var(--cn-ink);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────────── */
+
 @media (min-width: 760px) {
   .cn-home,
   .cn-stacks-page {
