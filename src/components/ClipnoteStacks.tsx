@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getStacks, type Stack } from "../lib/clipnote-store";
+import { getDatasetBins, type DatasetBin } from "../lib/clipnote-store";
 
 export function ClipnoteStacks() {
-  const [stacks, setStacks] = useState<Stack[]>([]);
+  const [bins, setBins] = useState<DatasetBin[]>([]);
 
   useEffect(() => {
-    setStacks(getStacks());
+    setBins(getDatasetBins());
   }, []);
 
   return (
@@ -20,15 +20,15 @@ export function ClipnoteStacks() {
         <p className="cn-brand cn-stack-page-title">STACKS</p>
       </nav>
 
-      {stacks.length > 0 ? (
+      {bins.length > 0 ? (
         <section className="cn-stacks-list">
-          {stacks.map((stack) => (
-            <div className="cn-stack-card" key={stack.tag_id}>
-              <span className="cn-stack-name">{stack.tag_name}</span>
+          {bins.map((bin) => (
+            <div className="cn-stack-card" key={bin.tag_id}>
+              <span className="cn-stack-name">{bin.tag_name}</span>
               <span className="cn-stack-count">
-                {stack.count} {stack.count === 1 ? "clipnote" : "clipnotes"}
+                {bin.clipnote_count}{" "}
+                {bin.clipnote_count === 1 ? "Clipnote" : "Clipnotes"}
               </span>
-              <span className="cn-stack-progress">{Math.min(stack.count, 10)} / 10 dataset progress</span>
             </div>
           ))}
         </section>

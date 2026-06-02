@@ -23,6 +23,7 @@ const PRESET_TAGS = [
   "PASS_BEFORE_BASKET",
   "SHOT_AFTER_MISS",
   "GOT_IT_BACK",
+  "SHOOTING_MACHINE",
   "FIRST_TO_THE_BALL",
   "TRANSITION",
   "DEFENSE",
@@ -39,6 +40,30 @@ function formatTime(seconds: number): string {
   const m = Math.floor(s / 60);
   const r = Math.round(s % 60);
   return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function buildSessionSummary(session: Session): SessionSummary {
+  const sessionTagCounts = new Map<string, number>();
+  for (const cn of session.clipnotes) {
+    if (cn.tag_id) {
+      sessionTagCounts.set(cn.tag_id, (sessionTagCounts.get(cn.tag_id) ?? 0) + 1);
+    }
+  }
+
+  const stacks = getStacks();
+  const tags = [...sessionTagCounts.entries()].map(([tagId, sessionCount]) => {
+    const stack = stacks.find((s) => s.tag_id === tagId);
+    const after = stack?.count ?? sessionCount;
+    const before = Math.max(0, after - sessionCount);
+    const name = stack?.tag_name ?? getTag(tagId)?.name ?? tagId;
+    return { after, before, name };
+  });
+
+  return {
+    clipnotesCount: session.clipnotes.length,
+    firstClipnoteId: session.clipnotes[0]?.id,
+    tags,
+  };
 }
 
 export function ClipnoteSession({ sessionId }: { sessionId: string }) {
@@ -91,6 +116,14 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
     } catch {
       // session not found in store
     }
+  }
+
+  function handlePlay() {
+    const video = videoRef.current;
+    if (!video) return;
+    void video.play().catch(() => {
+      // Browser playback can be blocked until the user taps again.
+    });
   }
 
   function openSheet(flag: Flag) {
@@ -184,30 +217,10 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
   function handleFinish() {
     if (!session) return;
 
-    // Compute dataset delta (before completing, counts include this session)
-    const sessionTagCounts = new Map<string, number>();
-    for (const cn of session.clipnotes) {
-      if (cn.tag_id) {
-        sessionTagCounts.set(cn.tag_id, (sessionTagCounts.get(cn.tag_id) ?? 0) + 1);
-      }
-    }
-
-    const stacks = getStacks();
-    const tags = [...sessionTagCounts.entries()].map(([tagId, sessionCount]) => {
-      const stack = stacks.find((s) => s.tag_id === tagId);
-      const after = stack?.count ?? sessionCount;
-      const before = after - sessionCount;
-      const name = stack?.tag_name ?? getTag(tagId)?.name ?? tagId;
-      return { after, before, name };
-    });
-
+    const nextSummary = buildSessionSummary(session);
     completeSession(session.id);
     setSession((cur) => cur ? { ...cur, status: "complete" } : cur);
-    setSummary({
-      clipnotesCount: session.clipnotes.length,
-      firstClipnoteId: session.clipnotes[0]?.id,
-      tags,
-    });
+    setSummary(nextSummary);
     setShowComplete(true);
   }
 
@@ -228,11 +241,10 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
 
   // ─── Session Complete ──────────────────────────────────────────────────────
   if (showComplete) {
-    const completeSummary = summary ?? {
-      clipnotesCount: session?.clipnotes.length ?? 0,
-      firstClipnoteId: session?.clipnotes[0]?.id,
+    const completeSummary = summary ?? (session ? buildSessionSummary(session) : {
+      clipnotesCount: 0,
       tags: [],
-    };
+    });
     return (
       <main className="cn-session-page">
         <nav className="cn-session-nav">
@@ -247,28 +259,34 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
           </div>
 
           {completeSummary.tags.length > 0 && (
-            <div className="cn-complete-bins">
-              {completeSummary.tags.map((tag) => (
-                <div className="cn-complete-bin" key={tag.name}>
-                  <span className="cn-complete-bin-name">{tag.name}</span>
-                  <span className="cn-complete-bin-count">
-                    {tag.before} → {tag.after}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <section className="cn-complete-progress">
+              <div className="cn-complete-section-heading">
+                <p>Tags Used</p>
+                <span>Dataset Counts Updated</span>
+              </div>
+              <div className="cn-complete-bins">
+                {completeSummary.tags.map((tag) => (
+                  <div className="cn-complete-bin" key={tag.name}>
+                    <span className="cn-complete-bin-name">{tag.name}</span>
+                    <span className="cn-complete-bin-count">
+                      {tag.before} → {tag.after}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           <div className="cn-complete-actions">
             <Link className="cn-complete-primary-btn" href="/">
-              Return to Sessions
+              RETURN TO SESSIONS
             </Link>
             {completeSummary.firstClipnoteId && (
               <Link
                 className="cn-complete-secondary-btn"
                 href={`/clipnote/${completeSummary.firstClipnoteId}`}
               >
-                Review Clipnotes
+                REVIEW CLIPNOTES
               </Link>
             )}
           </div>
@@ -299,7 +317,6 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
           <div className="cn-video-wrap">
             <video
               className="cn-video"
-              controls
               onLoadedMetadata={(e) =>
                 setDuration(
                   Number.isFinite(e.currentTarget.duration)
@@ -337,9 +354,14 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
             )}
           </div>
 
-          <button className="cn-flag-btn" onClick={handleFlag} type="button">
-            FLAG
-          </button>
+          <div className="cn-session-actions">
+            <button className="cn-play-btn" onClick={handlePlay} type="button">
+              PLAY
+            </button>
+            <button className="cn-flag-btn" onClick={handleFlag} type="button">
+              FLAG
+            </button>
+          </div>
 
           {session && session.clipnotes.length > 0 && (
             <section className="cn-clipnotes-section">
@@ -387,7 +409,7 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
               onClick={handleFinish}
               type="button"
             >
-              Finish Session
+              FINISH SESSION
             </button>
           )}
         </>

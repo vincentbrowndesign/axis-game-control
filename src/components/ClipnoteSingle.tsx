@@ -2,7 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { getCachedVideoUrl, getClipnote, type Clipnote, type Session } from "../lib/clipnote-store";
+import {
+  getCachedVideoUrl,
+  getClipnote,
+  getTag,
+  type Clipnote,
+  type Session,
+} from "../lib/clipnote-store";
+
+function formatTime(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const m = Math.floor(s / 60);
+  const r = Math.round(s % 60);
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
 
 export function ClipnoteSingle({ clipnoteId }: { clipnoteId: string }) {
   const [clipnote, setClipnote] = useState<Clipnote | null>(null);
@@ -59,6 +72,8 @@ export function ClipnoteSingle({ clipnoteId }: { clipnoteId: string }) {
     );
   }
 
+  const tag = clipnote.tag_id ? getTag(clipnote.tag_id) : null;
+
   return (
     <main className="cn-single-page">
       <nav className="cn-single-nav">
@@ -68,6 +83,28 @@ export function ClipnoteSingle({ clipnoteId }: { clipnoteId: string }) {
       </nav>
 
       <p className="cn-single-title">{clipnote.title}</p>
+
+      <section className="cn-single-field-strip" aria-label="Clipnote details">
+        <div className="cn-single-field-thumb">
+          {clipnote.thumbnail_url ? (
+            <img alt="" src={clipnote.thumbnail_url} />
+          ) : null}
+        </div>
+        <div className="cn-single-fields">
+          <div>
+            <span>TAG</span>
+            <strong>{tag?.name ?? clipnote.title}</strong>
+          </div>
+          <div>
+            <span>OPEN</span>
+            <strong>{formatTime(clipnote.open_time)}</strong>
+          </div>
+          <div>
+            <span>CLOSE</span>
+            <strong>{formatTime(clipnote.close_time)}</strong>
+          </div>
+        </div>
+      </section>
 
       {videoUrl ? (
         <div className="cn-single-video-wrap">

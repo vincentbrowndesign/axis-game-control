@@ -47,6 +47,13 @@ export type Stack = {
   count: number;
 };
 
+export type DatasetBin = {
+  tag_id: string;
+  tag_name: string;
+  tag_slug: string;
+  clipnote_count: number;
+};
+
 // ─── SQL schema (for future Supabase migration) ───────────────────────────────
 //
 // create table tags (
@@ -93,6 +100,17 @@ export type Stack = {
 //   group by t.id, t.name, t.slug
 //   having count(c.id) > 0
 //   order by count desc;
+//
+// create or replace view dataset_bins as
+//   select
+//     t.id as tag_id,
+//     t.name as tag_name,
+//     t.slug as tag_slug,
+//     count(c.id)::int as clipnote_count
+//   from tags t left join clipnotes c on c.tag_id = t.id
+//   group by t.id, t.name, t.slug
+//   having count(c.id) > 0
+//   order by clipnote_count desc;
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -248,6 +266,15 @@ export function createTag(name: string): Tag {
 // ─── Stacks (derived) ─────────────────────────────────────────────────────────
 
 export function getStacks(): Stack[] {
+  return getDatasetBins().map((bin) => ({
+    tag_id: bin.tag_id,
+    tag_name: bin.tag_name,
+    tag_slug: bin.tag_slug,
+    count: bin.clipnote_count,
+  }));
+}
+
+export function getDatasetBins(): DatasetBin[] {
   const tags = getTags();
   const sessions = getSessions();
 
@@ -266,9 +293,9 @@ export function getStacks(): Stack[] {
       tag_id: t.id,
       tag_name: t.name,
       tag_slug: t.slug,
-      count: counts.get(t.id) ?? 0,
+      clipnote_count: counts.get(t.id) ?? 0,
     }))
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => b.clipnote_count - a.clipnote_count);
 }
 
 // ─── Video URL cache (sessionStorage — survives navigation, not reload) ───────
