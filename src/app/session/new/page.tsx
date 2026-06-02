@@ -5,5 +5,5 @@ export const metadata = {
 };
 
 export default function NewSessionPage() {
-  redirect("/proof/session/new");
+  redirect("/");
 }

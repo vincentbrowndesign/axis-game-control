@@ -30,6 +30,781 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.clipnote-shell {
+  background:
+    linear-gradient(180deg, rgba(244, 244, 240, 0.035), transparent 20rem),
+    #030303;
+  color: var(--axis-ink);
+  display: grid;
+  gap: 1rem;
+  min-height: 100dvh;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+}
+
+.clipnote-header {
+  align-content: end;
+  border-bottom: 1px solid rgba(244, 244, 240, 0.12);
+  display: grid;
+  gap: 0.5rem;
+  min-height: 6.5rem;
+  padding-bottom: 0.8rem;
+}
+
+.clipnote-header span,
+.clipnote-header h1,
+.clipnote-back,
+.clipnote-import span,
+.clipnote-field span,
+.clipnote-list-section h1,
+.clipnote-list-section h2,
+.clipnote-row,
+.clipnote-panel-head,
+.clipnote-marker,
+.clipnote-flag-button,
+.clipnote-mark-row button,
+.clipnote-time-row span,
+.clipnote-tags button,
+.clipnote-save,
+.clipnote-card,
+.clipnote-complete,
+.clipnote-stack,
+.clipnote-player,
+.clipnote-player-actions {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.clipnote-header span {
+  color: var(--axis-live);
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.clipnote-header h1 {
+  font-size: clamp(2.2rem, 12vw, 5rem);
+  font-weight: 900;
+  line-height: 0.9;
+  margin: 0;
+}
+
+.clipnote-back {
+  color: rgba(244, 244, 240, 0.58);
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.clipnote-new-session,
+.clipnote-panel,
+.clipnote-complete,
+.clipnote-stack {
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.clipnote-field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.clipnote-field span {
+  color: rgba(244, 244, 240, 0.5);
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.clipnote-field input {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.035);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  color: var(--axis-ink);
+  font: 900 0.76rem/1 Arial, Helvetica, sans-serif;
+  min-height: 44px;
+  padding: 0 0.7rem;
+  width: 100%;
+}
+
+.clipnote-import {
+  align-items: center;
+  border: 1px solid rgba(168, 217, 51, 0.44);
+  border-radius: 999px;
+  color: var(--axis-live);
+  cursor: pointer;
+  display: grid;
+  min-height: 48px;
+  padding: 0 1rem;
+  place-items: center;
+  position: relative;
+}
+
+.clipnote-import input {
+  block-size: 1px;
+  inline-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.clipnote-import span,
+.clipnote-save {
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.clipnote-list-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.clipnote-list-section h1,
+.clipnote-list-section h2 {
+  color: var(--axis-ink);
+  font-size: clamp(1.35rem, 7vw, 2.5rem);
+  font-weight: 900;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.clipnote-list {
+  display: grid;
+}
+
+.clipnote-row {
+  align-items: center;
+  background: rgba(244, 244, 240, 0.025);
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  color: inherit;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 4rem;
+  padding: 0.75rem;
+  text-decoration: none;
+}
+
+.clipnote-row + .clipnote-row {
+  border-top: 0;
+}
+
+.clipnote-row strong {
+  color: var(--axis-ink);
+  font-size: clamp(0.95rem, 4.5vw, 1.35rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.clipnote-row span,
+.clipnote-row em {
+  color: var(--axis-live);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.clipnote-row em {
+  color: rgba(244, 244, 240, 0.48);
+  grid-column: 1 / -1;
+}
+
+.clipnote-empty {
+  color: rgba(244, 244, 240, 0.34);
+  font: 900 0.72rem/1.4 "Arial Narrow", Arial, Helvetica, sans-serif;
+  letter-spacing: 0.07em;
+  margin: 1rem auto;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.clipnote-session-surface {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.clipnote-video-wrap {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.clipnote-video,
+.clipnote-player-video {
+  background: #050505;
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  border-radius: 8px;
+  display: block;
+  object-fit: contain;
+  width: 100%;
+}
+
+.clipnote-video {
+  aspect-ratio: 16 / 9;
+}
+
+.clipnote-flag-button,
+.clipnote-save {
+  appearance: none;
+  background: rgba(168, 217, 51, 0.12);
+  border: 1px solid rgba(168, 217, 51, 0.52);
+  border-radius: 999px;
+  color: var(--axis-live);
+  cursor: pointer;
+  min-height: 48px;
+  touch-action: manipulation;
+}
+
+.clipnote-panel-head {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.clipnote-panel-head strong {
+  color: var(--axis-live);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.clipnote-panel-head span,
+.clipnote-panel-head button {
+  color: rgba(244, 244, 240, 0.58);
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.clipnote-panel-head button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.clipnote-rail {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.clipnote-marker {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.035);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 999px;
+  color: rgba(244, 244, 240, 0.68);
+  cursor: pointer;
+  display: grid;
+  gap: 0.15rem;
+  min-height: 44px;
+  min-width: 5rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.clipnote-marker[data-selected="true"] {
+  border-color: rgba(168, 217, 51, 0.55);
+  color: var(--axis-live);
+}
+
+.clipnote-marker span,
+.clipnote-marker em {
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.clipnote-sheet {
+  background: #070707;
+  border: 1px solid rgba(244, 244, 240, 0.14);
+  border-radius: 16px 16px 0 0;
+  bottom: 0;
+  box-shadow: 0 -1rem 4rem rgba(0, 0, 0, 0.45);
+  display: grid;
+  gap: 0.75rem;
+  left: 0;
+  padding: 1rem;
+  position: fixed;
+  right: 0;
+  z-index: 20;
+}
+
+.clipnote-mark-row,
+.clipnote-tags {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.clipnote-mark-row button,
+.clipnote-tags button {
+  appearance: none;
+  background: rgba(244, 244, 240, 0.025);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  color: rgba(244, 244, 240, 0.7);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 0.65rem;
+  touch-action: manipulation;
+}
+
+.clipnote-tags button[data-selected="true"] {
+  border-color: rgba(168, 217, 51, 0.55);
+  color: var(--axis-live);
+}
+
+.clipnote-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.clipnote-time-row span {
+  border: 1px solid rgba(244, 244, 240, 0.1);
+  border-radius: 999px;
+  color: rgba(244, 244, 240, 0.56);
+  font-size: 0.62rem;
+  font-weight: 900;
+  padding: 0.38rem 0.5rem;
+}
+
+.clipnote-save:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.clipnote-card-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.clipnote-card {
+  align-items: center;
+  background: rgba(244, 244, 240, 0.03);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  border-radius: 8px;
+  color: inherit;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  min-height: 5rem;
+  padding: 0.5rem;
+  text-decoration: none;
+}
+
+.clipnote-card strong {
+  color: var(--axis-ink);
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.clipnote-card em {
+  color: var(--axis-live);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.clipnote-thumb {
+  aspect-ratio: 16 / 9;
+  background: #050505;
+  border-radius: 6px;
+  display: block;
+  overflow: hidden;
+}
+
+.clipnote-thumb img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.clipnote-complete strong,
+.clipnote-stack strong {
+  color: var(--axis-live);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.clipnote-complete span,
+.clipnote-stack span {
+  color: rgba(244, 244, 240, 0.62);
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.clipnote-stack-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.clipnote-player {
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  inset: 0;
+  overflow: hidden;
+  padding: max(0.8rem, env(safe-area-inset-top)) 0.8rem max(0.8rem, env(safe-area-inset-bottom));
+  position: fixed;
+  z-index: 100;
+}
+
+.clipnote-player-close {
+  color: rgba(244, 244, 240, 0.72);
+  font: 900 0.62rem/1 "Arial Narrow", Arial, Helvetica, sans-serif;
+  letter-spacing: 0.07em;
+  position: absolute;
+  right: 1.2rem;
+  text-decoration: none;
+  text-transform: uppercase;
+  top: max(1.2rem, env(safe-area-inset-top));
+  z-index: 2;
+}
+
+.clipnote-player-frame {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.85rem;
+  justify-content: center;
+  min-height: 0;
+  padding-top: 2.5rem;
+}
+
+.clipnote-player-frame > strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.4rem, 7vw, 3.4rem);
+  font-weight: 900;
+  line-height: 0.95;
+  max-width: 18ch;
+  text-align: center;
+  text-transform: none;
+}
+
+.clipnote-player-video {
+  flex: 1 1 auto;
+  max-height: 70dvh;
+  max-width: min(100%, 56rem);
+  min-height: 0;
+}
+
+.clipnote-player-actions {
+  display: flex;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.clipnote-player-actions button,
+.clipnote-player-actions a {
+  align-items: center;
+  appearance: none;
+  background: rgba(244, 244, 240, 0.05);
+  border: 1px solid rgba(244, 244, 240, 0.16);
+  border-radius: 999px;
+  color: rgba(244, 244, 240, 0.74);
+  cursor: pointer;
+  display: grid;
+  flex: 1;
+  font-size: 0.62rem;
+  font-weight: 900;
+  min-height: 44px;
+  place-items: center;
+  text-decoration: none;
+}
+
+/* CLIPNOTE mobile-first shell */
+.clipnote-shell {
+  --clip-bg: #f7f5ef;
+  --clip-card: #ffffff;
+  --clip-ink: #171716;
+  --clip-muted: rgba(23, 23, 22, 0.54);
+  --clip-line: rgba(23, 23, 22, 0.1);
+  --clip-accent: #171716;
+  background: var(--clip-bg);
+  color: var(--clip-ink);
+  gap: 1.15rem;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1.15rem, env(safe-area-inset-bottom));
+}
+
+.clipnote-header {
+  border: 0;
+  min-height: auto;
+  padding: 0.25rem 0 0.1rem;
+}
+
+.clipnote-header h1 {
+  color: var(--clip-ink);
+  font-size: clamp(2.4rem, 13vw, 5.2rem);
+  letter-spacing: -0.02em;
+}
+
+.clipnote-back {
+  color: var(--clip-muted);
+}
+
+.clipnote-new-session {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.clipnote-import {
+  background: var(--clip-ink);
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  min-height: 58px;
+}
+
+.clipnote-import span {
+  font-size: 0.78rem;
+}
+
+.clipnote-list-section {
+  gap: 0.65rem;
+}
+
+.clipnote-list-section h1,
+.clipnote-list-section h2 {
+  color: var(--clip-muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+}
+
+.clipnote-row {
+  background: var(--clip-card);
+  border: 1px solid var(--clip-line);
+  border-radius: 22px;
+  box-shadow: 0 10px 28px rgba(23, 23, 22, 0.05);
+  margin-bottom: 0.65rem;
+  min-height: 5rem;
+  padding: 1rem;
+}
+
+.clipnote-row + .clipnote-row {
+  border-top: 1px solid var(--clip-line);
+}
+
+.clipnote-row strong {
+  color: var(--clip-ink);
+  font-size: 1.05rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.clipnote-row span,
+.clipnote-row em {
+  color: var(--clip-muted);
+}
+
+.clipnote-empty {
+  color: var(--clip-muted);
+}
+
+.clipnote-session-surface {
+  gap: 0.9rem;
+}
+
+.clipnote-video-wrap {
+  background: #111;
+  border-radius: 26px;
+  box-shadow: 0 18px 40px rgba(23, 23, 22, 0.18);
+  gap: 0;
+  overflow: hidden;
+}
+
+.clipnote-video {
+  aspect-ratio: 16 / 10;
+  border: 0;
+  border-radius: 0;
+  min-height: min(54dvh, 30rem);
+}
+
+.clipnote-flag-button {
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  color: var(--clip-ink);
+  min-height: 64px;
+}
+
+.clipnote-panel {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.clipnote-panel-head strong {
+  color: var(--clip-ink);
+}
+
+.clipnote-panel-head span,
+.clipnote-panel-head button {
+  color: var(--clip-muted);
+}
+
+.clipnote-rail {
+  background: rgba(23, 23, 22, 0.05);
+  border-radius: 999px;
+  gap: 0.55rem;
+  padding: 0.55rem;
+}
+
+.clipnote-marker {
+  background: #fff;
+  border: 1px solid var(--clip-line);
+  border-radius: 999px;
+  color: var(--clip-ink);
+  min-width: 4.75rem;
+}
+
+.clipnote-marker[data-selected="true"] {
+  background: var(--clip-ink);
+  border-color: var(--clip-ink);
+  color: #fff;
+}
+
+.clipnote-marker em {
+  color: currentColor;
+  opacity: 0.7;
+}
+
+.clipnote-card {
+  background: var(--clip-card);
+  border: 1px solid var(--clip-line);
+  border-radius: 22px;
+  box-shadow: 0 10px 28px rgba(23, 23, 22, 0.05);
+  min-height: 5.75rem;
+  padding: 0.55rem;
+}
+
+.clipnote-card strong {
+  color: var(--clip-ink);
+  font-size: 0.98rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.clipnote-card em {
+  color: var(--clip-muted);
+}
+
+.clipnote-thumb {
+  border-radius: 16px;
+}
+
+.clipnote-save {
+  background: var(--clip-ink);
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  min-height: 54px;
+}
+
+.clipnote-complete,
+.clipnote-stack {
+  background: var(--clip-card);
+  border: 1px solid var(--clip-line);
+  border-radius: 24px;
+  box-shadow: 0 10px 28px rgba(23, 23, 22, 0.05);
+}
+
+.clipnote-complete strong,
+.clipnote-stack strong {
+  color: var(--clip-ink);
+}
+
+.clipnote-complete span,
+.clipnote-stack span,
+.clipnote-stack em {
+  color: var(--clip-muted);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.clipnote-sheet {
+  background: #fff;
+  border: 0;
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -20px 60px rgba(23, 23, 22, 0.18);
+  color: var(--clip-ink);
+}
+
+.clipnote-mark-row button,
+.clipnote-tags button {
+  background: rgba(23, 23, 22, 0.04);
+  border: 1px solid var(--clip-line);
+  border-radius: 18px;
+  color: var(--clip-ink);
+}
+
+.clipnote-tags button[data-selected="true"] {
+  background: var(--clip-ink);
+  border-color: var(--clip-ink);
+  color: #fff;
+}
+
+.clipnote-field input {
+  background: rgba(23, 23, 22, 0.04);
+  border: 1px solid var(--clip-line);
+  color: var(--clip-ink);
+}
+
+.clipnote-field span,
+.clipnote-time-row span {
+  color: var(--clip-muted);
+}
+
+.clipnote-player {
+  background: #111;
+}
+
+.clipnote-player-frame > strong {
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.clipnote-player-video {
+  border: 0;
+  border-radius: 24px;
+}
+
+.clipnote-player-close,
+.clipnote-player-actions button,
+.clipnote-player-actions a {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+@media (min-width: 760px) {
+  .clipnote-shell {
+    margin: 0 auto;
+    max-width: 70rem;
+    padding: 2rem;
+  }
+
+  .clipnote-session-surface {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    align-items: start;
+  }
+
+  .clipnote-video {
+    min-height: min(62dvh, 38rem);
+  }
+}
+
 .proof-shell {
   background:
     linear-gradient(180deg, rgba(244, 244, 240, 0.035), transparent 22rem),

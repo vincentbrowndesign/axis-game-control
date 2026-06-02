@@ -933,6 +933,15 @@
   color: var(--cn-muted);
 }
 
+.cn-session-complete {
+  color: var(--cn-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 1rem 0 max(1.5rem, env(safe-area-inset-bottom));
+  text-align: center;
+}
+
 .cn-sheet-backdrop {
   background: rgba(17, 17, 17, 0.34);
 }

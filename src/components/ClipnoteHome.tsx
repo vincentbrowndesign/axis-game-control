@@ -32,9 +32,10 @@ export function ClipnoteHome() {
         NEW SESSION
       </button>
 
-      {sessions.length > 0 ? (
-        <section className="cn-session-list">
-          <p className="cn-section-label">SESSIONS</p>
+      <section className="cn-session-list">
+        <p className="cn-section-label">SESSIONS</p>
+        {sessions.length > 0 ? (
+          <>
           {sessions.map((session) => (
             <Link className="cn-session-card" href={`/session/${session.id}`} key={session.id}>
               <span className="cn-session-card-title">{session.title}</span>
@@ -51,10 +52,11 @@ export function ClipnoteHome() {
               </span>
             </Link>
           ))}
-        </section>
-      ) : (
-        <p className="cn-empty-state">Start your first session.</p>
-      )}
+          </>
+        ) : (
+          <p className="cn-empty-state">Start your first session.</p>
+        )}
+      </section>
     </main>
   );
 }

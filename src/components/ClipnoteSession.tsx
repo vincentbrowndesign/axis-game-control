@@ -26,7 +26,7 @@ const PRESET_TAGS = [
   "Form",
   "Hands",
   "Spacing",
-  "Finish",
+  "Moment",
 ];
 
 function formatTime(seconds: number): string {
@@ -46,12 +46,8 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
   const [activeFlag, setActiveFlag] = useState<Flag | null>(null);
   const [sheetOpenTime, setSheetOpenTime] = useState<number | null>(null);
   const [sheetCloseTime, setSheetCloseTime] = useState<number | null>(null);
-  const [sheetTitle, setSheetTitle] = useState("");
   const [sheetPresetTag, setSheetPresetTag] = useState<string | null>(null);
   const [sheetCustomTag, setSheetCustomTag] = useState("");
-
-  // Finish
-  const [showFinish, setShowFinish] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -90,15 +86,9 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
   }
 
   function openSheet(flag: Flag) {
-    const defaultOpen = Math.max(0, flag.timestamp - 2);
-    const defaultClose = Math.min(
-      duration > 0 ? duration : flag.timestamp + 10,
-      flag.timestamp + 5,
-    );
     setActiveFlag(flag);
-    setSheetOpenTime(defaultOpen);
-    setSheetCloseTime(defaultClose);
-    setSheetTitle("");
+    setSheetOpenTime(null);
+    setSheetCloseTime(null);
     setSheetPresetTag(null);
     setSheetCustomTag("");
   }
@@ -127,7 +117,6 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
     )
       return;
 
-    // Resolve tag
     let tagId: string | undefined;
     if (sheetPresetTag) {
       tagId = createTag(sheetPresetTag).id;
@@ -136,9 +125,8 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
     }
 
     const tagName = tagId ? getTag(tagId)?.name : undefined;
-    const title = sheetTitle.trim() || tagName || "Clipnote";
+    if (!tagName) return;
 
-    // Capture thumbnail from current video frame
     let thumbnailUrl: string | undefined;
     const video = videoRef.current;
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
@@ -160,7 +148,7 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
       flag_id: activeFlag.id,
       open_time: sheetOpenTime,
       close_time: sheetCloseTime,
-      title,
+      title: tagName,
       tag_id: tagId,
       thumbnail_url: thumbnailUrl,
       created_at: new Date().toISOString(),
@@ -182,15 +170,6 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
     });
 
     setActiveFlag(null);
-  }
-
-  function handleFinish() {
-    if (!session) return;
-    completeSession(session.id);
-    setSession((current) =>
-      current ? { ...current, status: "complete" } : current,
-    );
-    setShowFinish(true);
   }
 
   function handleTitleBlur() {
@@ -316,15 +295,21 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
             </section>
           )}
 
-          {/* Finish */}
-          {session?.status === "active" && (
+          {session?.status === "active" ? (
             <button
               className="cn-finish-btn"
-              onClick={handleFinish}
+              onClick={() => {
+                completeSession(session.id);
+                setSession((current) =>
+                  current ? { ...current, status: "complete" } : current,
+                );
+              }}
               type="button"
             >
-              Finish Session
+              COMPLETE SESSION
             </button>
+          ) : (
+            <p className="cn-session-complete">SESSION COMPLETE</p>
           )}
         </>
       ) : (
@@ -381,14 +366,6 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
               <p className="cn-sheet-clip-duration">{clipDuration}s clip</p>
             )}
 
-            <input
-              className="cn-sheet-title-input"
-              onChange={(e) => setSheetTitle(e.target.value)}
-              placeholder="Title this clipnote..."
-              type="text"
-              value={sheetTitle}
-            />
-
             <div className="cn-tag-row">
               {PRESET_TAGS.map((name) => (
                 <button
@@ -420,42 +397,16 @@ export function ClipnoteSession({ sessionId }: { sessionId: string }) {
 
             <button
               className="cn-sheet-save-btn"
-              disabled={clipDuration === null || clipDuration <= 0}
+              disabled={
+                clipDuration === null ||
+                clipDuration <= 0 ||
+                (!sheetPresetTag && !sheetCustomTag.trim())
+              }
               onClick={handleSaveClipnote}
               type="button"
             >
               Save Clipnote
             </button>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Finish modal */}
-      {showFinish && session ? (
-        <div
-          className="cn-sheet-backdrop"
-          onClick={() => setShowFinish(false)}
-        >
-          <div className="cn-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="cn-sheet-handle" />
-            <p className="cn-finish-title">Session Complete</p>
-            <div className="cn-finish-stats">
-              <span>{session.flags.length} flags</span>
-              <span>{session.clipnotes.length} clipnotes</span>
-              <span>
-                {
-                  new Set(
-                    session.clipnotes
-                      .map((c) => c.tag_id)
-                      .filter(Boolean),
-                  ).size
-                }{" "}
-                tags
-              </span>
-            </div>
-            <Link className="cn-sheet-save-btn" href="/">
-              Done
-            </Link>
           </div>
         </div>
       ) : null}

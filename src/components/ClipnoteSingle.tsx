@@ -38,6 +38,11 @@ export function ClipnoteSingle({ clipnoteId }: { clipnoteId: string }) {
       void navigator.share({ title: clipnote.title, text: clipnote.title }).catch(() => {
         // dismissed
       });
+      return;
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      void navigator.clipboard.writeText(clipnote.title);
     }
   }
 
