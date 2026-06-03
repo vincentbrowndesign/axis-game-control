@@ -209,7 +209,7 @@ export function FirstLoopHome() {
 
       const product = createProductFromLoopArtifact(result.artifact);
       refresh();
-      router.push(`/product/${product.id}`);
+      router.push(`/studio/${product.id}`);
     } catch {
       // Artifact unavailable — stay on screen, outcome button resets.
     } finally {
@@ -298,7 +298,7 @@ export function ChatHistory() {
                 {product.action ? (
                   <p className="axis-chat-body axis-chat-action">{product.action}</p>
                 ) : null}
-                <Link className="axis-chat-link" href={`/product/${product.id}`}>
+                <Link className="axis-chat-link" href={`/studio/${product.id}`}>
                   View artifact
                 </Link>
               </article>
@@ -328,7 +328,7 @@ export function StudioList() {
             {sorted.map((product) => (
               <Link
                 className="axis-model-card"
-                href={`/product/${product.id}`}
+                href={`/studio/${product.id}`}
                 key={product.id}
               >
                 <strong>{product.title}</strong>
