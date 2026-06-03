@@ -2267,6 +2267,100 @@
   text-decoration: none;
 }
 
+.axis-replay-entry {
+  background: var(--axis-panel-2);
+  border: 1px solid rgba(184, 219, 77, 0.28);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+}
+
+.axis-replay-entry span,
+.axis-replay-ready span {
+  color: var(--axis-signal);
+  font-size: 0.68rem;
+  font-weight: 820;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.axis-replay-entry a {
+  align-items: center;
+  background: var(--axis-signal);
+  border-radius: 6px;
+  color: #080908;
+  display: flex;
+  font-size: 0.92rem;
+  font-weight: 860;
+  justify-content: center;
+  min-height: 52px;
+  text-decoration: none;
+}
+
+.axis-replay-page {
+  max-width: 520px;
+}
+
+.axis-anim-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.axis-replay-ready {
+  background: var(--axis-panel);
+  border: 1px solid var(--axis-line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.85rem;
+}
+
+.axis-replay-ready strong {
+  color: var(--axis-ink);
+  font-size: clamp(1.1rem, 5vw, 1.5rem);
+  font-weight: 840;
+  line-height: 1.05;
+}
+
+.axis-anim-viewport {
+  background: #04050a;
+  border: 1px solid var(--axis-line);
+  border-radius: 10px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.axis-anim-canvas {
+  aspect-ratio: 9 / 16;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.axis-replay-callouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.axis-replay-callouts span {
+  background: rgba(184, 219, 77, 0.1);
+  border: 1px solid rgba(184, 219, 77, 0.25);
+  border-radius: 999px;
+  color: var(--axis-ink);
+  font-size: 0.68rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.6rem;
+}
+
+.axis-anim-controls {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr;
+}
+
 .axis-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -2431,7 +2525,7 @@
   bottom: max(0.8rem, env(safe-area-inset-bottom));
   display: grid;
   gap: 0.2rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   left: 1rem;
   padding: 0.28rem;
   position: fixed;

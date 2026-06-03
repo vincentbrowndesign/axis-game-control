@@ -43,6 +43,143 @@ const baselineExpectations = {
   },
 };
 
+const baselineTestTemplate = [
+  {
+    category: "clear_jumper",
+    expected: {
+      drive: 0,
+      make_miss: "make",
+      paint_touch: 0,
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "clear jumper 1",
+    upload_id: "",
+  },
+  {
+    category: "clear_jumper",
+    expected: {
+      drive: 0,
+      make_miss: "miss",
+      paint_touch: 0,
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "clear jumper 2",
+    upload_id: "",
+  },
+  {
+    category: "clear_jumper",
+    expected: {
+      drive: 0,
+      make_miss: "make",
+      paint_touch: 0,
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "clear jumper 3",
+    upload_id: "",
+  },
+  {
+    category: "drive",
+    expected: {
+      drive: 1,
+      make_miss: "make",
+      paint_touch: 1,
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "drive 1",
+    upload_id: "",
+  },
+  {
+    category: "drive",
+    expected: {
+      drive: 1,
+      make_miss: "miss",
+      paint_touch: 1,
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "drive 2",
+    upload_id: "",
+  },
+  {
+    category: "drive",
+    expected: {
+      drive: 1,
+      paint_touch: 1,
+    },
+    muxPlaybackId: "",
+    name: "drive 3 no shot",
+    upload_id: "",
+  },
+  {
+    category: "stationary_paint_catch",
+    expected: {
+      drive: 0,
+      paint_touch: 1,
+      shot_attempt: 0,
+    },
+    muxPlaybackId: "",
+    name: "stationary paint catch 1",
+    upload_id: "",
+  },
+  {
+    category: "stationary_paint_catch",
+    expected: {
+      drive: 0,
+      make_miss: "make",
+      paint_touch: 1,
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "stationary paint catch 2 shot",
+    upload_id: "",
+  },
+  {
+    category: "stationary_paint_catch",
+    expected: {
+      drive: 0,
+      paint_touch: 1,
+      shot_attempt: 0,
+    },
+    muxPlaybackId: "",
+    name: "stationary paint catch 3",
+    upload_id: "",
+  },
+  {
+    category: "cut_off_result",
+    expected: {
+      make_miss: "unknown",
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "cut-off result 1",
+    upload_id: "",
+  },
+  {
+    category: "cut_off_result",
+    expected: {
+      make_miss: "unknown",
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "cut-off result 2",
+    upload_id: "",
+  },
+  {
+    category: "cut_off_result",
+    expected: {
+      make_miss: "unknown",
+      shot_attempt: 1,
+    },
+    muxPlaybackId: "",
+    name: "cut-off result 3",
+    upload_id: "",
+  },
+];
+
 function getString(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback;
 }
@@ -108,6 +245,7 @@ function weakestFact(summary: Record<TargetFactKey, FactStats>) {
 
 export async function GET() {
   return Response.json({
+    baseline_tests_template: baselineTestTemplate,
     expected_fact_templates: baselineExpectations,
     minimum_baseline: {
       categories: ["clear_jumper", "drive", "stationary_paint_catch", "cut_off_result"],

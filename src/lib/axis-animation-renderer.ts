@@ -4,7 +4,7 @@
 export const ANIM_W = 1080;
 export const ANIM_H = 1920;
 export const ANIM_FPS = 30;
-export const ANIM_DURATION_MS = 4500;
+export const ANIM_DURATION_MS = 6200;
 
 // ─── Court geometry ───────────────────────────────────────────────────────────
 const CX = ANIM_W / 2;
@@ -77,6 +77,21 @@ export type AnimationScene = {
   shotAttempt: boolean;
 };
 
+export type ReplayTimelineEvent =
+  | "drive"
+  | "paint_touch"
+  | "shot_attempt"
+  | "make"
+  | "miss"
+  | "end_card";
+
+export type ReplayTimeline = {
+  callouts: string[];
+  events: ReplayTimelineEvent[];
+  finding: string;
+  scene: AnimationScene;
+};
+
 // ─── Fact → Scene ─────────────────────────────────────────────────────────────
 const AREA_SET = new Set(["paint", "right wing", "left wing", "corner", "top"]);
 const MM_SET = new Set(["make", "miss"]);
@@ -94,6 +109,75 @@ export function factsToScene(facts: AnimationFact[]): AnimationScene {
     shotArea: AREA_SET.has(rawArea ?? "") ? (rawArea as AnimationScene["shotArea"]) : null,
     shotAttempt: bool("shot_attempt"),
   };
+}
+
+export function sceneToReplayTimeline(scene: AnimationScene): ReplayTimeline {
+  const events: ReplayTimelineEvent[] = [];
+  const callouts: string[] = [];
+
+  if (scene.drive) {
+    events.push("drive");
+    callouts.push("DRIVE");
+  }
+  if (scene.paintTouch) {
+    events.push("paint_touch");
+    callouts.push("PAINT TOUCH");
+  }
+  if (scene.shotAttempt) {
+    events.push("shot_attempt");
+    callouts.push("SHOT ATTEMPT");
+  }
+  if (scene.makeMiss === "make") {
+    events.push("make");
+    callouts.push("MAKE");
+  }
+  if (scene.makeMiss === "miss") {
+    events.push("miss");
+    callouts.push("MISS");
+  }
+
+  if (events.length) events.push("end_card");
+
+  return {
+    callouts,
+    events,
+    finding: replayFinding(scene),
+    scene,
+  };
+}
+
+export function sceneHasUnderstandingEvent(scene: AnimationScene) {
+  return Boolean(
+    scene.drive ||
+      scene.paintTouch ||
+      scene.shotAttempt ||
+      scene.makeMiss === "make" ||
+      scene.makeMiss === "miss",
+  );
+}
+
+export function factsHaveReplayUnderstanding(facts: AnimationFact[]) {
+  return sceneHasUnderstandingEvent(factsToScene(facts));
+}
+
+function replayFinding(scene: AnimationScene) {
+  if (scene.drive && scene.paintTouch && scene.makeMiss === "make") {
+    return "Pressure created downhill and converted at the rim.";
+  }
+  if (scene.drive && scene.paintTouch && scene.shotAttempt) {
+    return "The attack reached the paint and produced a shot.";
+  }
+  if (scene.paintTouch && !scene.drive) {
+    return "The possession touched the paint without a downhill drive.";
+  }
+  if (scene.shotAttempt && scene.makeMiss === "make") {
+    return "The clip resolves into a made shot.";
+  }
+  if (scene.shotAttempt && scene.makeMiss === "miss") {
+    return "The clip resolves into a missed shot attempt.";
+  }
+  if (scene.shotAttempt) return "Axis found a shot attempt worth saving.";
+  return "Not enough understanding yet.";
 }
 
 // ─── Math ─────────────────────────────────────────────────────────────────────
@@ -707,6 +791,63 @@ function drawAxisMark(ctx: CanvasRenderingContext2D, alpha: number) {
   ctx.restore();
 }
 
+function drawWrappedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+) {
+  const words = text.split(/\s+/);
+  let line = "";
+  let lineY = y;
+
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, lineY);
+      line = word;
+      lineY += lineHeight;
+    } else {
+      line = test;
+    }
+  }
+
+  if (line) ctx.fillText(line, x, lineY);
+}
+
+function drawEndCard(ctx: CanvasRenderingContext2D, scene: AnimationScene, t: number) {
+  const alpha = ph(t, 0.88, 1, easeOutExp);
+  if (alpha <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  const panelTop = ANIM_H - 460;
+  const grad = ctx.createLinearGradient(0, panelTop - 180, 0, ANIM_H);
+  grad.addColorStop(0, "rgba(4,5,10,0)");
+  grad.addColorStop(0.38, "rgba(4,5,10,0.86)");
+  grad.addColorStop(1, "rgba(4,5,10,0.98)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, panelTop - 180, ANIM_W, 640);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = C.axisWord;
+  ctx.font = "bold 42px 'SF Mono','Roboto Mono',monospace";
+  ctx.fillText("AXIS", 72, panelTop);
+
+  ctx.fillStyle = C.labelDim;
+  ctx.font = "bold 30px 'SF Mono','Roboto Mono',monospace";
+  ctx.fillText("WHAT WE FOUND", 72, panelTop + 76);
+
+  ctx.fillStyle = C.label;
+  ctx.font = "bold 58px 'SF Mono','Roboto Mono',monospace";
+  drawWrappedText(ctx, replayFinding(scene), 72, panelTop + 154, ANIM_W - 144, 70);
+
+  ctx.restore();
+}
+
 function drawVignette(ctx: CanvasRenderingContext2D) {
   ctx.save();
   const vig = ctx.createRadialGradient(CX, ANIM_H * 0.40, ANIM_W * 0.28, CX, ANIM_H * 0.40, ANIM_W * 0.95);
@@ -788,6 +929,7 @@ export function renderFrame(
 
   // ── Labels — staggered spring entrance ───────────────────────────────────
   if (t > 0.82) drawLabels(ctx, scene, clamp((t - 0.82) / 0.18));
+  drawEndCard(ctx, scene, t);
 
   // ── AXIS watermark ────────────────────────────────────────────────────────
   drawAxisMark(ctx, courtAlpha);

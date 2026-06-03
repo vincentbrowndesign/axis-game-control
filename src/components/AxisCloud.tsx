@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 import {
-  axisOutcomeProducts,
-  createProductFromLoopArtifact,
+  createTacticalReplayProduct,
   createUploadedSessionAsset,
   exportProduct,
   formatExportDestination,
@@ -17,6 +16,7 @@ import {
   type AxisProduct,
   type ExportDestination,
 } from "../lib/axis-cloud-store";
+import { factsHaveReplayUnderstanding, type AnimationFact } from "../lib/axis-animation-renderer";
 
 type UploadState = "idle" | "uploading" | "saving";
 
@@ -115,11 +115,6 @@ type FirstLoopUnderstanding = {
   whatWeFound: string;
 };
 
-type FirstLoopArtifactResponse = {
-  artifact?: AxisLoopArtifact;
-  error?: string;
-};
-
 type FirstLoopExportResponse = {
   export?: {
     content: string;
@@ -131,17 +126,31 @@ type FirstLoopExportResponse = {
   };
 };
 
+type FactsResponse = { records?: AnimationFact[] };
+
 export function FirstLoopHome() {
   const { products, refresh } = useCloudSnapshot();
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [understanding, setUnderstanding] = useState<FirstLoopUnderstanding | null>(null);
-  const [generatingOutcome, setGeneratingOutcome] = useState("");
+  const [replayProductId, setReplayProductId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
-  const outcomes = Object.keys(axisOutcomeProducts);
+
+  async function createReplayIfReady(uploadId: string, whatWeFound: string) {
+    const response = await fetch(`/api/axis/facts?upload_id=${encodeURIComponent(uploadId)}&limit=20`);
+    if (!response.ok) return "";
+
+    const data = (await response.json().catch(() => null)) as FactsResponse | null;
+    const records = data?.records ?? [];
+    if (!factsHaveReplayUnderstanding(records)) return "";
+
+    const replayProduct = createTacticalReplayProduct({ uploadId, whatWeFound });
+    refresh();
+    return replayProduct.id;
+  }
 
   async function handleFile(file: File) {
     setUnderstanding(null);
+    setReplayProductId("");
     setUploadState("uploading");
 
     try {
@@ -169,15 +178,18 @@ export function FirstLoopHome() {
       const result = (await response.json().catch(() => null)) as FirstLoopUnderstanding | null;
       if (!response.ok || !result?.whatWeFound) throw new Error();
       setUnderstanding(result);
-      refresh();
+      setReplayProductId(await createReplayIfReady(result.uploadId, result.whatWeFound));
     } catch {
       const assetId = createUploadedSessionAsset(file);
-      setUnderstanding({
+      const fallbackUnderstanding = {
         sourceClipCount: 1,
         uploadId: assetId,
         uploadTimestamp: new Date().toISOString(),
         whatWeFound:
-          "Clip added. Axis found an early signal worth saving. Choose an outcome to turn it into an artifact.",
+          "Clip added. Axis found an early signal worth saving as a tactical replay.",
+      };
+      setUnderstanding({
+        ...fallbackUnderstanding,
       });
       refresh();
     } finally {
@@ -186,39 +198,8 @@ export function FirstLoopHome() {
     }
   }
 
-  async function handleOutcome(label: string) {
-    if (!understanding || generatingOutcome) return;
-    setGeneratingOutcome(label);
-
-    try {
-      const response = await fetch("/api/axis/first-loop", {
-        body: JSON.stringify({
-          action: "artifact",
-          muxPlaybackId: understanding.muxPlaybackId,
-          outcome: label.toLowerCase(),
-          sourceClipCount: understanding.sourceClipCount,
-          uploadId: understanding.uploadId,
-          videoUrl: understanding.videoUrl,
-          whatWeFound: understanding.whatWeFound,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const result = (await response.json().catch(() => null)) as FirstLoopArtifactResponse | null;
-      if (!response.ok || !result?.artifact) throw new Error(result?.error ?? "");
-
-      const product = createProductFromLoopArtifact(result.artifact);
-      refresh();
-      router.push(`/studio/${product.id}`);
-    } catch {
-      // Artifact unavailable — stay on screen, outcome button resets.
-    } finally {
-      setGeneratingOutcome("");
-    }
-  }
-
   return (
-    <Shell eyebrow="Sources" title="Reality to artifact">
+    <Shell eyebrow="Sources" title="Reality to replay">
       <section className="axis-cloud-panel axis-upload-panel">
         <button
           className="axis-cloud-primary"
@@ -256,22 +237,20 @@ export function FirstLoopHome() {
 
         <div className="axis-direction-rule" aria-hidden="true" />
 
-        {understanding ? (
-          <div className="axis-direction-grid">
-            {outcomes.map((label) => (
-              <button
-                disabled={Boolean(generatingOutcome)}
-                key={label}
-                onClick={() => void handleOutcome(label)}
-                type="button"
-              >
-                {generatingOutcome === label ? "Building" : label}
-              </button>
-            ))}
+        {understanding && replayProductId ? (
+          <div className="axis-replay-entry">
+            <span>Replay Ready</span>
+            <Link href={`/replay/${replayProductId}`}>View Replay</Link>
           </div>
-        ) : (
+        ) : null}
+
+        {understanding && !replayProductId ? (
+          <p className="axis-create-locked">Not enough understanding yet.</p>
+        ) : null}
+
+        {!understanding ? (
           <p className="axis-create-locked">Upload footage to begin.</p>
-        )}
+        ) : null}
       </section>
     </Shell>
   );
@@ -298,8 +277,8 @@ export function ChatHistory() {
                 {product.action ? (
                   <p className="axis-chat-body axis-chat-action">{product.action}</p>
                 ) : null}
-                <Link className="axis-chat-link" href={`/studio/${product.id}`}>
-                  View artifact
+                <Link className="axis-chat-link" href={`/replay/${product.id}`}>
+                  View replay
                 </Link>
               </article>
             ))}
@@ -321,14 +300,14 @@ export function StudioList() {
   );
 
   return (
-    <Shell eyebrow="Studio" title="Your artifacts">
+    <Shell eyebrow="Studio" title="Your replays">
       {sorted.length ? (
         <section className="axis-cloud-section">
           <div className="axis-model-list">
             {sorted.map((product) => (
               <Link
                 className="axis-model-card"
-                href={`/studio/${product.id}`}
+                href={`/replay/${product.id}`}
                 key={product.id}
               >
                 <strong>{product.title}</strong>
@@ -339,7 +318,7 @@ export function StudioList() {
         </section>
       ) : (
         <p className="axis-cloud-empty">
-          Upload a clip in Sources to generate your first artifact.
+          Upload a clip in Sources to generate your first replay.
         </p>
       )}
     </Shell>
@@ -443,7 +422,7 @@ export function ProductDetail({ productId }: { productId: string }) {
           <button onClick={() => void handleSave()} type="button">
             {saveState === "saved" ? "Saved" : "Save"}
           </button>
-          <Link href={`/studio/${productId}/animation`}>Animate</Link>
+          <Link href={`/replay/${productId}`}>View Replay</Link>
           <Link href="/studio">Studio</Link>
         </div>
       </section>

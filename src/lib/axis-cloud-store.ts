@@ -135,6 +135,30 @@ export function createProductFromLoopArtifact(artifact: AxisLoopArtifact) {
   return product;
 }
 
+export function createTacticalReplayProduct({
+  uploadId,
+  whatWeFound,
+}: {
+  uploadId: string;
+  whatWeFound: string;
+}) {
+  const product: AxisProduct = {
+    action: "Save the replay or use it as the source for the next Axis artifact.",
+    assetIds: [uploadId],
+    createdAt: new Date().toISOString(),
+    finding: whatWeFound,
+    id: `replay-${uploadId}`,
+    kind: "highlight",
+    meaning: "Tactical replay generated from the uploaded clip.",
+    modelId: "axis-tactical-replay",
+    summary: [whatWeFound],
+    title: "Tactical Replay",
+  };
+
+  write(PRODUCTS_KEY, [product, ...getAxisProducts().filter((p) => p.id !== product.id)]);
+  return product;
+}
+
 export function saveProductAsAsset(productId: string) {
   const product = getAxisProduct(productId);
   if (!product) return null;
