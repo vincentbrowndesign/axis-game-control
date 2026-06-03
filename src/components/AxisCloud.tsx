@@ -219,12 +219,14 @@ export function FirstLoopHome() {
     processing: "Processing Video",
     ready: "Replay Video",
   };
+  const replayReady = Boolean(localVideoUrl && replayProductId);
+  const displayStatus: SourcesStatus = replayReady ? "ready" : status;
 
   return (
     <main className="axis-cloud axis-sources">
       <header className="axis-sources-header">
         <span className="axis-cloud-mark">AXIS</span>
-        <p className="axis-sources-status">{statusLabel[status]}</p>
+        <p className="axis-sources-status">{statusLabel[displayStatus]}</p>
       </header>
 
       {/* Video area — shows immediately after file selection */}
@@ -237,7 +239,7 @@ export function FirstLoopHome() {
             src={localVideoUrl}
           />
 
-          {status === "ready" && replayProductId ? (
+          {replayReady ? (
             <Link
               className="axis-replay-cta"
               href={`/replay/${replayProductId}`}
@@ -258,13 +260,13 @@ export function FirstLoopHome() {
       <div className="axis-source-upload">
         <button
           className="axis-cloud-primary"
-          disabled={status === "uploading" || status === "processing"}
+          disabled={!replayReady && (status === "uploading" || status === "processing")}
           onClick={() => inputRef.current?.click()}
           type="button"
         >
-          {status === "idle" || status === "ready"
+          {displayStatus === "idle" || displayStatus === "ready"
             ? "Upload Video"
-            : status === "uploading"
+            : displayStatus === "uploading"
               ? "Processing"
               : "Processing"}
         </button>
