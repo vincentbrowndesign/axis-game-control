@@ -231,11 +231,74 @@ export function LibraryHome() {
   );
 }
 
+type ProposalState = "idle" | "reading" | "ready";
+type ClipProposal = { confidence: "high" | "medium"; zone: string };
+
+async function extractVideoFrame(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith("video/")) {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "metadata";
+    video.src = url;
+
+    const cleanup = () => URL.revokeObjectURL(url);
+
+    video.addEventListener("loadeddata", () => {
+      video.currentTime = Math.min(video.duration * 0.3, 5);
+    }, { once: true });
+
+    video.addEventListener("seeked", () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = video.videoHeight ? Math.round(320 * video.videoHeight / video.videoWidth) : 180;
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      cleanup();
+      resolve(canvas.toDataURL("image/jpeg", 0.7));
+    }, { once: true });
+
+    video.addEventListener("error", () => { cleanup(); resolve(""); }, { once: true });
+    video.load();
+  });
+}
+
+async function readClip(file: File): Promise<ClipProposal | null> {
+  const frame = await extractVideoFrame(file);
+  if (!frame) return null;
+
+  try {
+    const response = await fetch("/api/axis/read-clip", {
+      body: JSON.stringify({ frame }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const result = (await response.json()) as { confidence?: string; zone?: string | null };
+    if (result.zone && (result.confidence === "high" || result.confidence === "medium")) {
+      return { confidence: result.confidence, zone: result.zone };
+    }
+  } catch {
+    // Vision unavailable — fall back to label input.
+  }
+  return null;
+}
+
 export function DatasetsHome() {
   const { assets, models, refresh } = useCloudSnapshot();
   const [generatedProducts, setGeneratedProducts] = useState<AxisProduct[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [clipLabel, setClipLabel] = useState("");
+  const [proposal, setProposal] = useState<ClipProposal | null>(null);
+  const [proposalState, setProposalState] = useState<ProposalState>("idle");
+  const labelRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const activeModel = models.find((model) => model.assetIds.length) ?? models[0] ?? null;
@@ -251,6 +314,15 @@ export function DatasetsHome() {
   const pressure = insights.find((insight) => insight.id === "pressure") ?? null;
   const canGenerateProduct = Boolean(activeModel && activeAssets.length);
   const directions = Object.entries(axisDirectionProducts) as Array<[string, AxisProductKind]>;
+
+  async function handleFileSelected(file: File) {
+    setProposal(null);
+    setProposalState("reading");
+    const result = await readClip(file);
+    setProposal(result);
+    setProposalState(result ? "ready" : "idle");
+    void handleFile(file);
+  }
 
   async function handleFile(file: File) {
     setUploadState("uploading");
@@ -268,6 +340,8 @@ export function DatasetsHome() {
     } finally {
       setUploadState("idle");
       setClipLabel("");
+      setProposal(null);
+      setProposalState("idle");
       if (inputRef.current) inputRef.current.value = "";
     }
   }
@@ -285,6 +359,7 @@ export function DatasetsHome() {
     <Shell eyebrow="Axis" title="What We Found">
       <section className="axis-cloud-panel axis-upload-panel">
         <input
+          ref={labelRef}
           className="axis-clip-label"
           disabled={uploadState !== "idle"}
           onChange={(event) => setClipLabel(event.target.value)}
@@ -306,11 +381,41 @@ export function DatasetsHome() {
           hidden
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file) void handleFile(file);
+            if (file) void handleFileSelected(file);
           }}
           type="file"
         />
       </section>
+
+      {proposalState === "reading" ? (
+        <p className="axis-proposal-reading">Reading clip...</p>
+      ) : proposal && proposalState === "ready" ? (
+        <div className="axis-proposal">
+          <span>{proposal.confidence === "high" ? "We see" : "Possibly"}</span>
+          <strong>{proposal.zone}</strong>
+          <button
+            onClick={() => {
+              setClipLabel(proposal.zone);
+              setProposal(null);
+              setProposalState("idle");
+              labelRef.current?.focus();
+            }}
+            type="button"
+          >
+            Use it
+          </button>
+          <button
+            onClick={() => {
+              setProposal(null);
+              setProposalState("idle");
+              labelRef.current?.focus();
+            }}
+            type="button"
+          >
+            Change
+          </button>
+        </div>
+      ) : null}
 
       <section className="axis-understanding-card">
         <div className="axis-understanding">

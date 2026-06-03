@@ -736,6 +736,11 @@ function buildProductEvidence(kind: AxisProductKind, model: AxisModel | undefine
       meaning: "These are your real scoring areas — not just your preferred ones.",
       action: `Attack ${zone} first in every game. Work the percentages.`,
     },
+    "film-study": {
+      finding: n ? `${n} clips selected for film review. ${zone} appears most.` : "Add clips to start the film study.",
+      meaning: "This is your breakdown material. Watch it with intention.",
+      action: `Study the ${zone} sequences first. Look for the decision before the action.`,
+    },
     story: {
       finding: n ? `${n} clips across your history show a clear pattern.` : "Add clips to tell the story.",
       meaning: "This is the story your game is telling.",
