@@ -2475,6 +2475,10 @@
   z-index: 1;
 }
 
+.axis-overlay-thumbnail {
+  object-fit: cover;
+}
+
 .axis-overlay-stage[data-cropped="true"] .axis-overlay-video {
   object-fit: cover;
 }
@@ -2514,6 +2518,37 @@
   letter-spacing: 0.04em;
   margin: 0;
   text-align: center;
+}
+
+.axis-overlay-debug {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--axis-muted);
+  display: grid;
+  font-size: 0.66rem;
+  gap: 0.28rem;
+  margin: 0;
+  padding-top: 0.55rem;
+}
+
+.axis-overlay-debug div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.axis-overlay-debug dt,
+.axis-overlay-debug dd {
+  margin: 0;
+}
+
+.axis-overlay-debug dt {
+  text-transform: lowercase;
+}
+
+.axis-overlay-debug dd {
+  color: var(--axis-ink);
+  font-weight: 780;
 }
 
 .axis-replay-grid {

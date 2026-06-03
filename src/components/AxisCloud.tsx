@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as tus from "tus-js-client";
+import { AxisAnimationPlayer } from "./AxisAnimationPlayer";
+import type { AnimationFact } from "../lib/axis-animation-renderer";
 import {
   cacheVideoUrl,
   createTacticalReplayProduct,
@@ -112,6 +114,7 @@ function Shell({
 }
 
 type FirstLoopUnderstanding = {
+  facts?: AnimationFact[];
   muxPlaybackId?: string;
   sourceClipCount: number;
   uploadId: string;
@@ -136,7 +139,10 @@ type SourcesStatus = "idle" | "uploading" | "processing" | "ready";
 export function FirstLoopHome() {
   const { products, refresh } = useCloudSnapshot();
   const [status, setStatus] = useState<SourcesStatus>("idle");
+  const [homeFacts, setHomeFacts] = useState<AnimationFact[]>([]);
   const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
+  const [muxThumbnailUrl, setMuxThumbnailUrl] = useState<string | null>(null);
+  const [muxVideoUrl, setMuxVideoUrl] = useState<string | null>(null);
   const [replayProductId, setReplayProductId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -160,7 +166,10 @@ export function FirstLoopHome() {
       "Replay generated from uploaded video.",
     );
     cacheVideoUrl(immediateAssetId, blobUrl);
+    setHomeFacts([]);
     setLocalVideoUrl(blobUrl);
+    setMuxThumbnailUrl(null);
+    setMuxVideoUrl(null);
     setReplayProductId(immediateReplayId);
     setStatus("processing");
     console.info("REPLAY_COMPLETE", { replayProductId: immediateReplayId, uploadId: immediateAssetId });
@@ -177,6 +186,8 @@ export function FirstLoopHome() {
         : undefined;
 
       if (film.muxPlaybackId) {
+        setMuxVideoUrl(muxVideoUrl ?? null);
+        setMuxThumbnailUrl(film.thumbnailUrl ?? null);
         updateTacticalReplayProduct(immediateReplayId, { muxPlaybackId: film.muxPlaybackId });
         refresh();
       }
@@ -204,6 +215,7 @@ export function FirstLoopHome() {
         finding: whatWeFound,
         summary: [whatWeFound],
       });
+      if (Array.isArray(result?.facts)) setHomeFacts(result.facts);
       refresh();
     } catch {
       setStatus("ready");
@@ -221,6 +233,12 @@ export function FirstLoopHome() {
   };
   const replayReady = Boolean(localVideoUrl && replayProductId);
   const displayStatus: SourcesStatus = replayReady ? "ready" : status;
+  const playerVideoUrl = muxVideoUrl ?? localVideoUrl;
+
+  function handleHomeReplaySaved() {
+    if (replayProductId) exportProduct(replayProductId, "camera-roll");
+    refresh();
+  }
 
   return (
     <main className="axis-cloud axis-sources">
@@ -232,20 +250,16 @@ export function FirstLoopHome() {
       {/* Video area — shows immediately after file selection */}
       {localVideoUrl ? (
         <div className="axis-source-video-wrap">
-          <video
-            className="axis-source-video"
-            controls
-            playsInline
-            src={localVideoUrl}
+          <AxisAnimationPlayer
+            facts={homeFacts}
+            onReplaySaved={replayProductId ? handleHomeReplaySaved : undefined}
+            replayStatus={displayStatus === "ready" ? "ready" : "processing"}
+            thumbnailUrl={muxThumbnailUrl}
+            videoUrl={playerVideoUrl}
           />
 
           {replayReady ? (
-            <Link
-              className="axis-replay-cta"
-              href={`/replay/${replayProductId}`}
-            >
-              Replay Video
-            </Link>
+            <p className="axis-source-caption">Replay Ready</p>
           ) : (
             <p className="axis-source-caption axis-source-processing">
               Processing Video

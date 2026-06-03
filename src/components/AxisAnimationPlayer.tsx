@@ -70,10 +70,14 @@ function factsToOverlayUnderstanding(facts: AnimationFact[]): OverlayUnderstandi
 export function AxisAnimationPlayer({
   facts,
   onReplaySaved,
+  replayStatus = "ready",
+  thumbnailUrl,
   videoUrl,
 }: {
   facts: AnimationFact[];
   onReplaySaved?: () => void;
+  replayStatus?: "processing" | "ready" | "failed";
+  thumbnailUrl?: string | null;
   videoUrl?: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -82,6 +86,9 @@ export function AxisAnimationPlayer({
   const rafRef = useRef<number>(0);
   const [cropped, setCropped] = useState(true);
   const [exportState, setExportState] = useState<ExportState>("idle");
+  const [overlayCanvasReady, setOverlayCanvasReady] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
   const [supportsRecorder, setSupportsRecorder] = useState(true);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
   const understanding = useMemo(() => factsToOverlayUnderstanding(facts), [facts]);
@@ -97,15 +104,14 @@ export function AxisAnimationPlayer({
     const canvas = overlayRef.current;
     const ctx = canvas?.getContext("2d");
     const video = videoRef.current;
-    if (!canvas || !ctx || !video) return;
+    if (!canvas || !ctx) return;
 
-    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
-    const progress = Math.max(0, Math.min(1, video.currentTime / duration));
+    const duration = video && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+    const currentTime = video && !video.paused ? video.currentTime : performance.now() / 1000;
+    const progress = Math.max(0, Math.min(1, (currentTime % duration) / duration));
     drawOverlay(ctx, progress);
 
-    if (!video.paused && !video.ended) {
-      rafRef.current = requestAnimationFrame(paintOverlay);
-    }
+    rafRef.current = requestAnimationFrame(paintOverlay);
   }, [drawOverlay]);
 
   useEffect(() => {
@@ -116,16 +122,26 @@ export function AxisAnimationPlayer({
   }, []);
 
   useEffect(() => {
-    paintOverlay();
+    rafRef.current = requestAnimationFrame(paintOverlay);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [paintOverlay]);
 
+  useEffect(() => {
+    setVideoFailed(false);
+    setVideoLoaded(false);
+  }, [videoUrl]);
+
   function handlePlayState() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     paintOverlay();
   }
+
+  const handleOverlayRef = useCallback((node: HTMLCanvasElement | null) => {
+    overlayRef.current = node;
+    setOverlayCanvasReady(Boolean(node));
+  }, []);
 
   async function recordOverlayFilm() {
     const video = videoRef.current;
@@ -235,7 +251,13 @@ export function AxisAnimationPlayer({
             className="axis-overlay-video"
             controls
             crossOrigin="anonymous"
-            onLoadedMetadata={paintOverlay}
+            onCanPlay={() => setVideoLoaded(true)}
+            onError={() => setVideoFailed(true)}
+            onLoadedData={() => setVideoLoaded(true)}
+            onLoadedMetadata={() => {
+              setVideoLoaded(true);
+              paintOverlay();
+            }}
             onPause={handlePlayState}
             onPlay={handlePlayState}
             onSeeked={paintOverlay}
@@ -247,11 +269,14 @@ export function AxisAnimationPlayer({
         ) : (
           <div className="axis-overlay-video axis-overlay-no-video" aria-hidden="true" />
         )}
+        {videoFailed && thumbnailUrl ? (
+          <img className="axis-overlay-video axis-overlay-thumbnail" alt="" src={thumbnailUrl} />
+        ) : null}
         <canvas
           aria-hidden="true"
           className="axis-overlay-canvas"
           height={OVERLAY_H}
-          ref={overlayRef}
+          ref={handleOverlayRef}
           width={OVERLAY_W}
         />
       </div>
@@ -306,6 +331,29 @@ export function AxisAnimationPlayer({
           Saved as web preview. MP4 available on supported devices.
         </p>
       ) : null}
+
+      <dl className="axis-overlay-debug" aria-label="Replay debug">
+        <div>
+          <dt>video_url</dt>
+          <dd>{videoUrl ? "yes" : "no"}</dd>
+        </div>
+        <div>
+          <dt>video_loaded</dt>
+          <dd>{videoLoaded && !videoFailed ? "yes" : "no"}</dd>
+        </div>
+        <div>
+          <dt>overlay_canvas</dt>
+          <dd>{overlayCanvasReady ? "yes" : "no"}</dd>
+        </div>
+        <div>
+          <dt>facts_count</dt>
+          <dd>{facts.length}</dd>
+        </div>
+        <div>
+          <dt>replay_status</dt>
+          <dd>{replayStatus}</dd>
+        </div>
+      </dl>
     </div>
   );
 }
@@ -377,6 +425,18 @@ function drawMinimalReplayOverlay(
   ctx.moveTo(width - pad - len, height - pad);
   ctx.lineTo(width - pad, height - pad);
   ctx.lineTo(width - pad, height - pad - len);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = "rgba(184,219,77,0.94)";
+  ctx.font = "800 38px Arial, Helvetica, sans-serif";
+  ctx.fillText("AXIS", pad, height - pad - 34);
+
+  ctx.globalAlpha = 0.28 + Math.sin(progress * Math.PI * 2) * 0.14;
+  ctx.strokeStyle = "rgba(184,219,77,0.68)";
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.arc(width * 0.5, height * 0.5, width * 0.18 + progress * width * 0.06, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.globalAlpha = 0.18;
