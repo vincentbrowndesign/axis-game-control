@@ -25,6 +25,7 @@ export type AxisProductKind =
   | "shot-profile"
   | "hot-zones"
   | "training-focus";
+export type AxisOutcomeKind = "observe" | "improve" | "share" | "extend";
 
 export type ConfidenceTier = "Low" | "Medium" | "High";
 
@@ -72,7 +73,48 @@ export type AxisProduct = {
   exportDestination?: ExportDestination;
 };
 
+export type AxisLoopArtifact = {
+  body: string;
+  createdAt: string;
+  id: string;
+  outcome: AxisOutcomeKind;
+  sourceClipCount: number;
+  title: string;
+  uploadId: string;
+  whatWeFound: string;
+};
+
 export type ExportDestination = "camera-roll" | "instagram" | "tiktok" | "youtube";
+export type AxisCourtBand = "paint" | "midrange" | "perimeter" | "corner";
+export type AxisLocationThemeLabel = "Paint" | "Mid-Range" | "Perimeter" | "Corner";
+export type AxisBehaviorThemeLabel = "Off-Ball Movement" | "Isolation" | "Spacing" | "Transition";
+export type AxisThemeLabel = AxisLocationThemeLabel | AxisBehaviorThemeLabel | "No clear theme";
+export type AxisThemeKind = "location" | "behavior";
+export type AxisThemeTier = "strong" | "tentative";
+export type AxisTrackSample = {
+  is_carrier: boolean;
+  team?: string;
+  track_id: number | string;
+  xy: [number, number];
+};
+export type AxisUnderstandingInput = {
+  ball_xy: Array<[number, number] | null>;
+  court_bands?: (xy: [number, number]) => AxisCourtBand;
+  court_registered: boolean;
+  frame_count: number;
+  tracks: AxisTrackSample[][];
+};
+export type AxisPotentialTheme = {
+  confidence: number;
+  evidence: string;
+  id: string;
+  kind: AxisThemeKind;
+  label: AxisThemeLabel;
+  tier: AxisThemeTier;
+};
+export type AxisPotentialThemesOutput = {
+  themes: AxisPotentialTheme[];
+};
 export type AxisAssetRecordAction = "save" | "share";
 export type AxisAssetRecord = {
   id: string;
@@ -148,6 +190,26 @@ export const axisDirectionProducts = {
   Highlight: "highlight",
   Custom: "story",
 } satisfies Record<string, AxisProductKind>;
+
+export const axisOutcomeProducts = {
+  Extend: "curriculum",
+  Improve: "training-focus",
+  Observe: "film-study",
+  Share: "story",
+} satisfies Record<string, AxisProductKind>;
+
+export const LOCATION_THEME_LABELS: AxisLocationThemeLabel[] = ["Paint", "Mid-Range", "Perimeter", "Corner"];
+export const BEHAVIOR_THEME_LABELS: AxisBehaviorThemeLabel[] = [
+  "Off-Ball Movement",
+  "Isolation",
+  "Spacing",
+  "Transition",
+];
+const THETA_SHOW = 0.45;
+const THETA_STRONG = 0.65;
+const SCALE_MOVE = 0.08;
+const SCALE_SPREAD = 0.12;
+const SCALE_TEMPO = 0.1;
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -314,6 +376,25 @@ export function generateProduct(kind: AxisProductKind, modelId: string) {
   return product;
 }
 
+export function createProductFromLoopArtifact(artifact: AxisLoopArtifact) {
+  const kind = axisOutcomeProducts[getOutcomeLabel(artifact.outcome)];
+  const product: AxisProduct = {
+    action: artifact.body,
+    assetIds: [artifact.uploadId],
+    createdAt: artifact.createdAt,
+    finding: artifact.whatWeFound,
+    id: `product-${artifact.id}`,
+    kind,
+    meaning: artifact.body,
+    modelId: "axis-first-loop",
+    summary: [artifact.whatWeFound, artifact.body],
+    title: artifact.title,
+  };
+
+  write(PRODUCTS_KEY, [product, ...getAxisProducts().filter((item) => item.id !== product.id)]);
+  return product;
+}
+
 export function saveProductAsAsset(productId: string) {
   const product = getAxisProduct(productId);
   if (!product) return null;
@@ -363,8 +444,8 @@ export function exportProduct(productId: string, destination: ExportDestination)
   return { artifact, assetRecord, product: exported };
 }
 
-export function createUploadedSessionAsset(file: File, film?: { muxPlaybackId?: string; thumbnailUrl?: string }, label?: string) {
-  const session = createSession(label?.trim() || file.name.replace(/\.[^.]+$/, "") || "Camera Roll");
+export function createUploadedSessionAsset(file: File, film?: { muxPlaybackId?: string; thumbnailUrl?: string }) {
+  const session = createSession(file.name.replace(/\.[^.]+$/, "") || "Camera Roll");
   saveSession({
     ...session,
     mux_playback_id: film?.muxPlaybackId,
@@ -406,6 +487,19 @@ export function formatExportDestination(destination: ExportDestination) {
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+export function proposePotentialThemes(input: AxisUnderstandingInput | null | undefined): AxisPotentialThemesOutput {
+  if (!input || input.frame_count <= 0) return { themes: [createNoClearTheme()] };
+
+  const themes: AxisPotentialTheme[] = [];
+  const location = scoreLocationTheme(input);
+  const behavior = scoreBehaviorTheme(input);
+
+  if (location && location.confidence >= THETA_SHOW) themes.push(location);
+  if (behavior && behavior.confidence >= THETA_SHOW) themes.push(behavior);
+
+  return { themes: themes.length ? themes.slice(0, 2) : [createNoClearTheme()] };
 }
 
 export function getRegisteredProductsForDataset(dataset: AxisModel | null | undefined): AxisProductKind[] {
@@ -500,6 +594,194 @@ export function hasMinimumDatasetInsightConfidence(dataset: AxisModel | null | u
   return getDatasetInsights(dataset).some(
     (insight) => confidenceRank(insight.confidence) >= confidenceRank(MINIMUM_DATASET_INSIGHT_CONFIDENCE),
   );
+}
+
+function scoreLocationTheme(input: AxisUnderstandingInput): AxisPotentialTheme | null {
+  if (!input.court_registered || !input.court_bands) return null;
+
+  const counts: Record<AxisCourtBand, number> = {
+    corner: 0,
+    midrange: 0,
+    paint: 0,
+    perimeter: 0,
+  };
+  let activeFrames = 0;
+
+  for (const xy of input.ball_xy.slice(0, input.frame_count)) {
+    if (!xy) continue;
+    const band = input.court_bands(xy);
+    counts[band] += 1;
+    activeFrames += 1;
+  }
+
+  if (!activeFrames) return null;
+
+  const [band, count] = (Object.entries(counts) as Array<[AxisCourtBand, number]>).sort((a, b) => b[1] - a[1])[0];
+  const confidence = count / activeFrames;
+  const label = formatCourtBand(band);
+
+  return {
+    confidence,
+    evidence: `${Math.round(confidence * 100)}% of active frames in ${label.toLowerCase()} band`,
+    id: `location-${band}`,
+    kind: "location",
+    label,
+    tier: confidence >= THETA_STRONG ? "strong" : "tentative",
+  };
+}
+
+function scoreBehaviorTheme(input: AxisUnderstandingInput): AxisPotentialTheme | null {
+  const tracksByFrame = input.tracks.slice(0, input.frame_count);
+  const activeFrames = tracksByFrame.filter((tracks) => tracks.length > 0).length;
+  if (!activeFrames) return null;
+
+  const offBall = normalizeScore(getMeanNonCarrierDisplacement(tracksByFrame), SCALE_MOVE);
+  const teamDisplacement = normalizeScore(getMeanTrackDisplacement(tracksByFrame), SCALE_MOVE);
+  const carrierFrames = tracksByFrame.filter((tracks) => tracks.some((track) => track.is_carrier)).length;
+  const iso = clamp((carrierFrames / activeFrames) * (1 - teamDisplacement));
+  const spacing = normalizeScore(getMeanPairwiseDistanceVariance(tracksByFrame), SCALE_SPREAD);
+  const transition = normalizeScore(getCentroidShiftRate(tracksByFrame), SCALE_TEMPO);
+
+  const scores: Array<{ id: string; label: AxisBehaviorThemeLabel; score: number; evidence: string }> = [
+    {
+      evidence: `${Math.round(offBall * 100)}% off-ball movement score`,
+      id: "behavior-off-ball-movement",
+      label: "Off-Ball Movement",
+      score: offBall,
+    },
+    {
+      evidence: `${Math.round(iso * 100)}% isolation shape`,
+      id: "behavior-isolation",
+      label: "Isolation",
+      score: iso,
+    },
+    {
+      evidence: `${Math.round(spacing * 100)}% teammate spacing variance`,
+      id: "behavior-spacing",
+      label: "Spacing",
+      score: spacing,
+    },
+    {
+      evidence: `${Math.round(transition * 100)}% centroid tempo shift`,
+      id: "behavior-transition",
+      label: "Transition",
+      score: transition,
+    },
+  ];
+  const best = scores.sort((a, b) => b.score - a.score)[0];
+
+  return {
+    confidence: best.score,
+    evidence: best.evidence,
+    id: best.id,
+    kind: "behavior",
+    label: best.label,
+    tier: best.score >= THETA_STRONG ? "strong" : "tentative",
+  };
+}
+
+function createNoClearTheme(): AxisPotentialTheme {
+  return {
+    confidence: 0,
+    evidence: "No geometry or timing theme cleared threshold",
+    id: "no-clear-theme",
+    kind: "behavior",
+    label: "No clear theme",
+    tier: "tentative",
+  };
+}
+
+function formatCourtBand(band: AxisCourtBand): AxisLocationThemeLabel {
+  if (band === "midrange") return "Mid-Range";
+  if (band === "perimeter") return "Perimeter";
+  if (band === "corner") return "Corner";
+  return "Paint";
+}
+
+function getMeanNonCarrierDisplacement(frames: AxisTrackSample[][]) {
+  return getMeanDisplacement(frames, (track) => !track.is_carrier);
+}
+
+function getMeanTrackDisplacement(frames: AxisTrackSample[][]) {
+  return getMeanDisplacement(frames, () => true);
+}
+
+function getMeanDisplacement(frames: AxisTrackSample[][], include: (track: AxisTrackSample) => boolean) {
+  const previous = new Map<string, [number, number]>();
+  let total = 0;
+  let count = 0;
+
+  for (const frame of frames) {
+    for (const track of frame) {
+      const key = String(track.track_id);
+      const prior = previous.get(key);
+      if (prior && include(track)) {
+        total += getPointDistance(prior, track.xy);
+        count += 1;
+      }
+      previous.set(key, track.xy);
+    }
+  }
+
+  return count ? total / count : 0;
+}
+
+function getMeanPairwiseDistanceVariance(frames: AxisTrackSample[][]) {
+  const variances = frames
+    .map((tracks) => {
+      const distances: number[] = [];
+      for (let i = 0; i < tracks.length; i += 1) {
+        for (let j = i + 1; j < tracks.length; j += 1) {
+          if (tracks[i].team && tracks[j].team && tracks[i].team !== tracks[j].team) continue;
+          distances.push(getPointDistance(tracks[i].xy, tracks[j].xy));
+        }
+      }
+      return getVariance(distances);
+    })
+    .filter((value) => value > 0);
+
+  return getMean(variances);
+}
+
+function getCentroidShiftRate(frames: AxisTrackSample[][]) {
+  const centroids = frames.map(getCentroid).filter((xy): xy is [number, number] => Boolean(xy));
+  const shifts: number[] = [];
+
+  for (let i = 1; i < centroids.length; i += 1) {
+    shifts.push(getPointDistance(centroids[i - 1], centroids[i]));
+  }
+
+  return getMean(shifts);
+}
+
+function getCentroid(tracks: AxisTrackSample[]) {
+  if (!tracks.length) return null;
+  return [
+    tracks.reduce((total, track) => total + track.xy[0], 0) / tracks.length,
+    tracks.reduce((total, track) => total + track.xy[1], 0) / tracks.length,
+  ] as [number, number];
+}
+
+function getPointDistance(a: [number, number], b: [number, number]) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+function getVariance(values: number[]) {
+  if (values.length < 2) return 0;
+  const mean = getMean(values);
+  return getMean(values.map((value) => (value - mean) ** 2));
+}
+
+function getMean(values: number[]) {
+  return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+}
+
+function normalizeScore(value: number, scale: number) {
+  return clamp(value / scale);
+}
+
+function clamp(value: number) {
+  return Math.max(0, Math.min(1, value));
 }
 
 function confidenceRank(confidence: ConfidenceTier) {
@@ -646,6 +928,13 @@ function buildExportContent(product: AxisProduct, destination: ExportDestination
     "─────────────────────",
     `${formatExportDestination(destination)} · ${when}`,
   ].join("\n");
+}
+
+function getOutcomeLabel(outcome: AxisOutcomeKind): keyof typeof axisOutcomeProducts {
+  if (outcome === "extend") return "Extend";
+  if (outcome === "improve") return "Improve";
+  if (outcome === "share") return "Share";
+  return "Observe";
 }
 
 function slugify(value: string) {

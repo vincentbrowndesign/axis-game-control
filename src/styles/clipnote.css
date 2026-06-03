@@ -2100,9 +2100,108 @@
   overflow-wrap: anywhere;
 }
 
+.axis-understanding p.axis-understanding-copy {
+  font-size: clamp(1.18rem, 5.4vw, 2rem);
+  font-weight: 780;
+  line-height: 1.08;
+}
+
+.axis-loop-error {
+  color: var(--axis-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .axis-direction-rule {
   border-top: 1px solid var(--axis-line);
   margin: 0.5rem 0;
+}
+
+.axis-theme-rail {
+  display: grid;
+  gap: 0.52rem;
+}
+
+.axis-theme-rail > span {
+  color: var(--axis-muted);
+  font-size: 0.68rem;
+  font-weight: 790;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.axis-theme-chip-list {
+  display: grid;
+  gap: 0.48rem;
+}
+
+.axis-theme-chip {
+  background: rgba(184, 219, 77, 0.14);
+  border: 1px solid rgba(184, 219, 77, 0.36);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.44rem;
+  padding: 0.68rem;
+}
+
+.axis-theme-chip[data-tier="tentative"] {
+  background: transparent;
+  border-color: var(--axis-line);
+}
+
+.axis-theme-chip[data-tier="muted"] {
+  background: var(--axis-panel-2);
+  border-color: var(--axis-line);
+  color: var(--axis-muted);
+}
+
+.axis-theme-chip[data-status="confirmed"],
+.axis-theme-chip[data-status="corrected"] {
+  border-color: rgba(184, 219, 77, 0.72);
+}
+
+.axis-theme-chip strong {
+  align-items: center;
+  color: var(--axis-ink);
+  display: flex;
+  gap: 0.32rem;
+  font-size: 0.92rem;
+  font-weight: 840;
+}
+
+.axis-theme-chip strong em {
+  color: var(--axis-signal);
+  font-style: normal;
+}
+
+.axis-theme-chip small {
+  color: var(--axis-muted);
+  font-size: 0.68rem;
+  font-weight: 680;
+}
+
+.axis-theme-actions,
+.axis-theme-corrections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+}
+
+.axis-theme-actions button,
+.axis-theme-corrections button {
+  appearance: none;
+  background: var(--axis-panel);
+  border: 1px solid var(--axis-line);
+  border-radius: 999px;
+  color: var(--axis-ink);
+  cursor: pointer;
+  font-family: var(--cn-font);
+  font-size: 0.72rem;
+  font-weight: 780;
+  min-height: 30px;
+  padding: 0 0.62rem;
 }
 
 .axis-direction-grid {

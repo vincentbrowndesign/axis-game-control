@@ -4,7 +4,7 @@ import "../styles/clipnote.css";
 
 export const metadata: Metadata = {
   title: "Axis",
-  description: "Assets build models. Models generate products.",
+  description: "Reality. Understanding. Artifact.",
 };
 
 export default function RootLayout({

@@ -7,7 +7,10 @@ import * as tus from "tus-js-client";
 import {
   addAssetToModel,
   axisDirectionProducts,
+  axisOutcomeProducts,
+  BEHAVIOR_THEME_LABELS,
   buildMyModel,
+  createProductFromLoopArtifact,
   createUploadedSessionAsset,
   exportProduct,
   formatExportDestination,
@@ -20,6 +23,8 @@ import {
   getAxisProducts,
   getDatasetInsights,
   getProductLabel,
+  LOCATION_THEME_LABELS,
+  proposePotentialThemes,
   getRegisteredProductsForDataset,
   hasMinimumDatasetInsightConfidence,
   saveProductAsAsset,
@@ -27,7 +32,10 @@ import {
   type AxisAsset,
   type AxisExportArtifact,
   type AxisDatasetInsight,
+  type AxisLoopArtifact,
   type AxisModel,
+  type AxisPotentialTheme,
+  type AxisThemeLabel,
   type AxisProduct,
   type AxisProductKind,
   type ExportDestination,
@@ -121,9 +129,10 @@ function Shell({
         </div>
       </header>
       {children}
-      <nav className="axis-cloud-nav" aria-label="Axis cloud navigation">
-        <Link href="/">Axis</Link>
-        <Link href="/account">Account</Link>
+      <nav className="axis-cloud-nav" aria-label="Axis navigation">
+        <Link href="/">Sources</Link>
+        <Link href="/chat">Chat</Link>
+        <Link href="/studio">Studio</Link>
       </nav>
     </main>
   );
@@ -231,74 +240,191 @@ export function LibraryHome() {
   );
 }
 
-type ProposalState = "idle" | "reading" | "ready";
-type ClipProposal = { confidence: "high" | "medium"; zone: string };
+type RailTheme = AxisPotentialTheme & {
+  correcting?: boolean;
+  status?: "confirmed" | "corrected";
+};
 
-async function extractVideoFrame(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    if (!file.type.startsWith("video/")) {
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-      reader.onerror = () => resolve("");
-      reader.readAsDataURL(file);
-      return;
+type FirstLoopUnderstanding = {
+  sourceClipCount: number;
+  uploadId: string;
+  uploadTimestamp: string;
+  whatWeFound: string;
+};
+
+type FirstLoopArtifactResponse = {
+  artifact?: AxisLoopArtifact;
+  error?: string;
+};
+
+type FirstLoopExportResponse = {
+  export?: {
+    content: string;
+    contentType: string;
+    destination: string;
+    fileName: string;
+    id: string;
+    triggerRunId?: string | null;
+  };
+};
+
+export function FirstLoopHome() {
+  const { products, refresh } = useCloudSnapshot();
+  const [generatedProducts, setGeneratedProducts] = useState<AxisProduct[]>([]);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [understanding, setUnderstanding] = useState<FirstLoopUnderstanding | null>(null);
+  const [loopError, setLoopError] = useState("");
+  const [generatingOutcome, setGeneratingOutcome] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const outcomes = Object.keys(axisOutcomeProducts);
+
+  async function handleFile(file: File) {
+    setLoopError("");
+    setUnderstanding(null);
+    setUploadState("uploading");
+
+    try {
+      const film = await uploadToMux(file);
+      setUploadState("saving");
+      const assetId = createUploadedSessionAsset(file, film);
+      const response = await fetch("/api/axis/first-loop", {
+        body: JSON.stringify({
+          action: "understand",
+          fileName: file.name,
+          muxPlaybackId: film.muxPlaybackId,
+          priorArtifacts: products.slice(0, 3).map((product) => product.finding ?? product.title),
+          sessionId: assetId,
+          sourceClipCount: 1,
+          uploadId: assetId,
+          uploadTimestamp: new Date().toISOString(),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as FirstLoopUnderstanding | null;
+      if (!response.ok || !result?.whatWeFound) throw new Error("Understanding unavailable.");
+      setUnderstanding(result);
+      refresh();
+    } catch {
+      const assetId = createUploadedSessionAsset(file);
+      setUnderstanding({
+        sourceClipCount: 1,
+        uploadId: assetId,
+        uploadTimestamp: new Date().toISOString(),
+        whatWeFound:
+          "1 clip added from Camera Roll. Axis found an early practice signal worth saving. Choose an outcome to turn it into an artifact.",
+      });
+      setLoopError("Using local understanding until the server loop is available.");
+      refresh();
+    } finally {
+      setUploadState("idle");
+      if (inputRef.current) inputRef.current.value = "";
     }
-
-    const url = URL.createObjectURL(file);
-    const video = document.createElement("video");
-    video.muted = true;
-    video.preload = "metadata";
-    video.src = url;
-
-    const cleanup = () => URL.revokeObjectURL(url);
-
-    video.addEventListener("loadeddata", () => {
-      video.currentTime = Math.min(video.duration * 0.3, 5);
-    }, { once: true });
-
-    video.addEventListener("seeked", () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 320;
-      canvas.height = video.videoHeight ? Math.round(320 * video.videoHeight / video.videoWidth) : 180;
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      cleanup();
-      resolve(canvas.toDataURL("image/jpeg", 0.7));
-    }, { once: true });
-
-    video.addEventListener("error", () => { cleanup(); resolve(""); }, { once: true });
-    video.load();
-  });
-}
-
-async function readClip(file: File): Promise<ClipProposal | null> {
-  const frame = await extractVideoFrame(file);
-  if (!frame) return null;
-
-  try {
-    const response = await fetch("/api/axis/read-clip", {
-      body: JSON.stringify({ frame }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    });
-    const result = (await response.json()) as { confidence?: string; zone?: string | null };
-    if (result.zone && (result.confidence === "high" || result.confidence === "medium")) {
-      return { confidence: result.confidence, zone: result.zone };
-    }
-  } catch {
-    // Vision unavailable — fall back to label input.
   }
-  return null;
+
+  async function handleOutcome(label: string) {
+    if (!understanding || generatingOutcome) return;
+
+    setGeneratingOutcome(label);
+    setLoopError("");
+
+    try {
+      const response = await fetch("/api/axis/first-loop", {
+        body: JSON.stringify({
+          action: "artifact",
+          outcome: label.toLowerCase(),
+          sourceClipCount: understanding.sourceClipCount,
+          uploadId: understanding.uploadId,
+          whatWeFound: understanding.whatWeFound,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as FirstLoopArtifactResponse | null;
+      if (!response.ok || !result?.artifact) throw new Error(result?.error ?? "Artifact unavailable.");
+
+      const product = createProductFromLoopArtifact(result.artifact);
+      setGeneratedProducts([product]);
+      refresh();
+      router.push(`/product/${product.id}`);
+    } catch {
+      setLoopError("Artifact generation is unavailable.");
+    } finally {
+      setGeneratingOutcome("");
+    }
+  }
+
+  return (
+    <Shell eyebrow="Axis" title="Reality to artifact">
+      <section className="axis-cloud-panel axis-upload-panel">
+        <button
+          className="axis-cloud-primary"
+          disabled={uploadState !== "idle"}
+          onClick={() => inputRef.current?.click()}
+          type="button"
+        >
+          {uploadState === "idle" ? "Upload" : uploadState === "saving" ? "Understanding" : "Uploading"}
+        </button>
+        <input
+          ref={inputRef}
+          accept="video/*"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleFile(file);
+          }}
+          type="file"
+        />
+      </section>
+
+      <section className="axis-understanding-card">
+        <div className="axis-understanding">
+          <strong>{understanding?.sourceClipCount ?? 0} Clips</strong>
+          <div>
+            <span>What We Found</span>
+            <p className="axis-understanding-copy">{understanding?.whatWeFound ?? "Upload real footage."}</p>
+          </div>
+        </div>
+
+        {loopError ? <p className="axis-loop-error">{loopError}</p> : null}
+
+        <div className="axis-direction-rule" aria-hidden="true" />
+
+        {understanding ? (
+          <div className="axis-direction-grid">
+            {outcomes.map((label) => (
+              <button disabled={Boolean(generatingOutcome)} onClick={() => void handleOutcome(label)} type="button" key={label}>
+                {generatingOutcome === label ? "Building" : label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="axis-create-locked">Upload footage to begin.</p>
+        )}
+      </section>
+
+      {generatedProducts.length ? (
+        <section className="axis-cloud-section">
+          <div className="axis-model-list">
+            {generatedProducts.map((product) => (
+              <Link className="axis-model-card" href={`/product/${product.id}`} key={product.id}>
+                <strong>{product.title}</strong>
+                <em>{product.assetIds.length} clips</em>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </Shell>
+  );
 }
 
 export function DatasetsHome() {
   const { assets, models, refresh } = useCloudSnapshot();
   const [generatedProducts, setGeneratedProducts] = useState<AxisProduct[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
-  const [clipLabel, setClipLabel] = useState("");
-  const [proposal, setProposal] = useState<ClipProposal | null>(null);
-  const [proposalState, setProposalState] = useState<ProposalState>("idle");
-  const labelRef = useRef<HTMLInputElement>(null);
+  const [themeChips, setThemeChips] = useState<RailTheme[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const activeModel = models.find((model) => model.assetIds.length) ?? models[0] ?? null;
@@ -316,32 +442,30 @@ export function DatasetsHome() {
   const directions = Object.entries(axisDirectionProducts) as Array<[string, AxisProductKind]>;
 
   async function handleFileSelected(file: File) {
-    setProposal(null);
-    setProposalState("reading");
-    const result = await readClip(file);
-    setProposal(result);
-    setProposalState(result ? "ready" : "idle");
+    const themes = proposePotentialThemes({
+      ball_xy: [],
+      court_registered: false,
+      frame_count: 0,
+      tracks: [],
+    }).themes;
+    setThemeChips(themes);
     void handleFile(file);
   }
 
   async function handleFile(file: File) {
     setUploadState("uploading");
-    const label = clipLabel.trim() || undefined;
     try {
       const film = await uploadToMux(file);
       setUploadState("saving");
-      const assetId = createUploadedSessionAsset(file, film, label);
+      const assetId = createUploadedSessionAsset(file, film);
       addAssetToModel(assetId, activeModel?.id);
       refresh();
     } catch {
-      const assetId = createUploadedSessionAsset(file, undefined, label);
+      const assetId = createUploadedSessionAsset(file);
       addAssetToModel(assetId, activeModel?.id);
       refresh();
     } finally {
       setUploadState("idle");
-      setClipLabel("");
-      setProposal(null);
-      setProposalState("idle");
       if (inputRef.current) inputRef.current.value = "";
     }
   }
@@ -355,18 +479,35 @@ export function DatasetsHome() {
     router.push(`/product/${product.id}`);
   }
 
+  function confirmTheme(id: string) {
+    setThemeChips((themes) =>
+      themes.map((theme) => (theme.id === id ? { ...theme, correcting: false, status: "confirmed" } : theme)),
+    );
+  }
+
+  function openThemeCorrection(id: string) {
+    setThemeChips((themes) =>
+      themes.map((theme) => ({ ...theme, correcting: theme.id === id ? !theme.correcting : false })),
+    );
+  }
+
+  function correctTheme(id: string, label: AxisThemeLabel) {
+    setThemeChips((themes) =>
+      themes.map((theme) =>
+        theme.id === id
+          ? { ...theme, correcting: false, evidence: "Corrected in session", label, status: "corrected" }
+          : theme,
+      ),
+    );
+  }
+
+  function ignoreTheme(id: string) {
+    setThemeChips((themes) => themes.filter((theme) => theme.id !== id));
+  }
+
   return (
     <Shell eyebrow="Axis" title="What We Found">
       <section className="axis-cloud-panel axis-upload-panel">
-        <input
-          ref={labelRef}
-          className="axis-clip-label"
-          disabled={uploadState !== "idle"}
-          onChange={(event) => setClipLabel(event.target.value)}
-          placeholder="What's in this clip? (Mid-Range, Corner Three, Drive...)"
-          type="text"
-          value={clipLabel}
-        />
         <button
           className="axis-cloud-primary"
           disabled={uploadState !== "idle"}
@@ -387,36 +528,6 @@ export function DatasetsHome() {
         />
       </section>
 
-      {proposalState === "reading" ? (
-        <p className="axis-proposal-reading">Reading clip...</p>
-      ) : proposal && proposalState === "ready" ? (
-        <div className="axis-proposal">
-          <span>{proposal.confidence === "high" ? "We see" : "Possibly"}</span>
-          <strong>{proposal.zone}</strong>
-          <button
-            onClick={() => {
-              setClipLabel(proposal.zone);
-              setProposal(null);
-              setProposalState("idle");
-              labelRef.current?.focus();
-            }}
-            type="button"
-          >
-            Use it
-          </button>
-          <button
-            onClick={() => {
-              setProposal(null);
-              setProposalState("idle");
-              labelRef.current?.focus();
-            }}
-            type="button"
-          >
-            Change
-          </button>
-        </div>
-      ) : null}
-
       <section className="axis-understanding-card">
         <div className="axis-understanding">
           <strong>{activeAssets.length} Clips</strong>
@@ -433,6 +544,52 @@ export function DatasetsHome() {
             <p>{pressure?.value ?? "Add clips"}</p>
           </div>
         </div>
+
+        {themeChips.length ? (
+          <div className="axis-theme-rail" aria-label="Potential themes">
+            <span>Potential Themes</span>
+            <div className="axis-theme-chip-list">
+              {themeChips.map((theme) => (
+                <article
+                  className="axis-theme-chip"
+                  data-status={theme.status}
+                  data-tier={theme.label === "No clear theme" ? "muted" : theme.tier}
+                  key={theme.id}
+                >
+                  <strong>
+                    {theme.label}
+                    {theme.tier === "tentative" && theme.label !== "No clear theme" ? <em>?</em> : null}
+                  </strong>
+                  <small>{theme.evidence}</small>
+                  {theme.label !== "No clear theme" ? (
+                    <>
+                      <div className="axis-theme-actions">
+                        <button onClick={() => confirmTheme(theme.id)} type="button" aria-label={`Confirm ${theme.label}`}>
+                          ✓
+                        </button>
+                        <button onClick={() => openThemeCorrection(theme.id)} type="button">
+                          Correct
+                        </button>
+                        <button onClick={() => ignoreTheme(theme.id)} type="button" aria-label={`Ignore ${theme.label}`}>
+                          ×
+                        </button>
+                      </div>
+                      {theme.correcting ? (
+                        <div className="axis-theme-corrections">
+                          {(theme.kind === "location" ? LOCATION_THEME_LABELS : BEHAVIOR_THEME_LABELS).map((label) => (
+                            <button onClick={() => correctTheme(theme.id, label)} type="button" key={label}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="axis-direction-rule" aria-hidden="true" />
 
@@ -947,7 +1104,12 @@ export function ProductDetail({ productId }: { productId: string }) {
     if (!product) return;
     const result = exportProduct(product.id, cameraRollDestination);
     if (!result) return;
-    downloadArtifact(result.artifact);
+    const loopExport = await exportProductThroughLoop(product, "download");
+    if (loopExport) {
+      downloadLoopExport(loopExport);
+    } else {
+      downloadArtifact(result.artifact);
+    }
     setShareState("shared");
     refresh();
     router.push("/");
@@ -957,7 +1119,12 @@ export function ProductDetail({ productId }: { productId: string }) {
     if (!product || !supportsNativeShare) return;
     const result = exportProduct(product.id, cameraRollDestination);
     if (!result) return;
-    await shareArtifact(result.artifact);
+    const loopExport = await exportProductThroughLoop(product, "native-share");
+    if (loopExport) {
+      await shareLoopExport(loopExport);
+    } else {
+      await shareArtifact(result.artifact);
+    }
     setShareState("shared");
     refresh();
     router.push("/");
@@ -1045,6 +1212,124 @@ async function shareArtifact(artifact: AxisExportArtifact) {
     };
 
   await nav.share(shareData);
+}
+
+function productOutcome(product: AxisProduct): AxisLoopArtifact["outcome"] {
+  if (product.kind === "training-focus" || product.kind === "practice") return "improve";
+  if (product.kind === "story" || product.kind === "highlight" || product.kind === "playlist") return "share";
+  if (product.kind === "curriculum") return "extend";
+  return "observe";
+}
+
+function productToLoopArtifact(product: AxisProduct): AxisLoopArtifact {
+  return {
+    body: [product.finding, product.meaning, product.action].filter(Boolean).join("\n\n"),
+    createdAt: product.createdAt,
+    id: product.id,
+    outcome: productOutcome(product),
+    sourceClipCount: product.assetIds.length || 1,
+    title: product.title,
+    uploadId: product.assetIds[0] ?? product.id,
+    whatWeFound: product.finding ?? product.summary?.[0] ?? product.title,
+  };
+}
+
+async function exportProductThroughLoop(product: AxisProduct, destination: string) {
+  const response = await fetch("/api/axis/first-loop", {
+    body: JSON.stringify({
+      action: "export",
+      artifact: productToLoopArtifact(product),
+      destination,
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const result = (await response.json().catch(() => null)) as FirstLoopExportResponse | null;
+  return response.ok ? result?.export ?? null : null;
+}
+
+function downloadLoopExport(exportArtifact: NonNullable<FirstLoopExportResponse["export"]>) {
+  const blob = new Blob([exportArtifact.content], { type: exportArtifact.contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = exportArtifact.fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function shareLoopExport(exportArtifact: NonNullable<FirstLoopExportResponse["export"]>) {
+  const file = new File([exportArtifact.content], exportArtifact.fileName, { type: exportArtifact.contentType });
+  const nav = navigator as Navigator & {
+    canShare?: (data: ShareData) => boolean;
+    share: (data: ShareData) => Promise<void>;
+  };
+  const shareData: ShareData =
+    nav.canShare?.({ files: [file] }) ? { files: [file], title: exportArtifact.fileName } : {
+      text: exportArtifact.content,
+      title: exportArtifact.fileName,
+    };
+
+  await nav.share(shareData);
+}
+
+export function ChatHistory() {
+  const { products } = useCloudSnapshot();
+  const sorted = [...products].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return (
+    <Shell eyebrow="Chat" title="What we found">
+      {sorted.length ? (
+        <section className="axis-cloud-section">
+          <div className="axis-chat-feed">
+            {sorted.map((product) => (
+              <article className="axis-chat-entry" key={product.id}>
+                <span className="axis-chat-label">What do you see?</span>
+                <p className="axis-chat-body">{product.finding ?? product.title}</p>
+                {product.meaning ? <p className="axis-chat-body">{product.meaning}</p> : null}
+                {product.action ? <p className="axis-chat-body axis-chat-action">{product.action}</p> : null}
+                <Link className="axis-chat-link" href={`/product/${product.id}`}>
+                  View artifact
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <p className="axis-cloud-empty">Upload footage in Sources. Understanding appears here.</p>
+      )}
+    </Shell>
+  );
+}
+
+export function StudioList() {
+  const { products } = useCloudSnapshot();
+  const sorted = [...products].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return (
+    <Shell eyebrow="Studio" title="Your artifacts">
+      {sorted.length ? (
+        <section className="axis-cloud-section">
+          <div className="axis-model-list">
+            {sorted.map((product) => (
+              <Link className="axis-model-card" href={`/product/${product.id}`} key={product.id}>
+                <strong>{product.title}</strong>
+                <em>{product.finding ?? "Artifact ready"}</em>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <p className="axis-cloud-empty">Upload a clip in Sources to generate your first artifact.</p>
+      )}
+    </Shell>
+  );
 }
 
 export function AccountSettings() {
