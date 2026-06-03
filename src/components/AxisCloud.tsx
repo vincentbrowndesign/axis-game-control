@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 import { AxisAnimationPlayer } from "./AxisAnimationPlayer";
-import type { AnimationFact } from "../lib/axis-animation-renderer";
+import type { AnimationFact, AnimationTrack } from "../lib/axis-animation-renderer";
 import {
   cacheVideoUrl,
   createTacticalReplayProduct,
@@ -117,6 +117,7 @@ type FirstLoopUnderstanding = {
   facts?: AnimationFact[];
   muxPlaybackId?: string;
   sourceClipCount: number;
+  tracks?: AnimationTrack[];
   uploadId: string;
   uploadTimestamp: string;
   videoUrl?: string;
@@ -140,6 +141,7 @@ export function FirstLoopHome() {
   const { products, refresh } = useCloudSnapshot();
   const [status, setStatus] = useState<SourcesStatus>("idle");
   const [homeFacts, setHomeFacts] = useState<AnimationFact[]>([]);
+  const [homeTracks, setHomeTracks] = useState<AnimationTrack[]>([]);
   const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
   const [muxThumbnailUrl, setMuxThumbnailUrl] = useState<string | null>(null);
   const [muxVideoUrl, setMuxVideoUrl] = useState<string | null>(null);
@@ -167,6 +169,7 @@ export function FirstLoopHome() {
     );
     cacheVideoUrl(immediateAssetId, blobUrl);
     setHomeFacts([]);
+    setHomeTracks([]);
     setLocalVideoUrl(blobUrl);
     setMuxThumbnailUrl(null);
     setMuxVideoUrl(null);
@@ -216,6 +219,7 @@ export function FirstLoopHome() {
         summary: [whatWeFound],
       });
       if (Array.isArray(result?.facts)) setHomeFacts(result.facts);
+      if (Array.isArray(result?.tracks)) setHomeTracks(result.tracks);
       refresh();
     } catch {
       setStatus("ready");
@@ -255,6 +259,7 @@ export function FirstLoopHome() {
             onReplaySaved={replayProductId ? handleHomeReplaySaved : undefined}
             replayStatus={displayStatus === "ready" ? "ready" : "processing"}
             thumbnailUrl={muxThumbnailUrl}
+            tracks={homeTracks}
             videoUrl={playerVideoUrl}
           />
 

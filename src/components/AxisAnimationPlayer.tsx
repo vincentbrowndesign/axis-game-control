@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { factsToScene, type AnimationFact } from "../lib/axis-animation-renderer";
+import { factsToScene, type AnimationFact, type AnimationTrack } from "../lib/axis-animation-renderer";
 
 type ExportState = "idle" | "recording" | "encoding" | "saved" | "preview-saved";
 
@@ -72,12 +72,14 @@ export function AxisAnimationPlayer({
   onReplaySaved,
   replayStatus = "ready",
   thumbnailUrl,
+  tracks = [],
   videoUrl,
 }: {
   facts: AnimationFact[];
   onReplaySaved?: () => void;
   replayStatus?: "processing" | "ready" | "failed";
   thumbnailUrl?: string | null;
+  tracks?: AnimationTrack[];
   videoUrl?: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -95,9 +97,9 @@ export function AxisAnimationPlayer({
 
   const drawOverlay = useCallback(
     (ctx: CanvasRenderingContext2D, progress: number) => {
-      drawUnderstandingOverlay(ctx, understanding, progress, OVERLAY_W, OVERLAY_H);
+      drawUnderstandingOverlay(ctx, understanding, tracks, progress, OVERLAY_W, OVERLAY_H);
     },
-    [understanding],
+    [tracks, understanding],
   );
 
   const paintOverlay = useCallback(() => {
@@ -195,7 +197,7 @@ export function AxisAnimationPlayer({
           const elapsed = performance.now() - startedAt;
           const progress = Math.max(0, Math.min(1, elapsed / EXPORT_MS));
           drawVideoCover(ctx, video, exportCanvas.width, exportCanvas.height);
-          drawUnderstandingOverlay(ctx, understanding, progress, exportCanvas.width, exportCanvas.height);
+          drawUnderstandingOverlay(ctx, understanding, tracks, progress, exportCanvas.width, exportCanvas.height);
 
           if (progress < 1 && !video.ended) {
             requestAnimationFrame(drawFrame);
@@ -350,6 +352,10 @@ export function AxisAnimationPlayer({
           <dd>{facts.length}</dd>
         </div>
         <div>
+          <dt>tracks_count</dt>
+          <dd>{tracks.length}</dd>
+        </div>
+        <div>
           <dt>replay_status</dt>
           <dd>{replayStatus}</dd>
         </div>
@@ -361,6 +367,7 @@ export function AxisAnimationPlayer({
 function drawUnderstandingOverlay(
   ctx: CanvasRenderingContext2D,
   u: OverlayUnderstanding,
+  tracks: AnimationTrack[],
   progress: number,
   width: number,
   height: number,
@@ -378,17 +385,18 @@ function drawUnderstandingOverlay(
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   drawMinimalReplayOverlay(ctx, t, width, height);
+  drawTrackedEntities(ctx, tracks, t, width, height);
 
-  if (u.hoopDetected) drawLock(ctx, rim.x, rim.y, "#ff7a24", pulse(t, 0.05, 0.28));
-  if (u.ballDetected) {
+  if (!tracks.length && u.hoopDetected) drawLock(ctx, rim.x, rim.y, "#ff7a24", pulse(t, 0.05, 0.28));
+  if (!tracks.length && u.ballDetected) {
     const ballT = u.drive ? phase(t, 0.18, 0.62) : t;
     const bx = lerp(start.x, rim.x, ballT);
     const by = lerp(start.y, rim.y, ballT);
     drawLock(ctx, bx, by, "#ff9a3c", 0.75);
   }
 
-  if (u.movementPath) drawDirectionalCue(ctx, start, { x: cx, y: height * 0.46 }, phase(t, 0.08, 0.44));
-  if (u.drive) drawAttackTrail(ctx, start, { x: cx, y: height * 0.43 }, phase(t, 0.14, 0.56));
+  if (!tracks.length && u.movementPath) drawDirectionalCue(ctx, start, { x: cx, y: height * 0.46 }, phase(t, 0.08, 0.44));
+  if (!tracks.length && u.drive) drawAttackTrail(ctx, start, { x: cx, y: height * 0.43 }, phase(t, 0.14, 0.56));
   if (u.paintTouch) drawPaintPulse(ctx, paint, pulse(t, 0.38, 0.68));
   if (u.shotAttempt) drawShotArc(ctx, { x: cx, y: height * 0.43 }, rim, phase(t, 0.52, 0.78));
   if (u.makeMiss === "make") drawResultBurst(ctx, rim, "#19ff78", pulse(t, 0.72, 1));
@@ -447,6 +455,69 @@ function drawMinimalReplayOverlay(
   ctx.lineTo(width - pad, scanY);
   ctx.stroke();
   ctx.restore();
+}
+
+function drawTrackedEntities(
+  ctx: CanvasRenderingContext2D,
+  tracks: AnimationTrack[],
+  progress: number,
+  width: number,
+  height: number,
+) {
+  if (!tracks.length) return;
+  const maxFrame = Math.max(...tracks.map((track) => track.frame), 1);
+  const currentFrame = progress * maxFrame;
+  const byEntity = new Map<string, AnimationTrack[]>();
+
+  for (const track of tracks) {
+    const list = byEntity.get(track.entity_id) ?? [];
+    list.push(track);
+    byEntity.set(track.entity_id, list);
+  }
+
+  for (const list of byEntity.values()) {
+    const ordered = list.sort((a, b) => a.frame - b.frame);
+    const visible = ordered.filter((track) => track.frame <= currentFrame + 0.35);
+    if (!visible.length) continue;
+
+    const current = visible[visible.length - 1];
+    const color = current.entity_type === "ball" ? "#ff9a3c" : current.entity_type === "hoop" ? "#ff7a24" : "#b8db4d";
+    const radius = current.entity_type === "ball" ? 16 : current.entity_type === "hoop" ? 22 : 20;
+    const alpha = current.entity_type === "hoop" ? 0.76 : 0.92;
+
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = current.entity_type === "player" ? 5 : 4;
+    ctx.lineCap = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    visible.forEach((track, index) => {
+      const point = trackToCanvas(track, width, height);
+      index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y);
+    });
+    ctx.stroke();
+
+    const point = trackToCanvas(current, width, height);
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = current.entity_type === "hoop" ? 0.25 : 0.85;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, current.entity_type === "hoop" ? 4 : 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function trackToCanvas(track: AnimationTrack, width: number, height: number) {
+  return {
+    x: track.x * width,
+    y: track.y * height,
+  };
 }
 
 function drawVideoCover(

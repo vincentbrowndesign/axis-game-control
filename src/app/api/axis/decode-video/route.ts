@@ -56,6 +56,8 @@ export async function POST(request: Request) {
     return Response.json({
       facts: result.facts,
       stored: result.persistence.stored,
+      tracks: result.tracks,
+      tracks_stored: result.trackPersistence.stored,
     });
   } catch (error) {
     console.error("DECODE_COMPLETE", {

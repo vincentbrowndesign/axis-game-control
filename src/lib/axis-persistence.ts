@@ -49,6 +49,18 @@ export type AxisDecoderTestRecord = {
   wrong: unknown;
 };
 
+export type AxisEntityTrackRecord = {
+  artifact_id: string;
+  created_at: string;
+  entity_id: string;
+  entity_type: "ball" | "hoop" | "player";
+  frame: number;
+  track_id: string;
+  upload_id: string;
+  x: number;
+  y: number;
+};
+
 export type AxisPersistenceResult<T> =
   | {
       record: T;
@@ -185,6 +197,48 @@ export async function getAxisArtifactFactHistory({
 
   const { data, error } = await query;
   return { error: error?.message ?? null, records: (data ?? []) as AxisArtifactFactRecord[] };
+}
+
+export async function persistAxisEntityTracks(records: AxisEntityTrackRecord[]) {
+  const supabase = getAxisPersistenceClient();
+  if (!supabase) return { reason: "supabase_not_configured", stored: false };
+  if (!records.length) return { records: [] as AxisEntityTrackRecord[], stored: true };
+
+  const { data, error } = await supabase
+    .from("axis_entity_tracks")
+    .upsert(records, { onConflict: "track_id" })
+    .select();
+
+  if (error) return { reason: error.message, stored: false };
+  return { records: (data ?? []) as AxisEntityTrackRecord[], stored: true };
+}
+
+export async function getAxisEntityTracks({
+  artifactId,
+  entityType,
+  limit = 500,
+  uploadId,
+}: {
+  artifactId?: string;
+  entityType?: AxisEntityTrackRecord["entity_type"];
+  limit?: number;
+  uploadId?: string;
+}) {
+  const supabase = getAxisPersistenceClient();
+  if (!supabase) return { error: "supabase_not_configured", records: [] as AxisEntityTrackRecord[] };
+
+  let query = supabase
+    .from("axis_entity_tracks")
+    .select("track_id,artifact_id,upload_id,entity_id,entity_type,frame,x,y,created_at")
+    .order("frame", { ascending: true })
+    .limit(Math.max(1, Math.min(limit, 2000)));
+
+  if (artifactId) query = query.eq("artifact_id", artifactId);
+  if (entityType) query = query.eq("entity_type", entityType);
+  if (uploadId) query = query.eq("upload_id", uploadId);
+
+  const { data, error } = await query;
+  return { error: error?.message ?? null, records: (data ?? []) as AxisEntityTrackRecord[] };
 }
 
 export async function persistAxisDecoderTest(record: AxisDecoderTestRecord): Promise<AxisPersistenceResult<AxisDecoderTestRecord>> {

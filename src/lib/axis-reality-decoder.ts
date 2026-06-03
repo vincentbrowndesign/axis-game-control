@@ -3,7 +3,9 @@ import {
   getAxisArtifactFactHistory,
   persistAxisArtifact,
   persistAxisArtifactFacts,
+  persistAxisEntityTracks,
   type AxisArtifactFactRecord,
+  type AxisEntityTrackRecord,
 } from "./axis-persistence";
 
 export type AxisDecodedFact = {
@@ -65,6 +67,14 @@ type TrackSummary = {
   playerCounts: number[];
 };
 
+export type AxisEntityTrack = {
+  entity_id: string;
+  entity_type: "ball" | "hoop" | "player";
+  frame: number;
+  x: number;
+  y: number;
+};
+
 type GeminiResult = {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   error?: { message?: string };
@@ -123,8 +133,9 @@ export async function decodeAndPersistRealityFacts(input: DecodeVideoInput) {
     hasVideoUrl: Boolean(input.videoUrl),
     uploadId: input.uploadId,
   });
-  const decoded = await decodeRealityFacts(input, status);
+  const decoded = await decodeReality(input, status);
   const records = decoded.map((fact) => factToRecord(fact, input));
+  const trackRecords = decoded.tracks.map((track) => trackToRecord(track, input));
   await persistAxisArtifact({
     artifact_body: "Reality facts extracted from uploaded video.",
     artifact_id: input.artifactId,
@@ -135,12 +146,26 @@ export async function decodeAndPersistRealityFacts(input: DecodeVideoInput) {
     upload_id: input.uploadId,
   });
   const persistence = await persistAxisArtifactFacts(records);
+  const trackPersistence = await persistAxisEntityTracks(trackRecords);
   status.factExtraction = decoded.length
     ? { status: "PASS" }
     : { reason: "No supported facts were produced by available decoders.", status: "FAIL" };
   status.storedFactsCount = persistence.stored ? records.length : 0;
   if (!persistence.stored) {
     status.factExtraction = { reason: `Fact persistence failed: ${persistence.reason}`, status: "FAIL" };
+  }
+  if (!trackPersistence.stored) {
+    console.error("TRACKS_COMPLETE", {
+      reason: trackPersistence.reason,
+      status: "FAIL",
+      uploadId: input.uploadId,
+    });
+  } else {
+    console.log("TRACKS_COMPLETE", {
+      status: "PASS",
+      trackCount: trackRecords.length,
+      uploadId: input.uploadId,
+    });
   }
   logRealityDecoderStatus(status);
   console.log("DECODE_COMPLETE", {
@@ -152,6 +177,8 @@ export async function decodeAndPersistRealityFacts(input: DecodeVideoInput) {
   return {
     facts: decoded,
     persistence,
+    tracks: decoded.tracks,
+    trackPersistence,
   };
 }
 
@@ -212,7 +239,7 @@ export function factsToPlainLanguage(facts: AxisDecodedFact[]) {
   return parts.length ? parts.join(", ") : "";
 }
 
-async function decodeRealityFacts(input: DecodeVideoInput, status: RealityDecoderStatus): Promise<AxisDecodedFact[]> {
+async function decodeReality(input: DecodeVideoInput, status: RealityDecoderStatus): Promise<AxisDecodedFact[] & { tracks: AxisEntityTrack[] }> {
   const frames = await extractEvidenceFrames(input);
   status.frameExtraction = frames.length
     ? { frameCount: frames.length, status: "PASS" }
@@ -223,12 +250,6 @@ async function decodeRealityFacts(input: DecodeVideoInput, status: RealityDecode
   const yolo = await optionalDecoder("yolo", () => runYolo(frames));
   rawFacts.push(...yolo.facts);
   detections.push(...yolo.detections);
-
-  const tracks = await optionalDecoder("bytetrack", () => runByteTrack(detections));
-  rawFacts.push(...tracks.facts);
-
-  rawFacts.push(...(await optionalFacts("mediapipe_pose", () => runMediaPipePose(frames))).facts);
-  rawFacts.push(...(await optionalFacts("court_calibration", () => runCourtCalibration(detections, tracks.trackSummary))).facts);
 
   const roboflow = await optionalDecoder("roboflow", () => runRoboflow(frames));
   status.roboflow = roboflow.facts.length || roboflow.detections.length
@@ -243,6 +264,12 @@ async function decodeRealityFacts(input: DecodeVideoInput, status: RealityDecode
   });
   rawFacts.push(...roboflow.facts);
   detections.push(...roboflow.detections);
+
+  const tracks = await optionalDecoder("bytetrack", () => runByteTrack(detections));
+  rawFacts.push(...tracks.facts);
+
+  rawFacts.push(...(await optionalFacts("mediapipe_pose", () => runMediaPipePose(frames))).facts);
+  rawFacts.push(...(await optionalFacts("court_calibration", () => runCourtCalibration(detections, tracks.trackSummary))).facts);
 
   const gemini = await optionalFacts("gemini", () =>
     runGemini({
@@ -268,7 +295,8 @@ async function decodeRealityFacts(input: DecodeVideoInput, status: RealityDecode
     status: process.env.OPENAI_API_KEY ? "PASS" : "FAIL",
     uploadId: input.uploadId,
   });
-  return qualifyDecodedFacts(normalized, Math.max(input.sourceClipCount, frames.length || 1));
+  const qualified = qualifyDecodedFacts(normalized, Math.max(input.sourceClipCount, frames.length || 1));
+  return Object.assign(qualified, { tracks: tracks.tracks ?? [] });
 }
 
 async function optionalFacts(name: string, run: () => Promise<RawDecodedFact[]> | RawDecodedFact[]) {
@@ -281,20 +309,27 @@ async function optionalFacts(name: string, run: () => Promise<RawDecodedFact[]> 
 }
 
 async function optionalDecoder(
-  name: string,
-  run: () => Promise<{ detections: DetectionBox[]; facts: RawDecodedFact[]; reason?: string; trackSummary?: TrackSummary }> | {
+  _name: string,
+  run: () => Promise<{ detections: DetectionBox[]; facts: RawDecodedFact[]; reason?: string; tracks?: AxisEntityTrack[]; trackSummary?: TrackSummary }> | {
     detections: DetectionBox[];
     facts: RawDecodedFact[];
     reason?: string;
+    tracks?: AxisEntityTrack[];
     trackSummary?: TrackSummary;
   },
 ) {
   try {
     const result = await run();
-    return { detections: result.detections, facts: result.facts, reason: result.reason, trackSummary: result.trackSummary };
+    return {
+      detections: result.detections,
+      facts: result.facts,
+      reason: result.reason,
+      tracks: result.tracks ?? [],
+      trackSummary: result.trackSummary,
+    };
   } catch (error) {
-    console.error(`Axis reality decoder ${name} pass unavailable`, error);
-    return { detections: [], facts: [], reason: getErrorReason(error), trackSummary: undefined };
+    console.error(`Axis reality decoder ${_name} pass unavailable`, error);
+    return { detections: [], facts: [], reason: getErrorReason(error), tracks: [], trackSummary: undefined };
   }
 }
 
@@ -397,22 +432,108 @@ async function runRoboflow(frames: EvidenceFrame[]) {
 }
 
 function runByteTrack(detections: DetectionBox[]) {
+  const tracks = buildEntityTracks(detections);
   const summary: TrackSummary = {
-    ballFrames: new Set(detections.filter((box) => isBall(box.className)).map((box) => box.frameIndex)).size,
-    hoopFrames: new Set(detections.filter((box) => isHoop(box.className)).map((box) => box.frameIndex)).size,
+    ballFrames: new Set(tracks.filter((track) => track.entity_type === "ball").map((track) => track.frame)).size,
+    hoopFrames: new Set(tracks.filter((track) => track.entity_type === "hoop").map((track) => track.frame)).size,
     playerCounts: frameTimes.map((_, frameIndex) =>
-      detections.filter((box) => box.frameIndex === frameIndex && isPlayer(box.className)).length,
+      new Set(
+        tracks
+          .filter((track) => track.frame === frameIndex && track.entity_type === "player")
+          .map((track) => track.entity_id),
+      ).size,
     ),
   };
   const facts: RawDecodedFact[] = [];
 
   if (summary.ballFrames > 0) facts.push({ key: "ball_detected", label: "Ball detected", source: "bytetrack", value: 1 });
   if (summary.hoopFrames > 0) facts.push({ key: "hoop_detected", label: "Hoop detected", source: "bytetrack", value: 1 });
-  if (ballMovesTowardHoop(detections)) {
+  if (ballTrackMovesTowardHoop(tracks) || ballMovesTowardHoop(detections)) {
     facts.push({ key: "shot_attempt", label: "Shot attempt", source: "bytetrack", value: 1 });
   }
 
-  return { detections: [], facts, trackSummary: summary };
+  return { detections: [], facts, tracks, trackSummary: summary };
+}
+
+function buildEntityTracks(detections: DetectionBox[]): AxisEntityTrack[] {
+  const source = detections
+    .map((box) => ({ ...box, entityType: getTrackEntityType(box.className) }))
+    .filter(
+      (box): box is DetectionBox & { entityType: AxisEntityTrack["entity_type"] } =>
+        Boolean(box.entityType) && isNumber(box.x) && isNumber(box.y),
+    )
+    .sort((a, b) => a.frameIndex - b.frameIndex || getDetectionPriority(b) - getDetectionPriority(a));
+
+  const nextId: Record<AxisEntityTrack["entity_type"], number> = {
+    ball: 1,
+    hoop: 1,
+    player: 1,
+  };
+  const active = new Map<string, AxisEntityTrack>();
+  const tracks: AxisEntityTrack[] = [];
+
+  for (const frame of unique(source.map((box) => box.frameIndex))) {
+    const usedThisFrame = new Set<string>();
+    const frameBoxes = source.filter((box) => box.frameIndex === frame);
+
+    for (const box of frameBoxes) {
+      const type = box.entityType;
+      const x = box.x as number;
+      const y = box.y as number;
+      const entityId = type === "hoop"
+        ? "hoop_1"
+        : findNearestEntity(active, usedThisFrame, type, frame, x, y) ?? `${type}_${nextId[type]++}`;
+      const track: AxisEntityTrack = {
+        entity_id: entityId,
+        entity_type: type,
+        frame,
+        x: clamp01(x),
+        y: clamp01(y),
+      };
+      active.set(entityId, track);
+      usedThisFrame.add(entityId);
+      tracks.push(track);
+    }
+  }
+
+  return tracks;
+}
+
+function findNearestEntity(
+  active: Map<string, AxisEntityTrack>,
+  usedThisFrame: Set<string>,
+  type: AxisEntityTrack["entity_type"],
+  frame: number,
+  x: number,
+  y: number,
+) {
+  const maxDistance = type === "ball" ? 0.24 : 0.2;
+  let best: { distance: number; entityId: string } | null = null;
+
+  for (const track of active.values()) {
+    if (track.entity_type !== type || usedThisFrame.has(track.entity_id)) continue;
+    if (frame - track.frame > 3) continue;
+    const distance = Math.hypot(track.x - x, track.y - y);
+    if (distance > maxDistance) continue;
+    if (!best || distance < best.distance) best = { distance, entityId: track.entity_id };
+  }
+
+  return best?.entityId ?? null;
+}
+
+function getTrackEntityType(label: string): AxisEntityTrack["entity_type"] | null {
+  if (isBall(label)) return "ball";
+  if (isHoop(label)) return "hoop";
+  if (isPlayer(label)) return "player";
+  return null;
+}
+
+function getDetectionPriority(box: DetectionBox) {
+  return box.confidence ?? 0;
+}
+
+function unique(values: number[]) {
+  return Array.from(new Set(values));
 }
 
 async function runMediaPipePose(frames: EvidenceFrame[]) {
@@ -649,6 +770,19 @@ function ballMovesTowardHoop(detections: DetectionBox[]) {
   if (!isNumber(first) || !isNumber(last)) return false;
 
   return first - last > 0.08;
+}
+
+function ballTrackMovesTowardHoop(tracks: AxisEntityTrack[]) {
+  const hoop = tracks.find((track) => track.entity_type === "hoop");
+  if (!hoop) return false;
+  const ballByFrame = tracks
+    .filter((track) => track.entity_type === "ball")
+    .sort((a, b) => a.frame - b.frame);
+  if (ballByFrame.length < 2) return false;
+
+  const first = ballByFrame[0];
+  const last = ballByFrame[ballByFrame.length - 1];
+  return Math.hypot(first.x - hoop.x, first.y - hoop.y) - Math.hypot(last.x - hoop.x, last.y - hoop.y) > 0.08;
 }
 
 function rawFactsFromObject(value: Record<string, unknown>, source = "gemini", temporalFrameCount = 1) {
@@ -905,6 +1039,10 @@ function normalizeCoordinate(value: unknown) {
   return numberValue > 1 ? numberValue / 1000 : numberValue;
 }
 
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
 function average(values: number[]) {
   if (!values.length) return undefined;
   return values.reduce((total, value) => total + value, 0) / values.length;
@@ -942,6 +1080,20 @@ function factToRecord(fact: AxisDecodedFact, input: DecodeVideoInput): AxisArtif
     temporal_support: fact.temporal_support,
     upload_id: input.uploadId,
     verification_status: fact.verification_status,
+  };
+}
+
+function trackToRecord(track: AxisEntityTrack, input: DecodeVideoInput): AxisEntityTrackRecord {
+  return {
+    artifact_id: input.artifactId,
+    created_at: new Date().toISOString(),
+    entity_id: track.entity_id,
+    entity_type: track.entity_type,
+    frame: track.frame,
+    track_id: `${input.artifactId}-${track.entity_id}-${track.frame}`,
+    upload_id: input.uploadId,
+    x: track.x,
+    y: track.y,
   };
 }
 

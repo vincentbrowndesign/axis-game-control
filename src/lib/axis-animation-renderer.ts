@@ -69,6 +69,14 @@ export type AnimationFact = {
   fact_value: number;
 };
 
+export type AnimationTrack = {
+  entity_id: string;
+  entity_type: "ball" | "hoop" | "player";
+  frame: number;
+  x: number;
+  y: number;
+};
+
 export type AnimationScene = {
   drive: boolean;
   makeMiss: "make" | "miss" | null;

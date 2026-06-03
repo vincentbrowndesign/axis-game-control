@@ -7,6 +7,7 @@ import {
   getMuxPlaybackUrl,
   getStoredRealityFacts,
   type AxisDecodedFact,
+  type AxisEntityTrack,
 } from "../../../../lib/axis-reality-decoder";
 import {
   getAxisArtifactFactHistory,
@@ -134,6 +135,7 @@ async function generateUnderstanding(body: LoopRequestBody) {
     sourceClipCount,
   });
   let decodedFacts: AxisDecodedFact[] = [];
+  let tracks: AxisEntityTrack[] = [];
   if (videoUrl || muxPlaybackId) {
     console.log("DECODE_STARTED", {
       action: "understand",
@@ -141,13 +143,15 @@ async function generateUnderstanding(body: LoopRequestBody) {
       hasVideoUrl: Boolean(videoUrl),
       uploadId,
     });
-    decodedFacts = (await decodeAndPersistRealityFacts({
+    const decoded = await decodeAndPersistRealityFacts({
       artifactId: `decode-${uploadId}`,
       muxPlaybackId,
       sourceClipCount,
       uploadId,
       videoUrl,
-    })).facts;
+    });
+    decodedFacts = decoded.facts;
+    tracks = decoded.tracks;
   }
   if (videoUrl || muxPlaybackId) {
     console.log("DECODE_COMPLETE", {
@@ -212,6 +216,7 @@ async function generateUnderstanding(body: LoopRequestBody) {
     sourceClipCount,
     facts: extractedFacts,
     muxPlaybackId,
+    tracks,
     uploadId,
     uploadTimestamp,
     videoUrl,

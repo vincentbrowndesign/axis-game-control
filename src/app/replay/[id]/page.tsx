@@ -11,15 +11,17 @@ import {
   getMuxStreamUrl,
   type AxisProduct,
 } from "../../../lib/axis-cloud-store";
-import type { AnimationFact } from "../../../lib/axis-animation-renderer";
+import type { AnimationFact, AnimationTrack } from "../../../lib/axis-animation-renderer";
 
 type FactsResponse = { records?: AnimationFact[] };
+type TracksResponse = { records?: AnimationTrack[] };
 
 export default function TacticalReplayPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [facts, setFacts] = useState<AnimationFact[] | null>(null);
   const [product, setProduct] = useState<AxisProduct | null>(null);
+  const [tracks, setTracks] = useState<AnimationTrack[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
 
@@ -36,6 +38,7 @@ export default function TacticalReplayPage() {
     }
 
     setFacts([]);
+    setTracks([]);
     setStatus("ready");
     console.info("REPLAY_READY", { replayProductId: id, uploadId });
     console.info("UI_POLLING_STOPPED", { reason: "replay_shell_ready" });
@@ -55,6 +58,16 @@ export default function TacticalReplayPage() {
       })
       .finally(() => {
         window.clearTimeout(timeout);
+      });
+    fetch(`/api/axis/tracks?upload_id=${encodeURIComponent(uploadId)}&limit=1000`, {
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data: TracksResponse) => {
+        setTracks(data.records ?? []);
+      })
+      .catch(() => {
+        setTracks([]);
       });
     return () => {
       window.clearTimeout(timeout);
@@ -80,6 +93,7 @@ export default function TacticalReplayPage() {
       <AxisAnimationPlayer
         facts={facts ?? []}
         onReplaySaved={product ? handleReplaySaved : undefined}
+        tracks={tracks}
         videoUrl={videoUrl}
       />
     </ReplayShell>
