@@ -30,7 +30,6 @@ import {
   saveProductAsAsset,
   toggleFavoriteAsset,
   type AxisAsset,
-  type AxisExportArtifact,
   type AxisDatasetInsight,
   type AxisLoopArtifact,
   type AxisModel,
@@ -246,9 +245,11 @@ type RailTheme = AxisPotentialTheme & {
 };
 
 type FirstLoopUnderstanding = {
+  muxPlaybackId?: string;
   sourceClipCount: number;
   uploadId: string;
   uploadTimestamp: string;
+  videoUrl?: string;
   whatWeFound: string;
 };
 
@@ -288,6 +289,7 @@ export function FirstLoopHome() {
       const film = await uploadToMux(file);
       setUploadState("saving");
       const assetId = createUploadedSessionAsset(file, film);
+      const videoUrl = film.muxPlaybackId ? `https://stream.mux.com/${film.muxPlaybackId}.m3u8` : undefined;
       const response = await fetch("/api/axis/first-loop", {
         body: JSON.stringify({
           action: "understand",
@@ -298,6 +300,7 @@ export function FirstLoopHome() {
           sourceClipCount: 1,
           uploadId: assetId,
           uploadTimestamp: new Date().toISOString(),
+          videoUrl,
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -333,9 +336,11 @@ export function FirstLoopHome() {
       const response = await fetch("/api/axis/first-loop", {
         body: JSON.stringify({
           action: "artifact",
+          muxPlaybackId: understanding.muxPlaybackId,
           outcome: label.toLowerCase(),
           sourceClipCount: understanding.sourceClipCount,
           uploadId: understanding.uploadId,
+          videoUrl: understanding.videoUrl,
           whatWeFound: understanding.whatWeFound,
         }),
         headers: { "Content-Type": "application/json" },
@@ -1092,8 +1097,17 @@ export function ProductDetail({ productId }: { productId: string }) {
     );
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!product) return;
+    const response = await fetch("/api/axis/first-loop", {
+      body: JSON.stringify({
+        action: "save",
+        artifact: productToLoopArtifact(product),
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    if (!response.ok) return;
     const record = saveProductAsAsset(product.id);
     if (!record) return;
     setSaveState("saved");
@@ -1102,14 +1116,11 @@ export function ProductDetail({ productId }: { productId: string }) {
 
   async function handleCameraRollExport() {
     if (!product) return;
+    const loopExport = await exportProductThroughLoop(product, "download");
+    if (!loopExport) return;
     const result = exportProduct(product.id, cameraRollDestination);
     if (!result) return;
-    const loopExport = await exportProductThroughLoop(product, "download");
-    if (loopExport) {
-      downloadLoopExport(loopExport);
-    } else {
-      downloadArtifact(result.artifact);
-    }
+    downloadLoopExport(loopExport);
     setShareState("shared");
     refresh();
     router.push("/");
@@ -1117,14 +1128,11 @@ export function ProductDetail({ productId }: { productId: string }) {
 
   async function handleNativeShare() {
     if (!product || !supportsNativeShare) return;
+    const loopExport = await exportProductThroughLoop(product, "native-share");
+    if (!loopExport) return;
     const result = exportProduct(product.id, cameraRollDestination);
     if (!result) return;
-    const loopExport = await exportProductThroughLoop(product, "native-share");
-    if (loopExport) {
-      await shareLoopExport(loopExport);
-    } else {
-      await shareArtifact(result.artifact);
-    }
+    await shareLoopExport(loopExport);
     setShareState("shared");
     refresh();
     router.push("/");
@@ -1161,7 +1169,7 @@ export function ProductDetail({ productId }: { productId: string }) {
 
       <section className="axis-cloud-panel">
         <div className="axis-product-actions">
-          <button onClick={handleSave} type="button">
+          <button onClick={() => void handleSave()} type="button">
             {saveState === "saved" ? "Saved" : "Save"}
           </button>
           <Link href="/">Back</Link>
@@ -1185,33 +1193,6 @@ export function ProductDetail({ productId }: { productId: string }) {
       </section>
     </Shell>
   );
-}
-
-function downloadArtifact(artifact: AxisExportArtifact) {
-  const blob = new Blob([artifact.content], { type: artifact.content_type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = artifact.file_name;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function shareArtifact(artifact: AxisExportArtifact) {
-  const file = new File([artifact.content], artifact.file_name, { type: artifact.content_type });
-  const nav = navigator as Navigator & {
-    canShare?: (data: ShareData) => boolean;
-    share: (data: ShareData) => Promise<void>;
-  };
-  const shareData: ShareData =
-    nav.canShare?.({ files: [file] }) ? { files: [file], title: artifact.file_name } : {
-      text: artifact.content,
-      title: artifact.file_name,
-    };
-
-  await nav.share(shareData);
 }
 
 function productOutcome(product: AxisProduct): AxisLoopArtifact["outcome"] {
