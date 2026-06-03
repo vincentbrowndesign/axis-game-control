@@ -1,5 +1,5 @@
-import { ChatHistory } from "../../components/AxisCloud";
+import { redirect } from "next/navigation";
 
 export default function ChatPage() {
-  return <ChatHistory />;
+  redirect("/");
 }

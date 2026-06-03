@@ -1,5 +1,5 @@
-import { AccountSettings } from "../../components/AxisCloud";
+import { redirect } from "next/navigation";
 
 export default function AccountPage() {
-  return <AccountSettings />;
+  redirect("/");
 }

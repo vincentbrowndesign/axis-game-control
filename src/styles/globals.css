@@ -11,6 +11,201 @@
   --axis-live: #a8d933;
 }
 
+.axis-replay-loop {
+  align-content: start;
+  background:
+    linear-gradient(180deg, rgba(168, 217, 51, 0.055), transparent 18rem),
+    #030303;
+  color: var(--axis-ink);
+  display: grid;
+  gap: 0.85rem;
+  min-height: 100dvh;
+  padding: max(0.85rem, env(safe-area-inset-top)) 0.85rem max(0.85rem, env(safe-area-inset-bottom));
+}
+
+.axis-replay-loop-header {
+  align-items: end;
+  border-bottom: 1px solid rgba(244, 244, 240, 0.12);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: 4rem;
+  padding-bottom: 0.62rem;
+}
+
+.axis-replay-loop-header span,
+.axis-replay-loop-header strong,
+.axis-replay-upload-empty,
+.axis-cloud-primary,
+.axis-cloud-secondary,
+.axis-cloud-nav a {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-replay-loop-header span {
+  color: var(--axis-live);
+  font-size: clamp(2.4rem, 12vw, 5.8rem);
+  line-height: 0.82;
+}
+
+.axis-replay-loop-header strong {
+  color: rgba(244, 244, 240, 0.62);
+  font-size: 0.68rem;
+  text-align: right;
+}
+
+.axis-replay-loop-stage {
+  align-items: center;
+  display: grid;
+  min-height: 0;
+}
+
+.axis-replay-upload-empty {
+  appearance: none;
+  background: rgba(168, 217, 51, 0.1);
+  border: 1px solid rgba(168, 217, 51, 0.48);
+  color: var(--axis-live);
+  cursor: pointer;
+  display: grid;
+  font-size: clamp(2rem, 11vw, 5rem);
+  min-height: min(68dvh, 44rem);
+  place-items: center;
+  touch-action: manipulation;
+  width: 100%;
+}
+
+.axis-overlay-film {
+  display: grid;
+  gap: 0.7rem;
+  width: 100%;
+}
+
+.axis-overlay-stage {
+  aspect-ratio: 9 / 16;
+  background: #050505;
+  border: 1px solid rgba(244, 244, 240, 0.14);
+  max-height: calc(100dvh - 11rem);
+  min-height: 22rem;
+  overflow: hidden;
+  position: relative;
+  width: min(100%, 34rem);
+  justify-self: center;
+}
+
+.axis-overlay-video,
+.axis-overlay-canvas,
+.axis-overlay-thumbnail {
+  display: block;
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-overlay-video,
+.axis-overlay-thumbnail {
+  background: #050505;
+  object-fit: cover;
+}
+
+.axis-overlay-stage[data-cropped="false"] .axis-overlay-video,
+.axis-overlay-stage[data-cropped="false"] .axis-overlay-thumbnail {
+  object-fit: contain;
+}
+
+.axis-overlay-canvas {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.axis-overlay-no-video {
+  background:
+    linear-gradient(180deg, rgba(168, 217, 51, 0.08), transparent 40%),
+    #050505;
+}
+
+.axis-overlay-actions,
+.axis-replay-loop-actions {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-replay-loop-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.axis-cloud-primary,
+.axis-cloud-secondary {
+  appearance: none;
+  border-radius: 0;
+  cursor: pointer;
+  min-height: 3.25rem;
+  padding: 0 0.9rem;
+  touch-action: manipulation;
+}
+
+.axis-cloud-primary {
+  background: rgba(168, 217, 51, 0.14);
+  border: 1px solid rgba(168, 217, 51, 0.56);
+  color: var(--axis-live);
+}
+
+.axis-cloud-secondary {
+  background: rgba(244, 244, 240, 0.045);
+  border: 1px solid rgba(244, 244, 240, 0.18);
+  color: rgba(244, 244, 240, 0.78);
+}
+
+.axis-cloud-primary:disabled,
+.axis-cloud-secondary:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.axis-cloud-nav {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.25rem;
+}
+
+.axis-cloud-nav a {
+  border: 1px solid rgba(244, 244, 240, 0.16);
+  color: rgba(244, 244, 240, 0.72);
+  font-size: 0.66rem;
+  min-height: 2.75rem;
+  padding: 0.9rem 1rem;
+  text-decoration: none;
+}
+
+@media (min-width: 780px) {
+  .axis-replay-loop {
+    padding-inline: max(2rem, calc((100vw - 76rem) / 2));
+  }
+
+  .axis-replay-loop-header {
+    min-height: 5rem;
+  }
+
+  .axis-overlay-stage {
+    width: min(42vw, 36rem);
+  }
+
+  .axis-overlay-actions {
+    justify-self: center;
+    width: min(42vw, 36rem);
+  }
+
+  .axis-replay-loop-actions {
+    justify-self: center;
+    width: min(42vw, 36rem);
+  }
+}
+
 * {
   box-sizing: border-box;
 }

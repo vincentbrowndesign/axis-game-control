@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AxisAnimationPlayer } from "../../../components/AxisAnimationPlayer";
 import {
@@ -18,7 +18,6 @@ type TracksResponse = { records?: AnimationTrack[] };
 
 export default function TacticalReplayPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const [facts, setFacts] = useState<AnimationFact[] | null>(null);
   const [product, setProduct] = useState<AxisProduct | null>(null);
   const [tracks, setTracks] = useState<AnimationTrack[]>([]);
@@ -77,7 +76,6 @@ export default function TacticalReplayPage() {
 
   function handleReplaySaved() {
     if (product) exportProduct(product.id, "camera-roll");
-    router.push("/studio");
   }
 
   if (status === "loading") {
@@ -124,9 +122,7 @@ function ReplayShell({
       {children}
 
       <nav className="axis-cloud-nav" aria-label="Axis navigation">
-        <Link href="/">Sources</Link>
-        <Link href="/chat">Chat</Link>
-        <Link href="/studio">Studio</Link>
+        <Link href="/">Upload Another</Link>
       </nav>
     </main>
   );

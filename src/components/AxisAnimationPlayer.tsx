@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { factsToScene, type AnimationFact, type AnimationTrack } from "../lib/axis-animation-renderer";
 
-type ExportState = "idle" | "recording" | "encoding" | "saved" | "preview-saved";
+type ExportState = "idle" | "saving" | "saved" | "failed";
 
 type OverlayUnderstanding = {
   ballDetected: boolean;
@@ -91,9 +91,9 @@ export function AxisAnimationPlayer({
   const [overlayCanvasReady, setOverlayCanvasReady] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
-  const [supportsRecorder, setSupportsRecorder] = useState(true);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
   const understanding = useMemo(() => factsToOverlayUnderstanding(facts), [facts]);
+  const canExport = replayStatus === "ready";
 
   const drawOverlay = useCallback(
     (ctx: CanvasRenderingContext2D, progress: number) => {
@@ -117,7 +117,6 @@ export function AxisAnimationPlayer({
   }, [drawOverlay]);
 
   useEffect(() => {
-    setSupportsRecorder(typeof MediaRecorder !== "undefined" && Boolean(getBestMimeType()));
     setSupportsNativeShare(
       typeof navigator !== "undefined" && typeof navigator.share === "function",
     );
@@ -145,16 +144,33 @@ export function AxisAnimationPlayer({
     setOverlayCanvasReady(Boolean(node));
   }, []);
 
-  async function recordOverlayFilm() {
+  async function renderOverlayPreview(
+    video: HTMLVideoElement,
+    overlay: HTMLCanvasElement,
+  ) {
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = OVERLAY_W;
+    exportCanvas.height = OVERLAY_H;
+    const ctx = exportCanvas.getContext("2d");
+    if (!ctx) return null;
+
+    drawVideoCover(ctx, video, exportCanvas.width, exportCanvas.height);
+    ctx.drawImage(overlay, 0, 0, exportCanvas.width, exportCanvas.height);
+
+    return await new Promise<{ blob: Blob; ext: string; isMp4: boolean } | null>((resolve) => {
+      exportCanvas.toBlob((blob) => {
+        resolve(blob ? { blob, ext: "png", isMp4: false } : null);
+      }, "image/png");
+    });
+  }
+
+  async function recordOverlayAsset() {
     const video = videoRef.current;
     const overlay = overlayRef.current;
-    if (!video || !overlay || exportState !== "idle") return null;
+    if (!video || !overlay || exportState === "saving") return null;
 
     const mimeType = getBestMimeType();
-    if (!mimeType) {
-      setSupportsRecorder(false);
-      return null;
-    }
+    if (!mimeType || typeof MediaRecorder === "undefined") return renderOverlayPreview(video, overlay);
 
     const exportCanvas = document.createElement("canvas");
     exportCanvas.width = OVERLAY_W;
@@ -180,7 +196,7 @@ export function AxisAnimationPlayer({
           if (event.data.size > 0) chunks.push(event.data);
         };
         recorder.onerror = () => {
-          setExportState("idle");
+          setExportState("failed");
           resolve(null);
         };
         recorder.onstop = () => {
@@ -202,25 +218,33 @@ export function AxisAnimationPlayer({
           if (progress < 1 && !video.ended) {
             requestAnimationFrame(drawFrame);
           } else {
-            setExportState("encoding");
             setTimeout(() => recorder.stop(), 180);
           }
         }
 
         recorder.start();
-        setExportState("recording");
         drawFrame();
       });
     } catch (error) {
       console.error("Axis overlay film export failed", error);
-      setExportState("idle");
-      return null;
+      return renderOverlayPreview(video, overlay);
     }
   }
 
+  function getExportButtonText() {
+    if (exportState === "saving") return "Saving...";
+    if (exportState === "saved") return "Saved";
+    if (exportState === "failed") return "Export failed";
+    return "Save Replay";
+  }
+
   async function handleSaveReplay({ share }: { share: boolean }) {
-    const recording = await recordOverlayFilm();
-    if (!recording) return;
+    setExportState("saving");
+    const recording = await recordOverlayAsset();
+    if (!recording) {
+      setExportState("failed");
+      return null;
+    }
 
     const fileName = `axis-replay-${Date.now()}.${recording.ext}`;
     const file = new File([recording.blob], fileName, { type: recording.blob.type });
@@ -237,13 +261,13 @@ export function AxisAnimationPlayer({
       }
 
       onReplaySaved?.();
-      setExportState(recording.isMp4 ? "saved" : "preview-saved");
+      setExportState("saved");
     } catch {
-      setExportState("idle");
+      setExportState("failed");
     }
   }
 
-  const busy = exportState === "recording" || exportState === "encoding";
+  const busy = exportState === "saving";
 
   return (
     <div className="axis-overlay-film">
@@ -283,83 +307,26 @@ export function AxisAnimationPlayer({
         />
       </div>
 
-      <div className="axis-overlay-callouts" aria-label="Overlay events">
-        {understanding.callouts.map((callout) => (
-          <span key={callout}>{callout}</span>
-        ))}
-      </div>
-
-      <div className="axis-overlay-actions">
-        <button
-          className="axis-cloud-secondary"
-          onClick={() => setCropped((value) => !value)}
-          type="button"
-        >
-          {cropped ? "Fit" : "9:16 Crop"}
-        </button>
-
-        {supportsRecorder && onReplaySaved ? (
+      {canExport ? (
+        <div className="axis-overlay-actions">
           <button
             className="axis-cloud-primary"
-            disabled={exportState !== "idle"}
+            disabled={busy}
             onClick={() => void handleSaveReplay({ share: false })}
             type="button"
           >
-            {exportState === "recording"
-              ? "Recording"
-              : exportState === "encoding"
-                ? "Encoding"
-                : exportState === "saved"
-                  ? "Saved"
-                : exportState === "preview-saved"
-                  ? "Web Preview Saved"
-                    : "Save Replay"}
+            {getExportButtonText()}
           </button>
-        ) : null}
-        {supportsRecorder && onReplaySaved ? (
           <button
             className="axis-cloud-primary"
-            disabled={exportState !== "idle"}
+            disabled={busy}
             onClick={() => void handleSaveReplay({ share: true })}
             type="button"
           >
-            Share Replay
+            {busy ? "Saving..." : "Share Replay"}
           </button>
-        ) : null}
-      </div>
-
-      {exportState === "preview-saved" ? (
-        <p className="axis-export-note">
-          Saved as web preview. MP4 available on supported devices.
-        </p>
+        </div>
       ) : null}
-
-      <dl className="axis-overlay-debug" aria-label="Replay debug">
-        <div>
-          <dt>video_url</dt>
-          <dd>{videoUrl ? "yes" : "no"}</dd>
-        </div>
-        <div>
-          <dt>video_loaded</dt>
-          <dd>{videoLoaded && !videoFailed ? "yes" : "no"}</dd>
-        </div>
-        <div>
-          <dt>overlay_canvas</dt>
-          <dd>{overlayCanvasReady ? "yes" : "no"}</dd>
-        </div>
-        <div>
-          <dt>facts_count</dt>
-          <dd>{facts.length}</dd>
-        </div>
-        <div>
-          <dt>tracks_count</dt>
-          <dd>{tracks.length}</dd>
-        </div>
-        <div>
-          <dt>replay_status</dt>
-          <dd>{replayStatus}</dd>
-        </div>
-      </dl>
     </div>
   );
 }
