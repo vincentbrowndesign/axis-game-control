@@ -476,11 +476,15 @@ function drawTrackedEntities(
   }
 
   for (const list of byEntity.values()) {
-    const ordered = list.sort((a, b) => a.frame - b.frame);
-    const visible = ordered.filter((track) => track.frame <= currentFrame + 0.35);
-    if (!visible.length) continue;
+    const ordered = [...list].sort((a, b) => a.frame - b.frame);
+    const current = getTrackPositionAt(ordered, currentFrame);
+    if (!current) continue;
 
-    const current = visible[visible.length - 1];
+    const visible = ordered.filter((track) => track.frame <= currentFrame);
+    const path = [...visible, current].filter((track, index, values) => {
+      const previous = values[index - 1];
+      return !previous || previous.frame !== track.frame || previous.x !== track.x || previous.y !== track.y;
+    });
     const color = current.entity_type === "ball" ? "#ff9a3c" : current.entity_type === "hoop" ? "#ff7a24" : "#b8db4d";
     const radius = current.entity_type === "ball" ? 16 : current.entity_type === "hoop" ? 22 : 20;
     const alpha = current.entity_type === "hoop" ? 0.76 : 0.92;
@@ -493,7 +497,7 @@ function drawTrackedEntities(
     ctx.shadowColor = color;
     ctx.shadowBlur = 14;
     ctx.beginPath();
-    visible.forEach((track, index) => {
+    path.forEach((track, index) => {
       const point = trackToCanvas(track, width, height);
       index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y);
     });
@@ -511,6 +515,30 @@ function drawTrackedEntities(
     ctx.fill();
     ctx.restore();
   }
+}
+
+function getTrackPositionAt(ordered: AnimationTrack[], frame: number): AnimationTrack | null {
+  if (!ordered.length) return null;
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+  if (frame <= first.frame) return first;
+  if (frame >= last.frame) return last;
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index];
+    const next = ordered[index + 1];
+    if (frame < current.frame || frame > next.frame) continue;
+    const amount = (frame - current.frame) / Math.max(1, next.frame - current.frame);
+    return {
+      entity_id: current.entity_id,
+      entity_type: current.entity_type,
+      frame,
+      x: lerp(current.x, next.x, amount),
+      y: lerp(current.y, next.y, amount),
+    };
+  }
+
+  return last;
 }
 
 function trackToCanvas(track: AnimationTrack, width: number, height: number) {

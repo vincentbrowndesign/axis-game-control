@@ -61,6 +61,11 @@ type DetectionBox = {
   y?: number;
 };
 
+type DetectionDimensions = {
+  height?: number;
+  width?: number;
+};
+
 type TrackSummary = {
   ballFrames: number;
   hoopFrames: number;
@@ -412,7 +417,9 @@ async function runRoboflow(frames: EvidenceFrame[]) {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         method: "POST",
       });
-      const result = (await response.json().catch(() => null)) as { predictions?: unknown[] } | null;
+      const result = (await response.json().catch(() => null)) as
+        | { image?: Record<string, unknown>; predictions?: unknown[] }
+        | null;
       if (!response.ok || !Array.isArray(result?.predictions)) {
         console.error("Axis reality decoder Roboflow frame failed", {
           frameIndex: frame.index,
@@ -420,7 +427,7 @@ async function runRoboflow(frames: EvidenceFrame[]) {
         });
         return [];
       }
-      return normalizeDetections(result.predictions, frame.index);
+      return normalizeDetections(result.predictions, frame.index, getDetectionDimensions(result.image));
     }),
   );
 
@@ -469,12 +476,12 @@ function buildEntityTracks(detections: DetectionBox[]): AxisEntityTrack[] {
     hoop: 1,
     player: 1,
   };
-  const active = new Map<string, AxisEntityTrack>();
+  const active = new Map<string, TrackState>();
   const tracks: AxisEntityTrack[] = [];
 
   for (const frame of unique(source.map((box) => box.frameIndex))) {
     const usedThisFrame = new Set<string>();
-    const frameBoxes = source.filter((box) => box.frameIndex === frame);
+    const frameBoxes = selectFrameDetections(source.filter((box) => box.frameIndex === frame));
 
     for (const box of frameBoxes) {
       const type = box.entityType;
@@ -490,7 +497,7 @@ function buildEntityTracks(detections: DetectionBox[]): AxisEntityTrack[] {
         x: clamp01(x),
         y: clamp01(y),
       };
-      active.set(entityId, track);
+      active.set(entityId, updateTrackState(active.get(entityId), track));
       usedThisFrame.add(entityId);
       tracks.push(track);
     }
@@ -499,21 +506,63 @@ function buildEntityTracks(detections: DetectionBox[]): AxisEntityTrack[] {
   return tracks;
 }
 
+type TrackState = AxisEntityTrack & {
+  prevFrame?: number;
+  prevX?: number;
+  prevY?: number;
+};
+
+function selectFrameDetections(
+  boxes: Array<DetectionBox & { entityType: AxisEntityTrack["entity_type"] }>,
+) {
+  const bySingleton = new Map<"ball" | "hoop", DetectionBox & { entityType: AxisEntityTrack["entity_type"] }>();
+  const players: Array<DetectionBox & { entityType: AxisEntityTrack["entity_type"] }> = [];
+
+  for (const box of boxes) {
+    if (box.entityType === "player") {
+      players.push(box);
+      continue;
+    }
+
+    const current = bySingleton.get(box.entityType);
+    if (!current || getDetectionPriority(box) > getDetectionPriority(current)) {
+      bySingleton.set(box.entityType, box);
+    }
+  }
+
+  return [...bySingleton.values(), ...players].sort((a, b) => getDetectionPriority(b) - getDetectionPriority(a));
+}
+
+function updateTrackState(current: TrackState | undefined, next: AxisEntityTrack): TrackState {
+  return {
+    ...next,
+    prevFrame: current?.frame,
+    prevX: current?.x,
+    prevY: current?.y,
+  };
+}
+
 function findNearestEntity(
-  active: Map<string, AxisEntityTrack>,
+  active: Map<string, TrackState>,
   usedThisFrame: Set<string>,
   type: AxisEntityTrack["entity_type"],
   frame: number,
   x: number,
   y: number,
 ) {
-  const maxDistance = type === "ball" ? 0.24 : 0.2;
+  const maxDistance = type === "ball" ? 0.35 : 0.28;
   let best: { distance: number; entityId: string } | null = null;
 
   for (const track of active.values()) {
     if (track.entity_type !== type || usedThisFrame.has(track.entity_id)) continue;
-    if (frame - track.frame > 3) continue;
-    const distance = Math.hypot(track.x - x, track.y - y);
+    const frameGap = frame - track.frame;
+    if (frameGap > 4) continue;
+    const velocityFrameGap = track.prevFrame === undefined ? 0 : Math.max(1, track.frame - track.prevFrame);
+    const vx = track.prevX === undefined ? 0 : (track.x - track.prevX) / velocityFrameGap;
+    const vy = track.prevY === undefined ? 0 : (track.y - track.prevY) / velocityFrameGap;
+    const predictedX = clamp01(track.x + vx * frameGap);
+    const predictedY = clamp01(track.y + vy * frameGap);
+    const distance = Math.hypot(predictedX - x, predictedY - y);
     if (distance > maxDistance) continue;
     if (!best || distance < best.distance) best = { distance, entityId: track.entity_id };
   }
@@ -713,7 +762,7 @@ export async function buildHistoricalMeaningWithClaude(input: {
   }
 }
 
-function normalizeDetections(values: unknown[], fallbackFrameIndex = 0): DetectionBox[] {
+function normalizeDetections(values: unknown[], fallbackFrameIndex = 0, dimensions: DetectionDimensions = {}): DetectionBox[] {
   return values
     .map((value): DetectionBox | null => {
       if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -724,10 +773,10 @@ function normalizeDetections(values: unknown[], fallbackFrameIndex = 0): Detecti
         className,
         confidence: getOptionalNumber(record.confidence),
         frameIndex: getOptionalNumber(record.frameIndex) ?? getOptionalNumber(record.frame_index) ?? fallbackFrameIndex,
-        height: normalizeCoordinate(record.height),
-        width: normalizeCoordinate(record.width),
-        x: normalizeCoordinate(record.x),
-        y: normalizeCoordinate(record.y),
+        height: normalizeCoordinate(record.height, dimensions.height),
+        width: normalizeCoordinate(record.width, dimensions.width),
+        x: normalizeCoordinate(record.x, dimensions.width),
+        y: normalizeCoordinate(record.y, dimensions.height),
       };
     })
     .filter(isDetectionBox);
@@ -1033,9 +1082,20 @@ function getOptionalNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function normalizeCoordinate(value: unknown) {
+function getDetectionDimensions(value: unknown): DetectionDimensions {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  return {
+    height: getOptionalNumber(record.height),
+    width: getOptionalNumber(record.width),
+  };
+}
+
+function normalizeCoordinate(value: unknown, denominator?: number) {
   const numberValue = getOptionalNumber(value);
   if (numberValue === undefined) return undefined;
+  if (numberValue <= 1) return numberValue;
+  if (denominator && denominator > 1) return numberValue / denominator;
   return numberValue > 1 ? numberValue / 1000 : numberValue;
 }
 
