@@ -70,9 +70,11 @@ export type AnimationFact = {
 };
 
 export type AnimationTrack = {
+  confidence?: number;
   entity_id: string;
   entity_type: "ball" | "hoop" | "player";
   frame: number;
+  time?: number;
   x: number;
   y: number;
 };

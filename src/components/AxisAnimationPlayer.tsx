@@ -16,10 +16,38 @@ type OverlayUnderstanding = {
   shotAttempt: boolean;
 };
 
+type BallDebugState = {
+  ballConfidence: string;
+  ballTrackCount: number;
+  currentBallX: string;
+  currentBallY: string;
+  overlayHeight: number;
+  overlayWidth: number;
+  videoHeight: number;
+  videoWidth: number;
+};
+
+type BallTrackPoint = {
+  confidence?: number;
+  frame: number;
+  time: number;
+  x: number;
+  y: number;
+};
+
+type VideoMapping = {
+  drawHeight: number;
+  drawWidth: number;
+  offsetX: number;
+  offsetY: number;
+};
+
 const OVERLAY_W = 1080;
 const OVERLAY_H = 1920;
 const EXPORT_FPS = 30;
 const EXPORT_MS = 9000;
+const BALL_CONFIDENCE_THRESHOLD = 0.35;
+const BALL_TRAIL_SECONDS = 0.75;
 
 function getBestMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -92,14 +120,26 @@ export function AxisAnimationPlayer({
   const [videoFailed, setVideoFailed] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
+  const [ballDebug, setBallDebug] = useState<BallDebugState>({
+    ballConfidence: "n/a",
+    ballTrackCount: 0,
+    currentBallX: "n/a",
+    currentBallY: "n/a",
+    overlayHeight: OVERLAY_H,
+    overlayWidth: OVERLAY_W,
+    videoHeight: 0,
+    videoWidth: 0,
+  });
   const understanding = useMemo(() => factsToOverlayUnderstanding(facts), [facts]);
   const canExport = replayStatus === "ready";
+  const ballTrack = useMemo(() => tracksToBallTrack(tracks), [tracks]);
 
   const drawOverlay = useCallback(
-    (ctx: CanvasRenderingContext2D, progress: number) => {
-      drawUnderstandingOverlay(ctx, understanding, tracks, progress, OVERLAY_W, OVERLAY_H);
+    (ctx: CanvasRenderingContext2D, timing: OverlayTiming, video: HTMLVideoElement | null) => {
+      const debug = drawUnderstandingOverlay(ctx, understanding, tracks, ballTrack, timing, OVERLAY_W, OVERLAY_H, video, cropped);
+      setBallDebug(debug);
     },
-    [tracks, understanding],
+    [ballTrack, cropped, tracks, understanding],
   );
 
   const paintOverlay = useCallback(() => {
@@ -109,9 +149,9 @@ export function AxisAnimationPlayer({
     if (!canvas || !ctx) return;
 
     const duration = video && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
-    const currentTime = video && !video.paused ? video.currentTime : performance.now() / 1000;
-    const progress = Math.max(0, Math.min(1, (currentTime % duration) / duration));
-    drawOverlay(ctx, progress);
+    const currentTime = video ? video.currentTime : performance.now() / 1000;
+    const progress = Math.max(0, Math.min(1, duration > 0 ? currentTime / duration : 0));
+    drawOverlay(ctx, { currentTime, duration, progress }, video ?? null);
 
     rafRef.current = requestAnimationFrame(paintOverlay);
   }, [drawOverlay]);
@@ -212,8 +252,20 @@ export function AxisAnimationPlayer({
           if (!ctx || !video) return;
           const elapsed = performance.now() - startedAt;
           const progress = Math.max(0, Math.min(1, elapsed / EXPORT_MS));
-          drawVideoCover(ctx, video, exportCanvas.width, exportCanvas.height);
-          drawUnderstandingOverlay(ctx, understanding, tracks, progress, exportCanvas.width, exportCanvas.height);
+          const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : EXPORT_MS / 1000;
+          const currentTime = progress * duration;
+          drawVideoCover(ctx, video, exportCanvas.width, exportCanvas.height, cropped ? "cover" : "contain");
+          drawUnderstandingOverlay(
+            ctx,
+            understanding,
+            tracks,
+            ballTrack,
+            { currentTime, duration, progress },
+            exportCanvas.width,
+            exportCanvas.height,
+            video,
+            cropped,
+          );
 
           if (progress < 1 && !video.ended) {
             requestAnimationFrame(drawFrame);
@@ -327,50 +379,94 @@ export function AxisAnimationPlayer({
           </button>
         </div>
       ) : null}
+
+      <dl className="axis-ball-debug" aria-label="Ball tracking debug">
+        <div>
+          <dt>ball_track_count</dt>
+          <dd>{ballDebug.ballTrackCount}</dd>
+        </div>
+        <div>
+          <dt>current_ball_x</dt>
+          <dd>{ballDebug.currentBallX}</dd>
+        </div>
+        <div>
+          <dt>current_ball_y</dt>
+          <dd>{ballDebug.currentBallY}</dd>
+        </div>
+        <div>
+          <dt>ball_confidence</dt>
+          <dd>{ballDebug.ballConfidence}</dd>
+        </div>
+        <div>
+          <dt>video_width</dt>
+          <dd>{ballDebug.videoWidth}</dd>
+        </div>
+        <div>
+          <dt>video_height</dt>
+          <dd>{ballDebug.videoHeight}</dd>
+        </div>
+        <div>
+          <dt>overlay_width</dt>
+          <dd>{ballDebug.overlayWidth}</dd>
+        </div>
+        <div>
+          <dt>overlay_height</dt>
+          <dd>{ballDebug.overlayHeight}</dd>
+        </div>
+      </dl>
     </div>
   );
 }
+
+type OverlayTiming = {
+  currentTime: number;
+  duration: number;
+  progress: number;
+};
 
 function drawUnderstandingOverlay(
   ctx: CanvasRenderingContext2D,
   u: OverlayUnderstanding,
   tracks: AnimationTrack[],
-  progress: number,
+  ballTrack: BallTrackPoint[],
+  timing: OverlayTiming,
   width: number,
   height: number,
+  video: HTMLVideoElement | null,
+  cover: boolean,
 ) {
   ctx.clearRect(0, 0, width, height);
 
-  const t = Math.max(0, Math.min(1, progress));
+  const t = Math.max(0, Math.min(1, timing.progress));
   const cx = width / 2;
-  const cy = height / 2;
-  const rim = { x: cx, y: height * 0.22 };
-  const startX = u.movementPath === "left" ? width * 0.28 : u.movementPath === "right" ? width * 0.72 : cx;
-  const start = { x: startX, y: height * 0.66 };
   const paint = { x: cx, y: height * 0.42, w: width * 0.42, h: height * 0.19 };
+  const mapping = getVideoMapping(video, width, height, cover ? "cover" : "contain");
+  const ball = getNearestBallPoint(ballTrack, timing.currentTime);
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   drawMinimalReplayOverlay(ctx, t, width, height);
-  drawTrackedEntities(ctx, tracks, t, width, height);
+  drawNonBallTracks(ctx, tracks, t, width, height, mapping);
+  drawBallOverlay(ctx, ballTrack, ball, timing.currentTime, width, height, mapping);
 
-  if (!tracks.length && u.hoopDetected) drawLock(ctx, rim.x, rim.y, "#ff7a24", pulse(t, 0.05, 0.28));
-  if (!tracks.length && u.ballDetected) {
-    const ballT = u.drive ? phase(t, 0.18, 0.62) : t;
-    const bx = lerp(start.x, rim.x, ballT);
-    const by = lerp(start.y, rim.y, ballT);
-    drawLock(ctx, bx, by, "#ff9a3c", 0.75);
-  }
-
-  if (!tracks.length && u.movementPath) drawDirectionalCue(ctx, start, { x: cx, y: height * 0.46 }, phase(t, 0.08, 0.44));
-  if (!tracks.length && u.drive) drawAttackTrail(ctx, start, { x: cx, y: height * 0.43 }, phase(t, 0.14, 0.56));
   if (u.paintTouch) drawPaintPulse(ctx, paint, pulse(t, 0.38, 0.68));
-  if (u.shotAttempt) drawShotArc(ctx, { x: cx, y: height * 0.43 }, rim, phase(t, 0.52, 0.78));
-  if (u.makeMiss === "make") drawResultBurst(ctx, rim, "#19ff78", pulse(t, 0.72, 1));
-  if (u.makeMiss === "miss") drawResultBurst(ctx, rim, "#ff4055", pulse(t, 0.72, 1));
+  if (ball && u.shotAttempt) drawBallShotPath(ctx, ballTrack, timing.currentTime, width, height, mapping);
+  if (ball && u.makeMiss === "make") drawResultBurst(ctx, mapVideoPointToCanvas(ball, mapping), "#19ff78", pulse(t, 0.72, 1));
+  if (ball && u.makeMiss === "miss") drawResultBurst(ctx, mapVideoPointToCanvas(ball, mapping), "#ff4055", pulse(t, 0.72, 1));
 
   drawCalloutStack(ctx, u.callouts, width, height, phase(t, 0.62, 0.92));
   ctx.restore();
+
+  return {
+    ballConfidence: ball?.confidence === undefined ? "n/a" : formatDebugNumber(ball.confidence),
+    ballTrackCount: ballTrack.length,
+    currentBallX: ball ? formatDebugNumber(ball.x) : "n/a",
+    currentBallY: ball ? formatDebugNumber(ball.y) : "n/a",
+    overlayHeight: height,
+    overlayWidth: width,
+    videoHeight: video?.videoHeight ?? 0,
+    videoWidth: video?.videoWidth ?? 0,
+  };
 }
 
 function drawMinimalReplayOverlay(
@@ -424,19 +520,22 @@ function drawMinimalReplayOverlay(
   ctx.restore();
 }
 
-function drawTrackedEntities(
+function drawNonBallTracks(
   ctx: CanvasRenderingContext2D,
   tracks: AnimationTrack[],
   progress: number,
   width: number,
   height: number,
+  mapping: VideoMapping,
 ) {
   if (!tracks.length) return;
-  const maxFrame = Math.max(...tracks.map((track) => track.frame), 1);
+  const nonBallTracks = tracks.filter((track) => track.entity_type !== "ball");
+  if (!nonBallTracks.length) return;
+  const maxFrame = Math.max(...nonBallTracks.map((track) => track.frame), 1);
   const currentFrame = progress * maxFrame;
   const byEntity = new Map<string, AnimationTrack[]>();
 
-  for (const track of tracks) {
+  for (const track of nonBallTracks) {
     const list = byEntity.get(track.entity_id) ?? [];
     list.push(track);
     byEntity.set(track.entity_id, list);
@@ -452,8 +551,8 @@ function drawTrackedEntities(
       const previous = values[index - 1];
       return !previous || previous.frame !== track.frame || previous.x !== track.x || previous.y !== track.y;
     });
-    const color = current.entity_type === "ball" ? "#ff9a3c" : current.entity_type === "hoop" ? "#ff7a24" : "#b8db4d";
-    const radius = current.entity_type === "ball" ? 16 : current.entity_type === "hoop" ? 22 : 20;
+    const color = current.entity_type === "hoop" ? "#ff7a24" : "#b8db4d";
+    const radius = current.entity_type === "hoop" ? 22 : 20;
     const alpha = current.entity_type === "hoop" ? 0.76 : 0.92;
 
     ctx.save();
@@ -465,12 +564,12 @@ function drawTrackedEntities(
     ctx.shadowBlur = 14;
     ctx.beginPath();
     path.forEach((track, index) => {
-      const point = trackToCanvas(track, width, height);
+      const point = mapVideoPointToCanvas(track, mapping);
       index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y);
     });
     ctx.stroke();
 
-    const point = trackToCanvas(current, width, height);
+    const point = mapVideoPointToCanvas(current, mapping);
     ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
@@ -508,11 +607,168 @@ function getTrackPositionAt(ordered: AnimationTrack[], frame: number): Animation
   return last;
 }
 
-function trackToCanvas(track: AnimationTrack, width: number, height: number) {
+function tracksToBallTrack(tracks: AnimationTrack[]): BallTrackPoint[] {
+  const bestByFrame = new Map<number, BallTrackPoint>();
+
+  for (const track of tracks) {
+    if (track.entity_type !== "ball") continue;
+    if (!Number.isFinite(track.x) || !Number.isFinite(track.y)) continue;
+    const confidence = getNormalizedConfidence(track.confidence);
+    const point: BallTrackPoint = {
+      confidence: track.confidence,
+      frame: track.frame,
+      time: Number.isFinite(track.time) ? (track.time as number) : track.frame,
+      x: track.x,
+      y: track.y,
+    };
+    const current = bestByFrame.get(point.frame);
+    if (!current || confidence > getNormalizedConfidence(current.confidence)) {
+      bestByFrame.set(point.frame, point);
+    }
+  }
+
+  return Array.from(bestByFrame.values()).sort((a, b) => a.time - b.time || a.frame - b.frame);
+}
+
+function getNearestBallPoint(ballTrack: BallTrackPoint[], currentTime: number): BallTrackPoint | null {
+  if (!ballTrack.length) return null;
+  let best: { distance: number; point: BallTrackPoint } | null = null;
+
+  for (const point of ballTrack) {
+    const confidence = getNormalizedConfidence(point.confidence);
+    if (confidence < BALL_CONFIDENCE_THRESHOLD) continue;
+    const distance = Math.abs(point.time - currentTime);
+    if (!best || distance < best.distance) best = { distance, point };
+  }
+
+  if (!best || best.distance > 0.55) return null;
+  return best.point;
+}
+
+function drawBallOverlay(
+  ctx: CanvasRenderingContext2D,
+  ballTrack: BallTrackPoint[],
+  current: BallTrackPoint | null,
+  currentTime: number,
+  width: number,
+  height: number,
+  mapping: VideoMapping,
+) {
+  if (!current) return;
+
+  const recent = ballTrack.filter((point) => {
+    const confidence = getNormalizedConfidence(point.confidence);
+    return confidence >= BALL_CONFIDENCE_THRESHOLD && point.time <= currentTime && currentTime - point.time <= BALL_TRAIL_SECONDS;
+  });
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (recent.length > 1) {
+    for (let index = 1; index < recent.length; index += 1) {
+      const previous = recent[index - 1];
+      const point = recent[index];
+      const age = Math.max(0, currentTime - point.time);
+      const fade = 1 - Math.min(1, age / BALL_TRAIL_SECONDS);
+      const from = mapVideoPointToCanvas(previous, mapping);
+      const to = mapVideoPointToCanvas(point, mapping);
+      ctx.globalAlpha = 0.18 + fade * 0.62;
+      ctx.strokeStyle = "rgba(255,154,60,0.95)";
+      ctx.lineWidth = Math.max(3, width * 0.006 * fade);
+      ctx.shadowColor = "rgba(255,154,60,0.75)";
+      ctx.shadowBlur = 18 * fade;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    }
+  }
+
+  const p = mapVideoPointToCanvas(current, mapping);
+  const confidence = getNormalizedConfidence(current.confidence);
+  const radius = Math.max(12, Math.min(width, height) * 0.018);
+  ctx.globalAlpha = Math.max(0.35, confidence);
+  ctx.shadowColor = "rgba(255,154,60,0.95)";
+  ctx.shadowBlur = radius * 2.4;
+  ctx.strokeStyle = "rgba(255,184,102,0.96)";
+  ctx.lineWidth = Math.max(2, radius * 0.22);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = Math.max(0.55, confidence);
+  ctx.fillStyle = "rgba(255,154,60,0.92)";
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, Math.max(3, radius * 0.28), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBallShotPath(
+  ctx: CanvasRenderingContext2D,
+  ballTrack: BallTrackPoint[],
+  currentTime: number,
+  width: number,
+  height: number,
+  mapping: VideoMapping,
+) {
+  const visible = ballTrack.filter((point) => {
+    const confidence = getNormalizedConfidence(point.confidence);
+    return confidence >= BALL_CONFIDENCE_THRESHOLD && point.time <= currentTime;
+  });
+  if (visible.length < 2) return;
+
+  ctx.save();
+  ctx.globalAlpha = 0.42;
+  ctx.strokeStyle = "rgba(255,255,255,0.82)";
+  ctx.lineWidth = Math.max(2, width * 0.004);
+  ctx.setLineDash([18, 14]);
+  ctx.beginPath();
+  visible.slice(-8).forEach((point, index) => {
+    const mapped = mapVideoPointToCanvas(point, mapping);
+    index === 0 ? ctx.moveTo(mapped.x, mapped.y) : ctx.lineTo(mapped.x, mapped.y);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function getVideoMapping(
+  video: Pick<HTMLVideoElement, "videoHeight" | "videoWidth"> | null,
+  overlayWidth: number,
+  overlayHeight: number,
+  fit: "contain" | "cover",
+): VideoMapping {
+  const videoWidth = video?.videoWidth || overlayWidth;
+  const videoHeight = video?.videoHeight || overlayHeight;
+  const scale = fit === "contain"
+    ? Math.min(overlayWidth / videoWidth, overlayHeight / videoHeight)
+    : Math.max(overlayWidth / videoWidth, overlayHeight / videoHeight);
+  const drawWidth = videoWidth * scale;
+  const drawHeight = videoHeight * scale;
+
   return {
-    x: track.x * width,
-    y: track.y * height,
+    drawHeight,
+    drawWidth,
+    offsetX: (overlayWidth - drawWidth) / 2,
+    offsetY: (overlayHeight - drawHeight) / 2,
   };
+}
+
+function mapVideoPointToCanvas(point: Pick<AnimationTrack | BallTrackPoint, "x" | "y">, mapping: VideoMapping) {
+  return {
+    x: mapping.offsetX + point.x * mapping.drawWidth,
+    y: mapping.offsetY + point.y * mapping.drawHeight,
+  };
+}
+
+function getNormalizedConfidence(confidence: number | undefined) {
+  if (confidence === undefined || !Number.isFinite(confidence)) return 0;
+  return confidence > 1 ? confidence / 100 : confidence;
+}
+
+function formatDebugNumber(value: number) {
+  return Number.isFinite(value) ? value.toFixed(3) : "n/a";
 }
 
 function drawVideoCover(
@@ -520,16 +776,15 @@ function drawVideoCover(
   video: HTMLVideoElement,
   width: number,
   height: number,
+  fit: "contain" | "cover" = "cover",
 ) {
   ctx.fillStyle = "#020303";
   ctx.fillRect(0, 0, width, height);
 
   const vw = video.videoWidth || width;
   const vh = video.videoHeight || height;
-  const scale = Math.max(width / vw, height / vh);
-  const dw = vw * scale;
-  const dh = vh * scale;
-  ctx.drawImage(video, (width - dw) / 2, (height - dh) / 2, dw, dh);
+  const mapping = getVideoMapping({ videoWidth: vw, videoHeight: vh }, width, height, fit);
+  ctx.drawImage(video, mapping.offsetX, mapping.offsetY, mapping.drawWidth, mapping.drawHeight);
 }
 
 function drawLock(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, alpha: number) {

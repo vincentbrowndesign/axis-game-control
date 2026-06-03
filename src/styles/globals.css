@@ -135,6 +135,45 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.axis-ball-debug {
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.axis-ball-debug div {
+  border-bottom: 1px solid rgba(244, 244, 240, 0.1);
+  display: grid;
+  gap: 0.2rem;
+  min-height: 2.8rem;
+  padding: 0.45rem 0.5rem;
+}
+
+.axis-ball-debug div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.axis-ball-debug dt,
+.axis-ball-debug dd {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.axis-ball-debug dt {
+  color: rgba(244, 244, 240, 0.44);
+}
+
+.axis-ball-debug dd {
+  color: var(--axis-live);
+}
+
 .axis-replay-loop-actions {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -198,6 +237,16 @@
   .axis-overlay-actions {
     justify-self: center;
     width: min(42vw, 36rem);
+  }
+
+  .axis-ball-debug {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-self: center;
+    width: min(42vw, 36rem);
+  }
+
+  .axis-ball-debug div:nth-last-child(-n + 4) {
+    border-bottom: 0;
   }
 
   .axis-replay-loop-actions {

@@ -56,6 +56,7 @@ type DetectionBox = {
   confidence?: number;
   frameIndex: number;
   height?: number;
+  time?: number;
   width?: number;
   x?: number;
   y?: number;
@@ -73,9 +74,11 @@ type TrackSummary = {
 };
 
 export type AxisEntityTrack = {
+  confidence?: number;
   entity_id: string;
   entity_type: "ball" | "hoop" | "player";
   frame: number;
+  time?: number;
   x: number;
   y: number;
 };
@@ -427,7 +430,7 @@ async function runRoboflow(frames: EvidenceFrame[]) {
         });
         return [];
       }
-      return normalizeDetections(result.predictions, frame.index, getDetectionDimensions(result.image));
+      return normalizeDetections(result.predictions, frame.index, getDetectionDimensions(result.image), frame.time);
     }),
   );
 
@@ -491,9 +494,11 @@ function buildEntityTracks(detections: DetectionBox[]): AxisEntityTrack[] {
         ? "hoop_1"
         : findNearestEntity(active, usedThisFrame, type, frame, x, y) ?? `${type}_${nextId[type]++}`;
       const track: AxisEntityTrack = {
+        confidence: box.confidence,
         entity_id: entityId,
         entity_type: type,
         frame,
+        time: box.time,
         x: clamp01(x),
         y: clamp01(y),
       };
@@ -762,7 +767,12 @@ export async function buildHistoricalMeaningWithClaude(input: {
   }
 }
 
-function normalizeDetections(values: unknown[], fallbackFrameIndex = 0, dimensions: DetectionDimensions = {}): DetectionBox[] {
+function normalizeDetections(
+  values: unknown[],
+  fallbackFrameIndex = 0,
+  dimensions: DetectionDimensions = {},
+  fallbackTime?: number,
+): DetectionBox[] {
   return values
     .map((value): DetectionBox | null => {
       if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -774,6 +784,7 @@ function normalizeDetections(values: unknown[], fallbackFrameIndex = 0, dimensio
         confidence: getOptionalNumber(record.confidence),
         frameIndex: getOptionalNumber(record.frameIndex) ?? getOptionalNumber(record.frame_index) ?? fallbackFrameIndex,
         height: normalizeCoordinate(record.height, dimensions.height),
+        time: getOptionalNumber(record.time) ?? getOptionalNumber(record.timestamp) ?? fallbackTime,
         width: normalizeCoordinate(record.width, dimensions.width),
         x: normalizeCoordinate(record.x, dimensions.width),
         y: normalizeCoordinate(record.y, dimensions.height),
@@ -1117,7 +1128,8 @@ function isPlayer(label: string) {
 }
 
 function isBall(label: string) {
-  return label.includes("ball");
+  const normalized = label.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return normalized === "ball" || normalized === "basketball" || normalized === "sports ball";
 }
 
 function isHoop(label: string) {
