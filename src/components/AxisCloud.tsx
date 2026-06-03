@@ -443,6 +443,7 @@ export function ProductDetail({ productId }: { productId: string }) {
           <button onClick={() => void handleSave()} type="button">
             {saveState === "saved" ? "Saved" : "Save"}
           </button>
+          <Link href={`/studio/${productId}/animation`}>Animate</Link>
           <Link href="/studio">Studio</Link>
         </div>
       </section>
