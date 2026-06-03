@@ -849,27 +849,30 @@ export function ProductDetail({ productId }: { productId: string }) {
 
   return (
     <Shell eyebrow="Product" title={product.title}>
-      <section className="axis-cloud-section">
-        <div className="axis-cloud-row">
-          <span>Generated Output</span>
-          <strong>{product.title}</strong>
-        </div>
-        <div className="axis-cloud-row">
-          <span>Source Clip Count</span>
-          <strong>{product.assetIds.length}</strong>
-        </div>
-      </section>
-
-      {product.summary?.length ? (
+      {product.finding ? (
         <section className="axis-cloud-section">
           <div className="axis-cloud-row">
-            <span>What we found</span>
+            <span>What We Found</span>
           </div>
-          <div className="axis-chip-list">
-            {product.summary.map((item) => (
-              <span key={item}>{item}</span>
-            ))}
+          <p className="axis-product-body">{product.finding}</p>
+        </section>
+      ) : null}
+
+      {product.meaning ? (
+        <section className="axis-cloud-section">
+          <div className="axis-cloud-row">
+            <span>What It Means</span>
           </div>
+          <p className="axis-product-body">{product.meaning}</p>
+        </section>
+      ) : null}
+
+      {product.action ? (
+        <section className="axis-cloud-section">
+          <div className="axis-cloud-row">
+            <span>What To Do Next</span>
+          </div>
+          <p className="axis-product-body">{product.action}</p>
         </section>
       ) : null}
 

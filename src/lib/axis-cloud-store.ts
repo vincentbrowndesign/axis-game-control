@@ -66,6 +66,9 @@ export type AxisProduct = {
   createdAt: string;
   confidenceTier?: ConfidenceTier;
   summary?: string[];
+  finding?: string;
+  meaning?: string;
+  action?: string;
   exportDestination?: ExportDestination;
 };
 
@@ -295,11 +298,14 @@ export function generateProduct(kind: AxisProductKind, modelId: string) {
 
   const productEvidence = buildProductEvidence(kind, model);
   const product: AxisProduct = {
+    action: productEvidence.action,
     assetIds: model?.assetIds ?? [],
     createdAt: new Date().toISOString(),
     confidenceTier: productEvidence.confidenceTier,
+    finding: productEvidence.finding,
     id: `product-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     kind,
+    meaning: productEvidence.meaning,
     modelId: model?.id ?? "model-library",
     summary: productEvidence.summary,
     title: productLabels[kind],
@@ -621,17 +627,24 @@ function createAxisAssetRecord(
 }
 
 function buildExportContent(product: AxisProduct, destination: ExportDestination) {
+  const when = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(
+    new Date(product.createdAt),
+  );
   return [
     product.title,
-    "",
-    `Destination: ${formatExportDestination(destination)}`,
-    `Generated: ${product.createdAt}`,
-    `Product ID: ${product.id}`,
-    `Product Type: ${product.kind}`,
-    `Source Clips: ${product.assetIds.length}`,
+    "─────────────────────",
     "",
     "What We Found",
-    ...(product.summary?.length ? product.summary : ["Generated output ready."]),
+    product.finding ?? "",
+    "",
+    "What It Means",
+    product.meaning ?? "",
+    "",
+    "What To Do Next",
+    product.action ?? "",
+    "",
+    "─────────────────────",
+    `${formatExportDestination(destination)} · ${when}`,
   ].join("\n");
 }
 
@@ -672,51 +685,71 @@ function buildMakesDatasetFromFavorites(): AxisModel | null {
 
 function buildProductEvidence(kind: AxisProductKind, model: AxisModel | undefined) {
   const insights = getDatasetInsights(model);
+  const clipCount = model?.assetIds.length ?? 0;
   const confidenceTier = insights.reduce<ConfidenceTier>(
     (best, insight) => (confidenceRank(insight.confidence) > confidenceRank(best) ? insight.confidence : best),
     "Low",
   );
-  const leadingInsight = insights[0];
-  const insightSummary = insights.map(
-    (insight) => `${insight.name}: ${insight.value} / ${insight.confidence} / ${insight.sampleSize} clips`,
-  );
+  const leadMakes = insights.find((i) => i.id === "most-makes");
+  const leadShot = insights.find((i) => i.id === "most-common-shot");
+  const zone = leadMakes?.value ?? leadShot?.value ?? "your primary zone";
+  const n = clipCount || leadMakes?.sampleSize || 0;
 
-  if (kind === "shot-profile") {
-    return {
-      confidenceTier,
-      summary: [
-        `${leadingInsight?.sampleSize ?? 0} clips discovered`,
-        `${leadingInsight?.value ?? "No discovery"} leads the sample`,
-        `${confidenceTier} confidence`,
-      ],
-    };
-  }
+  const templates: Record<AxisProductKind, { finding: string; meaning: string; action: string }> = {
+    "training-focus": {
+      finding: n ? `${n} clips point to ${zone} as your most frequent make location.` : "Add clips to identify your training focus.",
+      meaning: "This zone is where your game lives. Build there.",
+      action: `Add ${zone} reps to every session until it stops feeling like a decision.`,
+    },
+    practice: {
+      finding: n ? `${n} training clips recorded. ${zone} leads the work.` : "Add training clips to see the pattern.",
+      meaning: "Your practice reps are forming a real pattern.",
+      action: `Add 10 ${zone} reps this week. Keep the record growing.`,
+    },
+    highlight: {
+      finding: n ? `${n} plays captured across your sessions.` : "Add clips to build your highlight.",
+      meaning: "This is your best work on record.",
+      action: "Save it. Post it. Let it travel.",
+    },
+    curriculum: {
+      finding: n ? `${n} clips with a repeatable pattern. ${zone} shows up most.` : "Add more clips to build the curriculum.",
+      meaning: "Someone else can learn from this. The form transfers.",
+      action: "Use these clips in your next walkthrough. Show the moment, not the concept.",
+    },
+    "scout-report": {
+      finding: n ? `${n} clips reviewed. ${zone} is the primary tendency.` : "Add clips to build the scout report.",
+      meaning: "This is where the player lives offensively. Defend there first.",
+      action: `Test the contest in ${zone}. Track the response over three games.`,
+    },
+    playlist: {
+      finding: n ? `${n} clips showing consistent production.` : "Add clips to build the reel.",
+      meaning: "This record speaks for itself. The work is here.",
+      action: "Send this. Let the film decide.",
+    },
+    "shot-profile": {
+      finding: n ? `${n} makes tracked. ${zone} leads the distribution.` : "Add makes to build your shot profile.",
+      meaning: "This is your shooting identity right now.",
+      action: `Own ${zone}. Add the next zone when this one feels automatic.`,
+    },
+    "hot-zones": {
+      finding: n ? `${zone} shows the highest make rate. ${n} clips tracked.` : "Add makes to reveal your hot zones.",
+      meaning: "These are your real scoring areas — not just your preferred ones.",
+      action: `Attack ${zone} first in every game. Work the percentages.`,
+    },
+    story: {
+      finding: n ? `${n} clips across your history show a clear pattern.` : "Add clips to tell the story.",
+      meaning: "This is the story your game is telling.",
+      action: "Decide if that's the story you want to keep writing.",
+    },
+  };
 
-  if (kind === "hot-zones") {
-    return {
-      confidenceTier,
-      summary: insightSummary.length
-        ? insightSummary
-        : ["No hot zones yet", `${confidenceTier} confidence`],
-    };
-  }
-
-  if (kind === "training-focus") {
-    return {
-      confidenceTier,
-      summary: [
-        leadingInsight ? `Keep building ${leadingInsight.value}` : "Add more makes",
-        leadingInsight && leadingInsight.sampleSize >= 3
-          ? "Use repeated clips as the practice anchor"
-          : "Favorite more clips to strengthen the dataset",
-        `${confidenceTier} confidence`,
-      ],
-    };
-  }
-
+  const { finding, meaning, action } = templates[kind];
   return {
+    action,
     confidenceTier,
-    summary: insightSummary.length ? insightSummary : [`${confidenceTier} confidence`],
+    finding,
+    meaning,
+    summary: [finding, meaning, action],
   };
 }
 
