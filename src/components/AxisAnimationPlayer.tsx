@@ -18,19 +18,43 @@ type ExportState = "idle" | "playing" | "encoding" | "saved";
 
 function getBestMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
-  const candidates = [
-    "video/mp4;codecs=avc1",
-    "video/mp4",
-  ];
+  const candidates = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
   return candidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
+}
+
+function fileExtForMime(mime: string) {
+  return mime.startsWith("video/mp4") ? "mp4" : "webm";
+}
+
+function FactBadges({ scene }: { scene: AnimationScene }) {
+  const badges: Array<{ label: string; cls: string }> = [];
+  if (scene.drive) badges.push({ label: "DRIVE", cls: "axis-badge-drive" });
+  if (scene.paintTouch) badges.push({ label: "PAINT TOUCH", cls: "axis-badge-paint" });
+  if (scene.shotAttempt) badges.push({ label: "SHOT ATTEMPT", cls: "axis-badge-shot" });
+  if (scene.makeMiss === "make") badges.push({ label: "MAKE", cls: "axis-badge-make" });
+  if (scene.makeMiss === "miss") badges.push({ label: "MISS", cls: "axis-badge-miss" });
+
+  if (!badges.length) return null;
+
+  return (
+    <div className="axis-fact-badges" aria-label="Detected events">
+      {badges.map((b) => (
+        <span className={`axis-fact-badge ${b.cls}`} key={b.label}>
+          {b.label}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export function AxisAnimationPlayer({
   facts,
   onReplaySaved,
+  videoUrl,
 }: {
   facts: AnimationFact[];
   onReplaySaved?: () => void;
+  videoUrl?: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -71,12 +95,10 @@ export function AxisAnimationPlayer({
 
       rafRef.current = requestAnimationFrame(frame);
     },
-    // scene changes only when facts change — safe to include
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [stopLoop, facts],
   );
 
-  // Paint the first frame on mount so the canvas isn't blank
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -98,7 +120,7 @@ export function AxisAnimationPlayer({
     runAnimation(() => setExportState("idle"));
   }
 
-  async function recordReplay() {
+  async function recordReplay(): Promise<{ blob: Blob; ext: string } | null> {
     const canvas = canvasRef.current;
     if (!canvas || exportState !== "idle") return null;
 
@@ -109,7 +131,7 @@ export function AxisAnimationPlayer({
     }
 
     try {
-      return await new Promise<{ blob: Blob; mimeType: string } | null>((resolve) => {
+      return await new Promise((resolve) => {
         const stream = canvas.captureStream(ANIM_FPS);
         const recorder = new MediaRecorder(stream, {
           mimeType,
@@ -120,14 +142,9 @@ export function AxisAnimationPlayer({
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) chunks.push(e.data);
         };
-
-        recorder.onerror = () => {
-          setExportState("idle");
-          resolve(null);
-        };
+        recorder.onerror = () => { setExportState("idle"); resolve(null); };
         recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: mimeType });
-          resolve({ blob, mimeType });
+          resolve({ blob: new Blob(chunks, { type: mimeType }), ext: fileExtForMime(mimeType) });
         };
 
         recorder.start();
@@ -139,18 +156,18 @@ export function AxisAnimationPlayer({
         });
       });
     } catch (error) {
-      console.error("Axis animation export failed", error);
+      console.error("Axis overlay film export failed", error);
       setExportState("idle");
       return null;
     }
   }
 
-  async function handleSaveToCameraRoll() {
+  async function handleSaveOverlayFilm() {
     const recording = await recordReplay();
     if (!recording) return;
 
-    const fileName = `axis-tactical-replay-${Date.now()}.mp4`;
-    const file = new File([recording.blob], fileName, { type: recording.mimeType });
+    const fileName = `axis-overlay-film-${Date.now()}.${recording.ext}`;
+    const file = new File([recording.blob], fileName, { type: recording.blob.type });
     const nav = navigator as Navigator & {
       canShare?: (data: ShareData) => boolean;
       share?: (data: ShareData) => Promise<void>;
@@ -158,7 +175,7 @@ export function AxisAnimationPlayer({
 
     try {
       if (supportsNativeShare && nav.share && nav.canShare?.({ files: [file] })) {
-        await nav.share({ files: [file], title: "Axis Tactical Replay" });
+        await nav.share({ files: [file], title: "Axis Overlay Film" });
       } else {
         downloadBlob(recording.blob, fileName);
       }
@@ -173,16 +190,34 @@ export function AxisAnimationPlayer({
   const busy = exportState === "playing" || exportState === "encoding";
 
   if (!canReplay) {
-    return <p className="axis-cloud-empty">Not enough understanding yet.</p>;
+    return (
+      <p className="axis-cloud-empty">
+        Need clearer footage for overlay film.
+      </p>
+    );
   }
 
   return (
     <div className="axis-anim-shell">
-      <div className="axis-replay-ready">
-        <span>Replay Ready</span>
-        <strong>{timeline.finding}</strong>
+      {/* ── Video player with fact badges ─────────────────────────────── */}
+      {videoUrl ? (
+        <div className="axis-video-wrapper">
+          <video
+            className="axis-source-video"
+            controls
+            playsInline
+            src={videoUrl}
+          />
+          <FactBadges scene={scene} />
+        </div>
+      ) : null}
+
+      {/* ── What Axis saw label ───────────────────────────────────────── */}
+      <div className="axis-replay-section-label">
+        {videoUrl ? "What Axis saw" : "Overlay Film"}
       </div>
 
+      {/* ── Canvas animation ──────────────────────────────────────────── */}
       <div className="axis-anim-viewport">
         <canvas
           className="axis-anim-canvas"
@@ -192,6 +227,7 @@ export function AxisAnimationPlayer({
         />
       </div>
 
+      {/* ── Callout chips ─────────────────────────────────────────────── */}
       {timeline.callouts.length ? (
         <div className="axis-replay-callouts" aria-label="Replay callouts">
           {timeline.callouts.map((callout) => (
@@ -200,6 +236,7 @@ export function AxisAnimationPlayer({
         </div>
       ) : null}
 
+      {/* ── Controls ──────────────────────────────────────────────────── */}
       <div className="axis-anim-controls">
         <button
           className="axis-cloud-primary"
@@ -210,18 +247,18 @@ export function AxisAnimationPlayer({
           {exportState === "playing" ? "Playing" : "Play"}
         </button>
 
-        {supportsRecorder && onReplaySaved ? (
+        {supportsRecorder ? (
           <button
             className="axis-cloud-primary"
             disabled={exportState !== "idle"}
-            onClick={() => void handleSaveToCameraRoll()}
+            onClick={() => void handleSaveOverlayFilm()}
             type="button"
           >
             {exportState === "encoding"
               ? "Encoding"
               : exportState === "saved"
                 ? "Saved"
-                : "Save To Camera Roll"}
+                : "Save Overlay Film"}
           </button>
         ) : null}
       </div>

@@ -7,6 +7,8 @@ import { AxisAnimationPlayer } from "../../../components/AxisAnimationPlayer";
 import {
   exportProduct,
   getAxisProduct,
+  getCachedVideoUrl,
+  getMuxStreamUrl,
   type AxisProduct,
 } from "../../../lib/axis-cloud-store";
 import {
@@ -21,12 +23,20 @@ export default function TacticalReplayPage() {
   const router = useRouter();
   const [facts, setFacts] = useState<AnimationFact[] | null>(null);
   const [product, setProduct] = useState<AxisProduct | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty">("loading");
 
   useEffect(() => {
     const storedProduct = getAxisProduct(id);
     const uploadId = storedProduct?.assetIds[0] ?? id;
     setProduct(storedProduct);
+
+    // Resolve video URL: Mux stream → cached local blob → null
+    if (storedProduct?.muxPlaybackId) {
+      setVideoUrl(getMuxStreamUrl(storedProduct.muxPlaybackId));
+    } else if (uploadId) {
+      setVideoUrl(getCachedVideoUrl(uploadId));
+    }
 
     fetch(`/api/axis/facts?upload_id=${encodeURIComponent(uploadId)}&limit=20`)
       .then((res) => res.json())
@@ -44,33 +54,37 @@ export default function TacticalReplayPage() {
 
   function handleReplaySaved() {
     if (product) exportProduct(product.id, "camera-roll");
-    router.push("/");
+    router.push("/studio");
   }
 
   if (status === "loading") {
     return (
-      <ReplayShell eyebrow="Replay" title="Loading">
-        <p className="axis-cloud-empty">Preparing replay.</p>
+      <ReplayShell eyebrow="Overlay Film" title="Loading">
+        <p className="axis-cloud-empty">Preparing overlay film.</p>
       </ReplayShell>
     );
   }
 
   if (status === "empty" || !facts) {
     return (
-      <ReplayShell eyebrow="Replay" title="Not enough understanding yet">
+      <ReplayShell eyebrow="Overlay Film" title="Not enough footage">
         <p className="axis-cloud-empty">
-          Not enough understanding yet.
+          Need clearer footage for overlay film.
         </p>
         <Link className="axis-cloud-primary" href="/">
-          Sources
+          Upload footage
         </Link>
       </ReplayShell>
     );
   }
 
   return (
-    <ReplayShell eyebrow="Tactical Replay" title="What Axis saw">
-      <AxisAnimationPlayer facts={facts} onReplaySaved={product ? handleReplaySaved : undefined} />
+    <ReplayShell eyebrow="Overlay Film" title={product?.title ?? "Overlay Film"}>
+      <AxisAnimationPlayer
+        facts={facts}
+        onReplaySaved={product ? handleReplaySaved : undefined}
+        videoUrl={videoUrl}
+      />
     </ReplayShell>
   );
 }

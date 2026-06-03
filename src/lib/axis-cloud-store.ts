@@ -24,9 +24,27 @@ export type AxisProduct = {
   kind: AxisProductKind;
   meaning?: string;
   modelId: string;
+  muxPlaybackId?: string;
   summary?: string[];
   title: string;
 };
+
+// ─── In-memory video URL cache ─────────────────────────────────────────────────
+// Stores ephemeral local blob URLs for the current browser session.
+// Falls back to Mux stream on reload.
+const _videoCache = new Map<string, string>();
+export function cacheVideoUrl(uploadId: string, url: string) {
+  _videoCache.set(uploadId, url);
+}
+export function getCachedVideoUrl(uploadId: string): string | null {
+  return _videoCache.get(uploadId) ?? null;
+}
+export function getMuxStreamUrl(muxPlaybackId: string) {
+  return `https://stream.mux.com/${muxPlaybackId}.m3u8`;
+}
+export function getMuxThumbnailUrl(muxPlaybackId: string) {
+  return `https://image.mux.com/${muxPlaybackId}/thumbnail.jpg`;
+}
 
 export type AxisLoopArtifact = {
   body: string;
@@ -136,23 +154,26 @@ export function createProductFromLoopArtifact(artifact: AxisLoopArtifact) {
 }
 
 export function createTacticalReplayProduct({
+  muxPlaybackId,
   uploadId,
   whatWeFound,
 }: {
+  muxPlaybackId?: string;
   uploadId: string;
   whatWeFound: string;
 }) {
   const product: AxisProduct = {
-    action: "Save the replay or use it as the source for the next Axis artifact.",
+    action: "Save the overlay film or use it as the source for the next Axis artifact.",
     assetIds: [uploadId],
     createdAt: new Date().toISOString(),
     finding: whatWeFound,
     id: `replay-${uploadId}`,
     kind: "highlight",
-    meaning: "Tactical replay generated from the uploaded clip.",
+    meaning: "Overlay film generated from the uploaded clip.",
     modelId: "axis-tactical-replay",
+    muxPlaybackId,
     summary: [whatWeFound],
-    title: "Tactical Replay",
+    title: "Overlay Film",
   };
 
   write(PRODUCTS_KEY, [product, ...getAxisProducts().filter((p) => p.id !== product.id)]);
