@@ -363,8 +363,8 @@ export function exportProduct(productId: string, destination: ExportDestination)
   return { artifact, assetRecord, product: exported };
 }
 
-export function createUploadedSessionAsset(file: File, film?: { muxPlaybackId?: string; thumbnailUrl?: string }) {
-  const session = createSession(file.name.replace(/\.[^.]+$/, "") || "Camera Roll");
+export function createUploadedSessionAsset(file: File, film?: { muxPlaybackId?: string; thumbnailUrl?: string }, label?: string) {
+  const session = createSession(label?.trim() || file.name.replace(/\.[^.]+$/, "") || "Camera Roll");
   saveSession({
     ...session,
     mux_playback_id: film?.muxPlaybackId,
@@ -514,7 +514,7 @@ function sessionToAsset(session: Session, favorites: string[]): AxisAsset {
 
   return {
     createdAt: session.created_at,
-    detail: clipCount ? `${clipCount} saved ${clipCount === 1 ? "asset" : "assets"}` : "Uploaded session",
+    detail: clipCount ? `${clipCount} saved ${clipCount === 1 ? "asset" : "assets"}` : session.title,
     durationLabel: "Session",
     favorite: favorites.includes(id),
     id,

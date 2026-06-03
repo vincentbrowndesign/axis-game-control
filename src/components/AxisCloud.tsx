@@ -235,6 +235,7 @@ export function DatasetsHome() {
   const { assets, models, refresh } = useCloudSnapshot();
   const [generatedProducts, setGeneratedProducts] = useState<AxisProduct[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [clipLabel, setClipLabel] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const activeModel = models.find((model) => model.assetIds.length) ?? models[0] ?? null;
@@ -253,18 +254,20 @@ export function DatasetsHome() {
 
   async function handleFile(file: File) {
     setUploadState("uploading");
+    const label = clipLabel.trim() || undefined;
     try {
       const film = await uploadToMux(file);
       setUploadState("saving");
-      const assetId = createUploadedSessionAsset(file, film);
+      const assetId = createUploadedSessionAsset(file, film, label);
       addAssetToModel(assetId, activeModel?.id);
       refresh();
     } catch {
-      const assetId = createUploadedSessionAsset(file);
+      const assetId = createUploadedSessionAsset(file, undefined, label);
       addAssetToModel(assetId, activeModel?.id);
       refresh();
     } finally {
       setUploadState("idle");
+      setClipLabel("");
       if (inputRef.current) inputRef.current.value = "";
     }
   }
@@ -281,6 +284,14 @@ export function DatasetsHome() {
   return (
     <Shell eyebrow="Axis" title="What We Found">
       <section className="axis-cloud-panel axis-upload-panel">
+        <input
+          className="axis-clip-label"
+          disabled={uploadState !== "idle"}
+          onChange={(event) => setClipLabel(event.target.value)}
+          placeholder="What's in this clip? (Mid-Range, Corner Three, Drive...)"
+          type="text"
+          value={clipLabel}
+        />
         <button
           className="axis-cloud-primary"
           disabled={uploadState !== "idle"}
