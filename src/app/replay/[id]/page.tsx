@@ -35,17 +35,31 @@ export default function TacticalReplayPage() {
       setVideoUrl(getMuxStreamUrl(storedProduct.muxPlaybackId));
     }
 
-    fetch(`/api/axis/facts?upload_id=${encodeURIComponent(uploadId)}&limit=20`)
+    setFacts([]);
+    setStatus("ready");
+    console.info("REPLAY_READY", { replayProductId: id, uploadId });
+    console.info("UI_POLLING_STOPPED", { reason: "replay_shell_ready" });
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 4000);
+    fetch(`/api/axis/facts?upload_id=${encodeURIComponent(uploadId)}&limit=20`, {
+      signal: controller.signal,
+    })
       .then((res) => res.json())
       .then((data: FactsResponse) => {
         const records = data.records ?? [];
         setFacts(records);
-        setStatus("ready");
       })
       .catch(() => {
         setFacts([]);
-        setStatus("ready");
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
       });
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [id]);
 
   function handleReplaySaved() {

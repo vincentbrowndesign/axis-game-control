@@ -33,6 +33,12 @@ export async function POST(request: Request) {
   const sourceClipCount = getSourceClipCount(body.sourceClipCount);
 
   try {
+    console.log("DECODE_STARTED", {
+      artifactId,
+      hasMuxPlaybackId: Boolean(muxPlaybackId),
+      hasVideoUrl: Boolean(videoUrl),
+      uploadId,
+    });
     const result = await decodeAndPersistRealityFacts({
       artifactId,
       muxPlaybackId,
@@ -41,11 +47,22 @@ export async function POST(request: Request) {
       videoUrl,
     });
 
+    console.log("DECODE_COMPLETE", {
+      factCount: result.facts.length,
+      stored: result.persistence.stored,
+      uploadId,
+    });
+
     return Response.json({
       facts: result.facts,
       stored: result.persistence.stored,
     });
   } catch (error) {
+    console.error("DECODE_COMPLETE", {
+      reason: error instanceof Error ? error.message : String(error),
+      status: "FAIL",
+      uploadId,
+    });
     console.error("Axis video decode failed", error);
     return Response.json({ facts: [], stored: false });
   }

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { factsToScene, type AnimationFact } from "../lib/axis-animation-renderer";
 
 type ExportState = "idle" | "recording" | "encoding" | "saved" | "preview-saved";
-type ExportResult = { mp4_ready: boolean; preview_ready: boolean } | null;
 
 type OverlayUnderstanding = {
   ballDetected: boolean;
@@ -83,7 +82,6 @@ export function AxisAnimationPlayer({
   const rafRef = useRef<number>(0);
   const [cropped, setCropped] = useState(true);
   const [exportState, setExportState] = useState<ExportState>("idle");
-  const [exportResult, setExportResult] = useState<ExportResult>(null);
   const [supportsRecorder, setSupportsRecorder] = useState(true);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
   const understanding = useMemo(() => factsToOverlayUnderstanding(facts), [facts]);
@@ -221,15 +219,10 @@ export function AxisAnimationPlayer({
       }
 
       onReplaySaved?.();
-      setExportResult({ mp4_ready: recording.isMp4, preview_ready: true });
       setExportState(recording.isMp4 ? "saved" : "preview-saved");
     } catch {
       setExportState("idle");
     }
-  }
-
-  if (!videoUrl) {
-    return <p className="axis-cloud-empty">Upload Video</p>;
   }
 
   const busy = exportState === "recording" || exportState === "encoding";
@@ -237,19 +230,23 @@ export function AxisAnimationPlayer({
   return (
     <div className="axis-overlay-film">
       <div className="axis-overlay-stage" data-cropped={cropped}>
-        <video
-          className="axis-overlay-video"
-          controls
-          crossOrigin="anonymous"
-          onLoadedMetadata={paintOverlay}
-          onPause={handlePlayState}
-          onPlay={handlePlayState}
-          onSeeked={paintOverlay}
-          onTimeUpdate={paintOverlay}
-          playsInline
-          ref={videoRef}
-          src={videoUrl}
-        />
+        {videoUrl ? (
+          <video
+            className="axis-overlay-video"
+            controls
+            crossOrigin="anonymous"
+            onLoadedMetadata={paintOverlay}
+            onPause={handlePlayState}
+            onPlay={handlePlayState}
+            onSeeked={paintOverlay}
+            onTimeUpdate={paintOverlay}
+            playsInline
+            ref={videoRef}
+            src={videoUrl}
+          />
+        ) : (
+          <div className="axis-overlay-video axis-overlay-no-video" aria-hidden="true" />
+        )}
         <canvas
           aria-hidden="true"
           className="axis-overlay-canvas"
@@ -304,11 +301,9 @@ export function AxisAnimationPlayer({
         ) : null}
       </div>
 
-      {exportResult ? (
-        <p className="axis-export-state">
-          {exportResult.mp4_ready
-            ? "mp4_ready: true"
-            : "preview_ready: true / mp4_ready: false"}
+      {exportState === "preview-saved" ? (
+        <p className="axis-export-note">
+          Saved as web preview. MP4 available on supported devices.
         </p>
       ) : null}
     </div>

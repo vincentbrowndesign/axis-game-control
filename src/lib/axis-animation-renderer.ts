@@ -156,19 +156,6 @@ export function sceneHasUnderstandingEvent(scene: AnimationScene) {
   );
 }
 
-export function factsHaveReplayUnderstanding(facts: AnimationFact[]) {
-  const hasVisualLock = facts.some(
-    (fact) =>
-      (fact.fact_key === "ball_detected" ||
-        fact.fact_key === "hoop_detected") &&
-      fact.fact_value === 1,
-  );
-  const hasMovementPath = facts.some(
-    (fact) => fact.fact_key === "movement_path" && Boolean(fact.fact_text_value),
-  );
-  return sceneHasUnderstandingEvent(factsToScene(facts)) || hasVisualLock || hasMovementPath;
-}
-
 function replayFinding(scene: AnimationScene) {
   if (scene.drive && scene.paintTouch && scene.makeMiss === "make") {
     return "Pressure created downhill and converted at the rim.";

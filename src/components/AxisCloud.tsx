@@ -16,12 +16,11 @@ import {
   getMuxStreamUrl,
   getMuxThumbnailUrl,
   saveProductAsAsset,
+  updateTacticalReplayProduct,
   type AxisLoopArtifact,
   type AxisProduct,
   type ExportDestination,
 } from "../lib/axis-cloud-store";
-
-type UploadState = "idle" | "uploading" | "saving";
 
 const cameraRollDestination: ExportDestination = "camera-roll";
 
@@ -62,6 +61,7 @@ async function uploadToMux(file: File) {
   }
 
   await uploadVideoWithTus(upload.uploadUrl, file);
+  console.info("UPLOAD_COMPLETE", { uploadId: upload.uploadId });
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const response = await fetch(`/api/film/uploads/${upload.uploadId}`);
@@ -70,12 +70,14 @@ async function uploadToMux(file: File) {
       | null;
 
     if (response.ok && film?.ready) {
+      console.info("MUX_READY", { playbackId: film.playbackId, status: "PASS", uploadId: upload.uploadId });
       return { muxPlaybackId: film.playbackId, thumbnailUrl: film.thumbnailUrl };
     }
 
     await new Promise((resolve) => setTimeout(resolve, 1200));
   }
 
+  console.info("MUX_READY", { reason: "Mux polling exhausted", status: "FAIL", uploadId: upload.uploadId });
   return {};
 }
 
@@ -149,23 +151,35 @@ export function FirstLoopHome() {
   }
 
   async function handleFile(file: File) {
-    // Show video immediately from local blob — no waiting for Mux
+    // Show video immediately from the local blob. Mux and understanding only enhance it.
     const blobUrl = URL.createObjectURL(file);
+    const immediateAssetId = createUploadedSessionAsset(file);
+    const immediateReplayId = createReplay(
+      immediateAssetId,
+      undefined,
+      "Replay generated from uploaded video.",
+    );
+    cacheVideoUrl(immediateAssetId, blobUrl);
     setLocalVideoUrl(blobUrl);
-    setReplayProductId("");
-    setStatus("uploading");
+    setReplayProductId(immediateReplayId);
+    setStatus("processing");
+    console.info("REPLAY_COMPLETE", { replayProductId: immediateReplayId, uploadId: immediateAssetId });
+    window.setTimeout(() => {
+      setStatus("ready");
+      console.info("REPLAY_READY", { replayProductId: immediateReplayId, uploadId: immediateAssetId });
+      console.info("UI_POLLING_STOPPED", { reason: "local_replay_ready" });
+    }, 350);
 
     try {
       const film = await uploadToMux(file);
-      setStatus("processing");
-      const assetId = createUploadedSessionAsset(file, film);
-
-      // Cache blob URL so replay page can use it if Mux isn't ready yet
-      cacheVideoUrl(assetId, blobUrl);
-
       const muxVideoUrl = film.muxPlaybackId
         ? getMuxStreamUrl(film.muxPlaybackId)
         : undefined;
+
+      if (film.muxPlaybackId) {
+        updateTacticalReplayProduct(immediateReplayId, { muxPlaybackId: film.muxPlaybackId });
+        refresh();
+      }
 
       const response = await fetch("/api/axis/first-loop", {
         body: JSON.stringify({
@@ -173,9 +187,9 @@ export function FirstLoopHome() {
           fileName: file.name,
           muxPlaybackId: film.muxPlaybackId,
           priorArtifacts: products.slice(0, 3).map((p) => p.finding ?? p.title),
-          sessionId: assetId,
+          sessionId: immediateAssetId,
           sourceClipCount: 1,
-          uploadId: assetId,
+          uploadId: immediateAssetId,
           uploadTimestamp: new Date().toISOString(),
           videoUrl: muxVideoUrl,
         }),
@@ -186,17 +200,12 @@ export function FirstLoopHome() {
       const whatWeFound =
         result?.whatWeFound ?? "Clip added. Axis read this footage.";
 
-      setReplayProductId(createReplay(assetId, film.muxPlaybackId, whatWeFound));
-      setStatus("ready");
+      updateTacticalReplayProduct(immediateReplayId, {
+        finding: whatWeFound,
+        summary: [whatWeFound],
+      });
+      refresh();
     } catch {
-      const assetId = createUploadedSessionAsset(file);
-      cacheVideoUrl(assetId, blobUrl);
-      const id = createReplay(
-        assetId,
-        undefined,
-        "Clip added from Camera Roll.",
-      );
-      setReplayProductId(id);
       setStatus("ready");
       refresh();
     } finally {
@@ -354,7 +363,7 @@ export function StudioList() {
                   </Link>
                   <div className="axis-replay-info">
                     <strong>{product.title}</strong>
-                    <em>{product.exportDestination ? "Exported" : "Saved"}</em>
+                    <em>{product.muxPlaybackId || cachedUrl ? "Ready" : "Processing"}</em>
                   </div>
                   <Link className="axis-replay-save-link" href={`/replay/${product.id}`}>
                     Save / Export

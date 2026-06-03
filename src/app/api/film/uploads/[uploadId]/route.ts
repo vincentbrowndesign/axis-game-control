@@ -22,7 +22,10 @@ async function getMuxJson(path: string, authorization: string) {
 
 export async function GET(_request: Request, context: { params: Promise<{ uploadId: string }> }) {
   const authorization = getMuxAuthHeader();
-  if (!authorization) return Response.json({ ready: false }, { status: 503 });
+  if (!authorization) {
+    console.error("MUX_READY", { reason: "Mux credentials missing", status: "FAIL" });
+    return Response.json({ ready: false }, { status: 503 });
+  }
 
   const { uploadId } = await context.params;
   const upload = await getMuxJson(`/uploads/${encodeURIComponent(uploadId)}`, authorization);
@@ -37,11 +40,17 @@ export async function GET(_request: Request, context: { params: Promise<{ upload
 
   if (!upload.response.ok) {
     console.error("Unable to read Mux upload", { status: upload.response.status });
+    console.error("MUX_READY", { reason: `Mux upload read failed HTTP ${upload.response.status}`, status: "FAIL", uploadId });
     return Response.json({ ready: false }, { status: 502 });
   }
 
   const muxAssetId = uploadData?.data?.asset_id;
   if (!muxAssetId) {
+    console.log("MUX_READY", {
+      reason: `Mux upload status ${uploadData?.data?.status ?? "waiting"}`,
+      status: "FAIL",
+      uploadId,
+    });
     return Response.json({
       muxAssetId: undefined,
       ready: false,
@@ -63,15 +72,30 @@ export async function GET(_request: Request, context: { params: Promise<{ upload
 
   if (!asset.response.ok) {
     console.error("Unable to read Mux asset", { status: asset.response.status });
+    console.error("MUX_READY", {
+      muxAssetId,
+      reason: `Mux asset read failed HTTP ${asset.response.status}`,
+      status: "FAIL",
+      uploadId,
+    });
     return Response.json({ muxAssetId, ready: false }, { status: 502 });
   }
 
   const playbackId = assetData?.data?.playback_ids?.[0]?.id;
 
+  const ready = Boolean(playbackId && assetData?.data?.status === "ready");
+  console.log("MUX_READY", {
+    muxAssetId,
+    playbackId,
+    reason: ready ? undefined : `Mux asset status ${assetData?.data?.status ?? "processing"}`,
+    status: ready ? "PASS" : "FAIL",
+    uploadId,
+  });
+
   return Response.json({
     muxAssetId,
     playbackId,
-    ready: Boolean(playbackId && assetData?.data?.status === "ready"),
+    ready,
     status: assetData?.data?.status ?? "processing",
     thumbnailUrl: playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : undefined,
   });

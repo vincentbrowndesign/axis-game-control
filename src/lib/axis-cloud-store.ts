@@ -180,6 +180,19 @@ export function createTacticalReplayProduct({
   return product;
 }
 
+export function updateTacticalReplayProduct(
+  productId: string,
+  patch: Partial<Pick<AxisProduct, "finding" | "muxPlaybackId" | "summary">>,
+) {
+  const products = getAxisProducts();
+  const product = products.find((item) => item.id === productId);
+  if (!product) return null;
+
+  const updated: AxisProduct = { ...product, ...patch };
+  write(PRODUCTS_KEY, products.map((item) => (item.id === productId ? updated : item)));
+  return updated;
+}
+
 export function saveProductAsAsset(productId: string) {
   const product = getAxisProduct(productId);
   if (!product) return null;

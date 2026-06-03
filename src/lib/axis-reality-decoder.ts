@@ -117,6 +117,12 @@ function getMuxThumbnailUrl(playbackId: string, time: number) {
 
 export async function decodeAndPersistRealityFacts(input: DecodeVideoInput) {
   const status = createDecoderStatus(input.uploadId);
+  console.log("DECODE_STARTED", {
+    artifactId: input.artifactId,
+    hasMuxPlaybackId: Boolean(input.muxPlaybackId),
+    hasVideoUrl: Boolean(input.videoUrl),
+    uploadId: input.uploadId,
+  });
   const decoded = await decodeRealityFacts(input, status);
   const records = decoded.map((fact) => factToRecord(fact, input));
   await persistAxisArtifact({
@@ -137,6 +143,11 @@ export async function decodeAndPersistRealityFacts(input: DecodeVideoInput) {
     status.factExtraction = { reason: `Fact persistence failed: ${persistence.reason}`, status: "FAIL" };
   }
   logRealityDecoderStatus(status);
+  console.log("DECODE_COMPLETE", {
+    factCount: decoded.length,
+    storedFactsCount: status.storedFactsCount,
+    uploadId: input.uploadId,
+  });
 
   return {
     facts: decoded,
@@ -223,6 +234,13 @@ async function decodeRealityFacts(input: DecodeVideoInput, status: RealityDecode
   status.roboflow = roboflow.facts.length || roboflow.detections.length
     ? { status: "PASS" }
     : { reason: roboflow.reason ?? "Roboflow produced no detections.", status: "FAIL" };
+  console.log("ROBOFLOW_COMPLETE", {
+    detectionCount: roboflow.detections.length,
+    factCount: roboflow.facts.length,
+    reason: status.roboflow.reason,
+    status: status.roboflow.status,
+    uploadId: input.uploadId,
+  });
   rawFacts.push(...roboflow.facts);
   detections.push(...roboflow.detections);
 
@@ -235,9 +253,21 @@ async function decodeRealityFacts(input: DecodeVideoInput, status: RealityDecode
   status.gemini = gemini.facts.length
     ? { status: "PASS" }
     : { reason: gemini.reason ?? "Gemini produced no supported facts.", status: "FAIL" };
+  console.log("GEMINI_COMPLETE", {
+    factCount: gemini.facts.length,
+    reason: status.gemini.reason,
+    status: status.gemini.status,
+    uploadId: input.uploadId,
+  });
   rawFacts.push(...gemini.facts);
 
   const normalized = process.env.OPENAI_API_KEY ? await normalizeWithOpenAI(rawFacts) : rawFacts;
+  console.log("OPENAI_COMPLETE", {
+    factCount: normalized.length,
+    reason: process.env.OPENAI_API_KEY ? undefined : "OPENAI_API_KEY missing",
+    status: process.env.OPENAI_API_KEY ? "PASS" : "FAIL",
+    uploadId: input.uploadId,
+  });
   return qualifyDecodedFacts(normalized, Math.max(input.sourceClipCount, frames.length || 1));
 }
 

@@ -11,7 +11,10 @@ function getMuxAuthHeader() {
 
 export async function POST() {
   const authorization = getMuxAuthHeader();
-  if (!authorization) return Response.json({ created: false }, { status: 503 });
+  if (!authorization) {
+    console.error("UPLOAD_COMPLETE", { reason: "Mux credentials missing", status: "FAIL" });
+    return Response.json({ created: false }, { status: 503 });
+  }
 
   const response = await fetch("https://api.mux.com/video/v1/uploads", {
     body: JSON.stringify({
@@ -37,8 +40,11 @@ export async function POST() {
 
   if (!response.ok || !result?.data?.id || !result.data.url) {
     console.error("Unable to create Mux upload", { status: response.status });
+    console.error("UPLOAD_COMPLETE", { reason: `Mux upload create failed HTTP ${response.status}`, status: "FAIL" });
     return Response.json({ created: false }, { status: 502 });
   }
+
+  console.log("UPLOAD_COMPLETE", { status: "PASS", uploadId: result.data.id });
 
   return Response.json(
     {

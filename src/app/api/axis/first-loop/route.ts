@@ -133,15 +133,29 @@ async function generateUnderstanding(body: LoopRequestBody) {
     sessionId,
     sourceClipCount,
   });
-  const decodedFacts = videoUrl || muxPlaybackId
-    ? (await decodeAndPersistRealityFacts({
-        artifactId: `decode-${uploadId}`,
-        muxPlaybackId,
-        sourceClipCount,
-        uploadId,
-        videoUrl,
-      })).facts
-    : [];
+  let decodedFacts: AxisDecodedFact[] = [];
+  if (videoUrl || muxPlaybackId) {
+    console.log("DECODE_STARTED", {
+      action: "understand",
+      hasMuxPlaybackId: Boolean(muxPlaybackId),
+      hasVideoUrl: Boolean(videoUrl),
+      uploadId,
+    });
+    decodedFacts = (await decodeAndPersistRealityFacts({
+      artifactId: `decode-${uploadId}`,
+      muxPlaybackId,
+      sourceClipCount,
+      uploadId,
+      videoUrl,
+    })).facts;
+  }
+  if (videoUrl || muxPlaybackId) {
+    console.log("DECODE_COMPLETE", {
+      action: "understand",
+      factCount: decodedFacts.length,
+      uploadId,
+    });
+  }
   const extractedFacts = decodedFacts.length ? decodedFacts : metadataFacts;
   const clientPriorArtifacts = Array.isArray(body.priorArtifacts)
     ? body.priorArtifacts.filter((item): item is string => typeof item === "string").slice(0, 4)
@@ -180,9 +194,18 @@ async function generateUnderstanding(body: LoopRequestBody) {
         store: false,
       });
       whatWeFound = response.output_text.trim() || whatWeFound;
+      console.log("OPENAI_COMPLETE", { action: "understand", status: "PASS", uploadId });
     } catch (error) {
+      console.error("OPENAI_COMPLETE", {
+        action: "understand",
+        reason: error instanceof Error ? error.message : String(error),
+        status: "FAIL",
+        uploadId,
+      });
       console.error("Axis first loop understanding unavailable", error);
     }
+  } else {
+    console.log("OPENAI_COMPLETE", { action: "understand", reason: "OPENAI_API_KEY missing", status: "FAIL", uploadId });
   }
 
   return Response.json({
