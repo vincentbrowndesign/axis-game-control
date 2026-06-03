@@ -20,7 +20,6 @@ import {
   type AxisProduct,
   type ExportDestination,
 } from "../lib/axis-cloud-store";
-import { factsHaveReplayUnderstanding, type AnimationFact } from "../lib/axis-animation-renderer";
 
 type UploadState = "idle" | "uploading" | "saving";
 
@@ -130,9 +129,7 @@ type FirstLoopExportResponse = {
   };
 };
 
-type FactsResponse = { records?: AnimationFact[] };
-
-type SourcesStatus = "idle" | "uploading" | "processing" | "ready" | "no-understanding";
+type SourcesStatus = "idle" | "uploading" | "processing" | "ready";
 
 export function FirstLoopHome() {
   const { products, refresh } = useCloudSnapshot();
@@ -141,20 +138,11 @@ export function FirstLoopHome() {
   const [replayProductId, setReplayProductId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function createReplayIfReady(
+  function createReplay(
     uploadId: string,
     muxPlaybackId: string | undefined,
     whatWeFound: string,
   ) {
-    const response = await fetch(
-      `/api/axis/facts?upload_id=${encodeURIComponent(uploadId)}&limit=20`,
-    );
-    if (!response.ok) return "";
-
-    const data = (await response.json().catch(() => null)) as FactsResponse | null;
-    const records = data?.records ?? [];
-    if (!factsHaveReplayUnderstanding(records)) return "";
-
     const replayProduct = createTacticalReplayProduct({ muxPlaybackId, uploadId, whatWeFound });
     refresh();
     return replayProduct.id;
@@ -198,23 +186,18 @@ export function FirstLoopHome() {
       const whatWeFound =
         result?.whatWeFound ?? "Clip added. Axis read this footage.";
 
-      const id = await createReplayIfReady(assetId, film.muxPlaybackId, whatWeFound);
-      if (id) {
-        setReplayProductId(id);
-        setStatus("ready");
-      } else {
-        setStatus("no-understanding");
-      }
+      setReplayProductId(createReplay(assetId, film.muxPlaybackId, whatWeFound));
+      setStatus("ready");
     } catch {
       const assetId = createUploadedSessionAsset(file);
       cacheVideoUrl(assetId, blobUrl);
-      const id = await createReplayIfReady(
+      const id = createReplay(
         assetId,
         undefined,
         "Clip added from Camera Roll.",
-      ).catch(() => "");
+      );
       setReplayProductId(id);
-      setStatus(id ? "ready" : "no-understanding");
+      setStatus("ready");
       refresh();
     } finally {
       if (inputRef.current) inputRef.current.value = "";
@@ -222,11 +205,10 @@ export function FirstLoopHome() {
   }
 
   const statusLabel: Record<SourcesStatus, string> = {
-    idle: "Upload Footage",
-    uploading: "Uploading",
-    processing: "Reading Footage",
-    ready: "Overlay Film Ready",
-    "no-understanding": "Need Clearer Footage",
+    idle: "Upload Video",
+    uploading: "Processing Video",
+    processing: "Processing Video",
+    ready: "Replay Video",
   };
 
   return (
@@ -251,20 +233,16 @@ export function FirstLoopHome() {
               className="axis-replay-cta"
               href={`/replay/${replayProductId}`}
             >
-              View Overlay Film
+              Replay Video
             </Link>
-          ) : status === "no-understanding" ? (
-            <p className="axis-source-caption">Need clearer footage for replay.</p>
           ) : (
             <p className="axis-source-caption axis-source-processing">
-              {status === "uploading" ? "Uploading…" : "Reading footage…"}
+              Processing Video
             </p>
           )}
         </div>
       ) : (
-        <div className="axis-source-empty">
-          <p>Upload basketball footage to begin.</p>
-        </div>
+        <div className="axis-source-empty" aria-hidden="true" />
       )}
 
       {/* Upload trigger */}
@@ -275,11 +253,11 @@ export function FirstLoopHome() {
           onClick={() => inputRef.current?.click()}
           type="button"
         >
-          {status === "idle" || status === "ready" || status === "no-understanding"
-            ? "Upload"
+          {status === "idle" || status === "ready"
+            ? "Upload Video"
             : status === "uploading"
-              ? "Uploading"
-              : "Reading"}
+              ? "Processing"
+              : "Processing"}
         </button>
         <input
           ref={inputRef}
@@ -358,12 +336,11 @@ export function StudioList() {
               const cachedUrl = uploadId ? getCachedVideoUrl(uploadId) : null;
 
               return (
-                <Link
+                <article
                   className="axis-replay-card"
-                  href={`/replay/${product.id}`}
                   key={product.id}
                 >
-                  <div className="axis-replay-thumb">
+                  <Link className="axis-replay-thumb" href={`/replay/${product.id}`}>
                     {thumb ? (
                       <img alt="" src={thumb} />
                     ) : cachedUrl ? (
@@ -374,19 +351,22 @@ export function StudioList() {
                       </div>
                     )}
                     <div className="axis-replay-play-icon" aria-hidden="true">&#9654;</div>
-                  </div>
+                  </Link>
                   <div className="axis-replay-info">
                     <strong>{product.title}</strong>
                     <em>{product.exportDestination ? "Exported" : "Saved"}</em>
                   </div>
-                </Link>
+                  <Link className="axis-replay-save-link" href={`/replay/${product.id}`}>
+                    Save / Export
+                  </Link>
+                </article>
               );
             })}
           </div>
         </section>
       ) : (
         <p className="axis-cloud-empty">
-          Upload footage in Sources to generate your first overlay film.
+          Upload video in Sources to generate your first replay.
         </p>
       )}
     </Shell>

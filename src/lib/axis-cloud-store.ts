@@ -163,17 +163,17 @@ export function createTacticalReplayProduct({
   whatWeFound: string;
 }) {
   const product: AxisProduct = {
-    action: "Save the overlay film or use it as the source for the next Axis artifact.",
+    action: "Save or share this replay.",
     assetIds: [uploadId],
     createdAt: new Date().toISOString(),
     finding: whatWeFound,
     id: `replay-${uploadId}`,
     kind: "highlight",
-    meaning: "Overlay film generated from the uploaded clip.",
+    meaning: "Replay generated from the uploaded clip.",
     modelId: "axis-tactical-replay",
     muxPlaybackId,
     summary: [whatWeFound],
-    title: "Overlay Film",
+    title: "Replay Video",
   };
 
   write(PRODUCTS_KEY, [product, ...getAxisProducts().filter((p) => p.id !== product.id)]);

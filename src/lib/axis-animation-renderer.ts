@@ -157,7 +157,16 @@ export function sceneHasUnderstandingEvent(scene: AnimationScene) {
 }
 
 export function factsHaveReplayUnderstanding(facts: AnimationFact[]) {
-  return sceneHasUnderstandingEvent(factsToScene(facts));
+  const hasVisualLock = facts.some(
+    (fact) =>
+      (fact.fact_key === "ball_detected" ||
+        fact.fact_key === "hoop_detected") &&
+      fact.fact_value === 1,
+  );
+  const hasMovementPath = facts.some(
+    (fact) => fact.fact_key === "movement_path" && Boolean(fact.fact_text_value),
+  );
+  return sceneHasUnderstandingEvent(factsToScene(facts)) || hasVisualLock || hasMovementPath;
 }
 
 function replayFinding(scene: AnimationScene) {
@@ -177,7 +186,7 @@ function replayFinding(scene: AnimationScene) {
     return "The clip resolves into a missed shot attempt.";
   }
   if (scene.shotAttempt) return "Axis found a shot attempt worth saving.";
-  return "Not enough understanding yet.";
+  return "Replay Video";
 }
 
 // ─── Math ─────────────────────────────────────────────────────────────────────

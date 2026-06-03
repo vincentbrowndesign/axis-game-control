@@ -2361,6 +2361,247 @@
   grid-template-columns: 1fr;
 }
 
+.axis-sources {
+  align-content: start;
+  max-width: 560px;
+}
+
+.axis-sources-header {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.25rem;
+}
+
+.axis-sources-status {
+  color: var(--axis-ink);
+  font-size: clamp(2.1rem, 13vw, 4.8rem);
+  font-weight: 880;
+  letter-spacing: -0.045em;
+  line-height: 0.9;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.axis-source-empty,
+.axis-source-video-wrap {
+  background: #030403;
+  border: 1px solid var(--axis-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.axis-source-empty {
+  align-items: center;
+  aspect-ratio: 9 / 16;
+  color: var(--axis-muted);
+  display: flex;
+  font-size: 0.92rem;
+  font-weight: 760;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+}
+
+.axis-source-video-wrap {
+  display: grid;
+  gap: 0;
+}
+
+.axis-source-video {
+  aspect-ratio: 9 / 16;
+  background: #020302;
+  display: block;
+  max-height: calc(100dvh - 15rem);
+  object-fit: contain;
+  width: 100%;
+}
+
+.axis-replay-cta {
+  align-items: center;
+  background: var(--axis-signal);
+  color: #070807;
+  display: flex;
+  font-size: 0.94rem;
+  font-weight: 860;
+  justify-content: center;
+  min-height: 56px;
+  text-decoration: none;
+}
+
+.axis-source-caption {
+  color: var(--axis-muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  margin: 0;
+  padding: 0.85rem;
+  text-align: center;
+}
+
+.axis-source-processing {
+  color: var(--axis-signal);
+}
+
+.axis-source-upload {
+  display: grid;
+}
+
+.axis-overlay-film {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.axis-overlay-stage {
+  aspect-ratio: 9 / 16;
+  background: #020302;
+  border: 1px solid var(--axis-line);
+  border-radius: 10px;
+  max-height: calc(100dvh - 13rem);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.axis-overlay-video,
+.axis-overlay-canvas {
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-overlay-video {
+  background: #020302;
+  object-fit: contain;
+  z-index: 1;
+}
+
+.axis-overlay-stage[data-cropped="true"] .axis-overlay-video {
+  object-fit: cover;
+}
+
+.axis-overlay-canvas {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.axis-overlay-callouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.axis-overlay-callouts span {
+  background: rgba(184, 219, 77, 0.1);
+  border: 1px solid rgba(184, 219, 77, 0.25);
+  border-radius: 999px;
+  color: var(--axis-ink);
+  font-size: 0.68rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.6rem;
+}
+
+.axis-overlay-actions {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+}
+
+.axis-export-state {
+  color: var(--axis-muted);
+  font-size: 0.68rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-align: center;
+}
+
+.axis-replay-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.axis-replay-card {
+  background: var(--axis-panel-2);
+  border: 1px solid var(--axis-line);
+  border-radius: 8px;
+  color: inherit;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.65rem;
+  text-decoration: none;
+}
+
+.axis-replay-thumb {
+  aspect-ratio: 9 / 16;
+  background: #020302;
+  border-radius: 7px;
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-replay-thumb img,
+.axis-replay-thumb video {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.axis-replay-thumb-blank {
+  align-items: center;
+  color: var(--axis-signal);
+  display: flex;
+  height: 100%;
+  justify-content: center;
+}
+
+.axis-replay-play-icon {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  bottom: 0.6rem;
+  color: var(--axis-ink);
+  display: flex;
+  font-size: 0.7rem;
+  height: 2rem;
+  justify-content: center;
+  position: absolute;
+  right: 0.6rem;
+  width: 2rem;
+}
+
+.axis-replay-info {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.axis-replay-info strong {
+  color: var(--axis-ink);
+  font-size: 1rem;
+  font-weight: 840;
+}
+
+.axis-replay-info em {
+  color: var(--axis-muted);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 740;
+}
+
+.axis-replay-save-link {
+  align-items: center;
+  background: var(--axis-signal);
+  border-radius: 6px;
+  color: #070807;
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 860;
+  justify-content: center;
+  min-height: 44px;
+  text-decoration: none;
+}
+
 .axis-chip-list {
   display: flex;
   flex-wrap: wrap;
