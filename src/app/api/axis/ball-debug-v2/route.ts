@@ -7,9 +7,7 @@ import ffmpegStatic from "ffmpeg-static";
 import {
   AxisUploadTooLargeError,
   axisMaxUploadBytes,
-  getDeclaredUploadSize,
-  getSafeFileName,
-  saveRequestVideoToTempFile,
+  saveMultipartVideoToTempFile,
 } from "../../../../lib/axis-upload-stream";
 
 export const runtime = "nodejs";
@@ -53,38 +51,38 @@ export async function POST(request: Request) {
   console.log("BALL_DEBUG_START");
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-debug-v2-"));
   const framesDir = path.join(workDir, "frames");
-  const uploadedFileName = getSafeFileName(request.headers.get("x-axis-file-name"));
-  const uploadedFileSize = getDeclaredUploadSize(request);
-  const videoPath = path.join(workDir, uploadedFileName);
+  const videoPath = path.join(workDir, "upload.mp4");
   let frameCount = 0;
   let detectionCount = 0;
   let ballTrackCount = 0;
+  let uploadedFileName = "upload.mp4";
+  let uploadedFileSize: number | null = null;
 
   console.log("BALL_DEBUG_UPLOAD_START", {
+    content_type: request.headers.get("content-type"),
     temp_video_path: videoPath,
-    uploaded_file_name: uploadedFileName,
-    uploaded_file_size: uploadedFileSize,
   });
 
   try {
-    console.log("VIDEO_RECEIVED", {
-      uploaded_file_name: uploadedFileName,
-      uploaded_file_size: uploadedFileSize,
-    });
-    console.log("VIDEO_SIZE_MB", {
-      value: uploadedFileSize === null ? null : roundMetric(uploadedFileSize / 1024 / 1024),
-    });
-
     let writtenBytes = 0;
     try {
       await fs.mkdir(framesDir, { recursive: true });
-      const upload = await saveRequestVideoToTempFile({
+      const upload = await saveMultipartVideoToTempFile({
         limitBytes: axisMaxUploadBytes,
         request,
         videoPath,
       });
+      uploadedFileName = upload.fileName;
+      uploadedFileSize = upload.fileSize;
       writtenBytes = upload.fileSize;
       await fs.access(videoPath);
+      console.log("VIDEO_RECEIVED", {
+        uploaded_file_name: uploadedFileName,
+        uploaded_file_size: uploadedFileSize,
+      });
+      console.log("VIDEO_SIZE_MB", {
+        value: upload.fileSizeMB,
+      });
       console.log("TEMP_FILE_CREATED", {
         temp_video_path: videoPath,
         uploaded_file_name: uploadedFileName,

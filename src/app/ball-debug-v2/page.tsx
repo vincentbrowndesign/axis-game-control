@@ -138,13 +138,11 @@ export default function BallDebugV2Page() {
     setStatus("processing");
 
     try {
+      const formData = new FormData();
+      formData.append("video", file, file.name || "upload.mp4");
+
       const response = await fetch("/api/axis/ball-debug-v2", {
-        body: file,
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-          "x-axis-file-name": encodeURIComponent(file.name || "upload.mp4"),
-          "x-axis-file-size": String(file.size),
-        },
+        body: formData,
         method: "POST",
       });
       const result = (await response.json().catch(() => null)) as BallDebugResponse | null;
