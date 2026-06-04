@@ -26,7 +26,7 @@ export default function TacticalReplayPage() {
 
   useEffect(() => {
     const storedProduct = getAxisProduct(id);
-    const uploadId = storedProduct?.assetIds[0] ?? id;
+    const uploadId = storedProduct?.assetIds[0] ?? normalizeReplayUploadId(id);
     setProduct(storedProduct);
 
     const cachedUrl = uploadId ? getCachedVideoUrl(uploadId) : null;
@@ -39,7 +39,7 @@ export default function TacticalReplayPage() {
     setFacts([]);
     setTracks([]);
     setStatus("ready");
-    console.info("REPLAY_READY", { replayProductId: id, uploadId });
+    console.info("REPLAY_READY", { replayProductId: id, replay_upload_id: uploadId, uploadId });
     console.info("UI_POLLING_STOPPED", { reason: "replay_shell_ready" });
 
     const controller = new AbortController();
@@ -63,9 +63,20 @@ export default function TacticalReplayPage() {
     })
       .then((res) => res.json())
       .then((data: TracksResponse) => {
-        setTracks(data.records ?? []);
+        const records = data.records ?? [];
+        console.info("REPLAY_TRACKS_READ", {
+          first_track_point: records[0] ?? null,
+          replay_upload_id: uploadId,
+          tracks_read_count: records.length,
+        });
+        setTracks(records);
       })
       .catch(() => {
+        console.info("REPLAY_TRACKS_READ", {
+          first_track_point: null,
+          replay_upload_id: uploadId,
+          tracks_read_count: 0,
+        });
         setTracks([]);
       });
     return () => {
@@ -96,6 +107,10 @@ export default function TacticalReplayPage() {
       />
     </ReplayShell>
   );
+}
+
+function normalizeReplayUploadId(value: string) {
+  return value.startsWith("replay-") ? value.slice("replay-".length) : value;
 }
 
 function ReplayShell({

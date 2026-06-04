@@ -212,7 +212,7 @@ export async function persistAxisEntityTracks(records: AxisEntityTrackRecord[]) 
 
   const rows = records.map((record) => ({
     confidence: record.confidence ?? null,
-    entity_type: record.entity_type,
+    entity_type: getStoredEntityType(record.entity_type),
     metadata: {
       artifact_id: record.artifact_id ?? null,
       track_id: record.track_id ?? null,
@@ -264,7 +264,8 @@ export async function getAxisEntityTracks({
     .limit(Math.max(1, Math.min(limit, 2000)));
 
   if (artifactId) query = query.contains("metadata", { artifact_id: artifactId });
-  if (entityType) query = query.eq("entity_type", entityType);
+  if (entityType === "ball") query = query.in("entity_type", ["ball", "basketball"]);
+  else if (entityType) query = query.eq("entity_type", entityType);
   if (uploadId) query = query.eq("upload_id", uploadId);
 
   const { data, error } = await query;
@@ -313,7 +314,12 @@ function mapAxisEntityTrackRows(rows: unknown[]): AxisEntityTrackRecord[] {
 }
 
 function getEntityType(value: unknown): AxisEntityTrackRecord["entity_type"] | null {
+  if (value === "basketball") return "ball";
   return value === "ball" || value === "hoop" || value === "player" ? value : null;
+}
+
+function getStoredEntityType(value: AxisEntityTrackRecord["entity_type"]) {
+  return value === "ball" ? "basketball" : value;
 }
 
 function getNumber(value: unknown) {

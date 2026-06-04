@@ -179,7 +179,12 @@ export function AxisAnimationPlayer({
       count: ballTrack.length,
       source: "player_component",
     });
-  }, [ballTrack.length]);
+    console.info("REPLAY_TRACK_PROPS_DEBUG", {
+      active_ball_track_count: ballTrack.length,
+      first_track_point: ballTrack[0] ?? null,
+      props_tracks_count: tracks.length,
+    });
+  }, [ballTrack, tracks.length]);
 
   function handlePlayState() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
