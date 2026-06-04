@@ -55,6 +55,10 @@ export async function POST(request: Request) {
 
     return Response.json({
       facts: result.facts,
+      raw_class_names: result.debug?.roboflow?.raw_class_names ?? [],
+      raw_detection_count: result.debug?.roboflow?.raw_detection_count ?? 0,
+      ball_detection_count: result.debug?.roboflow?.ball_detection_count ?? 0,
+      first_20_detections: result.debug?.roboflow?.first_20_detections ?? [],
       stored: result.persistence.stored,
       tracks: result.tracks,
       tracks_stored: result.trackPersistence.stored,

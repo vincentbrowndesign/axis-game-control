@@ -73,6 +73,19 @@ type TrackSummary = {
   playerCounts: number[];
 };
 
+export type AxisRoboflowDebug = {
+  ball_detection_count: number;
+  first_20_detections: Array<{
+    className: string;
+    confidence?: number;
+    frameIndex: number;
+    x?: number;
+    y?: number;
+  }>;
+  raw_class_names: string[];
+  raw_detection_count: number;
+};
+
 export type AxisEntityTrack = {
   confidence?: number;
   entity_id: string;
@@ -183,6 +196,7 @@ export async function decodeAndPersistRealityFacts(input: DecodeVideoInput) {
   });
 
   return {
+    debug: decoded.debug,
     facts: decoded,
     persistence,
     tracks: decoded.tracks,
@@ -247,7 +261,10 @@ export function factsToPlainLanguage(facts: AxisDecodedFact[]) {
   return parts.length ? parts.join(", ") : "";
 }
 
-async function decodeReality(input: DecodeVideoInput, status: RealityDecoderStatus): Promise<AxisDecodedFact[] & { tracks: AxisEntityTrack[] }> {
+async function decodeReality(
+  input: DecodeVideoInput,
+  status: RealityDecoderStatus,
+): Promise<AxisDecodedFact[] & { debug?: { roboflow?: AxisRoboflowDebug }; tracks: AxisEntityTrack[] }> {
   const frames = await extractEvidenceFrames(input);
   status.frameExtraction = frames.length
     ? { frameCount: frames.length, status: "PASS" }
@@ -304,7 +321,10 @@ async function decodeReality(input: DecodeVideoInput, status: RealityDecoderStat
     uploadId: input.uploadId,
   });
   const qualified = qualifyDecodedFacts(normalized, Math.max(input.sourceClipCount, frames.length || 1));
-  return Object.assign(qualified, { tracks: tracks.tracks ?? [] });
+  return Object.assign(qualified, {
+    debug: { roboflow: roboflow.roboflowDebug },
+    tracks: tracks.tracks ?? [],
+  });
 }
 
 async function optionalFacts(name: string, run: () => Promise<RawDecodedFact[]> | RawDecodedFact[]) {
@@ -318,10 +338,18 @@ async function optionalFacts(name: string, run: () => Promise<RawDecodedFact[]> 
 
 async function optionalDecoder(
   _name: string,
-  run: () => Promise<{ detections: DetectionBox[]; facts: RawDecodedFact[]; reason?: string; tracks?: AxisEntityTrack[]; trackSummary?: TrackSummary }> | {
+  run: () => Promise<{
     detections: DetectionBox[];
     facts: RawDecodedFact[];
     reason?: string;
+    roboflowDebug?: AxisRoboflowDebug;
+    tracks?: AxisEntityTrack[];
+    trackSummary?: TrackSummary;
+  }> | {
+    detections: DetectionBox[];
+    facts: RawDecodedFact[];
+    reason?: string;
+    roboflowDebug?: AxisRoboflowDebug;
     tracks?: AxisEntityTrack[];
     trackSummary?: TrackSummary;
   },
@@ -332,12 +360,13 @@ async function optionalDecoder(
       detections: result.detections,
       facts: result.facts,
       reason: result.reason,
+      roboflowDebug: result.roboflowDebug,
       tracks: result.tracks ?? [],
       trackSummary: result.trackSummary,
     };
   } catch (error) {
     console.error(`Axis reality decoder ${_name} pass unavailable`, error);
-    return { detections: [], facts: [], reason: getErrorReason(error), tracks: [], trackSummary: undefined };
+    return { detections: [], facts: [], reason: getErrorReason(error), roboflowDebug: undefined, tracks: [], trackSummary: undefined };
   }
 }
 
@@ -412,6 +441,8 @@ async function runRoboflow(frames: EvidenceFrame[]) {
 
   let rawDetectionsCount = 0;
   let rawBallDetectionsCount = 0;
+  const rawClassNames = new Set<string>();
+  const first20Detections: AxisRoboflowDebug["first_20_detections"] = [];
   const detectionSets = await Promise.all(
     frames.map(async (frame) => {
       const endpoint = `https://detect.roboflow.com/${encodeURIComponent(project)}/${encodeURIComponent(
@@ -434,11 +465,34 @@ async function runRoboflow(frames: EvidenceFrame[]) {
       }
       rawDetectionsCount += result.predictions.length;
       rawBallDetectionsCount += result.predictions.filter(isRawBallDetection).length;
-      return normalizeDetections(result.predictions, frame.index, getDetectionDimensions(result.image), frame.time);
+      const normalized = normalizeDetections(result.predictions, frame.index, getDetectionDimensions(result.image), frame.time);
+      for (const detection of normalized) {
+        rawClassNames.add(detection.className);
+        if (first20Detections.length < 20) {
+          first20Detections.push({
+            className: detection.className,
+            confidence: detection.confidence,
+            frameIndex: detection.frameIndex,
+            x: detection.x,
+            y: detection.y,
+          });
+        }
+      }
+      return normalized;
     }),
   );
 
   const detections = detectionSets.flat();
+  const roboflowDebug: AxisRoboflowDebug = {
+    ball_detection_count: rawBallDetectionsCount,
+    first_20_detections: first20Detections,
+    raw_class_names: Array.from(rawClassNames).sort(),
+    raw_detection_count: rawDetectionsCount,
+  };
+  console.log("ROBOFLOW_CLASSES", roboflowDebug.raw_class_names);
+  console.log("ROBOFLOW_DETECTION_COUNT", roboflowDebug.raw_detection_count);
+  console.log("ROBOFLOW_BALL_COUNT", roboflowDebug.ball_detection_count);
+  console.log("ROBOFLOW_FIRST_20_DETECTIONS", roboflowDebug.first_20_detections);
   console.log("ROBOFLOW_RAW_DETECTIONS_COUNT", {
     count: rawDetectionsCount,
   });
@@ -447,8 +501,8 @@ async function runRoboflow(frames: EvidenceFrame[]) {
   });
   const output = factsFromDetections(detections);
   return output.facts.length || output.detections.length
-    ? output
-    : { ...output, reason: "Roboflow returned zero usable detections." };
+    ? { ...output, roboflowDebug }
+    : { ...output, reason: "Roboflow returned zero usable detections.", roboflowDebug };
 }
 
 function runByteTrack(detections: DetectionBox[]) {
