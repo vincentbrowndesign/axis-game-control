@@ -410,6 +410,8 @@ async function runRoboflow(frames: EvidenceFrame[]) {
   const versionStatus = await verifyRoboflowVersion({ apiKey, project, version, workspace });
   if (!versionStatus.ok) return { detections: [], facts: [], reason: versionStatus.reason };
 
+  let rawDetectionsCount = 0;
+  let rawBallDetectionsCount = 0;
   const detectionSets = await Promise.all(
     frames.map(async (frame) => {
       const endpoint = `https://detect.roboflow.com/${encodeURIComponent(project)}/${encodeURIComponent(
@@ -430,11 +432,19 @@ async function runRoboflow(frames: EvidenceFrame[]) {
         });
         return [];
       }
+      rawDetectionsCount += result.predictions.length;
+      rawBallDetectionsCount += result.predictions.filter(isRawBallDetection).length;
       return normalizeDetections(result.predictions, frame.index, getDetectionDimensions(result.image), frame.time);
     }),
   );
 
   const detections = detectionSets.flat();
+  console.log("ROBOFLOW_RAW_DETECTIONS_COUNT", {
+    count: rawDetectionsCount,
+  });
+  console.log("ROBOFLOW_BALL_DETECTIONS_COUNT", {
+    count: rawBallDetectionsCount,
+  });
   const output = factsFromDetections(detections);
   return output.facts.length || output.detections.length
     ? output
@@ -443,6 +453,9 @@ async function runRoboflow(frames: EvidenceFrame[]) {
 
 function runByteTrack(detections: DetectionBox[]) {
   const tracks = buildEntityTracks(detections);
+  console.log("NORMALIZED_BALL_TRACK_COUNT", {
+    count: tracks.filter((track) => track.entity_type === "ball").length,
+  });
   const summary: TrackSummary = {
     ballFrames: new Set(tracks.filter((track) => track.entity_type === "ball").map((track) => track.frame)).size,
     hoopFrames: new Set(tracks.filter((track) => track.entity_type === "hoop").map((track) => track.frame)).size,
@@ -791,6 +804,13 @@ function normalizeDetections(
       };
     })
     .filter(isDetectionBox);
+}
+
+function isRawBallDetection(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const className = String(record.class ?? record.class_name ?? record.label ?? record.name ?? "").toLowerCase();
+  return isBall(className);
 }
 
 function isDetectionBox(value: DetectionBox | null): value is DetectionBox {

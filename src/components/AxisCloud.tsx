@@ -13,6 +13,10 @@ type DecodeResponse = {
   tracks?: AnimationTrack[];
 };
 
+function getBallTrackCount(tracks: AnimationTrack[] | undefined) {
+  return tracks?.filter((track) => track.entity_type === "ball").length ?? 0;
+}
+
 function uploadVideoWithTus(uploadUrl: string, file: File) {
   return new Promise<void>((resolve, reject) => {
     const upload = new tus.Upload(file, {
@@ -130,7 +134,13 @@ export function FirstLoopHome() {
         videoUrl: muxVideoUrl,
       });
       if (Array.isArray(decoded?.facts)) setFacts(decoded.facts);
-      if (Array.isArray(decoded?.tracks)) setTracks(decoded.tracks);
+      const decodedTracks = Array.isArray(decoded?.tracks) ? decoded.tracks : [];
+      console.info("REPLAY_BALL_TRACK_COUNT", {
+        count: getBallTrackCount(decodedTracks),
+        source: "decode_response",
+        uploadId: film.uploadId,
+      });
+      setTracks(decodedTracks);
       setStatus("ready");
       console.info("REPLAY_READY", { uploadId: film.uploadId });
     } catch (error) {

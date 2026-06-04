@@ -174,6 +174,13 @@ export function AxisAnimationPlayer({
     setVideoLoaded(false);
   }, [videoUrl]);
 
+  useEffect(() => {
+    console.info("REPLAY_BALL_TRACK_COUNT", {
+      count: ballTrack.length,
+      source: "player_component",
+    });
+  }, [ballTrack.length]);
+
   function handlePlayState() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     paintOverlay();
@@ -208,6 +215,9 @@ export function AxisAnimationPlayer({
     const video = videoRef.current;
     const overlay = overlayRef.current;
     if (!video || !overlay || exportState === "saving") return null;
+    console.info("EXPORT_BALL_TRACK_COUNT", {
+      count: ballTrack.length,
+    });
 
     const mimeType = getBestMimeType();
     if (!mimeType || typeof MediaRecorder === "undefined") return renderOverlayPreview(video, overlay);
