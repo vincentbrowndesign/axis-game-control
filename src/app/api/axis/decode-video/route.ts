@@ -75,6 +75,7 @@ export async function POST(request: Request) {
       ball_detection_count: result.debug?.roboflow?.ball_detection_count ?? 0,
       first_20_detections: result.debug?.roboflow?.first_20_detections ?? [],
       stored: result.persistence.stored,
+      track_persistence_reason: result.trackPersistence.stored ? null : result.trackPersistence.reason,
       tracks: result.tracks,
       tracks_stored: result.trackPersistence.stored,
     });

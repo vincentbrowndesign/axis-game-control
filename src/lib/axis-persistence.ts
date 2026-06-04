@@ -50,12 +50,18 @@ export type AxisDecoderTestRecord = {
 };
 
 export type AxisEntityTrackRecord = {
-  artifact_id: string;
-  created_at: string;
+  artifact_id?: string | null;
+  confidence?: number | null;
+  created_at?: string;
   entity_id: string;
   entity_type: "ball" | "hoop" | "player";
   frame: number;
-  track_id: string;
+  id?: string;
+  metadata?: Record<string, unknown> | null;
+  source?: string | null;
+  time?: number;
+  track?: Record<string, unknown>;
+  track_id?: string;
   upload_id: string;
   x: number;
   y: number;
@@ -204,13 +210,37 @@ export async function persistAxisEntityTracks(records: AxisEntityTrackRecord[]) 
   if (!supabase) return { reason: "supabase_not_configured", stored: false };
   if (!records.length) return { records: [] as AxisEntityTrackRecord[], stored: true };
 
+  const rows = records.map((record) => ({
+    confidence: record.confidence ?? null,
+    entity_type: record.entity_type,
+    metadata: {
+      artifact_id: record.artifact_id ?? null,
+      track_id: record.track_id ?? null,
+    },
+    source: record.source ?? "roboflow",
+    track: {
+      artifact_id: record.artifact_id ?? null,
+      confidence: record.confidence ?? null,
+      entity_id: record.entity_id,
+      entity_type: record.entity_type,
+      frame: record.frame,
+      time: record.time ?? null,
+      x: record.x,
+      y: record.y,
+    },
+    upload_id: record.upload_id,
+  }));
+  const uploadIds = Array.from(new Set(records.map((record) => record.upload_id)));
+  const cleanup = await supabase.from("axis_entity_tracks").delete().in("upload_id", uploadIds);
+  if (cleanup.error) return { reason: cleanup.error.message, stored: false };
+
   const { data, error } = await supabase
     .from("axis_entity_tracks")
-    .upsert(records, { onConflict: "track_id" })
+    .insert(rows)
     .select();
 
   if (error) return { reason: error.message, stored: false };
-  return { records: (data ?? []) as AxisEntityTrackRecord[], stored: true };
+  return { records: mapAxisEntityTrackRows(data ?? []), stored: true };
 }
 
 export async function getAxisEntityTracks({
@@ -229,16 +259,69 @@ export async function getAxisEntityTracks({
 
   let query = supabase
     .from("axis_entity_tracks")
-    .select("track_id,artifact_id,upload_id,entity_id,entity_type,frame,x,y,created_at")
-    .order("frame", { ascending: true })
+    .select("id,upload_id,entity_type,track,source,confidence,metadata,created_at")
+    .order("created_at", { ascending: true })
     .limit(Math.max(1, Math.min(limit, 2000)));
 
-  if (artifactId) query = query.eq("artifact_id", artifactId);
+  if (artifactId) query = query.contains("metadata", { artifact_id: artifactId });
   if (entityType) query = query.eq("entity_type", entityType);
   if (uploadId) query = query.eq("upload_id", uploadId);
 
   const { data, error } = await query;
-  return { error: error?.message ?? null, records: (data ?? []) as AxisEntityTrackRecord[] };
+  return { error: error?.message ?? null, records: mapAxisEntityTrackRows(data ?? []) };
+}
+
+function mapAxisEntityTrackRows(rows: unknown[]): AxisEntityTrackRecord[] {
+  return rows
+    .map((row): AxisEntityTrackRecord | null => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+      const record = row as Record<string, unknown>;
+      const track = record.track && typeof record.track === "object" && !Array.isArray(record.track)
+        ? (record.track as Record<string, unknown>)
+        : {};
+      const metadata = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+        ? (record.metadata as Record<string, unknown>)
+        : null;
+      const entityType = getEntityType(record.entity_type ?? track.entity_type);
+      const frame = getNumber(track.frame);
+      const x = getNumber(track.x);
+      const y = getNumber(track.y);
+      const entityId = getString(track.entity_id);
+      const uploadId = getString(record.upload_id);
+      if (!entityType || frame === undefined || x === undefined || y === undefined || !entityId || !uploadId) return null;
+
+      return {
+        artifact_id: getString(track.artifact_id) || getString(metadata?.artifact_id) || null,
+        confidence: getNumber(record.confidence) ?? getNumber(track.confidence) ?? null,
+        created_at: getString(record.created_at),
+        entity_id: entityId,
+        entity_type: entityType,
+        frame,
+        id: getString(record.id),
+        metadata,
+        source: getString(record.source) || null,
+        time: getNumber(track.time),
+        track,
+        track_id: getString(metadata?.track_id),
+        upload_id: uploadId,
+        x,
+        y,
+      };
+    })
+    .filter((record): record is AxisEntityTrackRecord => Boolean(record))
+    .sort((a, b) => a.frame - b.frame || (a.time ?? a.frame) - (b.time ?? b.frame));
+}
+
+function getEntityType(value: unknown): AxisEntityTrackRecord["entity_type"] | null {
+  return value === "ball" || value === "hoop" || value === "player" ? value : null;
+}
+
+function getNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 export async function persistAxisDecoderTest(record: AxisDecoderTestRecord): Promise<AxisPersistenceResult<AxisDecoderTestRecord>> {

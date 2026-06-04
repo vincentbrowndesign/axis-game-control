@@ -20,6 +20,16 @@ export async function GET(request: Request) {
   const limit = getLimit(url.searchParams.get("limit"));
   const history = await getAxisEntityTracks({ artifactId, entityType, limit, uploadId });
 
-  if (history.error) return Response.json({ error: history.error, records: [] }, { status: 502 });
+  if (history.error) {
+    console.error("TRACKS_READ_FAILED", {
+      error: history.error,
+      uploadId,
+    });
+    return Response.json({ error: history.error, records: [] }, { status: 502 });
+  }
+  console.log("TRACKS_READ_COMPLETE", {
+    count: history.records.length,
+    uploadId,
+  });
   return Response.json({ records: history.records });
 }

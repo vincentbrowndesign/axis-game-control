@@ -275,6 +275,10 @@ async function decodeReality(
   status: RealityDecoderStatus,
 ): Promise<AxisDecodedFact[] & { debug?: { roboflow?: AxisRoboflowDebug }; tracks: AxisEntityTrack[] }> {
   const frames = await extractEvidenceFrames(input);
+  console.log("FRAMES_EXTRACTED", {
+    count: frames.length,
+    uploadId: input.uploadId,
+  });
   status.frameExtraction = frames.length
     ? { frameCount: frames.length, status: "PASS" }
     : { frameCount: 0, reason: "No Mux playback frames could be loaded.", status: "FAIL" };
@@ -486,6 +490,11 @@ async function runRoboflow(frames: EvidenceFrame[]) {
     return { detections: [], facts: [], reason: "Roboflow env is incomplete." };
   }
   if (!frames.length) return { detections: [], facts: [], reason: "No frames available for Roboflow." };
+  console.log("FRAMES_SENT_TO_ROBOFLOW", {
+    count: frames.length,
+    project,
+    version,
+  });
 
   const versionStatus = await verifyRoboflowVersion({ apiKey, project, version, workspace });
   if (!versionStatus.ok) return { detections: [], facts: [], reason: versionStatus.reason };
@@ -543,6 +552,12 @@ async function runRoboflow(frames: EvidenceFrame[]) {
   console.log("ROBOFLOW_CLASSES", roboflowDebug.raw_class_names);
   console.log("ROBOFLOW_DETECTION_COUNT", roboflowDebug.raw_detection_count);
   console.log("ROBOFLOW_BALL_COUNT", roboflowDebug.ball_detection_count);
+  console.log("DETECTIONS_RETURNED", {
+    count: rawDetectionsCount,
+  });
+  console.log("BASKETBALL_DETECTIONS", {
+    count: rawBallDetectionsCount,
+  });
   console.log("ROBOFLOW_FIRST_20_DETECTIONS", roboflowDebug.first_20_detections);
   console.log("ROBOFLOW_RAW_DETECTIONS_COUNT", {
     count: rawDetectionsCount,
@@ -564,6 +579,9 @@ function runByteTrack(detections: DetectionBox[]) {
   });
   console.log("BALL_TRACK_COUNT", {
     count: ballTracks.length,
+  });
+  console.log("BALL_TRACK_CREATED", {
+    created: ballTracks.length > 0,
   });
   console.log("FIRST_BALL_FRAME", {
     frame: ballTracks[0]?.frame ?? null,
@@ -1294,9 +1312,12 @@ function trackToRecord(track: AxisEntityTrack, input: DecodeVideoInput): AxisEnt
   return {
     artifact_id: input.artifactId,
     created_at: new Date().toISOString(),
+    confidence: track.confidence ?? null,
     entity_id: track.entity_id,
     entity_type: track.entity_type,
     frame: track.frame,
+    source: "roboflow",
+    time: track.time,
     track_id: `${input.artifactId}-${track.entity_id}-${track.frame}`,
     upload_id: input.uploadId,
     x: track.x,
