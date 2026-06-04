@@ -23,6 +23,10 @@ function getBallTrackCount(tracks: AnimationTrack[] | undefined) {
   return tracks?.filter((track) => track.entity_type === "ball").length ?? 0;
 }
 
+function getPlayerTrackCount(tracks: AnimationTrack[] | undefined) {
+  return tracks?.filter((track) => track.entity_type === "player").length ?? 0;
+}
+
 async function uploadToMux(file: File) {
   console.info("EXPORT_START", { fileName: file.name, route: "/api/film/uploads/server" });
   const form = new FormData();
@@ -158,10 +162,17 @@ export function FirstLoopHome() {
         source: "decode_response",
         uploadId: film.uploadId,
       });
+      console.info("REPLAY_PLAYER_TRACK_COUNT", {
+        count: getPlayerTrackCount(decodedTracks),
+        processed_upload_id: storedUploadId,
+        source: "decode_response",
+        uploadId: film.uploadId,
+      });
       setTracks(decodedTracks);
       setStatus("ready");
       console.info("REPLAY_READY", {
         processed_upload_id: storedUploadId,
+        player_tracks_count: getPlayerTrackCount(decodedTracks),
         props_tracks_count: decodedTracks.length,
         uploadId: film.uploadId,
       });

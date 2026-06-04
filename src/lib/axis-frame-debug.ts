@@ -6,6 +6,7 @@ import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 
 export type AxisFrameDebugInput = {
+  createDebugMp4?: boolean;
   frameIntervalSeconds?: number;
   muxPlaybackId?: string;
   videoUrl?: string;
@@ -17,6 +18,30 @@ export type AxisBallTrackPoint = {
   time: number;
   x: number;
   y: number;
+};
+
+export type AxisPlayerTrackPoint = {
+  confidence: number;
+  frame: number;
+  id: string;
+  x: number;
+  y: number;
+};
+
+export type AxisTrackGap = {
+  endFrame: number;
+  length: number;
+  startFrame: number;
+};
+
+export type AxisTrackQuality = {
+  AVERAGE_CONFIDENCE: number | null;
+  DETECTION_COVERAGE_PERCENT: number;
+  FIRST_MISSING_FRAME: number | null;
+  FRAMES_WITH_BALL: number;
+  LAST_MISSING_FRAME: number | null;
+  LARGEST_TRACKING_GAP: number;
+  TRACK_GAPS: AxisTrackGap[];
 };
 
 type RawFrameDetection = {
@@ -55,7 +80,10 @@ export type AxisFrameDebugResult = {
   debug_mp4_path: string;
   exact_failing_step: string;
   first_20_detections: RawFrameDetection[];
+  ball_track: AxisBallTrackPoint[];
   frames_dir: string;
+  player_tracks: AxisPlayerTrackPoint[];
+  track_quality: AxisTrackQuality;
   raw_class_names: string[];
 };
 
@@ -83,22 +111,26 @@ export async function runAxisFrameDebugPass(input: AxisFrameDebugInput): Promise
 
   await extractFrames({ frameIntervalSeconds, framesDir, videoUrl });
   const frames = await listExtractedFrames(framesDir);
-  const { ballTrack, first20Detections, rawClassNames, totalBallDetections, totalDetections } =
+  const { ballTrack, first20Detections, playerTracks, rawClassNames, totalBallDetections, totalDetections } =
     await detectFramesWithRoboflow({
       frameIntervalSeconds,
       frames,
     });
 
   await fs.writeFile(ballTrackPath, JSON.stringify(ballTrack, null, 2), "utf8");
-  const debugMp4Created = await createDebugMp4({
-    ballTrack,
-    debugMp4Path,
-    frameIntervalSeconds,
-    videoUrl,
-  });
+  const shouldCreateDebugMp4 = input.createDebugMp4 !== false;
+  const debugMp4Created = shouldCreateDebugMp4
+    ? await createDebugMp4({
+        ballTrack,
+        debugMp4Path,
+        frameIntervalSeconds,
+        videoUrl,
+      })
+    : false;
   const trackFileExists = await fileExists(ballTrackPath);
   const firstBallFrame = ballTrack[0]?.frame ?? null;
   const lastBallFrame = ballTrack.at(-1)?.frame ?? null;
+  const trackQuality = getTrackQuality(ballTrack, frames.length);
 
   const output: AxisFrameDebugResult = {
     BALL_DETECTIONS: totalBallDetections,
@@ -118,9 +150,13 @@ export async function runAxisFrameDebugPass(input: AxisFrameDebugInput): Promise
       totalBallDetections,
       totalDetections,
       totalFrames: frames.length,
+      requireDebugMp4: shouldCreateDebugMp4,
     }),
     first_20_detections: first20Detections,
+    ball_track: ballTrack,
     frames_dir: framesDir,
+    player_tracks: playerTracks,
+    track_quality: trackQuality,
     raw_class_names: rawClassNames,
   };
 
@@ -191,6 +227,7 @@ async function detectFramesWithRoboflow({
   const rawClassNames = new Set<string>();
   const first20Detections: RawFrameDetection[] = [];
   const ballTrack: AxisBallTrackPoint[] = [];
+  const playerTrackBuilder = createPlayerTrackBuilder();
   let totalBallDetections = 0;
   let totalDetections = 0;
 
@@ -232,11 +269,19 @@ async function detectFramesWithRoboflow({
         y: bestBall.y,
       });
     }
+
+    playerTrackBuilder.addFrame(
+      frame.frame,
+      normalized.filter(
+        (detection) => isPlayerClass(detection.className) && isNumber(detection.x) && isNumber(detection.y),
+      ),
+    );
   }
 
   return {
     ballTrack: ballTrack.sort((a, b) => a.time - b.time),
     first20Detections,
+    playerTracks: playerTrackBuilder.getTracks(),
     rawClassNames: Array.from(rawClassNames).sort(),
     totalBallDetections,
     totalDetections,
@@ -308,15 +353,71 @@ function isBallClass(className: string) {
   return className === "ball" || className === "basketball" || className === "sports ball";
 }
 
+function isPlayerClass(className: string) {
+  return className === "person" || className === "player" || className === "athlete" || className.includes("person") || className.includes("player");
+}
+
+function createPlayerTrackBuilder() {
+  let nextId = 1;
+  const active = new Map<string, AxisPlayerTrackPoint>();
+  const tracks: AxisPlayerTrackPoint[] = [];
+
+  function addFrame(frame: number, detections: RawFrameDetection[]) {
+    const usedThisFrame = new Set<string>();
+    const ordered = [...detections].sort((a, b) => b.confidence - a.confidence);
+
+    for (const detection of ordered) {
+      if (!isNumber(detection.x) || !isNumber(detection.y)) continue;
+      const id = findNearestPlayer(active, usedThisFrame, frame, detection.x, detection.y) ?? `player_${nextId++}`;
+      const track: AxisPlayerTrackPoint = {
+        confidence: detection.confidence,
+        frame,
+        id,
+        x: detection.x,
+        y: detection.y,
+      };
+      active.set(id, track);
+      usedThisFrame.add(id);
+      tracks.push(track);
+    }
+  }
+
+  return {
+    addFrame,
+    getTracks: () => tracks.sort((a, b) => a.id.localeCompare(b.id) || a.frame - b.frame),
+  };
+}
+
+function findNearestPlayer(
+  active: Map<string, AxisPlayerTrackPoint>,
+  usedThisFrame: Set<string>,
+  frame: number,
+  x: number,
+  y: number,
+) {
+  let best: { distance: number; id: string } | null = null;
+
+  for (const track of active.values()) {
+    if (usedThisFrame.has(track.id) || frame - track.frame > 4) continue;
+    const distance = Math.hypot(track.x - x, track.y - y);
+    if (distance > 180) continue;
+    if (!best || distance < best.distance) best = { distance, id: track.id };
+  }
+
+  return best?.id ?? null;
+}
+
 function getFailingStep({
   ballTrackCount,
   debugMp4Created,
+  requireDebugMp4,
   totalBallDetections,
   totalDetections,
   totalFrames,
 }: {
   ballTrackCount: number;
   debugMp4Created: boolean;
+  requireDebugMp4: boolean;
   totalBallDetections: number;
   totalDetections: number;
   totalFrames: number;
@@ -325,17 +426,83 @@ function getFailingStep({
   if (totalDetections === 0) return "ROBOFLOW_RETURNED_NO_DETECTIONS";
   if (totalBallDetections === 0) return "ROBOFLOW_RETURNED_NO_BASKETBALL_DETECTIONS";
   if (ballTrackCount === 0) return "BALL_TRACK_CREATION_FAILED";
-  if (!debugMp4Created) return "DEBUG_MP4_CREATION_FAILED";
+  if (requireDebugMp4 && !debugMp4Created) return "DEBUG_MP4_CREATION_FAILED";
   return "TRACKING_WORKS_IN_FRAME_DEBUG";
+}
+
+function getTrackQuality(ballTrack: AxisBallTrackPoint[], totalFrames: number): AxisTrackQuality {
+  const uniqueFramesWithBall = new Set(ballTrack.map((point) => point.frame));
+  const missingFrames: number[] = [];
+  const gaps: AxisTrackGap[] = [];
+
+  for (let frame = 1; frame <= totalFrames; frame += 1) {
+    if (!uniqueFramesWithBall.has(frame)) missingFrames.push(frame);
+  }
+
+  let gapStart: number | null = null;
+  let previousMissing: number | null = null;
+  for (const frame of missingFrames) {
+    if (gapStart === null) {
+      gapStart = frame;
+      previousMissing = frame;
+      continue;
+    }
+
+    if (previousMissing !== null && frame === previousMissing + 1) {
+      previousMissing = frame;
+      continue;
+    }
+
+    if (previousMissing !== null) {
+      gaps.push({
+        endFrame: previousMissing,
+        length: previousMissing - gapStart + 1,
+        startFrame: gapStart,
+      });
+    }
+    gapStart = frame;
+    previousMissing = frame;
+  }
+
+  if (gapStart !== null && previousMissing !== null) {
+    gaps.push({
+      endFrame: previousMissing,
+      length: previousMissing - gapStart + 1,
+      startFrame: gapStart,
+    });
+  }
+
+  const averageConfidence = ballTrack.length
+    ? ballTrack.reduce((sum, point) => sum + point.confidence, 0) / ballTrack.length
+    : null;
+
+  return {
+    AVERAGE_CONFIDENCE: averageConfidence === null ? null : roundMetric(averageConfidence),
+    DETECTION_COVERAGE_PERCENT: totalFrames > 0 ? roundMetric((uniqueFramesWithBall.size / totalFrames) * 100) : 0,
+    FIRST_MISSING_FRAME: missingFrames[0] ?? null,
+    FRAMES_WITH_BALL: uniqueFramesWithBall.size,
+    LAST_MISSING_FRAME: missingFrames.at(-1) ?? null,
+    LARGEST_TRACKING_GAP: gaps.reduce((largest, gap) => Math.max(largest, gap.length), 0),
+    TRACK_GAPS: gaps,
+  };
 }
 
 function logFrameDebugOutput(output: AxisFrameDebugResult) {
   console.log("TOTAL_FRAMES", output.TOTAL_FRAMES);
+  console.log("FRAMES_EXTRACTED", output.TOTAL_FRAMES);
+  console.log("FRAMES_WITH_BALL", output.track_quality.FRAMES_WITH_BALL);
   console.log("ROBOFLOW_CLASSES", output.raw_class_names);
   console.log("ROBOFLOW_DETECTION_COUNT", output.TOTAL_DETECTIONS);
   console.log("ROBOFLOW_BALL_COUNT", output.BALL_DETECTIONS);
   console.log("ROBOFLOW_FIRST_20_DETECTIONS", output.first_20_detections);
   console.log("BALL_TRACK_COUNT", output.BALL_TRACK_COUNT);
+  console.log("PLAYER_TRACK_COUNT", output.player_tracks.length);
+  console.log("TRACK_GAPS", output.track_quality.TRACK_GAPS);
+  console.log("AVERAGE_CONFIDENCE", output.track_quality.AVERAGE_CONFIDENCE);
+  console.log("DETECTION_COVERAGE_PERCENT", output.track_quality.DETECTION_COVERAGE_PERCENT);
+  console.log("LARGEST_TRACKING_GAP", output.track_quality.LARGEST_TRACKING_GAP);
+  console.log("FIRST_MISSING_FRAME", output.track_quality.FIRST_MISSING_FRAME);
+  console.log("LAST_MISSING_FRAME", output.track_quality.LAST_MISSING_FRAME);
   console.log("BALL_TRACK_CREATED", output.BALL_TRACK_CREATED);
   console.log("BALL_TRACK_FILE_EXISTS", output.BALL_TRACK_FILE_EXISTS);
   console.log("DEBUG_MP4_CREATED", output.DEBUG_MP4_CREATED);
@@ -369,4 +536,8 @@ function isNumber(value: unknown): value is number {
 
 function roundTime(value: number) {
   return Math.round(value * 1000) / 1000;
+}
+
+function roundMetric(value: number) {
+  return Math.round(value * 100) / 100;
 }

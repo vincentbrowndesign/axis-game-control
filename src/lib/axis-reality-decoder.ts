@@ -577,6 +577,7 @@ async function runRoboflow(frames: EvidenceFrame[]) {
 function runByteTrack(detections: DetectionBox[]) {
   const tracks = buildEntityTracks(detections);
   const ballTracks = tracks.filter((track) => track.entity_type === "ball");
+  const playerTracks = tracks.filter((track) => track.entity_type === "player");
   console.log("NORMALIZED_BALL_TRACK_COUNT", {
     count: ballTracks.length,
   });
@@ -591,6 +592,9 @@ function runByteTrack(detections: DetectionBox[]) {
   });
   console.log("LAST_BALL_FRAME", {
     frame: ballTracks.at(-1)?.frame ?? null,
+  });
+  console.log("PLAYER_TRACK_COUNT", {
+    count: playerTracks.length,
   });
   const summary: TrackSummary = {
     ballFrames: new Set(ballTracks.map((track) => track.frame)).size,

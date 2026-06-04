@@ -23,6 +23,7 @@ type BallDebugState = {
   currentBallY: string;
   overlayHeight: number;
   overlayWidth: number;
+  playerTrackCount: number;
   videoHeight: number;
   videoWidth: number;
 };
@@ -127,6 +128,7 @@ export function AxisAnimationPlayer({
     currentBallY: "n/a",
     overlayHeight: OVERLAY_H,
     overlayWidth: OVERLAY_W,
+    playerTrackCount: 0,
     videoHeight: 0,
     videoWidth: 0,
   });
@@ -175,13 +177,19 @@ export function AxisAnimationPlayer({
   }, [videoUrl]);
 
   useEffect(() => {
+    const playerTrackCount = tracks.filter((track) => track.entity_type === "player").length;
     console.info("REPLAY_BALL_TRACK_COUNT", {
       count: ballTrack.length,
+      source: "player_component",
+    });
+    console.info("REPLAY_PLAYER_TRACK_COUNT", {
+      count: playerTrackCount,
       source: "player_component",
     });
     console.info("REPLAY_TRACK_PROPS_DEBUG", {
       active_ball_track_count: ballTrack.length,
       first_track_point: ballTrack[0] ?? null,
+      player_track_count: playerTrackCount,
       props_tracks_count: tracks.length,
     });
   }, [ballTrack, tracks.length]);
@@ -401,6 +409,10 @@ export function AxisAnimationPlayer({
           <dd>{ballDebug.ballTrackCount}</dd>
         </div>
         <div>
+          <dt>player_track_count</dt>
+          <dd>{ballDebug.playerTrackCount}</dd>
+        </div>
+        <div>
           <dt>current_ball_x</dt>
           <dd>{ballDebug.currentBallX}</dd>
         </div>
@@ -479,6 +491,7 @@ function drawUnderstandingOverlay(
     currentBallY: ball ? formatDebugNumber(ball.y) : "n/a",
     overlayHeight: height,
     overlayWidth: width,
+    playerTrackCount: tracks.filter((track) => track.entity_type === "player").length,
     videoHeight: video?.videoHeight ?? 0,
     videoWidth: video?.videoWidth ?? 0,
   };
@@ -559,7 +572,7 @@ function drawNonBallTracks(
       const previous = values[index - 1];
       return !previous || previous.frame !== track.frame || previous.x !== track.x || previous.y !== track.y;
     });
-    const color = current.entity_type === "hoop" ? "#ff7a24" : "#b8db4d";
+    const color = current.entity_type === "hoop" ? "#ff7a24" : "#ffffff";
     const radius = current.entity_type === "hoop" ? 22 : 20;
     const alpha = current.entity_type === "hoop" ? 0.76 : 0.92;
 
@@ -569,7 +582,7 @@ function drawNonBallTracks(
     ctx.lineWidth = current.entity_type === "player" ? 5 : 4;
     ctx.lineCap = "round";
     ctx.shadowColor = color;
-    ctx.shadowBlur = 14;
+    ctx.shadowBlur = current.entity_type === "player" ? 18 : 14;
     ctx.beginPath();
     path.forEach((track, index) => {
       const point = mapVideoPointToCanvas(track, mapping);
@@ -582,7 +595,7 @@ function drawNonBallTracks(
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.globalAlpha = current.entity_type === "hoop" ? 0.25 : 0.85;
+    ctx.globalAlpha = current.entity_type === "hoop" ? 0.25 : 0.9;
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(point.x, point.y, current.entity_type === "hoop" ? 4 : 6, 0, Math.PI * 2);
@@ -682,9 +695,9 @@ function drawBallOverlay(
       const from = mapVideoPointToCanvas(previous, mapping);
       const to = mapVideoPointToCanvas(point, mapping);
       ctx.globalAlpha = 0.18 + fade * 0.62;
-      ctx.strokeStyle = "rgba(255,154,60,0.95)";
+      ctx.strokeStyle = "rgba(42,255,91,0.95)";
       ctx.lineWidth = Math.max(3, width * 0.006 * fade);
-      ctx.shadowColor = "rgba(255,154,60,0.75)";
+      ctx.shadowColor = "rgba(42,255,91,0.75)";
       ctx.shadowBlur = 18 * fade;
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
@@ -697,15 +710,15 @@ function drawBallOverlay(
   const confidence = getNormalizedConfidence(current.confidence);
   const radius = Math.max(12, Math.min(width, height) * 0.018);
   ctx.globalAlpha = Math.max(0.35, confidence);
-  ctx.shadowColor = "rgba(255,154,60,0.95)";
+  ctx.shadowColor = "rgba(42,255,91,0.95)";
   ctx.shadowBlur = radius * 2.4;
-  ctx.strokeStyle = "rgba(255,184,102,0.96)";
+  ctx.strokeStyle = "rgba(42,255,91,0.96)";
   ctx.lineWidth = Math.max(2, radius * 0.22);
   ctx.beginPath();
   ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = Math.max(0.55, confidence);
-  ctx.fillStyle = "rgba(255,154,60,0.92)";
+  ctx.fillStyle = "rgba(42,255,91,0.92)";
   ctx.beginPath();
   ctx.arc(p.x, p.y, Math.max(3, radius * 0.28), 0, Math.PI * 2);
   ctx.fill();
