@@ -1,10 +1,16 @@
-import { createWriteStream } from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import {
+  AxisUploadTooLargeError,
+  axisMaxUploadBytes,
+  getDeclaredUploadSize,
+  getSafeFileName,
+  saveRequestVideoToTempFile,
+} from "../../../../lib/axis-upload-stream";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -40,7 +46,6 @@ type FailureStage =
   | "ball_track_generation";
 
 const frameIntervalSeconds = 0.1;
-const maxUploadBytes = 150 * 1024 * 1024;
 const roboflowProject = "axis-kenetic-observer";
 const roboflowVersion = "1";
 
@@ -49,7 +54,7 @@ export async function POST(request: Request) {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-debug-v2-"));
   const framesDir = path.join(workDir, "frames");
   const uploadedFileName = getSafeFileName(request.headers.get("x-axis-file-name"));
-  const uploadedFileSize = getHeaderNumber(request.headers.get("x-axis-file-size"));
+  const uploadedFileSize = getDeclaredUploadSize(request);
   const videoPath = path.join(workDir, uploadedFileName);
   let frameCount = 0;
   let detectionCount = 0;
@@ -62,18 +67,6 @@ export async function POST(request: Request) {
   });
 
   try {
-    if (uploadedFileSize !== null && uploadedFileSize > maxUploadBytes) {
-      return failureResponse(
-        "upload",
-        `Video is too large. Limit is ${Math.round(maxUploadBytes / 1024 / 1024)}MB.`,
-        {
-          maxUploadMb: Math.round(maxUploadBytes / 1024 / 1024),
-          uploaded_file_name: uploadedFileName,
-          uploaded_file_size: uploadedFileSize,
-        },
-        413,
-      );
-    }
     console.log("VIDEO_RECEIVED", {
       uploaded_file_name: uploadedFileName,
       uploaded_file_size: uploadedFileSize,
@@ -85,7 +78,12 @@ export async function POST(request: Request) {
     let writtenBytes = 0;
     try {
       await fs.mkdir(framesDir, { recursive: true });
-      writtenBytes = await writeRequestBodyToFile(request, videoPath, maxUploadBytes);
+      const upload = await saveRequestVideoToTempFile({
+        limitBytes: axisMaxUploadBytes,
+        request,
+        videoPath,
+      });
+      writtenBytes = upload.fileSize;
       await fs.access(videoPath);
       console.log("TEMP_FILE_CREATED", {
         temp_video_path: videoPath,
@@ -94,14 +92,14 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       return failureResponse(
-        error instanceof UploadTooLargeError ? "upload" : "temp_file_creation",
+        error instanceof AxisUploadTooLargeError ? "upload" : "temp_file_creation",
         getErrorMessage(error),
         {
           temp_video_path: videoPath,
           uploaded_file_name: uploadedFileName,
           uploaded_file_size: writtenBytes || uploadedFileSize,
         },
-        error instanceof UploadTooLargeError ? 413 : 500,
+        error instanceof AxisUploadTooLargeError ? 413 : 500,
       );
     }
 
@@ -190,7 +188,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error("BALL_DEBUG_V2_FAILED", { reason });
-    const isTooLarge = error instanceof UploadTooLargeError;
+    const isTooLarge = error instanceof AxisUploadTooLargeError;
     return failureResponse(
       isTooLarge ? "upload" : "temp_file_creation",
       reason,
@@ -205,57 +203,6 @@ export async function POST(request: Request) {
   } finally {
     await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
   }
-}
-
-class UploadTooLargeError extends Error {
-  constructor(limitBytes: number) {
-    super(`Video is too large. Limit is ${Math.round(limitBytes / 1024 / 1024)}MB.`);
-    this.name = "UploadTooLargeError";
-  }
-}
-
-async function writeRequestBodyToFile(request: Request, videoPath: string, limitBytes: number) {
-  if (!request.body) throw new Error("video upload body is required");
-
-  let writtenBytes = 0;
-  const reader = request.body.getReader();
-  const writer = createWriteStream(videoPath);
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = Buffer.from(value);
-      writtenBytes += chunk.byteLength;
-      if (writtenBytes > limitBytes) {
-        throw new UploadTooLargeError(limitBytes);
-      }
-      await writeChunk(writer, chunk);
-    }
-  } finally {
-    reader.releaseLock();
-    await closeWriter(writer);
-  }
-
-  return writtenBytes;
-}
-
-function writeChunk(writer: ReturnType<typeof createWriteStream>, chunk: Buffer) {
-  return new Promise<void>((resolve, reject) => {
-    writer.write(chunk, (error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-}
-
-function closeWriter(writer: ReturnType<typeof createWriteStream>) {
-  return new Promise<void>((resolve, reject) => {
-    writer.end((error?: Error | null) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
 }
 
 async function extractFrames(videoPath: string, framesDir: string) {
@@ -369,28 +316,12 @@ function normalizePrediction(prediction: RoboflowPrediction) {
   };
 }
 
-function getHeaderNumber(value: string | null) {
-  if (!value) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
 function getDetailNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
-}
-
-function getSafeFileName(value: string | null) {
-  const fallback = "upload.mp4";
-  if (!value) return fallback;
-  const clean = decodeURIComponent(value)
-    .replace(/[\\/]/g, "")
-    .replace(/[^\w .-]/g, "")
-    .trim();
-  return clean || fallback;
 }
 
 async function getFfmpegPath() {
