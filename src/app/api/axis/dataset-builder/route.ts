@@ -1,4 +1,4 @@
-import { buildAxisDataset } from "../../../../lib/axis-dataset-builder";
+import { buildAxisDataset, getDatasetDownload } from "../../../../lib/axis-dataset-builder";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -55,10 +55,25 @@ export async function POST(request: Request) {
       targetFrameCount: getNumber(body.targetFrameCount),
       videos: normalizeVideos(body),
     });
-    return Response.json(result);
+    return Response.json({
+      ...result,
+      download_dataset_url: "/api/axis/dataset-builder?download=1",
+    });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error("DATASET_BUILDER_FAILED", { reason });
     return Response.json({ error: reason, frame_count: 0 }, { status: 500 });
   }
+}
+
+export async function GET() {
+  const download = await getDatasetDownload();
+  if (!download) return Response.json({ error: "Dataset ZIP is not ready." }, { status: 404 });
+
+  return new Response(download.buffer, {
+    headers: {
+      "Content-Disposition": `attachment; filename="${download.fileName}"`,
+      "Content-Type": "application/zip",
+    },
+  });
 }

@@ -42,12 +42,15 @@ type DatasetFrameMetadata = {
 export type AxisDatasetBuilderResult = {
   candidate_frames: number;
   dataset_dir: string;
+  download_dataset_url?: string;
   frame_count: number;
+  frames_dir: string;
   metadata_path: string;
   sample_every_seconds: number;
   selected_frames: DatasetFrameMetadata[];
   target_frame_count: number;
   videos: Array<{ candidate_frames: number; video_id: string }>;
+  zip_path: string;
 };
 
 const defaultSampleEverySeconds = 0.25;
@@ -66,10 +69,12 @@ export async function buildAxisDataset(input: AxisDatasetBuilderInput): Promise<
   const sampleEverySeconds = clampSampleEverySeconds(input.sampleEverySeconds);
   const targetFrameCount = clampTargetFrameCount(input.targetFrameCount);
   const datasetDir = path.join(process.cwd(), "dataset");
+  const framesDir = path.join(datasetDir, "frames");
   const metadataPath = path.join(datasetDir, "metadata.json");
+  const zipPath = path.join(datasetDir, "axis-dataset.zip");
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-dataset-builder-"));
 
-  await prepareDatasetDir(datasetDir);
+  await prepareDatasetDir(datasetDir, framesDir);
 
   const candidates: CandidateFrame[] = [];
   const videoStats: AxisDatasetBuilderResult["videos"] = [];
@@ -98,6 +103,7 @@ export async function buildAxisDataset(input: AxisDatasetBuilderInput): Promise<
   const selected = selectUsefulFrames(candidates, targetFrameCount);
   const selectedMetadata = await writeDatasetFrames({
     datasetDir,
+    framesDir,
     selected,
   });
   await fs.writeFile(
@@ -118,16 +124,27 @@ export async function buildAxisDataset(input: AxisDatasetBuilderInput): Promise<
     "utf8",
   );
 
-  return {
+  const result: AxisDatasetBuilderResult = {
     candidate_frames: candidates.length,
     dataset_dir: datasetDir,
     frame_count: selectedMetadata.length,
+    frames_dir: framesDir,
     metadata_path: metadataPath,
     sample_every_seconds: sampleEverySeconds,
     selected_frames: selectedMetadata,
     target_frame_count: targetFrameCount,
     videos: videoStats,
+    zip_path: zipPath,
   };
+
+  await writeDatasetZip({
+    datasetDir,
+    framesDir,
+    metadataPath,
+    zipPath,
+  });
+
+  return result;
 }
 
 function normalizeVideos(videos: DatasetVideoInput[]) {
@@ -148,13 +165,20 @@ function getMuxPlaybackUrl(playbackId?: string) {
   return playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : "";
 }
 
-async function prepareDatasetDir(datasetDir: string) {
+async function prepareDatasetDir(datasetDir: string, framesDir: string) {
   await fs.mkdir(datasetDir, { recursive: true });
+  await fs.mkdir(framesDir, { recursive: true });
   const entries = await fs.readdir(datasetDir);
   await Promise.all(
     entries
-      .filter((entry) => /^frame_\d+\.jpg$/i.test(entry) || entry === "metadata.json")
+      .filter((entry) => entry === "metadata.json" || entry === "axis-dataset.zip")
       .map((entry) => fs.unlink(path.join(datasetDir, entry))),
+  );
+  const frameEntries = await fs.readdir(framesDir);
+  await Promise.all(
+    frameEntries
+      .filter((entry) => /^frame_\d+\.jpg$/i.test(entry))
+      .map((entry) => fs.unlink(path.join(framesDir, entry))),
   );
 }
 
@@ -257,11 +281,18 @@ function selectUsefulFrames(candidates: CandidateFrame[], targetFrameCount: numb
   return selected.sort((a, b) => a.videoId.localeCompare(b.videoId) || a.timestamp - b.timestamp);
 }
 
-async function writeDatasetFrames({ datasetDir, selected }: { datasetDir: string; selected: CandidateFrame[] }) {
+async function writeDatasetFrames({
+  framesDir,
+  selected,
+}: {
+  datasetDir: string;
+  framesDir: string;
+  selected: CandidateFrame[];
+}) {
   const metadata: DatasetFrameMetadata[] = [];
   for (const [index, frame] of selected.entries()) {
     const fileName = `frame_${String(index + 1).padStart(4, "0")}.jpg`;
-    await fs.copyFile(frame.filePath, path.join(datasetDir, fileName));
+    await fs.copyFile(frame.filePath, path.join(framesDir, fileName));
     metadata.push({
       frame: fileName,
       score: Math.round(frame.score * 1000) / 1000,
@@ -271,6 +302,165 @@ async function writeDatasetFrames({ datasetDir, selected }: { datasetDir: string
     });
   }
   return metadata;
+}
+
+async function writeDatasetZip({
+  datasetDir,
+  framesDir,
+  metadataPath,
+  zipPath,
+}: {
+  datasetDir: string;
+  framesDir: string;
+  metadataPath: string;
+  zipPath: string;
+}) {
+  const frameEntries = (await fs.readdir(framesDir))
+    .filter((entry) => /^frame_\d+\.jpg$/i.test(entry))
+    .sort()
+    .map((entry) => ({
+      archivePath: `dataset/frames/${entry}`,
+      filePath: path.join(framesDir, entry),
+    }));
+  const files = [
+    ...frameEntries,
+    {
+      archivePath: "dataset/metadata.json",
+      filePath: metadataPath,
+    },
+  ];
+  const zip = await createZipBuffer(files);
+  await fs.writeFile(zipPath, zip);
+}
+
+export async function getDatasetDownload() {
+  const datasetDir = path.join(process.cwd(), "dataset");
+  const framesDir = path.join(datasetDir, "frames");
+  const metadataPath = path.join(datasetDir, "metadata.json");
+  const zipPath = path.join(datasetDir, "axis-dataset.zip");
+  if (!(await fileExists(zipPath)) && (await fileExists(metadataPath)) && (await fileExists(framesDir))) {
+    await writeDatasetZip({ datasetDir, framesDir, metadataPath, zipPath });
+  }
+  if (!(await fileExists(zipPath))) return null;
+  return {
+    buffer: await fs.readFile(zipPath),
+    fileName: "axis-dataset.zip",
+    zipPath,
+  };
+}
+
+async function createZipBuffer(files: Array<{ archivePath: string; filePath: string }>) {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const data = await fs.readFile(file.filePath);
+    const name = Buffer.from(file.archivePath.replace(/\\/g, "/"), "utf8");
+    const crc = crc32(data);
+    const localHeader = createLocalFileHeader({ crc, data, name });
+    localParts.push(localHeader, data);
+    centralParts.push(createCentralDirectoryHeader({ crc, data, localHeaderOffset: offset, name }));
+    offset += localHeader.length + data.length;
+  }
+
+  const centralDirectory = Buffer.concat(centralParts);
+  const end = createEndOfCentralDirectory({
+    centralDirectoryOffset: offset,
+    centralDirectorySize: centralDirectory.length,
+    fileCount: files.length,
+  });
+  return Buffer.concat([...localParts, centralDirectory, end]);
+}
+
+function createLocalFileHeader({ crc, data, name }: { crc: number; data: Buffer; name: Buffer }) {
+  const header = Buffer.alloc(30);
+  header.writeUInt32LE(0x04034b50, 0);
+  header.writeUInt16LE(20, 4);
+  header.writeUInt16LE(0x0800, 6);
+  header.writeUInt16LE(0, 8);
+  header.writeUInt16LE(getDosTime(), 10);
+  header.writeUInt16LE(getDosDate(), 12);
+  header.writeUInt32LE(crc, 14);
+  header.writeUInt32LE(data.length, 18);
+  header.writeUInt32LE(data.length, 22);
+  header.writeUInt16LE(name.length, 26);
+  header.writeUInt16LE(0, 28);
+  return Buffer.concat([header, name]);
+}
+
+function createCentralDirectoryHeader({
+  crc,
+  data,
+  localHeaderOffset,
+  name,
+}: {
+  crc: number;
+  data: Buffer;
+  localHeaderOffset: number;
+  name: Buffer;
+}) {
+  const header = Buffer.alloc(46);
+  header.writeUInt32LE(0x02014b50, 0);
+  header.writeUInt16LE(20, 4);
+  header.writeUInt16LE(20, 6);
+  header.writeUInt16LE(0x0800, 8);
+  header.writeUInt16LE(0, 10);
+  header.writeUInt16LE(getDosTime(), 12);
+  header.writeUInt16LE(getDosDate(), 14);
+  header.writeUInt32LE(crc, 16);
+  header.writeUInt32LE(data.length, 20);
+  header.writeUInt32LE(data.length, 24);
+  header.writeUInt16LE(name.length, 28);
+  header.writeUInt16LE(0, 30);
+  header.writeUInt16LE(0, 32);
+  header.writeUInt16LE(0, 34);
+  header.writeUInt16LE(0, 36);
+  header.writeUInt32LE(0, 38);
+  header.writeUInt32LE(localHeaderOffset, 42);
+  return Buffer.concat([header, name]);
+}
+
+function createEndOfCentralDirectory({
+  centralDirectoryOffset,
+  centralDirectorySize,
+  fileCount,
+}: {
+  centralDirectoryOffset: number;
+  centralDirectorySize: number;
+  fileCount: number;
+}) {
+  const header = Buffer.alloc(22);
+  header.writeUInt32LE(0x06054b50, 0);
+  header.writeUInt16LE(0, 4);
+  header.writeUInt16LE(0, 6);
+  header.writeUInt16LE(fileCount, 8);
+  header.writeUInt16LE(fileCount, 10);
+  header.writeUInt32LE(centralDirectorySize, 12);
+  header.writeUInt32LE(centralDirectoryOffset, 16);
+  header.writeUInt16LE(0, 20);
+  return header;
+}
+
+function crc32(data: Buffer) {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function getDosTime() {
+  const now = new Date();
+  return (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+}
+
+function getDosDate() {
+  const now = new Date();
+  return ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
 }
 
 async function getFfmpegPath() {

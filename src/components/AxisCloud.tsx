@@ -13,6 +13,12 @@ type DecodeResponse = {
   tracks?: AnimationTrack[];
 };
 
+type DatasetExportResponse = {
+  download_dataset_url?: string;
+  frame_count?: number;
+  frames_dir?: string;
+};
+
 function getBallTrackCount(tracks: AnimationTrack[] | undefined) {
   return tracks?.filter((track) => track.entity_type === "ball").length ?? 0;
 }
@@ -87,6 +93,9 @@ export function FirstLoopHome() {
   const [facts, setFacts] = useState<AnimationFact[]>([]);
   const [tracks, setTracks] = useState<AnimationTrack[]>([]);
   const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
+  const [datasetExportState, setDatasetExportState] = useState<"idle" | "exporting" | "ready" | "failed">("idle");
+  const [datasetFrameCount, setDatasetFrameCount] = useState<number | null>(null);
+  const [muxPlaybackId, setMuxPlaybackId] = useState<string | null>(null);
   const [playbackVideoUrl, setPlaybackVideoUrl] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +104,9 @@ export function FirstLoopHome() {
   const resetForUpload = useCallback(() => {
     setFacts([]);
     setTracks([]);
+    setDatasetExportState("idle");
+    setDatasetFrameCount(null);
+    setMuxPlaybackId(null);
     setThumbnailUrl(null);
     setStatus("idle");
     setPlaybackVideoUrl(null);
@@ -119,11 +131,15 @@ export function FirstLoopHome() {
     setThumbnailUrl(null);
     setFacts([]);
     setTracks([]);
+    setDatasetExportState("idle");
+    setDatasetFrameCount(null);
+    setMuxPlaybackId(null);
     setStatus("uploading");
 
     try {
       const film = await uploadToMux(file);
       const muxVideoUrl = film.muxPlaybackId ? getMuxStreamUrl(film.muxPlaybackId) : undefined;
+      setMuxPlaybackId(film.muxPlaybackId ?? null);
       setThumbnailUrl(film.thumbnailUrl ?? null);
       if (muxVideoUrl) setPlaybackVideoUrl(muxVideoUrl);
 
@@ -153,6 +169,14 @@ export function FirstLoopHome() {
 
   const hasVideo = Boolean(localVideoUrl);
   const shownVideoUrl = playbackVideoUrl ?? localVideoUrl;
+  const datasetButtonText =
+    datasetExportState === "exporting"
+      ? "Exporting Frames..."
+      : datasetExportState === "ready" && datasetFrameCount
+        ? `Download Dataset (${datasetFrameCount})`
+        : datasetExportState === "failed"
+          ? "Export Failed"
+          : "Export Frames";
   const statusText: Record<ReplayStatus, string> = {
     failed: "Replay export failed",
     idle: "Upload Video",
@@ -160,6 +184,34 @@ export function FirstLoopHome() {
     ready: "Replay Ready",
     uploading: "Uploading video...",
   };
+
+  async function handleDatasetExport() {
+    if (!muxPlaybackId || datasetExportState === "exporting") return;
+    setDatasetExportState("exporting");
+    setDatasetFrameCount(null);
+
+    try {
+      const response = await fetch("/api/axis/dataset-builder", {
+        body: JSON.stringify({
+          muxPlaybackId,
+          sampleEverySeconds: 0.25,
+          targetFrameCount: 300,
+          videoId: muxPlaybackId,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Dataset export unavailable.");
+      const dataset = (await response.json().catch(() => null)) as DatasetExportResponse | null;
+      if (!dataset?.download_dataset_url) throw new Error("Dataset download unavailable.");
+      setDatasetFrameCount(dataset.frame_count ?? null);
+      setDatasetExportState("ready");
+      window.location.href = dataset.download_dataset_url;
+    } catch (error) {
+      console.error("Dataset export failed", error);
+      setDatasetExportState("failed");
+    }
+  }
 
   return (
     <main className="axis-replay-loop" data-state={status}>
@@ -195,9 +247,21 @@ export function FirstLoopHome() {
           </button>
         ) : null}
         {status === "ready" ? (
-          <button className="axis-cloud-secondary" onClick={resetForUpload} type="button">
-            Upload Another
-          </button>
+          <>
+            {muxPlaybackId ? (
+              <button
+                className="axis-cloud-secondary"
+                disabled={datasetExportState === "exporting"}
+                onClick={() => void handleDatasetExport()}
+                type="button"
+              >
+                {datasetButtonText}
+              </button>
+            ) : null}
+            <button className="axis-cloud-secondary" onClick={resetForUpload} type="button">
+              Upload Another
+            </button>
+          </>
         ) : null}
       </div>
 
