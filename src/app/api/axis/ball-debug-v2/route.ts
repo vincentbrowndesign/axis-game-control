@@ -32,17 +32,28 @@ type RoboflowPrediction = {
   y?: unknown;
 };
 
+type FailureStage =
+  | "upload"
+  | "temp_file_creation"
+  | "frame_extraction"
+  | "roboflow"
+  | "ball_track_generation";
+
 const frameIntervalSeconds = 0.1;
 const maxUploadBytes = 150 * 1024 * 1024;
 const roboflowProject = "axis-kenetic-observer";
 const roboflowVersion = "1";
 
 export async function POST(request: Request) {
+  console.log("BALL_DEBUG_START");
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-debug-v2-"));
   const framesDir = path.join(workDir, "frames");
   const uploadedFileName = getSafeFileName(request.headers.get("x-axis-file-name"));
   const uploadedFileSize = getHeaderNumber(request.headers.get("x-axis-file-size"));
   const videoPath = path.join(workDir, uploadedFileName);
+  let frameCount = 0;
+  let detectionCount = 0;
+  let ballTrackCount = 0;
 
   console.log("BALL_DEBUG_UPLOAD_START", {
     temp_video_path: videoPath,
@@ -52,69 +63,144 @@ export async function POST(request: Request) {
 
   try {
     if (uploadedFileSize !== null && uploadedFileSize > maxUploadBytes) {
-      return Response.json(
+      return failureResponse(
+        "upload",
+        `Video is too large. Limit is ${Math.round(maxUploadBytes / 1024 / 1024)}MB.`,
         {
-          ballTrack: [],
-          detectionCount: 0,
-          error: `Video is too large. Limit is ${Math.round(maxUploadBytes / 1024 / 1024)}MB.`,
-          frameCount: 0,
-          videoUrl: "local-upload",
+          maxUploadMb: Math.round(maxUploadBytes / 1024 / 1024),
+          uploaded_file_name: uploadedFileName,
+          uploaded_file_size: uploadedFileSize,
         },
-        { status: 413 },
+        413,
+      );
+    }
+    console.log("VIDEO_RECEIVED", {
+      uploaded_file_name: uploadedFileName,
+      uploaded_file_size: uploadedFileSize,
+    });
+    console.log("VIDEO_SIZE_MB", {
+      value: uploadedFileSize === null ? null : roundMetric(uploadedFileSize / 1024 / 1024),
+    });
+
+    let writtenBytes = 0;
+    try {
+      await fs.mkdir(framesDir, { recursive: true });
+      writtenBytes = await writeRequestBodyToFile(request, videoPath, maxUploadBytes);
+      await fs.access(videoPath);
+      console.log("TEMP_FILE_CREATED", {
+        temp_video_path: videoPath,
+        uploaded_file_name: uploadedFileName,
+        uploaded_file_size: writtenBytes,
+      });
+    } catch (error) {
+      return failureResponse(
+        error instanceof UploadTooLargeError ? "upload" : "temp_file_creation",
+        getErrorMessage(error),
+        {
+          temp_video_path: videoPath,
+          uploaded_file_name: uploadedFileName,
+          uploaded_file_size: writtenBytes || uploadedFileSize,
+        },
+        error instanceof UploadTooLargeError ? 413 : 500,
       );
     }
 
-    await fs.mkdir(framesDir, { recursive: true });
-    const writtenBytes = await writeRequestBodyToFile(request, videoPath, maxUploadBytes);
-    console.log("BALL_DEBUG_UPLOAD_STORED", {
-      temp_video_path: videoPath,
-      uploaded_file_name: uploadedFileName,
-      uploaded_file_size: writtenBytes,
-    });
+    let frames: FrameFile[] = [];
+    try {
+      const ffmpegPath = await getFfmpegPath();
+      ffmpeg.setFfmpegPath(ffmpegPath);
+      console.log("FRAME_EXTRACTION_START", {
+        temp_video_path: videoPath,
+      });
+      await extractFrames(videoPath, framesDir);
+      console.log("FRAME_EXTRACTION_COMPLETE", {
+        temp_video_path: videoPath,
+      });
+      frames = await listFrames(framesDir);
+      frameCount = frames.length;
+      console.log("FRAMES_EXTRACTED", {
+        count: frameCount,
+      });
+      if (frameCount === 0) {
+        return failureResponse(
+          "frame_extraction",
+          "Frame extraction completed but produced zero frames.",
+          { framesDir, temp_video_path: videoPath },
+        );
+      }
+    } catch (error) {
+      return failureResponse("frame_extraction", getErrorMessage(error), {
+        framesDir,
+        temp_video_path: videoPath,
+      });
+    }
 
-    const ffmpegPath = await getFfmpegPath();
-    ffmpeg.setFfmpegPath(ffmpegPath);
-    console.log("FRAME_EXTRACTION_START", {
-      temp_video_path: videoPath,
-    });
-    await extractFrames(videoPath, framesDir);
+    let ballTrack: BallTrackPoint[] = [];
+    try {
+      console.log("ROBOFLOW_START", {
+        frameCount,
+        project: roboflowProject,
+        version: roboflowVersion,
+      });
+      const result = await detectBasketballs(frames);
+      ballTrack = result.ballTrack;
+      detectionCount = result.detectionCount;
+      ballTrackCount = ballTrack.length;
+      console.log("BASKETBALL_DETECTIONS", {
+        count: detectionCount,
+      });
+    } catch (error) {
+      return failureResponse("roboflow", getErrorMessage(error), {
+        frameCount,
+        project: roboflowProject,
+        version: roboflowVersion,
+      });
+    }
 
-    const frames = await listFrames(framesDir);
-    console.log("FRAMES_EXTRACTED", {
-      count: frames.length,
-    });
-    console.log("ROBOFLOW_START", {
-      frameCount: frames.length,
-      project: roboflowProject,
-      version: roboflowVersion,
-    });
-    const { ballTrack, detectionCount } = await detectBasketballs(frames);
-    console.log("BASKETBALL_DETECTIONS", {
-      count: detectionCount,
+    if (!ballTrack.length) {
+      console.log("BALL_TRACK_CREATED", {
+        created: false,
+      });
+      return failureResponse("ball_track_generation", "No ball_track points were created.", {
+        BASKETBALL_DETECTIONS: detectionCount,
+        BALL_TRACK_COUNT: ballTrackCount,
+        FRAMES_EXTRACTED: frameCount,
+      });
+    }
+
+    console.log("BALL_TRACK_CREATED", {
+      created: true,
     });
     console.log("BALL_TRACK_COUNT", {
       count: ballTrack.length,
+    });
+    console.log("BALL_DEBUG_COMPLETE", {
+      BALL_TRACK_COUNT: ballTrack.length,
+      BASKETBALL_DETECTIONS: detectionCount,
+      FRAMES_EXTRACTED: frameCount,
     });
 
     return Response.json({
       ballTrack,
       detectionCount,
-      frameCount: frames.length,
+      failure: null,
+      frameCount,
       videoUrl: "local-upload",
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error("BALL_DEBUG_V2_FAILED", { reason });
     const isTooLarge = error instanceof UploadTooLargeError;
-    return Response.json(
+    return failureResponse(
+      isTooLarge ? "upload" : "temp_file_creation",
+      reason,
       {
-        ballTrack: [],
-        detectionCount: 0,
-        error: reason,
-        frameCount: 0,
-        videoUrl: "local-upload",
+        BALL_TRACK_COUNT: ballTrackCount,
+        BASKETBALL_DETECTIONS: detectionCount,
+        FRAMES_EXTRACTED: frameCount,
+        temp_video_path: videoPath,
       },
-      { status: isTooLarge ? 413 : 500 },
+      isTooLarge ? 413 : 500,
     );
   } finally {
     await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
@@ -213,12 +299,13 @@ async function detectBasketballs(frames: FrameFile[]) {
       method: "POST",
     });
     const result = (await response.json().catch(() => null)) as { predictions?: RoboflowPrediction[] } | null;
+    console.log("ROBOFLOW_RESPONSE", {
+      frame: frame.frame,
+      predictionCount: Array.isArray(result?.predictions) ? result.predictions.length : 0,
+      status: response.status,
+    });
     if (!response.ok || !Array.isArray(result?.predictions)) {
-      console.error("BALL_DEBUG_V2_ROBOFLOW_FRAME_FAILED", {
-        frame: frame.frame,
-        status: response.status,
-      });
-      continue;
+      throw new Error(`Roboflow failed at frame ${frame.frame} with HTTP ${response.status}.`);
     }
 
     const basketballs = result.predictions
@@ -246,6 +333,29 @@ async function detectBasketballs(frames: FrameFile[]) {
   };
 }
 
+function failureResponse(stage: FailureStage, error: string, details: Record<string, unknown>, status = 500) {
+  console.error("BALL_DEBUG_FAILED_STAGE", {
+    details,
+    error,
+    stage,
+  });
+  return Response.json(
+    {
+      ballTrack: [],
+      detectionCount: getDetailNumber(details.BASKETBALL_DETECTIONS),
+      error,
+      failure: {
+        details,
+        error,
+        stage,
+      },
+      frameCount: getDetailNumber(details.FRAMES_EXTRACTED),
+      videoUrl: "local-upload",
+    },
+    { status },
+  );
+}
+
 function normalizePrediction(prediction: RoboflowPrediction) {
   return {
     className: String(prediction.class ?? prediction.class_name ?? prediction.label ?? prediction.name ?? "")
@@ -263,6 +373,14 @@ function getHeaderNumber(value: string | null) {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function getDetailNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function getSafeFileName(value: string | null) {
@@ -294,4 +412,8 @@ function isFiniteNumber(value: unknown): value is number {
 
 function roundTime(value: number) {
   return Math.round(value * 1000) / 1000;
+}
+
+function roundMetric(value: number) {
+  return Math.round(value * 100) / 100;
 }

@@ -14,6 +14,11 @@ type BallDebugResponse = {
   ballTrack?: BallTrackPoint[];
   detectionCount?: number;
   error?: string;
+  failure?: {
+    details?: Record<string, unknown>;
+    error?: string;
+    stage?: string;
+  } | null;
   frameCount?: number;
   videoUrl?: string;
 };
@@ -24,6 +29,8 @@ type DebugState = {
   CURRENT_BALL_X: string;
   CURRENT_BALL_Y: string;
   CURRENT_CONFIDENCE: string;
+  ERROR_MESSAGE: string;
+  FAILED_STAGE: string;
   FIRST_FRAME: string;
   FRAMES_EXTRACTED: number;
   LAST_FRAME: string;
@@ -35,6 +42,8 @@ const emptyDebug: DebugState = {
   CURRENT_BALL_X: "N/A",
   CURRENT_BALL_Y: "N/A",
   CURRENT_CONFIDENCE: "N/A",
+  ERROR_MESSAGE: "N/A",
+  FAILED_STAGE: "N/A",
   FIRST_FRAME: "N/A",
   FRAMES_EXTRACTED: 0,
   LAST_FRAME: "N/A",
@@ -139,7 +148,18 @@ export default function BallDebugV2Page() {
         method: "POST",
       });
       const result = (await response.json().catch(() => null)) as BallDebugResponse | null;
-      if (!response.ok || !result) throw new Error(result?.error ?? "Ball debug failed.");
+      if (!response.ok || !result) {
+        const failedStage = result?.failure?.stage ?? "unknown";
+        const errorMessage = result?.failure?.error ?? result?.error ?? "Ball debug failed.";
+        setDebug({
+          ...emptyDebug,
+          BASKETBALL_DETECTIONS: result?.detectionCount ?? 0,
+          ERROR_MESSAGE: errorMessage,
+          FAILED_STAGE: failedStage,
+          FRAMES_EXTRACTED: result?.frameCount ?? 0,
+        });
+        throw new Error(errorMessage);
+      }
 
       const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
       setTrack(nextTrack);
@@ -149,6 +169,8 @@ export default function BallDebugV2Page() {
         CURRENT_BALL_X: "N/A",
         CURRENT_BALL_Y: "N/A",
         CURRENT_CONFIDENCE: "N/A",
+        ERROR_MESSAGE: "N/A",
+        FAILED_STAGE: "N/A",
         FIRST_FRAME: nextTrack[0] ? String(nextTrack[0].frame) : "N/A",
         FRAMES_EXTRACTED: result.frameCount ?? 0,
         LAST_FRAME: nextTrack.at(-1) ? String(nextTrack.at(-1)?.frame) : "N/A",
@@ -196,6 +218,8 @@ export default function BallDebugV2Page() {
         <DebugRow label="CURRENT_BALL_X" value={debug.CURRENT_BALL_X} />
         <DebugRow label="CURRENT_BALL_Y" value={debug.CURRENT_BALL_Y} />
         <DebugRow label="CURRENT_CONFIDENCE" value={debug.CURRENT_CONFIDENCE} />
+        <DebugRow label="FAILED_STAGE" value={debug.FAILED_STAGE} />
+        <DebugRow label="ERROR_MESSAGE" value={debug.ERROR_MESSAGE} />
         <DebugRow label="FIRST_FRAME" value={debug.FIRST_FRAME} />
         <DebugRow label="LAST_FRAME" value={debug.LAST_FRAME} />
       </dl>
