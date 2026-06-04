@@ -1,3 +1,4 @@
+import { createWriteStream } from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,30 +33,68 @@ type RoboflowPrediction = {
 };
 
 const frameIntervalSeconds = 0.1;
+const maxUploadBytes = 150 * 1024 * 1024;
 const roboflowProject = "axis-kenetic-observer";
 const roboflowVersion = "1";
 
 export async function POST(request: Request) {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-debug-v2-"));
   const framesDir = path.join(workDir, "frames");
-  const videoPath = path.join(workDir, "upload.mp4");
+  const uploadedFileName = getSafeFileName(request.headers.get("x-axis-file-name"));
+  const uploadedFileSize = getHeaderNumber(request.headers.get("x-axis-file-size"));
+  const videoPath = path.join(workDir, uploadedFileName);
+
+  console.log("BALL_DEBUG_UPLOAD_START", {
+    temp_video_path: videoPath,
+    uploaded_file_name: uploadedFileName,
+    uploaded_file_size: uploadedFileSize,
+  });
 
   try {
-    const form = await request.formData();
-    const video = form.get("video");
-    if (!(video instanceof Blob)) {
-      return Response.json({ error: "video is required" }, { status: 400 });
+    if (uploadedFileSize !== null && uploadedFileSize > maxUploadBytes) {
+      return Response.json(
+        {
+          ballTrack: [],
+          detectionCount: 0,
+          error: `Video is too large. Limit is ${Math.round(maxUploadBytes / 1024 / 1024)}MB.`,
+          frameCount: 0,
+          videoUrl: "local-upload",
+        },
+        { status: 413 },
+      );
     }
 
     await fs.mkdir(framesDir, { recursive: true });
-    await fs.writeFile(videoPath, Buffer.from(await video.arrayBuffer()));
+    const writtenBytes = await writeRequestBodyToFile(request, videoPath, maxUploadBytes);
+    console.log("BALL_DEBUG_UPLOAD_STORED", {
+      temp_video_path: videoPath,
+      uploaded_file_name: uploadedFileName,
+      uploaded_file_size: writtenBytes,
+    });
 
     const ffmpegPath = await getFfmpegPath();
     ffmpeg.setFfmpegPath(ffmpegPath);
+    console.log("FRAME_EXTRACTION_START", {
+      temp_video_path: videoPath,
+    });
     await extractFrames(videoPath, framesDir);
 
     const frames = await listFrames(framesDir);
+    console.log("FRAMES_EXTRACTED", {
+      count: frames.length,
+    });
+    console.log("ROBOFLOW_START", {
+      frameCount: frames.length,
+      project: roboflowProject,
+      version: roboflowVersion,
+    });
     const { ballTrack, detectionCount } = await detectBasketballs(frames);
+    console.log("BASKETBALL_DETECTIONS", {
+      count: detectionCount,
+    });
+    console.log("BALL_TRACK_COUNT", {
+      count: ballTrack.length,
+    });
 
     return Response.json({
       ballTrack,
@@ -66,6 +105,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error("BALL_DEBUG_V2_FAILED", { reason });
+    const isTooLarge = error instanceof UploadTooLargeError;
     return Response.json(
       {
         ballTrack: [],
@@ -74,11 +114,62 @@ export async function POST(request: Request) {
         frameCount: 0,
         videoUrl: "local-upload",
       },
-      { status: 500 },
+      { status: isTooLarge ? 413 : 500 },
     );
   } finally {
     await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
   }
+}
+
+class UploadTooLargeError extends Error {
+  constructor(limitBytes: number) {
+    super(`Video is too large. Limit is ${Math.round(limitBytes / 1024 / 1024)}MB.`);
+    this.name = "UploadTooLargeError";
+  }
+}
+
+async function writeRequestBodyToFile(request: Request, videoPath: string, limitBytes: number) {
+  if (!request.body) throw new Error("video upload body is required");
+
+  let writtenBytes = 0;
+  const reader = request.body.getReader();
+  const writer = createWriteStream(videoPath);
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      writtenBytes += chunk.byteLength;
+      if (writtenBytes > limitBytes) {
+        throw new UploadTooLargeError(limitBytes);
+      }
+      await writeChunk(writer, chunk);
+    }
+  } finally {
+    reader.releaseLock();
+    await closeWriter(writer);
+  }
+
+  return writtenBytes;
+}
+
+function writeChunk(writer: ReturnType<typeof createWriteStream>, chunk: Buffer) {
+  return new Promise<void>((resolve, reject) => {
+    writer.write(chunk, (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function closeWriter(writer: ReturnType<typeof createWriteStream>) {
+  return new Promise<void>((resolve, reject) => {
+    writer.end((error?: Error | null) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 async function extractFrames(videoPath: string, framesDir: string) {
@@ -168,22 +259,29 @@ function normalizePrediction(prediction: RoboflowPrediction) {
   };
 }
 
-async function getFfmpegPath() {
-  const candidates = [
-    typeof ffmpegStatic === "string" ? ffmpegStatic : "",
-    path.join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"),
-  ].filter(Boolean);
+function getHeaderNumber(value: string | null) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
-  for (const candidate of candidates) {
-    try {
-      await fs.access(candidate);
-      return candidate;
-    } catch {
-      // try next path
-    }
+function getSafeFileName(value: string | null) {
+  const fallback = "upload.mp4";
+  if (!value) return fallback;
+  const clean = decodeURIComponent(value)
+    .replace(/[\\/]/g, "")
+    .replace(/[^\w .-]/g, "")
+    .trim();
+  return clean || fallback;
+}
+
+async function getFfmpegPath() {
+  if (typeof ffmpegStatic === "string") {
+    await fs.access(ffmpegStatic);
+    return ffmpegStatic;
   }
 
-  throw new Error(`ffmpeg binary not found. Checked: ${candidates.join(", ")}`);
+  throw new Error("ffmpeg binary not found.");
 }
 
 function getNumber(value: unknown) {
