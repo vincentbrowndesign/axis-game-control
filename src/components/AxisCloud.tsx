@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as tus from "tus-js-client";
 import { AxisAnimationPlayer } from "./AxisAnimationPlayer";
 import type { AnimationFact, AnimationTrack } from "../lib/axis-animation-renderer";
 import { getMuxStreamUrl } from "../lib/axis-cloud-store";
@@ -24,29 +23,29 @@ function getBallTrackCount(tracks: AnimationTrack[] | undefined) {
   return tracks?.filter((track) => track.entity_type === "ball").length ?? 0;
 }
 
-function uploadVideoWithTus(uploadUrl: string, file: File) {
-  return new Promise<void>((resolve, reject) => {
-    const upload = new tus.Upload(file, {
-      endpoint: uploadUrl,
-      onError: reject,
-      onSuccess: () => resolve(),
-    });
-    upload.start();
-  });
-}
-
 async function uploadToMux(file: File) {
-  const uploadResponse = await fetch("/api/film/uploads", { method: "POST" });
+  console.info("EXPORT_START", { fileName: file.name, route: "/api/film/uploads/server" });
+  const form = new FormData();
+  form.append("file", file);
+
+  const uploadResponse = await fetch("/api/film/uploads/server", {
+    body: form,
+    method: "POST",
+  });
   const upload = (await uploadResponse.json().catch(() => null)) as
-    | { uploadId?: string; uploadUrl?: string }
+    | { uploadId?: string }
     | null;
 
-  if (!uploadResponse.ok || !upload?.uploadId || !upload.uploadUrl) {
+  if (!uploadResponse.ok || !upload?.uploadId) {
+    console.error("MUX_UPLOAD_FAILED", {
+      reason: "Server-side Mux upload endpoint unavailable.",
+      route: "/api/film/uploads/server",
+      status: "FAIL",
+    });
     throw new Error("Upload endpoint unavailable.");
   }
 
-  await uploadVideoWithTus(upload.uploadUrl, file);
-  console.info("UPLOAD_COMPLETE", { uploadId: upload.uploadId });
+  console.info("EXPORT_COMPLETE", { route: "/api/film/uploads/server", uploadId: upload.uploadId });
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const response = await fetch(`/api/film/uploads/${upload.uploadId}`);
