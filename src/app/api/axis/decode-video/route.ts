@@ -53,7 +53,22 @@ export async function POST(request: Request) {
       uploadId,
     });
 
+    const ballTrack = result.tracks
+      .filter((track) => track.entity_type === "ball")
+      .sort((a, b) => (a.time ?? a.frame) - (b.time ?? b.frame) || a.frame - b.frame)
+      .map((track) => ({
+        confidence: track.confidence,
+        frame: track.frame,
+        time: track.time,
+        x: track.x,
+        y: track.y,
+      }));
+
     return Response.json({
+      BALL_TRACK_COUNT: ballTrack.length,
+      FIRST_BALL_FRAME: ballTrack[0]?.frame ?? null,
+      LAST_BALL_FRAME: ballTrack.at(-1)?.frame ?? null,
+      ball_track: ballTrack,
       facts: result.facts,
       raw_class_names: result.debug?.roboflow?.raw_class_names ?? [],
       raw_detection_count: result.debug?.roboflow?.raw_detection_count ?? 0,

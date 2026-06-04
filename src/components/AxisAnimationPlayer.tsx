@@ -513,13 +513,6 @@ function drawMinimalReplayOverlay(
   ctx.font = "800 38px Arial, Helvetica, sans-serif";
   ctx.fillText("AXIS", pad, height - pad - 34);
 
-  ctx.globalAlpha = 0.28 + Math.sin(progress * Math.PI * 2) * 0.14;
-  ctx.strokeStyle = "rgba(184,219,77,0.68)";
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.arc(width * 0.5, height * 0.5, width * 0.18 + progress * width * 0.06, 0, Math.PI * 2);
-  ctx.stroke();
-
   ctx.globalAlpha = 0.18;
   ctx.strokeStyle = "rgba(184,219,77,0.85)";
   ctx.lineWidth = 2;

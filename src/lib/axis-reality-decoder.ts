@@ -1,3 +1,9 @@
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegStatic from "ffmpeg-static";
 import OpenAI from "openai";
 import {
   getAxisArtifactFactHistory,
@@ -116,6 +122,9 @@ type RealityDecoderStatus = {
 };
 
 const frameTimes = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5];
+const roboflowBasketballProject = "axis-kenetic-observer";
+const roboflowBasketballVersion = "1";
+const roboflowFrameIntervalSeconds = 0.1;
 const playerLabels = new Set(["person", "player", "athlete"]);
 const factKeys = new Set([
   "player_count",
@@ -371,6 +380,12 @@ async function optionalDecoder(
 }
 
 async function extractEvidenceFrames(input: DecodeVideoInput): Promise<EvidenceFrame[]> {
+  const videoUrl = input.videoUrl ?? getMuxPlaybackUrl(input.muxPlaybackId);
+  if (videoUrl) {
+    const frames = await extractFfmpegEvidenceFrames(videoUrl);
+    if (frames.length) return frames;
+  }
+
   if (!input.muxPlaybackId) return [];
 
   const frames = await Promise.all(
@@ -395,6 +410,42 @@ async function extractEvidenceFrames(input: DecodeVideoInput): Promise<EvidenceF
   );
 
   return frames.filter((frame): frame is EvidenceFrame => Boolean(frame));
+}
+
+async function extractFfmpegEvidenceFrames(videoUrl: string): Promise<EvidenceFrame[]> {
+  try {
+    const ffmpegPath = await getFfmpegPath();
+    ffmpeg.setFfmpegPath(ffmpegPath);
+
+    const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-decode-frames-"));
+    await runFfmpeg((command) => {
+      command
+        .input(videoUrl)
+        .outputOptions(["-vf", `fps=${1 / roboflowFrameIntervalSeconds}`, "-q:v", "2"])
+        .output(path.join(workDir, "frame_%06d.jpg"));
+    });
+
+    const entries = (await fs.readdir(workDir))
+      .filter((entry) => /^frame_\d+\.jpg$/i.test(entry))
+      .sort();
+
+    const frames: EvidenceFrame[] = [];
+    for (const [index, entry] of entries.entries()) {
+      const filePath = path.join(workDir, entry);
+      const buffer = await fs.readFile(filePath);
+      frames.push({
+        base64: buffer.toString("base64"),
+        contentType: "image/jpeg",
+        index: index + 1,
+        time: Math.round(index * roboflowFrameIntervalSeconds * 1000) / 1000,
+        url: filePath,
+      });
+    }
+    return frames;
+  } catch (error) {
+    console.error("Axis reality decoder ffmpeg frame extraction unavailable", error);
+    return [];
+  }
 }
 
 async function runYolo(frames: EvidenceFrame[]) {
@@ -429,8 +480,8 @@ async function runYolo(frames: EvidenceFrame[]) {
 async function runRoboflow(frames: EvidenceFrame[]) {
   const apiKey = process.env.ROBOFLOW_API_KEY;
   const workspace = process.env.ROBOFLOW_WORKSPACE;
-  const project = process.env.ROBOFLOW_PROJECT;
-  const version = process.env.ROBOFLOW_VERSION;
+  const project = process.env.ROBOFLOW_BASKETBALL_PROJECT ?? roboflowBasketballProject;
+  const version = process.env.ROBOFLOW_BASKETBALL_VERSION ?? roboflowBasketballVersion;
   if (!apiKey || !workspace || !project || !version) {
     return { detections: [], facts: [], reason: "Roboflow env is incomplete." };
   }
@@ -443,11 +494,11 @@ async function runRoboflow(frames: EvidenceFrame[]) {
   let rawBallDetectionsCount = 0;
   const rawClassNames = new Set<string>();
   const first20Detections: AxisRoboflowDebug["first_20_detections"] = [];
-  const detectionSets = await Promise.all(
-    frames.map(async (frame) => {
-      const endpoint = `https://detect.roboflow.com/${encodeURIComponent(project)}/${encodeURIComponent(
-        version,
-      )}?api_key=${encodeURIComponent(apiKey)}&confidence=35&overlap=30`;
+  const detectionSets: DetectionBox[][] = [];
+  const endpoint = `https://detect.roboflow.com/${encodeURIComponent(project)}/${encodeURIComponent(
+    version,
+  )}?api_key=${encodeURIComponent(apiKey)}&confidence=35&overlap=30`;
+  for (const frame of frames) {
       const response = await fetch(endpoint, {
         body: frame.base64,
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -461,7 +512,8 @@ async function runRoboflow(frames: EvidenceFrame[]) {
           frameIndex: frame.index,
           reason: !response.ok ? `HTTP ${response.status}` : "invalid_predictions",
         });
-        return [];
+        detectionSets.push([]);
+        continue;
       }
       rawDetectionsCount += result.predictions.length;
       rawBallDetectionsCount += result.predictions.filter(isRawBallDetection).length;
@@ -478,9 +530,8 @@ async function runRoboflow(frames: EvidenceFrame[]) {
           });
         }
       }
-      return normalized;
-    }),
-  );
+      detectionSets.push(normalized);
+  }
 
   const detections = detectionSets.flat();
   const roboflowDebug: AxisRoboflowDebug = {
@@ -507,13 +558,23 @@ async function runRoboflow(frames: EvidenceFrame[]) {
 
 function runByteTrack(detections: DetectionBox[]) {
   const tracks = buildEntityTracks(detections);
+  const ballTracks = tracks.filter((track) => track.entity_type === "ball");
   console.log("NORMALIZED_BALL_TRACK_COUNT", {
-    count: tracks.filter((track) => track.entity_type === "ball").length,
+    count: ballTracks.length,
+  });
+  console.log("BALL_TRACK_COUNT", {
+    count: ballTracks.length,
+  });
+  console.log("FIRST_BALL_FRAME", {
+    frame: ballTracks[0]?.frame ?? null,
+  });
+  console.log("LAST_BALL_FRAME", {
+    frame: ballTracks.at(-1)?.frame ?? null,
   });
   const summary: TrackSummary = {
-    ballFrames: new Set(tracks.filter((track) => track.entity_type === "ball").map((track) => track.frame)).size,
+    ballFrames: new Set(ballTracks.map((track) => track.frame)).size,
     hoopFrames: new Set(tracks.filter((track) => track.entity_type === "hoop").map((track) => track.frame)).size,
-    playerCounts: frameTimes.map((_, frameIndex) =>
+    playerCounts: unique(detections.map((box) => box.frameIndex)).map((frameIndex) =>
       new Set(
         tracks
           .filter((track) => track.frame === frameIndex && track.entity_type === "player")
@@ -1247,6 +1308,34 @@ function getVideoMimeType(videoUrl: string) {
   if (videoUrl.includes(".m3u8")) return "application/vnd.apple.mpegurl";
   if (videoUrl.includes(".mov")) return "video/quicktime";
   return "video/mp4";
+}
+
+async function getFfmpegPath() {
+  const candidates = [
+    typeof ffmpegStatic === "string" ? ffmpegStatic : "",
+    path.join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // Try the next known ffmpeg-static location.
+    }
+  }
+
+  throw new Error(`ffmpeg binary not found. Checked: ${candidates.join(", ")}`);
+}
+
+async function runFfmpeg(configure: (command: ffmpeg.FfmpegCommand) => void) {
+  await new Promise<void>((resolve, reject) => {
+    const command = ffmpeg();
+    configure(command);
+    command.on("end", () => resolve());
+    command.on("error", (error) => reject(error));
+    command.run();
+  });
 }
 
 function getTemporalLabel(index: number, total: number) {
