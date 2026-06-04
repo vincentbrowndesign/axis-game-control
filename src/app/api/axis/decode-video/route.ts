@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       track_persistence_reason: result.trackPersistence.stored ? null : result.trackPersistence.reason,
       tracks: result.tracks,
       tracks_stored: result.trackPersistence.stored,
+      upload_id: uploadId,
     });
   } catch (error) {
     console.error("DECODE_COMPLETE", {

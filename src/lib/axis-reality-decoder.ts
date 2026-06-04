@@ -186,15 +186,18 @@ export async function decodeAndPersistRealityFacts(input: DecodeVideoInput) {
   }
   if (!trackPersistence.stored) {
     console.error("TRACKS_COMPLETE", {
+      processed_upload_id: input.uploadId,
       reason: trackPersistence.reason,
       status: "FAIL",
-      uploadId: input.uploadId,
+      stored_track_upload_id: input.uploadId,
+      tracks_inserted_count: 0,
     });
   } else {
     console.log("TRACKS_COMPLETE", {
+      processed_upload_id: input.uploadId,
       status: "PASS",
-      trackCount: trackRecords.length,
-      uploadId: input.uploadId,
+      stored_track_upload_id: input.uploadId,
+      tracks_inserted_count: trackRecords.length,
     });
   }
   logRealityDecoderStatus(status);

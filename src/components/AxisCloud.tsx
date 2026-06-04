@@ -11,6 +11,7 @@ type ReplayStatus = "idle" | "uploading" | "processing" | "ready" | "failed";
 type DecodeResponse = {
   facts?: AnimationFact[];
   tracks?: AnimationTrack[];
+  upload_id?: string;
 };
 
 type DatasetExportResponse = {
@@ -149,16 +150,22 @@ export function FirstLoopHome() {
         uploadId: film.uploadId,
         videoUrl: muxVideoUrl,
       });
+      const storedUploadId = decoded?.upload_id ?? film.uploadId;
       if (Array.isArray(decoded?.facts)) setFacts(decoded.facts);
       const decodedTracks = Array.isArray(decoded?.tracks) ? decoded.tracks : [];
       console.info("REPLAY_BALL_TRACK_COUNT", {
         count: getBallTrackCount(decodedTracks),
+        processed_upload_id: storedUploadId,
         source: "decode_response",
         uploadId: film.uploadId,
       });
       setTracks(decodedTracks);
       setStatus("ready");
-      console.info("REPLAY_READY", { uploadId: film.uploadId });
+      console.info("REPLAY_READY", {
+        processed_upload_id: storedUploadId,
+        props_tracks_count: decodedTracks.length,
+        uploadId: film.uploadId,
+      });
     } catch (error) {
       console.error("Replay processing failed", error);
       setStatus("failed");
