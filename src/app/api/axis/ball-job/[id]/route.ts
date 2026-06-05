@@ -18,6 +18,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     error: result.record.error,
     frameCount: result.record.frame_count,
     jobId: result.record.job_id,
+    processingStage: result.record.processing_stage,
     status: result.record.status,
     videoUrl: result.record.video_url,
   });

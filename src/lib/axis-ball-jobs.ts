@@ -2,6 +2,14 @@ import { createClient } from "@supabase/supabase-js";
 import type { AxisBallTrackPoint } from "./axis-ball-processing";
 
 export type AxisBallJobStatus = "failed" | "processing" | "ready";
+export type AxisBallProcessingStage =
+  | "building_track"
+  | "complete"
+  | "detecting_basketball"
+  | "extracting_frames"
+  | "failed"
+  | "rendering_replay"
+  | "uploading";
 
 export type AxisBallJobRecord = {
   ball_track: AxisBallTrackPoint[];
@@ -13,6 +21,7 @@ export type AxisBallJobRecord = {
   job_id: string;
   mux_playback_id: string | null;
   mux_upload_id: string | null;
+  processing_stage: AxisBallProcessingStage;
   status: AxisBallJobStatus;
   storage_path: string;
   storage_provider: "mux";
@@ -44,6 +53,7 @@ export async function createAxisBallJob(record: AxisBallJobRecord) {
       job_id: record.job_id,
       mux_playback_id: record.mux_playback_id,
       mux_upload_id: record.mux_upload_id,
+      processing_stage: record.processing_stage,
       status: record.status,
       storage_path: record.storage_path,
       storage_provider: record.storage_provider,
@@ -83,6 +93,7 @@ export async function updateAxisBallJob(jobId: string, patch: Partial<AxisBallJo
       ...("detection_count" in patch ? { detection_count: patch.detection_count ?? 0 } : {}),
       ...("error" in patch ? { error: patch.error ?? null } : {}),
       ...("frame_count" in patch ? { frame_count: patch.frame_count ?? 0 } : {}),
+      ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "uploading" } : {}),
       ...("status" in patch ? { status: patch.status } : {}),
       ...("trigger_run_id" in patch ? { trigger_run_id: patch.trigger_run_id ?? null } : {}),
       updated_at: new Date().toISOString(),
@@ -111,6 +122,7 @@ function mapAxisBallJobRow(row: unknown): AxisBallJobRecord {
     job_id: getString(record.job_id),
     mux_playback_id: getString(record.mux_playback_id) || null,
     mux_upload_id: getString(record.mux_upload_id) || null,
+    processing_stage: getStage(record.processing_stage),
     status: getStatus(record.status),
     storage_path: getString(record.storage_path),
     storage_provider: "mux",
@@ -137,4 +149,20 @@ function getString(value: unknown) {
 function getStatus(value: unknown): AxisBallJobStatus {
   if (value === "ready" || value === "failed") return value;
   return "processing";
+}
+
+function getStage(value: unknown): AxisBallProcessingStage {
+  if (
+    value === "building_track" ||
+    value === "complete" ||
+    value === "detecting_basketball" ||
+    value === "extracting_frames" ||
+    value === "failed" ||
+    value === "rendering_replay" ||
+    value === "uploading"
+  ) {
+    return value;
+  }
+
+  return "uploading";
 }

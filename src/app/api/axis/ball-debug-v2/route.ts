@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     job_id: jobId,
     mux_playback_id: muxPlaybackId || null,
     mux_upload_id: muxUploadId || null,
+    processing_stage: "uploading",
     status: "processing",
     storage_path: storagePath,
     storage_provider: "mux",
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
     const reason = error instanceof Error ? error.message : String(error);
     await updateAxisBallJob(jobId, {
       error: reason,
+      processing_stage: "failed",
       status: "failed",
     });
     console.error("BALL_DEBUG_JOB_TRIGGER_FAILED", {

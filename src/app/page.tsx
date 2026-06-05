@@ -1,5 +1,5 @@
-import { FirstLoopHome } from "../components/AxisCloud";
+import { AxisOneScreen } from "../components/AxisOneScreen";
 
 export default function Home() {
-  return <FirstLoopHome />;
+  return <AxisOneScreen />;
 }

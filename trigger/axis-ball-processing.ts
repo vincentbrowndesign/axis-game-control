@@ -23,16 +23,23 @@ export const axisBallProcessing = task({
     try {
       await updateAxisBallJob(payload.jobId, {
         error: null,
+        processing_stage: "extracting_frames",
         status: "processing",
       });
 
-      const result = await runAxisBallProcessing(payload.videoUrl);
+      const result = await runAxisBallProcessing(payload.videoUrl, async (stage) => {
+        await updateAxisBallJob(payload.jobId, {
+          processing_stage: stage,
+          status: "processing",
+        });
+      });
       await updateAxisBallJob(payload.jobId, {
         ball_track: result.ballTrack,
         ball_track_count: result.ballTrack.length,
         detection_count: result.detectionCount,
         error: null,
         frame_count: result.frameCount,
+        processing_stage: "complete",
         status: "ready",
       });
 
@@ -54,6 +61,7 @@ export const axisBallProcessing = task({
       const reason = error instanceof Error ? error.message : String(error);
       await updateAxisBallJob(payload.jobId, {
         error: reason,
+        processing_stage: "failed",
         status: "failed",
       });
       console.error("AXIS_BALL_PROCESSING_FAILED", {

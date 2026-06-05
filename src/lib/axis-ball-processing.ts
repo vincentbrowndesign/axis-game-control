@@ -19,6 +19,12 @@ export type AxisBallProcessingResult = {
   frameCount: number;
 };
 
+export type AxisBallProcessingStageUpdate =
+  | "building_track"
+  | "detecting_basketball"
+  | "extracting_frames"
+  | "rendering_replay";
+
 type FrameFile = {
   frame: number;
   path: string;
@@ -42,7 +48,10 @@ export function getMuxPlaybackUrl(playbackId?: string | null) {
   return playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : "";
 }
 
-export async function runAxisBallProcessing(videoUrl: string): Promise<AxisBallProcessingResult> {
+export async function runAxisBallProcessing(
+  videoUrl: string,
+  onStage?: (stage: AxisBallProcessingStageUpdate) => Promise<void> | void,
+): Promise<AxisBallProcessingResult> {
   if (!videoUrl) throw new Error("videoUrl is required.");
 
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-processing-"));
@@ -54,6 +63,7 @@ export async function runAxisBallProcessing(videoUrl: string): Promise<AxisBallP
     ffmpeg.setFfmpegPath(ffmpegPath);
 
     console.log("AXIS_BALL_DOWNLOAD_VIDEO_START", { videoUrl });
+    await onStage?.("extracting_frames");
     console.log("FRAME_EXTRACTION_START", { videoUrl });
     await extractFrames(videoUrl, framesDir);
     console.log("FRAME_EXTRACTION_COMPLETE", { videoUrl });
@@ -70,15 +80,18 @@ export async function runAxisBallProcessing(videoUrl: string): Promise<AxisBallP
       };
     }
 
+    await onStage?.("detecting_basketball");
     console.log("ROBOFLOW_START", {
       project: roboflowProject,
       version: roboflowVersion,
     });
     const detectionResult = await detectBasketballs(frames);
+    await onStage?.("building_track");
     console.log("DETECTIONS_RETURNED", { count: detectionResult.detectionCount });
     console.log("BASKETBALL_DETECTIONS", { count: detectionResult.detectionCount });
     console.log("BALL_TRACK_COUNT", { count: detectionResult.ballTrack.length });
 
+    await onStage?.("rendering_replay");
     return {
       ballTrack: detectionResult.ballTrack,
       detectionCount: detectionResult.detectionCount,

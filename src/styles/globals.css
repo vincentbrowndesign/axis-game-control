@@ -276,6 +276,116 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.axis-one-screen {
+  align-items: center;
+  background: #020303;
+  color: var(--axis-ink);
+  display: grid;
+  min-height: 100dvh;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  place-items: center;
+}
+
+.axis-one-choose,
+.axis-one-view,
+.axis-one-small-button,
+.axis-one-processing strong,
+.axis-one-processing time,
+.axis-one-processing span,
+.axis-one-complete time {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.axis-one-choose,
+.axis-one-view {
+  appearance: none;
+  background: rgba(168, 217, 51, 0.12);
+  border: 1px solid rgba(168, 217, 51, 0.58);
+  color: var(--axis-live);
+  cursor: pointer;
+  min-height: min(72dvh, 34rem);
+  padding: 1rem;
+  touch-action: manipulation;
+  width: min(100%, 44rem);
+}
+
+.axis-one-choose {
+  font-size: clamp(3rem, 16vw, 7rem);
+  line-height: 0.9;
+}
+
+.axis-one-processing,
+.axis-one-complete {
+  display: grid;
+  gap: 1rem;
+  place-items: center;
+  text-align: center;
+}
+
+.axis-one-processing strong {
+  color: var(--axis-ink);
+  font-size: clamp(2.1rem, 11vw, 6rem);
+  line-height: 0.9;
+}
+
+.axis-one-processing time,
+.axis-one-complete time {
+  color: var(--axis-live);
+  font-size: clamp(3.5rem, 18vw, 8rem);
+  line-height: 0.9;
+}
+
+.axis-one-processing span {
+  color: rgba(244, 244, 240, 0.58);
+  font-size: clamp(0.9rem, 4vw, 1.35rem);
+}
+
+.axis-one-small-button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.48);
+  color: var(--axis-live);
+  cursor: pointer;
+  min-height: 3rem;
+  padding: 0 1rem;
+}
+
+.axis-one-view {
+  font-size: clamp(2.8rem, 14vw, 6.5rem);
+  line-height: 0.9;
+  min-height: 12rem;
+}
+
+.axis-one-replay {
+  align-self: stretch;
+  background: #050505;
+  display: grid;
+  justify-self: stretch;
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-one-video,
+.axis-one-canvas {
+  display: block;
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-one-video {
+  object-fit: contain;
+}
+
+.axis-one-canvas {
+  pointer-events: none;
+}
+
 .clipnote-shell {
   background:
     linear-gradient(180deg, rgba(244, 244, 240, 0.035), transparent 20rem),
