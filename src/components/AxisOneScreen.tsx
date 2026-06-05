@@ -1,6 +1,5 @@
 "use client";
 
-import * as tus from "tus-js-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type AppState = "choose" | "complete" | "failed" | "processing" | "replay";
@@ -33,12 +32,8 @@ type BallJobResponse = {
 
 type MuxUploadResponse = {
   error?: string;
-  expiresAt?: string | null;
   message?: string;
-  stack?: string | null;
-  stage?: string;
   uploadId?: string;
-  uploadUrl?: string;
 };
 
 type MuxReadyResponse = {
@@ -173,11 +168,12 @@ export function AxisOneScreen() {
     setState("processing");
 
     try {
-      const mux = await createMuxUpload();
-      if (!mux.uploadId || !mux.uploadUrl) throw new Error("Upload could not be created.");
-      await uploadFileToMux(file, mux.uploadUrl);
+      console.info("UPLOAD_FLOW_SELECTED", "SERVER_TO_MUX");
+      const mux = await uploadFileToMuxServer(file);
+      if (!mux.uploadId) throw new Error("Upload could not be created.");
 
       setStage("Extracting Frames");
+      console.info("PROCESSING_START", { uploadId: mux.uploadId });
       const ready = await waitForMuxPlayback(mux.uploadId);
       if (!ready.playbackId) throw new Error("Video storage was not ready.");
 
@@ -264,139 +260,33 @@ export function AxisOneScreen() {
   );
 }
 
-async function createMuxUpload() {
-  const response = await fetch("/api/film/uploads", { method: "POST" });
+async function uploadFileToMuxServer(file: File) {
+  console.info("UPLOAD_START", {
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type,
+    route: "/api/film/uploads/server",
+  });
+
+  const form = new FormData();
+  form.append("file", file);
+
+  const response = await fetch("/api/film/uploads/server", {
+    body: form,
+    method: "POST",
+  });
   const result = (await response.json().catch(() => null)) as MuxUploadResponse | null;
-  console.info("MUX_UPLOAD_CREATE_RESPONSE", {
-    body: result,
-    ok: response.ok,
-    responseHeaders: headersToObject(response.headers),
-    status: response.status,
-  });
-  if (!response.ok || !result?.uploadId || !result.uploadUrl) {
-    const failure = {
-      error: result?.error ?? "MuxUploadCreateError",
-      message: result?.message ?? "Upload could not be created.",
-      stack: result?.stack ?? null,
-      stage: result?.stage ?? "mux_upload_create",
-    };
-    console.error("MUX_UPLOAD_BROWSER_FAILED", failure);
-    throw new Error(failure.message);
+
+  if (!response.ok || !result?.uploadId) {
+    throw new Error(result?.message ?? result?.error ?? "Upload endpoint unavailable.");
   }
-  console.info("MUX_UPLOAD_ID", result.uploadId);
-  console.info("MUX_UPLOAD_URL", {
-    expiresAt: result.expiresAt ?? null,
+
+  console.info("UPLOAD_COMPLETE", {
+    route: "/api/film/uploads/server",
     uploadId: result.uploadId,
-    uploadUrl: result.uploadUrl,
   });
+
   return result;
-}
-
-function uploadFileToMux(file: File, uploadUrl: string) {
-  return new Promise<void>((resolve, reject) => {
-    const metadata = {
-      filename: file.name || "axis-video.mp4",
-      filetype: file.type || "video/mp4",
-    };
-    const tusConfiguration = {
-      endpoint: uploadUrl,
-      metadata,
-      removeFingerprintOnSuccess: true,
-      retryDelays: [0, 1000, 3000, 5000],
-      uploadSize: file.size,
-    };
-    console.info("MUX_UPLOAD_BROWSER_START", {
-      browserUploadConfiguration: {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-      },
-      tusConfiguration,
-      uploadUrl,
-    });
-
-    const upload = new tus.Upload(file, {
-      endpoint: uploadUrl,
-      metadata,
-      onAfterResponse: (request, response) => {
-        console.info("MUX_UPLOAD_BROWSER_RESPONSE", {
-          requestHeaders: getTusRequestHeaders(request),
-          requestMethod: request.getMethod(),
-          requestUrl: request.getURL(),
-          responseBody: response.getBody(),
-          responseHeaders: getTusResponseHeaders(response),
-          status: response.getStatus(),
-        });
-      },
-      onBeforeRequest: (request) => {
-        console.info("MUX_UPLOAD_BROWSER_REQUEST", {
-          requestHeaders: getTusRequestHeaders(request),
-          requestMethod: request.getMethod(),
-          requestUrl: request.getURL(),
-        });
-      },
-      onError: (uploadError) => {
-        const failure = serializeBrowserFailure("mux_upload_browser_tus", uploadError);
-        console.error("MUX_UPLOAD_BROWSER_FAILED", failure);
-        reject(uploadError);
-      },
-      onProgress: (bytesUploaded, bytesTotal) => {
-        console.info("MUX_UPLOAD_BROWSER_PROGRESS", {
-          bytesTotal,
-          bytesUploaded,
-          percent: bytesTotal > 0 ? Math.round((bytesUploaded / bytesTotal) * 10000) / 100 : null,
-        });
-      },
-      onSuccess: () => {
-        console.info("MUX_UPLOAD_BROWSER_COMPLETE", {
-          uploadUrl,
-        });
-        resolve();
-      },
-      removeFingerprintOnSuccess: true,
-      retryDelays: [0, 1000, 3000, 5000],
-      uploadSize: file.size,
-    });
-    upload.start();
-  });
-}
-
-function getTusRequestHeaders(request: tus.HttpRequest) {
-  return {
-    "Content-Type": request.getHeader("Content-Type"),
-    "Tus-Resumable": request.getHeader("Tus-Resumable"),
-    "Upload-Length": request.getHeader("Upload-Length"),
-    "Upload-Metadata": request.getHeader("Upload-Metadata"),
-    "Upload-Offset": request.getHeader("Upload-Offset"),
-  };
-}
-
-function getTusResponseHeaders(response: tus.HttpResponse) {
-  return {
-    Location: response.getHeader("Location"),
-    "Tus-Resumable": response.getHeader("Tus-Resumable"),
-    "Upload-Offset": response.getHeader("Upload-Offset"),
-  };
-}
-
-function headersToObject(headers: Headers) {
-  return Object.fromEntries(headers.entries());
-}
-
-function serializeBrowserFailure(stage: string, error: unknown) {
-  const detailed = error as Partial<tus.DetailedError> & Error;
-  return {
-    error: error instanceof Error ? error.name : "UnknownError",
-    message: error instanceof Error ? error.message : String(error),
-    requestHeaders: detailed.originalRequest ? getTusRequestHeaders(detailed.originalRequest) : null,
-    requestMethod: detailed.originalRequest?.getMethod?.() ?? null,
-    requestUrl: detailed.originalRequest?.getURL?.() ?? null,
-    responseBody: detailed.originalResponse?.getBody?.() ?? null,
-    responseHeaders: detailed.originalResponse ? getTusResponseHeaders(detailed.originalResponse) : null,
-    responseStatus: detailed.originalResponse?.getStatus?.() ?? null,
-    stack: error instanceof Error ? error.stack ?? null : null,
-    stage,
-  };
 }
 
 async function waitForMuxPlayback(uploadId: string) {
