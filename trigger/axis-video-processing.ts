@@ -19,12 +19,20 @@ export const axisVideoProcessing = task({
 
     try {
       console.log("PROCESSING_START", { jobId: payload.jobId });
+      console.log("PROCESSING_STEP_1", {
+        request: "supabase.axis_video_jobs.update",
+        stage: "mark_stream_processing",
+      });
       await updateAxisVideoJob(payload.jobId, {
         error: null,
         progress: 10,
         status: "stream_processing",
       });
 
+      console.log("PROCESSING_STEP_2", {
+        request: "cloudflare.stream.video.read",
+        uid: payload.cloudflareUid,
+      });
       const streamVideo = await waitForCloudflareStreamReady(payload.cloudflareUid);
       const videoReadyAt = new Date().toISOString();
       await updateAxisVideoJob(payload.jobId, {
@@ -37,6 +45,10 @@ export const axisVideoProcessing = task({
       console.log("DOWNLOAD_VIDEO_START", {
         cloudflareUid: payload.cloudflareUid,
         jobId: payload.jobId,
+      });
+      console.log("PROCESSING_STEP_3", {
+        request: "cloudflare.stream.downloads.create_and_read",
+        uid: payload.cloudflareUid,
       });
       const mp4Url = await waitForCloudflareMp4Download(payload.cloudflareUid);
       const mp4ReadyAt = new Date().toISOString();
