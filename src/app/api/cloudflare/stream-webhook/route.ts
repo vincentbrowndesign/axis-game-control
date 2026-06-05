@@ -3,6 +3,9 @@ import { getAxisVideoJobByCloudflareUid, updateAxisVideoJob } from "../../../../
 
 export const runtime = "nodejs";
 
+const axisVideoTriggerTtl = "30m";
+const axisVideoTriggerQueue = "axis-video-processing";
+
 export async function POST(request: Request) {
   const rawBody = await request.text();
   const payload = parsePayload(rawBody);
@@ -28,14 +31,48 @@ export async function POST(request: Request) {
   });
 
   if (isReady && !job.record.trigger_run_id) {
-    const handle = await tasks.trigger("axis-video-processing", {
-      cloudflareUid,
-      jobId: job.record.job_id,
-    });
-    await updateAxisVideoJob(job.record.job_id, {
-      status: "stream_processing",
-      trigger_run_id: handle.id,
-    });
+    try {
+      console.log("AXIS_VIDEO_TRIGGER_REQUEST", {
+        cloudflareUid,
+        jobId: job.record.job_id,
+        queueName: axisVideoTriggerQueue,
+        ttl: axisVideoTriggerTtl,
+      });
+      const handle = await tasks.trigger("axis-video-processing", {
+        cloudflareUid,
+        jobId: job.record.job_id,
+      }, {
+        queue: axisVideoTriggerQueue,
+        ttl: axisVideoTriggerTtl,
+      });
+      console.log("AXIS_VIDEO_TRIGGER_CREATED", {
+        cloudflareUid,
+        jobId: job.record.job_id,
+        queueName: axisVideoTriggerQueue,
+        triggerRunId: handle.id,
+        ttl: axisVideoTriggerTtl,
+      });
+      await updateAxisVideoJob(job.record.job_id, {
+        status: "stream_processing",
+        trigger_run_id: handle.id,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error("AXIS_VIDEO_TRIGGER_FAILED", {
+        cloudflareUid,
+        error: reason,
+        jobId: job.record.job_id,
+        queueName: axisVideoTriggerQueue,
+        ttl: axisVideoTriggerTtl,
+      });
+      await updateAxisVideoJob(job.record.job_id, {
+        error: reason,
+        processing_stage: "failed",
+        progress: 0,
+        status: "failed",
+      });
+      return Response.json({ error: reason, jobId: job.record.job_id, status: "failed" }, { status: 502 });
+    }
   }
 
   return Response.json({

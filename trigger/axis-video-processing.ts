@@ -11,6 +11,10 @@ type AxisVideoProcessingPayload = {
 export const axisVideoProcessing = task({
   id: "axis-video-processing",
   maxDuration: 900,
+  queue: {
+    name: "axis-video-processing",
+    concurrencyLimit: 1,
+  },
   run: async (payload: AxisVideoProcessingPayload) => {
     console.log("AXIS_VIDEO_PROCESSING_START", {
       cloudflareUid: payload.cloudflareUid,

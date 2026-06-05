@@ -3,6 +3,9 @@ import { getAxisVideoJob, updateAxisVideoJob } from "../../../../lib/axis-video-
 
 export const runtime = "nodejs";
 
+const axisVideoTriggerTtl = "30m";
+const axisVideoTriggerQueue = "axis-video-processing";
+
 type CreateVideoJobBody = {
   cloudflareUid?: unknown;
   fileSize?: unknown;
@@ -33,9 +36,25 @@ export async function POST(request: Request) {
   });
 
   try {
+    console.log("AXIS_VIDEO_TRIGGER_REQUEST", {
+      cloudflareUid,
+      jobId,
+      queueName: axisVideoTriggerQueue,
+      ttl: axisVideoTriggerTtl,
+    });
     const handle = await tasks.trigger("axis-video-processing", {
       cloudflareUid,
       jobId,
+    }, {
+      queue: axisVideoTriggerQueue,
+      ttl: axisVideoTriggerTtl,
+    });
+    console.log("AXIS_VIDEO_TRIGGER_CREATED", {
+      cloudflareUid,
+      jobId,
+      queueName: axisVideoTriggerQueue,
+      triggerRunId: handle.id,
+      ttl: axisVideoTriggerTtl,
     });
     await updateAxisVideoJob(jobId, {
       status: "stream_processing",
@@ -50,6 +69,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
+    console.error("AXIS_VIDEO_TRIGGER_FAILED", {
+      cloudflareUid,
+      error: reason,
+      jobId,
+      queueName: axisVideoTriggerQueue,
+      ttl: axisVideoTriggerTtl,
+    });
     await updateAxisVideoJob(jobId, {
       error: reason,
       processing_stage: "failed",
