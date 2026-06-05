@@ -19,7 +19,6 @@ type BallTrackPoint = {
 };
 
 type BallJobResponse = {
-  assetId?: string;
   ballTrack?: BallTrackPoint[];
   ballTrackCount?: number;
   detectionCount?: number;
@@ -27,21 +26,37 @@ type BallJobResponse = {
   frameCount?: number;
   jobId?: string;
   processingStage?: string;
-  status?: "failed" | "processing" | "queued" | "ready" | "uploading";
+  status?:
+    | "axis_processing"
+    | "failed"
+    | "ready_for_axis_processing"
+    | "replay_ready"
+    | "stream_processing"
+    | "uploaded"
+    | "uploading";
   videoUrl?: string;
 };
 
-type MuxUploadResponse = {
+type VideoUploadUrlResponse = {
+  cloudflareUid?: string;
+  contentType?: string;
   error?: string;
+  fileSize?: number;
+  filename?: string;
+  jobId?: string;
   message?: string;
-  playbackId?: string;
-  uploadId?: string;
-  videoUrl?: string;
+  uploadURL?: string;
+};
+
+type VideoJobResponse = {
+  cloudflareUid?: string;
+  error?: string;
+  jobId?: string;
+  status?: BallJobResponse["status"];
 };
 
 const confidenceThreshold = 0.35;
 const trailLength = 20;
-const activeUploadFlow = "SERVER_TO_MUX";
 
 export function AxisOneScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -122,7 +137,7 @@ export function AxisOneScreen() {
     let cancelled = false;
     const interval = window.setInterval(async () => {
       try {
-        const response = await fetch(`/api/axis/video-jobs/${encodeURIComponent(jobId)}`);
+        const response = await fetch(`/api/axis/video-job/${encodeURIComponent(jobId)}`);
         const result = (await response.json().catch(() => null)) as BallJobResponse | null;
         if (cancelled || !result) return;
         if (!response.ok) throw new Error(result.error ?? "Processing failed.");
@@ -130,7 +145,7 @@ export function AxisOneScreen() {
         setStage(stageFromJob(result.processingStage));
 
         if (result.status === "failed") throw new Error(result.error ?? "Processing failed.");
-        if (result.status !== "ready") return;
+        if (result.status !== "replay_ready") return;
 
         const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
         setTrack(nextTrack);
@@ -167,26 +182,23 @@ export function AxisOneScreen() {
     setState("processing");
 
     try {
-      assertServerUploadFlow(activeUploadFlow);
-      console.info("UPLOAD_FLOW_SELECTED", activeUploadFlow);
-      console.info("UPLOAD_SERVER_ROUTE", "/api/film/uploads/server");
-      const mux = await uploadFileToMuxServer(file);
-      if (!mux.uploadId || !mux.playbackId) throw new Error("Upload could not be created.");
+      console.info("UPLOAD_FLOW_SELECTED", "CLOUDFLARE_STREAM_DIRECT");
+      const upload = await createVideoUploadUrl(file);
+      await uploadFileToCloudflare(file, upload);
 
-      setStage("Extracting Frames");
-      const storedVideoUrl = mux.videoUrl || `https://stream.mux.com/${mux.playbackId}.m3u8`;
-      console.info("PROCESSING_START", { assetId: mux.uploadId, muxPlaybackId: mux.playbackId });
-      const response = await fetch("/api/axis/video-jobs", {
+      setStage("Uploading");
+      console.info("PROCESSING_START", { cloudflareUid: upload.cloudflareUid, jobId: upload.jobId });
+      const response = await fetch("/api/axis/video-job", {
         body: JSON.stringify({
-          assetId: mux.uploadId,
-          muxPlaybackId: mux.playbackId,
-          muxUploadId: mux.uploadId,
-          videoUrl: storedVideoUrl,
+          cloudflareUid: upload.cloudflareUid,
+          fileSize: file.size,
+          filename: file.name || "axis-video.mp4",
+          jobId: upload.jobId,
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      const result = (await response.json().catch(() => null)) as BallJobResponse | null;
+      const result = (await response.json().catch(() => null)) as VideoJobResponse | null;
       if (!response.ok || !result?.jobId) throw new Error(result?.error ?? "Processing job could not be created.");
       setJobId(result.jobId);
     } catch (nextError) {
@@ -260,40 +272,51 @@ export function AxisOneScreen() {
   );
 }
 
-async function uploadFileToMuxServer(file: File) {
-  console.info("UPLOAD_START", {
-    fileName: file.name,
-    fileSize: file.size,
-    fileType: file.type,
-    route: "/api/film/uploads/server",
-  });
-
-  const form = new FormData();
-  form.append("file", file);
-
-  const response = await fetch("/api/film/uploads/server", {
-    body: form,
+async function createVideoUploadUrl(file: File) {
+  const response = await fetch("/api/axis/video-upload-url", {
+    body: JSON.stringify({
+      contentType: file.type || "video/mp4",
+      fileSize: file.size,
+      filename: file.name || "axis-video.mp4",
+    }),
+    headers: { "Content-Type": "application/json" },
     method: "POST",
   });
-  const result = (await response.json().catch(() => null)) as MuxUploadResponse | null;
-
-  if (!response.ok || !result?.uploadId) {
-    throw new Error(result?.message ?? result?.error ?? "Upload endpoint unavailable.");
+  const result = (await response.json().catch(() => null)) as VideoUploadUrlResponse | null;
+  if (!response.ok || !result?.cloudflareUid || !result.jobId || !result.uploadURL) {
+    throw new Error(result?.message ?? result?.error ?? "Upload could not be created.");
   }
-
-  console.info("UPLOAD_COMPLETE", {
-    route: "/api/film/uploads/server",
-    uploadId: result.uploadId,
-  });
 
   return result;
 }
 
-function assertServerUploadFlow(flow: string) {
-  if (flow === "BROWSER_TO_MUX") throw new Error("BROWSER_TO_MUX_DISABLED");
+async function uploadFileToCloudflare(file: File, upload: VideoUploadUrlResponse) {
+  console.info("UPLOAD_START", {
+    cloudflareUid: upload.cloudflareUid,
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type,
+    storageProvider: "cloudflare_stream",
+  });
+
+  if (!upload.uploadURL) throw new Error("Upload URL is incomplete.");
+  const body = new FormData();
+  body.append("file", file, file.name || "axis-video.mp4");
+
+  const response = await fetch(upload.uploadURL, {
+    body,
+    method: "POST",
+  });
+  if (!response.ok) throw new Error(`Cloudflare upload failed HTTP ${response.status}`);
+
+  console.info("UPLOAD_COMPLETE", {
+    cloudflareUid: upload.cloudflareUid,
+    storageProvider: "cloudflare_stream",
+  });
 }
 
 function stageFromJob(stage: unknown): VisibleStage {
+  if (stage === "queued" || stage === "uploading") return "Uploading";
   if (stage === "extracting_frames") return "Extracting Frames";
   if (stage === "detecting_basketball") return "Detecting Basketball";
   if (stage === "building_track") return "Building Track";

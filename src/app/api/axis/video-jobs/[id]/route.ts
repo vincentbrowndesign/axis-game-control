@@ -13,8 +13,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
   return Response.json({
     assetId: result.record.asset_id,
-    ballTrack: result.record.status === "ready" ? result.record.ball_track : [],
+    ballTrack: result.record.status === "replay_ready" ? result.record.ball_track : [],
     ballTrackCount: result.record.ball_track_count,
+    cloudflareUid: result.record.cloudflare_uid,
     detectionCount: result.record.detection_count,
     error: result.record.error,
     frameCount: result.record.frame_count,

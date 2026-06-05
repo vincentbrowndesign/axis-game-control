@@ -1,0 +1,68 @@
+import { createAxisVideoJob } from "../../../../lib/axis-video-jobs";
+import { createCloudflareStreamDirectUpload } from "../../../../lib/cloudflare-stream";
+
+export const runtime = "nodejs";
+
+type CreateUploadUrlBody = {
+  contentType?: unknown;
+  fileSize?: unknown;
+  filename?: unknown;
+};
+
+export async function POST(request: Request) {
+  const body = (await request.json().catch(() => null)) as CreateUploadUrlBody | null;
+  if (!body) return Response.json({ error: "JSON body is required." }, { status: 400 });
+
+  const filename = getString(body.filename) || "axis-video.mp4";
+  const fileSize = getNumber(body.fileSize) ?? 0;
+  if (fileSize <= 0) return Response.json({ error: "fileSize is required." }, { status: 400 });
+
+  const direct = await createCloudflareStreamDirectUpload({ fileSize, filename });
+  if (direct.error || !direct.upload) return Response.json({ error: direct.error }, { status: 502 });
+
+  const now = new Date().toISOString();
+  const jobId = `axis-video-${crypto.randomUUID()}`;
+  const created = await createAxisVideoJob({
+    asset_id: direct.upload.uid,
+    ball_track: [],
+    ball_track_count: 0,
+    cloudflare_uid: direct.upload.uid,
+    detection_count: 0,
+    error: null,
+    file_size: fileSize,
+    filename,
+    frame_count: 0,
+    job_id: jobId,
+    mp4_ready_at: null,
+    mux_playback_id: null,
+    mux_upload_id: null,
+    processing_stage: "uploading",
+    progress: 0,
+    status: "uploading",
+    storage_path: `cloudflare:${direct.upload.uid}`,
+    storage_provider: "cloudflare",
+    trigger_run_id: null,
+    upload_url_created_at: now,
+    video_ready_at: null,
+    video_url: `cloudflare-stream://${direct.upload.uid}`,
+  });
+
+  if (!created.stored) return Response.json({ error: created.reason }, { status: 502 });
+
+  return Response.json({
+    cloudflareUid: direct.upload.uid,
+    contentType: getString(body.contentType) || "video/mp4",
+    filename,
+    fileSize,
+    jobId,
+    uploadURL: direct.upload.uploadURL,
+  });
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}

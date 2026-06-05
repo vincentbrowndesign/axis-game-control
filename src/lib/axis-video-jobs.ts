@@ -1,27 +1,41 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint } from "./axis-ball-processing";
 
-export type AxisVideoJobStatus = "failed" | "processing" | "queued" | "ready" | "uploading";
+export type AxisVideoJobStatus =
+  | "axis_processing"
+  | "failed"
+  | "ready_for_axis_processing"
+  | "replay_ready"
+  | "stream_processing"
+  | "uploaded"
+  | "uploading";
 export type AxisVideoProcessingStage = AxisBallProcessingStageUpdate | "complete" | "failed" | "queued" | "uploading";
 
 export type AxisVideoJobRecord = {
   asset_id: string;
   ball_track: AxisBallTrackPoint[];
   ball_track_count: number;
+  cloudflare_uid: string;
   created_at?: string;
   detection_count: number;
   error: string | null;
+  file_size: number;
+  filename: string;
   frame_count: number;
+  id?: string;
   job_id: string;
+  mp4_ready_at: string | null;
   mux_playback_id: string | null;
   mux_upload_id: string | null;
   processing_stage: AxisVideoProcessingStage;
   progress: number;
   status: AxisVideoJobStatus;
   storage_path: string;
-  storage_provider: "mux";
+  storage_provider: "cloudflare" | "mux" | "supabase";
   trigger_run_id: string | null;
+  upload_url_created_at: string | null;
   updated_at?: string;
+  video_ready_at: string | null;
   video_url: string;
 };
 
@@ -43,10 +57,14 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
       asset_id: record.asset_id,
       ball_track: record.ball_track,
       ball_track_count: record.ball_track_count,
+      cloudflare_uid: record.cloudflare_uid,
       detection_count: record.detection_count,
       error: record.error,
+      file_size: record.file_size,
+      filename: record.filename,
       frame_count: record.frame_count,
       job_id: record.job_id,
+      mp4_ready_at: record.mp4_ready_at,
       mux_playback_id: record.mux_playback_id,
       mux_upload_id: record.mux_upload_id,
       processing_stage: record.processing_stage,
@@ -55,6 +73,8 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
       storage_path: record.storage_path,
       storage_provider: record.storage_provider,
       trigger_run_id: record.trigger_run_id,
+      upload_url_created_at: record.upload_url_created_at,
+      video_ready_at: record.video_ready_at,
       video_url: record.video_url,
     })
     .select()
@@ -74,6 +94,22 @@ export async function getAxisVideoJob(jobId: string) {
   return { error: null, record: data ? mapAxisVideoJobRow(data) : null };
 }
 
+export async function getAxisVideoJobByCloudflareUid(cloudflareUid: string) {
+  const supabase = getAxisVideoJobClient();
+  if (!supabase) return { error: "supabase_not_configured", record: null };
+
+  const { data, error } = await supabase
+    .from("axis_video_jobs")
+    .select("*")
+    .eq("cloudflare_uid", cloudflareUid)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return { error: error.message, record: null };
+  return { error: null, record: data ? mapAxisVideoJobRow(data) : null };
+}
+
 export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideoJobRecord>) {
   const supabase = getAxisVideoJobClient();
   if (!supabase) return { reason: "supabase_not_configured", stored: false as const };
@@ -83,13 +119,19 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
     .update({
       ...("ball_track" in patch ? { ball_track: patch.ball_track ?? [] } : {}),
       ...("ball_track_count" in patch ? { ball_track_count: patch.ball_track_count ?? 0 } : {}),
+      ...("cloudflare_uid" in patch ? { cloudflare_uid: patch.cloudflare_uid ?? "" } : {}),
       ...("detection_count" in patch ? { detection_count: patch.detection_count ?? 0 } : {}),
       ...("error" in patch ? { error: patch.error ?? null } : {}),
+      ...("file_size" in patch ? { file_size: patch.file_size ?? 0 } : {}),
+      ...("filename" in patch ? { filename: patch.filename ?? "" } : {}),
       ...("frame_count" in patch ? { frame_count: patch.frame_count ?? 0 } : {}),
+      ...("mp4_ready_at" in patch ? { mp4_ready_at: patch.mp4_ready_at ?? null } : {}),
       ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "queued" } : {}),
       ...("progress" in patch ? { progress: clampProgress(patch.progress) } : {}),
       ...("status" in patch ? { status: patch.status } : {}),
       ...("trigger_run_id" in patch ? { trigger_run_id: patch.trigger_run_id ?? null } : {}),
+      ...("upload_url_created_at" in patch ? { upload_url_created_at: patch.upload_url_created_at ?? null } : {}),
+      ...("video_ready_at" in patch ? { video_ready_at: patch.video_ready_at ?? null } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("job_id", jobId)
@@ -108,20 +150,27 @@ function mapAxisVideoJobRow(row: unknown): AxisVideoJobRecord {
     asset_id: getString(record.asset_id),
     ball_track: ballTrack,
     ball_track_count: getNumber(record.ball_track_count) ?? ballTrack.length,
+    cloudflare_uid: getString(record.cloudflare_uid),
     created_at: getString(record.created_at),
     detection_count: getNumber(record.detection_count) ?? 0,
     error: getString(record.error) || null,
+    file_size: getNumber(record.file_size) ?? 0,
+    filename: getString(record.filename),
     frame_count: getNumber(record.frame_count) ?? 0,
+    id: getString(record.id),
     job_id: getString(record.job_id),
+    mp4_ready_at: getString(record.mp4_ready_at) || null,
     mux_playback_id: getString(record.mux_playback_id) || null,
     mux_upload_id: getString(record.mux_upload_id) || null,
     processing_stage: getStage(record.processing_stage),
     progress: clampProgress(getNumber(record.progress) ?? 0),
     status: getStatus(record.status),
     storage_path: getString(record.storage_path),
-    storage_provider: "mux",
+    storage_provider: getStorageProvider(record.storage_provider),
     trigger_run_id: getString(record.trigger_run_id) || null,
+    upload_url_created_at: getString(record.upload_url_created_at) || null,
     updated_at: getString(record.updated_at),
+    video_ready_at: getString(record.video_ready_at) || null,
     video_url: getString(record.video_url),
   };
 }
@@ -146,10 +195,23 @@ function getString(value: unknown) {
 }
 
 function getStatus(value: unknown): AxisVideoJobStatus {
-  if (value === "queued" || value === "uploading" || value === "processing" || value === "ready" || value === "failed") {
+  if (
+    value === "axis_processing" ||
+    value === "failed" ||
+    value === "ready_for_axis_processing" ||
+    value === "replay_ready" ||
+    value === "stream_processing" ||
+    value === "uploaded" ||
+    value === "uploading"
+  ) {
     return value;
   }
-  return "queued";
+  return "uploading";
+}
+
+function getStorageProvider(value: unknown): "cloudflare" | "mux" | "supabase" {
+  if (value === "cloudflare") return "cloudflare";
+  return value === "mux" ? "mux" : "supabase";
 }
 
 function getStage(value: unknown): AxisVideoProcessingStage {

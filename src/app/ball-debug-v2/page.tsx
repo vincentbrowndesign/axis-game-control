@@ -1,6 +1,5 @@
 "use client";
 
-import * as tus from "tus-js-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type BallTrackPoint = {
@@ -25,16 +24,6 @@ type BallDebugResponse = {
   jobId?: string;
   status?: "failed" | "processing" | "ready";
   videoUrl?: string;
-};
-
-type MuxUploadResponse = {
-  uploadId?: string;
-  uploadUrl?: string;
-};
-
-type MuxReadyResponse = {
-  playbackId?: string;
-  ready?: boolean;
 };
 
 type DebugState = {
@@ -214,39 +203,7 @@ export default function BallDebugV2Page() {
     setStatus("processing");
 
     try {
-      const mux = await createMuxUpload();
-      if (!mux.uploadId || !mux.uploadUrl) throw new Error("Mux upload could not be created.");
-      await uploadFileToMux(file, mux.uploadUrl);
-      const ready = await waitForMuxPlayback(mux.uploadId);
-      if (!ready.playbackId) throw new Error("Mux playback was not ready.");
-
-      const muxVideoUrl = `https://stream.mux.com/${ready.playbackId}.m3u8`;
-      const response = await fetch("/api/axis/ball-debug-v2", {
-        body: JSON.stringify({
-          muxPlaybackId: ready.playbackId,
-          muxUploadId: mux.uploadId,
-          videoUrl: muxVideoUrl,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const result = (await response.json().catch(() => null)) as BallDebugResponse | null;
-      if (!response.ok || !result) {
-        const failedStage = result?.failure?.stage ?? "job_create";
-        const errorMessage = result?.failure?.error ?? result?.error ?? "Ball debug failed.";
-        setDebug({
-          ...emptyDebug,
-          BASKETBALL_DETECTIONS: result?.detectionCount ?? 0,
-          ERROR_MESSAGE: errorMessage,
-          FAILED_STAGE: failedStage,
-          FRAMES_EXTRACTED: result?.frameCount ?? 0,
-        });
-        throw new Error(errorMessage);
-      }
-
-      if (!result.jobId) throw new Error("Ball job was not created.");
-      setJobId(result.jobId);
-      setStatus("processing");
+      throw new Error("BALL_DEBUG_V2_UPLOAD_DISABLED");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Ball debug failed.");
       setStatus("failed");
@@ -310,42 +267,6 @@ export default function BallDebugV2Page() {
       />
     </main>
   );
-}
-
-async function createMuxUpload() {
-  const response = await fetch("/api/film/uploads", { method: "POST" });
-  const result = (await response.json().catch(() => null)) as MuxUploadResponse | null;
-  if (!response.ok || !result?.uploadId || !result.uploadUrl) throw new Error("Mux upload could not be created.");
-  return result;
-}
-
-function uploadFileToMux(file: File, uploadUrl: string) {
-  return new Promise<void>((resolve, reject) => {
-    const upload = new tus.Upload(file, {
-      endpoint: uploadUrl,
-      metadata: {
-        filename: file.name || "axis-video.mp4",
-        filetype: file.type || "video/mp4",
-      },
-      onError: (uploadError) => reject(uploadError),
-      onSuccess: () => resolve(),
-      removeFingerprintOnSuccess: true,
-      retryDelays: [0, 1000, 3000, 5000],
-      uploadSize: file.size,
-    });
-    upload.start();
-  });
-}
-
-async function waitForMuxPlayback(uploadId: string) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const response = await fetch(`/api/film/uploads/${encodeURIComponent(uploadId)}`);
-    const result = (await response.json().catch(() => null)) as MuxReadyResponse | null;
-    if (response.ok && result?.ready && result.playbackId) return result;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-
-  throw new Error("Mux playback was not ready.");
 }
 
 function DebugRow({ label, value }: { label: string; value: number | string }) {

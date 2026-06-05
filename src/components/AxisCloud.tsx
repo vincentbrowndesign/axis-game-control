@@ -27,46 +27,9 @@ function getPlayerTrackCount(tracks: AnimationTrack[] | undefined) {
   return tracks?.filter((track) => track.entity_type === "player").length ?? 0;
 }
 
-async function uploadToMux(file: File) {
-  console.info("EXPORT_START", { fileName: file.name, route: "/api/film/uploads/server" });
-  const form = new FormData();
-  form.append("file", file);
-
-  const uploadResponse = await fetch("/api/film/uploads/server", {
-    body: form,
-    method: "POST",
-  });
-  const upload = (await uploadResponse.json().catch(() => null)) as
-    | { uploadId?: string }
-    | null;
-
-  if (!uploadResponse.ok || !upload?.uploadId) {
-    console.error("MUX_UPLOAD_FAILED", {
-      reason: "Server-side Mux upload endpoint unavailable.",
-      route: "/api/film/uploads/server",
-      status: "FAIL",
-    });
-    throw new Error("Upload endpoint unavailable.");
-  }
-
-  console.info("EXPORT_COMPLETE", { route: "/api/film/uploads/server", uploadId: upload.uploadId });
-
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const response = await fetch(`/api/film/uploads/${upload.uploadId}`);
-    const film = (await response.json().catch(() => null)) as
-      | { playbackId?: string; thumbnailUrl?: string; ready?: boolean }
-      | null;
-
-    if (response.ok && film?.ready) {
-      console.info("MUX_READY", { playbackId: film.playbackId, status: "PASS", uploadId: upload.uploadId });
-      return { muxPlaybackId: film.playbackId, thumbnailUrl: film.thumbnailUrl, uploadId: upload.uploadId };
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-  }
-
-  console.info("MUX_READY", { reason: "Mux polling exhausted", status: "FAIL", uploadId: upload.uploadId });
-  return { uploadId: upload.uploadId };
+async function uploadToMux(file: File): Promise<{ muxPlaybackId?: string; thumbnailUrl?: string; uploadId: string }> {
+  console.info("EXPORT_START", { fileName: file.name, status: "DISABLED" });
+  throw new Error("SERVER_VIDEO_UPLOAD_DISABLED");
 }
 
 async function decodeVideo({

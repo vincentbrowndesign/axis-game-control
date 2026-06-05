@@ -143,33 +143,8 @@ export default function BallDebugPage() {
     setError("");
     setStatus("processing");
 
-    const form = new FormData();
-    form.append("video", file);
-
     try {
-      const response = await fetch("/api/axis/ball-debug", {
-        body: form,
-        method: "POST",
-      });
-      const result = (await response.json().catch(() => null)) as BallDebugResponse | null;
-      if (!response.ok || !result) throw new Error(result?.error ?? "Ball debug failed.");
-
-      const nextTrack = Array.isArray(result.ball_track) ? result.ball_track : [];
-      const nextPlayerTracks = Array.isArray(result.player_tracks) ? result.player_tracks : [];
-      setTrack(nextTrack);
-      setPlayerTracks(nextPlayerTracks);
-      setDebug({
-        BALL_CONFIDENCE: "n/a",
-        BALL_TRACK_COUNT: result.BALL_TRACK_COUNT ?? nextTrack.length,
-        BASKETBALL_DETECTIONS: result.BASKETBALL_DETECTIONS ?? 0,
-        CURRENT_BALL_X: "n/a",
-        CURRENT_BALL_Y: "n/a",
-        FIRST_FRAME: getTrackFrameLabel(nextTrack, "first"),
-        FRAMES_EXTRACTED: result.FRAMES_EXTRACTED ?? 0,
-        LAST_FRAME: getTrackFrameLabel(nextTrack, "last"),
-        PLAYER_TRACK_COUNT: result.PLAYER_TRACK_COUNT ?? nextPlayerTracks.length,
-      });
-      setStatus("ready");
+      throw new Error("SYNC_VIDEO_DEBUG_DISABLED");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Ball debug failed.");
       setStatus("failed");
