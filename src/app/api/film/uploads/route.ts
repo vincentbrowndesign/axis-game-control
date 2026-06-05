@@ -2,11 +2,12 @@ import { createMuxDirectUpload, MuxUploadError } from "../../../../lib/mux-direc
 
 export const runtime = "nodejs";
 
-export async function POST() {
+export async function POST(request: Request) {
   console.log("EXPORT_START", { route: "/api/film/uploads", status: "START" });
 
   try {
-    const upload = await createMuxDirectUpload();
+    const origin = request.headers.get("origin") || "*";
+    const upload = await createMuxDirectUpload(origin);
     console.log("EXPORT_COMPLETE", {
       expiresAt: upload.expiresAt,
       route: "/api/film/uploads",

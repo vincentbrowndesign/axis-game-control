@@ -23,7 +23,7 @@ export function getMuxAuthHeader() {
   return `Basic ${Buffer.from(`${tokenId}:${tokenSecret}`).toString("base64")}`;
 }
 
-export async function createMuxDirectUpload(): Promise<MuxUploadCreateResult> {
+export async function createMuxDirectUpload(corsOrigin = "*"): Promise<MuxUploadCreateResult> {
   const authorization = getMuxAuthHeader();
   if (!authorization) throw new MuxUploadError("Mux credentials missing.", 503);
 
@@ -35,7 +35,7 @@ export async function createMuxDirectUpload(): Promise<MuxUploadCreateResult> {
   });
   const response = await fetch("https://api.mux.com/video/v1/uploads", {
     body: JSON.stringify({
-      cors_origin: "*",
+      cors_origin: corsOrigin,
       new_asset_settings: {
         playback_policy: ["public"],
       },
