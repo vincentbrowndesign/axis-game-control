@@ -80,12 +80,18 @@ export async function getCloudflareStreamVideo(uid: string) {
   const config = getCloudflareStreamConfig();
   if (!config) return { error: "cloudflare_stream_not_configured", video: null };
 
+  console.log("CLOUDFLARE_ACCOUNT_ID_EXISTS", config.accountId ? "exists" : "missing");
+  console.log("CLOUDFLARE_STREAM_API_TOKEN_EXISTS", config.apiToken ? "exists" : "missing");
+  console.log("CLOUDFLARE_STREAM_API_TOKEN_LENGTH", config.apiToken.length);
+
   const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}`, {
     headers: {
       Authorization: `Bearer ${config.apiToken}`,
     },
   });
   const responseBody = await response.text();
+  console.log("CLOUDFLARE_RESPONSE_STATUS", response.status);
+  console.log("CLOUDFLARE_RESPONSE_BODY", responseBody);
   console.log("PROCESSING_STEP_2_RESPONSE", {
     body: responseBody,
     env: {
