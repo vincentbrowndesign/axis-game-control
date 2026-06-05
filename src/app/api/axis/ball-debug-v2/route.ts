@@ -1,348 +1,87 @@
-import { promises as fs } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
-import {
-  AxisUploadTooLargeError,
-  axisMaxUploadBytes,
-  saveMultipartVideoToTempFile,
-} from "../../../../lib/axis-upload-stream";
+import { tasks } from "@trigger.dev/sdk/v3";
+import { createAxisBallJob, updateAxisBallJob } from "../../../../lib/axis-ball-jobs";
+import { getMuxPlaybackUrl } from "../../../../lib/axis-ball-processing";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
 
-type BallTrackPoint = {
-  confidence: number;
-  frame: number;
-  time: number;
-  x: number;
-  y: number;
+type CreateBallJobBody = {
+  muxPlaybackId?: unknown;
+  muxUploadId?: unknown;
+  videoUrl?: unknown;
 };
-
-type FrameFile = {
-  frame: number;
-  path: string;
-};
-
-type RoboflowPrediction = {
-  class?: unknown;
-  class_name?: unknown;
-  confidence?: unknown;
-  label?: unknown;
-  name?: unknown;
-  x?: unknown;
-  y?: unknown;
-};
-
-type FailureStage =
-  | "upload"
-  | "temp_file_creation"
-  | "frame_extraction"
-  | "roboflow"
-  | "ball_track_generation";
-
-const frameIntervalSeconds = 0.1;
-const roboflowProject = "axis-kenetic-observer";
-const roboflowVersion = "1";
 
 export async function POST(request: Request) {
-  console.log("BALL_DEBUG_START");
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-debug-v2-"));
-  const framesDir = path.join(workDir, "frames");
-  const videoPath = path.join(workDir, "upload.mp4");
-  let frameCount = 0;
-  let detectionCount = 0;
-  let ballTrackCount = 0;
-  let uploadedFileName = "upload.mp4";
-  let uploadedFileSize: number | null = null;
+  console.log("BALL_DEBUG_JOB_CREATE_START");
+  const body = (await request.json().catch(() => null)) as CreateBallJobBody | null;
+  if (!body) return Response.json({ error: "JSON body is required." }, { status: 400 });
 
-  console.log("BALL_DEBUG_UPLOAD_START", {
-    content_type: request.headers.get("content-type"),
-    temp_video_path: videoPath,
+  const muxPlaybackId = getString(body.muxPlaybackId);
+  const muxUploadId = getString(body.muxUploadId);
+  const videoUrl = getString(body.videoUrl) || getMuxPlaybackUrl(muxPlaybackId);
+  if (!videoUrl) return Response.json({ error: "videoUrl or muxPlaybackId is required." }, { status: 400 });
+
+  const jobId = `axis-ball-${crypto.randomUUID()}`;
+  const storagePath = muxPlaybackId ? `mux:${muxPlaybackId}` : videoUrl;
+
+  const created = await createAxisBallJob({
+    ball_track: [],
+    ball_track_count: 0,
+    detection_count: 0,
+    error: null,
+    frame_count: 0,
+    job_id: jobId,
+    mux_playback_id: muxPlaybackId || null,
+    mux_upload_id: muxUploadId || null,
+    status: "processing",
+    storage_path: storagePath,
+    storage_provider: "mux",
+    trigger_run_id: null,
+    video_url: videoUrl,
   });
 
+  if (!created.stored) {
+    console.error("BALL_DEBUG_JOB_CREATE_FAILED", {
+      jobId,
+      reason: created.reason,
+    });
+    return Response.json({ error: created.reason }, { status: 502 });
+  }
+
   try {
-    let writtenBytes = 0;
-    try {
-      await fs.mkdir(framesDir, { recursive: true });
-      const upload = await saveMultipartVideoToTempFile({
-        limitBytes: axisMaxUploadBytes,
-        request,
-        videoPath,
-      });
-      uploadedFileName = upload.fileName;
-      uploadedFileSize = upload.fileSize;
-      writtenBytes = upload.fileSize;
-      await fs.access(videoPath);
-      console.log("VIDEO_RECEIVED", {
-        uploaded_file_name: uploadedFileName,
-        uploaded_file_size: uploadedFileSize,
-      });
-      console.log("VIDEO_SIZE_MB", {
-        value: upload.fileSizeMB,
-      });
-      console.log("TEMP_FILE_CREATED", {
-        temp_video_path: videoPath,
-        uploaded_file_name: uploadedFileName,
-        uploaded_file_size: writtenBytes,
-      });
-    } catch (error) {
-      return failureResponse(
-        error instanceof AxisUploadTooLargeError ? "upload" : "temp_file_creation",
-        getErrorMessage(error),
-        {
-          temp_video_path: videoPath,
-          uploaded_file_name: uploadedFileName,
-          uploaded_file_size: writtenBytes || uploadedFileSize,
-        },
-        error instanceof AxisUploadTooLargeError ? 413 : 500,
-      );
-    }
-
-    let frames: FrameFile[] = [];
-    try {
-      const ffmpegPath = await getFfmpegPath();
-      ffmpeg.setFfmpegPath(ffmpegPath);
-      console.log("FRAME_EXTRACTION_START", {
-        temp_video_path: videoPath,
-      });
-      await extractFrames(videoPath, framesDir);
-      console.log("FRAME_EXTRACTION_COMPLETE", {
-        temp_video_path: videoPath,
-      });
-      frames = await listFrames(framesDir);
-      frameCount = frames.length;
-      console.log("FRAMES_EXTRACTED", {
-        count: frameCount,
-      });
-      if (frameCount === 0) {
-        return failureResponse(
-          "frame_extraction",
-          "Frame extraction completed but produced zero frames.",
-          { framesDir, temp_video_path: videoPath },
-        );
-      }
-    } catch (error) {
-      return failureResponse("frame_extraction", getErrorMessage(error), {
-        framesDir,
-        temp_video_path: videoPath,
-      });
-    }
-
-    let ballTrack: BallTrackPoint[] = [];
-    try {
-      console.log("ROBOFLOW_START", {
-        frameCount,
-        project: roboflowProject,
-        version: roboflowVersion,
-      });
-      const result = await detectBasketballs(frames);
-      ballTrack = result.ballTrack;
-      detectionCount = result.detectionCount;
-      ballTrackCount = ballTrack.length;
-      console.log("BASKETBALL_DETECTIONS", {
-        count: detectionCount,
-      });
-    } catch (error) {
-      return failureResponse("roboflow", getErrorMessage(error), {
-        frameCount,
-        project: roboflowProject,
-        version: roboflowVersion,
-      });
-    }
-
-    if (!ballTrack.length) {
-      console.log("BALL_TRACK_CREATED", {
-        created: false,
-      });
-      return failureResponse("ball_track_generation", "No ball_track points were created.", {
-        BASKETBALL_DETECTIONS: detectionCount,
-        BALL_TRACK_COUNT: ballTrackCount,
-        FRAMES_EXTRACTED: frameCount,
-      });
-    }
-
-    console.log("BALL_TRACK_CREATED", {
-      created: true,
+    const handle = await tasks.trigger("axis-ball-processing", {
+      jobId,
+      muxPlaybackId: muxPlaybackId || undefined,
+      muxUploadId: muxUploadId || undefined,
+      videoUrl,
     });
-    console.log("BALL_TRACK_COUNT", {
-      count: ballTrack.length,
-    });
-    console.log("BALL_DEBUG_COMPLETE", {
-      BALL_TRACK_COUNT: ballTrack.length,
-      BASKETBALL_DETECTIONS: detectionCount,
-      FRAMES_EXTRACTED: frameCount,
+    await updateAxisBallJob(jobId, { trigger_run_id: handle.id });
+
+    console.log("BALL_DEBUG_JOB_CREATED", {
+      jobId,
+      muxPlaybackId,
+      muxUploadId,
+      status: "processing",
+      triggerRunId: handle.id,
     });
 
     return Response.json({
-      ballTrack,
-      detectionCount,
-      failure: null,
-      frameCount,
-      videoUrl: "local-upload",
+      jobId,
+      status: "processing",
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    console.error("BALL_DEBUG_V2_FAILED", { reason });
-    const isTooLarge = error instanceof AxisUploadTooLargeError;
-    return failureResponse(
-      isTooLarge ? "upload" : "temp_file_creation",
+    await updateAxisBallJob(jobId, {
+      error: reason,
+      status: "failed",
+    });
+    console.error("BALL_DEBUG_JOB_TRIGGER_FAILED", {
+      jobId,
       reason,
-      {
-        BALL_TRACK_COUNT: ballTrackCount,
-        BASKETBALL_DETECTIONS: detectionCount,
-        FRAMES_EXTRACTED: frameCount,
-        temp_video_path: videoPath,
-      },
-      isTooLarge ? 413 : 500,
-    );
-  } finally {
-    await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
+    });
+    return Response.json({ error: reason, jobId, status: "failed" }, { status: 502 });
   }
 }
 
-async function extractFrames(videoPath: string, framesDir: string) {
-  await new Promise<void>((resolve, reject) => {
-    ffmpeg()
-      .input(videoPath)
-      .outputOptions(["-vf", `fps=${1 / frameIntervalSeconds}`, "-q:v", "2"])
-      .output(path.join(framesDir, "frame_%04d.jpg"))
-      .on("end", () => resolve())
-      .on("error", (error) => reject(error))
-      .run();
-  });
-}
-
-async function listFrames(framesDir: string): Promise<FrameFile[]> {
-  const entries = await fs.readdir(framesDir);
-  return entries
-    .filter((entry) => /^frame_\d+\.jpg$/i.test(entry))
-    .sort()
-    .map((entry, index) => ({
-      frame: index + 1,
-      path: path.join(framesDir, entry),
-    }));
-}
-
-async function detectBasketballs(frames: FrameFile[]) {
-  const apiKey = process.env.ROBOFLOW_API_KEY;
-  if (!apiKey) throw new Error("ROBOFLOW_API_KEY is required.");
-
-  const endpoint = `https://detect.roboflow.com/${roboflowProject}/${roboflowVersion}?api_key=${encodeURIComponent(
-    apiKey,
-  )}&confidence=35&overlap=30`;
-  const ballTrack: BallTrackPoint[] = [];
-  let detectionCount = 0;
-
-  for (const frame of frames) {
-    const image = await fs.readFile(frame.path);
-    const response = await fetch(endpoint, {
-      body: image.toString("base64"),
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      method: "POST",
-    });
-    const result = (await response.json().catch(() => null)) as { predictions?: RoboflowPrediction[] } | null;
-    console.log("ROBOFLOW_RESPONSE", {
-      frame: frame.frame,
-      predictionCount: Array.isArray(result?.predictions) ? result.predictions.length : 0,
-      status: response.status,
-    });
-    if (!response.ok || !Array.isArray(result?.predictions)) {
-      throw new Error(`Roboflow failed at frame ${frame.frame} with HTTP ${response.status}.`);
-    }
-
-    const basketballs = result.predictions
-      .map((prediction) => normalizePrediction(prediction))
-      .filter((prediction) => prediction.className === "basketball");
-    detectionCount += basketballs.length;
-
-    const best = basketballs
-      .filter((prediction) => isFiniteNumber(prediction.x) && isFiniteNumber(prediction.y))
-      .sort((a, b) => b.confidence - a.confidence)[0];
-
-    if (!best || !isFiniteNumber(best.x) || !isFiniteNumber(best.y)) continue;
-    ballTrack.push({
-      confidence: best.confidence,
-      frame: frame.frame,
-      time: roundTime((frame.frame - 1) * frameIntervalSeconds),
-      x: best.x,
-      y: best.y,
-    });
-  }
-
-  return {
-    ballTrack,
-    detectionCount,
-  };
-}
-
-function failureResponse(stage: FailureStage, error: string, details: Record<string, unknown>, status = 500) {
-  console.error("BALL_DEBUG_FAILED_STAGE", {
-    details,
-    error,
-    stage,
-  });
-  return Response.json(
-    {
-      ballTrack: [],
-      detectionCount: getDetailNumber(details.BASKETBALL_DETECTIONS),
-      error,
-      failure: {
-        details,
-        error,
-        stage,
-      },
-      frameCount: getDetailNumber(details.FRAMES_EXTRACTED),
-      videoUrl: "local-upload",
-    },
-    { status },
-  );
-}
-
-function normalizePrediction(prediction: RoboflowPrediction) {
-  return {
-    className: String(prediction.class ?? prediction.class_name ?? prediction.label ?? prediction.name ?? "")
-      .toLowerCase()
-      .replace(/[_-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim(),
-    confidence: getNumber(prediction.confidence) ?? 0,
-    x: getNumber(prediction.x),
-    y: getNumber(prediction.y),
-  };
-}
-
-function getDetailNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function getFfmpegPath() {
-  if (typeof ffmpegStatic === "string") {
-    await fs.access(ffmpegStatic);
-    return ffmpegStatic;
-  }
-
-  throw new Error("ffmpeg binary not found.");
-}
-
-function getNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function roundTime(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
-
-function roundMetric(value: number) {
-  return Math.round(value * 100) / 100;
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }

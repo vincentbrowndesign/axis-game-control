@@ -1,5 +1,6 @@
 "use client";
 
+import * as tus from "tus-js-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type BallTrackPoint = {
@@ -12,6 +13,7 @@ type BallTrackPoint = {
 
 type BallDebugResponse = {
   ballTrack?: BallTrackPoint[];
+  ballTrackCount?: number;
   detectionCount?: number;
   error?: string;
   failure?: {
@@ -20,7 +22,19 @@ type BallDebugResponse = {
     stage?: string;
   } | null;
   frameCount?: number;
+  jobId?: string;
+  status?: "failed" | "processing" | "ready";
   videoUrl?: string;
+};
+
+type MuxUploadResponse = {
+  uploadId?: string;
+  uploadUrl?: string;
+};
+
+type MuxReadyResponse = {
+  playbackId?: string;
+  ready?: boolean;
 };
 
 type DebugState = {
@@ -60,6 +74,7 @@ export default function BallDebugV2Page() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [debug, setDebug] = useState<DebugState>(emptyDebug);
   const [error, setError] = useState("");
+  const [jobId, setJobId] = useState("");
   const [status, setStatus] = useState<"idle" | "processing" | "ready" | "failed">("idle");
   const [track, setTrack] = useState<BallTrackPoint[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
@@ -127,6 +142,66 @@ export default function BallDebugV2Page() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!jobId || status !== "processing") return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await fetch(`/api/axis/ball-job/${encodeURIComponent(jobId)}`);
+        const result = (await response.json().catch(() => null)) as BallDebugResponse | null;
+        if (cancelled || !result) return;
+
+        if (!response.ok) throw new Error(result.error ?? "Ball job unavailable.");
+        if (result.status === "processing") {
+          setDebug((current) => ({
+            ...current,
+            BALL_TRACK_COUNT: result.ballTrackCount ?? current.BALL_TRACK_COUNT,
+            BASKETBALL_DETECTIONS: result.detectionCount ?? current.BASKETBALL_DETECTIONS,
+            FRAMES_EXTRACTED: result.frameCount ?? current.FRAMES_EXTRACTED,
+          }));
+          return;
+        }
+
+        if (result.status === "failed") {
+          setDebug((current) => ({
+            ...current,
+            ERROR_MESSAGE: result.error ?? "Ball debug failed.",
+            FAILED_STAGE: "background_processing",
+          }));
+          throw new Error(result.error ?? "Ball debug failed.");
+        }
+
+        const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
+        setTrack(nextTrack);
+        setDebug({
+          BALL_TRACK_COUNT: nextTrack.length,
+          BASKETBALL_DETECTIONS: result.detectionCount ?? 0,
+          CURRENT_BALL_X: "N/A",
+          CURRENT_BALL_Y: "N/A",
+          CURRENT_CONFIDENCE: "N/A",
+          ERROR_MESSAGE: "N/A",
+          FAILED_STAGE: "N/A",
+          FIRST_FRAME: nextTrack[0] ? String(nextTrack[0].frame) : "N/A",
+          FRAMES_EXTRACTED: result.frameCount ?? 0,
+          LAST_FRAME: nextTrack.at(-1) ? String(nextTrack.at(-1)?.frame) : "N/A",
+        });
+        setStatus("ready");
+        window.clearInterval(interval);
+      } catch (nextError) {
+        if (cancelled) return;
+        setError(nextError instanceof Error ? nextError.message : "Ball debug failed.");
+        setStatus("failed");
+        window.clearInterval(interval);
+      }
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [jobId, status]);
+
   async function handleUpload(file: File) {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     const localVideoUrl = URL.createObjectURL(file);
@@ -135,19 +210,29 @@ export default function BallDebugV2Page() {
     setTrack([]);
     setDebug(emptyDebug);
     setError("");
+    setJobId("");
     setStatus("processing");
 
     try {
-      const formData = new FormData();
-      formData.append("video", file, file.name || "upload.mp4");
+      const mux = await createMuxUpload();
+      if (!mux.uploadId || !mux.uploadUrl) throw new Error("Mux upload could not be created.");
+      await uploadFileToMux(file, mux.uploadUrl);
+      const ready = await waitForMuxPlayback(mux.uploadId);
+      if (!ready.playbackId) throw new Error("Mux playback was not ready.");
 
+      const muxVideoUrl = `https://stream.mux.com/${ready.playbackId}.m3u8`;
       const response = await fetch("/api/axis/ball-debug-v2", {
-        body: formData,
+        body: JSON.stringify({
+          muxPlaybackId: ready.playbackId,
+          muxUploadId: mux.uploadId,
+          videoUrl: muxVideoUrl,
+        }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       });
       const result = (await response.json().catch(() => null)) as BallDebugResponse | null;
       if (!response.ok || !result) {
-        const failedStage = result?.failure?.stage ?? "unknown";
+        const failedStage = result?.failure?.stage ?? "job_create";
         const errorMessage = result?.failure?.error ?? result?.error ?? "Ball debug failed.";
         setDebug({
           ...emptyDebug,
@@ -159,21 +244,9 @@ export default function BallDebugV2Page() {
         throw new Error(errorMessage);
       }
 
-      const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
-      setTrack(nextTrack);
-      setDebug({
-        BALL_TRACK_COUNT: nextTrack.length,
-        BASKETBALL_DETECTIONS: result.detectionCount ?? 0,
-        CURRENT_BALL_X: "N/A",
-        CURRENT_BALL_Y: "N/A",
-        CURRENT_CONFIDENCE: "N/A",
-        ERROR_MESSAGE: "N/A",
-        FAILED_STAGE: "N/A",
-        FIRST_FRAME: nextTrack[0] ? String(nextTrack[0].frame) : "N/A",
-        FRAMES_EXTRACTED: result.frameCount ?? 0,
-        LAST_FRAME: nextTrack.at(-1) ? String(nextTrack.at(-1)?.frame) : "N/A",
-      });
-      setStatus("ready");
+      if (!result.jobId) throw new Error("Ball job was not created.");
+      setJobId(result.jobId);
+      setStatus("processing");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Ball debug failed.");
       setStatus("failed");
@@ -237,6 +310,42 @@ export default function BallDebugV2Page() {
       />
     </main>
   );
+}
+
+async function createMuxUpload() {
+  const response = await fetch("/api/film/uploads", { method: "POST" });
+  const result = (await response.json().catch(() => null)) as MuxUploadResponse | null;
+  if (!response.ok || !result?.uploadId || !result.uploadUrl) throw new Error("Mux upload could not be created.");
+  return result;
+}
+
+function uploadFileToMux(file: File, uploadUrl: string) {
+  return new Promise<void>((resolve, reject) => {
+    const upload = new tus.Upload(file, {
+      endpoint: uploadUrl,
+      metadata: {
+        filename: file.name || "axis-video.mp4",
+        filetype: file.type || "video/mp4",
+      },
+      onError: (uploadError) => reject(uploadError),
+      onSuccess: () => resolve(),
+      removeFingerprintOnSuccess: true,
+      retryDelays: [0, 1000, 3000, 5000],
+      uploadSize: file.size,
+    });
+    upload.start();
+  });
+}
+
+async function waitForMuxPlayback(uploadId: string) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const response = await fetch(`/api/film/uploads/${encodeURIComponent(uploadId)}`);
+    const result = (await response.json().catch(() => null)) as MuxReadyResponse | null;
+    if (response.ok && result?.ready && result.playbackId) return result;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+
+  throw new Error("Mux playback was not ready.");
 }
 
 function DebugRow({ label, value }: { label: string; value: number | string }) {
