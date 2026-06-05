@@ -1,9 +1,12 @@
 import { promises as fs } from "node:fs";
+import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
+
+const execFileAsync = promisify(execFile);
 
 export type AxisBallTrackPoint = {
   confidence: number;
@@ -191,12 +194,70 @@ function normalizePrediction(prediction: RoboflowPrediction) {
 }
 
 async function getFfmpegPath() {
-  if (typeof ffmpegStatic === "string") {
-    await fs.access(ffmpegStatic);
-    return ffmpegStatic;
+  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+  const candidates = uniqueStrings([
+    process.env.FFMPEG_PATH,
+    process.env.FFMPEG_BINARY,
+    process.env.FFMPEG_BIN,
+    getFfmpegStaticRuntimePath(),
+    getFfmpegStaticPackagePath(binaryName),
+    path.join(process.cwd(), "node_modules", "ffmpeg-static", binaryName),
+  ]);
+
+  for (const candidate of candidates) {
+    if (await canAccess(candidate)) {
+      console.log("FFMPEG_PATH_SELECTED", { path: candidate });
+      return candidate;
+    }
   }
 
-  throw new Error("ffmpeg binary not found.");
+  if (await canRunFfmpeg("ffmpeg")) {
+    console.log("FFMPEG_PATH_SELECTED", { path: "ffmpeg" });
+    return "ffmpeg";
+  }
+
+  throw new Error(`ffmpeg binary not found. Checked: ${candidates.join(", ")}, ffmpeg`);
+}
+
+function getFfmpegStaticRuntimePath() {
+  try {
+    const runtimeRequire = eval("require") as NodeRequire;
+    const runtimePath = runtimeRequire("ffmpeg-static") as unknown;
+    return typeof runtimePath === "string" ? runtimePath : "";
+  } catch {
+    return "";
+  }
+}
+
+function getFfmpegStaticPackagePath(binaryName: string) {
+  try {
+    const runtimeRequire = eval("require") as NodeRequire;
+    return path.join(path.dirname(runtimeRequire.resolve("ffmpeg-static")), binaryName);
+  } catch {
+    return "";
+  }
+}
+
+function uniqueStrings(values: Array<string | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+async function canAccess(candidate: string) {
+  try {
+    await fs.access(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function canRunFfmpeg(command: string) {
+  try {
+    await execFileAsync(command, ["-version"]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getNumber(value: unknown) {
