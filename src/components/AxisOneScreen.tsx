@@ -1,6 +1,5 @@
 "use client";
 
-import * as tus from "tus-js-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type AppState = "choose" | "complete" | "failed" | "processing" | "replay";
@@ -34,21 +33,15 @@ type BallJobResponse = {
 
 type MuxUploadResponse = {
   error?: string;
-  expiresAt?: string | null;
   message?: string;
-  stack?: string | null;
-  stage?: string;
-  uploadId?: string;
-  uploadUrl?: string;
-};
-
-type MuxReadyResponse = {
   playbackId?: string;
-  ready?: boolean;
+  uploadId?: string;
+  videoUrl?: string;
 };
 
 const confidenceThreshold = 0.35;
 const trailLength = 20;
+const activeUploadFlow = "SERVER_TO_MUX";
 
 export function AxisOneScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -174,22 +167,21 @@ export function AxisOneScreen() {
     setState("processing");
 
     try {
-      console.info("UPLOAD_FLOW_SELECTED", "BROWSER_TO_MUX");
-      const mux = await createMuxUpload();
-      if (!mux.uploadId || !mux.uploadUrl) throw new Error("Upload could not be created.");
-      await uploadFileToMux(file, mux.uploadUrl);
+      assertServerUploadFlow(activeUploadFlow);
+      console.info("UPLOAD_FLOW_SELECTED", activeUploadFlow);
+      console.info("UPLOAD_SERVER_ROUTE", "/api/film/uploads/server");
+      const mux = await uploadFileToMuxServer(file);
+      if (!mux.uploadId || !mux.playbackId) throw new Error("Upload could not be created.");
 
       setStage("Extracting Frames");
-      const ready = await waitForMuxPlayback(mux.uploadId);
-      if (!ready.playbackId) throw new Error("Video storage was not ready.");
-
-      console.info("PROCESSING_START", { assetId: mux.uploadId, muxPlaybackId: ready.playbackId });
+      const storedVideoUrl = mux.videoUrl || `https://stream.mux.com/${mux.playbackId}.m3u8`;
+      console.info("PROCESSING_START", { assetId: mux.uploadId, muxPlaybackId: mux.playbackId });
       const response = await fetch("/api/axis/video-jobs", {
         body: JSON.stringify({
           assetId: mux.uploadId,
-          muxPlaybackId: ready.playbackId,
+          muxPlaybackId: mux.playbackId,
           muxUploadId: mux.uploadId,
-          videoUrl: `https://stream.mux.com/${ready.playbackId}.m3u8`,
+          videoUrl: storedVideoUrl,
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -268,55 +260,37 @@ export function AxisOneScreen() {
   );
 }
 
-async function createMuxUpload() {
-  const response = await fetch("/api/film/uploads", { method: "POST" });
-  const result = (await response.json().catch(() => null)) as MuxUploadResponse | null;
-  if (!response.ok || !result?.uploadId || !result.uploadUrl) {
-    throw new Error(result?.message ?? result?.error ?? "Upload could not be created.");
-  }
-
-  return result;
-}
-
-function uploadFileToMux(file: File, uploadUrl: string) {
+async function uploadFileToMuxServer(file: File) {
   console.info("UPLOAD_START", {
     fileName: file.name,
     fileSize: file.size,
     fileType: file.type,
-    storage: "mux",
+    route: "/api/film/uploads/server",
   });
 
-  return new Promise<void>((resolve, reject) => {
-    const upload = new tus.Upload(file, {
-      endpoint: uploadUrl,
-      metadata: {
-        filename: file.name || "axis-video.mp4",
-        filetype: file.type || "video/mp4",
-      },
-      onError: (error) => reject(error),
-      onSuccess: () => {
-        console.info("UPLOAD_COMPLETE", {
-          storage: "mux",
-        });
-        resolve();
-      },
-      removeFingerprintOnSuccess: true,
-      retryDelays: [0, 1000, 3000, 5000],
-      uploadSize: file.size,
-    });
-    upload.start();
-  });
-}
+  const form = new FormData();
+  form.append("file", file);
 
-async function waitForMuxPlayback(uploadId: string) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const response = await fetch(`/api/film/uploads/${encodeURIComponent(uploadId)}`);
-    const result = (await response.json().catch(() => null)) as MuxReadyResponse | null;
-    if (response.ok && result?.ready && result.playbackId) return result;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  const response = await fetch("/api/film/uploads/server", {
+    body: form,
+    method: "POST",
+  });
+  const result = (await response.json().catch(() => null)) as MuxUploadResponse | null;
+
+  if (!response.ok || !result?.uploadId) {
+    throw new Error(result?.message ?? result?.error ?? "Upload endpoint unavailable.");
   }
 
-  throw new Error("Video storage was not ready.");
+  console.info("UPLOAD_COMPLETE", {
+    route: "/api/film/uploads/server",
+    uploadId: result.uploadId,
+  });
+
+  return result;
+}
+
+function assertServerUploadFlow(flow: string) {
+  if (flow === "BROWSER_TO_MUX") throw new Error("BROWSER_TO_MUX_DISABLED");
 }
 
 function stageFromJob(stage: unknown): VisibleStage {
