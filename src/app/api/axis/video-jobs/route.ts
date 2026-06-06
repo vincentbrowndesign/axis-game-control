@@ -42,6 +42,7 @@ export async function POST(request: Request) {
       queueName: axisVideoTriggerQueue,
       ttl: axisVideoTriggerTtl,
     });
+    console.log("AXIS_VIDEO_TRIGGER_RUNTIME", getTriggerRuntimeDiagnostics());
     const handle = await tasks.trigger("axis-video-processing", {
       cloudflareUid,
       jobId,
@@ -92,4 +93,24 @@ function getString(value: unknown) {
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getTriggerRuntimeDiagnostics() {
+  const secret = process.env.TRIGGER_SECRET_KEY ?? "";
+  const keyType = secret.startsWith("tr_prod_")
+    ? "tr_prod_"
+    : secret.startsWith("tr_dev_")
+      ? "tr_dev_"
+      : secret
+        ? "other"
+        : "missing";
+
+  return {
+    TRIGGER_API_URL: process.env.TRIGGER_API_URL ?? "default",
+    TRIGGER_DEPLOYMENT_ID: process.env.TRIGGER_DEPLOYMENT_ID ?? "missing",
+    TRIGGER_ENV: process.env.TRIGGER_ENV ?? "missing",
+    TRIGGER_ENVIRONMENT_TARGET: keyType === "tr_prod_" ? "Production" : keyType === "tr_dev_" ? "Development" : "Unknown",
+    TRIGGER_KEY_TYPE: keyType,
+    TRIGGER_PROJECT_REF: process.env.TRIGGER_PROJECT_REF ?? "missing",
+  };
 }
