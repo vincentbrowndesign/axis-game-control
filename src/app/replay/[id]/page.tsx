@@ -11,6 +11,7 @@ import {
   getMuxStreamUrl,
   type AxisProduct,
 } from "../../../lib/axis-cloud-store";
+import { axisAuthenticatedFetch } from "../../../lib/axis-client-auth";
 import type { AnimationFact, AnimationTrack } from "../../../lib/axis-animation-renderer";
 
 type FactsResponse = { records?: AnimationFact[] };
@@ -44,12 +45,22 @@ export default function TacticalReplayPage() {
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 4000);
-    fetch(`/api/axis/facts?upload_id=${encodeURIComponent(uploadId)}&limit=20`, {
+    const factsRoute = `/api/axis/facts?upload_id=${encodeURIComponent(uploadId)}&limit=20`;
+    axisAuthenticatedFetch(factsRoute, {
       signal: controller.signal,
     })
-      .then((res) => res.json())
-      .then((data: FactsResponse) => {
-        const records = data.records ?? [];
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as FactsResponse | null;
+        if (res.status === 401) {
+          console.info("AXIS_AUTH_401_RESPONSE", {
+            body,
+            route: factsRoute,
+          });
+        }
+        return body;
+      })
+      .then((data: FactsResponse | null) => {
+        const records = data?.records ?? [];
         setFacts(records);
       })
       .catch(() => {
@@ -58,12 +69,22 @@ export default function TacticalReplayPage() {
       .finally(() => {
         window.clearTimeout(timeout);
       });
-    fetch(`/api/axis/tracks?upload_id=${encodeURIComponent(uploadId)}&limit=1000`, {
+    const tracksRoute = `/api/axis/tracks?upload_id=${encodeURIComponent(uploadId)}&limit=1000`;
+    axisAuthenticatedFetch(tracksRoute, {
       signal: controller.signal,
     })
-      .then((res) => res.json())
-      .then((data: TracksResponse) => {
-        const records = data.records ?? [];
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as TracksResponse | null;
+        if (res.status === 401) {
+          console.info("AXIS_AUTH_401_RESPONSE", {
+            body,
+            route: tracksRoute,
+          });
+        }
+        return body;
+      })
+      .then((data: TracksResponse | null) => {
+        const records = data?.records ?? [];
         console.info("REPLAY_TRACKS_READ", {
           first_track_point: records[0] ?? null,
           replay_upload_id: uploadId,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { axisAuthenticatedFetch } from "../lib/axis-client-auth";
 
 type AppState = "choose" | "complete" | "failed" | "processing" | "replay";
 type VisibleStage =
@@ -137,8 +138,15 @@ export function AxisOneScreen() {
     let cancelled = false;
     const interval = window.setInterval(async () => {
       try {
-        const response = await fetch(`/api/axis/video-job/${encodeURIComponent(jobId)}`);
+        const route = `/api/axis/video-job/${encodeURIComponent(jobId)}`;
+        const response = await axisAuthenticatedFetch(route);
         const result = (await response.json().catch(() => null)) as BallJobResponse | null;
+        if (response.status === 401) {
+          console.info("AXIS_AUTH_401_RESPONSE", {
+            body: result,
+            route,
+          });
+        }
         if (cancelled || !result) return;
         if (!response.ok) throw new Error(result.error ?? "Processing failed.");
 
@@ -188,7 +196,8 @@ export function AxisOneScreen() {
 
       setStage("Uploading");
       console.info("PROCESSING_START", { cloudflareUid: upload.cloudflareUid, jobId: upload.jobId });
-      const response = await fetch("/api/axis/video-job", {
+      const route = "/api/axis/video-job";
+      const response = await axisAuthenticatedFetch(route, {
         body: JSON.stringify({
           cloudflareUid: upload.cloudflareUid,
           fileSize: file.size,
@@ -199,6 +208,12 @@ export function AxisOneScreen() {
         method: "POST",
       });
       const result = (await response.json().catch(() => null)) as VideoJobResponse | null;
+      if (response.status === 401) {
+        console.info("AXIS_AUTH_401_RESPONSE", {
+          body: result,
+          route,
+        });
+      }
       if (!response.ok || !result?.jobId) throw new Error(result?.error ?? "Processing job could not be created.");
       setJobId(result.jobId);
     } catch (nextError) {
@@ -273,7 +288,8 @@ export function AxisOneScreen() {
 }
 
 async function createVideoUploadUrl(file: File) {
-  const response = await fetch("/api/axis/video-upload-url", {
+  const route = "/api/axis/video-upload-url";
+  const response = await axisAuthenticatedFetch(route, {
     body: JSON.stringify({
       contentType: file.type || "video/mp4",
       fileSize: file.size,
@@ -283,6 +299,12 @@ async function createVideoUploadUrl(file: File) {
     method: "POST",
   });
   const result = (await response.json().catch(() => null)) as VideoUploadUrlResponse | null;
+  if (response.status === 401) {
+    console.info("AXIS_AUTH_401_RESPONSE", {
+      body: result,
+      route,
+    });
+  }
   if (!response.ok || !result?.cloudflareUid || !result.jobId || !result.uploadURL) {
     throw new Error(result?.message ?? result?.error ?? "Upload could not be created.");
   }
