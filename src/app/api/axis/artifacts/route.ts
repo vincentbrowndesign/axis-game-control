@@ -1,4 +1,5 @@
 import { getAxisArtifactHistory } from "../../../../lib/axis-persistence";
+import { getAxisRequestUser } from "../../../../lib/axis-request-auth";
 
 export const runtime = "nodejs";
 
@@ -8,12 +9,15 @@ function getLimit(value: string | null) {
 }
 
 export async function GET(request: Request) {
+  const auth = await getAxisRequestUser(request);
+  if (auth.code) return Response.json({ code: auth.code, error: auth.reason, records: [] }, { status: 401 });
+
   const url = new URL(request.url);
   const artifactId = url.searchParams.get("artifact_id") ?? undefined;
   const uploadId = url.searchParams.get("upload_id") ?? undefined;
   const limit = getLimit(url.searchParams.get("limit"));
-  const history = await getAxisArtifactHistory({ artifactId, limit, uploadId });
+  const history = await getAxisArtifactHistory({ artifactId, limit, uploadId, userId: auth.userId });
 
-  if (history.error) return Response.json({ error: history.error, records: [] }, { status: 502 });
+  if (history.error) return Response.json({ code: history.code, error: history.error, records: [] }, { status: 502 });
   return Response.json({ records: history.records });
 }

@@ -1,4 +1,5 @@
 import { createAxisVideoJob } from "../../../../lib/axis-video-jobs";
+import { getAxisRequestUser } from "../../../../lib/axis-request-auth";
 import { createCloudflareStreamDirectUpload } from "../../../../lib/cloudflare-stream";
 
 export const runtime = "nodejs";
@@ -7,9 +8,18 @@ type CreateUploadUrlBody = {
   contentType?: unknown;
   fileSize?: unknown;
   filename?: unknown;
+  organizationId?: unknown;
+  organization_id?: unknown;
+  sessionId?: unknown;
+  session_id?: unknown;
+  videoId?: unknown;
+  video_id?: unknown;
 };
 
 export async function POST(request: Request) {
+  const auth = await getAxisRequestUser(request);
+  if (auth.code) return Response.json({ code: auth.code, error: auth.reason }, { status: 401 });
+
   const body = (await request.json().catch(() => null)) as CreateUploadUrlBody | null;
   if (!body) return Response.json({ error: "JSON body is required." }, { status: 400 });
 
@@ -36,14 +46,18 @@ export async function POST(request: Request) {
     mp4_ready_at: null,
     mux_playback_id: null,
     mux_upload_id: null,
+    organization_id: getUuid(body.organization_id) || getUuid(body.organizationId),
     processing_stage: "uploading",
     progress: 0,
+    session_id: getString(body.session_id) || getString(body.sessionId) || null,
     status: "uploading",
     storage_path: `cloudflare:${direct.upload.uid}`,
     storage_provider: "cloudflare",
     trigger_run_id: null,
     upload_url_created_at: now,
+    user_id: auth.userId,
     video_ready_at: null,
+    video_id: getString(body.video_id) || getString(body.videoId) || direct.upload.uid,
     video_url: `cloudflare-stream://${direct.upload.uid}`,
   });
 
@@ -65,4 +79,9 @@ function getString(value: unknown) {
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getUuid(value: unknown) {
+  const text = getString(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
 }

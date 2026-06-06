@@ -10,6 +10,12 @@ export type AxisVideoJobStatus =
   | "uploaded"
   | "uploading";
 export type AxisVideoProcessingStage = AxisBallProcessingStageUpdate | "complete" | "failed" | "queued" | "uploading";
+export type AxisSupabaseErrorCode =
+  | "SUPABASE_OWNERSHIP_MISSING"
+  | "SUPABASE_READ_FORBIDDEN"
+  | "SUPABASE_RLS_BLOCKED"
+  | "SUPABASE_SERVICE_ROLE_MISSING"
+  | "SUPABASE_WRITE_FAILED";
 
 export type AxisVideoJobRecord = {
   asset_id: string;
@@ -27,21 +33,31 @@ export type AxisVideoJobRecord = {
   mp4_ready_at: string | null;
   mux_playback_id: string | null;
   mux_upload_id: string | null;
+  organization_id: string | null;
   processing_stage: AxisVideoProcessingStage;
   progress: number;
+  session_id: string | null;
   status: AxisVideoJobStatus;
   storage_path: string;
   storage_provider: "cloudflare" | "mux" | "supabase";
   trigger_run_id: string | null;
   upload_url_created_at: string | null;
   updated_at?: string;
+  user_id: string | null;
   video_ready_at: string | null;
+  video_id: string | null;
   video_url: string;
+};
+
+type AxisSupabaseFailure = {
+  code: AxisSupabaseErrorCode;
+  reason: string;
+  stored: false;
 };
 
 export function getAxisVideoJobClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -49,7 +65,8 @@ export function getAxisVideoJobClient() {
 
 export async function createAxisVideoJob(record: AxisVideoJobRecord) {
   const supabase = getAxisVideoJobClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false as const };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis video job writes.");
+  if (!record.user_id) return supabaseFailure("SUPABASE_OWNERSHIP_MISSING", "Axis video jobs require user_id before creation.");
 
   const { data, error } = await supabase
     .from("axis_video_jobs")
@@ -67,36 +84,40 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
       mp4_ready_at: record.mp4_ready_at,
       mux_playback_id: record.mux_playback_id,
       mux_upload_id: record.mux_upload_id,
+      organization_id: record.organization_id,
       processing_stage: record.processing_stage,
       progress: record.progress,
+      session_id: record.session_id,
       status: record.status,
       storage_path: record.storage_path,
       storage_provider: record.storage_provider,
       trigger_run_id: record.trigger_run_id,
       upload_url_created_at: record.upload_url_created_at,
+      user_id: record.user_id,
       video_ready_at: record.video_ready_at,
+      video_id: record.video_id,
       video_url: record.video_url,
     })
     .select()
     .single();
 
-  if (error) return { reason: error.message, stored: false as const };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
   return { record: mapAxisVideoJobRow(data), stored: true as const };
 }
 
 export async function getAxisVideoJob(jobId: string) {
   const supabase = getAxisVideoJobClient();
-  if (!supabase) return { error: "supabase_not_configured", record: null };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis video job reads.", record: null };
 
   const { data, error } = await supabase.from("axis_video_jobs").select("*").eq("job_id", jobId).maybeSingle();
 
-  if (error) return { error: error.message, record: null };
-  return { error: null, record: data ? mapAxisVideoJobRow(data) : null };
+  if (error) return { code: getReadErrorCode(error.message), error: error.message, record: null };
+  return { code: null, error: null, record: data ? mapAxisVideoJobRow(data) : null };
 }
 
 export async function getAxisVideoJobByCloudflareUid(cloudflareUid: string) {
   const supabase = getAxisVideoJobClient();
-  if (!supabase) return { error: "supabase_not_configured", record: null };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis video job reads.", record: null };
 
   const { data, error } = await supabase
     .from("axis_video_jobs")
@@ -106,13 +127,13 @@ export async function getAxisVideoJobByCloudflareUid(cloudflareUid: string) {
     .limit(1)
     .maybeSingle();
 
-  if (error) return { error: error.message, record: null };
-  return { error: null, record: data ? mapAxisVideoJobRow(data) : null };
+  if (error) return { code: getReadErrorCode(error.message), error: error.message, record: null };
+  return { code: null, error: null, record: data ? mapAxisVideoJobRow(data) : null };
 }
 
 export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideoJobRecord>) {
   const supabase = getAxisVideoJobClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false as const };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis video job updates.");
 
   const { data, error } = await supabase
     .from("axis_video_jobs")
@@ -126,19 +147,23 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
       ...("filename" in patch ? { filename: patch.filename ?? "" } : {}),
       ...("frame_count" in patch ? { frame_count: patch.frame_count ?? 0 } : {}),
       ...("mp4_ready_at" in patch ? { mp4_ready_at: patch.mp4_ready_at ?? null } : {}),
+      ...("organization_id" in patch ? { organization_id: patch.organization_id ?? null } : {}),
       ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "queued" } : {}),
       ...("progress" in patch ? { progress: clampProgress(patch.progress) } : {}),
+      ...("session_id" in patch ? { session_id: patch.session_id ?? null } : {}),
       ...("status" in patch ? { status: patch.status } : {}),
       ...("trigger_run_id" in patch ? { trigger_run_id: patch.trigger_run_id ?? null } : {}),
       ...("upload_url_created_at" in patch ? { upload_url_created_at: patch.upload_url_created_at ?? null } : {}),
+      ...("user_id" in patch ? { user_id: patch.user_id ?? null } : {}),
       ...("video_ready_at" in patch ? { video_ready_at: patch.video_ready_at ?? null } : {}),
+      ...("video_id" in patch ? { video_id: patch.video_id ?? null } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("job_id", jobId)
     .select()
     .single();
 
-  if (error) return { reason: error.message, stored: false as const };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
   return { record: mapAxisVideoJobRow(data), stored: true as const };
 }
 
@@ -162,15 +187,19 @@ function mapAxisVideoJobRow(row: unknown): AxisVideoJobRecord {
     mp4_ready_at: getString(record.mp4_ready_at) || null,
     mux_playback_id: getString(record.mux_playback_id) || null,
     mux_upload_id: getString(record.mux_upload_id) || null,
+    organization_id: getString(record.organization_id) || null,
     processing_stage: getStage(record.processing_stage),
     progress: clampProgress(getNumber(record.progress) ?? 0),
+    session_id: getString(record.session_id) || null,
     status: getStatus(record.status),
     storage_path: getString(record.storage_path),
     storage_provider: getStorageProvider(record.storage_provider),
     trigger_run_id: getString(record.trigger_run_id) || null,
     upload_url_created_at: getString(record.upload_url_created_at) || null,
     updated_at: getString(record.updated_at),
+    user_id: getString(record.user_id) || null,
     video_ready_at: getString(record.video_ready_at) || null,
+    video_id: getString(record.video_id) || null,
     video_url: getString(record.video_url),
   };
 }
@@ -229,4 +258,16 @@ function getStage(value: unknown): AxisVideoProcessingStage {
   }
 
   return "queued";
+}
+
+function supabaseFailure(code: AxisSupabaseErrorCode, reason: string): AxisSupabaseFailure {
+  return { code, reason, stored: false };
+}
+
+function getWriteErrorCode(message: string): AxisSupabaseErrorCode {
+  return /row-level security|rls/i.test(message) ? "SUPABASE_RLS_BLOCKED" : "SUPABASE_WRITE_FAILED";
+}
+
+function getReadErrorCode(message: string): AxisSupabaseErrorCode {
+  return /permission|forbidden|row-level security|rls/i.test(message) ? "SUPABASE_READ_FORBIDDEN" : "SUPABASE_WRITE_FAILED";
 }

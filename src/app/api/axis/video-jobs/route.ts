@@ -1,4 +1,5 @@
 import { tasks } from "@trigger.dev/sdk/v3";
+import { assertAxisJobOwner, getAxisRequestUser } from "../../../../lib/axis-request-auth";
 import { getAxisVideoJob, updateAxisVideoJob } from "../../../../lib/axis-video-jobs";
 
 export const runtime = "nodejs";
@@ -14,6 +15,9 @@ type CreateVideoJobBody = {
 };
 
 export async function POST(request: Request) {
+  const auth = await getAxisRequestUser(request);
+  if (auth.code) return Response.json({ code: auth.code, error: auth.reason }, { status: 401 });
+
   const body = (await request.json().catch(() => null)) as CreateVideoJobBody | null;
   if (!body) return Response.json({ error: "JSON body is required." }, { status: 400 });
 
@@ -23,8 +27,10 @@ export async function POST(request: Request) {
   if (!cloudflareUid) return Response.json({ error: "cloudflareUid is required." }, { status: 400 });
 
   const existing = await getAxisVideoJob(jobId);
-  if (existing.error) return Response.json({ error: existing.error }, { status: 502 });
+  if (existing.error) return Response.json({ code: existing.code, error: existing.error }, { status: 502 });
   if (!existing.record) return Response.json({ error: "job not found" }, { status: 404 });
+  const ownership = assertAxisJobOwner({ recordUserId: existing.record.user_id, requestUserId: auth.userId });
+  if (ownership) return Response.json({ code: ownership.code, error: ownership.reason }, { status: 403 });
 
   await updateAxisVideoJob(jobId, {
     cloudflare_uid: cloudflareUid,

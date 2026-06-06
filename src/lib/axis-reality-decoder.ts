@@ -2,8 +2,6 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
 import OpenAI from "openai";
 import {
   getAxisArtifactFactHistory,
@@ -13,6 +11,7 @@ import {
   type AxisArtifactFactRecord,
   type AxisEntityTrackRecord,
 } from "./axis-persistence";
+import { extractAxisFrames } from "./axis-ffmpeg";
 
 export type AxisDecodedFact = {
   fact_key: string;
@@ -421,15 +420,13 @@ async function extractEvidenceFrames(input: DecodeVideoInput): Promise<EvidenceF
 
 async function extractFfmpegEvidenceFrames(videoUrl: string): Promise<EvidenceFrame[]> {
   try {
-    const ffmpegPath = await getFfmpegPath();
-    ffmpeg.setFfmpegPath(ffmpegPath);
-
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-decode-frames-"));
-    await runFfmpeg((command) => {
-      command
-        .input(videoUrl)
-        .outputOptions(["-vf", `fps=${1 / roboflowFrameIntervalSeconds}`, "-q:v", "2"])
-        .output(path.join(workDir, "frame_%06d.jpg"));
+    await extractAxisFrames({
+      filePattern: "frame_%06d.jpg",
+      fps: 1 / roboflowFrameIntervalSeconds,
+      inputPath: videoUrl,
+      operationName: "AXIS_REALITY_DECODER_FRAME_EXTRACTION",
+      outputDir: workDir,
     });
 
     const entries = (await fs.readdir(workDir))
@@ -1336,34 +1333,6 @@ function getVideoMimeType(videoUrl: string) {
   if (videoUrl.includes(".m3u8")) return "application/vnd.apple.mpegurl";
   if (videoUrl.includes(".mov")) return "video/quicktime";
   return "video/mp4";
-}
-
-async function getFfmpegPath() {
-  const candidates = [
-    typeof ffmpegStatic === "string" ? ffmpegStatic : "",
-    path.join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"),
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    try {
-      await fs.access(candidate);
-      return candidate;
-    } catch {
-      // Try the next known ffmpeg-static location.
-    }
-  }
-
-  throw new Error(`ffmpeg binary not found. Checked: ${candidates.join(", ")}`);
-}
-
-async function runFfmpeg(configure: (command: ffmpeg.FfmpegCommand) => void) {
-  await new Promise<void>((resolve, reject) => {
-    const command = ffmpeg();
-    configure(command);
-    command.on("end", () => resolve());
-    command.on("error", (error) => reject(error));
-    command.run();
-  });
 }
 
 function getTemporalLabel(index: number, total: number) {

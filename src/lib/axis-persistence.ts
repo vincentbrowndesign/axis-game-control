@@ -67,19 +67,27 @@ export type AxisEntityTrackRecord = {
   y: number;
 };
 
+export type AxisSupabaseErrorCode =
+  | "SUPABASE_OWNERSHIP_MISSING"
+  | "SUPABASE_READ_FORBIDDEN"
+  | "SUPABASE_RLS_BLOCKED"
+  | "SUPABASE_SERVICE_ROLE_MISSING"
+  | "SUPABASE_WRITE_FAILED";
+
 export type AxisPersistenceResult<T> =
   | {
       record: T;
       stored: true;
     }
   | {
+      code?: AxisSupabaseErrorCode;
       reason: string;
       stored: false;
     };
 
 export function getAxisPersistenceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -87,7 +95,7 @@ export function getAxisPersistenceClient() {
 
 export async function persistAxisArtifact(record: AxisArtifactRecord): Promise<AxisPersistenceResult<AxisArtifactRecord>> {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis artifact writes.");
 
   const { data, error } = await supabase
     .from("axis_artifacts")
@@ -95,13 +103,13 @@ export async function persistAxisArtifact(record: AxisArtifactRecord): Promise<A
     .select()
     .single();
 
-  if (error) return { reason: error.message, stored: false };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
   return { record: data as AxisArtifactRecord, stored: true };
 }
 
 export async function persistAxisExport(record: AxisExportRecord): Promise<AxisPersistenceResult<AxisExportRecord>> {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis export writes.");
 
   const { data, error } = await supabase
     .from("axis_exports")
@@ -109,35 +117,37 @@ export async function persistAxisExport(record: AxisExportRecord): Promise<AxisP
     .select()
     .single();
 
-  if (error) return { reason: error.message, stored: false };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
   return { record: data as AxisExportRecord, stored: true };
 }
 
 export async function persistAxisArtifactFacts(records: AxisArtifactFactRecord[]) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false };
-  if (!records.length) return { records: [] as AxisArtifactFactRecord[], stored: true };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis fact writes.");
+  if (!records.length) return { records: [] as AxisArtifactFactRecord[], stored: true as const };
 
   const { data, error } = await supabase
     .from("axis_artifact_facts")
     .upsert(records, { onConflict: "fact_id" })
     .select();
 
-  if (error) return { reason: error.message, stored: false };
-  return { records: (data ?? []) as AxisArtifactFactRecord[], stored: true };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  return { records: (data ?? []) as AxisArtifactFactRecord[], stored: true as const };
 }
 
 export async function getAxisArtifactHistory({
   artifactId,
   limit = 50,
   uploadId,
+  userId,
 }: {
   artifactId?: string;
   limit?: number;
   uploadId?: string;
+  userId?: string;
 }) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { error: "supabase_not_configured", records: [] as AxisArtifactRecord[] };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis artifact reads.", records: [] as AxisArtifactRecord[] };
 
   let query = supabase
     .from("axis_artifacts")
@@ -147,22 +157,25 @@ export async function getAxisArtifactHistory({
 
   if (artifactId) query = query.eq("artifact_id", artifactId);
   if (uploadId) query = query.eq("upload_id", uploadId);
+  if (userId) query = query.eq("user_id", userId);
 
   const { data, error } = await query;
-  return { error: error?.message ?? null, records: (data ?? []) as AxisArtifactRecord[] };
+  return { code: error ? getReadErrorCode(error.message) : null, error: error?.message ?? null, records: (data ?? []) as AxisArtifactRecord[] };
 }
 
 export async function getAxisExportHistory({
   artifactId,
   exportId,
   limit = 50,
+  userId,
 }: {
   artifactId?: string;
   exportId?: string;
   limit?: number;
+  userId?: string;
 }) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { error: "supabase_not_configured", records: [] as AxisExportRecord[] };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis export reads.", records: [] as AxisExportRecord[] };
 
   let query = supabase
     .from("axis_exports")
@@ -172,9 +185,10 @@ export async function getAxisExportHistory({
 
   if (artifactId) query = query.eq("artifact_id", artifactId);
   if (exportId) query = query.eq("export_id", exportId);
+  if (userId) query = query.eq("user_id", userId);
 
   const { data, error } = await query;
-  return { error: error?.message ?? null, records: (data ?? []) as AxisExportRecord[] };
+  return { code: error ? getReadErrorCode(error.message) : null, error: error?.message ?? null, records: (data ?? []) as AxisExportRecord[] };
 }
 
 export async function getAxisArtifactFactHistory({
@@ -182,14 +196,16 @@ export async function getAxisArtifactFactHistory({
   factKey,
   limit = 50,
   uploadId,
+  userId,
 }: {
   artifactId?: string;
   factKey?: string;
   limit?: number;
   uploadId?: string;
+  userId?: string;
 }) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { error: "supabase_not_configured", records: [] as AxisArtifactFactRecord[] };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis fact reads.", records: [] as AxisArtifactFactRecord[] };
 
   let query = supabase
     .from("axis_artifact_facts")
@@ -200,15 +216,16 @@ export async function getAxisArtifactFactHistory({
   if (artifactId) query = query.eq("artifact_id", artifactId);
   if (factKey) query = query.eq("fact_key", factKey);
   if (uploadId) query = query.eq("upload_id", uploadId);
+  if (userId) query = query.eq("user_id", userId);
 
   const { data, error } = await query;
-  return { error: error?.message ?? null, records: (data ?? []) as AxisArtifactFactRecord[] };
+  return { code: error ? getReadErrorCode(error.message) : null, error: error?.message ?? null, records: (data ?? []) as AxisArtifactFactRecord[] };
 }
 
 export async function persistAxisEntityTracks(records: AxisEntityTrackRecord[]) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false };
-  if (!records.length) return { records: [] as AxisEntityTrackRecord[], stored: true };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis track writes.");
+  if (!records.length) return { records: [] as AxisEntityTrackRecord[], stored: true as const };
 
   const rows = records.map((record) => ({
     confidence: record.confidence ?? null,
@@ -232,15 +249,15 @@ export async function persistAxisEntityTracks(records: AxisEntityTrackRecord[]) 
   }));
   const uploadIds = Array.from(new Set(records.map((record) => record.upload_id)));
   const cleanup = await supabase.from("axis_entity_tracks").delete().in("upload_id", uploadIds);
-  if (cleanup.error) return { reason: cleanup.error.message, stored: false };
+  if (cleanup.error) return supabaseFailure(getWriteErrorCode(cleanup.error.message), cleanup.error.message);
 
   const { data, error } = await supabase
     .from("axis_entity_tracks")
     .insert(rows)
     .select();
 
-  if (error) return { reason: error.message, stored: false };
-  return { records: mapAxisEntityTrackRows(data ?? []), stored: true };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  return { records: mapAxisEntityTrackRows(data ?? []), stored: true as const };
 }
 
 export async function getAxisEntityTracks({
@@ -248,14 +265,16 @@ export async function getAxisEntityTracks({
   entityType,
   limit = 500,
   uploadId,
+  userId,
 }: {
   artifactId?: string;
   entityType?: AxisEntityTrackRecord["entity_type"];
   limit?: number;
   uploadId?: string;
+  userId?: string;
 }) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { error: "supabase_not_configured", records: [] as AxisEntityTrackRecord[] };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis track reads.", records: [] as AxisEntityTrackRecord[] };
 
   let query = supabase
     .from("axis_entity_tracks")
@@ -267,9 +286,10 @@ export async function getAxisEntityTracks({
   if (entityType === "ball") query = query.in("entity_type", ["ball", "basketball"]);
   else if (entityType) query = query.eq("entity_type", entityType);
   if (uploadId) query = query.eq("upload_id", uploadId);
+  if (userId) query = query.eq("user_id", userId);
 
   const { data, error } = await query;
-  return { error: error?.message ?? null, records: mapAxisEntityTrackRows(data ?? []) };
+  return { code: error ? getReadErrorCode(error.message) : null, error: error?.message ?? null, records: mapAxisEntityTrackRows(data ?? []) };
 }
 
 function mapAxisEntityTrackRows(rows: unknown[]): AxisEntityTrackRecord[] {
@@ -332,7 +352,7 @@ function getString(value: unknown) {
 
 export async function persistAxisDecoderTest(record: AxisDecoderTestRecord): Promise<AxisPersistenceResult<AxisDecoderTestRecord>> {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis decoder test writes.");
 
   const { data, error } = await supabase
     .from("axis_decoder_tests")
@@ -340,7 +360,7 @@ export async function persistAxisDecoderTest(record: AxisDecoderTestRecord): Pro
     .select()
     .single();
 
-  if (error) return { reason: error.message, stored: false };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
   return { record: data as AxisDecoderTestRecord, stored: true };
 }
 
@@ -354,7 +374,7 @@ export async function getAxisDecoderTests({
   uploadId?: string;
 }) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { error: "supabase_not_configured", records: [] as AxisDecoderTestRecord[] };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis decoder test reads.", records: [] as AxisDecoderTestRecord[] };
 
   let query = supabase
     .from("axis_decoder_tests")
@@ -366,12 +386,12 @@ export async function getAxisDecoderTests({
   if (typeof pass === "boolean") query = query.eq("pass", pass);
 
   const { data, error } = await query;
-  return { error: error?.message ?? null, records: (data ?? []) as AxisDecoderTestRecord[] };
+  return { code: error ? getReadErrorCode(error.message) : null, error: error?.message ?? null, records: (data ?? []) as AxisDecoderTestRecord[] };
 }
 
 export async function getAxisDecoderTestHistory({ limit }: { limit?: number } = {}) {
   const supabase = getAxisPersistenceClient();
-  if (!supabase) return { error: "supabase_not_configured", records: [] as AxisDecoderTestRecord[] };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis decoder test reads.", records: [] as AxisDecoderTestRecord[] };
 
   let query = supabase
     .from("axis_decoder_tests")
@@ -381,5 +401,17 @@ export async function getAxisDecoderTestHistory({ limit }: { limit?: number } = 
   if (typeof limit === "number") query = query.limit(Math.max(1, Math.min(limit, 500)));
 
   const { data, error } = await query;
-  return { error: error?.message ?? null, records: (data ?? []) as AxisDecoderTestRecord[] };
+  return { code: error ? getReadErrorCode(error.message) : null, error: error?.message ?? null, records: (data ?? []) as AxisDecoderTestRecord[] };
+}
+
+function supabaseFailure(code: AxisSupabaseErrorCode, reason: string) {
+  return { code, reason, stored: false as const };
+}
+
+function getWriteErrorCode(message: string): AxisSupabaseErrorCode {
+  return /row-level security|rls/i.test(message) ? "SUPABASE_RLS_BLOCKED" : "SUPABASE_WRITE_FAILED";
+}
+
+function getReadErrorCode(message: string): AxisSupabaseErrorCode {
+  return /permission|forbidden|row-level security|rls/i.test(message) ? "SUPABASE_READ_FORBIDDEN" : "SUPABASE_WRITE_FAILED";
 }

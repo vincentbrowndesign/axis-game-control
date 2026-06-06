@@ -1,10 +1,8 @@
-import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
+import { extractAxisFrames, runAxisFfmpegBinary } from "./axis-ffmpeg";
 
 type DatasetVideoInput = {
   muxPlaybackId?: string;
@@ -62,9 +60,6 @@ const duplicateDistance = 10;
 export async function buildAxisDataset(input: AxisDatasetBuilderInput): Promise<AxisDatasetBuilderResult> {
   const videos = normalizeVideos(input.videos);
   if (!videos.length) throw new Error("At least one videoUrl or muxPlaybackId is required.");
-
-  const ffmpegPath = await getFfmpegPath();
-  ffmpeg.setFfmpegPath(ffmpegPath);
 
   const sampleEverySeconds = clampSampleEverySeconds(input.sampleEverySeconds);
   const targetFrameCount = clampTargetFrameCount(input.targetFrameCount);
@@ -192,11 +187,12 @@ async function extractCandidateFrames({
   videoUrl: string;
 }) {
   const fps = 1 / sampleEverySeconds;
-  await runFfmpeg((command) => {
-    command
-      .input(videoUrl)
-      .outputOptions(["-vf", `fps=${fps}`, "-q:v", "2"])
-      .output(path.join(outputDir, "candidate_%06d.jpg"));
+  await extractAxisFrames({
+    filePattern: "candidate_%06d.jpg",
+    fps,
+    inputPath: videoUrl,
+    operationName: "AXIS_DATASET_FRAME_EXTRACTION",
+    outputDir,
   });
 
   const entries = await fs.readdir(outputDir);
@@ -247,8 +243,7 @@ async function analyzeCandidateFrame({
 }
 
 async function readSmallGrayFrame(filePath: string) {
-  const ffmpegPath = await getFfmpegPath();
-  const output = await runBinary(ffmpegPath, [
+  const output = await runAxisFfmpegBinary([
     "-v",
     "error",
     "-i",
@@ -461,45 +456,6 @@ function getDosTime() {
 function getDosDate() {
   const now = new Date();
   return ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
-}
-
-async function getFfmpegPath() {
-  const candidates = [
-    typeof ffmpegStatic === "string" ? ffmpegStatic : "",
-    path.join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"),
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    if (await fileExists(candidate)) return candidate;
-  }
-
-  throw new Error(`ffmpeg binary not found. Checked: ${candidates.join(", ")}`);
-}
-
-async function runFfmpeg(configure: (command: ffmpeg.FfmpegCommand) => void) {
-  await new Promise<void>((resolve, reject) => {
-    const command = ffmpeg();
-    configure(command);
-    command.on("end", () => resolve());
-    command.on("error", (error) => reject(error));
-    command.run();
-  });
-}
-
-async function runBinary(command: string, args: string[]) {
-  await fs.access(command);
-  return new Promise<Buffer>((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve(Buffer.concat(stdout));
-      else reject(new Error(Buffer.concat(stderr).toString("utf8") || `Command failed with code ${code}`));
-    });
-  });
 }
 
 function createDifferenceHash(pixels: number[]) {

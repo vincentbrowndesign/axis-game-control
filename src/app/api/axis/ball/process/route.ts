@@ -3,8 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
+import { extractAxisFrames } from "../../../../../lib/axis-ffmpeg";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -67,12 +66,15 @@ export async function POST(request: Request) {
       uploaded_file_size: writtenBytes,
     });
 
-    const ffmpegPath = await getFfmpegPath();
-    ffmpeg.setFfmpegPath(ffmpegPath);
     console.log("FRAME_EXTRACTION_START", {
       temp_video_path: videoPath,
     });
-    await extractFrames(videoPath, framesDir);
+    await extractAxisFrames({
+      fps: 1 / frameIntervalSeconds,
+      inputPath: videoPath,
+      operationName: "AXIS_BALL_PROCESS_ROUTE_FRAME_EXTRACTION",
+      outputDir: framesDir,
+    });
 
     const frames = await listFrames(framesDir);
     console.log("FRAMES_EXTRACTED", frames.length);
@@ -153,18 +155,6 @@ function closeWriter(writer: ReturnType<typeof createWriteStream>) {
       if (error) reject(error);
       else resolve();
     });
-  });
-}
-
-async function extractFrames(videoPath: string, framesDir: string) {
-  await new Promise<void>((resolve, reject) => {
-    ffmpeg()
-      .input(videoPath)
-      .outputOptions(["-vf", `fps=${1 / frameIntervalSeconds}`, "-q:v", "2"])
-      .output(path.join(framesDir, "frame_%04d.jpg"))
-      .on("end", () => resolve())
-      .on("error", (error) => reject(error))
-      .run();
   });
 }
 
@@ -276,15 +266,6 @@ function getSafeFileName(value: string | null) {
     .replace(/[^\w .-]/g, "")
     .trim();
   return clean || fallback;
-}
-
-async function getFfmpegPath() {
-  if (typeof ffmpegStatic === "string") {
-    await fs.access(ffmpegStatic);
-    return ffmpegStatic;
-  }
-
-  throw new Error("ffmpeg binary not found.");
 }
 
 function getNumber(value: unknown) {

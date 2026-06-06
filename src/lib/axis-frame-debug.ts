@@ -2,8 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
+import { extractAxisFrames, runAxisFfmpegOperation } from "./axis-ffmpeg";
 
 export type AxisFrameDebugInput = {
   createDebugMp4?: boolean;
@@ -98,10 +97,6 @@ export function getMuxPlaybackUrl(playbackId?: string) {
 export async function runAxisFrameDebugPass(input: AxisFrameDebugInput): Promise<AxisFrameDebugResult> {
   const videoUrl = cleanString(input.videoUrl) || getMuxPlaybackUrl(cleanString(input.muxPlaybackId));
   if (!videoUrl) throw new Error("videoUrl or muxPlaybackId is required.");
-  const ffmpegPath = await getFfmpegPath();
-
-  ffmpeg.setFfmpegPath(ffmpegPath);
-
   const frameIntervalSeconds = clampFrameInterval(input.frameIntervalSeconds);
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-frame-debug-"));
   const framesDir = path.join(workDir, "frames");
@@ -109,7 +104,12 @@ export async function runAxisFrameDebugPass(input: AxisFrameDebugInput): Promise
   const debugMp4Path = path.join(workDir, "debug-ball-track.mp4");
   await fs.mkdir(framesDir, { recursive: true });
 
-  await extractFrames({ frameIntervalSeconds, framesDir, videoUrl });
+  await extractAxisFrames({
+    fps: 1 / frameIntervalSeconds,
+    inputPath: videoUrl,
+    operationName: "AXIS_FRAME_DEBUG_EXTRACTION",
+    outputDir: framesDir,
+  });
   const frames = await listExtractedFrames(framesDir);
   const { ballTrack, first20Detections, playerTracks, rawClassNames, totalBallDetections, totalDetections } =
     await detectFramesWithRoboflow({
@@ -162,37 +162,6 @@ export async function runAxisFrameDebugPass(input: AxisFrameDebugInput): Promise
 
   logFrameDebugOutput(output);
   return output;
-}
-
-async function getFfmpegPath() {
-  const candidates = [
-    typeof ffmpegStatic === "string" ? ffmpegStatic : "",
-    path.join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"),
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    if (await fileExists(candidate)) return candidate;
-  }
-
-  throw new Error(`ffmpeg binary not found. Checked: ${candidates.join(", ")}`);
-}
-
-async function extractFrames({
-  frameIntervalSeconds,
-  framesDir,
-  videoUrl,
-}: {
-  frameIntervalSeconds: number;
-  framesDir: string;
-  videoUrl: string;
-}) {
-  const fps = 1 / frameIntervalSeconds;
-  await runFfmpeg((command) => {
-    command
-      .input(videoUrl)
-      .outputOptions(["-vf", `fps=${fps}`, "-q:v", "2"])
-      .output(path.join(framesDir, "frame_%04d.jpg"));
-  });
 }
 
 async function listExtractedFrames(framesDir: string) {
@@ -300,12 +269,18 @@ async function createDebugMp4({
   videoUrl: string;
 }) {
   try {
-    await runFfmpeg((command) => {
+    await runAxisFfmpegOperation({
+      configure: (command) => {
       command.input(videoUrl).outputOptions(["-an", "-movflags", "+faststart"]);
       if (ballTrack.length) {
         command.videoFilters(ballTrack.map((point) => markerFilter(point, frameIntervalSeconds)).join(","));
       }
       command.output(debugMp4Path);
+      },
+      errorCode: "EXPORT_FAILED",
+      inputPath: videoUrl,
+      operationName: "AXIS_FRAME_DEBUG_MP4",
+      outputPath: debugMp4Path,
     });
     return fileExists(debugMp4Path);
   } catch (error) {
@@ -321,16 +296,6 @@ function markerFilter(point: AxisBallTrackPoint, frameIntervalSeconds: number) {
   const start = point.time.toFixed(3);
   const end = (point.time + frameIntervalSeconds).toFixed(3);
   return `drawtext=text=O:x=${x}:y=${y}:fontsize=${size}:fontcolor=red:enable='between(t\\,${start}\\,${end})'`;
-}
-
-async function runFfmpeg(configure: (command: ffmpeg.FfmpegCommand) => void) {
-  await new Promise<void>((resolve, reject) => {
-    const command = ffmpeg();
-    configure(command);
-    command.on("end", () => resolve());
-    command.on("error", (error) => reject(error));
-    command.run();
-  });
 }
 
 function normalizePrediction(prediction: RoboflowPrediction, frame: number): RawFrameDetection {

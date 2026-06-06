@@ -1,4 +1,5 @@
 import { getAxisEntityTracks, type AxisEntityTrackRecord } from "../../../../lib/axis-persistence";
+import { getAxisRequestUser } from "../../../../lib/axis-request-auth";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,9 @@ function normalizeReplayUploadId(value: string | undefined) {
 }
 
 export async function GET(request: Request) {
+  const auth = await getAxisRequestUser(request);
+  if (auth.code) return Response.json({ code: auth.code, error: auth.reason, records: [] }, { status: 401 });
+
   const url = new URL(request.url);
   const artifactId = url.searchParams.get("artifact_id") ?? undefined;
   const entityType = getEntityType(url.searchParams.get("entity_type"));
@@ -28,7 +32,7 @@ export async function GET(request: Request) {
     replay_id: rawUploadId,
     read_upload_id: uploadId,
   });
-  const history = await getAxisEntityTracks({ artifactId, entityType, limit, uploadId });
+  const history = await getAxisEntityTracks({ artifactId, entityType, limit, uploadId, userId: auth.userId });
 
   if (history.error) {
     console.error("TRACKS_READ_FAILED", {
@@ -36,7 +40,7 @@ export async function GET(request: Request) {
       read_upload_id: uploadId,
       replay_id: rawUploadId,
     });
-    return Response.json({ error: history.error, records: [] }, { status: 502 });
+    return Response.json({ code: history.code, error: history.error, records: [] }, { status: 502 });
   }
   console.log("TRACKS_READ_COMPLETE", {
     first_track_point: history.records[0] ?? null,

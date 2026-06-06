@@ -30,9 +30,14 @@ export type AxisBallJobRecord = {
   video_url: string;
 };
 
+export type AxisSupabaseErrorCode =
+  | "SUPABASE_RLS_BLOCKED"
+  | "SUPABASE_SERVICE_ROLE_MISSING"
+  | "SUPABASE_WRITE_FAILED";
+
 export function getAxisBallJobClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -40,7 +45,7 @@ export function getAxisBallJobClient() {
 
 export async function createAxisBallJob(record: AxisBallJobRecord) {
   const supabase = getAxisBallJobClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false as const };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis ball job writes.");
 
   const { data, error } = await supabase
     .from("axis_ball_jobs")
@@ -63,13 +68,13 @@ export async function createAxisBallJob(record: AxisBallJobRecord) {
     .select()
     .single();
 
-  if (error) return { reason: error.message, stored: false as const };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
   return { record: mapAxisBallJobRow(data), stored: true as const };
 }
 
 export async function getAxisBallJob(jobId: string) {
   const supabase = getAxisBallJobClient();
-  if (!supabase) return { error: "supabase_not_configured", record: null };
+  if (!supabase) return { code: "SUPABASE_SERVICE_ROLE_MISSING" as const, error: "SUPABASE_SERVICE_ROLE_KEY is required for Axis ball job reads.", record: null };
 
   const { data, error } = await supabase
     .from("axis_ball_jobs")
@@ -77,13 +82,13 @@ export async function getAxisBallJob(jobId: string) {
     .eq("job_id", jobId)
     .maybeSingle();
 
-  if (error) return { error: error.message, record: null };
-  return { error: null, record: data ? mapAxisBallJobRow(data) : null };
+  if (error) return { code: getWriteErrorCode(error.message), error: error.message, record: null };
+  return { code: null, error: null, record: data ? mapAxisBallJobRow(data) : null };
 }
 
 export async function updateAxisBallJob(jobId: string, patch: Partial<AxisBallJobRecord>) {
   const supabase = getAxisBallJobClient();
-  if (!supabase) return { reason: "supabase_not_configured", stored: false as const };
+  if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis ball job updates.");
 
   const { data, error } = await supabase
     .from("axis_ball_jobs")
@@ -102,8 +107,16 @@ export async function updateAxisBallJob(jobId: string, patch: Partial<AxisBallJo
     .select()
     .single();
 
-  if (error) return { reason: error.message, stored: false as const };
+  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
   return { record: mapAxisBallJobRow(data), stored: true as const };
+}
+
+function supabaseFailure(code: AxisSupabaseErrorCode, reason: string) {
+  return { code, reason, stored: false as const };
+}
+
+function getWriteErrorCode(message: string): AxisSupabaseErrorCode {
+  return /row-level security|rls/i.test(message) ? "SUPABASE_RLS_BLOCKED" : "SUPABASE_WRITE_FAILED";
 }
 
 function mapAxisBallJobRow(row: unknown): AxisBallJobRecord {

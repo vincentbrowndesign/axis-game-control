@@ -1,12 +1,8 @@
 import { promises as fs } from "node:fs";
-import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 
-import ffmpeg from "fluent-ffmpeg";
-
-const execFileAsync = promisify(execFile);
+import { extractAxisFrames } from "./axis-ffmpeg";
 
 export type AxisBallTrackPoint = {
   confidence: number;
@@ -62,13 +58,15 @@ export async function runAxisBallProcessing(
 
   try {
     await fs.mkdir(framesDir, { recursive: true });
-    const ffmpegPath = await getFfmpegPath();
-    ffmpeg.setFfmpegPath(ffmpegPath);
-
     console.log("AXIS_BALL_DOWNLOAD_VIDEO_START", { videoUrl });
     await onStage?.("extracting_frames");
     console.log("FRAME_EXTRACTION_START", { videoUrl });
-    await extractFrames(videoUrl, framesDir);
+    await extractAxisFrames({
+      fps: 1 / frameIntervalSeconds,
+      inputPath: videoUrl,
+      operationName: "AXIS_BALL_FRAME_EXTRACTION",
+      outputDir: framesDir,
+    });
     console.log("FRAME_EXTRACTION_COMPLETE", { videoUrl });
 
     const frames = await listFrames(framesDir);
@@ -103,18 +101,6 @@ export async function runAxisBallProcessing(
   } finally {
     await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
   }
-}
-
-async function extractFrames(videoUrl: string, framesDir: string) {
-  await new Promise<void>((resolve, reject) => {
-    ffmpeg()
-      .input(videoUrl)
-      .outputOptions(["-vf", `fps=${1 / frameIntervalSeconds}`, "-q:v", "2"])
-      .output(path.join(framesDir, "frame_%04d.jpg"))
-      .on("end", () => resolve())
-      .on("error", (error) => reject(error))
-      .run();
-  });
 }
 
 async function listFrames(framesDir: string): Promise<FrameFile[]> {
@@ -191,73 +177,6 @@ function normalizePrediction(prediction: RoboflowPrediction) {
     x: getNumber(prediction.x),
     y: getNumber(prediction.y),
   };
-}
-
-async function getFfmpegPath() {
-  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-  const candidates = uniqueStrings([
-    process.env.FFMPEG_PATH,
-    process.env.FFMPEG_BINARY,
-    process.env.FFMPEG_BIN,
-    getFfmpegStaticRuntimePath(),
-    getFfmpegStaticPackagePath(binaryName),
-    path.join(process.cwd(), "node_modules", "ffmpeg-static", binaryName),
-  ]);
-
-  for (const candidate of candidates) {
-    if (await canAccess(candidate)) {
-      console.log("FFMPEG_PATH_SELECTED", { path: candidate });
-      return candidate;
-    }
-  }
-
-  if (await canRunFfmpeg("ffmpeg")) {
-    console.log("FFMPEG_PATH_SELECTED", { path: "ffmpeg" });
-    return "ffmpeg";
-  }
-
-  throw new Error(`ffmpeg binary not found. Checked: ${candidates.join(", ")}, ffmpeg`);
-}
-
-function getFfmpegStaticRuntimePath() {
-  try {
-    const runtimeRequire = eval("require") as NodeRequire;
-    const runtimePath = runtimeRequire("ffmpeg-static") as unknown;
-    return typeof runtimePath === "string" ? runtimePath : "";
-  } catch {
-    return "";
-  }
-}
-
-function getFfmpegStaticPackagePath(binaryName: string) {
-  try {
-    const runtimeRequire = eval("require") as NodeRequire;
-    return path.join(path.dirname(runtimeRequire.resolve("ffmpeg-static")), binaryName);
-  } catch {
-    return "";
-  }
-}
-
-function uniqueStrings(values: Array<string | undefined>) {
-  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
-}
-
-async function canAccess(candidate: string) {
-  try {
-    await fs.access(candidate);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function canRunFfmpeg(command: string) {
-  try {
-    await execFileAsync(command, ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function getNumber(value: unknown) {
