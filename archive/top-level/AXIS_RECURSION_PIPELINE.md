@@ -30,6 +30,12 @@ Future recursion cycles must preserve:
 - Provider abstraction boundaries.
 - Upload, auth, Supabase, Mux, replay, voice, and AI utility infrastructure.
 
+## Scaling Laws
+
+- **Tier 1 (100):** Edge-native, provider-heavy (Roboflow API, Cloudflare Stream).
+- **Tier 2 (1000):** Queue-first, specialized compute (Fly.io/Docker).
+- **Tier 3 (10000):** Private GPU Cluster, self-hosted inference, event-streaming.
+
 ## Multi-Model Workflow
 
 Models may assist different parts of the workflow:
@@ -69,4 +75,3 @@ Research metaphors remain non-load-bearing until formalized into deterministic
 code and contracts.
 
 No silent promotion from metaphor to architecture.
-

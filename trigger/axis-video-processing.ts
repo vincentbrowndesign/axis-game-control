@@ -1,5 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { runAxisBallProcessing } from "../src/lib/axis-ball-processing";
+import { storeAxisEvents } from "../src/lib/axis-events";
 import type { AxisVideoJobRecord } from "../src/lib/axis-video-jobs";
 import { getAxisVideoJob, updateAxisVideoJob } from "../src/lib/axis-video-jobs";
 import { waitForCloudflareMp4Download, waitForCloudflareStreamReady } from "../src/lib/cloudflare-stream";
@@ -86,13 +87,17 @@ export const axisVideoProcessing = task({
         jobId: payload.jobId,
       });
       console.log("FRAME_EXTRACTION_START", { jobId: payload.jobId });
-      const result = await runAxisBallProcessing(mp4Url, async (stage) => {
-        await persistAxisVideoJobUpdate("PROCESSING_STAGE_UPDATE", payload.jobId, {
-          processing_stage: stage,
-          progress: progressFromStage(stage),
-          status: "axis_processing",
-        });
-      });
+      const result = await runAxisBallProcessing(
+        mp4Url,
+        async (stage) => {
+          await persistAxisVideoJobUpdate("PROCESSING_STAGE_UPDATE", payload.jobId, {
+            processing_stage: stage,
+            progress: progressFromStage(stage),
+            status: "axis_processing",
+          });
+        },
+        { sourceJobId: payload.jobId },
+      );
       logAxisVideoProcessingMemory("BEFORE_REPLAY_GENERATION", { jobId: payload.jobId });
       console.log("FRAME_EXTRACTION_COMPLETE", { frameCount: result.frameCount, jobId: payload.jobId });
       console.log("ROBOFLOW_COMPLETE", { detectionCount: result.detectionCount, jobId: payload.jobId });
@@ -100,6 +105,20 @@ export const axisVideoProcessing = task({
 
       const job = await getAxisVideoJob(payload.jobId);
       if (job.error) throw new Error(`Axis video job read failed before final update: ${job.error}`);
+      const eventStorage = await storeAxisEvents(result.events, {
+        organizationId: job.record?.organization_id,
+        sessionId: job.record?.session_id,
+        sourceJobId: payload.jobId,
+        userId: job.record?.user_id,
+        videoId: job.record?.video_id || payload.cloudflareUid,
+      });
+      if (!eventStorage.stored) {
+        throw new Error(`Axis event persistence failed: ${eventStorage.code}: ${eventStorage.reason}`);
+      }
+      console.log("AXIS_EVENTS_STORED", {
+        eventCount: eventStorage.eventCount,
+        jobId: payload.jobId,
+      });
       const finalUpdate = await persistAxisVideoJobUpdate("PROCESSING_FINAL_REPLAY_READY", payload.jobId, {
         ball_track: result.ballTrack,
         ball_track_count: result.ballTrack.length,
