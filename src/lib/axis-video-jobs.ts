@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint } from "./axis-ball-processing";
+import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint, AxisPlayerTrackPoint } from "./axis-ball-processing";
 import { axisServerSupabaseOptions, getAxisSupabaseServerEnv, logAxisSupabaseClientEnv } from "./axis-supabase-server";
 
 export type AxisVideoJobStatus =
@@ -37,6 +37,15 @@ export type AxisVideoJobRecord = {
   organization_id: string | null;
   processing_stage: AxisVideoProcessingStage;
   progress: number;
+  player_track: AxisPlayerTrackPoint[];
+  player_track_count: number;
+  replay_cloudflare_uid: string | null;
+  replay_export_height: number | null;
+  replay_export_path: string | null;
+  replay_export_size_bytes: number | null;
+  replay_export_width: number | null;
+  replay_mp4_url: string | null;
+  replay_video_url: string | null;
   session_id: string | null;
   status: AxisVideoJobStatus;
   storage_path: string;
@@ -87,6 +96,15 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
       organization_id: record.organization_id,
       processing_stage: record.processing_stage,
       progress: record.progress,
+      player_track: record.player_track,
+      player_track_count: record.player_track_count,
+      replay_cloudflare_uid: record.replay_cloudflare_uid,
+      replay_export_height: record.replay_export_height,
+      replay_export_path: record.replay_export_path,
+      replay_export_size_bytes: record.replay_export_size_bytes,
+      replay_export_width: record.replay_export_width,
+      replay_mp4_url: record.replay_mp4_url,
+      replay_video_url: record.replay_video_url,
       session_id: record.session_id,
       status: record.status,
       storage_path: record.storage_path,
@@ -153,6 +171,15 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
       ...("organization_id" in patch ? { organization_id: patch.organization_id ?? null } : {}),
       ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "queued" } : {}),
       ...("progress" in patch ? { progress: clampProgress(patch.progress) } : {}),
+      ...("player_track" in patch ? { player_track: patch.player_track ?? [] } : {}),
+      ...("player_track_count" in patch ? { player_track_count: patch.player_track_count ?? 0 } : {}),
+      ...("replay_cloudflare_uid" in patch ? { replay_cloudflare_uid: patch.replay_cloudflare_uid ?? null } : {}),
+      ...("replay_export_height" in patch ? { replay_export_height: patch.replay_export_height ?? null } : {}),
+      ...("replay_export_path" in patch ? { replay_export_path: patch.replay_export_path ?? null } : {}),
+      ...("replay_export_size_bytes" in patch ? { replay_export_size_bytes: patch.replay_export_size_bytes ?? null } : {}),
+      ...("replay_export_width" in patch ? { replay_export_width: patch.replay_export_width ?? null } : {}),
+      ...("replay_mp4_url" in patch ? { replay_mp4_url: patch.replay_mp4_url ?? null } : {}),
+      ...("replay_video_url" in patch ? { replay_video_url: patch.replay_video_url ?? null } : {}),
       ...("session_id" in patch ? { session_id: patch.session_id ?? null } : {}),
       ...("status" in patch ? { status: patch.status } : {}),
       ...("trigger_run_id" in patch ? { trigger_run_id: patch.trigger_run_id ?? null } : {}),
@@ -197,6 +224,15 @@ function mapAxisVideoJobRow(row: unknown): AxisVideoJobRecord {
     organization_id: getString(record.organization_id) || null,
     processing_stage: getStage(record.processing_stage),
     progress: clampProgress(getNumber(record.progress) ?? 0),
+    player_track: Array.isArray(record.player_track) ? record.player_track.filter(isPlayerTrackPoint) : [],
+    player_track_count: getNumber(record.player_track_count) ?? (Array.isArray(record.player_track) ? record.player_track.length : 0),
+    replay_cloudflare_uid: getString(record.replay_cloudflare_uid) || null,
+    replay_export_height: getNumber(record.replay_export_height) ?? null,
+    replay_export_path: getString(record.replay_export_path) || null,
+    replay_export_size_bytes: getNumber(record.replay_export_size_bytes) ?? null,
+    replay_export_width: getNumber(record.replay_export_width) ?? null,
+    replay_mp4_url: getString(record.replay_mp4_url) || null,
+    replay_video_url: getString(record.replay_video_url) || null,
     session_id: getString(record.session_id) || null,
     status: getStatus(record.status),
     storage_path: getString(record.storage_path),
@@ -215,6 +251,15 @@ function isBallTrackPoint(value: unknown): value is AxisBallTrackPoint {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const point = value as Record<string, unknown>;
   return ["confidence", "frame", "time", "x", "y"].every((key) => typeof point[key] === "number");
+}
+
+function isPlayerTrackPoint(value: unknown): value is AxisPlayerTrackPoint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const point = value as Record<string, unknown>;
+  return (
+    typeof point.id === "string" &&
+    ["confidence", "frame", "time", "x", "y"].every((key) => typeof point[key] === "number")
+  );
 }
 
 function clampProgress(value: unknown) {

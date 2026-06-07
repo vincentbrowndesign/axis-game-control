@@ -1,9 +1,10 @@
 import { task } from "@trigger.dev/sdk/v3";
+import { promises as fs } from "node:fs";
 import { runAxisBallProcessing } from "../src/lib/axis-ball-processing";
 import { storeAxisEvents } from "../src/lib/axis-events";
 import type { AxisVideoJobRecord } from "../src/lib/axis-video-jobs";
 import { getAxisVideoJob, updateAxisVideoJob } from "../src/lib/axis-video-jobs";
-import { waitForCloudflareMp4Download, waitForCloudflareStreamReady } from "../src/lib/cloudflare-stream";
+import { uploadCloudflareStreamVideoFile, waitForCloudflareMp4Download, waitForCloudflareStreamReady } from "../src/lib/cloudflare-stream";
 import { assertAxisSupabaseServerEnv } from "../src/lib/axis-supabase-server";
 
 type AxisVideoProcessingPayload = {
@@ -98,7 +99,7 @@ export const axisVideoProcessing = task({
             status: "axis_processing",
           });
         },
-        { sourceJobId: payload.jobId },
+        { exportReplay: true, keepWorkDir: true, sourceJobId: payload.jobId },
       );
       logAxisVideoProcessingMemory("BEFORE_REPLAY_GENERATION", { jobId: payload.jobId });
       console.log("FRAME_EXTRACTION_COMPLETE", { frameCount: result.frameCount, jobId: payload.jobId });
@@ -121,17 +122,48 @@ export const axisVideoProcessing = task({
         eventCount: eventStorage.eventCount,
         jobId: payload.jobId,
       });
+      let replayCloudflareUid: string | null = null;
+      let replayMp4Url: string | null = null;
+      if (!result.replayExport?.path) throw new Error("Replay export MP4 was not created.");
+      console.log("REPLAY_EXPORT_UPLOAD_START", {
+        exportPath: result.replayExport.path,
+        jobId: payload.jobId,
+        sizeBytes: result.replayExport.sizeBytes,
+      });
+      const replayUpload = await uploadCloudflareStreamVideoFile({
+        filePath: result.replayExport.path,
+        filename: `${payload.jobId}-axis-replay.mp4`,
+      });
+      if (replayUpload.error || !replayUpload.uid) throw new Error(`Replay upload failed: ${replayUpload.error}`);
+      replayCloudflareUid = replayUpload.uid;
+      replayMp4Url = await waitForCloudflareMp4Download(replayUpload.uid);
+      console.log("REPLAY_EXPORT_UPLOAD_COMPLETE", {
+        jobId: payload.jobId,
+        replayCloudflareUid,
+        replayMp4Url,
+      });
+
       const finalUpdate = await persistAxisVideoJobUpdate("PROCESSING_FINAL_REPLAY_READY", payload.jobId, {
         ball_track: result.ballTrack,
         ball_track_count: result.ballTrack.length,
         detection_count: result.detectionCount,
         error: null,
         frame_count: result.frameCount,
+        player_track: result.playerTrack,
+        player_track_count: result.playerTrack.length,
         processing_stage: "complete",
         progress: 100,
+        replay_cloudflare_uid: replayCloudflareUid,
+        replay_export_height: result.replayExport.height,
+        replay_export_path: `cloudflare:${replayCloudflareUid}`,
+        replay_export_size_bytes: result.replayExport.sizeBytes,
+        replay_export_width: result.replayExport.width,
+        replay_mp4_url: replayMp4Url,
+        replay_video_url: `https://customer-${replayCloudflareUid}.cloudflarestream.com/${replayCloudflareUid}/manifest/video.m3u8`,
         status: "replay_ready",
         video_url: job.record?.video_url || streamVideo.playback?.hls || "",
       });
+      if (result.workDir) await fs.rm(result.workDir, { force: true, recursive: true }).catch(() => null);
 
       console.log("JOB_READY", {
         ballTrackCount: result.ballTrack.length,
@@ -146,6 +178,7 @@ export const axisVideoProcessing = task({
         detectionCount: result.detectionCount,
         frameCount: result.frameCount,
         jobId: payload.jobId,
+        replayCloudflareUid,
         status: "replay_ready",
       };
     } catch (error) {

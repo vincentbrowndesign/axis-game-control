@@ -3158,6 +3158,24 @@ body {
   pointer-events: none;
 }
 
+.axis-one-save {
+  align-items: center;
+  background: #aeff4e;
+  border: 1px solid rgba(174, 255, 78, 0.78);
+  color: #050505;
+  display: inline-flex;
+  font: 800 0.74rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  inset: auto 1rem 1rem auto;
+  justify-content: center;
+  letter-spacing: 0;
+  min-height: 42px;
+  padding: 0 1.15rem;
+  position: absolute;
+  text-decoration: none;
+  text-transform: uppercase;
+  z-index: 3;
+}
+
 .clipnote-shell {
   background:
     linear-gradient(180deg, rgba(244, 244, 240, 0.035), transparent 20rem),

@@ -27,6 +27,10 @@ type StreamDownloadResult = {
   };
 };
 
+type StreamUploadResult = {
+  uid?: string;
+};
+
 export type CloudflareDirectUpload = {
   uploadURL: string;
   uid: string;
@@ -74,6 +78,44 @@ export async function createCloudflareStreamDirectUpload({
   }
 
   return { error: null, upload: { uploadURL, uid } satisfies CloudflareDirectUpload };
+}
+
+export async function uploadCloudflareStreamVideoFile({
+  filePath,
+  filename,
+}: {
+  filePath: string;
+  filename: string;
+}) {
+  const config = getCloudflareStreamConfig();
+  if (!config) return { error: "cloudflare_stream_not_configured", uid: null };
+
+  const { promises: fs } = await import("node:fs");
+  const bytes = await fs.readFile(filePath);
+  const form = new FormData();
+  form.append("file", new Blob([bytes], { type: "video/mp4" }), filename);
+  form.append("requireSignedURLs", "false");
+
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream`, {
+    body: form,
+    headers: {
+      Authorization: `Bearer ${config.apiToken}`,
+    },
+    method: "POST",
+  });
+  const body = await response.text();
+  console.log("CLOUDFLARE_REPLAY_UPLOAD_RESPONSE", {
+    body,
+    filename,
+    status: response.status,
+  });
+  const json = parseCloudflareJson<StreamUploadResult>(body);
+  const uid = json?.result?.uid;
+  if (!response.ok || !json?.success || !uid) {
+    return { error: getCloudflareError(json) || `cloudflare_replay_upload_failed_${response.status}`, uid: null };
+  }
+
+  return { error: null, uid };
 }
 
 export async function getCloudflareStreamVideo(uid: string) {

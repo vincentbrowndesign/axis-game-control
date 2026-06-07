@@ -9,17 +9,33 @@ import {
   type AxisOverlayFrame,
 } from "../lib/axis-overlay-engine";
 
-type AppState = "choose" | "complete" | "failed" | "processing" | "replay";
+type AppState = "choose" | "complete" | "failed" | "processing" | "replay" | "selected";
 type VisibleStage =
-  | "Building Track"
-  | "Detecting Basketball"
+  | "Detecting Ball"
+  | "Detecting Players"
   | "Extracting Frames"
+  | "Generating Replay"
   | "Rendering Replay"
+  | "Tracking Objects"
   | "Uploading";
 
 type BallTrackPoint = {
   confidence: number;
   frame: number;
+  sourceHeight?: number;
+  sourceWidth?: number;
+  time: number;
+  x: number;
+  y: number;
+};
+
+type PlayerTrackPoint = {
+  confidence: number;
+  frame: number;
+  id: string;
+  label?: string;
+  sourceHeight?: number;
+  sourceWidth?: number;
   time: number;
   x: number;
   y: number;
@@ -32,7 +48,11 @@ type BallJobResponse = {
   error?: string;
   frameCount?: number;
   jobId?: string;
+  playerTrack?: PlayerTrackPoint[];
+  playerTrackCount?: number;
   processingStage?: string;
+  replayMp4Url?: string | null;
+  replayVideoUrl?: string | null;
   status?:
     | "axis_processing"
     | "failed"
@@ -75,6 +95,9 @@ export function AxisOneScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
   const [jobId, setJobId] = useState("");
+  const [playerTrack, setPlayerTrack] = useState<PlayerTrackPoint[]>([]);
+  const [replayMp4Url, setReplayMp4Url] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [state, setState] = useState<AppState>("choose");
   const [stage, setStage] = useState<VisibleStage>("Uploading");
   const [track, setTrack] = useState<BallTrackPoint[]>([]);
@@ -83,6 +106,10 @@ export function AxisOneScreen() {
   const sortedTrack = useMemo(
     () => [...track].sort((a, b) => a.time - b.time || a.frame - b.frame),
     [track],
+  );
+  const sortedPlayerTrack = useMemo(
+    () => [...playerTrack].sort((a, b) => a.time - b.time || a.frame - b.frame || a.id.localeCompare(b.id)),
+    [playerTrack],
   );
 
   const draw = useCallback(() => {
@@ -105,9 +132,12 @@ export function AxisOneScreen() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const nearest = getNearestTrackPoint(sortedTrack, video.currentTime);
+    const players = getNearestPlayerFrame(sortedPlayerTrack, video.currentTime);
+    const sourceWidth = nearest?.point.sourceWidth || players[0]?.sourceWidth || video.videoWidth || width;
+    const sourceHeight = nearest?.point.sourceHeight || players[0]?.sourceHeight || video.videoHeight || height;
     const frame: AxisOverlayFrame = {
       ball: nearest?.point,
-      players: [],
+      players,
       timestamp: video.currentTime,
     };
     renderAxisOverlayFrame({
@@ -116,17 +146,17 @@ export function AxisOneScreen() {
       ctx,
       frame,
       options: {
-      confidenceThreshold,
-      coordinateSpace: "video",
-      fit: "contain",
-      sourceHeight: video.videoHeight || height,
-      sourceWidth: video.videoWidth || width,
+        confidenceThreshold,
+        coordinateSpace: "video",
+        fit: "contain",
+        sourceHeight,
+        sourceWidth,
       },
       state: overlayStateRef.current,
     });
 
     rafRef.current = requestAnimationFrame(draw);
-  }, [sortedTrack, state]);
+  }, [sortedPlayerTrack, sortedTrack, state]);
 
   useEffect(() => {
     if (state !== "processing") return;
@@ -176,7 +206,10 @@ export function AxisOneScreen() {
         if (result.status !== "replay_ready") return;
 
         const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
+        const nextPlayers = Array.isArray(result.playerTrack) ? result.playerTrack : [];
         setTrack(nextTrack);
+        setPlayerTrack(nextPlayers);
+        setReplayMp4Url(result.replayMp4Url || "");
         setStage("Rendering Replay");
         setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
         setState("complete");
@@ -196,16 +229,25 @@ export function AxisOneScreen() {
     };
   }, [jobId, state]);
 
-  async function handleFile(file: File) {
+  function handleFile(file: File) {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     const localVideoUrl = URL.createObjectURL(file);
     objectUrlRef.current = localVideoUrl;
     setVideoUrl(localVideoUrl);
     setTrack([]);
+    setPlayerTrack([]);
+    setReplayMp4Url("");
     setError("");
     setJobId("");
     setElapsedSeconds(0);
+    setSelectedFile(file);
     resetAxisOverlayEngineState(overlayStateRef.current);
+    setState("selected");
+  }
+
+  async function handleGenerateReplay() {
+    const file = selectedFile;
+    if (!file) return;
     setStage("Uploading");
     timerStartedAtRef.current = performance.now();
     setState("processing");
@@ -250,8 +292,17 @@ export function AxisOneScreen() {
     <main className="axis-one-screen" data-state={state}>
       {state === "choose" ? (
         <button className="axis-one-choose" onClick={() => inputRef.current?.click()} type="button">
-          Choose File
+          Select Video
         </button>
+      ) : null}
+
+      {state === "selected" ? (
+        <section className="axis-one-complete">
+          <span>{selectedFile?.name || "Video selected"}</span>
+          <button className="axis-one-view" onClick={() => void handleGenerateReplay()} type="button">
+            Generate Replay
+          </button>
+        </section>
       ) : null}
 
       {state === "processing" || state === "failed" ? (
@@ -261,7 +312,7 @@ export function AxisOneScreen() {
           <span>{state === "failed" ? error || "Try Again" : stage}</span>
           {state === "failed" ? (
             <button className="axis-one-small-button" onClick={() => inputRef.current?.click()} type="button">
-              Choose File
+              Select Video
             </button>
           ) : null}
         </section>
@@ -271,7 +322,7 @@ export function AxisOneScreen() {
         <section className="axis-one-complete">
           <time>{formatElapsed(elapsedSeconds)}</time>
           <button className="axis-one-view" onClick={() => setState("replay")} type="button">
-            View Replay
+            Preview
           </button>
         </section>
       ) : null}
@@ -291,6 +342,11 @@ export function AxisOneScreen() {
             src={videoUrl}
           />
           <canvas aria-hidden="true" className="axis-one-canvas" ref={canvasRef} />
+          {replayMp4Url ? (
+            <a className="axis-one-save" download href={replayMp4Url}>
+              Save
+            </a>
+          ) : null}
         </section>
       ) : null}
 
@@ -300,7 +356,7 @@ export function AxisOneScreen() {
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) void handleFile(file);
+          if (file) handleFile(file);
         }}
         type="file"
       />
@@ -361,8 +417,8 @@ async function uploadFileToCloudflare(file: File, upload: VideoUploadUrlResponse
 function stageFromJob(stage: unknown): VisibleStage {
   if (stage === "queued" || stage === "uploading") return "Uploading";
   if (stage === "extracting_frames") return "Extracting Frames";
-  if (stage === "detecting_basketball") return "Detecting Basketball";
-  if (stage === "building_track") return "Building Track";
+  if (stage === "detecting_basketball") return "Detecting Ball";
+  if (stage === "building_track") return "Tracking Objects";
   if (stage === "rendering_replay" || stage === "complete") return "Rendering Replay";
   return "Uploading";
 }
@@ -384,4 +440,25 @@ function getNearestTrackPoint(track: BallTrackPoint[], currentTime: number) {
 
   if (!nearest || nearest.distance > 0.35) return null;
   return nearest;
+}
+
+function getNearestPlayerFrame(track: PlayerTrackPoint[], currentTime: number) {
+  let nearestTime: number | null = null;
+  for (const point of track) {
+    const distance = Math.abs(point.time - currentTime);
+    if (distance > 0.35) continue;
+    if (nearestTime === null || distance < Math.abs(nearestTime - currentTime)) nearestTime = point.time;
+  }
+  if (nearestTime === null) return [];
+  return track
+    .filter((point) => Math.abs(point.time - nearestTime) < 0.001)
+    .map((point) => ({
+      confidence: point.confidence,
+      id: point.id,
+      label: point.label,
+      sourceHeight: point.sourceHeight,
+      sourceWidth: point.sourceWidth,
+      x: point.x,
+      y: point.y,
+    }));
 }

@@ -5,12 +5,26 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import { extractAxisFrames } from "./axis-ffmpeg";
+import { exportAxisReplayMp4, extractAxisFrames } from "./axis-ffmpeg";
 import { classifyZone, type AxisDetection, type AxisEvent, type AxisTrack } from "./axis-primitives";
 
 export type AxisBallTrackPoint = {
   confidence: number;
   frame: number;
+  sourceHeight?: number;
+  sourceWidth?: number;
+  time: number;
+  x: number;
+  y: number;
+};
+
+export type AxisPlayerTrackPoint = {
+  confidence: number;
+  frame: number;
+  id: string;
+  label?: string;
+  sourceHeight?: number;
+  sourceWidth?: number;
   time: number;
   x: number;
   y: number;
@@ -22,7 +36,15 @@ export type AxisBallProcessingResult = {
   detections: AxisDetection[];
   events: AxisEvent[];
   frameCount: number;
+  playerTrack: AxisPlayerTrackPoint[];
+  replayExport?: {
+    height: number | null;
+    path: string;
+    sizeBytes: number;
+    width: number | null;
+  };
   tracks: AxisTrack[];
+  workDir?: string;
 };
 
 export type AxisBallProcessingStageUpdate =
@@ -32,6 +54,8 @@ export type AxisBallProcessingStageUpdate =
   | "rendering_replay";
 
 export type AxisBallProcessingOptions = {
+  exportReplay?: boolean;
+  keepWorkDir?: boolean;
   sessionId?: string;
   sourceJobId?: string;
 };
@@ -61,6 +85,7 @@ type RoboflowImage = {
 const frameIntervalSeconds = 0.1;
 const roboflowProject = "axis-kenetic-observer";
 const roboflowVersion = "1";
+const playerClasses = new Set(["athlete", "person", "player"]);
 
 export function getMuxPlaybackUrl(playbackId?: string | null) {
   return playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : "";
@@ -113,6 +138,7 @@ export async function runAxisBallProcessing(
         detections: [],
         events: [],
         frameCount: 0,
+        playerTrack: [],
         tracks: [],
       };
     }
@@ -145,17 +171,44 @@ export async function runAxisBallProcessing(
     logAxisBallProcessingMemory("BEFORE_REPLAY_GENERATION", {
       ballTrackCount: detectionResult.ballTrack.length,
       frameCount: frames.length,
+      playerTrackCount: detectionResult.playerTrack.length,
     });
+    const replayExportPath = path.join(workDir, "axis-replay.mp4");
+    const replayExport = options.exportReplay
+      ? await exportAxisReplayMp4({
+          configureFilters: (command, metadata) => {
+            const filters = createReplayOverlayFilters({
+              ballTrack: detectionResult.ballTrack,
+              playerTrack: detectionResult.playerTrack,
+              sourceHeight: metadata.height ?? undefined,
+              sourceWidth: metadata.width ?? undefined,
+            });
+            if (filters.length) command.videoFilters(filters);
+          },
+          inputPath: extractionInputPath,
+          outputPath: replayExportPath,
+        })
+      : null;
     return {
       ballTrack: detectionResult.ballTrack,
       detectionCount: detectionResult.detectionCount,
       detections: detectionResult.detections,
       events: detectionResult.events,
       frameCount: frames.length,
+      playerTrack: detectionResult.playerTrack,
+      replayExport: replayExport
+        ? {
+            height: replayExport.height,
+            path: replayExport.export_path,
+            sizeBytes: replayExport.size_bytes,
+            width: replayExport.width,
+          }
+        : undefined,
       tracks: detectionResult.tracks,
+      workDir: options.keepWorkDir ? workDir : undefined,
     };
   } finally {
-    await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
+    if (!options.keepWorkDir) await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
   }
 }
 
@@ -170,7 +223,7 @@ async function listFrames(framesDir: string): Promise<FrameFile[]> {
     }));
 }
 
-async function detectBasketballs(frames: FrameFile[], options: Required<AxisBallProcessingOptions>) {
+async function detectBasketballs(frames: FrameFile[], options: { sessionId: string; sourceJobId: string }) {
   const apiKey = process.env.ROBOFLOW_API_KEY;
   if (!apiKey) throw new Error("ROBOFLOW_API_KEY is required.");
 
@@ -178,6 +231,7 @@ async function detectBasketballs(frames: FrameFile[], options: Required<AxisBall
     apiKey,
   )}&confidence=35&overlap=30`;
   const ballTrack: AxisBallTrackPoint[] = [];
+  const playerTrack: AxisPlayerTrackPoint[] = [];
   const detections: AxisDetection[] = [];
   let detectionCount = 0;
 
@@ -200,9 +254,13 @@ async function detectBasketballs(frames: FrameFile[], options: Required<AxisBall
 
     const frameWidth = getNumber(result.image?.width);
     const frameHeight = getNumber(result.image?.height);
-    const basketballs = result.predictions
-      .map((prediction) => normalizePrediction(prediction, { ...options, frame, frameHeight, frameWidth }))
-      .filter((prediction) => prediction.className === "basketball");
+    const normalizedPredictions = result.predictions.map((prediction) => normalizePrediction(prediction, { ...options, frame, frameHeight, frameWidth }));
+    const basketballs = normalizedPredictions.filter((prediction) => prediction.className === "basketball");
+    const players = normalizedPredictions
+      .filter((prediction) => playerClasses.has(prediction.className))
+      .filter((prediction) => isFiniteNumber(prediction.x) && isFiniteNumber(prediction.y))
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 10);
     detectionCount += basketballs.length;
     detections.push(...basketballs.map((prediction) => prediction.detection));
 
@@ -223,10 +281,25 @@ async function detectBasketballs(frames: FrameFile[], options: Required<AxisBall
     ballTrack.push({
       confidence: best.confidence,
       frame: frame.frame,
+      ...(frameHeight ? { sourceHeight: frameHeight } : {}),
+      ...(frameWidth ? { sourceWidth: frameWidth } : {}),
       time: roundTime((frame.frame - 1) * frameIntervalSeconds),
       x: best.x,
       y: best.y,
     });
+    playerTrack.push(
+      ...players.map((player, index) => ({
+        confidence: player.confidence,
+        frame: frame.frame,
+        id: `player_${index + 1}`,
+        label: String(index + 1),
+        ...(frameHeight ? { sourceHeight: frameHeight } : {}),
+        ...(frameWidth ? { sourceWidth: frameWidth } : {}),
+        time: roundTime((frame.frame - 1) * frameIntervalSeconds),
+        x: player.x ?? 0,
+        y: player.y ?? 0,
+      })),
+    );
   }
 
   const tracks = buildAxisTracksFromBallTrack(ballTrack, options.sessionId);
@@ -237,6 +310,7 @@ async function detectBasketballs(frames: FrameFile[], options: Required<AxisBall
     detectionCount,
     detections,
     events,
+    playerTrack,
     tracks,
   };
 }
@@ -420,6 +494,89 @@ function normalizeFramePoint({
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function createReplayOverlayFilters({
+  ballTrack,
+  playerTrack,
+  sourceHeight,
+  sourceWidth,
+}: {
+  ballTrack: AxisBallTrackPoint[];
+  playerTrack: AxisPlayerTrackPoint[];
+  sourceHeight?: number;
+  sourceWidth?: number;
+}) {
+  const filters: string[] = [];
+  const safeSourceWidth = sourceWidth ?? firstSourceSize(ballTrack, playerTrack).width;
+  const safeSourceHeight = sourceHeight ?? firstSourceSize(ballTrack, playerTrack).height;
+
+  for (const [index, point] of ballTrack.entries()) {
+    const mapped = mapExportPoint(point, safeSourceWidth, safeSourceHeight);
+    const start = Math.max(0, point.time - 0.08);
+    const end = point.time + 0.22;
+    const alpha = Math.max(0.28, Math.min(0.92, point.confidence > 1 ? point.confidence / 100 : point.confidence));
+    filters.push(
+      `drawbox=x=${Math.round(mapped.x - 9)}:y=${Math.round(mapped.y - 9)}:w=18:h=18:color=0xAEFF4E@${alpha.toFixed(
+        2,
+      )}:t=fill:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
+    );
+    if (index > 0) {
+      const previous = mapExportPoint(ballTrack[index - 1], safeSourceWidth, safeSourceHeight);
+      const trailStart = Math.max(0, point.time - 0.2);
+      filters.push(
+        `drawbox=x=${Math.round((previous.x + mapped.x) / 2 - 5)}:y=${Math.round((previous.y + mapped.y) / 2 - 5)}:w=10:h=10:color=0xAEFF4E@0.38:t=fill:enable='between(t,${trailStart.toFixed(
+          3,
+        )},${end.toFixed(3)})'`,
+      );
+    }
+  }
+
+  for (const point of playerTrack) {
+    const mapped = mapExportPoint(point, safeSourceWidth, safeSourceHeight);
+    const start = Math.max(0, point.time - 0.08);
+    const end = point.time + 0.18;
+    filters.push(
+      `drawbox=x=${Math.round(mapped.x - 24)}:y=${Math.round(mapped.y - 8)}:w=48:h=16:color=white@0.72:t=3:enable='between(t,${start.toFixed(
+        3,
+      )},${end.toFixed(3)})'`,
+    );
+    if (point.label) {
+      filters.push(
+        `drawtext=text='${escapeDrawText(point.label)}':x=${Math.round(mapped.x - 5)}:y=${Math.round(
+          mapped.y - 42,
+        )}:fontsize=24:fontcolor=white@0.92:box=1:boxcolor=black@0.45:boxborderw=6:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
+      );
+    }
+  }
+
+  console.log("AXIS_REPLAY_EXPORT_FILTERS_CREATED", {
+    ballFilterCount: ballTrack.length,
+    filterCount: filters.length,
+    playerFilterCount: playerTrack.length,
+  });
+  return filters;
+}
+
+function firstSourceSize(ballTrack: AxisBallTrackPoint[], playerTrack: AxisPlayerTrackPoint[]) {
+  const point = [...ballTrack, ...playerTrack].find((item) => item.sourceWidth && item.sourceHeight);
+  return {
+    height: point?.sourceHeight ?? 540,
+    width: point?.sourceWidth ?? 960,
+  };
+}
+
+function mapExportPoint(point: AxisBallTrackPoint | AxisPlayerTrackPoint, targetWidth: number, targetHeight: number) {
+  const sourceWidth = point.sourceWidth || targetWidth || 1;
+  const sourceHeight = point.sourceHeight || targetHeight || 1;
+  return {
+    x: (point.x / sourceWidth) * targetWidth,
+    y: (point.y / sourceHeight) * targetHeight,
+  };
+}
+
+function escapeDrawText(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
 }
 
 async function downloadVideoToLocalFile(videoUrl: string, localPath: string) {
