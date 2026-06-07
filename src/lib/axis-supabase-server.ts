@@ -1,4 +1,4 @@
-import type { SupabaseClientOptions } from "@supabase/supabase-js";
+import { createClient, type SupabaseClientOptions } from "@supabase/supabase-js";
 import crypto from "node:crypto";
 
 export type AxisSupabaseServerEnvDiagnostics = {
@@ -203,6 +203,53 @@ export function logAxisSupabaseClientEnv(client: string) {
   return env;
 }
 
+export async function verifyAxisSupabaseServiceRoleConnectivity(stage: string) {
+  const env = assertAxisSupabaseServerEnv(`${stage}:connectivity`);
+  const supabase = createClient(env.url, env.key, axisServerSupabaseOptions);
+
+  const authResponse = await supabase.auth.getUser().catch((error: unknown) => ({
+    data: null,
+    error,
+  }));
+  const authError = normalizeSupabaseError(authResponse.error);
+  console.log("AXIS_SUPABASE_SERVICE_ROLE_AUTH_CHECK", {
+    authResponse: {
+      hasUser: Boolean(authResponse.data?.user),
+      userId: authResponse.data?.user?.id ?? null,
+    },
+    error: authError,
+    keyHashFirst8: env.diagnostics.serviceKeyHashFirst8,
+    keyHashLast8: env.diagnostics.serviceKeyHashLast8,
+    keySourceName: env.diagnostics.serviceKeySource,
+    stage,
+    url: env.url,
+  });
+
+  const selectUrl = `${env.url.replace(/\/+$/, "")}/rest/v1/axis_events?select=id&limit=1`;
+  const selectResponse = await fetch(selectUrl, {
+    headers: {
+      Authorization: `Bearer ${env.key}`,
+      apikey: env.key,
+    },
+  });
+  const selectBody = await selectResponse.text().catch(() => "");
+  const parsedBody = parseJson(selectBody);
+  console.log("AXIS_SUPABASE_SERVICE_ROLE_SELECT_CHECK", {
+    body: parsedBody ?? selectBody.slice(0, 500),
+    error: selectResponse.ok ? null : getResponseError(parsedBody, selectBody),
+    keyHashFirst8: env.diagnostics.serviceKeyHashFirst8,
+    keyHashLast8: env.diagnostics.serviceKeyHashLast8,
+    keySourceName: env.diagnostics.serviceKeySource,
+    request: {
+      table: "axis_events",
+      url: selectUrl,
+    },
+    stage,
+    status: selectResponse.status,
+    statusText: selectResponse.statusText,
+  });
+}
+
 function normalizeEnvValue(value: string) {
   const trimmed = value.trim();
   const quote = trimmed[0];
@@ -245,4 +292,39 @@ function getKeyHashPart(value: string, part: "first" | "last") {
   if (!value) return null;
   const hash = crypto.createHash("sha256").update(value).digest("hex");
   return part === "first" ? hash.slice(0, 8) : hash.slice(-8);
+}
+
+function normalizeSupabaseError(error: unknown) {
+  if (!error) return null;
+  if (typeof error === "object" && !Array.isArray(error)) {
+    const record = error as Record<string, unknown>;
+    return {
+      code: typeof record.code === "string" ? record.code : null,
+      message: typeof record.message === "string" ? record.message : String(error),
+      name: typeof record.name === "string" ? record.name : null,
+      status: typeof record.status === "number" ? record.status : null,
+    };
+  }
+  return { code: null, message: String(error), name: null, status: null };
+}
+
+function parseJson(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function getResponseError(parsedBody: unknown, rawBody: string) {
+  if (parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)) {
+    const record = parsedBody as Record<string, unknown>;
+    return {
+      code: typeof record.code === "string" ? record.code : null,
+      details: typeof record.details === "string" ? record.details : null,
+      hint: typeof record.hint === "string" ? record.hint : null,
+      message: typeof record.message === "string" ? record.message : rawBody.slice(0, 500),
+    };
+  }
+  return { code: null, details: null, hint: null, message: rawBody.slice(0, 500) };
 }

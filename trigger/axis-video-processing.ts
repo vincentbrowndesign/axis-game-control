@@ -5,7 +5,7 @@ import { storeAxisEvents } from "../src/lib/axis-events";
 import type { AxisVideoJobRecord } from "../src/lib/axis-video-jobs";
 import { getAxisVideoJob, updateAxisVideoJob } from "../src/lib/axis-video-jobs";
 import { uploadCloudflareStreamVideoFile, waitForCloudflareMp4Download, waitForCloudflareStreamReady } from "../src/lib/cloudflare-stream";
-import { assertAxisSupabaseServerEnv } from "../src/lib/axis-supabase-server";
+import { assertAxisSupabaseServerEnv, verifyAxisSupabaseServiceRoleConnectivity } from "../src/lib/axis-supabase-server";
 
 type AxisVideoProcessingPayload = {
   cloudflareUid: string;
@@ -29,6 +29,7 @@ export const axisVideoProcessing = task({
     try {
       console.log("PROCESSING_START", { jobId: payload.jobId });
       assertAxisSupabaseServerEnv("axis-video-processing:startup");
+      await verifyAxisSupabaseServiceRoleConnectivity("axis-video-processing:startup");
       logAxisVideoProcessingMemory("PROCESSING_START_AFTER_LOG", { jobId: payload.jobId });
       console.log("PROCESSING_STEP_1", {
         request: "supabase.axis_video_jobs.update",
