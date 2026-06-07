@@ -52,6 +52,9 @@ export type AxisVideoJobRecord = {
 
 type AxisSupabaseFailure = {
   code: AxisSupabaseErrorCode;
+  details?: string | null;
+  hint?: string | null;
+  message?: string;
   reason: string;
   stored: false;
 };
@@ -102,8 +105,42 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
     .single();
 
   if (error) {
-    logSupabaseWriteError("insert", error.message);
-    return supabaseFailure(getWriteErrorCode(error.message), error.message);
+    logSupabaseWriteError("insert", error, {
+      payload: {
+        asset_id: record.asset_id,
+        ball_track: record.ball_track,
+        ball_track_count: record.ball_track_count,
+        cloudflare_uid: record.cloudflare_uid,
+        detection_count: record.detection_count,
+        error: record.error,
+        file_size: record.file_size,
+        filename: record.filename,
+        frame_count: record.frame_count,
+        job_id: record.job_id,
+        mp4_ready_at: record.mp4_ready_at,
+        mux_playback_id: record.mux_playback_id,
+        mux_upload_id: record.mux_upload_id,
+        organization_id: record.organization_id,
+        processing_stage: record.processing_stage,
+        progress: record.progress,
+        session_id: record.session_id,
+        status: record.status,
+        storage_path: record.storage_path,
+        storage_provider: record.storage_provider,
+        trigger_run_id: record.trigger_run_id,
+        upload_url_created_at: record.upload_url_created_at,
+        user_id: record.user_id,
+        video_ready_at: record.video_ready_at,
+        video_id: record.video_id,
+        video_url: record.video_url,
+      },
+      table: "axis_video_jobs",
+    });
+    return supabaseFailure(getWriteErrorCode(error.message), error.message, {
+      details: error.details,
+      hint: error.hint,
+      message: error.message,
+    });
   }
   return { record: mapAxisVideoJobRow(data), stored: true as const };
 }
@@ -137,39 +174,49 @@ export async function getAxisVideoJobByCloudflareUid(cloudflareUid: string) {
 export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideoJobRecord>) {
   const supabase = getAxisVideoJobClient();
   if (!supabase) return supabaseFailure("SUPABASE_SERVICE_ROLE_MISSING", "SUPABASE_SERVICE_ROLE_KEY is required for Axis video job updates.");
+  const updatePayload = {
+    ...("ball_track" in patch ? { ball_track: patch.ball_track ?? [] } : {}),
+    ...("ball_track_count" in patch ? { ball_track_count: patch.ball_track_count ?? 0 } : {}),
+    ...("cloudflare_uid" in patch ? { cloudflare_uid: patch.cloudflare_uid ?? "" } : {}),
+    ...("detection_count" in patch ? { detection_count: patch.detection_count ?? 0 } : {}),
+    ...("error" in patch ? { error: patch.error ?? null } : {}),
+    ...("file_size" in patch ? { file_size: patch.file_size ?? 0 } : {}),
+    ...("filename" in patch ? { filename: patch.filename ?? "" } : {}),
+    ...("frame_count" in patch ? { frame_count: patch.frame_count ?? 0 } : {}),
+    ...("mp4_ready_at" in patch ? { mp4_ready_at: patch.mp4_ready_at ?? null } : {}),
+    ...("organization_id" in patch ? { organization_id: patch.organization_id ?? null } : {}),
+    ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "queued" } : {}),
+    ...("progress" in patch ? { progress: clampProgress(patch.progress) } : {}),
+    ...("session_id" in patch ? { session_id: patch.session_id ?? null } : {}),
+    ...("status" in patch ? { status: patch.status } : {}),
+    ...("trigger_run_id" in patch ? { trigger_run_id: patch.trigger_run_id ?? null } : {}),
+    ...("upload_url_created_at" in patch ? { upload_url_created_at: patch.upload_url_created_at ?? null } : {}),
+    ...("user_id" in patch ? { user_id: patch.user_id ?? null } : {}),
+    ...("video_ready_at" in patch ? { video_ready_at: patch.video_ready_at ?? null } : {}),
+    ...("video_id" in patch ? { video_id: patch.video_id ?? null } : {}),
+    ...("video_url" in patch ? { video_url: patch.video_url ?? "" } : {}),
+    updated_at: new Date().toISOString(),
+  };
 
   const { data, error } = await supabase
     .from("axis_video_jobs")
-    .update({
-      ...("ball_track" in patch ? { ball_track: patch.ball_track ?? [] } : {}),
-      ...("ball_track_count" in patch ? { ball_track_count: patch.ball_track_count ?? 0 } : {}),
-      ...("cloudflare_uid" in patch ? { cloudflare_uid: patch.cloudflare_uid ?? "" } : {}),
-      ...("detection_count" in patch ? { detection_count: patch.detection_count ?? 0 } : {}),
-      ...("error" in patch ? { error: patch.error ?? null } : {}),
-      ...("file_size" in patch ? { file_size: patch.file_size ?? 0 } : {}),
-      ...("filename" in patch ? { filename: patch.filename ?? "" } : {}),
-      ...("frame_count" in patch ? { frame_count: patch.frame_count ?? 0 } : {}),
-      ...("mp4_ready_at" in patch ? { mp4_ready_at: patch.mp4_ready_at ?? null } : {}),
-      ...("organization_id" in patch ? { organization_id: patch.organization_id ?? null } : {}),
-      ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "queued" } : {}),
-      ...("progress" in patch ? { progress: clampProgress(patch.progress) } : {}),
-      ...("session_id" in patch ? { session_id: patch.session_id ?? null } : {}),
-      ...("status" in patch ? { status: patch.status } : {}),
-      ...("trigger_run_id" in patch ? { trigger_run_id: patch.trigger_run_id ?? null } : {}),
-      ...("upload_url_created_at" in patch ? { upload_url_created_at: patch.upload_url_created_at ?? null } : {}),
-      ...("user_id" in patch ? { user_id: patch.user_id ?? null } : {}),
-      ...("video_ready_at" in patch ? { video_ready_at: patch.video_ready_at ?? null } : {}),
-      ...("video_id" in patch ? { video_id: patch.video_id ?? null } : {}),
-      ...("video_url" in patch ? { video_url: patch.video_url ?? "" } : {}),
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("job_id", jobId)
     .select()
     .single();
 
   if (error) {
-    logSupabaseWriteError("update", error.message);
-    return supabaseFailure(getWriteErrorCode(error.message), error.message);
+    logSupabaseWriteError("update", error, {
+      jobId,
+      payload: updatePayload,
+      table: "axis_video_jobs",
+      where: { job_id: jobId },
+    });
+    return supabaseFailure(getWriteErrorCode(error.message), error.message, {
+      details: error.details,
+      hint: error.hint,
+      message: error.message,
+    });
   }
   return { record: mapAxisVideoJobRow(data), stored: true as const };
 }
@@ -267,8 +314,12 @@ function getStage(value: unknown): AxisVideoProcessingStage {
   return "queued";
 }
 
-function supabaseFailure(code: AxisSupabaseErrorCode, reason: string): AxisSupabaseFailure {
-  return { code, reason, stored: false };
+function supabaseFailure(
+  code: AxisSupabaseErrorCode,
+  reason: string,
+  meta: Pick<AxisSupabaseFailure, "details" | "hint" | "message"> = {},
+): AxisSupabaseFailure {
+  return { code, ...meta, reason, stored: false };
 }
 
 function getWriteErrorCode(message: string): AxisSupabaseErrorCode {
@@ -279,13 +330,28 @@ function getReadErrorCode(message: string): AxisSupabaseErrorCode {
   return /permission|forbidden|row-level security|rls/i.test(message) ? "SUPABASE_READ_FORBIDDEN" : "SUPABASE_WRITE_FAILED";
 }
 
-function logSupabaseWriteError(operation: string, error: string) {
+function logSupabaseWriteError(
+  operation: string,
+  error: { code?: string; details?: string | null; hint?: string | null; message: string },
+  context: {
+    jobId?: string;
+    payload?: Record<string, unknown>;
+    table: string;
+    where?: Record<string, unknown>;
+  },
+) {
   const env = getAxisSupabaseServerEnv();
   console.error("AXIS_SUPABASE_WRITE_ERROR", {
     client: "axis_video_jobs",
+    code: error.code ?? null,
+    details: error.details ?? null,
     diagnostics: env.diagnostics,
-    error,
+    hint: error.hint ?? null,
+    jobId: context.jobId ?? null,
+    message: error.message,
     operation,
-    table: "axis_video_jobs",
+    payload: context.payload ?? null,
+    table: context.table,
+    where: context.where ?? null,
   });
 }

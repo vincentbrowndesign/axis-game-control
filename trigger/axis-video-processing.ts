@@ -212,9 +212,15 @@ async function persistAxisVideoJobUpdate(stage: string, jobId: string, patch: Pa
   if (!result.stored) {
     console.error("AXIS_VIDEO_JOB_UPDATE_FAILED", {
       code: result.code,
+      details: result.details ?? null,
+      hint: result.hint ?? null,
       jobId,
+      message: result.message ?? result.reason,
+      payload: patch,
       reason: result.reason,
       stage,
+      table: "axis_video_jobs",
+      where: { job_id: jobId },
     });
     throw new Error(`${stage}: ${result.code}: ${result.reason}`);
   }
