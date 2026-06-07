@@ -158,6 +158,7 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
       ...("user_id" in patch ? { user_id: patch.user_id ?? null } : {}),
       ...("video_ready_at" in patch ? { video_ready_at: patch.video_ready_at ?? null } : {}),
       ...("video_id" in patch ? { video_id: patch.video_id ?? null } : {}),
+      ...("video_url" in patch ? { video_url: patch.video_url ?? "" } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("job_id", jobId)

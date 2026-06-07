@@ -1,5 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { runAxisBallProcessing } from "../src/lib/axis-ball-processing";
+import type { AxisVideoJobRecord } from "../src/lib/axis-video-jobs";
 import { getAxisVideoJob, updateAxisVideoJob } from "../src/lib/axis-video-jobs";
 import { waitForCloudflareMp4Download, waitForCloudflareStreamReady } from "../src/lib/cloudflare-stream";
 
@@ -29,7 +30,7 @@ export const axisVideoProcessing = task({
         request: "supabase.axis_video_jobs.update",
         stage: "mark_stream_processing",
       });
-      await updateAxisVideoJob(payload.jobId, {
+      await persistAxisVideoJobUpdate("PROCESSING_MARK_STREAM_PROCESSING", payload.jobId, {
         error: null,
         progress: 10,
         status: "stream_processing",
@@ -41,7 +42,7 @@ export const axisVideoProcessing = task({
       });
       const streamVideo = await waitForCloudflareStreamReady(payload.cloudflareUid);
       const videoReadyAt = new Date().toISOString();
-      await updateAxisVideoJob(payload.jobId, {
+      await persistAxisVideoJobUpdate("PROCESSING_MARK_VIDEO_READY", payload.jobId, {
         progress: 25,
         status: "ready_for_axis_processing",
         video_ready_at: videoReadyAt,
@@ -66,7 +67,7 @@ export const axisVideoProcessing = task({
         mp4Url,
       });
       const mp4ReadyAt = new Date().toISOString();
-      await updateAxisVideoJob(payload.jobId, {
+      await persistAxisVideoJobUpdate("PROCESSING_MARK_AXIS_PROCESSING", payload.jobId, {
         mp4_ready_at: mp4ReadyAt,
         progress: 35,
         status: "axis_processing",
@@ -86,7 +87,7 @@ export const axisVideoProcessing = task({
       });
       console.log("FRAME_EXTRACTION_START", { jobId: payload.jobId });
       const result = await runAxisBallProcessing(mp4Url, async (stage) => {
-        await updateAxisVideoJob(payload.jobId, {
+        await persistAxisVideoJobUpdate("PROCESSING_STAGE_UPDATE", payload.jobId, {
           processing_stage: stage,
           progress: progressFromStage(stage),
           status: "axis_processing",
@@ -98,7 +99,8 @@ export const axisVideoProcessing = task({
       console.log("BALL_TRACK_CREATED", { ballTrackCount: result.ballTrack.length, jobId: payload.jobId });
 
       const job = await getAxisVideoJob(payload.jobId);
-      await updateAxisVideoJob(payload.jobId, {
+      if (job.error) throw new Error(`Axis video job read failed before final update: ${job.error}`);
+      const finalUpdate = await persistAxisVideoJobUpdate("PROCESSING_FINAL_REPLAY_READY", payload.jobId, {
         ball_track: result.ballTrack,
         ball_track_count: result.ballTrack.length,
         detection_count: result.detectionCount,
@@ -113,6 +115,7 @@ export const axisVideoProcessing = task({
       console.log("JOB_READY", {
         ballTrackCount: result.ballTrack.length,
         cloudflareUid: payload.cloudflareUid,
+        persistedStatus: finalUpdate.record.status,
         jobId: payload.jobId,
       });
 
@@ -126,12 +129,20 @@ export const axisVideoProcessing = task({
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      await updateAxisVideoJob(payload.jobId, {
-        error: reason,
-        processing_stage: "failed",
-        progress: 0,
-        status: "failed",
-      });
+      try {
+        await persistAxisVideoJobUpdate("PROCESSING_MARK_FAILED", payload.jobId, {
+          error: reason,
+          processing_stage: "failed",
+          progress: 0,
+          status: "failed",
+        });
+      } catch (persistenceError) {
+        console.error("AXIS_VIDEO_PROCESSING_FAILED_STATUS_WRITE_FAILED", {
+          cloudflareUid: payload.cloudflareUid,
+          jobId: payload.jobId,
+          reason: persistenceError instanceof Error ? persistenceError.message : String(persistenceError),
+        });
+      }
       console.error("AXIS_VIDEO_PROCESSING_FAILED", {
         cloudflareUid: payload.cloudflareUid,
         jobId: payload.jobId,
@@ -149,6 +160,29 @@ function progressFromStage(stage: string) {
   if (stage === "rendering_replay") return 95;
   if (stage === "complete") return 100;
   return 40;
+}
+
+async function persistAxisVideoJobUpdate(stage: string, jobId: string, patch: Partial<AxisVideoJobRecord>) {
+  const result = await updateAxisVideoJob(jobId, patch);
+  if (!result.stored) {
+    console.error("AXIS_VIDEO_JOB_UPDATE_FAILED", {
+      code: result.code,
+      jobId,
+      reason: result.reason,
+      stage,
+    });
+    throw new Error(`${stage}: ${result.code}: ${result.reason}`);
+  }
+
+  console.log("AXIS_VIDEO_JOB_UPDATE_STORED", {
+    ballTrackCount: result.record.ball_track_count,
+    jobId,
+    processingStage: result.record.processing_stage,
+    progress: result.record.progress,
+    stage,
+    status: result.record.status,
+  });
+  return result;
 }
 
 function isRemoteUrl(value: string) {
