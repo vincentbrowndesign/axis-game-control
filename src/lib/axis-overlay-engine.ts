@@ -59,6 +59,11 @@ type AxisOverlayMapping = {
   scale: number;
 };
 
+export type AxisOverlayPoint = {
+  x: number;
+  y: number;
+};
+
 const defaultConfidenceThreshold = 0.35;
 const defaultMaxBallHistory = 36;
 const movementSpikeDistance = 34;
@@ -197,32 +202,11 @@ function drawPlayerIndicators(
     if (confidenceValue(player.confidence) < threshold) continue;
     const point = mapOverlayPoint(player, coordinateSpace, mapping, options);
 
-    ctx.save();
-    ctx.globalAlpha = 0.94;
-    ctx.strokeStyle = "rgba(245,248,239,0.96)";
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 18;
-    ctx.shadowColor = "rgba(245,248,239,0.48)";
-    ctx.beginPath();
-    ctx.ellipse(point.x, point.y + 5, 22, 8, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = "rgba(245,248,239,0.72)";
-    ctx.beginPath();
-    ctx.ellipse(point.x, point.y + 5, 18, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    if ((options.drawLabels ?? true) && player.label) {
-      ctx.globalAlpha = 0.9;
-      ctx.shadowBlur = 10;
-      ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillStyle = "rgba(245,248,239,0.92)";
-      ctx.fillText(player.label.toUpperCase(), point.x, point.y - 12);
-    }
-    ctx.restore();
+    renderPlayerRing(ctx, {
+      label: (options.drawLabels ?? true) ? player.label : undefined,
+      x: point.x,
+      y: point.y,
+    });
   }
 }
 
@@ -237,14 +221,48 @@ function drawBallTrail(
   const recent = history.filter((point) => Math.abs(timestamp - point.timestamp) <= 1.25);
   if (recent.length < 2) return;
   const mapped = recent.map((point) => mapOverlayPoint(point, coordinateSpace, mapping, options));
+  renderBallTrail(ctx, mapped);
+}
+
+export function renderPlayerRing(ctx: CanvasRenderingContext2D, player: AxisOverlayPoint & { label?: string }) {
+  ctx.save();
+  ctx.globalAlpha = 0.94;
+  ctx.strokeStyle = "rgba(245,248,239,0.96)";
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 18;
+  ctx.shadowColor = "rgba(245,248,239,0.48)";
+  ctx.beginPath();
+  ctx.ellipse(player.x, player.y + 5, 22, 8, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = "rgba(245,248,239,0.72)";
+  ctx.beginPath();
+  ctx.ellipse(player.x, player.y + 5, 18, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (player.label) {
+    ctx.globalAlpha = 0.9;
+    ctx.shadowBlur = 10;
+    ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "rgba(245,248,239,0.92)";
+    ctx.fillText(player.label.toUpperCase(), player.x, player.y - 12);
+  }
+  ctx.restore();
+}
+
+export function renderBallTrail(ctx: CanvasRenderingContext2D, points: AxisOverlayPoint[]) {
+  if (points.length < 2) return;
 
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  for (let index = 1; index < mapped.length; index += 1) {
-    const fade = index / Math.max(1, mapped.length - 1);
-    const from = mapped[index - 1];
-    const to = mapped[index];
+  for (let index = 1; index < points.length; index += 1) {
+    const fade = index / Math.max(1, points.length - 1);
+    const from = points[index - 1];
+    const to = points[index];
     const midX = (from.x + to.x) / 2;
     const midY = (from.y + to.y) / 2;
     ctx.globalAlpha = fade * 0.74;
@@ -257,6 +275,27 @@ function drawBallTrail(
     ctx.quadraticCurveTo(midX, midY, to.x, to.y);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+export function renderPressurePulse(
+  ctx: CanvasRenderingContext2D,
+  pulse: AxisOverlayPoint & { age?: number; kind?: "ball" | "court" | "player"; strength?: number },
+) {
+  const age = Math.max(0, Math.min(1, pulse.age ?? 0));
+  const strength = pulse.strength ?? 1;
+  const alpha = (1 - age) * 0.42 * strength;
+  const radius = 12 + age * 72 * strength;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = pulse.kind === "player" ? "rgba(245,248,239,0.85)" : "rgba(174,255,78,0.9)";
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 22;
+  ctx.shadowColor = pulse.kind === "player" ? "rgba(245,248,239,0.5)" : "rgba(174,255,78,0.72)";
+  ctx.beginPath();
+  ctx.ellipse(pulse.x, pulse.y + 5, radius, radius * 0.36, 0, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -293,19 +332,7 @@ function drawPressurePulses(ctx: CanvasRenderingContext2D, state: AxisOverlayEng
 
   for (const pulse of state.pulses) {
     const age = Math.max(0, Math.min(1, (now - pulse.createdAt) / pulseLifeMs));
-    const alpha = (1 - age) * 0.42 * pulse.strength;
-    const radius = 12 + age * 72 * pulse.strength;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = pulse.kind === "player" ? "rgba(245,248,239,0.85)" : "rgba(174,255,78,0.9)";
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 22;
-    ctx.shadowColor = pulse.kind === "player" ? "rgba(245,248,239,0.5)" : "rgba(174,255,78,0.72)";
-    ctx.beginPath();
-    ctx.ellipse(pulse.x, pulse.y + 5, radius, radius * 0.36, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    renderPressurePulse(ctx, { age, kind: pulse.kind, strength: pulse.strength, x: pulse.x, y: pulse.y });
   }
 }
 
