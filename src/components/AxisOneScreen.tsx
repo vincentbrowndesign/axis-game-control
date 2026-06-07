@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { axisAuthenticatedFetch } from "../lib/axis-client-auth";
 import {
-  createAxisCvOverlayState,
-  drawAxisCvOverlay,
-  resetAxisCvOverlayState,
-  type OverlayFrame,
-} from "../lib/axis-cv-overlay";
+  createAxisOverlayEngineState,
+  renderAxisOverlayFrame,
+  resetAxisOverlayEngineState,
+  type AxisOverlayFrame,
+} from "../lib/axis-overlay-engine";
 
 type AppState = "choose" | "complete" | "failed" | "processing" | "replay";
 type VisibleStage =
@@ -68,7 +68,7 @@ export function AxisOneScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
-  const overlayStateRef = useRef(createAxisCvOverlayState());
+  const overlayStateRef = useRef(createAxisOverlayEngineState());
   const rafRef = useRef<number>(0);
   const timerStartedAtRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -105,16 +105,24 @@ export function AxisOneScreen() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const nearest = getNearestTrackPoint(sortedTrack, video.currentTime);
-    const frame: OverlayFrame = {
+    const frame: AxisOverlayFrame = {
       ball: nearest?.point,
       players: [],
       timestamp: video.currentTime,
     };
-    drawAxisCvOverlay(ctx, frame, overlayStateRef.current, width, height, {
+    renderAxisOverlayFrame({
+      canvasHeight: height,
+      canvasWidth: width,
+      ctx,
+      frame,
+      options: {
       confidenceThreshold,
+      coordinateSpace: "video",
       fit: "contain",
-      videoHeight: video.videoHeight || height,
-      videoWidth: video.videoWidth || width,
+      sourceHeight: video.videoHeight || height,
+      sourceWidth: video.videoWidth || width,
+      },
+      state: overlayStateRef.current,
     });
 
     rafRef.current = requestAnimationFrame(draw);
@@ -197,7 +205,7 @@ export function AxisOneScreen() {
     setError("");
     setJobId("");
     setElapsedSeconds(0);
-    resetAxisCvOverlayState(overlayStateRef.current);
+    resetAxisOverlayEngineState(overlayStateRef.current);
     setStage("Uploading");
     timerStartedAtRef.current = performance.now();
     setState("processing");
