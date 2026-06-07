@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { axisAuthenticatedFetch } from "../lib/axis-client-auth";
+import {
+  createAxisCvOverlayState,
+  drawAxisCvOverlay,
+  resetAxisCvOverlayState,
+  type OverlayFrame,
+} from "../lib/axis-cv-overlay";
 
 type AppState = "choose" | "complete" | "failed" | "processing" | "replay";
 type VisibleStage =
@@ -57,12 +63,12 @@ type VideoJobResponse = {
 };
 
 const confidenceThreshold = 0.35;
-const trailLength = 20;
 
 export function AxisOneScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const overlayStateRef = useRef(createAxisCvOverlayState());
   const rafRef = useRef<number>(0);
   const timerStartedAtRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -97,13 +103,19 @@ export function AxisOneScreen() {
     }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
 
     const nearest = getNearestTrackPoint(sortedTrack, video.currentTime);
-    if (nearest && normalizeConfidence(nearest.point.confidence) >= confidenceThreshold) {
-      drawTrail(ctx, sortedTrack, nearest.index, video, width, height);
-      drawGlow(ctx, nearest.point, video, width, height);
-    }
+    const frame: OverlayFrame = {
+      ball: nearest?.point,
+      players: [],
+      timestamp: video.currentTime,
+    };
+    drawAxisCvOverlay(ctx, frame, overlayStateRef.current, width, height, {
+      confidenceThreshold,
+      fit: "contain",
+      videoHeight: video.videoHeight || height,
+      videoWidth: video.videoWidth || width,
+    });
 
     rafRef.current = requestAnimationFrame(draw);
   }, [sortedTrack, state]);
@@ -185,6 +197,7 @@ export function AxisOneScreen() {
     setError("");
     setJobId("");
     setElapsedSeconds(0);
+    resetAxisCvOverlayState(overlayStateRef.current);
     setStage("Uploading");
     timerStartedAtRef.current = performance.now();
     setState("processing");
@@ -363,82 +376,4 @@ function getNearestTrackPoint(track: BallTrackPoint[], currentTime: number) {
 
   if (!nearest || nearest.distance > 0.35) return null;
   return nearest;
-}
-
-function drawTrail(
-  ctx: CanvasRenderingContext2D,
-  track: BallTrackPoint[],
-  currentIndex: number,
-  video: HTMLVideoElement,
-  width: number,
-  height: number,
-) {
-  const points = track
-    .slice(Math.max(0, currentIndex - trailLength), currentIndex)
-    .filter((point) => normalizeConfidence(point.confidence) >= confidenceThreshold);
-
-  points.forEach((point, index) => {
-    const mapped = mapPointToVideo(point, video, width, height);
-    const fade = (index + 1) / Math.max(1, points.length);
-
-    ctx.save();
-    ctx.globalAlpha = fade * 0.52;
-    ctx.shadowColor = "rgba(42,255,91,0.95)";
-    ctx.shadowBlur = 14 + fade * 22;
-    ctx.fillStyle = "rgba(42,255,91,0.95)";
-    ctx.beginPath();
-    ctx.arc(mapped.x, mapped.y, 3 + fade * 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  });
-}
-
-function drawGlow(
-  ctx: CanvasRenderingContext2D,
-  point: BallTrackPoint,
-  video: HTMLVideoElement,
-  width: number,
-  height: number,
-) {
-  const mapped = mapPointToVideo(point, video, width, height);
-  const confidence = normalizeConfidence(point.confidence);
-
-  ctx.save();
-  ctx.globalAlpha = Math.max(0.3, confidence * 0.7);
-  ctx.shadowColor = "rgba(42,255,91,1)";
-  ctx.shadowBlur = 54;
-  ctx.fillStyle = "rgba(42,255,91,0.35)";
-  ctx.beginPath();
-  ctx.arc(mapped.x, mapped.y, 32, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.globalAlpha = Math.max(0.72, confidence);
-  ctx.shadowBlur = 24;
-  ctx.fillStyle = "rgba(42,255,91,1)";
-  ctx.beginPath();
-  ctx.arc(mapped.x, mapped.y, 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function mapPointToVideo(
-  point: Pick<BallTrackPoint, "x" | "y">,
-  video: HTMLVideoElement,
-  width: number,
-  height: number,
-) {
-  const videoWidth = video.videoWidth || width;
-  const videoHeight = video.videoHeight || height;
-  const scale = Math.min(width / videoWidth, height / videoHeight);
-  const drawWidth = videoWidth * scale;
-  const drawHeight = videoHeight * scale;
-
-  return {
-    x: (width - drawWidth) / 2 + point.x * scale,
-    y: (height - drawHeight) / 2 + point.y * scale,
-  };
-}
-
-function normalizeConfidence(confidence: number) {
-  return confidence > 1 ? confidence / 100 : confidence;
 }
