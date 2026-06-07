@@ -1,0 +1,4 @@
+inference
+opencv-python
+numpy
+supervision
