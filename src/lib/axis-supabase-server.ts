@@ -1,4 +1,5 @@
 import type { SupabaseClientOptions } from "@supabase/supabase-js";
+import crypto from "node:crypto";
 
 export type AxisSupabaseServerEnvDiagnostics = {
   anonKeyExists: boolean;
@@ -9,6 +10,9 @@ export type AxisSupabaseServerEnvDiagnostics = {
   serviceKeyRole: string | null;
   serviceKeyWasQuoted: boolean;
   serviceKeyFormat: "jwt" | "sb_secret" | "unknown";
+  serviceKeyHashFirst8: string | null;
+  serviceKeyHashLast8: string | null;
+  serviceKeySource: "SUPABASE_SERVICE_ROLE_KEY";
   urlExists: boolean;
   urlHost: string | null;
   urlValid: boolean;
@@ -102,6 +106,9 @@ export function getAxisSupabaseServerEnv(): AxisSupabaseServerEnv {
     serviceKeyRole,
     serviceKeyWasQuoted: keyValue.wasQuoted,
     serviceKeyFormat,
+    serviceKeyHashFirst8: getKeyHashPart(keyValue.value, "first"),
+    serviceKeyHashLast8: getKeyHashPart(keyValue.value, "last"),
+    serviceKeySource: "SUPABASE_SERVICE_ROLE_KEY",
     urlExists: Boolean(urlValue.value),
     urlHost: parsedUrl?.host ?? null,
     urlValid: Boolean(parsedUrl),
@@ -161,6 +168,10 @@ export function assertAxisSupabaseServerEnv(stage: string) {
   const env = getAxisSupabaseServerEnv();
   console.log("AXIS_SUPABASE_ENV_CHECK", {
     ...env.diagnostics,
+    createClientUrl: env.ok ? env.url : null,
+    keyHashFirst8: env.diagnostics.serviceKeyHashFirst8,
+    keyHashLast8: env.diagnostics.serviceKeyHashLast8,
+    keySourceName: env.diagnostics.serviceKeySource,
     ok: env.ok,
     stage,
     ...(env.ok ? {} : { code: env.code, reason: env.reason }),
@@ -182,6 +193,13 @@ export function logAxisSupabaseClientEnv(client: string) {
     });
     return null;
   }
+  console.log("AXIS_SUPABASE_CREATE_CLIENT", {
+    client,
+    createClientUrl: env.url,
+    keyHashFirst8: env.diagnostics.serviceKeyHashFirst8,
+    keyHashLast8: env.diagnostics.serviceKeyHashLast8,
+    keySourceName: env.diagnostics.serviceKeySource,
+  });
   return env;
 }
 
@@ -221,4 +239,10 @@ function getJwtRole(value: string) {
 function toBase64(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   return normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+}
+
+function getKeyHashPart(value: string, part: "first" | "last") {
+  if (!value) return null;
+  const hash = crypto.createHash("sha256").update(value).digest("hex");
+  return part === "first" ? hash.slice(0, 8) : hash.slice(-8);
 }
