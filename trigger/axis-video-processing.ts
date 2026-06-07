@@ -58,6 +58,13 @@ export const axisVideoProcessing = task({
         uid: payload.cloudflareUid,
       });
       const mp4Url = await waitForCloudflareMp4Download(payload.cloudflareUid);
+      console.log("CLOUDFLARE_MP4_DOWNLOAD_RESULT", {
+        cloudflareUid: payload.cloudflareUid,
+        downloadedLocalPath: null,
+        inputMode: "remote_url_handoff",
+        jobId: payload.jobId,
+        mp4Url,
+      });
       const mp4ReadyAt = new Date().toISOString();
       await updateAxisVideoJob(payload.jobId, {
         mp4_ready_at: mp4ReadyAt,
@@ -71,6 +78,12 @@ export const axisVideoProcessing = task({
       });
 
       logAxisVideoProcessingMemory("BEFORE_FRAME_EXTRACTION", { jobId: payload.jobId });
+      console.log("AXIS_BALL_PROCESSING_INPUT", {
+        ballProcessingInputPath: mp4Url,
+        localDownloadStage: "runAxisBallProcessing",
+        willDownloadBeforeExtraction: isRemoteUrl(mp4Url),
+        jobId: payload.jobId,
+      });
       console.log("FRAME_EXTRACTION_START", { jobId: payload.jobId });
       const result = await runAxisBallProcessing(mp4Url, async (stage) => {
         await updateAxisVideoJob(payload.jobId, {
@@ -136,6 +149,10 @@ function progressFromStage(stage: string) {
   if (stage === "rendering_replay") return 95;
   if (stage === "complete") return 100;
   return 40;
+}
+
+function isRemoteUrl(value: string) {
+  return /^https?:\/\//i.test(value);
 }
 
 function logAxisVideoProcessingMemory(stage: string, details: Record<string, unknown> = {}) {

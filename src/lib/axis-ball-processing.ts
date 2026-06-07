@@ -1,6 +1,8 @@
-import { promises as fs } from "node:fs";
+import { createWriteStream, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import { extractAxisFrames } from "./axis-ffmpeg";
 
@@ -55,17 +57,26 @@ export async function runAxisBallProcessing(
 
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-processing-"));
   const framesDir = path.join(workDir, "frames");
+  const localVideoPath = path.join(workDir, "video.mp4");
 
   try {
     await fs.mkdir(framesDir, { recursive: true });
     logAxisBallProcessingMemory("PROCESSING_START", { workDir });
     console.log("AXIS_BALL_DOWNLOAD_VIDEO_START", { videoUrl });
+    const extractionInputPath = isRemoteUrl(videoUrl) ? await downloadVideoToLocalFile(videoUrl, localVideoPath) : videoUrl;
     await onStage?.("extracting_frames");
     logAxisBallProcessingMemory("BEFORE_FRAME_EXTRACTION", { outputDir: framesDir });
+    console.log("FRAME_EXTRACTION_INPUT_TRACE", {
+      downloadedLocalPath: isRemoteUrl(videoUrl) ? extractionInputPath : null,
+      extractionInputPath,
+      inputIsRemoteUrl: isRemoteUrl(extractionInputPath),
+      inputIsLocalFile: !isRemoteUrl(extractionInputPath),
+      outputDir: framesDir,
+    });
     console.log("FRAME_EXTRACTION_START", { videoUrl });
     await extractAxisFrames({
       fps: 1 / frameIntervalSeconds,
-      inputPath: videoUrl,
+      inputPath: extractionInputPath,
       operationName: "AXIS_BALL_FRAME_EXTRACTION",
       outputDir: framesDir,
     });
@@ -213,6 +224,27 @@ function roundTime(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 
+async function downloadVideoToLocalFile(videoUrl: string, localPath: string) {
+  const response = await fetch(videoUrl);
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to download video for local processing with HTTP ${response.status}.`);
+  }
+
+  await fs.mkdir(path.dirname(localPath), { recursive: true });
+  const stream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
+  await pipeline(stream, createWriteStream(localPath));
+  const stats = await fs.stat(localPath);
+  console.log("LOCAL_MP4_DOWNLOADED", {
+    fileSizeMb: bytesToMb(stats.size),
+    localPath,
+  });
+  return localPath;
+}
+
+function isRemoteUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
 function logAxisBallProcessingMemory(stage: string, details: Record<string, unknown> = {}) {
   const memory = process.memoryUsage();
   console.log("AXIS_BALL_PROCESSING_MEMORY", {
@@ -223,4 +255,8 @@ function logAxisBallProcessingMemory(stage: string, details: Record<string, unkn
     rss: memory.rss,
     stage,
   });
+}
+
+function bytesToMb(value: number) {
+  return Math.round((value / 1024 / 1024) * 100) / 100;
 }
