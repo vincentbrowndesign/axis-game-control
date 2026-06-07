@@ -55,6 +55,7 @@ type RunOperationInput = {
   operationName: string;
   outputPath: string;
   requireFfprobe?: boolean;
+  timeoutMs?: number;
 };
 
 type FrameOutputInspection = {
@@ -65,6 +66,12 @@ type FrameOutputInspection = {
 
 const ffmpegBinaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
 const ffprobeBinaryName = process.platform === "win32" ? "ffprobe.exe" : "ffprobe";
+const frameExtractionTimeoutMs = 45_000;
+const maxFrameExtractionDurationSeconds = 10;
+const maxFrameExtractionFrames = 75;
+const safeFrameExtractionFps = 5;
+const safeFrameExtractionQuality = 5;
+const safeFrameExtractionScale = "960:-2";
 let cachedResolution: AxisFfmpegResolution | null = null;
 
 export class AxisFfmpegError extends Error {
@@ -174,39 +181,68 @@ export async function extractAxisFrames({
     });
     return null;
   });
+  const extractionDuration = getSafeExtractionDuration(metadata?.duration ?? null);
+  const extractionFilter = `fps=${safeFrameExtractionFps},scale=${safeFrameExtractionScale}`;
   console.log("FRAME_EXTRACTION_CONFIG", {
     duration: metadata?.duration ?? null,
+    effectiveFps: safeFrameExtractionFps,
+    maxFrames: maxFrameExtractionFrames,
     inputPath,
     outputDir,
     requestedFps: fps,
+    safeDuration: extractionDuration,
+    scale: safeFrameExtractionScale,
     sourceFps: metadata?.fps ?? null,
+    timeoutMs: frameExtractionTimeoutMs,
   });
 
   console.log("FRAME_EXTRACTION_FFMPEG_COMMAND_BEFORE", {
     duration: metadata?.duration ?? null,
-    filterChain: [`fps=${fps}`],
+    effectiveFps: safeFrameExtractionFps,
+    filterChain: [extractionFilter],
     inputPath,
+    maxFrames: maxFrameExtractionFrames,
     mode: "image_sequence_to_disk",
     outputDir,
     outputPattern: path.join(outputDir, filePattern),
+    quality: safeFrameExtractionQuality,
     requestedFps: fps,
+    safeDuration: extractionDuration,
+    scale: safeFrameExtractionScale,
     sourceFps: metadata?.fps ?? null,
     transport: "disk_files",
   });
   await runAxisFfmpegOperation({
     configure: (command) => {
-      command.input(inputPath).outputOptions(["-vf", `fps=${fps}`, "-q:v", "2"]).output(path.join(outputDir, filePattern));
+      command
+        .inputOptions(["-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1"])
+        .input(inputPath)
+        .outputOptions([
+          "-t",
+          String(extractionDuration),
+          "-vf",
+          extractionFilter,
+          "-q:v",
+          String(safeFrameExtractionQuality),
+          "-frames:v",
+          String(maxFrameExtractionFrames),
+        ])
+        .output(path.join(outputDir, filePattern));
     },
     errorCode: "FRAME_EXTRACTION_FAILED",
     inputPath,
     operationName,
     outputPath: outputDir,
+    timeoutMs: frameExtractionTimeoutMs,
   });
   console.log("FRAME_EXTRACTION_FFMPEG_COMMAND_AFTER", {
     duration: metadata?.duration ?? null,
+    effectiveFps: safeFrameExtractionFps,
     inputPath,
+    maxFrames: maxFrameExtractionFrames,
     outputDir,
     requestedFps: fps,
+    safeDuration: extractionDuration,
     sourceFps: metadata?.fps ?? null,
   });
 
@@ -215,17 +251,20 @@ export async function extractAxisFrames({
     inputPath,
     operationName,
     pattern: framePatternToRegex(filePattern),
-    requestedFps: fps,
+    requestedFps: safeFrameExtractionFps,
     sourceDuration: metadata?.duration ?? null,
     sourceFps: metadata?.fps ?? null,
   });
   console.log("FRAME_EXTRACTION_RESULT", {
     duration: metadata?.duration ?? null,
+    effectiveFps: safeFrameExtractionFps,
     frameCount: output.count,
     inputPath,
+    maxFrames: maxFrameExtractionFrames,
     outputDir,
     outputDirectorySizeMb: output.sizeMb,
     requestedFps: fps,
+    safeDuration: extractionDuration,
     sourceFps: metadata?.fps ?? null,
   });
   if (output.count === 0) {
@@ -322,6 +361,7 @@ export async function runAxisFfmpegOperation({
   operationName,
   outputPath,
   requireFfprobe = false,
+  timeoutMs,
 }: RunOperationInput) {
   const started = Date.now();
   const resolution = await configureAxisFfmpeg({ requireFfprobe });
@@ -330,6 +370,27 @@ export async function runAxisFfmpegOperation({
   try {
     await new Promise<void>((resolve, reject) => {
       const command = ffmpeg();
+      let finished = false;
+      let timedOut = false;
+      const timeout =
+        timeoutMs && timeoutMs > 0
+          ? setTimeout(() => {
+              if (finished) return;
+              timedOut = true;
+              console.error("FFMPEG_OPERATION_TIMEOUT", {
+                input_path: inputPath,
+                operation: operationName,
+                output_path: outputPath,
+                timeout_ms: timeoutMs,
+              });
+              command.kill("SIGKILL");
+            }, timeoutMs)
+          : null;
+      const complete = (callback: () => void) => {
+        finished = true;
+        if (timeout) clearTimeout(timeout);
+        callback();
+      };
       configure(command);
       command.on("start", (commandLine) => {
         console.log("FFMPEG_COMMAND_START", {
@@ -340,8 +401,10 @@ export async function runAxisFfmpegOperation({
           output_path: outputPath,
         });
       });
-      command.on("end", () => resolve());
-      command.on("error", (error) => reject(error));
+      command.on("end", () => complete(resolve));
+      command.on("error", (error) =>
+        complete(() => reject(timedOut ? new Error(`${operationName} timed out after ${timeoutMs}ms.`) : error)),
+      );
       command.run();
     });
     logOperationComplete({
@@ -563,6 +626,11 @@ function clampSafeTimestamp(value: number, duration: number | null) {
   const requested = Number.isFinite(value) && value >= 0 ? value : fallback;
   if (!duration || duration <= 0) return requested;
   return Math.max(0, Math.min(requested, Math.max(0, duration - 0.1)));
+}
+
+function getSafeExtractionDuration(duration: number | null) {
+  if (!duration || duration <= 0) return maxFrameExtractionDurationSeconds;
+  return Math.max(0.1, Math.min(duration, maxFrameExtractionDurationSeconds));
 }
 
 function logResolvedSource(resolution: AxisFfmpegResolution) {
