@@ -57,6 +57,12 @@ type RunOperationInput = {
   requireFfprobe?: boolean;
 };
 
+type FrameOutputInspection = {
+  count: number;
+  sizeBytes: number;
+  sizeMb: number;
+};
+
 const ffmpegBinaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
 const ffprobeBinaryName = process.platform === "win32" ? "ffprobe.exe" : "ffprobe";
 let cachedResolution: AxisFfmpegResolution | null = null;
@@ -169,12 +175,20 @@ export async function extractAxisFrames({
     return null;
   });
   console.log("FRAME_EXTRACTION_CONFIG", {
+    duration: metadata?.duration ?? null,
     inputPath,
     outputDir,
     requestedFps: fps,
     sourceFps: metadata?.fps ?? null,
   });
 
+  console.log("FRAME_EXTRACTION_FFMPEG_COMMAND_BEFORE", {
+    duration: metadata?.duration ?? null,
+    inputPath,
+    outputDir,
+    requestedFps: fps,
+    sourceFps: metadata?.fps ?? null,
+  });
   await runAxisFfmpegOperation({
     configure: (command) => {
       command.input(inputPath).outputOptions(["-vf", `fps=${fps}`, "-q:v", "2"]).output(path.join(outputDir, filePattern));
@@ -184,21 +198,38 @@ export async function extractAxisFrames({
     operationName,
     outputPath: outputDir,
   });
-
-  const frameCount = await countFiles(outputDir, framePatternToRegex(filePattern));
-  console.log("FRAME_EXTRACTION_RESULT", {
-    frameCount,
+  console.log("FRAME_EXTRACTION_FFMPEG_COMMAND_AFTER", {
+    duration: metadata?.duration ?? null,
     inputPath,
     outputDir,
     requestedFps: fps,
     sourceFps: metadata?.fps ?? null,
   });
-  if (frameCount === 0) {
+
+  const output = await inspectFrameOutput({
+    directory: outputDir,
+    inputPath,
+    operationName,
+    pattern: framePatternToRegex(filePattern),
+    requestedFps: fps,
+    sourceDuration: metadata?.duration ?? null,
+    sourceFps: metadata?.fps ?? null,
+  });
+  console.log("FRAME_EXTRACTION_RESULT", {
+    duration: metadata?.duration ?? null,
+    frameCount: output.count,
+    inputPath,
+    outputDir,
+    outputDirectorySizeMb: output.sizeMb,
+    requestedFps: fps,
+    sourceFps: metadata?.fps ?? null,
+  });
+  if (output.count === 0) {
     throw new AxisFfmpegError("ZERO_FRAMES_EXTRACTED", `No frames were extracted from ${inputPath}.`);
   }
 
   return {
-    frameCount,
+    frameCount: output.count,
     metadata,
   };
 }
@@ -452,9 +483,61 @@ function getRotation(stream: Record<string, unknown>) {
   return null;
 }
 
-async function countFiles(directory: string, pattern: RegExp) {
+async function inspectFrameOutput({
+  directory,
+  inputPath,
+  operationName,
+  pattern,
+  requestedFps,
+  sourceDuration,
+  sourceFps,
+}: {
+  directory: string;
+  inputPath: string;
+  operationName: string;
+  pattern: RegExp;
+  requestedFps: number;
+  sourceDuration: number | null;
+  sourceFps: number | null;
+}): Promise<FrameOutputInspection> {
   const entries = await fs.readdir(directory);
-  return entries.filter((entry) => pattern.test(entry)).length;
+  const frames = entries.filter((entry) => pattern.test(entry)).sort();
+  let sizeBytes = 0;
+
+  for (const [index, entry] of frames.entries()) {
+    const stat = await fs.stat(path.join(directory, entry));
+    sizeBytes += stat.size;
+    const frameCount = index + 1;
+    if (frameCount % 100 === 0) {
+      console.log("FRAME_EXTRACTION_DISCOVERED_FRAMES", {
+        duration: sourceDuration,
+        frameCount,
+        inputPath,
+        operation: operationName,
+        outputDirectorySizeMb: bytesToMb(sizeBytes),
+        outputDir: directory,
+        requestedFps,
+        sourceFps,
+      });
+    }
+  }
+
+  console.log("FRAME_EXTRACTION_OUTPUT_SIZE", {
+    duration: sourceDuration,
+    frameCount: frames.length,
+    inputPath,
+    operation: operationName,
+    outputDirectorySizeMb: bytesToMb(sizeBytes),
+    outputDir: directory,
+    requestedFps,
+    sourceFps,
+  });
+
+  return {
+    count: frames.length,
+    sizeBytes,
+    sizeMb: bytesToMb(sizeBytes),
+  };
 }
 
 function framePatternToRegex(filePattern: string) {
@@ -561,6 +644,10 @@ function getNumber(value: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function bytesToMb(value: number) {
+  return Math.round((value / 1024 / 1024) * 100) / 100;
 }
 
 function getErrorMessage(error: unknown) {
