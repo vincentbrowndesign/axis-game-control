@@ -1,5 +1,5 @@
-import { AxisOneScreen } from "../components/AxisOneScreen";
+import { AxisHomepage } from "../components/AxisHomepage";
 
 export default function Home() {
-  return <AxisOneScreen />;
+  return <AxisHomepage />;
 }

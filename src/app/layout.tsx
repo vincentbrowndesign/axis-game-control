@@ -3,7 +3,7 @@ import "../styles/globals.css";
 
 export const metadata: Metadata = {
   title: "Axis",
-  description: "Reality. Understanding. Artifact.",
+  description: "Upload basketball footage and bring important moments to life.",
 };
 
 export default function RootLayout({
