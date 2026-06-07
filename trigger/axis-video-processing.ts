@@ -149,19 +149,10 @@ export const axisVideoProcessing = task({
         detection_count: result.detectionCount,
         error: null,
         frame_count: result.frameCount,
-        player_track: result.playerTrack,
-        player_track_count: result.playerTrack.length,
         processing_stage: "complete",
         progress: 100,
-        replay_cloudflare_uid: replayCloudflareUid,
-        replay_export_height: result.replayExport.height,
-        replay_export_path: `cloudflare:${replayCloudflareUid}`,
-        replay_export_size_bytes: result.replayExport.sizeBytes,
-        replay_export_width: result.replayExport.width,
-        replay_mp4_url: replayMp4Url,
-        replay_video_url: `https://customer-${replayCloudflareUid}.cloudflarestream.com/${replayCloudflareUid}/manifest/video.m3u8`,
         status: "replay_ready",
-        video_url: job.record?.video_url || streamVideo.playback?.hls || "",
+        video_url: replayMp4Url,
       });
       if (result.workDir) await fs.rm(result.workDir, { force: true, recursive: true }).catch(() => null);
 

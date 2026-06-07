@@ -29,18 +29,6 @@ type BallTrackPoint = {
   y: number;
 };
 
-type PlayerTrackPoint = {
-  confidence: number;
-  frame: number;
-  id: string;
-  label?: string;
-  sourceHeight?: number;
-  sourceWidth?: number;
-  time: number;
-  x: number;
-  y: number;
-};
-
 type BallJobResponse = {
   ballTrack?: BallTrackPoint[];
   ballTrackCount?: number;
@@ -48,11 +36,7 @@ type BallJobResponse = {
   error?: string;
   frameCount?: number;
   jobId?: string;
-  playerTrack?: PlayerTrackPoint[];
-  playerTrackCount?: number;
   processingStage?: string;
-  replayMp4Url?: string | null;
-  replayVideoUrl?: string | null;
   status?:
     | "axis_processing"
     | "failed"
@@ -95,8 +79,7 @@ export function AxisOneScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
   const [jobId, setJobId] = useState("");
-  const [playerTrack, setPlayerTrack] = useState<PlayerTrackPoint[]>([]);
-  const [replayMp4Url, setReplayMp4Url] = useState("");
+  const [saveUrl, setSaveUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [state, setState] = useState<AppState>("choose");
   const [stage, setStage] = useState<VisibleStage>("Uploading");
@@ -106,10 +89,6 @@ export function AxisOneScreen() {
   const sortedTrack = useMemo(
     () => [...track].sort((a, b) => a.time - b.time || a.frame - b.frame),
     [track],
-  );
-  const sortedPlayerTrack = useMemo(
-    () => [...playerTrack].sort((a, b) => a.time - b.time || a.frame - b.frame || a.id.localeCompare(b.id)),
-    [playerTrack],
   );
 
   const draw = useCallback(() => {
@@ -132,12 +111,11 @@ export function AxisOneScreen() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const nearest = getNearestTrackPoint(sortedTrack, video.currentTime);
-    const players = getNearestPlayerFrame(sortedPlayerTrack, video.currentTime);
-    const sourceWidth = nearest?.point.sourceWidth || players[0]?.sourceWidth || video.videoWidth || width;
-    const sourceHeight = nearest?.point.sourceHeight || players[0]?.sourceHeight || video.videoHeight || height;
+    const sourceWidth = nearest?.point.sourceWidth || video.videoWidth || width;
+    const sourceHeight = nearest?.point.sourceHeight || video.videoHeight || height;
     const frame: AxisOverlayFrame = {
       ball: nearest?.point,
-      players,
+      players: [],
       timestamp: video.currentTime,
     };
     renderAxisOverlayFrame({
@@ -156,7 +134,7 @@ export function AxisOneScreen() {
     });
 
     rafRef.current = requestAnimationFrame(draw);
-  }, [sortedPlayerTrack, sortedTrack, state]);
+  }, [sortedTrack, state]);
 
   useEffect(() => {
     if (state !== "processing") return;
@@ -206,10 +184,11 @@ export function AxisOneScreen() {
         if (result.status !== "replay_ready") return;
 
         const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
-        const nextPlayers = Array.isArray(result.playerTrack) ? result.playerTrack : [];
         setTrack(nextTrack);
-        setPlayerTrack(nextPlayers);
-        setReplayMp4Url(result.replayMp4Url || "");
+        if (result.videoUrl) {
+          setVideoUrl(result.videoUrl);
+          setSaveUrl(result.videoUrl);
+        }
         setStage("Rendering Replay");
         setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
         setState("complete");
@@ -235,8 +214,7 @@ export function AxisOneScreen() {
     objectUrlRef.current = localVideoUrl;
     setVideoUrl(localVideoUrl);
     setTrack([]);
-    setPlayerTrack([]);
-    setReplayMp4Url("");
+    setSaveUrl("");
     setError("");
     setJobId("");
     setElapsedSeconds(0);
@@ -341,9 +319,8 @@ export function AxisOneScreen() {
             ref={videoRef}
             src={videoUrl}
           />
-          <canvas aria-hidden="true" className="axis-one-canvas" ref={canvasRef} />
-          {replayMp4Url ? (
-            <a className="axis-one-save" download href={replayMp4Url}>
+          {saveUrl ? (
+            <a className="axis-one-save" download href={saveUrl}>
               Save
             </a>
           ) : null}
@@ -440,25 +417,4 @@ function getNearestTrackPoint(track: BallTrackPoint[], currentTime: number) {
 
   if (!nearest || nearest.distance > 0.35) return null;
   return nearest;
-}
-
-function getNearestPlayerFrame(track: PlayerTrackPoint[], currentTime: number) {
-  let nearestTime: number | null = null;
-  for (const point of track) {
-    const distance = Math.abs(point.time - currentTime);
-    if (distance > 0.35) continue;
-    if (nearestTime === null || distance < Math.abs(nearestTime - currentTime)) nearestTime = point.time;
-  }
-  if (nearestTime === null) return [];
-  return track
-    .filter((point) => Math.abs(point.time - nearestTime) < 0.001)
-    .map((point) => ({
-      confidence: point.confidence,
-      id: point.id,
-      label: point.label,
-      sourceHeight: point.sourceHeight,
-      sourceWidth: point.sourceWidth,
-      x: point.x,
-      y: point.y,
-    }));
 }
