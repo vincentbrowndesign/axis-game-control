@@ -215,8 +215,8 @@ export async function extractAxisFrames({
   await runAxisFfmpegOperation({
     configure: (command) => {
       command
-        .inputOptions(["-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1"])
         .input(inputPath)
+        .inputOptions(["-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1"])
         .outputOptions([
           "-t",
           String(extractionDuration),
@@ -405,6 +405,11 @@ export async function runAxisFfmpegOperation({
       command.on("error", (error) =>
         complete(() => reject(timedOut ? new Error(`${operationName} timed out after ${timeoutMs}ms.`) : error)),
       );
+      console.log("FFMPEG_FINAL_INPUT_SOURCE", {
+        input_path: inputPath,
+        operation: operationName,
+        output_path: outputPath,
+      });
       command.run();
     });
     logOperationComplete({
