@@ -184,10 +184,14 @@ export async function extractAxisFrames({
 
   console.log("FRAME_EXTRACTION_FFMPEG_COMMAND_BEFORE", {
     duration: metadata?.duration ?? null,
+    filterChain: [`fps=${fps}`],
     inputPath,
+    mode: "image_sequence_to_disk",
     outputDir,
+    outputPattern: path.join(outputDir, filePattern),
     requestedFps: fps,
     sourceFps: metadata?.fps ?? null,
+    transport: "disk_files",
   });
   await runAxisFfmpegOperation({
     configure: (command) => {
@@ -327,6 +331,15 @@ export async function runAxisFfmpegOperation({
     await new Promise<void>((resolve, reject) => {
       const command = ffmpeg();
       configure(command);
+      command.on("start", (commandLine) => {
+        console.log("FFMPEG_COMMAND_START", {
+          argv: parseFfmpegCommandLine(commandLine),
+          command_line: commandLine,
+          input_path: inputPath,
+          operation: operationName,
+          output_path: outputPath,
+        });
+      });
       command.on("end", () => resolve());
       command.on("error", (error) => reject(error));
       command.run();
@@ -648,6 +661,40 @@ function getNumber(value: unknown) {
 
 function bytesToMb(value: number) {
   return Math.round((value / 1024 / 1024) * 100) / 100;
+}
+
+function parseFfmpegCommandLine(commandLine: string) {
+  const args: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | null = null;
+  let escaped = false;
+
+  for (const char of commandLine) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if ((char === "'" || char === "\"") && (!quote || quote === char)) {
+      quote = quote ? null : char;
+      continue;
+    }
+    if (char === " " && !quote) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (current) args.push(current);
+  return args;
 }
 
 function getErrorMessage(error: unknown) {
