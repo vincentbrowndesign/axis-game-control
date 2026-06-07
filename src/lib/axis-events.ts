@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AxisEvent } from "./axis-primitives";
-import { axisServerSupabaseOptions } from "./axis-supabase-server";
+import { axisServerSupabaseOptions, getAxisSupabaseServerEnv, logAxisSupabaseClientEnv } from "./axis-supabase-server";
 
 export type AxisEventPersistContext = {
   organizationId?: string | null;
@@ -15,11 +15,10 @@ export type AxisEventPersistResult =
   | { code: "SUPABASE_SERVICE_ROLE_MISSING" | "SUPABASE_WRITE_FAILED"; reason: string; stored: false };
 
 export function getAxisEventsClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
+  const env = logAxisSupabaseClientEnv("axis_events");
+  if (!env) return null;
 
-  return createClient(url, key, axisServerSupabaseOptions);
+  return createClient(env.url, env.key, axisServerSupabaseOptions);
 }
 
 export async function storeAxisEvents(events: AxisEvent[], context: AxisEventPersistContext): Promise<AxisEventPersistResult> {
@@ -65,7 +64,17 @@ export async function storeAxisEvents(events: AxisEvent[], context: AxisEventPer
   }));
 
   const { error } = await supabase.from("axis_events").upsert(rows, { onConflict: "id" });
-  if (error) return { code: "SUPABASE_WRITE_FAILED", reason: error.message, stored: false };
+  if (error) {
+    const env = getAxisSupabaseServerEnv();
+    console.error("AXIS_SUPABASE_WRITE_ERROR", {
+      client: "axis_events",
+      diagnostics: env.diagnostics,
+      error: error.message,
+      operation: "upsert",
+      table: "axis_events",
+    });
+    return { code: "SUPABASE_WRITE_FAILED", reason: error.message, stored: false };
+  }
 
   return { eventCount: rows.length, stored: true };
 }

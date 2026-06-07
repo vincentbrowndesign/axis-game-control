@@ -1,5 +1,34 @@
 import type { SupabaseClientOptions } from "@supabase/supabase-js";
 
+export type AxisSupabaseServerEnvDiagnostics = {
+  anonKeyExists: boolean;
+  anonKeyLength: number;
+  serviceKeyExists: boolean;
+  serviceKeyHasWhitespace: boolean;
+  serviceKeyLength: number;
+  serviceKeyRole: string | null;
+  serviceKeyWasQuoted: boolean;
+  serviceKeyFormat: "jwt" | "sb_secret" | "unknown";
+  urlExists: boolean;
+  urlHost: string | null;
+  urlValid: boolean;
+  urlWasQuoted: boolean;
+};
+
+export type AxisSupabaseServerEnv =
+  | {
+      diagnostics: AxisSupabaseServerEnvDiagnostics;
+      key: string;
+      ok: true;
+      url: string;
+    }
+  | {
+      code: "SUPABASE_SERVICE_ROLE_MISSING" | "SUPABASE_SERVICE_ROLE_INVALID" | "SUPABASE_URL_MISSING" | "SUPABASE_URL_INVALID";
+      diagnostics: AxisSupabaseServerEnvDiagnostics;
+      ok: false;
+      reason: string;
+    };
+
 class AxisDisabledRealtimeTransport {
   readonly CLOSED = 3;
   readonly CLOSING = 2;
@@ -50,3 +79,146 @@ export const axisServerSupabaseOptions = {
     transport: AxisDisabledRealtimeTransport,
   },
 } satisfies SupabaseClientOptions<"public">;
+
+export function getAxisSupabaseServerEnv(): AxisSupabaseServerEnv {
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  const rawAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  const urlValue = normalizeEnvValue(rawUrl);
+  const keyValue = normalizeEnvValue(rawServiceKey);
+  const parsedUrl = parseUrl(urlValue.value);
+  const serviceKeyRole = getJwtRole(keyValue.value);
+  const serviceKeyFormat = keyValue.value.startsWith("sb_secret_")
+    ? "sb_secret"
+    : keyValue.value.split(".").length === 3
+      ? "jwt"
+      : "unknown";
+  const diagnostics: AxisSupabaseServerEnvDiagnostics = {
+    anonKeyExists: Boolean(normalizeEnvValue(rawAnonKey).value),
+    anonKeyLength: normalizeEnvValue(rawAnonKey).value.length,
+    serviceKeyExists: Boolean(keyValue.value),
+    serviceKeyHasWhitespace: rawServiceKey !== rawServiceKey.trim(),
+    serviceKeyLength: keyValue.value.length,
+    serviceKeyRole,
+    serviceKeyWasQuoted: keyValue.wasQuoted,
+    serviceKeyFormat,
+    urlExists: Boolean(urlValue.value),
+    urlHost: parsedUrl?.host ?? null,
+    urlValid: Boolean(parsedUrl),
+    urlWasQuoted: urlValue.wasQuoted,
+  };
+
+  if (!urlValue.value) {
+    return {
+      code: "SUPABASE_URL_MISSING",
+      diagnostics,
+      ok: false,
+      reason: "NEXT_PUBLIC_SUPABASE_URL is required for server-side Supabase writes.",
+    };
+  }
+  if (!parsedUrl) {
+    return {
+      code: "SUPABASE_URL_INVALID",
+      diagnostics,
+      ok: false,
+      reason: "NEXT_PUBLIC_SUPABASE_URL is not a valid URL.",
+    };
+  }
+  if (!keyValue.value) {
+    return {
+      code: "SUPABASE_SERVICE_ROLE_MISSING",
+      diagnostics,
+      ok: false,
+      reason: "SUPABASE_SERVICE_ROLE_KEY is required for server-side Supabase writes.",
+    };
+  }
+  if (serviceKeyFormat === "jwt" && serviceKeyRole !== "service_role") {
+    return {
+      code: "SUPABASE_SERVICE_ROLE_INVALID",
+      diagnostics,
+      ok: false,
+      reason: `SUPABASE_SERVICE_ROLE_KEY must be a service_role key; current JWT role is ${serviceKeyRole ?? "missing"}.`,
+    };
+  }
+  if (serviceKeyFormat === "unknown") {
+    return {
+      code: "SUPABASE_SERVICE_ROLE_INVALID",
+      diagnostics,
+      ok: false,
+      reason: "SUPABASE_SERVICE_ROLE_KEY does not look like a Supabase service role key.",
+    };
+  }
+
+  return {
+    diagnostics,
+    key: keyValue.value,
+    ok: true,
+    url: urlValue.value,
+  };
+}
+
+export function assertAxisSupabaseServerEnv(stage: string) {
+  const env = getAxisSupabaseServerEnv();
+  console.log("AXIS_SUPABASE_ENV_CHECK", {
+    ...env.diagnostics,
+    ok: env.ok,
+    stage,
+    ...(env.ok ? {} : { code: env.code, reason: env.reason }),
+  });
+  if (!env.ok) {
+    throw new Error(`${env.code}: ${env.reason}`);
+  }
+  return env;
+}
+
+export function logAxisSupabaseClientEnv(client: string) {
+  const env = getAxisSupabaseServerEnv();
+  if (!env.ok) {
+    console.error("AXIS_SUPABASE_CLIENT_ENV_INVALID", {
+      ...env.diagnostics,
+      client,
+      code: env.code,
+      reason: env.reason,
+    });
+    return null;
+  }
+  return env;
+}
+
+function normalizeEnvValue(value: string) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  const wasQuoted =
+    trimmed.length >= 2 &&
+    (quote === "\"" || quote === "'") &&
+    trimmed[trimmed.length - 1] === quote;
+  return {
+    value: wasQuoted ? trimmed.slice(1, -1).trim() : trimmed,
+    wasQuoted,
+  };
+}
+
+function parseUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function getJwtRole(value: string) {
+  const parts = value.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(toBase64(parts[1]), "base64").toString("utf8")) as { role?: unknown };
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
+function toBase64(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  return normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+}

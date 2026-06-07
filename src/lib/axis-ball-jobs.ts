@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AxisBallTrackPoint } from "./axis-ball-processing";
-import { axisServerSupabaseOptions } from "./axis-supabase-server";
+import { axisServerSupabaseOptions, getAxisSupabaseServerEnv, logAxisSupabaseClientEnv } from "./axis-supabase-server";
 
 export type AxisBallJobStatus = "failed" | "processing" | "ready";
 export type AxisBallProcessingStage =
@@ -37,11 +37,10 @@ export type AxisSupabaseErrorCode =
   | "SUPABASE_WRITE_FAILED";
 
 export function getAxisBallJobClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
+  const env = logAxisSupabaseClientEnv("axis_ball_jobs");
+  if (!env) return null;
 
-  return createClient(url, key, axisServerSupabaseOptions);
+  return createClient(env.url, env.key, axisServerSupabaseOptions);
 }
 
 export async function createAxisBallJob(record: AxisBallJobRecord) {
@@ -69,7 +68,10 @@ export async function createAxisBallJob(record: AxisBallJobRecord) {
     .select()
     .single();
 
-  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  if (error) {
+    logSupabaseWriteError("insert", error.message);
+    return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  }
   return { record: mapAxisBallJobRow(data), stored: true as const };
 }
 
@@ -108,7 +110,10 @@ export async function updateAxisBallJob(jobId: string, patch: Partial<AxisBallJo
     .select()
     .single();
 
-  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  if (error) {
+    logSupabaseWriteError("update", error.message);
+    return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  }
   return { record: mapAxisBallJobRow(data), stored: true as const };
 }
 
@@ -118,6 +123,17 @@ function supabaseFailure(code: AxisSupabaseErrorCode, reason: string) {
 
 function getWriteErrorCode(message: string): AxisSupabaseErrorCode {
   return /row-level security|rls/i.test(message) ? "SUPABASE_RLS_BLOCKED" : "SUPABASE_WRITE_FAILED";
+}
+
+function logSupabaseWriteError(operation: string, error: string) {
+  const env = getAxisSupabaseServerEnv();
+  console.error("AXIS_SUPABASE_WRITE_ERROR", {
+    client: "axis_ball_jobs",
+    diagnostics: env.diagnostics,
+    error,
+    operation,
+    table: "axis_ball_jobs",
+  });
 }
 
 function mapAxisBallJobRow(row: unknown): AxisBallJobRecord {

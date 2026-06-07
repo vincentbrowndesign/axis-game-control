@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint } from "./axis-ball-processing";
-import { axisServerSupabaseOptions } from "./axis-supabase-server";
+import { axisServerSupabaseOptions, getAxisSupabaseServerEnv, logAxisSupabaseClientEnv } from "./axis-supabase-server";
 
 export type AxisVideoJobStatus =
   | "axis_processing"
@@ -57,11 +57,10 @@ type AxisSupabaseFailure = {
 };
 
 export function getAxisVideoJobClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
+  const env = logAxisSupabaseClientEnv("axis_video_jobs");
+  if (!env) return null;
 
-  return createClient(url, key, axisServerSupabaseOptions);
+  return createClient(env.url, env.key, axisServerSupabaseOptions);
 }
 
 export async function createAxisVideoJob(record: AxisVideoJobRecord) {
@@ -102,7 +101,10 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
     .select()
     .single();
 
-  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  if (error) {
+    logSupabaseWriteError("insert", error.message);
+    return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  }
   return { record: mapAxisVideoJobRow(data), stored: true as const };
 }
 
@@ -165,7 +167,10 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
     .select()
     .single();
 
-  if (error) return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  if (error) {
+    logSupabaseWriteError("update", error.message);
+    return supabaseFailure(getWriteErrorCode(error.message), error.message);
+  }
   return { record: mapAxisVideoJobRow(data), stored: true as const };
 }
 
@@ -272,4 +277,15 @@ function getWriteErrorCode(message: string): AxisSupabaseErrorCode {
 
 function getReadErrorCode(message: string): AxisSupabaseErrorCode {
   return /permission|forbidden|row-level security|rls/i.test(message) ? "SUPABASE_READ_FORBIDDEN" : "SUPABASE_WRITE_FAILED";
+}
+
+function logSupabaseWriteError(operation: string, error: string) {
+  const env = getAxisSupabaseServerEnv();
+  console.error("AXIS_SUPABASE_WRITE_ERROR", {
+    client: "axis_video_jobs",
+    diagnostics: env.diagnostics,
+    error,
+    operation,
+    table: "axis_video_jobs",
+  });
 }

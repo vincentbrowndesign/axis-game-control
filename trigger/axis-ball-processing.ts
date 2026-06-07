@@ -1,6 +1,7 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { runAxisBallProcessing } from "../src/lib/axis-ball-processing";
 import { updateAxisBallJob } from "../src/lib/axis-ball-jobs";
+import { assertAxisSupabaseServerEnv } from "../src/lib/axis-supabase-server";
 
 type AxisBallProcessingPayload = {
   jobId: string;
@@ -21,6 +22,7 @@ export const axisBallProcessing = task({
     });
 
     try {
+      assertAxisSupabaseServerEnv("axis-ball-processing:startup");
       await updateAxisBallJob(payload.jobId, {
         error: null,
         processing_stage: "extracting_frames",
