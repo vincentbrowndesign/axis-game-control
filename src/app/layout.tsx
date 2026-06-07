@@ -3,7 +3,7 @@ import "../styles/globals.css";
 
 export const metadata: Metadata = {
   title: "Axis",
-  description: "Upload basketball footage and bring important moments to life.",
+  description: "Upload video, add overlays, and save a replay.",
 };
 
 export default function RootLayout({
