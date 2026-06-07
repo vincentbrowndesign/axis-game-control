@@ -58,8 +58,10 @@ export async function runAxisBallProcessing(
 
   try {
     await fs.mkdir(framesDir, { recursive: true });
+    logAxisBallProcessingMemory("PROCESSING_START", { workDir });
     console.log("AXIS_BALL_DOWNLOAD_VIDEO_START", { videoUrl });
     await onStage?.("extracting_frames");
+    logAxisBallProcessingMemory("BEFORE_FRAME_EXTRACTION", { outputDir: framesDir });
     console.log("FRAME_EXTRACTION_START", { videoUrl });
     await extractAxisFrames({
       fps: 1 / frameIntervalSeconds,
@@ -67,9 +69,11 @@ export async function runAxisBallProcessing(
       operationName: "AXIS_BALL_FRAME_EXTRACTION",
       outputDir: framesDir,
     });
+    logAxisBallProcessingMemory("AFTER_FRAME_EXTRACTION", { outputDir: framesDir });
     console.log("FRAME_EXTRACTION_COMPLETE", { videoUrl });
 
     const frames = await listFrames(framesDir);
+    logAxisBallProcessingMemory("AFTER_FRAME_LIST", { frameCount: frames.length });
     console.log("FRAMES_EXTRACTED", { count: frames.length });
     console.log("FRAMES_SENT_TO_ROBOFLOW", { count: frames.length });
 
@@ -82,17 +86,26 @@ export async function runAxisBallProcessing(
     }
 
     await onStage?.("detecting_basketball");
+    logAxisBallProcessingMemory("BEFORE_ROBOFLOW", { frameCount: frames.length });
     console.log("ROBOFLOW_START", {
       project: roboflowProject,
       version: roboflowVersion,
     });
     const detectionResult = await detectBasketballs(frames);
+    logAxisBallProcessingMemory("AFTER_ROBOFLOW", {
+      ballTrackCount: detectionResult.ballTrack.length,
+      detectionCount: detectionResult.detectionCount,
+    });
     await onStage?.("building_track");
     console.log("DETECTIONS_RETURNED", { count: detectionResult.detectionCount });
     console.log("BASKETBALL_DETECTIONS", { count: detectionResult.detectionCount });
     console.log("BALL_TRACK_COUNT", { count: detectionResult.ballTrack.length });
 
     await onStage?.("rendering_replay");
+    logAxisBallProcessingMemory("BEFORE_REPLAY_GENERATION", {
+      ballTrackCount: detectionResult.ballTrack.length,
+      frameCount: frames.length,
+    });
     return {
       ballTrack: detectionResult.ballTrack,
       detectionCount: detectionResult.detectionCount,
@@ -150,6 +163,15 @@ async function detectBasketballs(frames: FrameFile[]) {
       .filter((prediction) => isFiniteNumber(prediction.x) && isFiniteNumber(prediction.y))
       .sort((a, b) => b.confidence - a.confidence)[0];
 
+    if (frame.frame % 100 === 0) {
+      logAxisBallProcessingMemory("ROBOFLOW_FRAME_BATCH", {
+        ballTrackCount: ballTrack.length,
+        detectionCount,
+        frame: frame.frame,
+        totalFrames: frames.length,
+      });
+    }
+
     if (!best || !isFiniteNumber(best.x) || !isFiniteNumber(best.y)) continue;
     ballTrack.push({
       confidence: best.confidence,
@@ -189,4 +211,16 @@ function isFiniteNumber(value: unknown): value is number {
 
 function roundTime(value: number) {
   return Math.round(value * 1000) / 1000;
+}
+
+function logAxisBallProcessingMemory(stage: string, details: Record<string, unknown> = {}) {
+  const memory = process.memoryUsage();
+  console.log("AXIS_BALL_PROCESSING_MEMORY", {
+    ...details,
+    external: memory.external,
+    heap_total: memory.heapTotal,
+    heap_used: memory.heapUsed,
+    rss: memory.rss,
+    stage,
+  });
 }

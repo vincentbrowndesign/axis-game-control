@@ -16,6 +16,7 @@ export const axisVideoProcessing = task({
     concurrencyLimit: 1,
   },
   run: async (payload: AxisVideoProcessingPayload) => {
+    logAxisVideoProcessingMemory("PROCESSING_START", { jobId: payload.jobId });
     console.log("AXIS_VIDEO_PROCESSING_START", {
       cloudflareUid: payload.cloudflareUid,
       jobId: payload.jobId,
@@ -23,6 +24,7 @@ export const axisVideoProcessing = task({
 
     try {
       console.log("PROCESSING_START", { jobId: payload.jobId });
+      logAxisVideoProcessingMemory("PROCESSING_START_AFTER_LOG", { jobId: payload.jobId });
       console.log("PROCESSING_STEP_1", {
         request: "supabase.axis_video_jobs.update",
         stage: "mark_stream_processing",
@@ -45,6 +47,7 @@ export const axisVideoProcessing = task({
         video_ready_at: videoReadyAt,
         video_url: streamVideo.playback?.hls ?? `https://customer-${payload.cloudflareUid}.cloudflarestream.com/${payload.cloudflareUid}/manifest/video.m3u8`,
       });
+      logAxisVideoProcessingMemory("AFTER_CLOUDFLARE_VIDEO_READY", { jobId: payload.jobId });
 
       console.log("DOWNLOAD_VIDEO_START", {
         cloudflareUid: payload.cloudflareUid,
@@ -61,11 +64,13 @@ export const axisVideoProcessing = task({
         progress: 35,
         status: "axis_processing",
       });
+      logAxisVideoProcessingMemory("AFTER_CLOUDFLARE_DOWNLOAD", { jobId: payload.jobId });
       console.log("DOWNLOAD_VIDEO_COMPLETE", {
         cloudflareUid: payload.cloudflareUid,
         jobId: payload.jobId,
       });
 
+      logAxisVideoProcessingMemory("BEFORE_FRAME_EXTRACTION", { jobId: payload.jobId });
       console.log("FRAME_EXTRACTION_START", { jobId: payload.jobId });
       const result = await runAxisBallProcessing(mp4Url, async (stage) => {
         await updateAxisVideoJob(payload.jobId, {
@@ -74,6 +79,7 @@ export const axisVideoProcessing = task({
           status: "axis_processing",
         });
       });
+      logAxisVideoProcessingMemory("BEFORE_REPLAY_GENERATION", { jobId: payload.jobId });
       console.log("FRAME_EXTRACTION_COMPLETE", { frameCount: result.frameCount, jobId: payload.jobId });
       console.log("ROBOFLOW_COMPLETE", { detectionCount: result.detectionCount, jobId: payload.jobId });
       console.log("BALL_TRACK_CREATED", { ballTrackCount: result.ballTrack.length, jobId: payload.jobId });
@@ -130,4 +136,16 @@ function progressFromStage(stage: string) {
   if (stage === "rendering_replay") return 95;
   if (stage === "complete") return 100;
   return 40;
+}
+
+function logAxisVideoProcessingMemory(stage: string, details: Record<string, unknown> = {}) {
+  const memory = process.memoryUsage();
+  console.log("AXIS_VIDEO_PROCESSING_MEMORY", {
+    ...details,
+    external: memory.external,
+    heap_total: memory.heapTotal,
+    heap_used: memory.heapUsed,
+    rss: memory.rss,
+    stage,
+  });
 }
