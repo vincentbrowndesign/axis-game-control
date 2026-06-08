@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import { exportAxisReplayMp4, extractAxisFrames } from "./axis-ffmpeg";
+import { axisFfmpegColor, axisOverlayStyleV1 } from "./axis-overlay-style";
 import { classifyZone, type AxisDetection, type AxisEvent, type AxisTrack } from "./axis-primitives";
 
 export type AxisBallTrackPoint = {
@@ -87,6 +88,7 @@ type RoboflowImage = {
 const frameIntervalSeconds = 0.1;
 const overlayPreviewDurationSeconds = 10;
 const overlayFadeOutSeconds = 0.4;
+const overlayStyle = axisOverlayStyleV1;
 const roboflowProject = "axis-kenetic-observer";
 const roboflowVersion = "1";
 const playerClasses = new Set(["athlete", "person", "player"]);
@@ -529,29 +531,32 @@ function createReplayOverlayFilters({
     const start = point.time;
     const end = Math.min(overlayPreviewDurationSeconds - overlayFadeOutSeconds, point.time + 0.58);
     if (end <= start) continue;
-    const tailAlpha = Math.min(0.42, point.confidence * 0.34);
-    const coreAlpha = Math.min(0.88, point.confidence * 0.82);
+    const tailAlpha = Math.min(overlayStyle.fade.trailTailAlpha, point.confidence * 0.34);
+    const coreAlpha = Math.min(overlayStyle.fade.trailCoreAlpha, point.confidence * 0.82);
+    const tailSize = overlayStyle.trail.tailSize;
+    const coreSize = overlayStyle.trail.coreSize;
+    const ballColor = axisFfmpegColor(overlayStyle.colors.ball);
     filters.push(
       drawBoxFilter({
         alpha: tailAlpha,
-        color: "0xFF7A1A",
-        height: 9,
+        color: ballColor,
+        height: tailSize,
         start,
         thickness: "fill",
-        width: 9,
-        x: point.x - 4.5,
-        y: point.y - 4.5,
+        width: tailSize,
+        x: point.x - tailSize / 2,
+        y: point.y - tailSize / 2,
         end,
       }),
       drawBoxFilter({
         alpha: coreAlpha,
-        color: "0xFF7A1A",
-        height: 6,
+        color: ballColor,
+        height: coreSize,
         start,
         thickness: "fill",
-        width: 6,
-        x: point.x - 3,
-        y: point.y - 3,
+        width: coreSize,
+        x: point.x - coreSize / 2,
+        y: point.y - coreSize / 2,
         end: Math.min(start + 0.18, end),
       }),
     );
@@ -568,15 +573,19 @@ function createReplayOverlayFilters({
     const fadeOut = Math.min(1, Math.max(0, (overlayPreviewDurationSeconds - point.time) / overlayFadeOutSeconds));
     const alpha = Math.min(0.86, point.confidence * fadeIn * fadeOut);
     if (alpha < 0.08) continue;
-    const ringColor = point.featured ? "0xAEFF4E" : "white";
-    const ringWidth = Math.round(Math.max(48, Math.min(118, point.boxWidth * 0.82)));
-    const ringHeight = Math.round(Math.max(12, Math.min(30, point.boxHeight * 0.15)));
+    const ringColor = point.featured ? axisFfmpegColor(overlayStyle.colors.lime) : axisFfmpegColor(overlayStyle.colors.white);
+    const ringWidth = Math.round(
+      Math.max(overlayStyle.ring.minWidth, Math.min(overlayStyle.ring.maxWidth, point.boxWidth * overlayStyle.ring.widthScale)),
+    );
+    const ringHeight = Math.round(
+      Math.max(overlayStyle.ring.minHeight, Math.min(overlayStyle.ring.maxHeight, point.boxHeight * overlayStyle.ring.heightScale)),
+    );
     const ringX = point.x - ringWidth / 2;
     const ringY = point.bottomY - ringHeight / 2;
 
     filters.push(
       drawBoxFilter({
-        alpha: Math.max(0.05, alpha * 0.12),
+        alpha: Math.max(0.05, alpha * overlayStyle.ring.fillAlpha * 0.55),
         color: ringColor,
         height: ringHeight + 8,
         start,
@@ -591,7 +600,7 @@ function createReplayOverlayFilters({
         color: ringColor,
         height: ringHeight,
         start,
-        thickness: 4,
+        thickness: overlayStyle.ring.strokeWidth,
         width: ringWidth,
         x: ringX,
         y: ringY,
@@ -601,15 +610,15 @@ function createReplayOverlayFilters({
 
     if (point.label && playerOverlay.points.length >= 4 && point.time >= 0.8 && alpha >= 0.42) {
       const labelText = escapeDrawText(point.label);
-      const fontSize = 18;
-      const labelWidth = Math.max(34, labelText.length * 12 + 18);
+      const fontSize = overlayStyle.label.textSize;
+      const labelWidth = Math.max(overlayStyle.label.minWidth, labelText.length * 12 + overlayStyle.label.paddingX * 2);
       const labelX = point.x - labelWidth / 2;
-      const labelY = Math.max(8, point.y - point.boxHeight / 2 - 38);
+      const labelY = Math.max(8, point.y - point.boxHeight / 2 - overlayStyle.label.verticalOffset);
       filters.push(
         drawBoxFilter({
-          alpha: Math.min(0.62, alpha * 0.72),
-          color: "black",
-          height: 28,
+          alpha: Math.min(overlayStyle.label.backgroundAlpha, alpha * 0.72),
+          color: axisFfmpegColor(overlayStyle.colors.black),
+          height: overlayStyle.label.height,
           start,
           thickness: "fill",
           width: labelWidth,
@@ -617,9 +626,9 @@ function createReplayOverlayFilters({
           y: labelY,
           end,
         }),
-        `drawtext=text='${labelText}':x=${Math.round(labelX + 10)}:y=${Math.round(
+        `drawtext=text='${labelText}':x=${Math.round(labelX + overlayStyle.label.paddingX)}:y=${Math.round(
           labelY + 5,
-        )}:fontsize=${fontSize}:fontcolor=white@${Math.min(0.96, alpha).toFixed(2)}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
+        )}:fontsize=${fontSize}:fontcolor=${axisFfmpegColor(overlayStyle.label.textColor)}@${Math.min(0.96, alpha).toFixed(2)}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
       );
     }
   }
@@ -659,7 +668,7 @@ type PlayerOverlayPoint = BallOverlayPoint & {
 function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: number, targetHeight: number) {
   const points = ballTrack
     .filter((point) => point.time <= overlayPreviewDurationSeconds)
-    .filter((point) => toConfidence01(point.confidence) >= 0.25)
+    .filter((point) => toConfidence01(point.confidence) >= overlayStyle.trail.confidenceThreshold)
     .sort((a, b) => a.time - b.time);
   const smoothed: BallOverlayPoint[] = [];
   let interpolated = 0;
@@ -720,7 +729,7 @@ function buildFeaturedPlayerOverlayPoints(playerTrack: AxisPlayerTrackPoint[], t
     .filter((item) => item.id === featuredId && item.time <= overlayPreviewDurationSeconds)
     .sort((a, b) => a.time - b.time)) {
     const confidence = toConfidence01(point.confidence);
-    if (confidence < 0.35) {
+    if (confidence < overlayStyle.ring.confidenceThreshold) {
       lowConfidenceDrops += 1;
       continue;
     }

@@ -1,3 +1,5 @@
+import { axisOverlayStyleV1, axisRgba } from "./axis-overlay-style";
+
 export type AxisOverlayCoordinateSpace = "normalized" | "video" | "screen";
 
 export type AxisOverlayPlayer = {
@@ -64,8 +66,9 @@ export type AxisOverlayPoint = {
   y: number;
 };
 
-const defaultConfidenceThreshold = 0.35;
-const defaultMaxBallHistory = 36;
+const overlayStyle = axisOverlayStyleV1;
+const defaultConfidenceThreshold = overlayStyle.ring.confidenceThreshold;
+const defaultMaxBallHistory = overlayStyle.trail.maxHistory;
 const movementSpikeDistance = 34;
 const pulseLifeMs = 820;
 
@@ -218,7 +221,7 @@ function drawBallTrail(
   mapping: AxisOverlayMapping,
   options: AxisOverlayRenderOptions,
 ) {
-  const recent = history.filter((point) => Math.abs(timestamp - point.timestamp) <= 1.25);
+  const recent = history.filter((point) => Math.abs(timestamp - point.timestamp) <= overlayStyle.trail.maxAgeSeconds);
   if (recent.length < 2) return;
   const mapped = recent.map((point) => mapOverlayPoint(point, coordinateSpace, mapping, options));
   renderBallTrail(ctx, mapped);
@@ -226,29 +229,41 @@ function drawBallTrail(
 
 export function renderPlayerRing(ctx: CanvasRenderingContext2D, player: AxisOverlayPoint & { label?: string }) {
   ctx.save();
-  ctx.globalAlpha = 0.94;
-  ctx.strokeStyle = "rgba(245,248,239,0.96)";
-  ctx.lineWidth = 2;
-  ctx.shadowBlur = 18;
-  ctx.shadowColor = "rgba(245,248,239,0.48)";
+  ctx.globalAlpha = overlayStyle.fade.ringAlpha;
+  ctx.strokeStyle = axisRgba(overlayStyle.ring.neutralColor, 0.96);
+  ctx.lineWidth = overlayStyle.ring.strokeWidth;
+  ctx.shadowBlur = overlayStyle.glow.ringShadowBlur;
+  ctx.shadowColor = axisRgba(overlayStyle.ring.neutralColor, 0.48);
   ctx.beginPath();
   ctx.ellipse(player.x, player.y + 5, 22, 8, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.globalAlpha = 0.22;
-  ctx.fillStyle = "rgba(245,248,239,0.72)";
+  ctx.globalAlpha = overlayStyle.ring.fillAlpha;
+  ctx.fillStyle = axisRgba(overlayStyle.ring.neutralColor, 0.72);
   ctx.beginPath();
   ctx.ellipse(player.x, player.y + 5, 18, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
   if (player.label) {
-    ctx.globalAlpha = 0.9;
+    const text = player.label.toUpperCase();
+    const labelWidth = Math.max(overlayStyle.label.minWidth, text.length * 8 + overlayStyle.label.paddingX * 2);
+    const labelHeight = 18;
+    const labelX = player.x - labelWidth / 2;
+    const labelY = player.y - 36;
+
+    ctx.globalAlpha = overlayStyle.label.backgroundAlpha;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = axisRgba(overlayStyle.colors.black, 0.92);
+    roundRect(ctx, labelX, labelY, labelWidth, labelHeight, 7);
+    ctx.fill();
+
+    ctx.globalAlpha = overlayStyle.fade.labelAlpha;
     ctx.shadowBlur = 10;
     ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillStyle = "rgba(245,248,239,0.92)";
-    ctx.fillText(player.label.toUpperCase(), player.x, player.y - 12);
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = axisRgba(overlayStyle.label.textColor, overlayStyle.fade.labelAlpha);
+    ctx.fillText(text, player.x, labelY + labelHeight / 2 + 0.5);
   }
   ctx.restore();
 }
@@ -266,10 +281,20 @@ export function renderBallTrail(ctx: CanvasRenderingContext2D, points: AxisOverl
     const midX = (from.x + to.x) / 2;
     const midY = (from.y + to.y) / 2;
     ctx.globalAlpha = fade * 0.74;
-    ctx.strokeStyle = "rgba(174,255,78,0.96)";
-    ctx.lineWidth = 3 + fade * 5;
-    ctx.shadowBlur = 12 + fade * 20;
-    ctx.shadowColor = "rgba(174,255,78,0.9)";
+    ctx.strokeStyle = axisRgba(overlayStyle.colors.ball, 0.92);
+    ctx.lineWidth = 2 + fade * 5;
+    ctx.shadowBlur = 10 + fade * 14;
+    ctx.shadowColor = axisRgba(overlayStyle.colors.ball, 0.7);
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(midX, midY, to.x, to.y);
+    ctx.stroke();
+
+    ctx.globalAlpha = fade * 0.38;
+    ctx.strokeStyle = axisRgba(overlayStyle.trail.highlightColor, 0.86);
+    ctx.lineWidth = 1 + fade * 2;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = axisRgba(overlayStyle.trail.highlightColor, 0.62);
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.quadraticCurveTo(midX, midY, to.x, to.y);
@@ -289,10 +314,10 @@ export function renderPressurePulse(
 
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = pulse.kind === "player" ? "rgba(245,248,239,0.85)" : "rgba(174,255,78,0.9)";
+  ctx.strokeStyle = pulse.kind === "player" ? axisRgba(overlayStyle.colors.white, 0.85) : axisRgba(overlayStyle.colors.lime, 0.9);
   ctx.lineWidth = 2;
-  ctx.shadowBlur = 22;
-  ctx.shadowColor = pulse.kind === "player" ? "rgba(245,248,239,0.5)" : "rgba(174,255,78,0.72)";
+  ctx.shadowBlur = overlayStyle.glow.pulseShadowBlur;
+  ctx.shadowColor = pulse.kind === "player" ? axisRgba(overlayStyle.colors.white, 0.5) : axisRgba(overlayStyle.colors.lime, 0.72);
   ctx.beginPath();
   ctx.ellipse(pulse.x, pulse.y + 5, radius, radius * 0.36, 0, 0, Math.PI * 2);
   ctx.stroke();
@@ -311,18 +336,18 @@ function drawBallGlow(
 
   ctx.save();
   ctx.globalAlpha = Math.max(0.3, confidence * 0.78);
-  ctx.shadowColor = "rgba(174,255,78,1)";
-  ctx.shadowBlur = 46;
-  ctx.fillStyle = "rgba(174,255,78,0.3)";
+  ctx.shadowColor = axisRgba(overlayStyle.trail.highlightColor, 1);
+  ctx.shadowBlur = overlayStyle.glow.ballShadowBlur;
+  ctx.fillStyle = axisRgba(overlayStyle.trail.highlightColor, 0.3);
   ctx.beginPath();
-  ctx.arc(point.x, point.y, 26, 0, Math.PI * 2);
+  ctx.arc(point.x, point.y, overlayStyle.glow.ballBloomRadius, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.globalAlpha = Math.max(0.76, confidence);
   ctx.shadowBlur = 18;
-  ctx.fillStyle = "rgba(174,255,78,1)";
+  ctx.fillStyle = axisRgba(overlayStyle.trail.highlightColor, 1);
   ctx.beginPath();
-  ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+  ctx.arc(point.x, point.y, overlayStyle.glow.ballCoreRadius, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -340,7 +365,7 @@ function drawCourtEffects(ctx: CanvasRenderingContext2D, width: number, height: 
   const sweep = ((now / 2200) % 1) * height;
   ctx.save();
   ctx.globalAlpha = 0.12;
-  ctx.strokeStyle = "rgba(174,255,78,0.42)";
+  ctx.strokeStyle = axisRgba(overlayStyle.colors.lime, 0.42);
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, sweep);
@@ -348,7 +373,7 @@ function drawCourtEffects(ctx: CanvasRenderingContext2D, width: number, height: 
   ctx.stroke();
 
   ctx.globalAlpha = 0.08;
-  ctx.strokeStyle = "rgba(245,248,239,0.35)";
+  ctx.strokeStyle = axisRgba(overlayStyle.colors.white, 0.35);
   for (let x = width / 4; x < width; x += width / 4) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -444,6 +469,21 @@ function getOverlayMapping(sourceWidth: number, sourceHeight: number, canvasWidt
     offsetY: (canvasHeight - drawHeight) / 2,
     scale,
   };
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function confidenceValue(confidence: number | undefined) {

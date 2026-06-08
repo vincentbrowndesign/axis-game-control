@@ -32,14 +32,37 @@ export async function POST(request: Request) {
   const ownership = assertAxisJobOwner({ recordUserId: existing.record.user_id, requestUserId: auth.userId });
   if (ownership) return Response.json({ code: ownership.code, error: ownership.reason }, { status: 403 });
 
-  await updateAxisVideoJob(jobId, {
-    cloudflare_uid: cloudflareUid,
-    error: null,
-    file_size: getNumber(body.fileSize) ?? existing.record.file_size,
-    filename: getString(body.filename) || existing.record.filename,
-    progress: 5,
-    status: "uploaded",
-  });
+  try {
+    console.log("LOG_BEFORE_JOB_CREATE", {
+      cloudflareUid,
+      jobId,
+      route: "/api/axis/video-jobs",
+      step: "mark_uploaded",
+    });
+    await updateAxisVideoJob(jobId, {
+      cloudflare_uid: cloudflareUid,
+      error: null,
+      file_size: getNumber(body.fileSize) ?? existing.record.file_size,
+      filename: getString(body.filename) || existing.record.filename,
+      progress: 5,
+      status: "uploaded",
+    });
+    console.log("LOG_AFTER_JOB_CREATE", {
+      cloudflareUid,
+      jobId,
+      route: "/api/axis/video-jobs",
+      step: "mark_uploaded",
+    });
+  } catch (error) {
+    console.error("LOG_JOB_CREATE_ERROR", {
+      cloudflareUid,
+      error: serializeError(error),
+      jobId,
+      route: "/api/axis/video-jobs",
+      step: "mark_uploaded",
+    });
+    throw error;
+  }
 
   try {
     console.log("AXIS_VIDEO_TRIGGER_REQUEST", {
@@ -49,11 +72,24 @@ export async function POST(request: Request) {
       ttl: axisVideoTriggerTtl,
     });
     console.log("AXIS_VIDEO_TRIGGER_RUNTIME", getTriggerRuntimeDiagnostics());
+    console.log("LOG_BEFORE_TRIGGER", {
+      cloudflareUid,
+      jobId,
+      queueName: axisVideoTriggerQueue,
+      ttl: axisVideoTriggerTtl,
+    });
     const handle = await tasks.trigger("axis-video-processing", {
       cloudflareUid,
       jobId,
     }, {
       queue: axisVideoTriggerQueue,
+      ttl: axisVideoTriggerTtl,
+    });
+    console.log("LOG_AFTER_TRIGGER", {
+      cloudflareUid,
+      jobId,
+      queueName: axisVideoTriggerQueue,
+      triggerRunId: handle.id,
       ttl: axisVideoTriggerTtl,
     });
     console.log("AXIS_VIDEO_TRIGGER_CREATED", {
@@ -78,6 +114,7 @@ export async function POST(request: Request) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error("AXIS_VIDEO_TRIGGER_FAILED", {
       cloudflareUid,
+      errorObject: serializeError(error),
       error: reason,
       jobId,
       queueName: axisVideoTriggerQueue,
@@ -91,6 +128,22 @@ export async function POST(request: Request) {
     });
     return Response.json({ error: reason, jobId, status: "failed" }, { status: 502 });
   }
+}
+
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      cause: error.cause,
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+  return {
+    error,
+    message: String(error),
+    type: typeof error,
+  };
 }
 
 function getString(value: unknown) {

@@ -232,22 +232,70 @@ export function AxisOneScreen() {
 
     try {
       console.info("UPLOAD_FLOW_SELECTED", "CLOUDFLARE_STREAM_DIRECT");
-      const upload = await createVideoUploadUrl(file);
-      await uploadFileToCloudflare(file, upload);
+      let upload: VideoUploadUrlResponse;
+      try {
+        console.info("LOG_BEFORE_UPLOAD_URL", {
+          fileName: file.name,
+          fileSize: file.size,
+          route: "/api/axis/video-upload-url",
+        });
+        upload = await createVideoUploadUrl(file);
+        console.info("LOG_AFTER_UPLOAD_URL", {
+          cloudflareUid: upload.cloudflareUid,
+          jobId: upload.jobId,
+          uploadUrlPresent: Boolean(upload.uploadURL),
+        });
+      } catch (uploadUrlError) {
+        console.error("LOG_UPLOAD_URL_ERROR", serializeError(uploadUrlError));
+        throw uploadUrlError;
+      }
+
+      try {
+        console.info("LOG_BEFORE_UPLOAD", {
+          cloudflareUid: upload.cloudflareUid,
+          fileName: file.name,
+          fileSize: file.size,
+        });
+        await uploadFileToCloudflare(file, upload);
+        console.info("LOG_AFTER_UPLOAD", {
+          cloudflareUid: upload.cloudflareUid,
+          jobId: upload.jobId,
+        });
+      } catch (uploadError) {
+        console.error("LOG_UPLOAD_ERROR", serializeError(uploadError));
+        throw uploadError;
+      }
 
       setStage("Uploading");
       console.info("PROCESSING_START", { cloudflareUid: upload.cloudflareUid, jobId: upload.jobId });
       const route = "/api/axis/video-job";
-      const response = await axisAuthenticatedFetch(route, {
-        body: JSON.stringify({
+      let response: Response;
+      try {
+        console.info("LOG_BEFORE_JOB_CREATE", {
           cloudflareUid: upload.cloudflareUid,
-          fileSize: file.size,
-          filename: file.name || "axis-video.mp4",
           jobId: upload.jobId,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
+          route,
+        });
+        response = await axisAuthenticatedFetch(route, {
+          body: JSON.stringify({
+            cloudflareUid: upload.cloudflareUid,
+            fileSize: file.size,
+            filename: file.name || "axis-video.mp4",
+            jobId: upload.jobId,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        console.info("LOG_AFTER_JOB_CREATE", {
+          cloudflareUid: upload.cloudflareUid,
+          jobId: upload.jobId,
+          ok: response.ok,
+          status: response.status,
+        });
+      } catch (jobCreateError) {
+        console.error("LOG_JOB_CREATE_ERROR", serializeError(jobCreateError));
+        throw jobCreateError;
+      }
       const result = (await response.json().catch(() => null)) as VideoJobResponse | null;
       if (response.status === 401) {
         console.info("AXIS_AUTH_401_RESPONSE", {
@@ -258,6 +306,7 @@ export function AxisOneScreen() {
       if (!response.ok || !result?.jobId) throw new Error(result?.error ?? "Processing job could not be created.");
       setJobId(result.jobId);
     } catch (nextError) {
+      console.error("UPLOAD_FLOW_ERROR", serializeError(nextError));
       setError(nextError instanceof Error ? nextError.message : "Processing failed.");
       setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
       setState("failed");
@@ -406,6 +455,22 @@ async function createVideoUploadUrl(file: File) {
   }
 
   return result;
+}
+
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      cause: error.cause,
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+  return {
+    error,
+    message: String(error),
+    type: typeof error,
+  };
 }
 
 async function uploadFileToCloudflare(file: File, upload: VideoUploadUrlResponse) {
