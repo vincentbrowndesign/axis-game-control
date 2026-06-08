@@ -86,6 +86,7 @@ type RoboflowImage = {
 
 const frameIntervalSeconds = 0.1;
 const overlayPreviewDurationSeconds = 10;
+const overlayFadeOutSeconds = 0.4;
 const roboflowProject = "axis-kenetic-observer";
 const roboflowVersion = "1";
 const playerClasses = new Set(["athlete", "person", "player"]);
@@ -523,46 +524,37 @@ function createReplayOverlayFilters({
   const ballOverlay = buildBallOverlayPoints(ballTrack, safeSourceWidth, safeSourceHeight);
   const playerOverlay = buildFeaturedPlayerOverlayPoints(playerTrack, safeSourceWidth, safeSourceHeight);
 
-  for (const [index, point] of ballOverlay.points.entries()) {
+  for (const point of ballOverlay.points) {
     if (point.time < 0.7) continue;
-    const visibleEnd = Math.min(overlayPreviewDurationSeconds, point.time + 0.12);
-    const recentPoints = ballOverlay.points.slice(Math.max(0, index - 12), index + 1);
-    for (const [trailIndex, trailPoint] of recentPoints.entries()) {
-      const age = recentPoints.length - trailIndex - 1;
-      const fade = recentPoints.length <= 1 ? 1 : trailIndex / (recentPoints.length - 1);
-      const alpha = Math.max(0, Math.min(0.72, fade * 0.58 * point.confidence));
-      if (alpha <= 0.03) continue;
-      const size = Math.round(4 + fade * 8);
-      const trailStart = Math.max(0.7, point.time - 0.62);
-      filters.push(
-        drawBoxFilter({
-          alpha,
-          color: "0xFF7A1A",
-          height: size,
-          start: trailStart,
-          thickness: "fill",
-          width: size,
-          x: trailPoint.x - size / 2,
-          y: trailPoint.y - size / 2,
-          end: visibleEnd,
-        }),
-      );
-      if (age <= 2) {
-        filters.push(
-          drawBoxFilter({
-            alpha: Math.max(0.12, alpha * 0.45),
-            color: "white",
-            height: Math.max(2, Math.round(size * 0.45)),
-            start: trailStart,
-            thickness: "fill",
-            width: Math.max(2, Math.round(size * 0.45)),
-            x: trailPoint.x - size * 0.225,
-            y: trailPoint.y - size * 0.225,
-            end: visibleEnd,
-          }),
-        );
-      }
-    }
+    const start = point.time;
+    const end = Math.min(overlayPreviewDurationSeconds - overlayFadeOutSeconds, point.time + 0.58);
+    if (end <= start) continue;
+    const tailAlpha = Math.min(0.42, point.confidence * 0.34);
+    const coreAlpha = Math.min(0.88, point.confidence * 0.82);
+    filters.push(
+      drawBoxFilter({
+        alpha: tailAlpha,
+        color: "0xFF7A1A",
+        height: 9,
+        start,
+        thickness: "fill",
+        width: 9,
+        x: point.x - 4.5,
+        y: point.y - 4.5,
+        end,
+      }),
+      drawBoxFilter({
+        alpha: coreAlpha,
+        color: "0xFF7A1A",
+        height: 6,
+        start,
+        thickness: "fill",
+        width: 6,
+        x: point.x - 3,
+        y: point.y - 3,
+        end: Math.min(start + 0.18, end),
+      }),
+    );
   }
 
   for (const [index, point] of playerOverlay.points.entries()) {
@@ -572,8 +564,10 @@ function createReplayOverlayFilters({
       next && next.frame - point.frame <= 3
         ? Math.min(overlayPreviewDurationSeconds, next.time + 0.12)
         : Math.min(overlayPreviewDurationSeconds, point.time + 0.36);
-    const fadeIn = Math.min(1, Math.max(0.25, (point.time - 0.5) / 0.3));
-    const alpha = Math.min(0.95, point.confidence * fadeIn);
+    const fadeIn = Math.min(1, Math.max(0, (point.time - 0.5) / 0.3));
+    const fadeOut = Math.min(1, Math.max(0, (overlayPreviewDurationSeconds - point.time) / overlayFadeOutSeconds));
+    const alpha = Math.min(0.86, point.confidence * fadeIn * fadeOut);
+    if (alpha < 0.08) continue;
     const ringColor = point.featured ? "0xAEFF4E" : "white";
     const ringWidth = Math.round(Math.max(48, Math.min(118, point.boxWidth * 0.82)));
     const ringHeight = Math.round(Math.max(12, Math.min(30, point.boxHeight * 0.15)));
@@ -582,14 +576,14 @@ function createReplayOverlayFilters({
 
     filters.push(
       drawBoxFilter({
-        alpha: Math.max(0.08, alpha * 0.22),
+        alpha: Math.max(0.05, alpha * 0.12),
         color: ringColor,
-        height: ringHeight + 12,
+        height: ringHeight + 8,
         start,
         thickness: "fill",
-        width: ringWidth + 18,
-        x: ringX - 9,
-        y: ringY - 6,
+        width: ringWidth + 14,
+        x: ringX - 7,
+        y: ringY - 4,
         end,
       }),
       drawBoxFilter({
@@ -605,7 +599,7 @@ function createReplayOverlayFilters({
       }),
     );
 
-    if (point.label) {
+    if (point.label && playerOverlay.points.length >= 4 && point.time >= 0.8 && alpha >= 0.42) {
       const labelText = escapeDrawText(point.label);
       const fontSize = 18;
       const labelWidth = Math.max(34, labelText.length * 12 + 18);
@@ -677,12 +671,12 @@ function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: nu
     if (previous) {
       const gap = point.time - previous.time;
       const distance = Math.hypot(mapped.x - previous.x, mapped.y - previous.y);
-      const maxJump = Math.max(targetWidth, targetHeight) * Math.max(0.22, gap * 2.4);
+      const maxJump = Math.max(64, Math.min(140, Math.max(targetWidth, targetHeight) * Math.max(0.12, gap * 1.25)));
       if (distance > maxJump) {
         jumpDrops += 1;
         continue;
       }
-      if (gap > frameIntervalSeconds * 1.5 && gap <= 0.32) {
+      if (gap > frameIntervalSeconds * 1.5 && gap <= 0.26) {
         const steps = Math.min(2, Math.floor(gap / frameIntervalSeconds) - 1);
         for (let step = 1; step <= steps; step += 1) {
           const t = step / (steps + 1);
@@ -701,8 +695,8 @@ function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: nu
       confidence: toConfidence01(point.confidence),
       frame: point.frame,
       time: point.time,
-      x: previous ? previous.x * 0.42 + mapped.x * 0.58 : mapped.x,
-      y: previous ? previous.y * 0.42 + mapped.y * 0.58 : mapped.y,
+      x: previous ? previous.x * 0.55 + mapped.x * 0.45 : mapped.x,
+      y: previous ? previous.y * 0.55 + mapped.y * 0.45 : mapped.y,
     });
   }
 
@@ -731,11 +725,14 @@ function buildFeaturedPlayerOverlayPoints(playerTrack: AxisPlayerTrackPoint[], t
       continue;
     }
     const box = mapExportBox(point, targetWidth, targetHeight);
-    if (previous && point.frame - previous.frame > 3) dropoutGaps += 1;
-    const x: number = previous ? previous.x * 0.62 + box.x * 0.38 : box.x;
-    const y: number = previous ? previous.y * 0.62 + box.y * 0.38 : box.y;
-    const boxWidth: number = previous ? previous.boxWidth * 0.7 + box.width * 0.3 : box.width;
-    const boxHeight: number = previous ? previous.boxHeight * 0.7 + box.height * 0.3 : box.height;
+    if (previous && point.frame - previous.frame > 3) {
+      dropoutGaps += 1;
+      previous = null;
+    }
+    const x: number = previous ? previous.x * 0.72 + box.x * 0.28 : box.x;
+    const y: number = previous ? previous.y * 0.72 + box.y * 0.28 : box.y;
+    const boxWidth: number = previous ? previous.boxWidth * 0.78 + box.width * 0.22 : box.width;
+    const boxHeight: number = previous ? previous.boxHeight * 0.78 + box.height * 0.22 : box.height;
     const overlayPoint: PlayerOverlayPoint = {
       bottomY: y + boxHeight / 2,
       boxHeight,
