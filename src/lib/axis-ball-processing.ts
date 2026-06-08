@@ -184,11 +184,11 @@ export async function runAxisBallProcessing(
               playerTrack: detectionResult.playerTrack,
               sourceHeight: metadata.height ?? undefined,
               sourceWidth: metadata.width ?? undefined,
-            }),
+          }),
           inputPath: extractionInputPath,
           maxDurationSeconds: 10,
-          maxWidth: 960,
-          outputFps: 15,
+          maxHeight: 720,
+          outputFps: 10,
           outputPath: replayExportPath,
         })
       : null;

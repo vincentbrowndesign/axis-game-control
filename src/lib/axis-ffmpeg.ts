@@ -72,6 +72,8 @@ const maxFrameExtractionFrames = 75;
 const safeFrameExtractionFps = 5;
 const safeFrameExtractionQuality = 5;
 const safeFrameExtractionScale = "960:-2";
+const replayExportTimeoutMs = 120_000;
+const replayPreviewInputTimeoutMs = 90_000;
 let cachedResolution: AxisFfmpegResolution | null = null;
 
 export class AxisFfmpegError extends Error {
@@ -308,88 +310,157 @@ export async function exportAxisReplayMp4({
   createFilters,
   inputPath,
   maxDurationSeconds = 10,
-  maxWidth = 960,
-  outputFps = 15,
+  maxHeight = 720,
+  outputFps = 10,
   outputPath,
 }: {
   createFilters?: (metadata: AxisVideoMetadata) => string[];
   inputPath: string;
   maxDurationSeconds?: number;
-  maxWidth?: number;
+  maxHeight?: number;
   outputFps?: number;
   outputPath: string;
 }): Promise<AxisReplayExportResult> {
-  const metadata = await probeAxisVideoMetadata(inputPath);
-  const exportDuration = getSafeExportDuration(metadata.duration, maxDurationSeconds);
-  const overlayFilters = createFilters?.(metadata) ?? [];
-  const filterChain = [...overlayFilters, `scale='min(${maxWidth},iw)':-2`];
+  const sourceMetadata = await probeAxisVideoMetadata(inputPath);
+  const exportDuration = getSafeExportDuration(sourceMetadata.duration, maxDurationSeconds);
+  const exportHeight = getSafeExportHeight(sourceMetadata.height, maxHeight);
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  console.log("REPLAY_EXPORT_CONFIG", {
-    filterCount: filterChain.length,
-    inputDuration: metadata.duration,
-    inputFps: metadata.fps,
-    inputHeight: metadata.height,
-    inputPath,
-    inputWidth: metadata.width,
-    maxDurationSeconds,
-    maxWidth,
-    memoryBefore: getMemorySnapshot(),
-    outputFps,
-    outputPath,
-    safeDuration: exportDuration,
-  });
-  await runAxisFfmpegOperation({
-    configure: (command) => {
-      command
-        .input(inputPath)
-        .inputOptions(["-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1"])
-        .outputOptions([
-          "-t",
-          String(exportDuration),
-          "-r",
-          String(outputFps),
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "20",
-          "-pix_fmt",
-          "yuv420p",
-          "-c:a",
-          "aac",
-          "-movflags",
-          "+faststart",
-        ]);
-      command.videoFilters(filterChain);
-      command.output(outputPath);
-    },
-    errorCode: "EXPORT_FAILED",
-    inputPath,
-    operationName: "REPLAY_EXPORT",
-    outputPath,
-    requireFfprobe: true,
-    timeoutMs: 120_000,
-  });
+  const previewDir = await fs.mkdtemp(path.join(path.dirname(outputPath), "axis-replay-preview-"));
+  const previewInputPath = path.join(previewDir, "input-preview.mp4");
 
-  const stats = await fs.stat(outputPath);
-  console.log("REPLAY_EXPORT_RESULT", {
-    duration: exportDuration,
-    export_path: outputPath,
-    frame_count_estimate: Math.ceil(exportDuration * outputFps),
-    inputDuration: metadata.duration,
-    memoryAfter: getMemorySnapshot(),
-    outputFps,
-    size_bytes: stats.size,
-  });
-  return {
-    codec: "h264/aac",
-    duration: exportDuration,
-    export_path: outputPath,
-    height: metadata.height,
-    size_bytes: stats.size,
-    width: metadata.width,
-  };
+  try {
+    console.log("REPLAY_EXPORT_PREVIEW_INPUT_CONFIG", {
+      inputDuration: sourceMetadata.duration,
+      inputFps: sourceMetadata.fps,
+      inputHeight: sourceMetadata.height,
+      inputPath,
+      inputWidth: sourceMetadata.width,
+      maxDurationSeconds,
+      maxHeight,
+      memoryBefore: getMemorySnapshot(),
+      outputFps,
+      previewInputPath,
+      safeDuration: exportDuration,
+      targetHeight: exportHeight,
+    });
+    await runAxisFfmpegOperation({
+      configure: (command) => {
+        command
+          .input(inputPath)
+          .inputOptions(["-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1"])
+          .outputOptions([
+            "-t",
+            String(exportDuration),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "30",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+          ])
+          .videoFilters([`fps=${outputFps}`, `scale=-2:${exportHeight}`])
+          .output(previewInputPath);
+      },
+      errorCode: "EXPORT_FAILED",
+      inputPath,
+      operationName: "REPLAY_EXPORT_PREVIEW_INPUT",
+      outputPath: previewInputPath,
+      requireFfprobe: true,
+      timeoutMs: replayPreviewInputTimeoutMs,
+    });
+
+    const previewMetadata = await probeAxisVideoMetadata(previewInputPath);
+    const previewStats = await fs.stat(previewInputPath);
+    console.log("REPLAY_EXPORT_PREVIEW_INPUT_READY", {
+      memoryAfter: getMemorySnapshot(),
+      previewDuration: previewMetadata.duration,
+      previewFps: previewMetadata.fps,
+      previewHeight: previewMetadata.height,
+      previewInputPath,
+      previewSizeBytes: previewStats.size,
+      previewWidth: previewMetadata.width,
+    });
+
+    const overlayFilters = createFilters?.(previewMetadata) ?? [];
+    console.log("REPLAY_EXPORT_CONFIG", {
+      filterCount: overlayFilters.length,
+      inputDuration: previewMetadata.duration,
+      inputFps: previewMetadata.fps,
+      inputHeight: previewMetadata.height,
+      inputPath: previewInputPath,
+      inputWidth: previewMetadata.width,
+      maxDurationSeconds,
+      maxHeight,
+      memoryBefore: getMemorySnapshot(),
+      originalInputHeight: sourceMetadata.height,
+      originalInputPath: inputPath,
+      originalInputWidth: sourceMetadata.width,
+      outputFps,
+      outputPath,
+      safeDuration: exportDuration,
+    });
+    await runAxisFfmpegOperation({
+      configure: (command) => {
+        command
+          .input(previewInputPath)
+          .inputOptions(["-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1"])
+          .outputOptions([
+            "-t",
+            String(exportDuration),
+            "-r",
+            String(outputFps),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "28",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+          ]);
+        if (overlayFilters.length) command.videoFilters(overlayFilters);
+        command.output(outputPath);
+      },
+      errorCode: "EXPORT_FAILED",
+      inputPath: previewInputPath,
+      operationName: "REPLAY_EXPORT",
+      outputPath,
+      requireFfprobe: true,
+      timeoutMs: replayExportTimeoutMs,
+    });
+
+    const stats = await fs.stat(outputPath);
+    console.log("REPLAY_EXPORT_RESULT", {
+      duration: exportDuration,
+      export_path: outputPath,
+      frame_count_estimate: Math.ceil(exportDuration * outputFps),
+      inputDuration: previewMetadata.duration,
+      memoryAfter: getMemorySnapshot(),
+      outputFps,
+      size_bytes: stats.size,
+    });
+    return {
+      codec: "h264/aac",
+      duration: exportDuration,
+      export_path: outputPath,
+      height: previewMetadata.height,
+      size_bytes: stats.size,
+      width: previewMetadata.width,
+    };
+  } finally {
+    await fs.rm(previewDir, { force: true, recursive: true }).catch(() => null);
+    console.log("REPLAY_EXPORT_TEMP_CLEANUP", {
+      previewDir,
+    });
+  }
 }
 
 export async function runAxisFfmpegOperation({
@@ -680,6 +751,12 @@ function getSafeExportDuration(duration: number | null, maxDurationSeconds: numb
   const safeMax = Math.max(1, Math.min(maxDurationSeconds, 20));
   if (!duration || duration <= 0) return safeMax;
   return Math.max(0.1, Math.min(duration, safeMax));
+}
+
+function getSafeExportHeight(sourceHeight: number | null, maxHeight: number) {
+  const safeMaxHeight = Math.max(180, Math.min(maxHeight, 720));
+  const selectedHeight = sourceHeight && sourceHeight > 0 ? Math.min(sourceHeight, safeMaxHeight) : safeMaxHeight;
+  return Math.max(2, Math.floor(selectedHeight / 2) * 2);
 }
 
 function logResolvedSource(resolution: AxisFfmpegResolution) {
