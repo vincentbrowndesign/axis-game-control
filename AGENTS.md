@@ -3,6 +3,7 @@
 Before making product changes, read:
 
 * `/AXIS_CONSTITUTION.md`
+* `/AXIS_ENGINEERING_CONSTITUTION.md`
 * `/context/core-loop.md`
 
 Axis is a personal athletic continuity system.
