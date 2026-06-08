@@ -20,6 +20,7 @@ export const axisVideoProcessing = task({
     concurrencyLimit: 1,
   },
   run: async (payload: AxisVideoProcessingPayload) => {
+    let processingWorkDir: string | undefined;
     logAxisVideoProcessingMemory("PROCESSING_START", { jobId: payload.jobId });
     console.log("AXIS_VIDEO_PROCESSING_START", {
       cloudflareUid: payload.cloudflareUid,
@@ -102,6 +103,7 @@ export const axisVideoProcessing = task({
         },
         { exportReplay: true, keepWorkDir: true, sourceJobId: payload.jobId },
       );
+      processingWorkDir = result.workDir;
       logAxisVideoProcessingMemory("BEFORE_REPLAY_GENERATION", { jobId: payload.jobId });
       console.log("FRAME_EXTRACTION_COMPLETE", { frameCount: result.frameCount, jobId: payload.jobId });
       console.log("ROBOFLOW_COMPLETE", { detectionCount: result.detectionCount, jobId: payload.jobId });
@@ -156,6 +158,7 @@ export const axisVideoProcessing = task({
         video_url: replayMp4Url,
       });
       if (result.workDir) await fs.rm(result.workDir, { force: true, recursive: true }).catch(() => null);
+      processingWorkDir = undefined;
 
       console.log("JOB_READY", {
         ballTrackCount: result.ballTrack.length,
@@ -174,6 +177,10 @@ export const axisVideoProcessing = task({
         status: "replay_ready",
       };
     } catch (error) {
+      if (processingWorkDir) {
+        await fs.rm(processingWorkDir, { force: true, recursive: true }).catch(() => null);
+        processingWorkDir = undefined;
+      }
       const reason = error instanceof Error ? error.message : String(error);
       try {
         await persistAxisVideoJobUpdate("PROCESSING_MARK_FAILED", payload.jobId, {

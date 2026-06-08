@@ -305,21 +305,49 @@ export async function generateAxisThumbnail({
 }
 
 export async function exportAxisReplayMp4({
-  configureFilters,
+  createFilters,
   inputPath,
+  maxDurationSeconds = 10,
+  maxWidth = 960,
+  outputFps = 15,
   outputPath,
 }: {
-  configureFilters?: (command: ffmpeg.FfmpegCommand, metadata: AxisVideoMetadata) => void;
+  createFilters?: (metadata: AxisVideoMetadata) => string[];
   inputPath: string;
+  maxDurationSeconds?: number;
+  maxWidth?: number;
+  outputFps?: number;
   outputPath: string;
 }): Promise<AxisReplayExportResult> {
   const metadata = await probeAxisVideoMetadata(inputPath);
+  const exportDuration = getSafeExportDuration(metadata.duration, maxDurationSeconds);
+  const overlayFilters = createFilters?.(metadata) ?? [];
+  const filterChain = [...overlayFilters, `scale='min(${maxWidth},iw)':-2`];
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  console.log("REPLAY_EXPORT_CONFIG", {
+    filterCount: filterChain.length,
+    inputDuration: metadata.duration,
+    inputFps: metadata.fps,
+    inputHeight: metadata.height,
+    inputPath,
+    inputWidth: metadata.width,
+    maxDurationSeconds,
+    maxWidth,
+    memoryBefore: getMemorySnapshot(),
+    outputFps,
+    outputPath,
+    safeDuration: exportDuration,
+  });
   await runAxisFfmpegOperation({
     configure: (command) => {
       command
         .input(inputPath)
+        .inputOptions(["-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1"])
         .outputOptions([
+          "-t",
+          String(exportDuration),
+          "-r",
+          String(outputFps),
           "-c:v",
           "libx264",
           "-preset",
@@ -333,7 +361,7 @@ export async function exportAxisReplayMp4({
           "-movflags",
           "+faststart",
         ]);
-      configureFilters?.(command, metadata);
+      command.videoFilters(filterChain);
       command.output(outputPath);
     },
     errorCode: "EXPORT_FAILED",
@@ -341,12 +369,22 @@ export async function exportAxisReplayMp4({
     operationName: "REPLAY_EXPORT",
     outputPath,
     requireFfprobe: true,
+    timeoutMs: 120_000,
   });
 
   const stats = await fs.stat(outputPath);
+  console.log("REPLAY_EXPORT_RESULT", {
+    duration: exportDuration,
+    export_path: outputPath,
+    frame_count_estimate: Math.ceil(exportDuration * outputFps),
+    inputDuration: metadata.duration,
+    memoryAfter: getMemorySnapshot(),
+    outputFps,
+    size_bytes: stats.size,
+  });
   return {
     codec: "h264/aac",
-    duration: metadata.duration,
+    duration: exportDuration,
     export_path: outputPath,
     height: metadata.height,
     size_bytes: stats.size,
@@ -638,6 +676,12 @@ function getSafeExtractionDuration(duration: number | null) {
   return Math.max(0.1, Math.min(duration, maxFrameExtractionDurationSeconds));
 }
 
+function getSafeExportDuration(duration: number | null, maxDurationSeconds: number) {
+  const safeMax = Math.max(1, Math.min(maxDurationSeconds, 20));
+  if (!duration || duration <= 0) return safeMax;
+  return Math.max(0.1, Math.min(duration, safeMax));
+}
+
 function logResolvedSource(resolution: AxisFfmpegResolution) {
   console.log("FFMPEG_RESOLVED_SOURCE", {
     ffmpeg_path: resolution.ffmpeg.command,
@@ -772,4 +816,14 @@ function parseFfmpegCommandLine(commandLine: string) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getMemorySnapshot() {
+  const memory = process.memoryUsage();
+  return {
+    external: memory.external,
+    heapTotal: memory.heapTotal,
+    heapUsed: memory.heapUsed,
+    rss: memory.rss,
+  };
 }

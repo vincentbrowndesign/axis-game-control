@@ -90,10 +90,16 @@ export async function uploadCloudflareStreamVideoFile({
   const config = getCloudflareStreamConfig();
   if (!config) return { error: "cloudflare_stream_not_configured", uid: null };
 
-  const { promises: fs } = await import("node:fs");
-  const bytes = await fs.readFile(filePath);
+  const fs = await import("node:fs");
+  const stats = await fs.promises.stat(filePath);
+  console.log("CLOUDFLARE_REPLAY_UPLOAD_FILE_START", {
+    filePath,
+    fileSizeMb: bytesToMb(stats.size),
+    memory: getMemorySnapshot(),
+  });
   const form = new FormData();
-  form.append("file", new Blob([bytes], { type: "video/mp4" }), filename);
+  const fileBlob = await createFileBackedBlob(filePath);
+  form.append("file", fileBlob, filename);
   form.append("requireSignedURLs", "false");
 
   const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream`, {
@@ -107,6 +113,7 @@ export async function uploadCloudflareStreamVideoFile({
   console.log("CLOUDFLARE_REPLAY_UPLOAD_RESPONSE", {
     body,
     filename,
+    memory: getMemorySnapshot(),
     status: response.status,
   });
   const json = parseCloudflareJson<StreamUploadResult>(body);
@@ -116,6 +123,19 @@ export async function uploadCloudflareStreamVideoFile({
   }
 
   return { error: null, uid };
+}
+
+async function createFileBackedBlob(filePath: string) {
+  const fsModule = await import("node:fs");
+  const maybeOpenAsBlob = (fsModule as typeof fsModule & { openAsBlob?: (path: string, options?: { type?: string }) => Promise<Blob> }).openAsBlob;
+  if (maybeOpenAsBlob) return maybeOpenAsBlob(filePath, { type: "video/mp4" });
+
+  console.warn("CLOUDFLARE_REPLAY_UPLOAD_FILE_BACKED_BLOB_UNAVAILABLE", {
+    fallback: "readFile",
+    filePath,
+  });
+  const bytes = await fsModule.promises.readFile(filePath);
+  return new Blob([bytes], { type: "video/mp4" });
 }
 
 export async function getCloudflareStreamVideo(uid: string) {
@@ -240,4 +260,18 @@ function parseCloudflareJson<T>(body: string) {
   } catch {
     return null;
   }
+}
+
+function getMemorySnapshot() {
+  const memory = process.memoryUsage();
+  return {
+    external: memory.external,
+    heapTotal: memory.heapTotal,
+    heapUsed: memory.heapUsed,
+    rss: memory.rss,
+  };
+}
+
+function bytesToMb(value: number) {
+  return Math.round((value / 1024 / 1024) * 100) / 100;
 }

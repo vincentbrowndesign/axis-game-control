@@ -83,6 +83,7 @@ type RoboflowImage = {
 };
 
 const frameIntervalSeconds = 0.1;
+const overlayPreviewDurationSeconds = 10;
 const roboflowProject = "axis-kenetic-observer";
 const roboflowVersion = "1";
 const playerClasses = new Set(["athlete", "person", "player"]);
@@ -101,6 +102,7 @@ export async function runAxisBallProcessing(
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "axis-ball-processing-"));
   const framesDir = path.join(workDir, "frames");
   const localVideoPath = path.join(workDir, "video.mp4");
+  let completed = false;
 
   try {
     await fs.mkdir(framesDir, { recursive: true });
@@ -176,19 +178,21 @@ export async function runAxisBallProcessing(
     const replayExportPath = path.join(workDir, "axis-replay.mp4");
     const replayExport = options.exportReplay
       ? await exportAxisReplayMp4({
-          configureFilters: (command, metadata) => {
-            const filters = createReplayOverlayFilters({
+          createFilters: (metadata) =>
+            createReplayOverlayFilters({
               ballTrack: detectionResult.ballTrack,
               playerTrack: detectionResult.playerTrack,
               sourceHeight: metadata.height ?? undefined,
               sourceWidth: metadata.width ?? undefined,
-            });
-            if (filters.length) command.videoFilters(filters);
-          },
+            }),
           inputPath: extractionInputPath,
+          maxDurationSeconds: 10,
+          maxWidth: 960,
+          outputFps: 15,
           outputPath: replayExportPath,
         })
       : null;
+    completed = true;
     return {
       ballTrack: detectionResult.ballTrack,
       detectionCount: detectionResult.detectionCount,
@@ -208,7 +212,7 @@ export async function runAxisBallProcessing(
       workDir: options.keepWorkDir ? workDir : undefined,
     };
   } finally {
-    if (!options.keepWorkDir) await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
+    if (!options.keepWorkDir || !completed) await fs.rm(workDir, { force: true, recursive: true }).catch(() => null);
   }
 }
 
@@ -510,8 +514,10 @@ function createReplayOverlayFilters({
   const filters: string[] = [];
   const safeSourceWidth = sourceWidth ?? firstSourceSize(ballTrack, playerTrack).width;
   const safeSourceHeight = sourceHeight ?? firstSourceSize(ballTrack, playerTrack).height;
+  const filteredBallTrack = ballTrack.filter((point) => point.time <= overlayPreviewDurationSeconds);
+  const filteredPlayerTrack = playerTrack.filter((point) => point.time <= overlayPreviewDurationSeconds);
 
-  for (const [index, point] of ballTrack.entries()) {
+  for (const [index, point] of filteredBallTrack.entries()) {
     const mapped = mapExportPoint(point, safeSourceWidth, safeSourceHeight);
     const start = Math.max(0, point.time - 0.08);
     const end = point.time + 0.22;
@@ -522,7 +528,7 @@ function createReplayOverlayFilters({
       )}:t=fill:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
     );
     if (index > 0) {
-      const previous = mapExportPoint(ballTrack[index - 1], safeSourceWidth, safeSourceHeight);
+      const previous = mapExportPoint(filteredBallTrack[index - 1], safeSourceWidth, safeSourceHeight);
       const trailStart = Math.max(0, point.time - 0.2);
       filters.push(
         `drawbox=x=${Math.round((previous.x + mapped.x) / 2 - 5)}:y=${Math.round((previous.y + mapped.y) / 2 - 5)}:w=10:h=10:color=0xAEFF4E@0.38:t=fill:enable='between(t,${trailStart.toFixed(
@@ -532,7 +538,7 @@ function createReplayOverlayFilters({
     }
   }
 
-  for (const point of playerTrack) {
+  for (const point of filteredPlayerTrack) {
     const mapped = mapExportPoint(point, safeSourceWidth, safeSourceHeight);
     const start = Math.max(0, point.time - 0.08);
     const end = point.time + 0.18;
@@ -551,9 +557,12 @@ function createReplayOverlayFilters({
   }
 
   console.log("AXIS_REPLAY_EXPORT_FILTERS_CREATED", {
-    ballFilterCount: ballTrack.length,
+    ballFilterCount: filteredBallTrack.length,
     filterCount: filters.length,
-    playerFilterCount: playerTrack.length,
+    playerFilterCount: filteredPlayerTrack.length,
+    previewDurationSeconds: overlayPreviewDurationSeconds,
+    sourceBallTrackCount: ballTrack.length,
+    sourcePlayerTrackCount: playerTrack.length,
   });
   return filters;
 }
