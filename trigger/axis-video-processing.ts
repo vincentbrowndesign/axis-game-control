@@ -139,7 +139,25 @@ export const axisVideoProcessing = task({
       });
       if (replayUpload.error || !replayUpload.uid) throw new Error(`Replay upload failed: ${replayUpload.error}`);
       replayCloudflareUid = replayUpload.uid;
+      console.log("CLOUDFLARE_REPLAY_STREAM_READY_WAIT_START", {
+        jobId: payload.jobId,
+        replayCloudflareUid,
+      });
+      await waitForCloudflareStreamReady(replayUpload.uid);
+      console.log("CLOUDFLARE_REPLAY_STREAM_READY_WAIT_COMPLETE", {
+        jobId: payload.jobId,
+        replayCloudflareUid,
+      });
+      console.log("CLOUDFLARE_REPLAY_MP4_DOWNLOAD_WAIT_START", {
+        jobId: payload.jobId,
+        replayCloudflareUid,
+      });
       replayMp4Url = await waitForCloudflareMp4Download(replayUpload.uid);
+      console.log("CLOUDFLARE_REPLAY_MP4_DOWNLOAD_READY", {
+        jobId: payload.jobId,
+        replayCloudflareUid,
+        replayMp4Url,
+      });
       console.log("REPLAY_EXPORT_UPLOAD_COMPLETE", {
         jobId: payload.jobId,
         replayCloudflareUid,
