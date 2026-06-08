@@ -67,6 +67,11 @@ type VideoJobResponse = {
 };
 
 const confidenceThreshold = 0.35;
+const recentReplays = [
+  { label: "Replay 01", meta: "Ready" },
+  { label: "Replay 02", meta: "Overlay" },
+  { label: "Replay 03", meta: "Saved" },
+];
 
 export function AxisOneScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,6 +79,7 @@ export function AxisOneScreen() {
   const objectUrlRef = useRef<string | null>(null);
   const overlayStateRef = useRef(createAxisOverlayEngineState());
   const rafRef = useRef<number>(0);
+  const recordInputRef = useRef<HTMLInputElement>(null);
   const timerStartedAtRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -268,17 +274,31 @@ export function AxisOneScreen() {
 
   return (
     <main className="axis-one-screen" data-state={state}>
+      <header className="axis-one-header" aria-label="Axis home">
+        <span>AXIS</span>
+        <strong>{state === "processing" ? stage : "Camera Roll + Live Replay"}</strong>
+      </header>
+
       {state === "choose" ? (
-        <button className="axis-one-choose" onClick={() => inputRef.current?.click()} type="button">
-          Select Video
-        </button>
+        <section className="axis-one-camera" aria-label="Create replay">
+          <button className="axis-one-record" onClick={() => recordInputRef.current?.click()} type="button" aria-label="Record live replay">
+            <span />
+            RECORD
+          </button>
+          <button className="axis-one-select" onClick={() => inputRef.current?.click()} type="button">
+            SELECT VIDEO
+          </button>
+        </section>
       ) : null}
 
       {state === "selected" ? (
-        <section className="axis-one-complete">
+        <section className="axis-one-status">
           <span>{selectedFile?.name || "Video selected"}</span>
-          <button className="axis-one-view" onClick={() => void handleGenerateReplay()} type="button">
-            Generate Replay
+          <button className="axis-one-primary" onClick={() => void handleGenerateReplay()} type="button">
+            GENERATE REPLAY
+          </button>
+          <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
+            SELECT ANOTHER
           </button>
         </section>
       ) : null}
@@ -289,18 +309,21 @@ export function AxisOneScreen() {
           <time>{formatElapsed(elapsedSeconds)}</time>
           <span>{state === "failed" ? error || "Try Again" : stage}</span>
           {state === "failed" ? (
-            <button className="axis-one-small-button" onClick={() => inputRef.current?.click()} type="button">
-              Select Video
+            <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
+              SELECT VIDEO
             </button>
           ) : null}
         </section>
       ) : null}
 
       {state === "complete" ? (
-        <section className="axis-one-complete">
+        <section className="axis-one-status">
           <time>{formatElapsed(elapsedSeconds)}</time>
-          <button className="axis-one-view" onClick={() => setState("replay")} type="button">
-            Preview
+          <button className="axis-one-primary" onClick={() => setState("replay")} type="button">
+            PREVIEW REPLAY
+          </button>
+          <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
+            SELECT VIDEO
           </button>
         </section>
       ) : null}
@@ -321,15 +344,47 @@ export function AxisOneScreen() {
           />
           {saveUrl ? (
             <a className="axis-one-save" download href={saveUrl}>
-              Save
+              SAVE VIDEO
             </a>
           ) : null}
+        </section>
+      ) : null}
+
+      {state !== "replay" ? (
+        <section className="axis-one-recent" aria-label="Recent replays">
+          <div className="axis-one-recent-head">
+            <span>Recent Replay</span>
+          </div>
+          <div className="axis-one-recent-grid">
+            {recentReplays.map((replay, index) => (
+              <article className="axis-one-thumb" key={replay.label}>
+                <div>
+                  <span className="axis-one-thumb-ring" />
+                  <span className="axis-one-thumb-ball" />
+                  <span className="axis-one-thumb-trail" />
+                </div>
+                <strong>{replay.label}</strong>
+                <em>{index === 0 && state === "complete" ? "New" : replay.meta}</em>
+              </article>
+            ))}
+          </div>
         </section>
       ) : null}
 
       <input
         ref={inputRef}
         accept="video/*"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) handleFile(file);
+        }}
+        type="file"
+      />
+      <input
+        ref={recordInputRef}
+        accept="video/*"
+        capture="environment"
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];

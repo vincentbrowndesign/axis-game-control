@@ -3049,22 +3049,29 @@ body {
 }
 
 .axis-one-screen {
-  align-items: center;
-  background: #020303;
+  align-content: space-between;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(168, 217, 51, 0.08), transparent 18rem),
+    #020303;
   color: var(--axis-ink);
   display: grid;
+  gap: clamp(1rem, 4dvh, 2.4rem);
   min-height: 100dvh;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
-  place-items: center;
+  overflow: hidden;
+  padding: max(1rem, env(safe-area-inset-top)) clamp(1rem, 4vw, 2rem) max(1rem, env(safe-area-inset-bottom));
 }
 
-.axis-one-choose,
-.axis-one-view,
-.axis-one-small-button,
+.axis-one-header,
+.axis-one-record,
+.axis-one-select,
+.axis-one-primary,
+.axis-one-secondary,
 .axis-one-processing strong,
 .axis-one-processing time,
 .axis-one-processing span,
-.axis-one-complete time {
+.axis-one-status,
+.axis-one-recent,
+.axis-one-save {
   font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
   font-style: normal;
   font-weight: 900;
@@ -3072,26 +3079,90 @@ body {
   text-transform: uppercase;
 }
 
-.axis-one-choose,
-.axis-one-view {
-  appearance: none;
-  background: rgba(168, 217, 51, 0.12);
-  border: 1px solid rgba(168, 217, 51, 0.58);
-  color: var(--axis-live);
-  cursor: pointer;
-  min-height: min(72dvh, 34rem);
-  padding: 1rem;
-  touch-action: manipulation;
-  width: min(100%, 44rem);
+.axis-one-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 3rem;
 }
 
-.axis-one-choose {
-  font-size: clamp(3rem, 16vw, 7rem);
-  line-height: 0.9;
+.axis-one-header span {
+  color: var(--axis-ink);
+  font-size: 1.08rem;
+  line-height: 1;
+}
+
+.axis-one-header strong {
+  color: rgba(244, 244, 240, 0.48);
+  font-size: 0.62rem;
+  text-align: right;
+}
+
+.axis-one-camera {
+  align-items: center;
+  display: grid;
+  gap: clamp(1.2rem, 4dvh, 2rem);
+  justify-items: center;
+  min-height: min(54dvh, 34rem);
+}
+
+.axis-one-record {
+  align-items: center;
+  appearance: none;
+  aspect-ratio: 1;
+  background:
+    radial-gradient(circle, rgba(168, 217, 51, 0.16), rgba(168, 217, 51, 0.03) 56%, transparent 57%),
+    #050505;
+  border: 2px solid rgba(244, 244, 240, 0.78);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 12px rgba(244, 244, 240, 0.03),
+    0 0 48px rgba(168, 217, 51, 0.14);
+  color: var(--axis-ink);
+  cursor: pointer;
+  display: grid;
+  font-size: clamp(1.05rem, 4vw, 1.5rem);
+  gap: 0.7rem;
+  justify-items: center;
+  place-content: center;
+  touch-action: manipulation;
+  width: clamp(12.5rem, 48vw, 20rem);
+}
+
+.axis-one-record span {
+  background: #ff3b30;
+  border-radius: 999px;
+  box-shadow: 0 0 28px rgba(255, 59, 48, 0.48);
+  display: block;
+  height: clamp(2.2rem, 8vw, 3.4rem);
+  width: clamp(2.2rem, 8vw, 3.4rem);
+}
+
+.axis-one-select,
+.axis-one-primary,
+.axis-one-secondary {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(168, 217, 51, 0.56);
+  color: var(--axis-live);
+  cursor: pointer;
+  min-height: 3.1rem;
+  padding: 0 1.2rem;
+  touch-action: manipulation;
+}
+
+.axis-one-select {
+  background: rgba(168, 217, 51, 0.1);
+  min-width: min(100%, 18rem);
+}
+
+.axis-one-secondary {
+  border-color: rgba(244, 244, 240, 0.18);
+  color: rgba(244, 244, 240, 0.64);
 }
 
 .axis-one-processing,
-.axis-one-complete {
+.axis-one-status {
   display: grid;
   gap: 1rem;
   place-items: center;
@@ -3105,31 +3176,18 @@ body {
 }
 
 .axis-one-processing time,
-.axis-one-complete time {
+.axis-one-status time {
   color: var(--axis-live);
   font-size: clamp(3.5rem, 18vw, 8rem);
   line-height: 0.9;
 }
 
-.axis-one-processing span {
+.axis-one-processing span,
+.axis-one-status span {
   color: rgba(244, 244, 240, 0.58);
-  font-size: clamp(0.9rem, 4vw, 1.35rem);
-}
-
-.axis-one-small-button {
-  appearance: none;
-  background: transparent;
-  border: 1px solid rgba(168, 217, 51, 0.48);
-  color: var(--axis-live);
-  cursor: pointer;
-  min-height: 3rem;
-  padding: 0 1rem;
-}
-
-.axis-one-view {
-  font-size: clamp(2.8rem, 14vw, 6.5rem);
-  line-height: 0.9;
-  min-height: 12rem;
+  font-size: clamp(0.82rem, 3vw, 1.12rem);
+  max-width: min(100%, 32rem);
+  overflow-wrap: anywhere;
 }
 
 .axis-one-replay {
@@ -3141,8 +3199,7 @@ body {
   position: relative;
 }
 
-.axis-one-video,
-.axis-one-canvas {
+.axis-one-video {
   display: block;
   height: 100%;
   inset: 0;
@@ -3152,10 +3209,6 @@ body {
 
 .axis-one-video {
   object-fit: contain;
-}
-
-.axis-one-canvas {
-  pointer-events: none;
 }
 
 .axis-one-save {
@@ -3174,6 +3227,121 @@ body {
   text-decoration: none;
   text-transform: uppercase;
   z-index: 3;
+}
+
+.axis-one-recent {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.axis-one-recent-head {
+  align-items: center;
+  border-top: 1px solid rgba(244, 244, 240, 0.12);
+  display: flex;
+  min-height: 2.4rem;
+}
+
+.axis-one-recent-head span {
+  color: rgba(244, 244, 240, 0.48);
+  font-size: 0.64rem;
+}
+
+.axis-one-recent-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-one-thumb {
+  display: grid;
+  gap: 0.36rem;
+  min-width: 0;
+}
+
+.axis-one-thumb div {
+  aspect-ratio: 16 / 10;
+  background:
+    linear-gradient(rgba(244, 244, 240, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244, 244, 240, 0.04) 1px, transparent 1px),
+    #080908;
+  background-size: 1.4rem 1.4rem;
+  border: 1px solid rgba(244, 244, 240, 0.11);
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-one-thumb strong,
+.axis-one-thumb em {
+  font-size: 0.58rem;
+  font-style: normal;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-one-thumb strong {
+  color: var(--axis-ink);
+}
+
+.axis-one-thumb em {
+  color: var(--axis-live);
+}
+
+.axis-one-thumb-ring {
+  border: 2px solid rgba(168, 217, 51, 0.8);
+  border-radius: 999px;
+  bottom: 18%;
+  box-shadow: 0 0 18px rgba(168, 217, 51, 0.18);
+  height: 16%;
+  left: 18%;
+  position: absolute;
+  transform: scaleX(1.7);
+  width: 22%;
+}
+
+.axis-one-thumb-ball {
+  background: #d97d24;
+  border-radius: 999px;
+  box-shadow: 0 0 18px rgba(217, 125, 36, 0.6);
+  height: 0.5rem;
+  left: 65%;
+  position: absolute;
+  top: 31%;
+  width: 0.5rem;
+}
+
+.axis-one-thumb-trail {
+  background: rgba(217, 125, 36, 0.56);
+  border-radius: 999px;
+  height: 0.26rem;
+  left: 42%;
+  position: absolute;
+  top: 42%;
+  transform: rotate(-22deg);
+  width: 30%;
+}
+
+@media (max-width: 680px) {
+  .axis-one-screen {
+    gap: 1rem;
+  }
+
+  .axis-one-header {
+    min-height: 2.5rem;
+  }
+
+  .axis-one-camera {
+    min-height: 48dvh;
+  }
+
+  .axis-one-record {
+    width: clamp(11.8rem, 68vw, 17rem);
+  }
+
+  .axis-one-recent-grid {
+    gap: 0.5rem;
+  }
 }
 
 .clipnote-shell {
