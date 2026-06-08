@@ -102,7 +102,15 @@ export async function uploadCloudflareStreamVideoFile({
   form.append("file", fileBlob, filename);
   form.append("requireSignedURLs", "false");
 
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream`, {
+  const uploadEndpoint = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream`;
+  console.log("CLOUDFLARE_REPLAY_UPLOAD_REQUEST", {
+    accountId: config.accountId,
+    endpoint: uploadEndpoint,
+    headers: getCloudflareAuditHeaders(config.apiToken),
+    method: "POST",
+    token: getCloudflareTokenAudit(config.apiToken),
+  });
+  const response = await fetch(uploadEndpoint, {
     body: form,
     headers: {
       Authorization: `Bearer ${config.apiToken}`,
@@ -118,6 +126,10 @@ export async function uploadCloudflareStreamVideoFile({
   });
   const json = parseCloudflareJson<StreamUploadResult>(body);
   const uid = json?.result?.uid;
+  console.log("CLOUDFLARE_REPLAY_UPLOAD_UID", {
+    success: json?.success ?? null,
+    uid: uid ?? null,
+  });
   if (!response.ok || !json?.success || !uid) {
     return { error: getCloudflareError(json) || `cloudflare_replay_upload_failed_${response.status}`, uid: null };
   }
@@ -181,17 +193,28 @@ export async function createCloudflareStreamDownload(uid: string) {
   const config = getCloudflareStreamConfig();
   if (!config) return { error: "cloudflare_stream_not_configured" };
 
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}/downloads`, {
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}/downloads`;
+  console.log("CLOUDFLARE_MP4_DOWNLOAD_CREATE_REQUEST", {
+    accountId: config.accountId,
+    endpoint,
+    headers: getCloudflareAuditHeaders(config.apiToken),
+    method: "POST",
+    token: getCloudflareTokenAudit(config.apiToken),
+    uid,
+  });
+  const response = await fetch(endpoint, {
     headers: {
       Authorization: `Bearer ${config.apiToken}`,
     },
     method: "POST",
   });
   const responseBody = await response.text();
-  console.log("PROCESSING_STEP_3_CREATE_RESPONSE", {
+  console.log("CLOUDFLARE_MP4_DOWNLOAD_CREATE_RESPONSE", {
     body: responseBody,
-    request: `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}/downloads`,
+    endpoint,
+    method: "POST",
     status: response.status,
+    uid,
   });
   const json = parseCloudflareJson<unknown>(responseBody);
   if (!response.ok || json?.success === false) {
@@ -205,16 +228,27 @@ export async function getCloudflareStreamDownload(uid: string) {
   const config = getCloudflareStreamConfig();
   if (!config) return { download: null, error: "cloudflare_stream_not_configured" };
 
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}/downloads`, {
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}/downloads`;
+  console.log("CLOUDFLARE_MP4_DOWNLOAD_POLL_REQUEST", {
+    accountId: config.accountId,
+    endpoint,
+    headers: getCloudflareAuditHeaders(config.apiToken),
+    method: "GET",
+    token: getCloudflareTokenAudit(config.apiToken),
+    uid,
+  });
+  const response = await fetch(endpoint, {
     headers: {
       Authorization: `Bearer ${config.apiToken}`,
     },
   });
   const responseBody = await response.text();
-  console.log("PROCESSING_STEP_3_READ_RESPONSE", {
+  console.log("CLOUDFLARE_MP4_DOWNLOAD_POLL_RESPONSE", {
     body: responseBody,
-    request: `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}/downloads`,
+    endpoint,
+    method: "GET",
     status: response.status,
+    uid,
   });
   const json = parseCloudflareJson<StreamDownloadResult>(responseBody);
   if (!response.ok || !json?.success || !json.result) {
@@ -236,14 +270,34 @@ export async function waitForCloudflareStreamReady(uid: string) {
 }
 
 export async function waitForCloudflareMp4Download(uid: string) {
+  console.log("CLOUDFLARE_MP4_DOWNLOAD_WAIT_START", {
+    uid,
+  });
   const created = await createCloudflareStreamDownload(uid);
   if (created.error) throw new Error(created.error);
 
   for (let attempt = 0; attempt < 90; attempt += 1) {
+    console.log("CLOUDFLARE_MP4_DOWNLOAD_WAIT_ATTEMPT", {
+      attempt: attempt + 1,
+      uid,
+    });
     const result = await getCloudflareStreamDownload(uid);
     if (result.error) throw new Error(result.error);
     const download = result.download?.default;
-    if (download?.status === "ready" && download.url) return download.url;
+    console.log("CLOUDFLARE_MP4_DOWNLOAD_STATUS", {
+      attempt: attempt + 1,
+      status: download?.status ?? null,
+      uid,
+      urlPresent: Boolean(download?.url),
+    });
+    if (download?.status === "ready" && download.url) {
+      console.log("CLOUDFLARE_MP4_DOWNLOAD_READY", {
+        attempt: attempt + 1,
+        uid,
+        url: download.url,
+      });
+      return download.url;
+    }
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 
@@ -260,6 +314,19 @@ function parseCloudflareJson<T>(body: string) {
   } catch {
     return null;
   }
+}
+
+function getCloudflareAuditHeaders(apiToken: string) {
+  return {
+    Authorization: apiToken ? "Bearer <redacted>" : "missing",
+  };
+}
+
+function getCloudflareTokenAudit(apiToken: string) {
+  return {
+    exists: Boolean(apiToken),
+    length: apiToken.length,
+  };
 }
 
 function getMemorySnapshot() {
