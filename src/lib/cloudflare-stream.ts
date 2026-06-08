@@ -199,6 +199,7 @@ export async function createCloudflareStreamDownload(uid: string) {
     endpoint,
     headers: getCloudflareAuditHeaders(config.apiToken),
     method: "POST",
+    requestBody: null,
     token: getCloudflareTokenAudit(config.apiToken),
     uid,
   });
