@@ -19,6 +19,8 @@ export type AxisBallTrackPoint = {
 };
 
 export type AxisPlayerTrackPoint = {
+  boxHeight?: number;
+  boxWidth?: number;
   confidence: number;
   frame: number;
   id: string;
@@ -297,6 +299,8 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
         frame: frame.frame,
         id: `player_${index + 1}`,
         label: String(index + 1),
+        ...(player.height ? { boxHeight: player.height } : {}),
+        ...(player.width ? { boxWidth: player.width } : {}),
         ...(frameHeight ? { sourceHeight: frameHeight } : {}),
         ...(frameWidth ? { sourceWidth: frameWidth } : {}),
         time: roundTime((frame.frame - 1) * frameIntervalSeconds),
@@ -348,6 +352,7 @@ function normalizePrediction(
       .replace(/\s+/g, " ")
       .trim(),
     confidence,
+    height,
     detection: {
       bbox: {
         h: frameHeight && height ? height / frameHeight : 0,
@@ -365,6 +370,7 @@ function normalizePrediction(
       timestamp_ms: Math.round((frame.frame - 1) * frameIntervalSeconds * 1000),
       track_id: "ball",
     } satisfies AxisDetection,
+    width,
     x,
     y,
   };
@@ -514,57 +520,299 @@ function createReplayOverlayFilters({
   const filters: string[] = [];
   const safeSourceWidth = sourceWidth ?? firstSourceSize(ballTrack, playerTrack).width;
   const safeSourceHeight = sourceHeight ?? firstSourceSize(ballTrack, playerTrack).height;
-  const filteredBallTrack = ballTrack.filter((point) => point.time <= overlayPreviewDurationSeconds);
-  const filteredPlayerTrack = playerTrack.filter((point) => point.time <= overlayPreviewDurationSeconds);
+  const ballOverlay = buildBallOverlayPoints(ballTrack, safeSourceWidth, safeSourceHeight);
+  const playerOverlay = buildFeaturedPlayerOverlayPoints(playerTrack, safeSourceWidth, safeSourceHeight);
 
-  for (const [index, point] of filteredBallTrack.entries()) {
-    const mapped = mapExportPoint(point, safeSourceWidth, safeSourceHeight);
-    const start = Math.max(0, point.time - 0.08);
-    const end = point.time + 0.22;
-    const alpha = Math.max(0.28, Math.min(0.92, point.confidence > 1 ? point.confidence / 100 : point.confidence));
-    filters.push(
-      `drawbox=x=${Math.round(mapped.x - 9)}:y=${Math.round(mapped.y - 9)}:w=18:h=18:color=0xAEFF4E@${alpha.toFixed(
-        2,
-      )}:t=fill:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
-    );
-    if (index > 0) {
-      const previous = mapExportPoint(filteredBallTrack[index - 1], safeSourceWidth, safeSourceHeight);
-      const trailStart = Math.max(0, point.time - 0.2);
+  for (const [index, point] of ballOverlay.points.entries()) {
+    if (point.time < 0.7) continue;
+    const visibleEnd = Math.min(overlayPreviewDurationSeconds, point.time + 0.12);
+    const recentPoints = ballOverlay.points.slice(Math.max(0, index - 12), index + 1);
+    for (const [trailIndex, trailPoint] of recentPoints.entries()) {
+      const age = recentPoints.length - trailIndex - 1;
+      const fade = recentPoints.length <= 1 ? 1 : trailIndex / (recentPoints.length - 1);
+      const alpha = Math.max(0, Math.min(0.72, fade * 0.58 * point.confidence));
+      if (alpha <= 0.03) continue;
+      const size = Math.round(4 + fade * 8);
+      const trailStart = Math.max(0.7, point.time - 0.62);
       filters.push(
-        `drawbox=x=${Math.round((previous.x + mapped.x) / 2 - 5)}:y=${Math.round((previous.y + mapped.y) / 2 - 5)}:w=10:h=10:color=0xAEFF4E@0.38:t=fill:enable='between(t,${trailStart.toFixed(
-          3,
-        )},${end.toFixed(3)})'`,
+        drawBoxFilter({
+          alpha,
+          color: "0xFF7A1A",
+          height: size,
+          start: trailStart,
+          thickness: "fill",
+          width: size,
+          x: trailPoint.x - size / 2,
+          y: trailPoint.y - size / 2,
+          end: visibleEnd,
+        }),
       );
+      if (age <= 2) {
+        filters.push(
+          drawBoxFilter({
+            alpha: Math.max(0.12, alpha * 0.45),
+            color: "white",
+            height: Math.max(2, Math.round(size * 0.45)),
+            start: trailStart,
+            thickness: "fill",
+            width: Math.max(2, Math.round(size * 0.45)),
+            x: trailPoint.x - size * 0.225,
+            y: trailPoint.y - size * 0.225,
+            end: visibleEnd,
+          }),
+        );
+      }
     }
   }
 
-  for (const point of filteredPlayerTrack) {
-    const mapped = mapExportPoint(point, safeSourceWidth, safeSourceHeight);
-    const start = Math.max(0, point.time - 0.08);
-    const end = point.time + 0.18;
+  for (const [index, point] of playerOverlay.points.entries()) {
+    const next = playerOverlay.points[index + 1];
+    const start = Math.max(0.5, point.time - 0.05);
+    const end =
+      next && next.frame - point.frame <= 3
+        ? Math.min(overlayPreviewDurationSeconds, next.time + 0.12)
+        : Math.min(overlayPreviewDurationSeconds, point.time + 0.36);
+    const fadeIn = Math.min(1, Math.max(0.25, (point.time - 0.5) / 0.3));
+    const alpha = Math.min(0.95, point.confidence * fadeIn);
+    const ringColor = point.featured ? "0xAEFF4E" : "white";
+    const ringWidth = Math.round(Math.max(48, Math.min(118, point.boxWidth * 0.82)));
+    const ringHeight = Math.round(Math.max(12, Math.min(30, point.boxHeight * 0.15)));
+    const ringX = point.x - ringWidth / 2;
+    const ringY = point.bottomY - ringHeight / 2;
+
     filters.push(
-      `drawbox=x=${Math.round(mapped.x - 24)}:y=${Math.round(mapped.y - 8)}:w=48:h=16:color=white@0.72:t=3:enable='between(t,${start.toFixed(
-        3,
-      )},${end.toFixed(3)})'`,
+      drawBoxFilter({
+        alpha: Math.max(0.08, alpha * 0.22),
+        color: ringColor,
+        height: ringHeight + 12,
+        start,
+        thickness: "fill",
+        width: ringWidth + 18,
+        x: ringX - 9,
+        y: ringY - 6,
+        end,
+      }),
+      drawBoxFilter({
+        alpha,
+        color: ringColor,
+        height: ringHeight,
+        start,
+        thickness: 4,
+        width: ringWidth,
+        x: ringX,
+        y: ringY,
+        end,
+      }),
     );
+
     if (point.label) {
+      const labelText = escapeDrawText(point.label);
+      const fontSize = 18;
+      const labelWidth = Math.max(34, labelText.length * 12 + 18);
+      const labelX = point.x - labelWidth / 2;
+      const labelY = Math.max(8, point.y - point.boxHeight / 2 - 38);
       filters.push(
-        `drawtext=text='${escapeDrawText(point.label)}':x=${Math.round(mapped.x - 5)}:y=${Math.round(
-          mapped.y - 42,
-        )}:fontsize=24:fontcolor=white@0.92:box=1:boxcolor=black@0.45:boxborderw=6:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
+        drawBoxFilter({
+          alpha: Math.min(0.62, alpha * 0.72),
+          color: "black",
+          height: 28,
+          start,
+          thickness: "fill",
+          width: labelWidth,
+          x: labelX,
+          y: labelY,
+          end,
+        }),
+        `drawtext=text='${labelText}':x=${Math.round(labelX + 10)}:y=${Math.round(
+          labelY + 5,
+        )}:fontsize=${fontSize}:fontcolor=white@${Math.min(0.96, alpha).toFixed(2)}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
       );
     }
   }
 
   console.log("AXIS_REPLAY_EXPORT_FILTERS_CREATED", {
-    ballFilterCount: filteredBallTrack.length,
+    ballFilterCount: ballOverlay.points.length,
+    ballInterpolatedPoints: ballOverlay.interpolated,
+    ballJumpDrops: ballOverlay.jumpDrops,
     filterCount: filters.length,
-    playerFilterCount: filteredPlayerTrack.length,
+    overlayPackage: "AXIS_REPLAY_BASIC",
+    playerDropoutGaps: playerOverlay.dropoutGaps,
+    playerFilterCount: playerOverlay.points.length,
+    playerLowConfidenceDrops: playerOverlay.lowConfidenceDrops,
     previewDurationSeconds: overlayPreviewDurationSeconds,
     sourceBallTrackCount: ballTrack.length,
     sourcePlayerTrackCount: playerTrack.length,
   });
   return filters;
+}
+
+type BallOverlayPoint = {
+  confidence: number;
+  frame: number;
+  time: number;
+  x: number;
+  y: number;
+};
+
+type PlayerOverlayPoint = BallOverlayPoint & {
+  bottomY: number;
+  boxHeight: number;
+  boxWidth: number;
+  featured: boolean;
+  label?: string;
+};
+
+function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: number, targetHeight: number) {
+  const points = ballTrack
+    .filter((point) => point.time <= overlayPreviewDurationSeconds)
+    .filter((point) => toConfidence01(point.confidence) >= 0.25)
+    .sort((a, b) => a.time - b.time);
+  const smoothed: BallOverlayPoint[] = [];
+  let interpolated = 0;
+  let jumpDrops = 0;
+
+  for (const point of points) {
+    const mapped = mapExportPoint(point, targetWidth, targetHeight);
+    const previous = smoothed[smoothed.length - 1];
+    if (previous) {
+      const gap = point.time - previous.time;
+      const distance = Math.hypot(mapped.x - previous.x, mapped.y - previous.y);
+      const maxJump = Math.max(targetWidth, targetHeight) * Math.max(0.22, gap * 2.4);
+      if (distance > maxJump) {
+        jumpDrops += 1;
+        continue;
+      }
+      if (gap > frameIntervalSeconds * 1.5 && gap <= 0.32) {
+        const steps = Math.min(2, Math.floor(gap / frameIntervalSeconds) - 1);
+        for (let step = 1; step <= steps; step += 1) {
+          const t = step / (steps + 1);
+          smoothed.push({
+            confidence: Math.min(previous.confidence, toConfidence01(point.confidence)) * 0.82,
+            frame: previous.frame + step,
+            time: roundTime(previous.time + gap * t),
+            x: previous.x + (mapped.x - previous.x) * t,
+            y: previous.y + (mapped.y - previous.y) * t,
+          });
+          interpolated += 1;
+        }
+      }
+    }
+    smoothed.push({
+      confidence: toConfidence01(point.confidence),
+      frame: point.frame,
+      time: point.time,
+      x: previous ? previous.x * 0.42 + mapped.x * 0.58 : mapped.x,
+      y: previous ? previous.y * 0.42 + mapped.y * 0.58 : mapped.y,
+    });
+  }
+
+  console.log("AXIS_REPLAY_BASIC_BALL_SMOOTHING", {
+    inputPoints: ballTrack.length,
+    interpolated,
+    jumpDrops,
+    outputPoints: smoothed.length,
+  });
+  return { interpolated, jumpDrops, points: smoothed };
+}
+
+function buildFeaturedPlayerOverlayPoints(playerTrack: AxisPlayerTrackPoint[], targetWidth: number, targetHeight: number) {
+  const featuredId = selectFeaturedPlayerId(playerTrack);
+  let lowConfidenceDrops = 0;
+  let dropoutGaps = 0;
+  let previous: PlayerOverlayPoint | null = null;
+  const points: PlayerOverlayPoint[] = [];
+
+  for (const point of playerTrack
+    .filter((item) => item.id === featuredId && item.time <= overlayPreviewDurationSeconds)
+    .sort((a, b) => a.time - b.time)) {
+    const confidence = toConfidence01(point.confidence);
+    if (confidence < 0.35) {
+      lowConfidenceDrops += 1;
+      continue;
+    }
+    const box = mapExportBox(point, targetWidth, targetHeight);
+    if (previous && point.frame - previous.frame > 3) dropoutGaps += 1;
+    const x: number = previous ? previous.x * 0.62 + box.x * 0.38 : box.x;
+    const y: number = previous ? previous.y * 0.62 + box.y * 0.38 : box.y;
+    const boxWidth: number = previous ? previous.boxWidth * 0.7 + box.width * 0.3 : box.width;
+    const boxHeight: number = previous ? previous.boxHeight * 0.7 + box.height * 0.3 : box.height;
+    const overlayPoint: PlayerOverlayPoint = {
+      bottomY: y + boxHeight / 2,
+      boxHeight,
+      boxWidth,
+      confidence,
+      featured: true,
+      frame: point.frame,
+      label: point.label,
+      time: point.time,
+      x,
+      y,
+    };
+    points.push(overlayPoint);
+    previous = overlayPoint;
+  }
+
+  console.log("AXIS_REPLAY_BASIC_PLAYER_SMOOTHING", {
+    dropoutGaps,
+    featuredId,
+    inputPoints: playerTrack.length,
+    lowConfidenceDrops,
+    outputPoints: points.length,
+  });
+  return { dropoutGaps, lowConfidenceDrops, points };
+}
+
+function selectFeaturedPlayerId(playerTrack: AxisPlayerTrackPoint[]) {
+  const scores = new Map<string, number>();
+  for (const point of playerTrack) {
+    scores.set(point.id, (scores.get(point.id) ?? 0) + toConfidence01(point.confidence));
+  }
+  return [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "player_1";
+}
+
+function mapExportBox(point: AxisPlayerTrackPoint, targetWidth: number, targetHeight: number) {
+  const center = mapExportPoint(point, targetWidth, targetHeight);
+  const sourceWidth = point.sourceWidth || targetWidth || 1;
+  const sourceHeight = point.sourceHeight || targetHeight || 1;
+  const width = point.boxWidth ? (point.boxWidth / sourceWidth) * targetWidth : 72;
+  const height = point.boxHeight ? (point.boxHeight / sourceHeight) * targetHeight : 180;
+  return {
+    height: Math.max(72, Math.min(targetHeight * 0.55, height)),
+    width: Math.max(34, Math.min(targetWidth * 0.28, width)),
+    x: center.x,
+    y: center.y,
+  };
+}
+
+function drawBoxFilter({
+  alpha,
+  color,
+  end,
+  height,
+  start,
+  thickness,
+  width,
+  x,
+  y,
+}: {
+  alpha: number;
+  color: string;
+  end: number;
+  height: number;
+  start: number;
+  thickness: number | "fill";
+  width: number;
+  x: number;
+  y: number;
+}) {
+  return `drawbox=x=${Math.round(x)}:y=${Math.round(y)}:w=${Math.max(1, Math.round(width))}:h=${Math.max(
+    1,
+    Math.round(height),
+  )}:color=${color}@${Math.max(0, Math.min(1, alpha)).toFixed(2)}:t=${thickness}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`;
+}
+
+function toConfidence01(value: number) {
+  return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
 }
 
 function firstSourceSize(ballTrack: AxisBallTrackPoint[], playerTrack: AxisPlayerTrackPoint[]) {
