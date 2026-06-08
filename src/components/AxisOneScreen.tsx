@@ -67,11 +67,6 @@ type VideoJobResponse = {
 };
 
 const confidenceThreshold = 0.35;
-const recentReplays = [
-  { label: "Replay 01", meta: "Ready" },
-  { label: "Replay 02", meta: "Overlay" },
-  { label: "Replay 03", meta: "Saved" },
-];
 
 export function AxisOneScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -79,7 +74,6 @@ export function AxisOneScreen() {
   const objectUrlRef = useRef<string | null>(null);
   const overlayStateRef = useRef(createAxisOverlayEngineState());
   const rafRef = useRef<number>(0);
-  const recordInputRef = useRef<HTMLInputElement>(null);
   const timerStartedAtRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -276,24 +270,26 @@ export function AxisOneScreen() {
     <main className="axis-one-screen" data-state={state}>
       <header className="axis-one-header" aria-label="Axis home">
         <span>AXIS</span>
-        <strong>{state === "processing" ? stage : "Camera Roll + Live Replay"}</strong>
+        <strong>{state === "processing" ? stage : "Camera Roll Replay"}</strong>
       </header>
 
       {state === "choose" ? (
-        <section className="axis-one-camera" aria-label="Create replay">
-          <button className="axis-one-record" onClick={() => recordInputRef.current?.click()} type="button" aria-label="Record live replay">
-            <span />
-            RECORD
-          </button>
+        <section className="axis-one-intro" aria-label="Create overlay replay">
+          <h1>Turn a basketball clip into a replay.</h1>
           <button className="axis-one-select" onClick={() => inputRef.current?.click()} type="button">
             SELECT VIDEO
           </button>
+          <button className="axis-one-record-soon" disabled type="button">
+            RECORD CLIP <span>Coming Soon</span>
+          </button>
+          <p>Upload a clip. Axis tracks the ball, adds replay graphics, and exports a new video.</p>
         </section>
       ) : null}
 
       {state === "selected" ? (
         <section className="axis-one-status">
           <span>{selectedFile?.name || "Video selected"}</span>
+          <p>Ready to turn this clip into an overlay replay.</p>
           <button className="axis-one-primary" onClick={() => void handleGenerateReplay()} type="button">
             GENERATE REPLAY
           </button>
@@ -319,6 +315,7 @@ export function AxisOneScreen() {
       {state === "complete" ? (
         <section className="axis-one-status">
           <time>{formatElapsed(elapsedSeconds)}</time>
+          <p>Replay exported. Preview it, then save or share the finished video.</p>
           <button className="axis-one-primary" onClick={() => setState("replay")} type="button">
             PREVIEW REPLAY
           </button>
@@ -353,38 +350,28 @@ export function AxisOneScreen() {
       {state !== "replay" ? (
         <section className="axis-one-recent" aria-label="Recent replays">
           <div className="axis-one-recent-head">
-            <span>Recent Replay</span>
+            <span>Recent Replays</span>
           </div>
-          <div className="axis-one-recent-grid">
-            {recentReplays.map((replay, index) => (
-              <article className="axis-one-thumb" key={replay.label}>
-                <div>
-                  <span className="axis-one-thumb-ring" />
-                  <span className="axis-one-thumb-ball" />
-                  <span className="axis-one-thumb-trail" />
-                </div>
-                <strong>{replay.label}</strong>
-                <em>{index === 0 && state === "complete" ? "New" : replay.meta}</em>
-              </article>
-            ))}
-          </div>
+          {saveUrl ? (
+            <article className="axis-one-real-replay">
+              <video muted playsInline preload="metadata" src={saveUrl} />
+              <div>
+                <strong>Latest Replay</strong>
+                <em>Ready to save</em>
+              </div>
+            </article>
+          ) : (
+            <div className="axis-one-empty-replays">
+              <strong>No replays yet.</strong>
+              <span>Create your first replay from a video.</span>
+            </div>
+          )}
         </section>
       ) : null}
 
       <input
         ref={inputRef}
         accept="video/*"
-        hidden
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) handleFile(file);
-        }}
-        type="file"
-      />
-      <input
-        ref={recordInputRef}
-        accept="video/*"
-        capture="environment"
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
