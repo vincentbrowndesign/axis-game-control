@@ -33,6 +33,12 @@ export type AxisPlayerTrackPoint = {
   y: number;
 };
 
+export type AxisReplayFocusPlayer = {
+  label?: string;
+  x: number;
+  y: number;
+};
+
 export type AxisBallProcessingResult = {
   ballTrack: AxisBallTrackPoint[];
   detectionCount: number;
@@ -58,6 +64,7 @@ export type AxisBallProcessingStageUpdate =
 
 export type AxisBallProcessingOptions = {
   exportReplay?: boolean;
+  focusPlayer?: AxisReplayFocusPlayer;
   keepWorkDir?: boolean;
   sessionId?: string;
   sourceJobId?: string;
@@ -186,6 +193,7 @@ export async function runAxisBallProcessing(
           createFilters: (metadata) =>
             createReplayOverlayFilters({
               ballTrack: detectionResult.ballTrack,
+              focusPlayer: options.focusPlayer,
               playerTrack: detectionResult.playerTrack,
               sourceHeight: metadata.height ?? undefined,
               sourceWidth: metadata.width ?? undefined,
@@ -511,11 +519,13 @@ function clamp01(value: number) {
 
 function createReplayOverlayFilters({
   ballTrack,
+  focusPlayer,
   playerTrack,
   sourceHeight,
   sourceWidth,
 }: {
   ballTrack: AxisBallTrackPoint[];
+  focusPlayer?: AxisReplayFocusPlayer;
   playerTrack: AxisPlayerTrackPoint[];
   sourceHeight?: number;
   sourceWidth?: number;
@@ -524,7 +534,7 @@ function createReplayOverlayFilters({
   const safeSourceWidth = sourceWidth ?? firstSourceSize(ballTrack, playerTrack).width;
   const safeSourceHeight = sourceHeight ?? firstSourceSize(ballTrack, playerTrack).height;
   const ballOverlay = buildBallOverlayPoints(ballTrack, safeSourceWidth, safeSourceHeight);
-  const playerOverlay = buildFeaturedPlayerOverlayPoints(playerTrack, safeSourceWidth, safeSourceHeight);
+  const playerOverlay = buildFeaturedPlayerOverlayPoints(playerTrack, safeSourceWidth, safeSourceHeight, focusPlayer);
 
   for (const point of ballOverlay.points) {
     if (point.time < 0.7) continue;
@@ -718,8 +728,13 @@ function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: nu
   return { interpolated, jumpDrops, points: smoothed };
 }
 
-function buildFeaturedPlayerOverlayPoints(playerTrack: AxisPlayerTrackPoint[], targetWidth: number, targetHeight: number) {
-  const featuredId = selectFeaturedPlayerId(playerTrack);
+function buildFeaturedPlayerOverlayPoints(
+  playerTrack: AxisPlayerTrackPoint[],
+  targetWidth: number,
+  targetHeight: number,
+  focusPlayer?: AxisReplayFocusPlayer,
+) {
+  const featuredId = selectFeaturedPlayerId(playerTrack, targetWidth, targetHeight, focusPlayer);
   let lowConfidenceDrops = 0;
   let dropoutGaps = 0;
   let previous: PlayerOverlayPoint | null = null;
@@ -749,7 +764,7 @@ function buildFeaturedPlayerOverlayPoints(playerTrack: AxisPlayerTrackPoint[], t
       confidence,
       featured: true,
       frame: point.frame,
-      label: point.label,
+      label: focusPlayer?.label || point.label,
       time: point.time,
       x,
       y,
@@ -761,6 +776,7 @@ function buildFeaturedPlayerOverlayPoints(playerTrack: AxisPlayerTrackPoint[], t
   console.log("AXIS_REPLAY_BASIC_PLAYER_SMOOTHING", {
     dropoutGaps,
     featuredId,
+    focusPlayer,
     inputPoints: playerTrack.length,
     lowConfidenceDrops,
     outputPoints: points.length,
@@ -768,7 +784,26 @@ function buildFeaturedPlayerOverlayPoints(playerTrack: AxisPlayerTrackPoint[], t
   return { dropoutGaps, lowConfidenceDrops, points };
 }
 
-function selectFeaturedPlayerId(playerTrack: AxisPlayerTrackPoint[]) {
+function selectFeaturedPlayerId(
+  playerTrack: AxisPlayerTrackPoint[],
+  targetWidth: number,
+  targetHeight: number,
+  focusPlayer?: AxisReplayFocusPlayer,
+) {
+  if (focusPlayer) {
+    const focusX = clamp01(focusPlayer.x) * targetWidth;
+    const focusY = clamp01(focusPlayer.y) * targetHeight;
+    let nearest: { distance: number; id: string } | null = null;
+
+    for (const point of playerTrack.filter((item) => item.time <= 1.5)) {
+      const mapped = mapExportPoint(point, targetWidth, targetHeight);
+      const distance = Math.hypot(mapped.x - focusX, mapped.y - focusY);
+      if (!nearest || distance < nearest.distance) nearest = { distance, id: point.id };
+    }
+
+    if (nearest) return nearest.id;
+  }
+
   const scores = new Map<string, number>();
   for (const point of playerTrack) {
     scores.set(point.id, (scores.get(point.id) ?? 0) + toConfidence01(point.confidence));

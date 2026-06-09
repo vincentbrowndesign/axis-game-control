@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { promises as fs } from "node:fs";
-import { runAxisBallProcessing } from "../src/lib/axis-ball-processing";
+import { runAxisBallProcessing, type AxisReplayFocusPlayer } from "../src/lib/axis-ball-processing";
 import { storeAxisEvents } from "../src/lib/axis-events";
 import type { AxisVideoJobRecord } from "../src/lib/axis-video-jobs";
 import { getAxisVideoJob, updateAxisVideoJob } from "../src/lib/axis-video-jobs";
@@ -9,6 +9,7 @@ import { assertAxisSupabaseServerEnv, verifyAxisSupabaseServiceRoleConnectivity 
 
 type AxisVideoProcessingPayload = {
   cloudflareUid: string;
+  focusPlayer?: AxisReplayFocusPlayer;
   jobId: string;
 };
 
@@ -59,6 +60,7 @@ export const axisVideoProcessing = task({
       console.log("DOWNLOAD_VIDEO_START", {
         cloudflareUid: payload.cloudflareUid,
         jobId: payload.jobId,
+        focusPlayer: payload.focusPlayer ?? null,
       });
       console.log("PROCESSING_STEP_3", {
         request: "cloudflare.stream.downloads.create_and_read",
@@ -101,7 +103,7 @@ export const axisVideoProcessing = task({
             status: "axis_processing",
           });
         },
-        { exportReplay: true, keepWorkDir: true, sourceJobId: payload.jobId },
+        { exportReplay: true, focusPlayer: payload.focusPlayer, keepWorkDir: true, sourceJobId: payload.jobId },
       );
       processingWorkDir = result.workDir;
       logAxisVideoProcessingMemory("BEFORE_REPLAY_GENERATION", { jobId: payload.jobId });

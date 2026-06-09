@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../lib/axis-client-auth";
 import {
   createAxisOverlayEngineState,
@@ -9,15 +9,12 @@ import {
   type AxisOverlayFrame,
 } from "../lib/axis-overlay-engine";
 
-type AppState = "choose" | "complete" | "failed" | "processing" | "replay" | "selected";
+type AppState = "choose" | "complete" | "failed" | "focus" | "processing";
+type PreviewMode = "original" | "replay";
 type VisibleStage =
-  | "Detecting Ball"
-  | "Detecting Players"
-  | "Extracting Frames"
-  | "Generating Replay"
-  | "Rendering Replay"
-  | "Tracking Objects"
-  | "Uploading";
+  | "Building Replay"
+  | "Finding Player"
+  | "Uploading Clip";
 
 type BallTrackPoint = {
   confidence: number;
@@ -70,6 +67,12 @@ type VideoJobResponse = {
   triggerRunId?: string;
 };
 
+type FocusPlayer = {
+  label?: string;
+  x: number;
+  y: number;
+};
+
 const confidenceThreshold = 0.35;
 
 export function AxisOneScreen() {
@@ -83,12 +86,16 @@ export function AxisOneScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
+  const [focusPlayer, setFocusPlayer] = useState<FocusPlayer | null>(null);
   const [jobId, setJobId] = useState("");
+  const [originalUrl, setOriginalUrl] = useState("");
+  const [playerLabel, setPlayerLabel] = useState("");
   const [pollWarning, setPollWarning] = useState("");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("replay");
   const [saveUrl, setSaveUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [state, setState] = useState<AppState>("choose");
-  const [stage, setStage] = useState<VisibleStage>("Uploading");
+  const [stage, setStage] = useState<VisibleStage>("Uploading Clip");
   const [track, setTrack] = useState<BallTrackPoint[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
 
@@ -102,7 +109,7 @@ export function AxisOneScreen() {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !video || !ctx || state !== "replay") return;
+    if (!canvas || !video || !ctx || state !== "complete") return;
 
     const rect = video.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -154,7 +161,7 @@ export function AxisOneScreen() {
   }, [state]);
 
   useEffect(() => {
-    if (state !== "replay") return;
+    if (state !== "complete") return;
     rafRef.current = requestAnimationFrame(draw);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -239,7 +246,7 @@ export function AxisOneScreen() {
           setVideoUrl(result.videoUrl);
           setSaveUrl(result.videoUrl);
         }
-        setStage("Rendering Replay");
+        setStage("Building Replay");
         setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
         setState("complete");
         window.clearInterval(interval);
@@ -263,23 +270,42 @@ export function AxisOneScreen() {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     const localVideoUrl = URL.createObjectURL(file);
     objectUrlRef.current = localVideoUrl;
+    setOriginalUrl(localVideoUrl);
     setVideoUrl(localVideoUrl);
+    setFocusPlayer(null);
     setTrack([]);
     setSaveUrl("");
     setError("");
     setJobId("");
+    setPlayerLabel("");
+    setPreviewMode("replay");
     setPollWarning("");
     pollingAccessTokenRef.current = null;
     setElapsedSeconds(0);
     setSelectedFile(file);
     resetAxisOverlayEngineState(overlayStateRef.current);
-    setState("selected");
+    setState("focus");
+  }
+
+  function handleFocusTap(event: PointerEvent<HTMLVideoElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / Math.max(1, rect.width);
+    const y = (event.clientY - rect.top) / Math.max(1, rect.height);
+    setFocusPlayer({
+      ...(playerLabel.trim() ? { label: playerLabel.trim() } : {}),
+      x: clamp01(x),
+      y: clamp01(y),
+    });
   }
 
   async function handleGenerateReplay() {
-    const file = selectedFile;
-    if (!file) return;
-    setStage("Uploading");
+      const file = selectedFile;
+      if (!file) return;
+    if (!focusPlayer) {
+      setError("Tap the player you want Axis to follow.");
+      return;
+    }
+    setStage("Uploading Clip");
     timerStartedAtRef.current = performance.now();
     setState("processing");
 
@@ -322,7 +348,7 @@ export function AxisOneScreen() {
         throw uploadError;
       }
 
-      setStage("Uploading");
+      setStage("Uploading Clip");
       console.info("PROCESSING_START", { cloudflareUid: upload.cloudflareUid, jobId: upload.jobId });
       const route = "/api/axis/video-job";
       let response: Response;
@@ -337,6 +363,10 @@ export function AxisOneScreen() {
             cloudflareUid: upload.cloudflareUid,
             fileSize: file.size,
             filename: file.name || "axis-video.mp4",
+            focusPlayer: {
+              ...focusPlayer,
+              ...(playerLabel.trim() ? { label: playerLabel.trim() } : {}),
+            },
             jobId: upload.jobId,
           }),
           headers: { "Content-Type": "application/json" },
@@ -381,13 +411,36 @@ export function AxisOneScreen() {
     }
   }
 
-  function handlePreviewReplay() {
-    console.info("PREVIEW_URL", {
-      replayUrl,
-      saveUrl,
-      videoUrl,
-    });
-    setState("replay");
+  function handleCreateAnother() {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
+    pollingAccessTokenRef.current = null;
+    setElapsedSeconds(0);
+    setError("");
+    setFocusPlayer(null);
+    setJobId("");
+    setOriginalUrl("");
+    setPlayerLabel("");
+    setPollWarning("");
+    setPreviewMode("replay");
+    setSaveUrl("");
+    setSelectedFile(null);
+    setTrack([]);
+    setVideoUrl("");
+    setState("choose");
+  }
+
+  async function handleShareReplay() {
+    const url = saveUrl || replayUrl;
+    if (!url) return;
+    if (navigator.share) {
+      await navigator.share({
+        title: "Axis Replay",
+        url,
+      });
+      return;
+    }
+    await navigator.clipboard?.writeText(url);
   }
 
   function logVideoLoaded(eventName: "canplay" | "loadedmetadata", video: HTMLVideoElement) {
@@ -434,18 +487,51 @@ export function AxisOneScreen() {
           <button className="axis-one-select" onClick={() => inputRef.current?.click()} type="button">
             SELECT VIDEO
           </button>
-          <button className="axis-one-record-soon" disabled type="button">
-            RECORD CLIP <span>Coming Soon</span>
-          </button>
           <p>Upload a clip. Axis tracks the ball, adds replay graphics, and exports a new video.</p>
         </section>
       ) : null}
 
-      {state === "selected" ? (
-        <section className="axis-one-status">
-          <span>{selectedFile?.name || "Video selected"}</span>
-          <p>Ready to turn this clip into an overlay replay.</p>
-          <button className="axis-one-primary" onClick={() => void handleGenerateReplay()} type="button">
+      {state === "focus" ? (
+        <section className="axis-one-focus" aria-label="Choose focus player">
+          <header>
+            <span>{selectedFile?.name || "Video selected"}</span>
+            <h1>Who should we follow?</h1>
+            <p>Tap the player you want Axis to follow.</p>
+          </header>
+          <div className="axis-one-focus-stage">
+            <video controls muted onPointerDown={handleFocusTap} playsInline preload="metadata" src={originalUrl} />
+            {focusPlayer ? (
+              <span
+                aria-label="Selected player"
+                className="axis-one-focus-ring"
+                style={{
+                  left: `${focusPlayer.x * 100}%`,
+                  top: `${focusPlayer.y * 100}%`,
+                }}
+              />
+            ) : null}
+          </div>
+          {focusPlayer ? (
+            <label className="axis-one-name-field">
+              <span>Name or number</span>
+              <input
+                onChange={(event) => {
+                  const label = event.target.value;
+                  setPlayerLabel(label);
+                  setFocusPlayer((current) => {
+                    if (!current) return current;
+                    const nextLabel = label.trim();
+                    return nextLabel ? { ...current, label: nextLabel } : { x: current.x, y: current.y };
+                  });
+                }}
+                placeholder="Optional"
+                type="text"
+                value={playerLabel}
+              />
+            </label>
+          ) : null}
+          {error ? <em className="axis-one-inline-error">{error}</em> : null}
+          <button className="axis-one-primary" disabled={!focusPlayer} onClick={() => void handleGenerateReplay()} type="button">
             GENERATE REPLAY
           </button>
           <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
@@ -456,8 +542,9 @@ export function AxisOneScreen() {
 
       {state === "processing" || state === "failed" ? (
         <section className="axis-one-processing" aria-live="polite">
-          <strong>{state === "failed" ? "PROCESSING FAILED" : "PROCESSING VIDEO"}</strong>
+          <strong>{state === "failed" ? "PROCESSING FAILED" : "BUILDING REPLAY"}</strong>
           <time>{formatElapsed(elapsedSeconds)}</time>
+          {playerLabel.trim() ? <em>Following: {playerLabel.trim().toUpperCase()}</em> : null}
           <span>{state === "failed" ? error || "Try Again" : pollWarning || stage}</span>
           {state === "failed" ? (
             <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
@@ -468,20 +555,19 @@ export function AxisOneScreen() {
       ) : null}
 
       {state === "complete" ? (
-        <section className="axis-one-status">
-          <time>{formatElapsed(elapsedSeconds)}</time>
-          <p>Replay exported. Preview it, then save or share the finished video.</p>
-          <button className="axis-one-primary" onClick={handlePreviewReplay} type="button">
-            PREVIEW REPLAY
-          </button>
-          <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
-            SELECT VIDEO
-          </button>
-        </section>
-      ) : null}
-
-      {state === "replay" ? (
-        <section className="axis-one-replay" aria-label="Replay">
+        <section className="axis-one-replay" aria-label="Replay ready">
+          <header className="axis-one-ready-head">
+            <span>Replay Ready</span>
+            <time>{formatElapsed(elapsedSeconds)}</time>
+          </header>
+          <div className="axis-one-preview-toggle" aria-label="Preview mode">
+            <button aria-pressed={previewMode === "replay"} onClick={() => setPreviewMode("replay")} type="button">
+              Replay
+            </button>
+            <button aria-pressed={previewMode === "original"} onClick={() => setPreviewMode("original")} type="button">
+              View Original
+            </button>
+          </div>
           <video
             autoPlay
             className="axis-one-video"
@@ -504,17 +590,25 @@ export function AxisOneScreen() {
             onTimeUpdate={draw}
             playsInline
             ref={videoRef}
-            src={replayUrl}
+            src={previewMode === "original" ? originalUrl : replayUrl}
           />
-          {saveUrl ? (
-            <a className="axis-one-save" download href={saveUrl}>
-              SAVE VIDEO
-            </a>
-          ) : null}
+          <div className="axis-one-complete-actions">
+            {saveUrl ? (
+              <a className="axis-one-save" download href={saveUrl}>
+                SAVE VIDEO
+              </a>
+            ) : null}
+            <button className="axis-one-share" onClick={() => void handleShareReplay()} type="button">
+              SHARE
+            </button>
+            <button className="axis-one-create" onClick={handleCreateAnother} type="button">
+              CREATE ANOTHER
+            </button>
+          </div>
         </section>
       ) : null}
 
-      {state !== "replay" ? (
+      {state === "choose" || state === "focus" ? (
         <section className="axis-one-recent" aria-label="Recent replays">
           <div className="axis-one-recent-head">
             <span>Recent Replays</span>
@@ -617,12 +711,14 @@ async function uploadFileToCloudflare(file: File, upload: VideoUploadUrlResponse
 }
 
 function stageFromJob(stage: unknown): VisibleStage {
-  if (stage === "queued" || stage === "uploading") return "Uploading";
-  if (stage === "extracting_frames") return "Extracting Frames";
-  if (stage === "detecting_basketball") return "Detecting Ball";
-  if (stage === "building_track") return "Tracking Objects";
-  if (stage === "rendering_replay" || stage === "complete") return "Rendering Replay";
-  return "Uploading";
+  if (stage === "queued" || stage === "uploading") return "Uploading Clip";
+  if (stage === "extracting_frames" || stage === "detecting_basketball") return "Finding Player";
+  if (stage === "building_track" || stage === "rendering_replay" || stage === "complete") return "Building Replay";
+  return "Uploading Clip";
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
 }
 
 function formatElapsed(totalSeconds: number) {
