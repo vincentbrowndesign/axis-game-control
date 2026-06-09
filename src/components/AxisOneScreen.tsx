@@ -69,6 +69,7 @@ type VideoJobResponse = {
 
 type FocusSelection = {
   label?: string;
+  timestamp?: number;
   x: number;
   y: number;
 };
@@ -288,13 +289,16 @@ export function AxisOneScreen() {
   }
 
   function handleFocusTap(event: PointerEvent<HTMLVideoElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / Math.max(1, rect.width);
-    const y = (event.clientY - rect.top) / Math.max(1, rect.height);
+    const videoPoint = getVideoRelativePoint(event.currentTarget, event.clientX, event.clientY);
+    console.info("FOCUS_TAP_VIDEO_POINT", {
+      x: videoPoint.x,
+      y: videoPoint.y,
+    });
     setFocusSelection({
       ...(playerLabel.trim() ? { label: playerLabel.trim() } : {}),
-      x: clamp01(x),
-      y: clamp01(y),
+      timestamp: Number.isFinite(event.currentTarget.currentTime) ? event.currentTarget.currentTime : 0,
+      x: videoPoint.x,
+      y: videoPoint.y,
     });
   }
 
@@ -719,6 +723,31 @@ function stageFromJob(stage: unknown): VisibleStage {
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function getVideoRelativePoint(video: HTMLVideoElement, clientX: number, clientY: number) {
+  const rect = video.getBoundingClientRect();
+  const naturalWidth = video.videoWidth || rect.width || 1;
+  const naturalHeight = video.videoHeight || rect.height || 1;
+  const naturalAspect = naturalWidth / Math.max(1, naturalHeight);
+  const renderedAspect = rect.width / Math.max(1, rect.height);
+  let contentWidth = rect.width;
+  let contentHeight = rect.height;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (renderedAspect > naturalAspect) {
+    contentWidth = rect.height * naturalAspect;
+    offsetX = (rect.width - contentWidth) / 2;
+  } else {
+    contentHeight = rect.width / naturalAspect;
+    offsetY = (rect.height - contentHeight) / 2;
+  }
+
+  return {
+    x: clamp01((clientX - rect.left - offsetX) / Math.max(1, contentWidth)),
+    y: clamp01((clientY - rect.top - offsetY) / Math.max(1, contentHeight)),
+  };
 }
 
 function formatElapsed(totalSeconds: number) {

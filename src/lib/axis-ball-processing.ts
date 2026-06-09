@@ -20,21 +20,28 @@ export type AxisBallTrackPoint = {
 };
 
 export type AxisPlayerTrackPoint = {
-  boxHeight?: number;
-  boxWidth?: number;
+  bbox: {
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  };
+  centerX: number;
+  centerY: number;
   confidence: number;
-  frame: number;
-  id: string;
+  footX: number;
+  footY: number;
+  frameIndex: number;
   label?: string;
   sourceHeight?: number;
   sourceWidth?: number;
-  time: number;
-  x: number;
-  y: number;
+  timestamp: number;
+  trackId: string;
 };
 
 export type AxisReplayFocusSelection = {
   label?: string;
+  timestamp?: number;
   x: number;
   y: number;
 };
@@ -100,11 +107,37 @@ type RoboflowImage = {
 };
 
 type ActivePlayerTrack = {
+  bbox: {
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  };
+  centerX: number;
+  centerY: number;
   frame: number;
+  footX: number;
+  footY: number;
   id: string;
   label: string;
-  x: number;
-  y: number;
+};
+
+type PlayerDetectionCandidate = {
+  bbox: {
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  };
+  centerX: number;
+  centerY: number;
+  confidence: number;
+  footX: number;
+  footY: number;
+  height: number;
+  sourceHeight: number;
+  sourceWidth: number;
+  width: number;
 };
 
 const frameIntervalSeconds = 0.1;
@@ -276,6 +309,10 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
   const activePlayerTracks: ActivePlayerTrack[] = [];
   let detectionCount = 0;
   let nextPlayerTrackNumber = 1;
+  let playerDetectionsCreated = 0;
+  let playerTracksCreated = 0;
+  let playerTrackSwitches = 0;
+  let playerDroppedDetections = 0;
 
   for (const frame of frames) {
     const image = await fs.readFile(frame.path);
@@ -303,6 +340,7 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
       .filter((prediction) => isFiniteNumber(prediction.x) && isFiniteNumber(prediction.y))
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 10);
+    playerDetectionsCreated += players.length;
     detectionCount += basketballs.length;
     detections.push(...basketballs.map((prediction) => prediction.detection));
 
@@ -322,53 +360,75 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
     const usedTrackIds = new Set<string>();
     for (const player of players) {
       if (!isFiniteNumber(player.x) || !isFiniteNumber(player.y)) continue;
-      const sourceWidth = frameWidth || 1;
-      const sourceHeight = frameHeight || 1;
-      const normalizedX = player.x / sourceWidth;
-      const normalizedY = player.y / sourceHeight;
-      let nearestTrack: { distance: number; track: ActivePlayerTrack } | null = null;
+      const candidate = createPlayerDetectionCandidate(player, frameWidth, frameHeight);
+      let bestTrack: { cost: number; distance: number; iou: number; track: ActivePlayerTrack } | null = null;
 
       for (const track of activePlayerTracks) {
-        if (usedTrackIds.has(track.id) || frame.frame - track.frame > 12) continue;
-        const distance = Math.hypot(normalizedX - track.x, normalizedY - track.y);
-        if (distance > 0.22) continue;
-        if (!nearestTrack || distance < nearestTrack.distance) nearestTrack = { distance, track };
+        const missedFrames = frame.frame - track.frame;
+        if (usedTrackIds.has(track.id) || missedFrames > 5) continue;
+        const distance = normalizedDistance(candidate, track);
+        const iou = normalizedBoxIou(candidate, track);
+        const maxDistance = Math.min(0.34, 0.14 + missedFrames * 0.035);
+        if (distance > maxDistance && iou < 0.04) continue;
+        const cost = distance - iou * 0.32 + missedFrames * 0.01;
+        if (!bestTrack || cost < bestTrack.cost) bestTrack = { cost, distance, iou, track };
       }
 
       const assignedTrack =
-        nearestTrack?.track ??
+        bestTrack?.track ??
         ({
           frame: frame.frame,
+          bbox: candidate.bbox,
+          centerX: candidate.centerX,
+          centerY: candidate.centerY,
+          footX: candidate.footX,
+          footY: candidate.footY,
           id: `player_${nextPlayerTrackNumber}`,
           label: String(nextPlayerTrackNumber),
-          x: normalizedX,
-          y: normalizedY,
         } satisfies ActivePlayerTrack);
 
-      if (!nearestTrack) {
+      if (!bestTrack) {
         activePlayerTracks.push(assignedTrack);
         nextPlayerTrackNumber += 1;
+        playerTracksCreated += 1;
+      } else if (bestTrack.distance > 0.2 && bestTrack.iou < 0.12) {
+        playerTrackSwitches += 1;
+        console.log("PLAYER_TRACK_SWITCH_CANDIDATE", {
+          distance: bestTrack.distance,
+          frame: frame.frame,
+          iou: bestTrack.iou,
+          trackId: assignedTrack.id,
+        });
       }
 
+      const previousFootX = assignedTrack.footX;
+      const previousFootY = assignedTrack.footY;
       assignedTrack.frame = frame.frame;
-      assignedTrack.x = normalizedX;
-      assignedTrack.y = normalizedY;
+      assignedTrack.bbox = candidate.bbox;
+      assignedTrack.centerX = candidate.centerX;
+      assignedTrack.centerY = candidate.centerY;
+      assignedTrack.footX = previousFootX * 0.72 + candidate.footX * 0.28;
+      assignedTrack.footY = previousFootY * 0.72 + candidate.footY * 0.28;
       usedTrackIds.add(assignedTrack.id);
 
       playerTrack.push({
+        bbox: candidate.bbox,
+        centerX: candidate.centerX,
+        centerY: candidate.centerY,
         confidence: player.confidence,
-        frame: frame.frame,
-        id: assignedTrack.id,
+        footX: assignedTrack.footX,
+        footY: assignedTrack.footY,
+        frameIndex: frame.frame,
         label: assignedTrack.label,
-        ...(player.height ? { boxHeight: player.height } : {}),
-        ...(player.width ? { boxWidth: player.width } : {}),
-        ...(frameHeight ? { sourceHeight: frameHeight } : {}),
-        ...(frameWidth ? { sourceWidth: frameWidth } : {}),
-        time: roundTime((frame.frame - 1) * frameIntervalSeconds),
-        x: player.x,
-        y: player.y,
+        sourceHeight: candidate.sourceHeight,
+        sourceWidth: candidate.sourceWidth,
+        timestamp: roundTime((frame.frame - 1) * frameIntervalSeconds),
+        trackId: assignedTrack.id,
       });
     }
+
+    const droppedThisFrame = Math.max(0, players.length - usedTrackIds.size);
+    playerDroppedDetections += droppedThisFrame;
 
     if (!best || !isFiniteNumber(best.x) || !isFiniteNumber(best.y)) continue;
     ballTrack.push({
@@ -384,6 +444,14 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
 
   const tracks = buildAxisTracksFromBallTrack(ballTrack, options.sessionId);
   const events = buildAxisEventsFromTracks({ detectionCount: detections.length, sessionId: options.sessionId, tracks });
+  console.log("PLAYER_DETECTIONS_CREATED", { count: playerDetectionsCreated });
+  console.log("PLAYER_TRACKS_CREATED", {
+    droppedDetections: playerDroppedDetections,
+    points: playerTrack.length,
+    trackCount: activePlayerTracks.length,
+    trackSwitchCandidates: playerTrackSwitches,
+    tracksCreated: playerTracksCreated,
+  });
 
   return {
     ballTrack,
@@ -454,6 +522,66 @@ function getNumber(value: unknown) {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function createPlayerDetectionCandidate(
+  player: ReturnType<typeof normalizePrediction>,
+  frameWidth?: number,
+  frameHeight?: number,
+): PlayerDetectionCandidate {
+  const sourceWidth = frameWidth || 1;
+  const sourceHeight = frameHeight || 1;
+  const width = Math.max(1, player.width ?? sourceWidth * 0.08);
+  const height = Math.max(1, player.height ?? sourceHeight * 0.24);
+  const centerX = player.x ?? 0;
+  const centerY = player.y ?? 0;
+  const bbox = {
+    height,
+    width,
+    x: centerX - width / 2,
+    y: centerY - height / 2,
+  };
+  return {
+    bbox,
+    centerX,
+    centerY,
+    confidence: player.confidence,
+    footX: centerX,
+    footY: bbox.y + bbox.height,
+    height,
+    sourceHeight,
+    sourceWidth,
+    width,
+  };
+}
+
+function normalizedDistance(candidate: PlayerDetectionCandidate, track: ActivePlayerTrack) {
+  const sourceWidth = Math.max(1, candidate.sourceWidth);
+  const sourceHeight = Math.max(1, candidate.sourceHeight);
+  return Math.hypot((candidate.footX - track.footX) / sourceWidth, (candidate.footY - track.footY) / sourceHeight);
+}
+
+function normalizedBoxIou(candidate: PlayerDetectionCandidate, track: ActivePlayerTrack) {
+  const sourceWidth = Math.max(1, candidate.sourceWidth);
+  const sourceHeight = Math.max(1, candidate.sourceHeight);
+  const a = normalizeBox(candidate.bbox, sourceWidth, sourceHeight);
+  const b = normalizeBox(track.bbox, sourceWidth, sourceHeight);
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.width, b.x + b.width);
+  const y2 = Math.min(a.y + a.height, b.y + b.height);
+  const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const union = a.width * a.height + b.width * b.height - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
+function normalizeBox(box: PlayerDetectionCandidate["bbox"], sourceWidth: number, sourceHeight: number) {
+  return {
+    height: box.height / sourceHeight,
+    width: box.width / sourceWidth,
+    x: box.x / sourceWidth,
+    y: box.y / sourceHeight,
+  };
 }
 
 function roundTime(value: number) {
@@ -651,10 +779,21 @@ function createReplayOverlayFilters({
     const ringHeight = Math.round(
       Math.max(overlayStyle.ring.minHeight, Math.min(overlayStyle.ring.maxHeight, point.boxHeight * overlayStyle.ring.heightScale)),
     );
-    const ringX = point.x - ringWidth / 2;
-    const ringY = point.bottomY - ringHeight / 2;
+    const ringX = point.footX - ringWidth / 2;
+    const ringY = point.footY - ringHeight / 2;
 
     filters.push(
+      drawBoxFilter({
+        alpha: Math.max(0.04, alpha * 0.18),
+        color: axisFfmpegColor(overlayStyle.colors.black),
+        height: ringHeight + 12,
+        start,
+        thickness: "fill",
+        width: ringWidth + 22,
+        x: point.footX - (ringWidth + 22) / 2,
+        y: point.footY - ringHeight / 2 + 4,
+        end,
+      }),
       drawBoxFilter({
         alpha: Math.max(0.05, alpha * overlayStyle.ring.fillAlpha * 0.55),
         color: ringColor,
@@ -683,8 +822,8 @@ function createReplayOverlayFilters({
       const labelText = escapeDrawText(point.label);
       const fontSize = overlayStyle.label.textSize;
       const labelWidth = Math.max(overlayStyle.label.minWidth, labelText.length * 12 + overlayStyle.label.paddingX * 2);
-      const labelX = point.x - labelWidth / 2;
-      const labelY = Math.max(8, point.y - point.boxHeight / 2 - overlayStyle.label.verticalOffset);
+      const labelX = point.centerX - labelWidth / 2;
+      const labelY = Math.max(8, point.centerY - point.boxHeight / 2 - overlayStyle.label.verticalOffset);
       filters.push(
         drawBoxFilter({
           alpha: Math.min(overlayStyle.label.backgroundAlpha, alpha * 0.72),
@@ -729,10 +868,13 @@ type BallOverlayPoint = {
 };
 
 type PlayerOverlayPoint = BallOverlayPoint & {
-  bottomY: number;
   boxHeight: number;
   boxWidth: number;
+  centerX: number;
+  centerY: number;
   featured: boolean;
+  footX: number;
+  footY: number;
   label?: string;
 };
 
@@ -800,35 +942,53 @@ function buildFeaturedPlayerOverlayPoints(
   let dropoutGaps = 0;
   let previous: PlayerOverlayPoint | null = null;
   const points: PlayerOverlayPoint[] = [];
+  let interpolatedGaps = 0;
 
   for (const point of playerTrack
-    .filter((item) => item.id === featuredId && item.time <= overlayPreviewDurationSeconds)
-    .sort((a, b) => a.time - b.time)) {
+    .filter((item) => item.trackId === featuredId && item.timestamp <= overlayPreviewDurationSeconds)
+    .sort((a, b) => a.timestamp - b.timestamp)) {
     const confidence = toConfidence01(point.confidence);
     if (confidence < overlayStyle.ring.confidenceThreshold) {
       lowConfidenceDrops += 1;
       continue;
     }
     const box = mapExportBox(point, targetWidth, targetHeight);
-    if (previous && point.frame - previous.frame > 3) {
+    if (previous && point.frameIndex - previous.frame > 5) {
       dropoutGaps += 1;
+      console.log("FOCUS_TRACK_LOST", {
+        frame: point.frameIndex,
+        gapFrames: point.frameIndex - previous.frame,
+        trackId: featuredId,
+      });
       previous = null;
+    } else if (previous && point.frameIndex - previous.frame > 1) {
+      interpolatedGaps += 1;
+      console.log("FOCUS_TRACK_GAP_INTERPOLATED", {
+        frame: point.frameIndex,
+        gapFrames: point.frameIndex - previous.frame,
+        trackId: featuredId,
+      });
     }
-    const x: number = previous ? previous.x * 0.72 + box.x * 0.28 : box.x;
-    const y: number = previous ? previous.y * 0.72 + box.y * 0.28 : box.y;
+    const centerX: number = previous ? previous.centerX * 0.72 + box.centerX * 0.28 : box.centerX;
+    const centerY: number = previous ? previous.centerY * 0.72 + box.centerY * 0.28 : box.centerY;
+    const footX: number = previous ? previous.footX * 0.72 + box.footX * 0.28 : box.footX;
+    const footY: number = previous ? previous.footY * 0.72 + box.footY * 0.28 : box.footY;
     const boxWidth: number = previous ? previous.boxWidth * 0.78 + box.width * 0.22 : box.width;
     const boxHeight: number = previous ? previous.boxHeight * 0.78 + box.height * 0.22 : box.height;
     const overlayPoint: PlayerOverlayPoint = {
-      bottomY: y + boxHeight / 2,
       boxHeight,
       boxWidth,
+      centerX,
+      centerY,
       confidence,
       featured: true,
-      frame: point.frame,
+      footX,
+      footY,
+      frame: point.frameIndex,
       label: focusPlayer?.label || point.label,
-      time: point.time,
-      x,
-      y,
+      time: point.timestamp,
+      x: footX,
+      y: footY,
     };
     points.push(overlayPoint);
     previous = overlayPoint;
@@ -839,18 +999,23 @@ function buildFeaturedPlayerOverlayPoints(
     featuredId,
     focusPlayer,
     inputPoints: playerTrack.length,
+    interpolatedGaps,
     lowConfidenceDrops,
     outputPoints: points.length,
+  });
+  console.log("FOCUS_RING_FROM_TRACK", {
+    outputPoints: points.length,
+    trackId: featuredId,
   });
   return { dropoutGaps, lowConfidenceDrops, points };
 }
 
 function selectFeaturedPlayerId(playerTrack: AxisPlayerTrackPoint[], focusPlayer?: AxisReplayFocusPlayer) {
-  if (focusPlayer?.trackId && playerTrack.some((point) => point.id === focusPlayer.trackId)) return focusPlayer.trackId;
+  if (focusPlayer?.trackId && playerTrack.some((point) => point.trackId === focusPlayer.trackId)) return focusPlayer.trackId;
 
   const scores = new Map<string, number>();
   for (const point of playerTrack) {
-    scores.set(point.id, (scores.get(point.id) ?? 0) + toConfidence01(point.confidence));
+    scores.set(point.trackId, (scores.get(point.trackId) ?? 0) + toConfidence01(point.confidence));
   }
   return [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "player_1";
 }
@@ -858,35 +1023,60 @@ function selectFeaturedPlayerId(playerTrack: AxisPlayerTrackPoint[], focusPlayer
 function resolveFocusPlayer(playerTrack: AxisPlayerTrackPoint[], focusSelection?: AxisReplayFocusSelection): AxisReplayFocusPlayer | undefined {
   if (!focusSelection) return undefined;
   let nearest: { distance: number; point: AxisPlayerTrackPoint } | null = null;
+  const targetTime = typeof focusSelection.timestamp === "number" && Number.isFinite(focusSelection.timestamp) ? Math.max(0, focusSelection.timestamp) : 0;
+  const closestTimestamp =
+    playerTrack
+      .map((point) => point.timestamp)
+      .sort((a, b) => Math.abs(a - targetTime) - Math.abs(b - targetTime))[0] ?? 0;
+  const candidates = playerTrack.filter((item) => Math.abs(item.timestamp - closestTimestamp) <= frameIntervalSeconds / 2);
+  const fallbackCandidates = candidates.length ? candidates : playerTrack.filter((item) => item.timestamp <= 1.5);
 
-  for (const point of playerTrack.filter((item) => item.time <= 1.5)) {
+  for (const point of fallbackCandidates) {
     const sourceWidth = point.sourceWidth || 1;
     const sourceHeight = point.sourceHeight || 1;
-    const normalizedX = point.x / sourceWidth;
-    const normalizedY = point.y / sourceHeight;
-    const distance = Math.hypot(normalizedX - clamp01(focusSelection.x), normalizedY - clamp01(focusSelection.y));
+    const distance = normalizedDistanceToBox(clamp01(focusSelection.x), clamp01(focusSelection.y), point, sourceWidth, sourceHeight);
     if (!nearest || distance < nearest.distance) nearest = { distance, point };
   }
 
   if (!nearest) return undefined;
+  console.log("FOCUS_PLAYER_CANDIDATES", {
+    candidateCount: fallbackCandidates.length,
+    closestTimestamp,
+    nearestDistance: nearest.distance,
+    targetTime,
+  });
+  console.log("FOCUS_PLAYER_LOCKED", {
+    focusPlayerTrackId: nearest.point.trackId,
+  });
   return {
     distance: nearest.distance,
     ...(focusSelection.label ? { label: focusSelection.label } : {}),
-    trackId: nearest.point.id,
+    trackId: nearest.point.trackId,
   };
 }
 
+function normalizedDistanceToBox(x: number, y: number, point: AxisPlayerTrackPoint, sourceWidth: number, sourceHeight: number) {
+  const left = point.bbox.x / sourceWidth;
+  const top = point.bbox.y / sourceHeight;
+  const right = (point.bbox.x + point.bbox.width) / sourceWidth;
+  const bottom = (point.bbox.y + point.bbox.height) / sourceHeight;
+  const dx = x < left ? left - x : x > right ? x - right : 0;
+  const dy = y < top ? top - y : y > bottom ? y - bottom : 0;
+  return Math.hypot(dx, dy);
+}
+
 function mapExportBox(point: AxisPlayerTrackPoint, targetWidth: number, targetHeight: number) {
-  const center = mapExportPoint(point, targetWidth, targetHeight);
   const sourceWidth = point.sourceWidth || targetWidth || 1;
   const sourceHeight = point.sourceHeight || targetHeight || 1;
-  const width = point.boxWidth ? (point.boxWidth / sourceWidth) * targetWidth : 72;
-  const height = point.boxHeight ? (point.boxHeight / sourceHeight) * targetHeight : 180;
+  const width = point.bbox.width ? (point.bbox.width / sourceWidth) * targetWidth : 72;
+  const height = point.bbox.height ? (point.bbox.height / sourceHeight) * targetHeight : 180;
   return {
+    centerX: (point.centerX / sourceWidth) * targetWidth,
+    centerY: (point.centerY / sourceHeight) * targetHeight,
+    footX: (point.footX / sourceWidth) * targetWidth,
+    footY: (point.footY / sourceHeight) * targetHeight,
     height: Math.max(72, Math.min(targetHeight * 0.55, height)),
     width: Math.max(34, Math.min(targetWidth * 0.28, width)),
-    x: center.x,
-    y: center.y,
   };
 }
 
@@ -932,6 +1122,12 @@ function firstSourceSize(ballTrack: AxisBallTrackPoint[], playerTrack: AxisPlaye
 function mapExportPoint(point: AxisBallTrackPoint | AxisPlayerTrackPoint, targetWidth: number, targetHeight: number) {
   const sourceWidth = point.sourceWidth || targetWidth || 1;
   const sourceHeight = point.sourceHeight || targetHeight || 1;
+  if ("centerX" in point) {
+    return {
+      x: (point.centerX / sourceWidth) * targetWidth,
+      y: (point.centerY / sourceHeight) * targetHeight,
+    };
+  }
   return {
     x: (point.x / sourceWidth) * targetWidth,
     y: (point.y / sourceHeight) * targetHeight,

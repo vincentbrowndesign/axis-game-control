@@ -27,6 +27,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     focusPlayerTrackId: result.record.focus_player_track_id,
     frameCount: result.record.frame_count,
     jobId: result.record.job_id,
+    playerTrack: result.record.status === "replay_ready" ? result.record.player_track : [],
+    playerTrackCount: result.record.player_track_count,
     processingStage: result.record.processing_stage,
     progress: result.record.progress,
     status: result.record.status,

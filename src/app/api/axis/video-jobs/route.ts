@@ -177,10 +177,12 @@ function getFocusSelection(value: unknown) {
   const record = value as Record<string, unknown>;
   const x = getNumber(record.x);
   const y = getNumber(record.y);
+  const timestamp = getNumber(record.timestamp);
   if (x === undefined || y === undefined) return undefined;
   const label = getString(record.label);
   return {
     ...(label ? { label } : {}),
+    ...(timestamp !== undefined ? { timestamp: Math.max(0, timestamp) } : {}),
     x: Math.max(0, Math.min(1, x)),
     y: Math.max(0, Math.min(1, y)),
   };

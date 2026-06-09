@@ -173,6 +173,8 @@ export const axisVideoProcessing = task({
         error: null,
         focus_player_track_id: result.focusPlayerTrackId ?? null,
         frame_count: result.frameCount,
+        player_track: result.playerTrack,
+        player_track_count: result.playerTrack.length,
         processing_stage: "complete",
         progress: 100,
         status: "replay_ready",
@@ -187,6 +189,10 @@ export const axisVideoProcessing = task({
         focusPlayerTrackId: result.focusPlayerTrackId ?? null,
         persistedStatus: finalUpdate.record.status,
         jobId: payload.jobId,
+      });
+      console.log("PLAYER_TRACKS_PERSISTED", {
+        jobId: payload.jobId,
+        playerTrackCount: finalUpdate.record.player_track_count,
       });
 
       return {

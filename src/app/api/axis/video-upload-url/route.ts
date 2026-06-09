@@ -71,6 +71,8 @@ export async function POST(request: Request) {
       mux_playback_id: null,
       mux_upload_id: null,
       organization_id: getUuid(body.organization_id) || getUuid(body.organizationId),
+      player_track: [],
+      player_track_count: 0,
       processing_stage: "uploading",
       progress: 0,
       session_id: getString(body.session_id) || getString(body.sessionId) || null,

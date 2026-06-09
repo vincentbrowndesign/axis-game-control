@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint } from "./axis-ball-processing";
+import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint, AxisPlayerTrackPoint } from "./axis-ball-processing";
 import { axisServerSupabaseOptions, getAxisSupabaseServerEnv, logAxisSupabaseClientEnv } from "./axis-supabase-server";
 
 export type AxisVideoJobStatus =
@@ -36,6 +36,8 @@ export type AxisVideoJobRecord = {
   mux_playback_id: string | null;
   mux_upload_id: string | null;
   organization_id: string | null;
+  player_track: AxisPlayerTrackPoint[];
+  player_track_count: number;
   processing_stage: AxisVideoProcessingStage;
   progress: number;
   session_id: string | null;
@@ -90,6 +92,8 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
       mux_playback_id: record.mux_playback_id,
       mux_upload_id: record.mux_upload_id,
       organization_id: record.organization_id,
+      player_track: record.player_track,
+      player_track_count: record.player_track_count,
       processing_stage: record.processing_stage,
       progress: record.progress,
       session_id: record.session_id,
@@ -124,6 +128,8 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
         mux_playback_id: record.mux_playback_id,
         mux_upload_id: record.mux_upload_id,
         organization_id: record.organization_id,
+        player_track: record.player_track,
+        player_track_count: record.player_track_count,
         processing_stage: record.processing_stage,
         progress: record.progress,
         session_id: record.session_id,
@@ -189,6 +195,8 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
     ...("frame_count" in patch ? { frame_count: patch.frame_count ?? 0 } : {}),
     ...("mp4_ready_at" in patch ? { mp4_ready_at: patch.mp4_ready_at ?? null } : {}),
     ...("organization_id" in patch ? { organization_id: patch.organization_id ?? null } : {}),
+    ...("player_track" in patch ? { player_track: patch.player_track ?? [] } : {}),
+    ...("player_track_count" in patch ? { player_track_count: patch.player_track_count ?? 0 } : {}),
     ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "queued" } : {}),
     ...("progress" in patch ? { progress: clampProgress(patch.progress) } : {}),
     ...("session_id" in patch ? { session_id: patch.session_id ?? null } : {}),
@@ -228,6 +236,7 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
 function mapAxisVideoJobRow(row: unknown): AxisVideoJobRecord {
   const record = row && typeof row === "object" && !Array.isArray(row) ? (row as Record<string, unknown>) : {};
   const ballTrack = Array.isArray(record.ball_track) ? record.ball_track.filter(isBallTrackPoint) : [];
+  const playerTrack = Array.isArray(record.player_track) ? record.player_track.filter(isPlayerTrackPoint) : [];
 
   return {
     asset_id: getString(record.asset_id),
@@ -247,6 +256,8 @@ function mapAxisVideoJobRow(row: unknown): AxisVideoJobRecord {
     mux_playback_id: getString(record.mux_playback_id) || null,
     mux_upload_id: getString(record.mux_upload_id) || null,
     organization_id: getString(record.organization_id) || null,
+    player_track: playerTrack,
+    player_track_count: getNumber(record.player_track_count) ?? playerTrack.length,
     processing_stage: getStage(record.processing_stage),
     progress: clampProgress(getNumber(record.progress) ?? 0),
     session_id: getString(record.session_id) || null,
@@ -267,6 +278,22 @@ function isBallTrackPoint(value: unknown): value is AxisBallTrackPoint {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const point = value as Record<string, unknown>;
   return ["confidence", "frame", "time", "x", "y"].every((key) => typeof point[key] === "number");
+}
+
+function isPlayerTrackPoint(value: unknown): value is AxisPlayerTrackPoint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const point = value as Record<string, unknown>;
+  const bbox = point.bbox;
+  const hasBbox =
+    Boolean(bbox) &&
+    typeof bbox === "object" &&
+    !Array.isArray(bbox) &&
+    ["height", "width", "x", "y"].every((key) => typeof (bbox as Record<string, unknown>)[key] === "number");
+  return (
+    hasBbox &&
+    typeof point.trackId === "string" &&
+    ["centerX", "centerY", "confidence", "footX", "footY", "frameIndex", "timestamp"].every((key) => typeof point[key] === "number")
+  );
 }
 
 function clampProgress(value: unknown) {
