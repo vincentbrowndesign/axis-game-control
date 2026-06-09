@@ -24,6 +24,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     cloudflareUid: result.record.cloudflare_uid,
     detectionCount: result.record.detection_count,
     error: result.record.error,
+    focusPlayerTrackId: result.record.focus_player_track_id,
     frameCount: result.record.frame_count,
     jobId: result.record.job_id,
     processingStage: result.record.processing_stage,

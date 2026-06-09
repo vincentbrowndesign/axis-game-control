@@ -59,8 +59,8 @@ export const axisVideoProcessing = task({
 
       console.log("DOWNLOAD_VIDEO_START", {
         cloudflareUid: payload.cloudflareUid,
+        hasFocusSelection: Boolean(payload.focusSelection),
         jobId: payload.jobId,
-        focusSelection: payload.focusSelection ?? null,
       });
       console.log("PROCESSING_STEP_3", {
         request: "cloudflare.stream.downloads.create_and_read",
@@ -171,6 +171,7 @@ export const axisVideoProcessing = task({
         ball_track_count: result.ballTrack.length,
         detection_count: result.detectionCount,
         error: null,
+        focus_player_track_id: result.focusPlayerTrackId ?? null,
         frame_count: result.frameCount,
         processing_stage: "complete",
         progress: 100,

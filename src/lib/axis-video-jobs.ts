@@ -28,6 +28,7 @@ export type AxisVideoJobRecord = {
   error: string | null;
   file_size: number;
   filename: string;
+  focus_player_track_id: string | null;
   frame_count: number;
   id?: string;
   job_id: string;
@@ -82,6 +83,7 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
       error: record.error,
       file_size: record.file_size,
       filename: record.filename,
+      focus_player_track_id: record.focus_player_track_id,
       frame_count: record.frame_count,
       job_id: record.job_id,
       mp4_ready_at: record.mp4_ready_at,
@@ -115,6 +117,7 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
         error: record.error,
         file_size: record.file_size,
         filename: record.filename,
+        focus_player_track_id: record.focus_player_track_id,
         frame_count: record.frame_count,
         job_id: record.job_id,
         mp4_ready_at: record.mp4_ready_at,
@@ -182,6 +185,7 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
     ...("error" in patch ? { error: patch.error ?? null } : {}),
     ...("file_size" in patch ? { file_size: patch.file_size ?? 0 } : {}),
     ...("filename" in patch ? { filename: patch.filename ?? "" } : {}),
+    ...("focus_player_track_id" in patch ? { focus_player_track_id: patch.focus_player_track_id ?? null } : {}),
     ...("frame_count" in patch ? { frame_count: patch.frame_count ?? 0 } : {}),
     ...("mp4_ready_at" in patch ? { mp4_ready_at: patch.mp4_ready_at ?? null } : {}),
     ...("organization_id" in patch ? { organization_id: patch.organization_id ?? null } : {}),
@@ -235,6 +239,7 @@ function mapAxisVideoJobRow(row: unknown): AxisVideoJobRecord {
     error: getString(record.error) || null,
     file_size: getNumber(record.file_size) ?? 0,
     filename: getString(record.filename),
+    focus_player_track_id: getString(record.focus_player_track_id) || null,
     frame_count: getNumber(record.frame_count) ?? 0,
     id: getString(record.id),
     job_id: getString(record.job_id),

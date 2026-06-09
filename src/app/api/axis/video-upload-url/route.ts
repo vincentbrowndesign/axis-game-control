@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       error: null,
       file_size: fileSize,
       filename,
+      focus_player_track_id: null,
       frame_count: 0,
       job_id: jobId,
       mp4_ready_at: null,

@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   try {
     console.log("AXIS_VIDEO_TRIGGER_REQUEST", {
       cloudflareUid,
-      focusSelection,
+      hasFocusSelection: Boolean(focusSelection),
       jobId,
       queueName: axisVideoTriggerQueue,
       ttl: axisVideoTriggerTtl,
