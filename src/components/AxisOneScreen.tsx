@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { axisAuthenticatedFetch } from "../lib/axis-client-auth";
+import { axisFetchWithAccessToken, getAxisAccessToken } from "../lib/axis-client-auth";
 import {
   createAxisOverlayEngineState,
   renderAxisOverlayFrame,
@@ -62,8 +62,12 @@ type VideoUploadUrlResponse = {
 type VideoJobResponse = {
   cloudflareUid?: string;
   error?: string;
+  errorObject?: unknown;
   jobId?: string;
   status?: BallJobResponse["status"];
+  triggerRequested?: boolean;
+  triggerResponse?: unknown;
+  triggerRunId?: string;
 };
 
 const confidenceThreshold = 0.35;
@@ -73,12 +77,14 @@ export function AxisOneScreen() {
   const inputRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
   const overlayStateRef = useRef(createAxisOverlayEngineState());
+  const pollingAccessTokenRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
   const timerStartedAtRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
   const [jobId, setJobId] = useState("");
+  const [pollWarning, setPollWarning] = useState("");
   const [saveUrl, setSaveUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [state, setState] = useState<AppState>("choose");
@@ -168,20 +174,63 @@ export function AxisOneScreen() {
     const interval = window.setInterval(async () => {
       try {
         const route = `/api/axis/video-job/${encodeURIComponent(jobId)}`;
-        const response = await axisAuthenticatedFetch(route);
+        const accessToken = pollingAccessTokenRef.current;
+        console.info("POLL_START", {
+          accessTokenPresent: Boolean(accessToken),
+          jobId,
+          route,
+        });
+        if (!accessToken) {
+          console.warn("POLL_AUTH_ERROR", {
+            jobId,
+            reason: "missing_cached_access_token",
+            route,
+          });
+          setPollWarning("Replay started. Refresh status failed.");
+          return;
+        }
+        const response = await axisFetchWithAccessToken(accessToken, route);
         const result = (await response.json().catch(() => null)) as BallJobResponse | null;
+        console.info("POLL_RESPONSE", {
+          body: result,
+          jobId,
+          ok: response.ok,
+          route,
+          status: response.status,
+        });
         if (response.status === 401) {
           console.info("AXIS_AUTH_401_RESPONSE", {
             body: result,
             route,
           });
+          console.warn("POLL_AUTH_ERROR", {
+            body: result,
+            jobId,
+            route,
+            status: response.status,
+          });
+          setPollWarning("Replay started. Refresh status failed.");
+          return;
         }
         if (cancelled || !result) return;
-        if (!response.ok) throw new Error(result.error ?? "Processing failed.");
+        if (!response.ok) {
+          setError(result.error ?? "Processing failed.");
+          setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
+          setState("failed");
+          window.clearInterval(interval);
+          return;
+        }
 
+        setPollWarning("");
         setStage(stageFromJob(result.processingStage));
 
-        if (result.status === "failed") throw new Error(result.error ?? "Processing failed.");
+        if (result.status === "failed") {
+          setError(result.error ?? "Processing failed.");
+          setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
+          setState("failed");
+          window.clearInterval(interval);
+          return;
+        }
         if (result.status !== "replay_ready") return;
 
         const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
@@ -196,10 +245,11 @@ export function AxisOneScreen() {
         window.clearInterval(interval);
       } catch (nextError) {
         if (cancelled) return;
-        setError(nextError instanceof Error ? nextError.message : "Processing failed.");
-        setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
-        setState("failed");
-        window.clearInterval(interval);
+        console.warn("POLL_AUTH_ERROR", {
+          error: serializeError(nextError),
+          jobId,
+        });
+        setPollWarning("Replay started. Refresh status failed.");
       }
     }, 1800);
 
@@ -218,6 +268,8 @@ export function AxisOneScreen() {
     setSaveUrl("");
     setError("");
     setJobId("");
+    setPollWarning("");
+    pollingAccessTokenRef.current = null;
     setElapsedSeconds(0);
     setSelectedFile(file);
     resetAxisOverlayEngineState(overlayStateRef.current);
@@ -233,6 +285,9 @@ export function AxisOneScreen() {
 
     try {
       console.info("UPLOAD_FLOW_SELECTED", "CLOUDFLARE_STREAM_DIRECT");
+      const accessToken = await getAxisAccessToken();
+      pollingAccessTokenRef.current = accessToken;
+      if (!accessToken) throw new Error("Authenticated session is required to create a replay.");
       let upload: VideoUploadUrlResponse;
       try {
         console.info("LOG_BEFORE_UPLOAD_URL", {
@@ -240,7 +295,7 @@ export function AxisOneScreen() {
           fileSize: file.size,
           route: "/api/axis/video-upload-url",
         });
-        upload = await createVideoUploadUrl(file);
+        upload = await createVideoUploadUrl(file, accessToken);
         console.info("LOG_AFTER_UPLOAD_URL", {
           cloudflareUid: upload.cloudflareUid,
           jobId: upload.jobId,
@@ -277,7 +332,7 @@ export function AxisOneScreen() {
           jobId: upload.jobId,
           route,
         });
-        response = await axisAuthenticatedFetch(route, {
+        response = await axisFetchWithAccessToken(accessToken, route, {
           body: JSON.stringify({
             cloudflareUid: upload.cloudflareUid,
             fileSize: file.size,
@@ -298,6 +353,13 @@ export function AxisOneScreen() {
         throw jobCreateError;
       }
       const result = (await response.json().catch(() => null)) as VideoJobResponse | null;
+      console.info("JOB_CREATE_RESPONSE_BODY", {
+        body: result,
+        cloudflareUid: upload.cloudflareUid,
+        jobId: upload.jobId,
+        ok: response.ok,
+        status: response.status,
+      });
       if (response.status === 401) {
         console.info("AXIS_AUTH_401_RESPONSE", {
           body: result,
@@ -305,6 +367,9 @@ export function AxisOneScreen() {
         });
       }
       if (!response.ok || !result?.jobId) throw new Error(result?.error ?? "Processing job could not be created.");
+      if (!result.triggerRequested && !result.triggerRunId) {
+        throw new Error(result.error ?? "Trigger was not started for this replay.");
+      }
       setJobId(result.jobId);
     } catch (nextError) {
       console.error("UPLOAD_FLOW_ERROR", serializeError(nextError));
@@ -393,7 +458,7 @@ export function AxisOneScreen() {
         <section className="axis-one-processing" aria-live="polite">
           <strong>{state === "failed" ? "PROCESSING FAILED" : "PROCESSING VIDEO"}</strong>
           <time>{formatElapsed(elapsedSeconds)}</time>
-          <span>{state === "failed" ? error || "Try Again" : stage}</span>
+          <span>{state === "failed" ? error || "Try Again" : pollWarning || stage}</span>
           {state === "failed" ? (
             <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
               SELECT VIDEO
@@ -485,9 +550,9 @@ export function AxisOneScreen() {
   );
 }
 
-async function createVideoUploadUrl(file: File) {
+async function createVideoUploadUrl(file: File, accessToken: string | null) {
   const route = "/api/axis/video-upload-url";
-  const response = await axisAuthenticatedFetch(route, {
+  const response = await axisFetchWithAccessToken(accessToken, route, {
     body: JSON.stringify({
       contentType: file.type || "video/mp4",
       fileSize: file.size,

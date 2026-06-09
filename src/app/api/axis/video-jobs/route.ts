@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       ttl: axisVideoTriggerTtl,
     });
     console.log("AXIS_VIDEO_TRIGGER_RUNTIME", getTriggerRuntimeDiagnostics());
-    console.log("LOG_BEFORE_TRIGGER", {
+    console.log("SERVER_LOG_BEFORE_TRIGGER", {
       cloudflareUid,
       jobId,
       queueName: axisVideoTriggerQueue,
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       queue: axisVideoTriggerQueue,
       ttl: axisVideoTriggerTtl,
     });
-    console.log("LOG_AFTER_TRIGGER", {
+    console.log("SERVER_LOG_AFTER_TRIGGER", {
       cloudflareUid,
       jobId,
       queueName: axisVideoTriggerQueue,
@@ -108,6 +108,10 @@ export async function POST(request: Request) {
       cloudflareUid,
       jobId,
       status: "stream_processing",
+      triggerRequested: true,
+      triggerResponse: {
+        id: handle.id,
+      },
       triggerRunId: handle.id,
     });
   } catch (error) {
@@ -126,7 +130,17 @@ export async function POST(request: Request) {
       progress: 0,
       status: "failed",
     });
-    return Response.json({ error: reason, jobId, status: "failed" }, { status: 502 });
+    return Response.json(
+      {
+        cloudflareUid,
+        error: reason,
+        errorObject: serializeError(error),
+        jobId,
+        status: "failed",
+        triggerRequested: false,
+      },
+      { status: 502 },
+    );
   }
 }
 

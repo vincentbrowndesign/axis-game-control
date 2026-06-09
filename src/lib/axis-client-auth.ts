@@ -22,9 +22,9 @@ export async function getAxisAccessToken() {
   return token;
 }
 
-export async function createAxisAuthHeaders(base?: HeadersInit) {
+export async function createAxisAuthHeaders(base?: HeadersInit, accessToken?: string | null) {
   const headers = new Headers(base);
-  const token = await getAxisAccessToken();
+  const token = accessToken === undefined ? await getAxisAccessToken() : accessToken;
   if (token) headers.set("Authorization", `Bearer ${token}`);
   console.info("AXIS_UPLOAD_AUTH_HEADER_ATTACHED", {
     attached: headers.has("Authorization"),
@@ -36,5 +36,12 @@ export async function axisAuthenticatedFetch(input: RequestInfo | URL, init: Req
   return fetch(input, {
     ...init,
     headers: await createAxisAuthHeaders(init.headers),
+  });
+}
+
+export async function axisFetchWithAccessToken(accessToken: string | null, input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, {
+    ...init,
+    headers: await createAxisAuthHeaders(init.headers, accessToken),
   });
 }
