@@ -90,6 +90,7 @@ export function AxisOneScreen() {
     () => [...track].sort((a, b) => a.time - b.time || a.frame - b.frame),
     [track],
   );
+  const replayUrl = saveUrl || videoUrl;
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -315,6 +316,46 @@ export function AxisOneScreen() {
     }
   }
 
+  function handlePreviewReplay() {
+    console.info("PREVIEW_URL", {
+      replayUrl,
+      saveUrl,
+      videoUrl,
+    });
+    setState("replay");
+  }
+
+  function logVideoLoaded(eventName: "canplay" | "loadedmetadata", video: HTMLVideoElement) {
+    console.info("VIDEO_LOADED", {
+      currentSrc: video.currentSrc,
+      duration: video.duration,
+      event: eventName,
+      height: video.videoHeight,
+      readyState: video.readyState,
+      replayUrl,
+      saveUrl,
+      videoUrl,
+      width: video.videoWidth,
+    });
+  }
+
+  function logVideoError(video: HTMLVideoElement) {
+    console.error("VIDEO_ERROR", {
+      currentSrc: video.currentSrc,
+      error: video.error
+        ? {
+            code: video.error.code,
+            message: video.error.message,
+          }
+        : null,
+      networkState: video.networkState,
+      readyState: video.readyState,
+      replayUrl,
+      saveUrl,
+      videoUrl,
+    });
+  }
+
   return (
     <main className="axis-one-screen" data-state={state}>
       <header className="axis-one-header" aria-label="Axis home">
@@ -365,7 +406,7 @@ export function AxisOneScreen() {
         <section className="axis-one-status">
           <time>{formatElapsed(elapsedSeconds)}</time>
           <p>Replay exported. Preview it, then save or share the finished video.</p>
-          <button className="axis-one-primary" onClick={() => setState("replay")} type="button">
+          <button className="axis-one-primary" onClick={handlePreviewReplay} type="button">
             PREVIEW REPLAY
           </button>
           <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">
@@ -380,13 +421,25 @@ export function AxisOneScreen() {
             autoPlay
             className="axis-one-video"
             controls
-            onLoadedMetadata={draw}
+            onCanPlay={(event) => logVideoLoaded("canplay", event.currentTarget)}
+            onError={(event) => logVideoError(event.currentTarget)}
+            onLoadedMetadata={(event) => {
+              console.info("VIDEO_ELEMENT_SRC", {
+                currentSrc: event.currentTarget.currentSrc,
+                replayUrl,
+                saveUrl,
+                src: event.currentTarget.src,
+                videoUrl,
+              });
+              logVideoLoaded("loadedmetadata", event.currentTarget);
+              draw();
+            }}
             onPlay={draw}
             onSeeked={draw}
             onTimeUpdate={draw}
             playsInline
             ref={videoRef}
-            src={videoUrl}
+            src={replayUrl}
           />
           {saveUrl ? (
             <a className="axis-one-save" download href={saveUrl}>

@@ -3190,9 +3190,11 @@ body {
 
 .axis-one-replay {
   align-self: stretch;
+  aspect-ratio: 16 / 9;
   background: #050505;
   display: grid;
   justify-self: stretch;
+  min-height: min(64dvh, 34rem);
   overflow: hidden;
   position: relative;
 }
