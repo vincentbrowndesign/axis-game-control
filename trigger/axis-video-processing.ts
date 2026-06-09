@@ -177,6 +177,7 @@ export const axisVideoProcessing = task({
         player_track_count: result.playerTrack.length,
         processing_stage: "complete",
         progress: 100,
+        replay_quality_report: result.replayQualityReport,
         status: "replay_ready",
         video_url: replayMp4Url,
       });
@@ -193,6 +194,10 @@ export const axisVideoProcessing = task({
       console.log("PLAYER_TRACKS_PERSISTED", {
         jobId: payload.jobId,
         playerTrackCount: finalUpdate.record.player_track_count,
+      });
+      console.log("REPLAY_QUALITY_REPORT_PERSISTED", {
+        jobId: payload.jobId,
+        replayQualityReport: finalUpdate.record.replay_quality_report,
       });
 
       return {

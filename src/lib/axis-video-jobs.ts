@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint, AxisPlayerTrackPoint } from "./axis-ball-processing";
+import type { AxisBallProcessingStageUpdate, AxisBallTrackPoint, AxisPlayerTrackPoint, ReplayQualityReport } from "./axis-ball-processing";
 import { axisServerSupabaseOptions, getAxisSupabaseServerEnv, logAxisSupabaseClientEnv } from "./axis-supabase-server";
 
 export type AxisVideoJobStatus =
@@ -40,6 +40,7 @@ export type AxisVideoJobRecord = {
   player_track_count: number;
   processing_stage: AxisVideoProcessingStage;
   progress: number;
+  replay_quality_report: ReplayQualityReport;
   session_id: string | null;
   status: AxisVideoJobStatus;
   storage_path: string;
@@ -96,6 +97,7 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
       player_track_count: record.player_track_count,
       processing_stage: record.processing_stage,
       progress: record.progress,
+      replay_quality_report: record.replay_quality_report,
       session_id: record.session_id,
       status: record.status,
       storage_path: record.storage_path,
@@ -132,6 +134,7 @@ export async function createAxisVideoJob(record: AxisVideoJobRecord) {
         player_track_count: record.player_track_count,
         processing_stage: record.processing_stage,
         progress: record.progress,
+        replay_quality_report: record.replay_quality_report,
         session_id: record.session_id,
         status: record.status,
         storage_path: record.storage_path,
@@ -199,6 +202,7 @@ export async function updateAxisVideoJob(jobId: string, patch: Partial<AxisVideo
     ...("player_track_count" in patch ? { player_track_count: patch.player_track_count ?? 0 } : {}),
     ...("processing_stage" in patch ? { processing_stage: patch.processing_stage ?? "queued" } : {}),
     ...("progress" in patch ? { progress: clampProgress(patch.progress) } : {}),
+    ...("replay_quality_report" in patch ? { replay_quality_report: patch.replay_quality_report ?? createEmptyReplayQualityReport() } : {}),
     ...("session_id" in patch ? { session_id: patch.session_id ?? null } : {}),
     ...("status" in patch ? { status: patch.status } : {}),
     ...("trigger_run_id" in patch ? { trigger_run_id: patch.trigger_run_id ?? null } : {}),
@@ -260,6 +264,7 @@ function mapAxisVideoJobRow(row: unknown): AxisVideoJobRecord {
     player_track_count: getNumber(record.player_track_count) ?? playerTrack.length,
     processing_stage: getStage(record.processing_stage),
     progress: clampProgress(getNumber(record.progress) ?? 0),
+    replay_quality_report: isReplayQualityReport(record.replay_quality_report) ? record.replay_quality_report : createEmptyReplayQualityReport(),
     session_id: getString(record.session_id) || null,
     status: getStatus(record.status),
     storage_path: getString(record.storage_path),
@@ -294,6 +299,32 @@ function isPlayerTrackPoint(value: unknown): value is AxisPlayerTrackPoint {
     typeof point.trackId === "string" &&
     ["centerX", "centerY", "confidence", "footX", "footY", "frameIndex", "timestamp"].every((key) => typeof point[key] === "number")
   );
+}
+
+function isReplayQualityReport(value: unknown): value is ReplayQualityReport {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const report = value as Record<string, unknown>;
+  return [
+    "ballTrackInterpolatedFrames",
+    "ballTrackLostCount",
+    "focusInterpolatedFrames",
+    "focusTrackLostCount",
+    "focusTrackSwitchCount",
+    "focusVisibleFrames",
+    "replayDuration",
+  ].every((key) => typeof report[key] === "number");
+}
+
+function createEmptyReplayQualityReport(): ReplayQualityReport {
+  return {
+    ballTrackInterpolatedFrames: 0,
+    ballTrackLostCount: 0,
+    focusInterpolatedFrames: 0,
+    focusTrackLostCount: 0,
+    focusTrackSwitchCount: 0,
+    focusVisibleFrames: 0,
+    replayDuration: 0,
+  };
 }
 
 function clampProgress(value: unknown) {

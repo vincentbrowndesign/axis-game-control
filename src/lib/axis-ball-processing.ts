@@ -52,6 +52,16 @@ export type AxisReplayFocusPlayer = {
   trackId: string;
 };
 
+export type ReplayQualityReport = {
+  ballTrackInterpolatedFrames: number;
+  ballTrackLostCount: number;
+  focusInterpolatedFrames: number;
+  focusTrackLostCount: number;
+  focusTrackSwitchCount: number;
+  focusVisibleFrames: number;
+  replayDuration: number;
+};
+
 export type AxisBallProcessingResult = {
   ballTrack: AxisBallTrackPoint[];
   detectionCount: number;
@@ -60,6 +70,7 @@ export type AxisBallProcessingResult = {
   focusPlayerTrackId?: string;
   frameCount: number;
   playerTrack: AxisPlayerTrackPoint[];
+  replayQualityReport: ReplayQualityReport;
   replayExport?: {
     height: number | null;
     path: string;
@@ -201,6 +212,7 @@ export async function runAxisBallProcessing(
         events: [],
         frameCount: 0,
         playerTrack: [],
+        replayQualityReport: createEmptyReplayQualityReport(0),
         tracks: [],
       };
     }
@@ -243,16 +255,22 @@ export async function runAxisBallProcessing(
       playerTrackCount: detectionResult.playerTrack.length,
     });
     const replayExportPath = path.join(workDir, "axis-replay.mp4");
+    let replayQualityReport = createEmptyReplayQualityReport(overlayPreviewDurationSeconds);
     const replayExport = options.exportReplay
       ? await exportAxisReplayMp4({
-          createFilters: (metadata) =>
-            createReplayOverlayFilters({
+          createFilters: (metadata) => {
+            const overlay = createReplayOverlayFilters({
               ballTrack: detectionResult.ballTrack,
               focusPlayer,
+              focusTrackSwitchCount: detectionResult.playerTrackSwitchCount,
               playerTrack: detectionResult.playerTrack,
+              replayDuration: Math.min(metadata.duration ?? overlayPreviewDurationSeconds, overlayPreviewDurationSeconds),
               sourceHeight: metadata.height ?? undefined,
               sourceWidth: metadata.width ?? undefined,
-          }),
+            });
+            replayQualityReport = overlay.replayQualityReport;
+            return overlay.filters;
+          },
           inputPath: extractionInputPath,
           maxDurationSeconds: 10,
           maxHeight: 720,
@@ -269,6 +287,7 @@ export async function runAxisBallProcessing(
       ...(focusPlayer?.trackId ? { focusPlayerTrackId: focusPlayer.trackId } : {}),
       frameCount: frames.length,
       playerTrack: detectionResult.playerTrack,
+      replayQualityReport,
       replayExport: replayExport
         ? {
             height: replayExport.height,
@@ -459,6 +478,7 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
     detections,
     events,
     playerTrack,
+    playerTrackSwitchCount: playerTrackSwitches,
     tracks,
   };
 }
@@ -588,6 +608,22 @@ function roundTime(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 
+function lerp(start: number, end: number, amount: number) {
+  return start + (end - start) * amount;
+}
+
+function createEmptyReplayQualityReport(replayDuration: number): ReplayQualityReport {
+  return {
+    ballTrackInterpolatedFrames: 0,
+    ballTrackLostCount: 0,
+    focusInterpolatedFrames: 0,
+    focusTrackLostCount: 0,
+    focusTrackSwitchCount: 0,
+    focusVisibleFrames: 0,
+    replayDuration: roundTime(replayDuration),
+  };
+}
+
 function buildAxisTracksFromBallTrack(ballTrack: AxisBallTrackPoint[], sessionId: string): AxisTrack[] {
   if (!ballTrack.length) return [];
   const normalizedPoints = normalizeBallTrackPoints(ballTrack);
@@ -709,13 +745,17 @@ function clamp01(value: number) {
 function createReplayOverlayFilters({
   ballTrack,
   focusPlayer,
+  focusTrackSwitchCount,
   playerTrack,
+  replayDuration,
   sourceHeight,
   sourceWidth,
 }: {
   ballTrack: AxisBallTrackPoint[];
   focusPlayer?: AxisReplayFocusPlayer;
+  focusTrackSwitchCount: number;
   playerTrack: AxisPlayerTrackPoint[];
+  replayDuration: number;
   sourceHeight?: number;
   sourceWidth?: number;
 }) {
@@ -856,7 +896,17 @@ function createReplayOverlayFilters({
     sourceBallTrackCount: ballTrack.length,
     sourcePlayerTrackCount: playerTrack.length,
   });
-  return filters;
+  const replayQualityReport: ReplayQualityReport = {
+    ballTrackInterpolatedFrames: ballOverlay.interpolated,
+    ballTrackLostCount: ballOverlay.jumpDrops + ballOverlay.lostGaps,
+    focusInterpolatedFrames: playerOverlay.interpolatedPoints,
+    focusTrackLostCount: playerOverlay.dropoutGaps,
+    focusTrackSwitchCount,
+    focusVisibleFrames: playerOverlay.points.length,
+    replayDuration: roundTime(replayDuration),
+  };
+  console.log("REPLAY_QUALITY_REPORT", replayQualityReport);
+  return { filters, replayQualityReport };
 }
 
 type BallOverlayPoint = {
@@ -886,6 +936,7 @@ function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: nu
   const smoothed: BallOverlayPoint[] = [];
   let interpolated = 0;
   let jumpDrops = 0;
+  let lostGaps = 0;
 
   for (const point of points) {
     const mapped = mapExportPoint(point, targetWidth, targetHeight);
@@ -898,6 +949,7 @@ function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: nu
         jumpDrops += 1;
         continue;
       }
+      if (gap > 0.26) lostGaps += 1;
       if (gap > frameIntervalSeconds * 1.5 && gap <= 0.26) {
         const steps = Math.min(2, Math.floor(gap / frameIntervalSeconds) - 1);
         for (let step = 1; step <= steps; step += 1) {
@@ -926,9 +978,10 @@ function buildBallOverlayPoints(ballTrack: AxisBallTrackPoint[], targetWidth: nu
     inputPoints: ballTrack.length,
     interpolated,
     jumpDrops,
+    lostGaps,
     outputPoints: smoothed.length,
   });
-  return { interpolated, jumpDrops, points: smoothed };
+  return { interpolated, jumpDrops, lostGaps, points: smoothed };
 }
 
 function buildFeaturedPlayerOverlayPoints(
@@ -942,7 +995,7 @@ function buildFeaturedPlayerOverlayPoints(
   let dropoutGaps = 0;
   let previous: PlayerOverlayPoint | null = null;
   const points: PlayerOverlayPoint[] = [];
-  let interpolatedGaps = 0;
+  let interpolatedPoints = 0;
 
   for (const point of playerTrack
     .filter((item) => item.trackId === featuredId && item.timestamp <= overlayPreviewDurationSeconds)
@@ -962,7 +1015,6 @@ function buildFeaturedPlayerOverlayPoints(
       });
       previous = null;
     } else if (previous && point.frameIndex - previous.frame > 1) {
-      interpolatedGaps += 1;
       console.log("FOCUS_TRACK_GAP_INTERPOLATED", {
         frame: point.frameIndex,
         gapFrames: point.frameIndex - previous.frame,
@@ -975,6 +1027,28 @@ function buildFeaturedPlayerOverlayPoints(
     const footY: number = previous ? previous.footY * 0.72 + box.footY * 0.28 : box.footY;
     const boxWidth: number = previous ? previous.boxWidth * 0.78 + box.width * 0.22 : box.width;
     const boxHeight: number = previous ? previous.boxHeight * 0.78 + box.height * 0.22 : box.height;
+    const gapFrames = previous ? point.frameIndex - previous.frame : 0;
+    if (previous && gapFrames > 1 && gapFrames <= 5) {
+      for (let step = 1; step < gapFrames; step += 1) {
+        const t = step / gapFrames;
+        points.push({
+          boxHeight: lerp(previous.boxHeight, boxHeight, t),
+          boxWidth: lerp(previous.boxWidth, boxWidth, t),
+          centerX: lerp(previous.centerX, centerX, t),
+          centerY: lerp(previous.centerY, centerY, t),
+          confidence: Math.min(previous.confidence, confidence) * 0.82,
+          featured: true,
+          footX: lerp(previous.footX, footX, t),
+          footY: lerp(previous.footY, footY, t),
+          frame: previous.frame + step,
+          label: focusPlayer?.label || point.label,
+          time: roundTime(previous.time + (point.timestamp - previous.time) * t),
+          x: lerp(previous.footX, footX, t),
+          y: lerp(previous.footY, footY, t),
+        });
+        interpolatedPoints += 1;
+      }
+    }
     const overlayPoint: PlayerOverlayPoint = {
       boxHeight,
       boxWidth,
@@ -999,7 +1073,7 @@ function buildFeaturedPlayerOverlayPoints(
     featuredId,
     focusPlayer,
     inputPoints: playerTrack.length,
-    interpolatedGaps,
+    interpolatedPoints,
     lowConfidenceDrops,
     outputPoints: points.length,
   });
@@ -1007,7 +1081,7 @@ function buildFeaturedPlayerOverlayPoints(
     outputPoints: points.length,
     trackId: featuredId,
   });
-  return { dropoutGaps, lowConfidenceDrops, points };
+  return { dropoutGaps, interpolatedPoints, lowConfidenceDrops, points };
 }
 
 function selectFeaturedPlayerId(playerTrack: AxisPlayerTrackPoint[], focusPlayer?: AxisReplayFocusPlayer) {

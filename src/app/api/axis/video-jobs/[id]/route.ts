@@ -31,6 +31,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     playerTrackCount: result.record.player_track_count,
     processingStage: result.record.processing_stage,
     progress: result.record.progress,
+    replayQualityReport: result.record.status === "replay_ready" ? result.record.replay_quality_report : null,
     status: result.record.status,
     videoUrl: result.record.video_url,
   });
