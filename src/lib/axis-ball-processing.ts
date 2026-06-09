@@ -33,10 +33,16 @@ export type AxisPlayerTrackPoint = {
   y: number;
 };
 
-export type AxisReplayFocusPlayer = {
+export type AxisReplayFocusSelection = {
   label?: string;
   x: number;
   y: number;
+};
+
+export type AxisReplayFocusPlayer = {
+  distance?: number;
+  label?: string;
+  trackId: string;
 };
 
 export type AxisBallProcessingResult = {
@@ -44,6 +50,7 @@ export type AxisBallProcessingResult = {
   detectionCount: number;
   detections: AxisDetection[];
   events: AxisEvent[];
+  focusPlayerTrackId?: string;
   frameCount: number;
   playerTrack: AxisPlayerTrackPoint[];
   replayExport?: {
@@ -64,7 +71,7 @@ export type AxisBallProcessingStageUpdate =
 
 export type AxisBallProcessingOptions = {
   exportReplay?: boolean;
-  focusPlayer?: AxisReplayFocusPlayer;
+  focusSelection?: AxisReplayFocusSelection;
   keepWorkDir?: boolean;
   sessionId?: string;
   sourceJobId?: string;
@@ -90,6 +97,14 @@ type RoboflowPrediction = {
 type RoboflowImage = {
   height?: unknown;
   width?: unknown;
+};
+
+type ActivePlayerTrack = {
+  frame: number;
+  id: string;
+  label: string;
+  x: number;
+  y: number;
 };
 
 const frameIntervalSeconds = 0.1;
@@ -180,6 +195,13 @@ export async function runAxisBallProcessing(
       eventCount: detectionResult.events.length,
       trackCount: detectionResult.tracks.length,
     });
+    const focusPlayer = resolveFocusPlayer(detectionResult.playerTrack, options.focusSelection);
+    console.log("AXIS_FOCUS_PLAYER_RESOLVED", {
+      focusPointDistance: focusPlayer?.distance ?? null,
+      focusPlayerTrackId: focusPlayer?.trackId ?? null,
+      hasFocusSelection: Boolean(options.focusSelection),
+      playerTrackCount: detectionResult.playerTrack.length,
+    });
 
     await onStage?.("rendering_replay");
     logAxisBallProcessingMemory("BEFORE_REPLAY_GENERATION", {
@@ -193,7 +215,7 @@ export async function runAxisBallProcessing(
           createFilters: (metadata) =>
             createReplayOverlayFilters({
               ballTrack: detectionResult.ballTrack,
-              focusPlayer: options.focusPlayer,
+              focusPlayer,
               playerTrack: detectionResult.playerTrack,
               sourceHeight: metadata.height ?? undefined,
               sourceWidth: metadata.width ?? undefined,
@@ -211,6 +233,7 @@ export async function runAxisBallProcessing(
       detectionCount: detectionResult.detectionCount,
       detections: detectionResult.detections,
       events: detectionResult.events,
+      ...(focusPlayer?.trackId ? { focusPlayerTrackId: focusPlayer.trackId } : {}),
       frameCount: frames.length,
       playerTrack: detectionResult.playerTrack,
       replayExport: replayExport
@@ -250,7 +273,9 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
   const ballTrack: AxisBallTrackPoint[] = [];
   const playerTrack: AxisPlayerTrackPoint[] = [];
   const detections: AxisDetection[] = [];
+  const activePlayerTracks: ActivePlayerTrack[] = [];
   let detectionCount = 0;
+  let nextPlayerTrackNumber = 1;
 
   for (const frame of frames) {
     const image = await fs.readFile(frame.path);
@@ -294,6 +319,57 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
       });
     }
 
+    const usedTrackIds = new Set<string>();
+    for (const player of players) {
+      if (!isFiniteNumber(player.x) || !isFiniteNumber(player.y)) continue;
+      const sourceWidth = frameWidth || 1;
+      const sourceHeight = frameHeight || 1;
+      const normalizedX = player.x / sourceWidth;
+      const normalizedY = player.y / sourceHeight;
+      let nearestTrack: { distance: number; track: ActivePlayerTrack } | null = null;
+
+      for (const track of activePlayerTracks) {
+        if (usedTrackIds.has(track.id) || frame.frame - track.frame > 12) continue;
+        const distance = Math.hypot(normalizedX - track.x, normalizedY - track.y);
+        if (distance > 0.22) continue;
+        if (!nearestTrack || distance < nearestTrack.distance) nearestTrack = { distance, track };
+      }
+
+      const assignedTrack =
+        nearestTrack?.track ??
+        ({
+          frame: frame.frame,
+          id: `player_${nextPlayerTrackNumber}`,
+          label: String(nextPlayerTrackNumber),
+          x: normalizedX,
+          y: normalizedY,
+        } satisfies ActivePlayerTrack);
+
+      if (!nearestTrack) {
+        activePlayerTracks.push(assignedTrack);
+        nextPlayerTrackNumber += 1;
+      }
+
+      assignedTrack.frame = frame.frame;
+      assignedTrack.x = normalizedX;
+      assignedTrack.y = normalizedY;
+      usedTrackIds.add(assignedTrack.id);
+
+      playerTrack.push({
+        confidence: player.confidence,
+        frame: frame.frame,
+        id: assignedTrack.id,
+        label: assignedTrack.label,
+        ...(player.height ? { boxHeight: player.height } : {}),
+        ...(player.width ? { boxWidth: player.width } : {}),
+        ...(frameHeight ? { sourceHeight: frameHeight } : {}),
+        ...(frameWidth ? { sourceWidth: frameWidth } : {}),
+        time: roundTime((frame.frame - 1) * frameIntervalSeconds),
+        x: player.x,
+        y: player.y,
+      });
+    }
+
     if (!best || !isFiniteNumber(best.x) || !isFiniteNumber(best.y)) continue;
     ballTrack.push({
       confidence: best.confidence,
@@ -304,21 +380,6 @@ async function detectBasketballs(frames: FrameFile[], options: { sessionId: stri
       x: best.x,
       y: best.y,
     });
-    playerTrack.push(
-      ...players.map((player, index) => ({
-        confidence: player.confidence,
-        frame: frame.frame,
-        id: `player_${index + 1}`,
-        label: String(index + 1),
-        ...(player.height ? { boxHeight: player.height } : {}),
-        ...(player.width ? { boxWidth: player.width } : {}),
-        ...(frameHeight ? { sourceHeight: frameHeight } : {}),
-        ...(frameWidth ? { sourceWidth: frameWidth } : {}),
-        time: roundTime((frame.frame - 1) * frameIntervalSeconds),
-        x: player.x ?? 0,
-        y: player.y ?? 0,
-      })),
-    );
   }
 
   const tracks = buildAxisTracksFromBallTrack(ballTrack, options.sessionId);
@@ -734,7 +795,7 @@ function buildFeaturedPlayerOverlayPoints(
   targetHeight: number,
   focusPlayer?: AxisReplayFocusPlayer,
 ) {
-  const featuredId = selectFeaturedPlayerId(playerTrack, targetWidth, targetHeight, focusPlayer);
+  const featuredId = selectFeaturedPlayerId(playerTrack, focusPlayer);
   let lowConfidenceDrops = 0;
   let dropoutGaps = 0;
   let previous: PlayerOverlayPoint | null = null;
@@ -784,31 +845,35 @@ function buildFeaturedPlayerOverlayPoints(
   return { dropoutGaps, lowConfidenceDrops, points };
 }
 
-function selectFeaturedPlayerId(
-  playerTrack: AxisPlayerTrackPoint[],
-  targetWidth: number,
-  targetHeight: number,
-  focusPlayer?: AxisReplayFocusPlayer,
-) {
-  if (focusPlayer) {
-    const focusX = clamp01(focusPlayer.x) * targetWidth;
-    const focusY = clamp01(focusPlayer.y) * targetHeight;
-    let nearest: { distance: number; id: string } | null = null;
-
-    for (const point of playerTrack.filter((item) => item.time <= 1.5)) {
-      const mapped = mapExportPoint(point, targetWidth, targetHeight);
-      const distance = Math.hypot(mapped.x - focusX, mapped.y - focusY);
-      if (!nearest || distance < nearest.distance) nearest = { distance, id: point.id };
-    }
-
-    if (nearest) return nearest.id;
-  }
+function selectFeaturedPlayerId(playerTrack: AxisPlayerTrackPoint[], focusPlayer?: AxisReplayFocusPlayer) {
+  if (focusPlayer?.trackId && playerTrack.some((point) => point.id === focusPlayer.trackId)) return focusPlayer.trackId;
 
   const scores = new Map<string, number>();
   for (const point of playerTrack) {
     scores.set(point.id, (scores.get(point.id) ?? 0) + toConfidence01(point.confidence));
   }
   return [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "player_1";
+}
+
+function resolveFocusPlayer(playerTrack: AxisPlayerTrackPoint[], focusSelection?: AxisReplayFocusSelection): AxisReplayFocusPlayer | undefined {
+  if (!focusSelection) return undefined;
+  let nearest: { distance: number; point: AxisPlayerTrackPoint } | null = null;
+
+  for (const point of playerTrack.filter((item) => item.time <= 1.5)) {
+    const sourceWidth = point.sourceWidth || 1;
+    const sourceHeight = point.sourceHeight || 1;
+    const normalizedX = point.x / sourceWidth;
+    const normalizedY = point.y / sourceHeight;
+    const distance = Math.hypot(normalizedX - clamp01(focusSelection.x), normalizedY - clamp01(focusSelection.y));
+    if (!nearest || distance < nearest.distance) nearest = { distance, point };
+  }
+
+  if (!nearest) return undefined;
+  return {
+    distance: nearest.distance,
+    ...(focusSelection.label ? { label: focusSelection.label } : {}),
+    trackId: nearest.point.id,
+  };
 }
 
 function mapExportBox(point: AxisPlayerTrackPoint, targetWidth: number, targetHeight: number) {

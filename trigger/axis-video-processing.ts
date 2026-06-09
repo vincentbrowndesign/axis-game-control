@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { promises as fs } from "node:fs";
-import { runAxisBallProcessing, type AxisReplayFocusPlayer } from "../src/lib/axis-ball-processing";
+import { runAxisBallProcessing, type AxisReplayFocusSelection } from "../src/lib/axis-ball-processing";
 import { storeAxisEvents } from "../src/lib/axis-events";
 import type { AxisVideoJobRecord } from "../src/lib/axis-video-jobs";
 import { getAxisVideoJob, updateAxisVideoJob } from "../src/lib/axis-video-jobs";
@@ -9,7 +9,7 @@ import { assertAxisSupabaseServerEnv, verifyAxisSupabaseServiceRoleConnectivity 
 
 type AxisVideoProcessingPayload = {
   cloudflareUid: string;
-  focusPlayer?: AxisReplayFocusPlayer;
+  focusSelection?: AxisReplayFocusSelection;
   jobId: string;
 };
 
@@ -60,7 +60,7 @@ export const axisVideoProcessing = task({
       console.log("DOWNLOAD_VIDEO_START", {
         cloudflareUid: payload.cloudflareUid,
         jobId: payload.jobId,
-        focusPlayer: payload.focusPlayer ?? null,
+        focusSelection: payload.focusSelection ?? null,
       });
       console.log("PROCESSING_STEP_3", {
         request: "cloudflare.stream.downloads.create_and_read",
@@ -103,7 +103,7 @@ export const axisVideoProcessing = task({
             status: "axis_processing",
           });
         },
-        { exportReplay: true, focusPlayer: payload.focusPlayer, keepWorkDir: true, sourceJobId: payload.jobId },
+        { exportReplay: true, focusSelection: payload.focusSelection, keepWorkDir: true, sourceJobId: payload.jobId },
       );
       processingWorkDir = result.workDir;
       logAxisVideoProcessingMemory("BEFORE_REPLAY_GENERATION", { jobId: payload.jobId });
@@ -183,6 +183,7 @@ export const axisVideoProcessing = task({
       console.log("JOB_READY", {
         ballTrackCount: result.ballTrack.length,
         cloudflareUid: payload.cloudflareUid,
+        focusPlayerTrackId: result.focusPlayerTrackId ?? null,
         persistedStatus: finalUpdate.record.status,
         jobId: payload.jobId,
       });
@@ -192,6 +193,7 @@ export const axisVideoProcessing = task({
         cloudflareUid: payload.cloudflareUid,
         detectionCount: result.detectionCount,
         frameCount: result.frameCount,
+        focusPlayerTrackId: result.focusPlayerTrackId ?? null,
         jobId: payload.jobId,
         replayCloudflareUid,
         status: "replay_ready",

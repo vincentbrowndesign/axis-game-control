@@ -67,7 +67,7 @@ type VideoJobResponse = {
   triggerRunId?: string;
 };
 
-type FocusPlayer = {
+type FocusSelection = {
   label?: string;
   x: number;
   y: number;
@@ -86,7 +86,7 @@ export function AxisOneScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
-  const [focusPlayer, setFocusPlayer] = useState<FocusPlayer | null>(null);
+  const [focusSelection, setFocusSelection] = useState<FocusSelection | null>(null);
   const [jobId, setJobId] = useState("");
   const [originalUrl, setOriginalUrl] = useState("");
   const [playerLabel, setPlayerLabel] = useState("");
@@ -272,7 +272,7 @@ export function AxisOneScreen() {
     objectUrlRef.current = localVideoUrl;
     setOriginalUrl(localVideoUrl);
     setVideoUrl(localVideoUrl);
-    setFocusPlayer(null);
+    setFocusSelection(null);
     setTrack([]);
     setSaveUrl("");
     setError("");
@@ -291,7 +291,7 @@ export function AxisOneScreen() {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - rect.left) / Math.max(1, rect.width);
     const y = (event.clientY - rect.top) / Math.max(1, rect.height);
-    setFocusPlayer({
+    setFocusSelection({
       ...(playerLabel.trim() ? { label: playerLabel.trim() } : {}),
       x: clamp01(x),
       y: clamp01(y),
@@ -301,7 +301,7 @@ export function AxisOneScreen() {
   async function handleGenerateReplay() {
       const file = selectedFile;
       if (!file) return;
-    if (!focusPlayer) {
+    if (!focusSelection) {
       setError("Tap the player you want Axis to follow.");
       return;
     }
@@ -363,8 +363,8 @@ export function AxisOneScreen() {
             cloudflareUid: upload.cloudflareUid,
             fileSize: file.size,
             filename: file.name || "axis-video.mp4",
-            focusPlayer: {
-              ...focusPlayer,
+            focusSelection: {
+              ...focusSelection,
               ...(playerLabel.trim() ? { label: playerLabel.trim() } : {}),
             },
             jobId: upload.jobId,
@@ -417,7 +417,7 @@ export function AxisOneScreen() {
     pollingAccessTokenRef.current = null;
     setElapsedSeconds(0);
     setError("");
-    setFocusPlayer(null);
+    setFocusSelection(null);
     setJobId("");
     setOriginalUrl("");
     setPlayerLabel("");
@@ -500,25 +500,25 @@ export function AxisOneScreen() {
           </header>
           <div className="axis-one-focus-stage">
             <video controls muted onPointerDown={handleFocusTap} playsInline preload="metadata" src={originalUrl} />
-            {focusPlayer ? (
+            {focusSelection ? (
               <span
                 aria-label="Selected player"
                 className="axis-one-focus-ring"
                 style={{
-                  left: `${focusPlayer.x * 100}%`,
-                  top: `${focusPlayer.y * 100}%`,
+                  left: `${focusSelection.x * 100}%`,
+                  top: `${focusSelection.y * 100}%`,
                 }}
               />
             ) : null}
           </div>
-          {focusPlayer ? (
+          {focusSelection ? (
             <label className="axis-one-name-field">
               <span>Name or number</span>
               <input
                 onChange={(event) => {
                   const label = event.target.value;
                   setPlayerLabel(label);
-                  setFocusPlayer((current) => {
+                  setFocusSelection((current) => {
                     if (!current) return current;
                     const nextLabel = label.trim();
                     return nextLabel ? { ...current, label: nextLabel } : { x: current.x, y: current.y };
@@ -531,7 +531,7 @@ export function AxisOneScreen() {
             </label>
           ) : null}
           {error ? <em className="axis-one-inline-error">{error}</em> : null}
-          <button className="axis-one-primary" disabled={!focusPlayer} onClick={() => void handleGenerateReplay()} type="button">
+          <button className="axis-one-primary" disabled={!focusSelection} onClick={() => void handleGenerateReplay()} type="button">
             GENERATE REPLAY
           </button>
           <button className="axis-one-secondary" onClick={() => inputRef.current?.click()} type="button">

@@ -11,7 +11,7 @@ type CreateVideoJobBody = {
   cloudflareUid?: unknown;
   fileSize?: unknown;
   filename?: unknown;
-  focusPlayer?: unknown;
+  focusSelection?: unknown;
   jobId?: unknown;
 };
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
   const jobId = getString(body.jobId);
   const cloudflareUid = getString(body.cloudflareUid);
-  const focusPlayer = getFocusPlayer(body.focusPlayer);
+  const focusSelection = getFocusSelection(body.focusSelection);
   if (!jobId) return Response.json({ error: "jobId is required." }, { status: 400 });
   if (!cloudflareUid) return Response.json({ error: "cloudflareUid is required." }, { status: 400 });
 
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   try {
     console.log("AXIS_VIDEO_TRIGGER_REQUEST", {
       cloudflareUid,
-      focusPlayer,
+      focusSelection,
       jobId,
       queueName: axisVideoTriggerQueue,
       ttl: axisVideoTriggerTtl,
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     });
     const handle = await tasks.trigger("axis-video-processing", {
       cloudflareUid,
-      ...(focusPlayer ? { focusPlayer } : {}),
+      ...(focusSelection ? { focusSelection } : {}),
       jobId,
     }, {
       queue: axisVideoTriggerQueue,
@@ -172,7 +172,7 @@ function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function getFocusPlayer(value: unknown) {
+function getFocusSelection(value: unknown) {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
   const x = getNumber(record.x);
