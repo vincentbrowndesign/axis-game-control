@@ -42,6 +42,7 @@ export type AxisPlayerTrackPoint = {
 export type AxisReplayFocusSelection = {
   label?: string;
   timestamp?: number;
+  trackId?: string;
   x: number;
   y: number;
 };
@@ -89,6 +90,8 @@ export type AxisBallProcessingStageUpdate =
 
 export type AxisBallProcessingOptions = {
   exportReplay?: boolean;
+  focusPlayerLabel?: string;
+  focusPlayerTrackId?: string;
   focusSelection?: AxisReplayFocusSelection;
   keepWorkDir?: boolean;
   sessionId?: string;
@@ -240,11 +243,16 @@ export async function runAxisBallProcessing(
       eventCount: detectionResult.events.length,
       trackCount: detectionResult.tracks.length,
     });
-    const focusPlayer = resolveFocusPlayer(detectionResult.playerTrack, options.focusSelection);
+    const focusPlayer = resolveFocusPlayer(detectionResult.playerTrack, {
+      focusPlayerLabel: options.focusPlayerLabel,
+      focusPlayerTrackId: options.focusPlayerTrackId,
+      focusSelection: options.focusSelection,
+    });
     console.log("AXIS_FOCUS_PLAYER_RESOLVED", {
       focusPointDistance: focusPlayer?.distance ?? null,
       focusPlayerTrackId: focusPlayer?.trackId ?? null,
       hasFocusSelection: Boolean(options.focusSelection),
+      hasFocusTrackId: Boolean(options.focusPlayerTrackId),
       playerTrackCount: detectionResult.playerTrack.length,
     });
 
@@ -1094,7 +1102,29 @@ function selectFeaturedPlayerId(playerTrack: AxisPlayerTrackPoint[], focusPlayer
   return [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "player_1";
 }
 
-function resolveFocusPlayer(playerTrack: AxisPlayerTrackPoint[], focusSelection?: AxisReplayFocusSelection): AxisReplayFocusPlayer | undefined {
+function resolveFocusPlayer(
+  playerTrack: AxisPlayerTrackPoint[],
+  {
+    focusPlayerLabel,
+    focusPlayerTrackId,
+    focusSelection,
+  }: {
+    focusPlayerLabel?: string;
+    focusPlayerTrackId?: string;
+    focusSelection?: AxisReplayFocusSelection;
+  },
+): AxisReplayFocusPlayer | undefined {
+  const selectedTrackId = focusPlayerTrackId || focusSelection?.trackId;
+  if (selectedTrackId && playerTrack.some((point) => point.trackId === selectedTrackId)) {
+    console.log("FOCUS_PLAYER_LOCKED", {
+      focusPlayerTrackId: selectedTrackId,
+      source: "track_id",
+    });
+    return {
+      ...(focusPlayerLabel || focusSelection?.label ? { label: focusPlayerLabel || focusSelection?.label } : {}),
+      trackId: selectedTrackId,
+    };
+  }
   if (!focusSelection) return undefined;
   let nearest: { distance: number; point: AxisPlayerTrackPoint } | null = null;
   const targetTime = typeof focusSelection.timestamp === "number" && Number.isFinite(focusSelection.timestamp) ? Math.max(0, focusSelection.timestamp) : 0;
@@ -1124,7 +1154,7 @@ function resolveFocusPlayer(playerTrack: AxisPlayerTrackPoint[], focusSelection?
   });
   return {
     distance: nearest.distance,
-    ...(focusSelection.label ? { label: focusSelection.label } : {}),
+    ...(focusPlayerLabel || focusSelection.label ? { label: focusPlayerLabel || focusSelection.label } : {}),
     trackId: nearest.point.trackId,
   };
 }

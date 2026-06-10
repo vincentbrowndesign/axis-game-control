@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../lib/axis-client-auth";
 import {
   createAxisOverlayEngineState,
@@ -33,6 +33,8 @@ type BallJobResponse = {
   error?: string;
   frameCount?: number;
   jobId?: string;
+  playerTrack?: PlayerTrackPoint[];
+  playerTrackCount?: number;
   processingStage?: string;
   status?:
     | "axis_processing"
@@ -67,11 +69,37 @@ type VideoJobResponse = {
   triggerRunId?: string;
 };
 
+type PlayerTrackPoint = {
+  bbox: {
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  };
+  centerX: number;
+  centerY: number;
+  confidence: number;
+  footX: number;
+  footY: number;
+  frameIndex: number;
+  label?: string;
+  sourceHeight?: number;
+  sourceWidth?: number;
+  timestamp: number;
+  trackId: string;
+};
+
+type PlayerCandidate = {
+  bestFrame: number;
+  confidence: number;
+  thumbnail: string;
+  trackId: string;
+  visibleFrames: number;
+};
+
 type FocusSelection = {
   label?: string;
-  timestamp?: number;
-  x: number;
-  y: number;
+  trackId: string;
 };
 
 const confidenceThreshold = 0.35;
@@ -87,6 +115,8 @@ export function AxisOneScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
+  const [cloudflareUid, setCloudflareUid] = useState("");
+  const [playerCandidates, setPlayerCandidates] = useState<PlayerCandidate[]>([]);
   const [focusSelection, setFocusSelection] = useState<FocusSelection | null>(null);
   const [jobId, setJobId] = useState("");
   const [originalUrl, setOriginalUrl] = useState("");
@@ -98,6 +128,7 @@ export function AxisOneScreen() {
   const [state, setState] = useState<AppState>("choose");
   const [stage, setStage] = useState<VisibleStage>("Uploading Clip");
   const [track, setTrack] = useState<BallTrackPoint[]>([]);
+  const [playerTrack, setPlayerTrack] = useState<PlayerTrackPoint[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
 
   const sortedTrack = useMemo(
@@ -239,10 +270,28 @@ export function AxisOneScreen() {
           window.clearInterval(interval);
           return;
         }
+        if (result.status === "ready_for_axis_processing") {
+          const nextPlayerTrack = Array.isArray(result.playerTrack) ? result.playerTrack : [];
+          setPlayerTrack(nextPlayerTrack);
+          const candidates = await createPlayerCandidates(nextPlayerTrack, originalUrl);
+          console.info("PLAYER_CANDIDATES_CREATED", {
+            candidateCount: candidates.length,
+            jobId,
+            playerTrackCount: nextPlayerTrack.length,
+          });
+          setPlayerCandidates(candidates);
+          setStage("Finding Player");
+          setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
+          setState("focus");
+          window.clearInterval(interval);
+          return;
+        }
         if (result.status !== "replay_ready") return;
 
         const nextTrack = Array.isArray(result.ballTrack) ? result.ballTrack : [];
+        const nextPlayerTrack = Array.isArray(result.playerTrack) ? result.playerTrack : [];
         setTrack(nextTrack);
+        setPlayerTrack(nextPlayerTrack);
         if (result.videoUrl) {
           setVideoUrl(result.videoUrl);
           setSaveUrl(result.videoUrl);
@@ -265,7 +314,7 @@ export function AxisOneScreen() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [jobId, state]);
+  }, [jobId, originalUrl, state]);
 
   function handleFile(file: File) {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -274,9 +323,12 @@ export function AxisOneScreen() {
     setOriginalUrl(localVideoUrl);
     setVideoUrl(localVideoUrl);
     setFocusSelection(null);
+    setPlayerCandidates([]);
+    setPlayerTrack([]);
     setTrack([]);
     setSaveUrl("");
     setError("");
+    setCloudflareUid("");
     setJobId("");
     setPlayerLabel("");
     setPreviewMode("replay");
@@ -285,30 +337,22 @@ export function AxisOneScreen() {
     setElapsedSeconds(0);
     setSelectedFile(file);
     resetAxisOverlayEngineState(overlayStateRef.current);
-    setState("focus");
+    void handleAnalyzePlayers(file);
   }
 
-  function handleFocusTap(event: PointerEvent<HTMLVideoElement>) {
-    const videoPoint = getVideoRelativePoint(event.currentTarget, event.clientX, event.clientY);
-    console.info("FOCUS_TAP_VIDEO_POINT", {
-      x: videoPoint.x,
-      y: videoPoint.y,
+  function handlePlayerCandidateSelect(candidate: PlayerCandidate) {
+    console.info("PLAYER_CANDIDATE_SELECTED", {
+      confidence: candidate.confidence,
+      trackId: candidate.trackId,
+      visibleFrames: candidate.visibleFrames,
     });
     setFocusSelection({
       ...(playerLabel.trim() ? { label: playerLabel.trim() } : {}),
-      timestamp: Number.isFinite(event.currentTarget.currentTime) ? event.currentTarget.currentTime : 0,
-      x: videoPoint.x,
-      y: videoPoint.y,
+      trackId: candidate.trackId,
     });
   }
 
-  async function handleGenerateReplay() {
-      const file = selectedFile;
-      if (!file) return;
-    if (!focusSelection) {
-      setError("Tap the player you want Axis to follow.");
-      return;
-    }
+  async function handleAnalyzePlayers(file: File) {
     setStage("Uploading Clip");
     timerStartedAtRef.current = performance.now();
     setState("processing");
@@ -354,31 +398,107 @@ export function AxisOneScreen() {
 
       setStage("Uploading Clip");
       console.info("PROCESSING_START", { cloudflareUid: upload.cloudflareUid, jobId: upload.jobId });
+      const nextCloudflareUid = upload.cloudflareUid;
+      const nextJobId = upload.jobId;
+      if (!nextCloudflareUid || !nextJobId) throw new Error("Upload response was incomplete.");
+      setCloudflareUid(nextCloudflareUid);
+      await createVideoJob({
+        accessToken,
+        action: "analyze_players",
+        cloudflareUid: nextCloudflareUid,
+        file,
+        jobId: nextJobId,
+      });
+    } catch (nextError) {
+      console.error("UPLOAD_FLOW_ERROR", serializeError(nextError));
+      setError(nextError instanceof Error ? nextError.message : "Processing failed.");
+      setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
+      setState("failed");
+    } finally {
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function handleGenerateReplay() {
+    const file = selectedFile;
+    if (!file || !jobId || !cloudflareUid) return;
+    if (!focusSelection?.trackId) {
+      setError("Choose the player Axis should follow.");
+      return;
+    }
+    setStage("Building Replay");
+    timerStartedAtRef.current = performance.now();
+    setState("processing");
+
+    try {
+      const accessToken = pollingAccessTokenRef.current ?? (await getAxisAccessToken());
+      pollingAccessTokenRef.current = accessToken;
+      if (!accessToken) throw new Error("Authenticated session is required to create a replay.");
+      console.info("FOCUS_PLAYER_TRACK_ID", { focusPlayerTrackId: focusSelection.trackId, jobId });
+      console.info("FOCUS_PLAYER_LABEL", { focusPlayerLabel: playerLabel.trim() || null, jobId });
+      await createVideoJob({
+        accessToken,
+        action: "generate_replay",
+        cloudflareUid,
+        file,
+        focusPlayerLabel: playerLabel.trim(),
+        focusPlayerTrackId: focusSelection.trackId,
+        jobId,
+      });
+    } catch (nextError) {
+      console.error("UPLOAD_FLOW_ERROR", serializeError(nextError));
+      setError(nextError instanceof Error ? nextError.message : "Processing failed.");
+      setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
+      setState("failed");
+    } finally {
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function createVideoJob({
+    accessToken,
+    action,
+    cloudflareUid,
+    file,
+    focusPlayerLabel,
+    focusPlayerTrackId,
+    jobId,
+  }: {
+    accessToken: string;
+    action: "analyze_players" | "generate_replay";
+    cloudflareUid: string;
+    file: File;
+    focusPlayerLabel?: string;
+    focusPlayerTrackId?: string;
+    jobId: string;
+  }) {
       const route = "/api/axis/video-job";
       let response: Response;
       try {
         console.info("LOG_BEFORE_JOB_CREATE", {
-          cloudflareUid: upload.cloudflareUid,
-          jobId: upload.jobId,
+          action,
+          cloudflareUid,
+          focusPlayerTrackId: focusPlayerTrackId ?? null,
+          jobId,
           route,
         });
         response = await axisFetchWithAccessToken(accessToken, route, {
           body: JSON.stringify({
-            cloudflareUid: upload.cloudflareUid,
+            action,
+            cloudflareUid,
             fileSize: file.size,
             filename: file.name || "axis-video.mp4",
-            focusSelection: {
-              ...focusSelection,
-              ...(playerLabel.trim() ? { label: playerLabel.trim() } : {}),
-            },
-            jobId: upload.jobId,
+            ...(focusPlayerLabel ? { focusPlayerLabel } : {}),
+            ...(focusPlayerTrackId ? { focusPlayerTrackId } : {}),
+            jobId,
           }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
         console.info("LOG_AFTER_JOB_CREATE", {
-          cloudflareUid: upload.cloudflareUid,
-          jobId: upload.jobId,
+          action,
+          cloudflareUid,
+          jobId,
           ok: response.ok,
           status: response.status,
         });
@@ -388,9 +508,10 @@ export function AxisOneScreen() {
       }
       const result = (await response.json().catch(() => null)) as VideoJobResponse | null;
       console.info("JOB_CREATE_RESPONSE_BODY", {
+        action,
         body: result,
-        cloudflareUid: upload.cloudflareUid,
-        jobId: upload.jobId,
+        cloudflareUid,
+        jobId,
         ok: response.ok,
         status: response.status,
       });
@@ -405,14 +526,6 @@ export function AxisOneScreen() {
         throw new Error(result.error ?? "Trigger was not started for this replay.");
       }
       setJobId(result.jobId);
-    } catch (nextError) {
-      console.error("UPLOAD_FLOW_ERROR", serializeError(nextError));
-      setError(nextError instanceof Error ? nextError.message : "Processing failed.");
-      setElapsedSeconds(Math.floor((performance.now() - timerStartedAtRef.current) / 1000));
-      setState("failed");
-    } finally {
-      if (inputRef.current) inputRef.current.value = "";
-    }
   }
 
   function handleCreateAnother() {
@@ -421,10 +534,13 @@ export function AxisOneScreen() {
     pollingAccessTokenRef.current = null;
     setElapsedSeconds(0);
     setError("");
+    setCloudflareUid("");
     setFocusSelection(null);
     setJobId("");
     setOriginalUrl("");
     setPlayerLabel("");
+    setPlayerCandidates([]);
+    setPlayerTrack([]);
     setPollWarning("");
     setPreviewMode("replay");
     setSaveUrl("");
@@ -500,20 +616,52 @@ export function AxisOneScreen() {
           <header>
             <span>{selectedFile?.name || "Video selected"}</span>
             <h1>Who should we follow?</h1>
-            <p>Tap the player you want Axis to follow.</p>
+            <p>Choose the player Axis found in this clip.</p>
           </header>
-          <div className="axis-one-focus-stage">
-            <video controls muted onPointerDown={handleFocusTap} playsInline preload="metadata" src={originalUrl} />
-            {focusSelection ? (
-              <span
-                aria-label="Selected player"
-                className="axis-one-focus-ring"
-                style={{
-                  left: `${focusSelection.x * 100}%`,
-                  top: `${focusSelection.y * 100}%`,
-                }}
-              />
-            ) : null}
+          <div
+            className="axis-one-player-candidates"
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))",
+            }}
+          >
+            {playerCandidates.length ? (
+              playerCandidates.map((candidate, index) => (
+                <button
+                  aria-pressed={focusSelection?.trackId === candidate.trackId}
+                  key={candidate.trackId}
+                  onClick={() => handlePlayerCandidateSelect(candidate)}
+                  style={{
+                    background: focusSelection?.trackId === candidate.trackId ? "#b8ff3d" : "#101010",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    color: focusSelection?.trackId === candidate.trackId ? "#050505" : "#f5f5f0",
+                    display: "grid",
+                    gap: 8,
+                    padding: 10,
+                    textAlign: "left",
+                  }}
+                  type="button"
+                >
+                  {candidate.thumbnail ? (
+                    <img
+                      alt={`Player ${index + 1}`}
+                      src={candidate.thumbnail}
+                      style={{ aspectRatio: "3 / 4", background: "#050505", objectFit: "cover", width: "100%" }}
+                    />
+                  ) : (
+                    <span style={{ aspectRatio: "3 / 4", background: "#050505", display: "block", width: "100%" }} />
+                  )}
+                  <strong>Player {index + 1}</strong>
+                  <span>{Math.round(candidate.confidence * 100)}% visible</span>
+                </button>
+              ))
+            ) : (
+              <div className="axis-one-empty-replays">
+                <strong>No player candidates found.</strong>
+                <span>Select another clip with the athlete visible.</span>
+              </div>
+            )}
           </div>
           {focusSelection ? (
             <label className="axis-one-name-field">
@@ -525,7 +673,7 @@ export function AxisOneScreen() {
                   setFocusSelection((current) => {
                     if (!current) return current;
                     const nextLabel = label.trim();
-                    return nextLabel ? { ...current, label: nextLabel } : { x: current.x, y: current.y };
+                    return nextLabel ? { ...current, label: nextLabel } : { trackId: current.trackId };
                   });
                 }}
                 placeholder="Optional"
@@ -721,8 +869,120 @@ function stageFromJob(stage: unknown): VisibleStage {
   return "Uploading Clip";
 }
 
+async function createPlayerCandidates(playerTrack: PlayerTrackPoint[], videoUrl: string): Promise<PlayerCandidate[]> {
+  const byTrack = new Map<string, PlayerTrackPoint[]>();
+  for (const point of playerTrack) {
+    const points = byTrack.get(point.trackId) ?? [];
+    points.push(point);
+    byTrack.set(point.trackId, points);
+  }
+
+  const summaries = [...byTrack.entries()]
+    .map(([trackId, points]) => {
+      const sorted = points.sort((a, b) => a.timestamp - b.timestamp);
+      const confidence = sorted.reduce((sum, point) => sum + toConfidence01(point.confidence), 0) / Math.max(1, sorted.length);
+      const bestPoint =
+        sorted
+          .map((point) => ({
+            point,
+            score: Math.max(1, point.bbox.width * point.bbox.height) * Math.max(0.1, toConfidence01(point.confidence)),
+          }))
+          .sort((a, b) => b.score - a.score)[0]?.point ?? sorted[0];
+
+      return {
+        bestPoint,
+        confidence,
+        trackId,
+        visibleFrames: sorted.length,
+      };
+    })
+    .filter((summary) => summary.bestPoint)
+    .sort((a, b) => b.visibleFrames * b.confidence - a.visibleFrames * a.confidence)
+    .slice(0, 8);
+
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = videoUrl;
+
+  await waitForVideoMetadata(video).catch(() => null);
+
+  const candidates: PlayerCandidate[] = [];
+  for (const summary of summaries) {
+    const point = summary.bestPoint;
+    const thumbnail = point ? await createCandidateThumbnail(video, point).catch(() => "") : "";
+    candidates.push({
+      bestFrame: point?.frameIndex ?? 0,
+      confidence: summary.confidence,
+      thumbnail,
+      trackId: summary.trackId,
+      visibleFrames: summary.visibleFrames,
+    });
+  }
+
+  return candidates;
+}
+
+function waitForVideoMetadata(video: HTMLVideoElement) {
+  if (video.readyState >= 1 && video.videoWidth > 0) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error("Video metadata timed out.")), 5000);
+    video.onloadedmetadata = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    video.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error("Video metadata failed."));
+    };
+  });
+}
+
+async function createCandidateThumbnail(video: HTMLVideoElement, point: PlayerTrackPoint) {
+  await seekVideo(video, point.timestamp);
+  const sourceWidth = point.sourceWidth || video.videoWidth || 1;
+  const sourceHeight = point.sourceHeight || video.videoHeight || 1;
+  const scaleX = video.videoWidth / Math.max(1, sourceWidth);
+  const scaleY = video.videoHeight / Math.max(1, sourceHeight);
+  const padX = point.bbox.width * 0.42;
+  const padY = point.bbox.height * 0.2;
+  const sx = Math.max(0, (point.bbox.x - padX) * scaleX);
+  const sy = Math.max(0, (point.bbox.y - padY) * scaleY);
+  const sw = Math.min(video.videoWidth - sx, (point.bbox.width + padX * 2) * scaleX);
+  const sh = Math.min(video.videoHeight - sy, (point.bbox.height + padY * 2) * scaleY);
+  const canvas = document.createElement("canvas");
+  canvas.width = 240;
+  canvas.height = 320;
+  const ctx = canvas.getContext("2d");
+  if (!ctx || sw <= 0 || sh <= 0) return "";
+  ctx.fillStyle = "#050505";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.74);
+}
+
+function seekVideo(video: HTMLVideoElement, time: number) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error("Video seek timed out.")), 5000);
+    video.onseeked = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    video.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error("Video seek failed."));
+    };
+    video.currentTime = Math.max(0, Math.min(Number.isFinite(video.duration) ? video.duration : time, time));
+  });
+}
+
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function toConfidence01(value: number) {
+  return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
 }
 
 function getVideoRelativePoint(video: HTMLVideoElement, clientX: number, clientY: number) {

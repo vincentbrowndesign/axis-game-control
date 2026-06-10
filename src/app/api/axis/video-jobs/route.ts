@@ -8,9 +8,12 @@ const axisVideoTriggerTtl = "30m";
 const axisVideoTriggerQueue = "axis-video-processing";
 
 type CreateVideoJobBody = {
+  action?: unknown;
   cloudflareUid?: unknown;
   fileSize?: unknown;
   filename?: unknown;
+  focusPlayerLabel?: unknown;
+  focusPlayerTrackId?: unknown;
   focusSelection?: unknown;
   jobId?: unknown;
 };
@@ -24,9 +27,15 @@ export async function POST(request: Request) {
 
   const jobId = getString(body.jobId);
   const cloudflareUid = getString(body.cloudflareUid);
+  const action = getString(body.action) === "generate_replay" ? "generate_replay" : "analyze_players";
+  const focusPlayerTrackId = getString(body.focusPlayerTrackId);
+  const focusPlayerLabel = getString(body.focusPlayerLabel);
   const focusSelection = getFocusSelection(body.focusSelection);
   if (!jobId) return Response.json({ error: "jobId is required." }, { status: 400 });
   if (!cloudflareUid) return Response.json({ error: "cloudflareUid is required." }, { status: 400 });
+  if (action === "generate_replay" && !focusPlayerTrackId) {
+    return Response.json({ error: "focusPlayerTrackId is required." }, { status: 400 });
+  }
 
   const existing = await getAxisVideoJob(jobId);
   if (existing.error) return Response.json({ code: existing.code, error: existing.error }, { status: 502 });
@@ -68,8 +77,10 @@ export async function POST(request: Request) {
 
   try {
     console.log("AXIS_VIDEO_TRIGGER_REQUEST", {
+      action,
       cloudflareUid,
       hasFocusSelection: Boolean(focusSelection),
+      hasFocusTrackId: Boolean(focusPlayerTrackId),
       jobId,
       queueName: axisVideoTriggerQueue,
       ttl: axisVideoTriggerTtl,
@@ -83,8 +94,11 @@ export async function POST(request: Request) {
     });
     const handle = await tasks.trigger("axis-video-processing", {
       cloudflareUid,
+      ...(focusPlayerLabel ? { focusPlayerLabel } : {}),
+      ...(focusPlayerTrackId ? { focusPlayerTrackId } : {}),
       ...(focusSelection ? { focusSelection } : {}),
       jobId,
+      mode: action,
     }, {
       queue: axisVideoTriggerQueue,
       ttl: axisVideoTriggerTtl,
@@ -104,6 +118,9 @@ export async function POST(request: Request) {
       ttl: axisVideoTriggerTtl,
     });
     await updateAxisVideoJob(jobId, {
+      ...(focusPlayerTrackId ? { focus_player_track_id: focusPlayerTrackId } : {}),
+      processing_stage: action === "generate_replay" ? "rendering_replay" : "uploading",
+      progress: action === "generate_replay" ? 60 : 8,
       status: "stream_processing",
       trigger_run_id: handle.id,
     });
@@ -111,6 +128,7 @@ export async function POST(request: Request) {
     return Response.json({
       cloudflareUid,
       jobId,
+      mode: action,
       status: "stream_processing",
       triggerRequested: true,
       triggerResponse: {

@@ -9,8 +9,11 @@ import { assertAxisSupabaseServerEnv, verifyAxisSupabaseServiceRoleConnectivity 
 
 type AxisVideoProcessingPayload = {
   cloudflareUid: string;
+  focusPlayerLabel?: string;
+  focusPlayerTrackId?: string;
   focusSelection?: AxisReplayFocusSelection;
   jobId: string;
+  mode?: "analyze_players" | "generate_replay";
 };
 
 export const axisVideoProcessing = task({
@@ -57,10 +60,13 @@ export const axisVideoProcessing = task({
       });
       logAxisVideoProcessingMemory("AFTER_CLOUDFLARE_VIDEO_READY", { jobId: payload.jobId });
 
+      const mode = payload.mode ?? (payload.focusPlayerTrackId || payload.focusSelection ? "generate_replay" : "analyze_players");
       console.log("DOWNLOAD_VIDEO_START", {
         cloudflareUid: payload.cloudflareUid,
         hasFocusSelection: Boolean(payload.focusSelection),
+        hasFocusTrackId: Boolean(payload.focusPlayerTrackId),
         jobId: payload.jobId,
+        mode,
       });
       console.log("PROCESSING_STEP_3", {
         request: "cloudflare.stream.downloads.create_and_read",
@@ -103,13 +109,51 @@ export const axisVideoProcessing = task({
             status: "axis_processing",
           });
         },
-        { exportReplay: true, focusSelection: payload.focusSelection, keepWorkDir: true, sourceJobId: payload.jobId },
+        {
+          exportReplay: mode === "generate_replay",
+          focusPlayerLabel: payload.focusPlayerLabel,
+          focusPlayerTrackId: payload.focusPlayerTrackId,
+          focusSelection: payload.focusSelection,
+          keepWorkDir: true,
+          sourceJobId: payload.jobId,
+        },
       );
       processingWorkDir = result.workDir;
       logAxisVideoProcessingMemory("BEFORE_REPLAY_GENERATION", { jobId: payload.jobId });
       console.log("FRAME_EXTRACTION_COMPLETE", { frameCount: result.frameCount, jobId: payload.jobId });
       console.log("ROBOFLOW_COMPLETE", { detectionCount: result.detectionCount, jobId: payload.jobId });
       console.log("BALL_TRACK_CREATED", { ballTrackCount: result.ballTrack.length, jobId: payload.jobId });
+
+      if (mode === "analyze_players") {
+        const analysisUpdate = await persistAxisVideoJobUpdate("PROCESSING_PLAYER_CANDIDATES_READY", payload.jobId, {
+          ball_track: result.ballTrack,
+          ball_track_count: result.ballTrack.length,
+          detection_count: result.detectionCount,
+          error: null,
+          frame_count: result.frameCount,
+          player_track: result.playerTrack,
+          player_track_count: result.playerTrack.length,
+          processing_stage: "complete",
+          progress: 55,
+          status: "ready_for_axis_processing",
+        });
+        if (result.workDir) await fs.rm(result.workDir, { force: true, recursive: true }).catch(() => null);
+        processingWorkDir = undefined;
+        console.log("PLAYER_CANDIDATES_CREATED", {
+          jobId: payload.jobId,
+          playerTrackCount: analysisUpdate.record.player_track_count,
+          status: analysisUpdate.record.status,
+        });
+        return {
+          ballTrackCount: result.ballTrack.length,
+          cloudflareUid: payload.cloudflareUid,
+          detectionCount: result.detectionCount,
+          frameCount: result.frameCount,
+          jobId: payload.jobId,
+          playerTrackCount: result.playerTrack.length,
+          status: "ready_for_axis_processing",
+        };
+      }
 
       const job = await getAxisVideoJob(payload.jobId);
       if (job.error) throw new Error(`Axis video job read failed before final update: ${job.error}`);
@@ -130,6 +174,11 @@ export const axisVideoProcessing = task({
       let replayCloudflareUid: string | null = null;
       let replayMp4Url: string | null = null;
       if (!result.replayExport?.path) throw new Error("Replay export MP4 was not created.");
+      console.log("REPLAY_GENERATED_FROM_TRACK", {
+        focusPlayerLabel: payload.focusPlayerLabel ?? null,
+        focusPlayerTrackId: payload.focusPlayerTrackId ?? result.focusPlayerTrackId ?? null,
+        jobId: payload.jobId,
+      });
       console.log("REPLAY_EXPORT_UPLOAD_START", {
         exportPath: result.replayExport.path,
         jobId: payload.jobId,
