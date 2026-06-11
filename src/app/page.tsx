@@ -1,5 +1,5 @@
-import { AxisOneScreen } from "../components/AxisOneScreen";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <AxisOneScreen />;
+  redirect("/axis/mission");
 }
