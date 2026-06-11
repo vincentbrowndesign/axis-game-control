@@ -3,10 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
 import {
+  appendMissionEvent,
   createLocalMissionMemoryAdapter,
+  createMissionEvent,
   createMissionAttempt,
+  createMissionSession,
   createMoment,
+  endMissionSession,
   type MissionAttempt,
+  type MissionSession,
   type MissionStatus,
 } from "../../../lib/axis-mission-memory";
 import { createMissionContextSnapshot } from "../../../lib/axis-context-engine";
@@ -49,6 +54,7 @@ export default function AxisMissionPage() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const shouldListenRef = useRef(false);
   const [attempts, setAttempts] = useState<MissionAttempt[]>([]);
+  const [activeSession, setActiveSession] = useState<MissionSession | null>(null);
   const [cameraFoundation, setCameraFoundation] = useState<AxisCameraFoundationState>(() => createEmptyCameraFoundationState());
   const [heard, setHeard] = useState("");
   const [mission, setMission] = useState<Mission>(() => createMission());
@@ -63,6 +69,7 @@ export default function AxisMissionPage() {
   const personalBest = missionMemory.getPersonalBest(mission.objective, mission.constraint);
   const streak = missionMemory.getStreak(mission.objective, mission.constraint);
   const axisPrompt = useMemo(() => createAxisPrompt({ lastAttempt, target: mission.target }), [lastAttempt, mission.target]);
+  const recentEvents = activeSession?.events.slice(-5).reverse() ?? [];
 
   useEffect(() => {
     setAttempts(missionMemory.listAttempts());
@@ -80,17 +87,28 @@ export default function AxisMissionPage() {
   }, []);
 
   function beginMission() {
+    const session = createMissionSession({
+      constraint: defaultConstraint,
+      objective: defaultObjective,
+      target: defaultTarget,
+    });
     const nextMission = {
       ...createMission(),
+      progress: session.result,
       status: "ACTIVE" as const,
+      timestamp: session.startedAt,
     };
+    setActiveSession(session);
     setMission(nextMission);
+    missionMemory.saveSession(session);
+    void saveRemoteMissionSession(session);
     speak(axisPrompt);
     startListening();
   }
 
   function resetMission() {
     setHeard("");
+    setActiveSession(null);
     setMission(createMission());
     speak("Ready.");
   }
@@ -98,32 +116,87 @@ export default function AxisMissionPage() {
   function pauseMission() {
     shouldListenRef.current = false;
     recognitionRef.current?.stop();
+    if (activeSession) {
+      const nextSession = appendMissionEvent(
+        { ...activeSession, status: "PAUSED" },
+        createMissionEvent({ payload: { progress: mission.progress }, type: "MISSION_PAUSED" }),
+      );
+      setActiveSession(nextSession);
+      missionMemory.saveSession(nextSession);
+      void saveRemoteMissionSession(nextSession);
+    }
+    setMission((current) => ({ ...current, status: "PAUSED", timestamp: new Date().toISOString() }));
     setVoiceState("PAUSED");
     speak("Paused.");
   }
 
   function resumeMission() {
-    if (mission.status !== "ACTIVE") {
-      setMission((current) => ({ ...current, status: "ACTIVE" }));
+    if (activeSession) {
+      const nextSession = appendMissionEvent(
+        { ...activeSession, status: "ACTIVE" },
+        createMissionEvent({ payload: { progress: mission.progress }, type: "MISSION_RESUMED" }),
+      );
+      setActiveSession(nextSession);
+      missionMemory.saveSession(nextSession);
+      void saveRemoteMissionSession(nextSession);
     }
+    setMission((current) => ({ ...current, status: "ACTIVE", timestamp: new Date().toISOString() }));
     speak("Resume.");
     startListening();
   }
 
-  function applyResult(result: number, status: MissionStatus = result >= mission.target ? "COMPLETE" : "ACTIVE") {
+  function recordSessionResult(result: number, type: "COUNT_RECORDED" | "RESULT_RECORDED" = "RESULT_RECORDED") {
+    if (!activeSession || activeSession.status === "ENDED" || activeSession.status === "EVALUATED") {
+      speak("Begin first.");
+      return;
+    }
+
     const boundedResult = Math.max(0, result);
-    const previousBest = missionMemory.getPersonalBest(mission.objective, mission.constraint);
-    const moment = createMoment({
-      previousBest,
-      result: boundedResult,
-      status,
-      target: mission.target,
-    });
-    const completedMission: Mission = {
+    const nextSession = appendMissionEvent(
+      activeSession,
+      createMissionEvent({
+        payload: { result: boundedResult },
+        type,
+      }),
+    );
+    setActiveSession(nextSession);
+    missionMemory.saveSession(nextSession);
+    void saveRemoteMissionSession(nextSession);
+    setMission({
       ...mission,
       progress: Math.max(0, Math.min(mission.target, boundedResult)),
-      status,
+      status: activeSession.status === "PAUSED" ? "PAUSED" : "ACTIVE",
       timestamp: new Date().toISOString(),
+    });
+    speak(`${boundedResult}. Logged.`);
+  }
+
+  function endSession() {
+    if (!activeSession) {
+      speak("No active session.");
+      return;
+    }
+
+    const endedSession = endMissionSession(activeSession);
+    const result = endedSession.result;
+    const previousBest = missionMemory.getPersonalBest(endedSession.objective, endedSession.constraint);
+    const moment = createMoment({
+      previousBest,
+      result,
+      target: endedSession.target,
+    });
+    const evaluatedSession = appendMissionEvent(
+      { ...endedSession, status: "EVALUATED" },
+      createMissionEvent({
+        payload: { moment, previousBest, result },
+        type: "SESSION_EVALUATED",
+      }),
+    );
+    const evaluatedMission: Mission = {
+      ...mission,
+      progress: Math.max(0, Math.min(mission.target, result)),
+      status: "EVALUATED",
+      timestamp: evaluatedSession.endedAt ?? new Date().toISOString(),
     };
     const context = createMissionContextSnapshot({
       audioContext: null,
@@ -131,31 +204,34 @@ export default function AxisMissionPage() {
         calibrationState: cameraFoundation.calibrationState,
         referenceFrameId: cameraFoundation.referenceFrame?.id,
         source: cameraFoundation.powerState === "ON" ? "camera" : "none",
-        timestamp: cameraFoundation.referenceFrame?.createdAt ?? completedMission.timestamp,
+        timestamp: cameraFoundation.referenceFrame?.createdAt ?? evaluatedMission.timestamp,
       },
-      constraint: completedMission.constraint,
+      constraint: evaluatedMission.constraint,
       notes: null,
-      objective: completedMission.objective,
-      result: boundedResult,
-      timestamp: completedMission.timestamp,
+      objective: evaluatedMission.objective,
+      result,
+      timestamp: evaluatedMission.timestamp,
     });
     const attempt = createMissionAttempt({
       audioContext: context.audioContext,
       cameraContext: context.cameraContext,
-      constraint: completedMission.constraint,
+      constraint: evaluatedMission.constraint,
       moment,
       notes: context.notes,
-      objective: completedMission.objective,
-      result: boundedResult,
-      status,
-      target: completedMission.target,
+      objective: evaluatedMission.objective,
+      result,
+      sessionId: evaluatedSession.id,
+      target: evaluatedMission.target,
     });
 
-    setMission(completedMission);
+    setActiveSession(evaluatedSession);
+    setMission(evaluatedMission);
+    missionMemory.saveSession(evaluatedSession);
+    void saveRemoteMissionSession(evaluatedSession);
     const nextAttempts = missionMemory.saveAttempt(attempt);
     setAttempts(nextAttempts);
     void saveRemoteMissionAttempt(attempt);
-    speak(createResultPrompt({ moment, previousBest, result: boundedResult, status, target: mission.target }));
+    speak(createEvaluationPrompt({ moment, previousBest, result, target: mission.target }));
   }
 
   async function loadRemoteMissionMemory() {
@@ -167,7 +243,7 @@ export default function AxisMissionPage() {
     }
 
     const response = await axisFetchWithAccessToken(token, "/api/axis/mission-memory");
-    const result = (await response.json().catch(() => null)) as { attempts?: MissionAttempt[]; error?: string } | null;
+    const result = (await response.json().catch(() => null)) as { attempts?: MissionAttempt[]; sessions?: MissionSession[]; error?: string } | null;
     if (!response.ok || !Array.isArray(result?.attempts)) {
       console.warn("AXIS_MISSION_MEMORY_REMOTE_LOAD_FAILED", {
         error: result?.error ?? null,
@@ -178,6 +254,7 @@ export default function AxisMissionPage() {
     }
 
     for (const attempt of [...result.attempts].reverse()) missionMemory.saveAttempt(attempt);
+    for (const session of [...(result.sessions ?? [])].reverse()) missionMemory.saveSession(session);
     setAttempts(missionMemory.listAttempts());
     setMemoryState("REMOTE");
   }
@@ -209,13 +286,39 @@ export default function AxisMissionPage() {
     setMemoryState("REMOTE");
   }
 
+  async function saveRemoteMissionSession(session: MissionSession) {
+    const token = await getAxisAccessToken();
+    if (!token) {
+      setMemoryState("LOCAL");
+      return;
+    }
+
+    const response = await axisFetchWithAccessToken(token, "/api/axis/mission-memory", {
+      body: JSON.stringify({ session }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as { sessions?: MissionSession[]; error?: string } | null;
+    if (!response.ok || !Array.isArray(result?.sessions)) {
+      console.warn("AXIS_MISSION_SESSION_REMOTE_SAVE_FAILED", {
+        error: result?.error ?? null,
+        status: response.status,
+      });
+      setMemoryState("LOCAL");
+      return;
+    }
+
+    for (const remoteSession of [...result.sessions].reverse()) missionMemory.saveSession(remoteSession);
+    setMemoryState("REMOTE");
+  }
+
   function handleVoiceCommand(command: string) {
     const normalized = command.toLowerCase().trim();
     setHeard(command);
 
     const count = normalized.match(/\bcount\s+(\d+)\b/)?.[1];
     if (count) {
-      applyResult(Number(count));
+      recordSessionResult(Number(count), "COUNT_RECORDED");
       return;
     }
 
@@ -231,17 +334,22 @@ export default function AxisMissionPage() {
 
     const number = normalized.match(/\b\d+\b/)?.[0];
     if (number) {
-      applyResult(Number(number));
+      recordSessionResult(Number(number), "COUNT_RECORDED");
       return;
     }
 
     if (/\b(done|complete|completed|finished)\b/.test(normalized)) {
-      applyResult(mission.target, "COMPLETE");
+      recordSessionResult(mission.target, "RESULT_RECORDED");
       return;
     }
 
     if (/\b(failed|fail|missed|stop)\b/.test(normalized)) {
-      applyResult(mission.progress, "FAILED");
+      recordSessionResult(mission.progress, "RESULT_RECORDED");
+      return;
+    }
+
+    if (/\b(end|close|evaluate|checkout|check out)\b/.test(normalized)) {
+      endSession();
       return;
     }
 
@@ -411,11 +519,14 @@ export default function AxisMissionPage() {
           <button onClick={beginMission} type="button">
             {mission.status === "ACTIVE" ? "LISTENING" : "BEGIN"}
           </button>
-          <button className="quiet" onClick={() => applyResult(mission.target, "COMPLETE")} type="button">
+          <button className="quiet" onClick={() => recordSessionResult(mission.target, "RESULT_RECORDED")} type="button">
             DONE
           </button>
-          <button className="quiet" onClick={() => applyResult(mission.progress, "FAILED")} type="button">
+          <button className="quiet" onClick={() => recordSessionResult(mission.progress, "RESULT_RECORDED")} type="button">
             FAILED
+          </button>
+          <button className="quiet" onClick={endSession} type="button">
+            END SESSION
           </button>
           <button className="quiet" onClick={resetMission} type="button">
             AGAIN
@@ -428,9 +539,26 @@ export default function AxisMissionPage() {
         <footer>
           <span>Voice {voiceState}</span>
           <span>Streak {streak}</span>
+          <span>Events {activeSession?.events.length ?? 0}</span>
           <span>Memory {memoryState}</span>
           <span>{heard ? `Heard: ${heard}` : "Awaiting result"}</span>
         </footer>
+
+        <section className="session-events" aria-label="Session events">
+          <span>Session Events</span>
+          {recentEvents.length ? (
+            <ol>
+              {recentEvents.map((event) => (
+                <li key={event.id}>
+                  <strong>{event.type.replaceAll("_", " ")}</strong>
+                  <time>{formatAttemptTime(event.timestamp)}</time>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p>No session events yet.</p>
+          )}
+        </section>
 
         <section className="camera-foundation" aria-label="Camera foundation">
           <div>
@@ -572,7 +700,7 @@ export default function AxisMissionPage() {
         .mission-actions {
           display: grid;
           gap: 10px;
-          grid-template-columns: 1fr repeat(4, minmax(72px, 0.24fr));
+          grid-template-columns: 1fr repeat(5, minmax(72px, 0.24fr));
         }
 
         button {
@@ -603,7 +731,8 @@ export default function AxisMissionPage() {
           white-space: nowrap;
         }
 
-        .recent-attempts {
+        .recent-attempts,
+        .session-events {
           border-top: 1px solid rgba(244, 244, 239, 0.12);
           display: grid;
           gap: 10px;
@@ -651,14 +780,16 @@ export default function AxisMissionPage() {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
-        .recent-attempts > span {
+        .recent-attempts > span,
+        .session-events > span {
           color: rgba(244, 244, 239, 0.56);
           font-size: 11px;
           font-weight: 800;
           text-transform: uppercase;
         }
 
-        .recent-attempts ol {
+        .recent-attempts ol,
+        .session-events ol {
           display: grid;
           gap: 6px;
           list-style: none;
@@ -666,7 +797,8 @@ export default function AxisMissionPage() {
           padding: 0;
         }
 
-        .recent-attempts li {
+        .recent-attempts li,
+        .session-events li {
           align-items: center;
           border: 1px solid rgba(244, 244, 239, 0.1);
           display: grid;
@@ -683,9 +815,17 @@ export default function AxisMissionPage() {
           line-height: 1;
         }
 
+        .session-events strong {
+          color: #f4f4ef;
+          font-size: 12px;
+          line-height: 1;
+        }
+
         .recent-attempts em,
         .recent-attempts time,
-        .recent-attempts p {
+        .recent-attempts p,
+        .session-events time,
+        .session-events p {
           color: rgba(244, 244, 239, 0.58);
           font-size: 11px;
           font-style: normal;
@@ -747,24 +887,21 @@ function createAxisPrompt({
   return "50 weak-hand finishes. Begin.";
 }
 
-function createResultPrompt({
+function createEvaluationPrompt({
   moment,
   result,
-  status,
   target,
   previousBest,
 }: {
   moment: MissionAttempt["moment"];
   previousBest: number;
   result: number;
-  status: MissionStatus;
   target: number;
 }) {
-  if (status === "COMPLETE" && result > previousBest) return `${result}. Complete. New record.`;
-  if (status === "COMPLETE") return `${result}. Complete.`;
+  if (result >= target && result > previousBest) return `${result}. Complete. New record.`;
+  if (result >= target) return `${result}. Complete.`;
   if (moment === "ALMOST") return "Almost. Again.";
-  if (status === "FAILED") return "Failed. Again.";
-  return `${result}. Need ${Math.max(0, target - result)}. Continue.`;
+  return `${result}. Need ${Math.max(0, target - result)}. Again.`;
 }
 
 function speak(text: string) {

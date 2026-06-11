@@ -1,8 +1,37 @@
 import type { AxisMissionContext } from "./axis-context-engine";
 
-export type MissionStatus = "ACTIVE" | "COMPLETE" | "FAILED" | "READY";
+export type MissionStatus = "ACTIVE" | "ENDED" | "EVALUATED" | "PAUSED" | "READY";
 
 export type MissionMoment = "ALMOST" | "COMPLETE" | "FAILED" | "RECORD" | "STREAK" | null;
+
+export type MissionEventType =
+  | "COMMAND"
+  | "COUNT_RECORDED"
+  | "MISSION_PAUSED"
+  | "MISSION_RESUMED"
+  | "RESULT_RECORDED"
+  | "SESSION_ENDED"
+  | "SESSION_EVALUATED"
+  | "SESSION_STARTED";
+
+export type MissionEvent = {
+  id: string;
+  payload: Record<string, unknown>;
+  timestamp: string;
+  type: MissionEventType;
+};
+
+export type MissionSession = {
+  constraint: string;
+  endedAt?: string;
+  events: MissionEvent[];
+  id: string;
+  objective: string;
+  result: number;
+  startedAt: string;
+  status: MissionStatus;
+  target: number;
+};
 
 export type MissionAttempt = {
   audioContext?: AxisMissionContext["audioContext"];
@@ -14,6 +43,7 @@ export type MissionAttempt = {
   objective: string;
   playerId?: string;
   result: number;
+  sessionId?: string;
   status: MissionStatus;
   target: number;
   timestamp: string;
@@ -25,11 +55,15 @@ export type MissionMemoryAdapter = {
   getStreak: (objective: string, constraint: string) => number;
   listAttempts: () => MissionAttempt[];
   listRecentAttempts: (objective: string, constraint: string, limit?: number) => MissionAttempt[];
+  listSessions: () => MissionSession[];
   saveAttempt: (attempt: MissionAttempt) => MissionAttempt[];
+  saveSession: (session: MissionSession) => MissionSession[];
 };
 
-const missionStorageKey = "axis.mission.attempts.v1";
-const legacyMissionStorageKey = "axis.mission.v1.weak-hand-finishes";
+const missionStorageKey = "axis.mission.attempts.v2";
+const sessionStorageKey = "axis.mission.sessions.v1";
+const legacyMissionStorageKey = "axis.mission.attempts.v1";
+const olderLegacyMissionStorageKey = "axis.mission.v1.weak-hand-finishes";
 
 export function createLocalMissionMemoryAdapter(): MissionMemoryAdapter {
   return {
@@ -42,7 +76,7 @@ export function createLocalMissionMemoryAdapter(): MissionMemoryAdapter {
     getStreak(objective, constraint) {
       let streak = 0;
       for (const attempt of filterMission(readAttempts(), objective, constraint)) {
-        if (attempt.status !== "COMPLETE") break;
+        if (attempt.moment !== "COMPLETE" && attempt.moment !== "RECORD" && attempt.moment !== "STREAK") break;
         streak += 1;
       }
       return streak;
@@ -53,11 +87,93 @@ export function createLocalMissionMemoryAdapter(): MissionMemoryAdapter {
     listRecentAttempts(objective, constraint, limit = 5) {
       return filterMission(readAttempts(), objective, constraint).slice(0, Math.max(0, limit));
     },
+    listSessions() {
+      return readSessions();
+    },
     saveAttempt(attempt) {
       const attempts = [attempt, ...readAttempts().filter((item) => item.id !== attempt.id)].slice(0, 100);
       writeAttempts(attempts);
       return attempts;
     },
+    saveSession(session) {
+      const sessions = [session, ...readSessions().filter((item) => item.id !== session.id)].slice(0, 50);
+      writeSessions(sessions);
+      return sessions;
+    },
+  };
+}
+
+export function createMissionSession({
+  constraint,
+  objective,
+  target,
+}: {
+  constraint: string;
+  objective: string;
+  target: number;
+}): MissionSession {
+  const timestamp = new Date().toISOString();
+  return {
+    constraint,
+    events: [
+      createMissionEvent({
+        payload: { constraint, objective, target },
+        timestamp,
+        type: "SESSION_STARTED",
+      }),
+    ],
+    id: createMissionId("session"),
+    objective,
+    result: 0,
+    startedAt: timestamp,
+    status: "ACTIVE",
+    target,
+  };
+}
+
+export function createMissionEvent({
+  payload = {},
+  timestamp = new Date().toISOString(),
+  type,
+}: {
+  payload?: Record<string, unknown>;
+  timestamp?: string;
+  type: MissionEventType;
+}): MissionEvent {
+  return {
+    id: createMissionId("event"),
+    payload,
+    timestamp,
+    type,
+  };
+}
+
+export function appendMissionEvent(session: MissionSession, event: MissionEvent): MissionSession {
+  const result = getNumber(event.payload.result) ?? session.result;
+  return {
+    ...session,
+    events: [...session.events, event],
+    result,
+  };
+}
+
+export function endMissionSession(session: MissionSession): MissionSession {
+  const timestamp = new Date().toISOString();
+  return {
+    ...appendMissionEvent(
+      {
+        ...session,
+        endedAt: timestamp,
+        status: "ENDED",
+      },
+      createMissionEvent({
+        payload: { result: session.result },
+        timestamp,
+        type: "SESSION_ENDED",
+      }),
+    ),
+    endedAt: timestamp,
+    status: "ENDED",
   };
 }
 
@@ -70,7 +186,8 @@ export function createMissionAttempt({
   objective,
   playerId,
   result,
-  status,
+  sessionId,
+  status = "EVALUATED",
   target,
 }: {
   audioContext?: AxisMissionContext["audioContext"];
@@ -81,19 +198,21 @@ export function createMissionAttempt({
   objective: string;
   playerId?: string;
   result: number;
-  status: MissionStatus;
+  sessionId?: string;
+  status?: MissionStatus;
   target: number;
 }): MissionAttempt {
   return {
     audioContext,
     cameraContext,
     constraint,
-    id: createAttemptId(),
+    id: createMissionId("attempt"),
     moment,
     notes,
     objective,
     ...(playerId ? { playerId } : {}),
     result,
+    ...(sessionId ? { sessionId } : {}),
     status,
     target,
     timestamp: new Date().toISOString(),
@@ -102,16 +221,26 @@ export function createMissionAttempt({
 
 function readAttempts() {
   if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(missionStorageKey);
-  const parsed = parseAttempts(raw);
+  const parsed = parseAttempts(window.localStorage.getItem(missionStorageKey));
   if (parsed.length) return parsed;
 
-  const legacy = parseLegacyAttempts(window.localStorage.getItem(legacyMissionStorageKey));
+  const legacy = parseAttempts(window.localStorage.getItem(legacyMissionStorageKey));
   if (legacy.length) {
     writeAttempts(legacy);
     return legacy;
   }
+
+  const olderLegacy = parseLegacyAttempts(window.localStorage.getItem(olderLegacyMissionStorageKey));
+  if (olderLegacy.length) {
+    writeAttempts(olderLegacy);
+    return olderLegacy;
+  }
   return [];
+}
+
+function readSessions() {
+  if (typeof window === "undefined") return [];
+  return parseSessions(window.localStorage.getItem(sessionStorageKey));
 }
 
 function writeAttempts(attempts: MissionAttempt[]) {
@@ -119,10 +248,24 @@ function writeAttempts(attempts: MissionAttempt[]) {
   window.localStorage.setItem(missionStorageKey, JSON.stringify(attempts));
 }
 
+function writeSessions(sessions: MissionSession[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(sessionStorageKey, JSON.stringify(sessions));
+}
+
 function parseAttempts(raw: string | null) {
   try {
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter(isMissionAttempt).sort(sortNewestFirst) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseSessions(raw: string | null) {
+  try {
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(isMissionSession).sort(sortSessionNewestFirst) : [];
   } catch {
     return [];
   }
@@ -136,15 +279,15 @@ function parseLegacyAttempts(raw: string | null): MissionAttempt[] {
       .filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value))
       .map((record) => {
         const result = getNumber(record.result) ?? 0;
-        const status = getStatus(record.status);
         const target = 50;
+        const moment = createMoment({ previousBest: 0, result, target });
         return {
           constraint: getString(record.constraint) || "Weak Hand Only",
-          id: createAttemptId(),
-          moment: createMoment({ previousBest: 0, result, status, target }),
+          id: createMissionId("attempt"),
+          moment,
           objective: getString(record.objective) || "50 Weak-Hand Finishes",
           result,
-          status,
+          status: "EVALUATED" as const,
           target,
           timestamp: getString(record.timestamp) || new Date().toISOString(),
         };
@@ -163,49 +306,84 @@ function filterMission(attempts: MissionAttempt[], objective: string, constraint
 export function createMoment({
   previousBest,
   result,
-  status,
   target,
 }: {
   previousBest: number;
   result: number;
-  status: MissionStatus;
   target: number;
 }): MissionMoment {
-  if (status === "FAILED") return "FAILED";
-  if (status === "COMPLETE" && result > previousBest) return "RECORD";
-  if (status === "COMPLETE") return "COMPLETE";
-  if (result > 0 && result < target && target - result <= target * 0.1) return "ALMOST";
-  return null;
+  if (result >= target && result > previousBest) return "RECORD";
+  if (result >= target) return "COMPLETE";
+  if (result > 0 && target - result <= target * 0.1) return "ALMOST";
+  return "FAILED";
 }
 
 function isMissionAttempt(value: unknown): value is MissionAttempt {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-    return (
-      typeof record.id === "string" &&
-      typeof record.objective === "string" &&
-      typeof record.constraint === "string" &&
-      typeof record.target === "number" &&
-      typeof record.result === "number" &&
-      typeof record.timestamp === "string" &&
-      isOptionalAudioContext(record.audioContext) &&
-      isOptionalCameraContext(record.cameraContext) &&
-      isOptionalNotes(record.notes) &&
-      isMissionStatus(record.status) &&
-      isMissionMoment(record.moment)
-    );
+  return (
+    typeof record.id === "string" &&
+    typeof record.objective === "string" &&
+    typeof record.constraint === "string" &&
+    typeof record.target === "number" &&
+    typeof record.result === "number" &&
+    typeof record.timestamp === "string" &&
+    isOptionalAudioContext(record.audioContext) &&
+    isOptionalCameraContext(record.cameraContext) &&
+    isOptionalNotes(record.notes) &&
+    isMissionStatus(record.status) &&
+    isMissionMoment(record.moment)
+  );
+}
+
+function isMissionSession(value: unknown): value is MissionSession {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.objective === "string" &&
+    typeof record.constraint === "string" &&
+    typeof record.target === "number" &&
+    typeof record.result === "number" &&
+    typeof record.startedAt === "string" &&
+    isMissionStatus(record.status) &&
+    Array.isArray(record.events) &&
+    record.events.every(isMissionEvent)
+  );
+}
+
+function isMissionEvent(value: unknown): value is MissionEvent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.timestamp === "string" &&
+    isMissionEventType(record.type) &&
+    Boolean(record.payload) &&
+    typeof record.payload === "object" &&
+    !Array.isArray(record.payload)
+  );
 }
 
 function isMissionStatus(value: unknown): value is MissionStatus {
-  return value === "ACTIVE" || value === "COMPLETE" || value === "FAILED" || value === "READY";
+  return value === "ACTIVE" || value === "ENDED" || value === "EVALUATED" || value === "PAUSED" || value === "READY";
+}
+
+function isMissionEventType(value: unknown): value is MissionEventType {
+  return (
+    value === "COMMAND" ||
+    value === "COUNT_RECORDED" ||
+    value === "MISSION_PAUSED" ||
+    value === "MISSION_RESUMED" ||
+    value === "RESULT_RECORDED" ||
+    value === "SESSION_ENDED" ||
+    value === "SESSION_EVALUATED" ||
+    value === "SESSION_STARTED"
+  );
 }
 
 function isMissionMoment(value: unknown): value is MissionMoment {
   return value === null || value === "ALMOST" || value === "COMPLETE" || value === "FAILED" || value === "RECORD" || value === "STREAK";
-}
-
-function getStatus(value: unknown): MissionStatus {
-  return isMissionStatus(value) ? value : "ACTIVE";
 }
 
 function getNumber(value: unknown) {
@@ -248,7 +426,11 @@ function sortNewestFirst(a: MissionAttempt, b: MissionAttempt) {
   return Date.parse(b.timestamp) - Date.parse(a.timestamp);
 }
 
-function createAttemptId() {
+function sortSessionNewestFirst(a: MissionSession, b: MissionSession) {
+  return Date.parse(b.startedAt) - Date.parse(a.startedAt);
+}
+
+function createMissionId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  return `mission_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
