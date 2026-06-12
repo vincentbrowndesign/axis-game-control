@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AXIS_CHALLENGES, type AxisChallenge } from "../lib/axis-challenges";
 import { type AxisEvidence } from "../lib/axis-evidence";
 
-type LoopPhase = "IDLE" | "SPEAKING" | "LISTENING" | "REVIEW" | "DONE";
+type LoopPhase = "IDLE" | "SPEAKING" | "LISTENING" | "DONE";
+
+const OBSERVATION_QUESTION = "What did you notice?";
 
 type Props = {
   challenges?: AxisChallenge[];
@@ -14,73 +16,98 @@ type Props = {
 
 export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
   const activeChallenges = challenges ?? AXIS_CHALLENGES;
+
   const [phase, setPhase] = useState<LoopPhase>("IDLE");
   const [challengeIndex, setChallengeIndex] = useState(0);
-  const [transcript, setTranscript] = useState("");
+  const [waitingForTap, setWaitingForTap] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-
-  const challenge = activeChallenges[challengeIndex];
-  const isLast = challengeIndex === activeChallenges.length - 1;
+  const isListeningRef = useRef(false);
+  const videoBgRef = useRef<HTMLVideoElement | null>(null);
+  const presentChallengeRef = useRef<(index: number) => void>(() => null);
+  const pendingObservationRef = useRef<(() => void) | null>(null);
 
   const isSupported =
     typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
+  // Ambient camera background — silent fail if denied
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "user" } })
+      .then((s) => {
+        stream = s;
+        const v = videoBgRef.current;
+        if (v) {
+          v.srcObject = s;
+          v.play().catch(() => null);
+        }
+      })
+      .catch(() => null);
+    return () => {
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
-      recognitionRef.current = null;
-      if (typeof window !== "undefined") {
-        window.speechSynthesis?.cancel();
-      }
+      window.speechSynthesis?.cancel();
     };
   }, []);
 
   const speak = useCallback((text: string, onDone?: () => void) => {
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.88;
-    utterance.pitch = 1.0;
-    utterance.onend = () => onDone?.();
-    utterance.onerror = () => onDone?.();
-    window.speechSynthesis.speak(utterance);
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.88;
+    u.pitch = 1.0;
+    u.onend = () => onDone?.();
+    u.onerror = () => onDone?.();
+    window.speechSynthesis.speak(u);
   }, []);
 
-  const startListening = useCallback(() => {
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
+  const startListening = useCallback(
+    (challenge: AxisChallenge, onComplete: (evidence: AxisEvidence) => void) => {
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SpeechAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechAPI) return;
 
-    const recognition: SpeechRecognition = new SpeechRecognitionAPI();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
+      const rec: SpeechRecognition = new SpeechAPI();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let accumulated = "";
-      for (let i = 0; i < event.results.length; i++) {
-        if (i > 0) accumulated += " ";
-        accumulated += event.results[i][0].transcript;
-      }
-      setTranscript(accumulated.trim());
-    };
+      let latest = "";
+      isListeningRef.current = true;
 
-    recognition.onend = () => {
-      setPhase((prev) => (prev === "LISTENING" ? "REVIEW" : prev));
-    };
+      rec.onresult = (e: SpeechRecognitionEvent) => {
+        let acc = "";
+        for (let i = 0; i < e.results.length; i++) {
+          if (i > 0) acc += " ";
+          acc += e.results[i][0].transcript;
+        }
+        latest = acc.trim();
+      };
 
-    recognition.onerror = () => {
-      setPhase((prev) => (prev === "LISTENING" ? "REVIEW" : prev));
-    };
+      const finish = () => {
+        if (!isListeningRef.current) return;
+        isListeningRef.current = false;
+        onComplete({ kind: challenge.requiredEvidence, source: "VOICE", value: latest || null });
+      };
 
-    recognitionRef.current = recognition;
-    recognition.start();
-    setPhase("LISTENING");
-  }, []);
+      rec.onend = finish;
+      rec.onerror = finish;
+
+      recognitionRef.current = rec;
+      rec.start();
+      setPhase("LISTENING");
+    },
+    [],
+  );
 
   function presentChallenge(index: number) {
     const c = activeChallenges[index];
@@ -88,61 +115,96 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
 
     recognitionRef.current?.abort();
     recognitionRef.current = null;
+    isListeningRef.current = false;
     window.speechSynthesis.cancel();
-
-    setTranscript("");
     setChallengeIndex(index);
     setPhase("SPEAKING");
+    setWaitingForTap(false);
+    pendingObservationRef.current = null;
 
-    speak(c.text, () => {
-      setTimeout(startListening, 900);
-    });
-  }
+    const isLast = index === activeChallenges.length - 1;
 
-  function handleAnswer() {
-    presentChallenge(0);
-  }
+    function complete(evidence: AxisEvidence) {
+      onAttempt(c, evidence);
+      if (isLast) {
+        setPhase("DONE");
+        speak("Done.");
+      } else {
+        presentChallengeRef.current(index + 1);
+      }
+    }
 
-  function handleDone() {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setPhase("REVIEW");
-  }
-
-  function handleRecord() {
-    onAttempt(challenge, {
-      kind: challenge.requiredEvidence,
-      source: "VOICE",
-      value: transcript.trim() || null,
-    });
-    if (isLast) {
-      setPhase("DONE");
-      speak("Done.");
+    const qIdx = c.text.indexOf(OBSERVATION_QUESTION);
+    if (c.requiredEvidence === "OBSERVATION" && qIdx > -1) {
+      const task = c.text.slice(0, qIdx).trim();
+      speak(task, () => {
+        // Wait for player to do the challenge, then tap when ready
+        pendingObservationRef.current = () => {
+          setWaitingForTap(false);
+          pendingObservationRef.current = null;
+          speak(OBSERVATION_QUESTION, () => {
+            setTimeout(() => startListening(c, complete), 900);
+          });
+        };
+        setWaitingForTap(true);
+      });
     } else {
-      presentChallenge(challengeIndex + 1);
+      speak(c.text, () => {
+        setTimeout(() => startListening(c, complete), 900);
+      });
     }
   }
 
-  function handlePass() {
-    if (isLast) {
-      setPhase("DONE");
-      speak("Done.");
-    } else {
-      presentChallenge(challengeIndex + 1);
+  // Keep ref current every render
+  presentChallengeRef.current = presentChallenge;
+
+  function handleTap() {
+    if (waitingForTap && pendingObservationRef.current) {
+      pendingObservationRef.current();
+    } else if (phase === "LISTENING") {
+      // Manual mic stop — triggers recognition.onend → auto-advances
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
     }
   }
 
   function handleExit() {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
+    isListeningRef.current = false;
     window.speechSynthesis?.cancel();
     onEnd();
   }
 
+  const challenge = activeChallenges[challengeIndex];
   const incomingChallenge = activeChallenges[0];
+
+  let displayText = "";
+  if (phase === "IDLE") {
+    displayText = incomingChallenge.text;
+  } else if (phase === "DONE") {
+    displayText = "Done.";
+  } else if (phase === "LISTENING") {
+    // During listening, show the question being answered
+    displayText =
+      challenge.requiredEvidence === "OBSERVATION"
+        ? OBSERVATION_QUESTION
+        : challenge.text;
+  } else {
+    // SPEAKING — show task part only (strip question if present)
+    const qIdx = challenge.text.indexOf(OBSERVATION_QUESTION);
+    displayText =
+      challenge.requiredEvidence === "OBSERVATION" && qIdx > -1
+        ? challenge.text.slice(0, qIdx).trim()
+        : challenge.text;
+  }
+
+  const isTappable = waitingForTap || phase === "LISTENING";
 
   return (
     <main className="voice-loop">
+      <video ref={videoBgRef} muted playsInline aria-hidden className="camera-bg" />
+
       <header>
         <button aria-label="Back" className="back" onClick={handleExit} type="button">
           ←
@@ -154,32 +216,27 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
         </span>
       </header>
 
-      <section className="stage">
-        {phase === "IDLE" && (
-          <p className="challenge-text dim">{incomingChallenge.text}</p>
-        )}
+      <section
+        className={`stage${isTappable ? " tappable" : ""}`}
+        onClick={isTappable ? handleTap : undefined}
+        role={isTappable ? "button" : undefined}
+        aria-label={
+          waitingForTap ? "Tap when ready" : phase === "LISTENING" ? "Tap to finish" : undefined
+        }
+      >
+        {phase === "SPEAKING" && !waitingForTap && <span className="dot" />}
+        {waitingForTap && <span className="dot waiting" />}
+        {phase === "LISTENING" && <span className="dot listening" />}
 
-        {phase === "SPEAKING" && (
-          <>
-            <span className="dot" />
-            <p className="challenge-text">{challenge.text}</p>
-          </>
-        )}
+        <p
+          className={`challenge-text${
+            phase === "IDLE" || phase === "DONE" ? " dim" : ""
+          }`}
+        >
+          {displayText}
+        </p>
 
-        {phase === "LISTENING" && (
-          <>
-            <span className="dot listening" />
-            <p className="challenge-text dim">{challenge.text}</p>
-          </>
-        )}
-
-        {phase === "REVIEW" && (
-          <p className="challenge-text dim">{challenge.text}</p>
-        )}
-
-        {phase === "DONE" && (
-          <p className="challenge-text dim">Done.</p>
-        )}
+        {waitingForTap && <p className="tap-hint">tap when ready</p>}
       </section>
 
       <footer>
@@ -187,28 +244,11 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
           <button
             className="primary"
             disabled={!isSupported}
-            onClick={handleAnswer}
+            onClick={() => presentChallenge(0)}
             type="button"
           >
             Go
           </button>
-        )}
-
-        {phase === "LISTENING" && (
-          <button className="primary" onClick={handleDone} type="button">
-            Done
-          </button>
-        )}
-
-        {phase === "REVIEW" && (
-          <>
-            <button className="primary" onClick={handleRecord} type="button">
-              Done
-            </button>
-            <button className="secondary" onClick={handlePass} type="button">
-              Pass
-            </button>
-          </>
         )}
 
         {phase === "DONE" && (
@@ -225,6 +265,29 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
           display: grid;
           grid-template-rows: auto 1fr auto;
           min-height: 100dvh;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .camera-bg {
+          filter: blur(24px);
+          height: 100%;
+          left: 0;
+          object-fit: cover;
+          opacity: 0.18;
+          pointer-events: none;
+          position: absolute;
+          top: 0;
+          transform: scaleX(-1);
+          width: 100%;
+          z-index: 0;
+        }
+
+        header,
+        .stage,
+        footer {
+          position: relative;
+          z-index: 1;
         }
 
         header {
@@ -267,6 +330,10 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
           padding: 48px clamp(18px, 5vw, 64px);
         }
 
+        .stage.tappable {
+          cursor: pointer;
+        }
+
         .dot {
           background: rgba(247, 247, 242, 0.2);
           border-radius: 50%;
@@ -275,9 +342,19 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
           width: 8px;
         }
 
+        .dot.waiting {
+          animation: breathe 2.4s ease-in-out infinite;
+          background: rgba(247, 247, 242, 0.35);
+        }
+
         .dot.listening {
           animation: pulse 1.1s ease-in-out infinite;
           background: #b8ff3d;
+        }
+
+        @keyframes breathe {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.8; }
         }
 
         @keyframes pulse {
@@ -297,17 +374,28 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
           color: rgba(247, 247, 242, 0.35);
         }
 
+        .tap-hint {
+          color: rgba(247, 247, 242, 0.25);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin: 8px 0 0;
+          text-transform: uppercase;
+        }
+
         footer {
           border-top: 1px solid rgba(247, 247, 242, 0.08);
           display: flex;
           gap: 10px;
+          min-height: 88px;
           padding: 22px clamp(18px, 5vw, 64px) 32px;
         }
 
-        button.primary,
-        button.secondary {
+        button.primary {
+          background: #f7f7f2;
           border: 0;
           border-radius: 999px;
+          color: #0d0d0a;
           cursor: pointer;
           font: inherit;
           font-size: 14px;
@@ -316,19 +404,9 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
           padding: 0 22px;
         }
 
-        button:disabled {
+        button.primary:disabled {
           cursor: not-allowed;
           opacity: 0.4;
-        }
-
-        button.primary {
-          background: #f7f7f2;
-          color: #0d0d0a;
-        }
-
-        button.secondary {
-          background: rgba(247, 247, 242, 0.1);
-          color: #f7f7f2;
         }
       `}</style>
     </main>
