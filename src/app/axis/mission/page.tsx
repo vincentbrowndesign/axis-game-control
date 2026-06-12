@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import VoiceLoop from "../../../components/VoiceLoop";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
+import { type AxisChallenge } from "../../../lib/axis-challenges";
+import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
 import {
   appendMissionEvent,
   createLocalMissionMemoryAdapter,
@@ -16,7 +19,6 @@ import {
 import { createMissionContextSnapshot } from "../../../lib/axis-context-engine";
 
 type ComposerMode = "IDLE" | "MENU";
-type MicState = "LISTENING" | "OFF";
 
 type ThreadMessage = {
   id: string;
@@ -39,8 +41,8 @@ export default function AxisMissionPage() {
   const [composerMode, setComposerMode] = useState<ComposerMode>("IDLE");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [inputValue, setInputValue] = useState("");
-  const [micState, setMicState] = useState<MicState>("OFF");
   const [saveState, setSaveState] = useState<"IDLE" | "SAVED" | "SAVING">("IDLE");
+  const [voiceLoopActive, setVoiceLoopActive] = useState(false);
   const [session, setSession] = useState<MissionSession | null>(null);
   const [thread, setThread] = useState<ThreadMessage[]>(() => [
     axisMessage("Last attempt was 43."),
@@ -208,6 +210,20 @@ export default function AxisMissionPage() {
     setSession(null);
   }
 
+  function handleVoiceAttempt(challenge: AxisChallenge, evidence: AxisEvidence) {
+    const evaluation = evaluateEvidence(challenge.requiredEvidence, evidence);
+    const attempt = createMissionAttempt({
+      constraint: challenge.constraint,
+      evidence,
+      moment: evaluation === "SATISFIED" ? "COMPLETE" : "FAILED",
+      objective: challenge.objective,
+      result: 1,
+      target: 1,
+    });
+    missionMemory.saveAttempt(attempt);
+    void saveRemoteMemory({ attempt });
+  }
+
   function quickCapture() {
     appendUser("Camera");
     appendAxis("Camera context is ready later. Continue the mission.");
@@ -229,6 +245,15 @@ export default function AxisMissionPage() {
 
   function appendUser(text: string) {
     setThread((current) => [...current, { author: "You", id: crypto.randomUUID(), text }]);
+  }
+
+  if (voiceLoopActive) {
+    return (
+      <VoiceLoop
+        onAttempt={handleVoiceAttempt}
+        onEnd={() => setVoiceLoopActive(false)}
+      />
+    );
   }
 
   return (
@@ -286,12 +311,11 @@ export default function AxisMissionPage() {
             Camera
           </button>
           <button
-            aria-label="Toggle listening"
-            className={micState === "LISTENING" ? "listening" : ""}
-            onClick={() => setMicState(micState === "LISTENING" ? "OFF" : "LISTENING")}
+            aria-label="Voice loop"
+            onClick={() => setVoiceLoopActive(true)}
             type="button"
           >
-            {micState === "LISTENING" ? "Listening" : "Mic"}
+            Voice
           </button>
           <input
             aria-label="Message Axis"
@@ -502,16 +526,18 @@ async function saveRemoteMemory({
   session,
 }: {
   attempt: MissionAttempt;
-  session: MissionSession;
+  session?: MissionSession;
 }) {
   const token = await getAxisAccessToken();
   if (!token) return;
 
-  await axisFetchWithAccessToken(token, "/api/axis/mission-memory", {
-    body: JSON.stringify({ session }),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  }).catch(() => null);
+  if (session) {
+    await axisFetchWithAccessToken(token, "/api/axis/mission-memory", {
+      body: JSON.stringify({ session }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }).catch(() => null);
+  }
 
   await axisFetchWithAccessToken(token, "/api/axis/mission-memory", {
     body: JSON.stringify({ attempt }),

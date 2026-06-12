@@ -1,4 +1,5 @@
 import type { AxisMissionContext } from "./axis-context-engine";
+import { type AxisEvidence } from "./axis-evidence";
 
 export type MissionStatus = "READY";
 
@@ -37,6 +38,7 @@ export type MissionAttempt = {
   audioContext?: AxisMissionContext["audioContext"];
   cameraContext?: AxisMissionContext["cameraContext"];
   constraint: string;
+  evidence?: AxisEvidence;
   id: string;
   moment: MissionMoment;
   notes?: AxisMissionContext["notes"];
@@ -181,6 +183,7 @@ export function createMissionAttempt({
   audioContext = null,
   cameraContext = null,
   constraint,
+  evidence,
   moment,
   notes = null,
   objective,
@@ -193,6 +196,7 @@ export function createMissionAttempt({
   audioContext?: AxisMissionContext["audioContext"];
   cameraContext?: AxisMissionContext["cameraContext"];
   constraint: string;
+  evidence?: AxisEvidence;
   moment: MissionMoment;
   notes?: AxisMissionContext["notes"];
   objective: string;
@@ -206,6 +210,7 @@ export function createMissionAttempt({
     audioContext,
     cameraContext,
     constraint,
+    ...(evidence ? { evidence } : {}),
     id: createMissionId("attempt"),
     moment,
     notes,
@@ -330,6 +335,7 @@ function isMissionAttempt(value: unknown): value is MissionAttempt {
     typeof record.timestamp === "string" &&
     isOptionalAudioContext(record.audioContext) &&
     isOptionalCameraContext(record.cameraContext) &&
+    isOptionalEvidence(record.evidence) &&
     isOptionalNotes(record.notes) &&
     isSessionStatus(record.status) &&
     isMissionMoment(record.moment)
@@ -417,6 +423,28 @@ function isOptionalCameraContext(value: unknown) {
     (record.referenceFrameId === undefined || typeof record.referenceFrameId === "string") &&
     (record.source === undefined || record.source === "camera" || record.source === "none") &&
     (record.timestamp === undefined || typeof record.timestamp === "string")
+  );
+}
+
+function isOptionalEvidence(value: unknown) {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return isEvidenceKind(record.kind) && isEvidenceSource(record.source);
+}
+
+function isEvidenceKind(value: unknown) {
+  return value === "COUNT" || value === "OBSERVATION" || value === "PRESENCE" || value === "COMPLETION";
+}
+
+function isEvidenceSource(value: unknown) {
+  return (
+    value === "VOICE" ||
+    value === "CAMERA" ||
+    value === "PRESENCE" ||
+    value === "COACH" ||
+    value === "USER" ||
+    value === "SYSTEM"
   );
 }
 
