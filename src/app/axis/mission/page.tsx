@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import VoiceLoop from "../../../components/VoiceLoop";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
-import { type AxisChallenge, VISION_CHALLENGES } from "../../../lib/axis-challenges";
+import { type AxisChallenge, type AxisContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
 import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
 import {
   appendMissionEvent,
@@ -43,6 +43,7 @@ export default function AxisMissionPage() {
   const [inputValue, setInputValue] = useState("");
   const [saveState, setSaveState] = useState<"IDLE" | "SAVED" | "SAVING">("IDLE");
   const [voiceLoopActive, setVoiceLoopActive] = useState(false);
+  const [activeContext, setActiveContext] = useState<AxisContext | null>(null);
   const [session, setSession] = useState<MissionSession | null>(null);
   const [thread, setThread] = useState<ThreadMessage[]>(() => [
     axisMessage("Last attempt was 43."),
@@ -247,12 +248,104 @@ export default function AxisMissionPage() {
     setThread((current) => [...current, { author: "You", id: crypto.randomUUID(), text }]);
   }
 
-  if (voiceLoopActive) {
+  if (voiceLoopActive && !activeContext) {
+    return (
+      <main className="context-picker">
+        <header>
+          <button
+            aria-label="Back"
+            className="back"
+            onClick={() => setVoiceLoopActive(false)}
+            type="button"
+          >
+            ←
+          </button>
+        </header>
+        <section>
+          <p className="question">Who's here?</p>
+          <div className="options">
+            {(["SOLO", "PARTNER", "TEAM", "GAME"] as AxisContext[]).map((ctx) => (
+              <button
+                className="option"
+                key={ctx}
+                onClick={() => setActiveContext(ctx)}
+                type="button"
+              >
+                {ctx === "SOLO" ? "Alone" : ctx === "PARTNER" ? "Partner" : ctx === "TEAM" ? "Practice" : "Game"}
+              </button>
+            ))}
+          </div>
+        </section>
+        <style jsx>{`
+          .context-picker {
+            background: #0d0d0a;
+            color: #f7f7f2;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            min-height: 100dvh;
+          }
+          header {
+            align-items: center;
+            border-bottom: 1px solid rgba(247, 247, 242, 0.08);
+            display: flex;
+            padding: 14px clamp(18px, 5vw, 64px);
+          }
+          .back {
+            background: transparent;
+            border: 0;
+            color: rgba(247, 247, 242, 0.3);
+            cursor: pointer;
+            font: inherit;
+            font-size: 18px;
+            line-height: 1;
+            min-height: 44px;
+            min-width: 44px;
+            padding: 0;
+          }
+          .back:hover { color: rgba(247, 247, 242, 0.6); }
+          section {
+            align-content: center;
+            display: grid;
+            gap: 40px;
+            padding: 48px clamp(18px, 5vw, 64px);
+          }
+          .question {
+            color: rgba(247, 247, 242, 0.35);
+            font-size: clamp(32px, 6vw, 64px);
+            font-weight: 900;
+            line-height: 1.0;
+            margin: 0;
+          }
+          .options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+          }
+          .option {
+            background: rgba(247, 247, 242, 0.08);
+            border: 0;
+            border-radius: 999px;
+            color: #f7f7f2;
+            cursor: pointer;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 850;
+            min-height: 48px;
+            padding: 0 22px;
+          }
+          .option:hover { background: rgba(247, 247, 242, 0.14); }
+        `}</style>
+      </main>
+    );
+  }
+
+  if (voiceLoopActive && activeContext) {
+    const filteredChallenges = VISION_CHALLENGES.filter((c) => c.contexts.includes(activeContext));
     return (
       <VoiceLoop
-        challenges={VISION_CHALLENGES}
+        challenges={filteredChallenges.length > 0 ? filteredChallenges : VISION_CHALLENGES}
         onAttempt={handleVoiceAttempt}
-        onEnd={() => setVoiceLoopActive(false)}
+        onEnd={() => { setVoiceLoopActive(false); setActiveContext(null); }}
       />
     );
   }
