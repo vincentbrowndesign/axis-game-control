@@ -52,9 +52,11 @@ export default function AxisShell() {
   }, []);
 
   function startCamera() {
+    console.log("[AXIS] START_CAMERA");
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "user" } })
       .then((stream) => {
+        console.log("[AXIS] CAMERA_READY");
         streamRef.current = stream;
         const v = videoBgRef.current;
         if (v) {
@@ -62,16 +64,17 @@ export default function AxisShell() {
           v.play().catch(() => null);
         }
       })
-      .catch(() => null);
+      .catch((err) => console.log("[AXIS] CAMERA_ERROR", err));
   }
 
   const speak = useCallback((text: string, onDone?: () => void) => {
+    console.log("[AXIS] SPEAK_START", text);
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.88;
     u.pitch = 1.0;
-    u.onend = () => onDone?.();
-    u.onerror = () => onDone?.();
+    u.onend = () => { console.log("[AXIS] SPEAK_END", text); onDone?.(); };
+    u.onerror = (e) => { console.log("[AXIS] SPEAK_ERROR", e); onDone?.(); };
     window.speechSynthesis.speak(u);
   }, []);
 
@@ -182,7 +185,9 @@ export default function AxisShell() {
   presentChallengeRef.current = presentChallenge;
 
   function handleGo() {
+    console.log("[AXIS] GO");
     setPhase("CONTEXT");
+    console.log("[AXIS] SET_CONTEXT");
     speak("Who's here?");
     startCamera();
   }
