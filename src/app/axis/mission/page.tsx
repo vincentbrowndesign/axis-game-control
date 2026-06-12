@@ -22,6 +22,49 @@ const CONTEXT_LABELS: Record<AxisContext, string> = {
   TEAM: "Practice",
 };
 
+function matchContextKeyword(transcript: string): AxisContext | null {
+  const t = transcript.toLowerCase();
+  if (
+    t.includes("solo") ||
+    t.includes("alone") ||
+    t.includes("myself") ||
+    t.includes("just me") ||
+    t.includes("by myself")
+  )
+    return "SOLO";
+  if (
+    t.includes("partner") ||
+    t.includes("one on one") ||
+    t.includes("1v1") ||
+    t.includes("with someone") ||
+    t.includes("with a friend")
+  )
+    return "PARTNER";
+  if (
+    t.includes("team") ||
+    t.includes("practice") ||
+    t.includes("group") ||
+    t.includes("squad") ||
+    t.includes("drill")
+  )
+    return "TEAM";
+  if (
+    t.includes("game") ||
+    t.includes("match") ||
+    t.includes("playing") ||
+    t.includes("competition") ||
+    t.includes("scrimmage")
+  )
+    return "GAME";
+  return null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getSpeechAPI(): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+}
+
 export default function AxisShell() {
   const missionMemory = useMemo(() => createLocalMissionMemoryAdapter(), []);
 
@@ -30,8 +73,8 @@ export default function AxisShell() {
   const [loopSubPhase, setLoopSubPhase] = useState<LoopSubPhase>("SPEAKING");
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [waitingForTap, setWaitingForTap] = useState(false);
-  const [contextReady, setContextReady] = useState(false);
-  const [doneReady, setDoneReady] = useState(false);
+  const [fallbackVisible, setFallbackVisible] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
 
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -40,8 +83,9 @@ export default function AxisShell() {
   const pendingObservationRef = useRef<(() => void) | null>(null);
   const challengesRef = useRef<AxisChallenge[]>([]);
   const presentChallengeRef = useRef<(index: number) => void>(() => null);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Optimistic true — useEffect corrects after hydration if unsupported
+  // Optimistic true — corrected client-side after hydration
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
 
   useEffect(() => {
@@ -50,6 +94,7 @@ export default function AxisShell() {
 
   useEffect(() => {
     return () => {
+      clearTimeout(fallbackTimerRef.current ?? undefined);
       recognitionRef.current?.abort();
       window.speechSynthesis?.cancel();
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -80,13 +125,160 @@ export default function AxisShell() {
     window.speechSynthesis.speak(u);
   }, []);
 
+  // Opens mic after "Who's here?" — listens for context keyword
+  // Falls back to visible buttons after 5s if no voice match
+  function listenForContextVoice() {
+    clearTimeout(fallbackTimerRef.current ?? undefined);
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+
+    const SpeechAPI = getSpeechAPI();
+    if (!SpeechAPI) {
+      setFallbackVisible(true);
+      return;
+    }
+
+    const rec: SpeechRecognition = new SpeechAPI();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    let matched = false;
+
+    setVoiceActive(true);
+
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = Array.from(
+        { length: e.results.length },
+        (_, i) => e.results[i][0].transcript,
+      ).join(" ");
+      const ctx = matchContextKeyword(transcript);
+      if (!matched && ctx) {
+        matched = true;
+        clearTimeout(fallbackTimerRef.current ?? undefined);
+        recognitionRef.current?.abort();
+        recognitionRef.current = null;
+        setVoiceActive(false);
+        handleContextSelect(ctx);
+      }
+    };
+
+    rec.onerror = () => {
+      if (!matched) {
+        setVoiceActive(false);
+        setFallbackVisible(true);
+      }
+    };
+
+    recognitionRef.current = rec;
+    rec.start();
+
+    fallbackTimerRef.current = setTimeout(() => {
+      if (!matched) {
+        setVoiceActive(false);
+        setFallbackVisible(true);
+      }
+    }, 5000);
+  }
+
+  // Opens mic after "Done." — listens for "again"/"yes"/"more" etc.
+  // Falls back to visible button after 6s if no voice match
+  function listenForAgainVoice() {
+    clearTimeout(fallbackTimerRef.current ?? undefined);
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+
+    const SpeechAPI = getSpeechAPI();
+    if (!SpeechAPI) {
+      setFallbackVisible(true);
+      return;
+    }
+
+    const AGAIN = ["again", "yes", "yeah", "sure", "go", "ready", "more", "another", "next"];
+    const rec: SpeechRecognition = new SpeechAPI();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    let matched = false;
+
+    setVoiceActive(true);
+
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = Array.from(
+        { length: e.results.length },
+        (_, i) => e.results[i][0].transcript,
+      )
+        .join(" ")
+        .toLowerCase();
+      if (!matched && AGAIN.some((k) => transcript.includes(k))) {
+        matched = true;
+        clearTimeout(fallbackTimerRef.current ?? undefined);
+        recognitionRef.current?.abort();
+        recognitionRef.current = null;
+        setVoiceActive(false);
+        handleAgain();
+      }
+    };
+
+    rec.onerror = () => {
+      if (!matched) {
+        setVoiceActive(false);
+        setFallbackVisible(true);
+      }
+    };
+
+    recognitionRef.current = rec;
+    rec.start();
+
+    fallbackTimerRef.current = setTimeout(() => {
+      if (!matched) {
+        setVoiceActive(false);
+        setFallbackVisible(true);
+      }
+    }, 6000);
+  }
+
+  // Opens mic during OBSERVATION "waiting for ready" state
+  // Listens for "ready"/"yes"/"go" — tap always works too
+  function listenForReadyVoice(onReady: () => void) {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+
+    const SpeechAPI = getSpeechAPI();
+    if (!SpeechAPI) return;
+
+    const READY = ["ready", "yes", "yeah", "go", "done", "ok", "okay"];
+    const rec: SpeechRecognition = new SpeechAPI();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    let matched = false;
+
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = Array.from(
+        { length: e.results.length },
+        (_, i) => e.results[i][0].transcript,
+      )
+        .join(" ")
+        .toLowerCase();
+      if (!matched && READY.some((k) => transcript.includes(k))) {
+        matched = true;
+        recognitionRef.current?.abort();
+        recognitionRef.current = null;
+        onReady();
+      }
+    };
+
+    rec.onerror = () => null;
+    recognitionRef.current = rec;
+    rec.start();
+  }
+
   const startListening = useCallback(
     (challenge: AxisChallenge, onComplete: (evidence: AxisEvidence) => void) => {
       recognitionRef.current?.abort();
       recognitionRef.current = null;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const SpeechAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const SpeechAPI = getSpeechAPI();
       if (!SpeechAPI) return;
 
       const rec: SpeechRecognition = new SpeechAPI();
@@ -157,8 +349,9 @@ export default function AxisShell() {
       handleAttempt(c, evidence);
       if (isLast) {
         setPhase("DONE");
-        setDoneReady(false);
-        speak("Done.", () => setDoneReady(true));
+        setFallbackVisible(false);
+        setVoiceActive(false);
+        speak("Done.", () => listenForAgainVoice());
       } else {
         presentChallengeRef.current(index + 1);
       }
@@ -168,14 +361,16 @@ export default function AxisShell() {
     if (c.requiredEvidence === "OBSERVATION" && qIdx > -1) {
       const task = c.text.slice(0, qIdx).trim();
       speak(task, () => {
-        pendingObservationRef.current = () => {
+        const advance = () => {
           setWaitingForTap(false);
           pendingObservationRef.current = null;
           speak(OBSERVATION_QUESTION, () => {
             setTimeout(() => startListening(c, complete), 900);
           });
         };
+        pendingObservationRef.current = advance;
         setWaitingForTap(true);
+        listenForReadyVoice(advance);
       });
     } else {
       speak(c.text, () => {
@@ -187,17 +382,21 @@ export default function AxisShell() {
   presentChallengeRef.current = presentChallenge;
 
   function handleGo() {
-    setContextReady(false);
+    setFallbackVisible(false);
+    setVoiceActive(false);
     setPhase("CONTEXT");
-    speak("Who's here?", () => setContextReady(true));
+    speak("Who's here?", () => listenForContextVoice());
     startCamera();
   }
 
   function handleContextSelect(ctx: AxisContext) {
+    clearTimeout(fallbackTimerRef.current ?? undefined);
     const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
     challengesRef.current = filtered.length > 0 ? filtered : VISION_CHALLENGES;
     setActiveContext(ctx);
     setChallengeIndex(0);
+    setFallbackVisible(false);
+    setVoiceActive(false);
     setPhase("LOOP");
     presentChallengeRef.current(0);
   }
@@ -212,6 +411,7 @@ export default function AxisShell() {
   }
 
   function handleExit() {
+    clearTimeout(fallbackTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     isListeningRef.current = false;
@@ -220,23 +420,24 @@ export default function AxisShell() {
     setActiveContext(null);
     setChallengeIndex(0);
     setWaitingForTap(false);
-    setContextReady(false);
-    setDoneReady(false);
+    setFallbackVisible(false);
+    setVoiceActive(false);
     pendingObservationRef.current = null;
   }
 
   function handleAgain() {
+    clearTimeout(fallbackTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     isListeningRef.current = false;
     window.speechSynthesis.cancel();
     setActiveContext(null);
     setWaitingForTap(false);
-    setContextReady(false);
-    setDoneReady(false);
+    setFallbackVisible(false);
+    setVoiceActive(false);
     pendingObservationRef.current = null;
     setPhase("CONTEXT");
-    speak("Who's here?", () => setContextReady(true));
+    speak("Who's here?", () => listenForContextVoice());
   }
 
   const challenges = challengesRef.current;
@@ -286,7 +487,7 @@ export default function AxisShell() {
               : undefined
         }
       >
-        {/* READY — threshold only, no wordmark */}
+        {/* READY — threshold only */}
         {phase === "READY" && (
           <button
             className="go"
@@ -298,11 +499,12 @@ export default function AxisShell() {
           </button>
         )}
 
-        {/* CONTEXT — question first, options appear after Axis finishes speaking */}
+        {/* CONTEXT — Axis speaks first, player speaks back, buttons are fallback */}
         {phase === "CONTEXT" && (
           <>
             <p className="headline dim">Who's here?</p>
-            {contextReady && (
+            {voiceActive && <span className="dot listening" />}
+            {fallbackVisible && (
               <div className="context-options">
                 {(["SOLO", "PARTNER", "TEAM", "GAME"] as AxisContext[]).map((ctx) => (
                   <button
@@ -326,15 +528,16 @@ export default function AxisShell() {
             {waitingForTap && <span className="dot waiting" />}
             {loopSubPhase === "LISTENING" && <span className="dot listening" />}
             <p className="headline">{getDisplayText()}</p>
-            {waitingForTap && <p className="tap-hint">tap when ready</p>}
+            {waitingForTap && <p className="tap-hint">say ready — or tap</p>}
           </>
         )}
 
-        {/* DONE — "Again" appears only after "Done." finishes speaking */}
+        {/* DONE — voice primary, button is fallback */}
         {phase === "DONE" && (
           <>
             <p className="headline dim">Done.</p>
-            {doneReady && (
+            {voiceActive && <span className="dot listening" />}
+            {fallbackVisible && (
               <button className="again" onClick={handleAgain} type="button">
                 again
               </button>
@@ -428,7 +631,6 @@ export default function AxisShell() {
           cursor: pointer;
         }
 
-        /* Challenge is the dominant element */
         .headline {
           font-size: clamp(40px, 7vw, 80px);
           font-weight: 900;
@@ -488,7 +690,6 @@ export default function AxisShell() {
           text-transform: uppercase;
         }
 
-        /* Context options: large text selections, not pill buttons */
         .context-options {
           display: flex;
           flex-direction: column;
@@ -514,7 +715,6 @@ export default function AxisShell() {
           color: #f7f7f2;
         }
 
-        /* Go — threshold, not launcher */
         .go {
           background: #f7f7f2;
           border: 0;
@@ -534,7 +734,6 @@ export default function AxisShell() {
           opacity: 0.4;
         }
 
-        /* Again — barely there */
         .again {
           background: transparent;
           border: 0;
@@ -548,6 +747,7 @@ export default function AxisShell() {
           padding: 0;
           text-align: left;
           text-transform: uppercase;
+          transition: color 0.1s;
         }
 
         .again:hover {
