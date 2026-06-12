@@ -7,19 +7,21 @@ import { type AxisEvidence } from "../lib/axis-evidence";
 type LoopPhase = "IDLE" | "SPEAKING" | "LISTENING" | "REVIEW" | "DONE";
 
 type Props = {
+  challenges?: AxisChallenge[];
   onAttempt: (challenge: AxisChallenge, evidence: AxisEvidence) => void;
   onEnd: () => void;
 };
 
-export default function VoiceLoop({ onAttempt, onEnd }: Props) {
+export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
+  const activeChallenges = challenges ?? AXIS_CHALLENGES;
   const [phase, setPhase] = useState<LoopPhase>("IDLE");
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [transcript, setTranscript] = useState("");
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
-  const challenge = AXIS_CHALLENGES[challengeIndex];
-  const isLast = challengeIndex === AXIS_CHALLENGES.length - 1;
+  const challenge = activeChallenges[challengeIndex];
+  const isLast = challengeIndex === activeChallenges.length - 1;
 
   const isSupported =
     typeof window !== "undefined" &&
@@ -81,7 +83,7 @@ export default function VoiceLoop({ onAttempt, onEnd }: Props) {
   }, []);
 
   function presentChallenge(index: number) {
-    const c = AXIS_CHALLENGES[index];
+    const c = activeChallenges[index];
     if (!c) return;
 
     recognitionRef.current?.abort();
@@ -137,7 +139,7 @@ export default function VoiceLoop({ onAttempt, onEnd }: Props) {
     onEnd();
   }
 
-  const incomingChallenge = AXIS_CHALLENGES[0];
+  const incomingChallenge = activeChallenges[0];
 
   return (
     <main className="voice-loop">
@@ -147,7 +149,7 @@ export default function VoiceLoop({ onAttempt, onEnd }: Props) {
         </button>
         <span>
           {phase !== "IDLE" && phase !== "DONE"
-            ? `${challengeIndex + 1} / ${AXIS_CHALLENGES.length}`
+            ? `${challengeIndex + 1} / ${activeChallenges.length}`
             : ""}
         </span>
       </header>

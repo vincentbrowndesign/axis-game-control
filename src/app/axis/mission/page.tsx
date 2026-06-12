@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import VoiceLoop from "../../../components/VoiceLoop";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
-import { type AxisChallenge } from "../../../lib/axis-challenges";
+import { type AxisChallenge, VISION_CHALLENGES } from "../../../lib/axis-challenges";
 import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
 import {
   appendMissionEvent,
@@ -250,6 +250,7 @@ export default function AxisMissionPage() {
   if (voiceLoopActive) {
     return (
       <VoiceLoop
+        challenges={VISION_CHALLENGES}
         onAttempt={handleVoiceAttempt}
         onEnd={() => setVoiceLoopActive(false)}
       />
