@@ -39,9 +39,12 @@ export default function AxisShell() {
   const challengesRef = useRef<AxisChallenge[]>([]);
   const presentChallengeRef = useRef<(index: number) => void>(() => null);
 
-  const isVoiceSupported =
-    typeof window !== "undefined" &&
-    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+  // Start true (optimistic) so SSR and hydration agree — useEffect corrects if actually unsupported
+  const [isVoiceSupported, setIsVoiceSupported] = useState(true);
+
+  useEffect(() => {
+    setIsVoiceSupported("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+  }, []);
 
   useEffect(() => {
     return () => {
