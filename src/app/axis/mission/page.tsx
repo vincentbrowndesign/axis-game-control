@@ -30,6 +30,8 @@ export default function AxisShell() {
   const [loopSubPhase, setLoopSubPhase] = useState<LoopSubPhase>("SPEAKING");
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [waitingForTap, setWaitingForTap] = useState(false);
+  const [contextReady, setContextReady] = useState(false);
+  const [doneReady, setDoneReady] = useState(false);
 
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -39,7 +41,7 @@ export default function AxisShell() {
   const challengesRef = useRef<AxisChallenge[]>([]);
   const presentChallengeRef = useRef<(index: number) => void>(() => null);
 
-  // Start true (optimistic) so SSR and hydration agree — useEffect corrects if actually unsupported
+  // Optimistic true — useEffect corrects after hydration if unsupported
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
 
   useEffect(() => {
@@ -55,11 +57,9 @@ export default function AxisShell() {
   }, []);
 
   function startCamera() {
-    console.log("[AXIS] START_CAMERA");
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "user" } })
       .then((stream) => {
-        console.log("[AXIS] CAMERA_READY");
         streamRef.current = stream;
         const v = videoBgRef.current;
         if (v) {
@@ -67,17 +67,16 @@ export default function AxisShell() {
           v.play().catch(() => null);
         }
       })
-      .catch((err) => console.log("[AXIS] CAMERA_ERROR", err));
+      .catch(() => null);
   }
 
   const speak = useCallback((text: string, onDone?: () => void) => {
-    console.log("[AXIS] SPEAK_START", text);
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.88;
     u.pitch = 1.0;
-    u.onend = () => { console.log("[AXIS] SPEAK_END", text); onDone?.(); };
-    u.onerror = (e) => { console.log("[AXIS] SPEAK_ERROR", e); onDone?.(); };
+    u.onend = () => onDone?.();
+    u.onerror = () => onDone?.();
     window.speechSynthesis.speak(u);
   }, []);
 
@@ -158,7 +157,8 @@ export default function AxisShell() {
       handleAttempt(c, evidence);
       if (isLast) {
         setPhase("DONE");
-        speak("Done.");
+        setDoneReady(false);
+        speak("Done.", () => setDoneReady(true));
       } else {
         presentChallengeRef.current(index + 1);
       }
@@ -184,14 +184,12 @@ export default function AxisShell() {
     }
   }
 
-  // Always keep ref current
   presentChallengeRef.current = presentChallenge;
 
   function handleGo() {
-    console.log("[AXIS] GO");
+    setContextReady(false);
     setPhase("CONTEXT");
-    console.log("[AXIS] SET_CONTEXT");
-    speak("Who's here?");
+    speak("Who's here?", () => setContextReady(true));
     startCamera();
   }
 
@@ -222,6 +220,8 @@ export default function AxisShell() {
     setActiveContext(null);
     setChallengeIndex(0);
     setWaitingForTap(false);
+    setContextReady(false);
+    setDoneReady(false);
     pendingObservationRef.current = null;
   }
 
@@ -232,12 +232,13 @@ export default function AxisShell() {
     window.speechSynthesis.cancel();
     setActiveContext(null);
     setWaitingForTap(false);
+    setContextReady(false);
+    setDoneReady(false);
     pendingObservationRef.current = null;
     setPhase("CONTEXT");
-    speak("Who's here?");
+    speak("Who's here?", () => setContextReady(true));
   }
 
-  // Display text for LOOP phase
   const challenges = challengesRef.current;
   const challenge = challenges[challengeIndex];
 
@@ -285,38 +286,40 @@ export default function AxisShell() {
               : undefined
         }
       >
+        {/* READY — threshold only, no wordmark */}
         {phase === "READY" && (
-          <>
-            <p className="wordmark">Axis</p>
-            <button
-              className="go"
-              disabled={!isVoiceSupported}
-              onClick={handleGo}
-              type="button"
-            >
-              Go
-            </button>
-          </>
+          <button
+            className="go"
+            disabled={!isVoiceSupported}
+            onClick={handleGo}
+            type="button"
+          >
+            Go
+          </button>
         )}
 
+        {/* CONTEXT — question first, options appear after Axis finishes speaking */}
         {phase === "CONTEXT" && (
           <>
             <p className="headline dim">Who's here?</p>
-            <div className="context-options">
-              {(["SOLO", "PARTNER", "TEAM", "GAME"] as AxisContext[]).map((ctx) => (
-                <button
-                  className="option"
-                  key={ctx}
-                  onClick={() => handleContextSelect(ctx)}
-                  type="button"
-                >
-                  {CONTEXT_LABELS[ctx]}
-                </button>
-              ))}
-            </div>
+            {contextReady && (
+              <div className="context-options">
+                {(["SOLO", "PARTNER", "TEAM", "GAME"] as AxisContext[]).map((ctx) => (
+                  <button
+                    className="context-choice"
+                    key={ctx}
+                    onClick={() => handleContextSelect(ctx)}
+                    type="button"
+                  >
+                    {CONTEXT_LABELS[ctx]}
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         )}
 
+        {/* LOOP */}
         {phase === "LOOP" && (
           <>
             {loopSubPhase === "SPEAKING" && !waitingForTap && <span className="dot" />}
@@ -327,12 +330,15 @@ export default function AxisShell() {
           </>
         )}
 
+        {/* DONE — "Again" appears only after "Done." finishes speaking */}
         {phase === "DONE" && (
           <>
             <p className="headline dim">Done.</p>
-            <button className="option" onClick={handleAgain} type="button">
-              Again
-            </button>
+            {doneReady && (
+              <button className="again" onClick={handleAgain} type="button">
+                again
+              </button>
+            )}
           </>
         )}
       </section>
@@ -370,7 +376,7 @@ export default function AxisShell() {
 
         header {
           align-items: center;
-          border-bottom: 1px solid rgba(247, 247, 242, 0.08);
+          border-bottom: 1px solid rgba(247, 247, 242, 0.06);
           display: grid;
           gap: 12px;
           grid-template-columns: auto 1fr auto;
@@ -380,7 +386,7 @@ export default function AxisShell() {
         .back {
           background: transparent;
           border: 0;
-          color: rgba(247, 247, 242, 0.3);
+          color: rgba(247, 247, 242, 0.25);
           cursor: pointer;
           font: inherit;
           font-size: 18px;
@@ -391,11 +397,11 @@ export default function AxisShell() {
         }
 
         .back:hover {
-          color: rgba(247, 247, 242, 0.6);
+          color: rgba(247, 247, 242, 0.5);
         }
 
         .context-label {
-          color: rgba(247, 247, 242, 0.4);
+          color: rgba(247, 247, 242, 0.35);
           font-size: 11px;
           font-weight: 800;
           letter-spacing: 0.12em;
@@ -403,7 +409,7 @@ export default function AxisShell() {
         }
 
         .challenge-count {
-          color: rgba(247, 247, 242, 0.25);
+          color: rgba(247, 247, 242, 0.2);
           font-size: 11px;
           font-weight: 800;
           letter-spacing: 0.1em;
@@ -414,29 +420,21 @@ export default function AxisShell() {
           align-content: center;
           display: grid;
           flex: 1;
-          gap: 24px;
-          padding: 48px clamp(18px, 5vw, 64px);
+          gap: 32px;
+          padding: 56px clamp(18px, 5vw, 64px) 48px;
         }
 
         .stage.tappable {
           cursor: pointer;
         }
 
-        .wordmark {
-          color: rgba(247, 247, 242, 0.15);
-          font-size: clamp(48px, 10vw, 96px);
-          font-weight: 950;
-          letter-spacing: -0.02em;
-          line-height: 1;
-          margin: 0;
-        }
-
+        /* Challenge is the dominant element */
         .headline {
-          font-size: clamp(32px, 6vw, 64px);
+          font-size: clamp(40px, 7vw, 80px);
           font-weight: 900;
           line-height: 1;
           margin: 0;
-          max-width: 18ch;
+          max-width: 16ch;
         }
 
         .headline.dim {
@@ -482,7 +480,7 @@ export default function AxisShell() {
         }
 
         .tap-hint {
-          color: rgba(247, 247, 242, 0.25);
+          color: rgba(247, 247, 242, 0.22);
           font-size: 11px;
           font-weight: 800;
           letter-spacing: 0.12em;
@@ -490,12 +488,33 @@ export default function AxisShell() {
           text-transform: uppercase;
         }
 
+        /* Context options: large text selections, not pill buttons */
         .context-options {
           display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
+          flex-direction: column;
+          gap: 2px;
         }
 
+        .context-choice {
+          background: transparent;
+          border: 0;
+          color: rgba(247, 247, 242, 0.55);
+          cursor: pointer;
+          font: inherit;
+          font-size: clamp(28px, 5vw, 52px);
+          font-weight: 900;
+          line-height: 1.1;
+          min-height: 52px;
+          padding: 0;
+          text-align: left;
+          transition: color 0.1s;
+        }
+
+        .context-choice:hover {
+          color: #f7f7f2;
+        }
+
+        /* Go — threshold, not launcher */
         .go {
           background: #f7f7f2;
           border: 0;
@@ -503,10 +522,10 @@ export default function AxisShell() {
           color: #0d0d0a;
           cursor: pointer;
           font: inherit;
-          font-size: 14px;
+          font-size: 15px;
           font-weight: 850;
-          min-height: 48px;
-          padding: 0 28px;
+          min-height: 52px;
+          padding: 0 32px;
           width: fit-content;
         }
 
@@ -515,21 +534,24 @@ export default function AxisShell() {
           opacity: 0.4;
         }
 
-        .option {
-          background: rgba(247, 247, 242, 0.08);
+        /* Again — barely there */
+        .again {
+          background: transparent;
           border: 0;
-          border-radius: 999px;
-          color: #f7f7f2;
+          color: rgba(247, 247, 242, 0.22);
           cursor: pointer;
           font: inherit;
-          font-size: 14px;
-          font-weight: 850;
-          min-height: 48px;
-          padding: 0 22px;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          min-height: 44px;
+          padding: 0;
+          text-align: left;
+          text-transform: uppercase;
         }
 
-        .option:hover {
-          background: rgba(247, 247, 242, 0.14);
+        .again:hover {
+          color: rgba(247, 247, 242, 0.5);
         }
       `}</style>
     </main>
