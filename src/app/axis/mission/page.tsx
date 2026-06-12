@@ -1,217 +1,123 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import VoiceLoop from "../../../components/VoiceLoop";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
 import { type AxisChallenge, type AxisContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
 import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
 import {
-  appendMissionEvent,
   createLocalMissionMemoryAdapter,
   createMissionAttempt,
-  createMissionEvent,
-  createMissionSession,
-  createMoment,
-  endMissionSession,
   type MissionAttempt,
-  type MissionSession,
 } from "../../../lib/axis-mission-memory";
-import { createMissionContextSnapshot } from "../../../lib/axis-context-engine";
 
-type ComposerMode = "IDLE" | "MENU";
+type ShellPhase = "READY" | "CONTEXT" | "LOOP" | "DONE";
+type LoopSubPhase = "SPEAKING" | "LISTENING";
 
-type ThreadMessage = {
-  id: string;
-  author: "Axis" | "You";
-  text: string;
+const OBSERVATION_QUESTION = "What did you notice?";
+
+const CONTEXT_LABELS: Record<AxisContext, string> = {
+  GAME: "Game",
+  PARTNER: "Partner",
+  SOLO: "Alone",
+  TEAM: "Practice",
 };
 
-const missionTemplate = {
-  constraint: "Weak Hand Only",
-  objective: "50 Weak-Hand Finishes",
-  reason: "Build touch, balance, and finishing confidence under a simple constraint.",
-  target: 50,
-};
-
-export default function AxisMissionPage() {
+export default function AxisShell() {
   const missionMemory = useMemo(() => createLocalMissionMemoryAdapter(), []);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const videoInputRef = useRef<HTMLInputElement | null>(null);
-  const [composerMode, setComposerMode] = useState<ComposerMode>("IDLE");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [inputValue, setInputValue] = useState("");
-  const [saveState, setSaveState] = useState<"IDLE" | "SAVED" | "SAVING">("IDLE");
-  const [voiceLoopActive, setVoiceLoopActive] = useState(false);
-  const [activeContext, setActiveContext] = useState<AxisContext | null>(null);
-  const [session, setSession] = useState<MissionSession | null>(null);
-  const [thread, setThread] = useState<ThreadMessage[]>(() => [
-    axisMessage("Last attempt was 43."),
-    axisMessage("Target is 50."),
-    axisMessage("Weak hand only."),
-    axisMessage("Let's see it."),
-  ]);
 
-  const result = session?.result ?? 0;
-  const active = session?.status === "ACTIVE";
-  const paused = session?.status === "PAUSED";
-  const complete = session?.status === "EVALUATED";
+  const [phase, setPhase] = useState<ShellPhase>("READY");
+  const [activeContext, setActiveContext] = useState<AxisContext | null>(null);
+  const [loopSubPhase, setLoopSubPhase] = useState<LoopSubPhase>("SPEAKING");
+  const [challengeIndex, setChallengeIndex] = useState(0);
+  const [waitingForTap, setWaitingForTap] = useState(false);
+
+  const videoBgRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const isListeningRef = useRef(false);
+  const pendingObservationRef = useRef<(() => void) | null>(null);
+  const challengesRef = useRef<AxisChallenge[]>([]);
+  const presentChallengeRef = useRef<(index: number) => void>(() => null);
+
+  const isVoiceSupported =
+    typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
   useEffect(() => {
-    if (!session || !active) return;
-
-    const updateElapsed = () => {
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - Date.parse(session.startedAt)) / 1000)));
+    return () => {
+      recognitionRef.current?.abort();
+      window.speechSynthesis?.cancel();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-    updateElapsed();
-    const interval = window.setInterval(updateElapsed, 1000);
-    return () => window.clearInterval(interval);
-  }, [active, session?.id, session?.startedAt]);
+  }, []);
 
-  function ensureSession() {
-    if (session) return session;
-
-    const nextSession = createMissionSession(missionTemplate);
-    setSession(nextSession);
-    setElapsedSeconds(0);
-    appendAxis("Begin.");
-    return nextSession;
+  function startCamera() {
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "user" } })
+      .then((stream) => {
+        streamRef.current = stream;
+        const v = videoBgRef.current;
+        if (v) {
+          v.srcObject = stream;
+          v.play().catch(() => null);
+        }
+      })
+      .catch(() => null);
   }
 
-  function submitCommand() {
-    const command = inputValue.trim();
-    if (!command) return;
+  const speak = useCallback((text: string, onDone?: () => void) => {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.88;
+    u.pitch = 1.0;
+    u.onend = () => onDone?.();
+    u.onerror = () => onDone?.();
+    window.speechSynthesis.speak(u);
+  }, []);
 
-    setInputValue("");
-    appendUser(command);
-    handleCommand(command);
-  }
+  const startListening = useCallback(
+    (challenge: AxisChallenge, onComplete: (evidence: AxisEvidence) => void) => {
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
 
-  function handleCommand(command: string) {
-    const normalized = command.toLowerCase();
-    const countMatch = normalized.match(/(?:count\s*)?(\d+)/);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SpeechAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechAPI) return;
 
-    if (normalized === "again") {
-      resetMission();
-      appendAxis("Again.");
-      return;
-    }
+      const rec: SpeechRecognition = new SpeechAPI();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
 
-    if (normalized === "pause") {
-      updateSessionStatus("PAUSED");
-      appendAxis("Paused.");
-      return;
-    }
+      let latest = "";
+      isListeningRef.current = true;
 
-    if (normalized === "resume") {
-      updateSessionStatus("ACTIVE");
-      appendAxis("Continue.");
-      return;
-    }
+      rec.onresult = (e: SpeechRecognitionEvent) => {
+        let acc = "";
+        for (let i = 0; i < e.results.length; i++) {
+          if (i > 0) acc += " ";
+          acc += e.results[i][0].transcript;
+        }
+        latest = acc.trim();
+      };
 
-    if (normalized === "failed") {
-      finishSession("FAILED");
-      appendAxis("Failed. Save the attempt.");
-      return;
-    }
+      const finish = () => {
+        if (!isListeningRef.current) return;
+        isListeningRef.current = false;
+        onComplete({ kind: challenge.requiredEvidence, source: "VOICE", value: latest || null });
+      };
 
-    if (normalized === "done") {
-      finishSession("COMPLETE");
-      appendAxis(result >= missionTemplate.target ? "Complete." : `Need ${missionTemplate.target - result} more.`);
-      return;
-    }
+      rec.onend = finish;
+      rec.onerror = finish;
 
-    if (countMatch) {
-      updateProgress(Number.parseInt(countMatch[1], 10));
-      return;
-    }
+      recognitionRef.current = rec;
+      rec.start();
+      setLoopSubPhase("LISTENING");
+    },
+    [],
+  );
 
-    appendAxis("Send a count, done, failed, pause, resume, or again.");
-  }
-
-  function updateProgress(nextResult: number) {
-    const currentSession = ensureSession();
-    const nextSession = appendMissionEvent(
-      { ...currentSession, status: currentSession.status === "PAUSED" ? "ACTIVE" : currentSession.status },
-      createMissionEvent({
-        payload: { result: nextResult },
-        type: "PROGRESS_UPDATE",
-      }),
-    );
-    setSession(nextSession);
-    appendAxis(nextResult >= missionTemplate.target ? `${nextResult}. Complete.` : `${nextResult}. Need ${missionTemplate.target - nextResult}. Continue.`);
-  }
-
-  function updateSessionStatus(status: "ACTIVE" | "PAUSED") {
-    const currentSession = ensureSession();
-    const nextSession = appendMissionEvent(
-      { ...currentSession, status },
-      createMissionEvent({
-        payload: { state: status === "PAUSED" ? "pause" : "resume" },
-        type: "BREAK",
-      }),
-    );
-    setSession(nextSession);
-  }
-
-  function finishSession(status: "COMPLETE" | "FAILED") {
-    const currentSession = ensureSession();
-    const endedSession = {
-      ...endMissionSession(currentSession),
-      status: "ENDED" as const,
-    };
-    setSession(endedSession);
-    void saveDebrief(endedSession, status);
-  }
-
-  async function saveDebrief(finalSessionInput: MissionSession, finalStatus: "COMPLETE" | "FAILED") {
-    if (saveState === "SAVING") return;
-
-    setSaveState("SAVING");
-    const finalSession = appendMissionEvent(
-      { ...finalSessionInput, status: "EVALUATED" as const },
-      createMissionEvent({
-        payload: { result: finalSessionInput.result, status: finalStatus },
-        type: "FINISHED",
-      }),
-    );
-    const previousBest = missionMemory.getPersonalBest(finalSession.objective, finalSession.constraint);
-    const context = createMissionContextSnapshot({
-      audioContext: null,
-      cameraContext: null,
-      constraint: finalSession.constraint,
-      notes: null,
-      objective: finalSession.objective,
-      result: finalSession.result,
-      timestamp: finalSession.endedAt ?? new Date().toISOString(),
-    });
-    const attempt = createMissionAttempt({
-      audioContext: context.audioContext,
-      cameraContext: context.cameraContext,
-      constraint: finalSession.constraint,
-      moment: createMoment({ previousBest, result: finalSession.result, target: finalSession.target }),
-      notes: null,
-      objective: finalSession.objective,
-      result: finalSession.result,
-      sessionId: finalSession.id,
-      target: finalSession.target,
-    });
-
-    missionMemory.saveSession(finalSession);
-    missionMemory.saveAttempt(attempt);
-    setSession(finalSession);
-    await saveRemoteMemory({ attempt, session: finalSession });
-    setSaveState("SAVED");
-    appendAxis(finalStatus === "COMPLETE" ? "Saved. New session when ready." : "Saved. Again when ready.");
-  }
-
-  function resetMission() {
-    setElapsedSeconds(0);
-    setSaveState("IDLE");
-    setSession(null);
-  }
-
-  function handleVoiceAttempt(challenge: AxisChallenge, evidence: AxisEvidence) {
+  function handleAttempt(challenge: AxisChallenge, evidence: AxisEvidence) {
     const evaluation = evaluateEvidence(challenge.requiredEvidence, evidence);
     const attempt = createMissionAttempt({
       constraint: challenge.constraint,
@@ -225,435 +131,409 @@ export default function AxisMissionPage() {
     void saveRemoteMemory({ attempt });
   }
 
-  function quickCapture() {
-    appendUser("Camera");
-    appendAxis("Camera context is ready later. Continue the mission.");
-  }
+  function presentChallenge(index: number) {
+    const challenges = challengesRef.current;
+    const c = challenges[index];
+    if (!c) return;
 
-  function handleUtility(label: string, inputRef?: React.RefObject<HTMLInputElement | null>) {
-    setComposerMode("IDLE");
-    appendUser(label);
-    if (inputRef?.current) {
-      inputRef.current.click();
-      return;
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    isListeningRef.current = false;
+    window.speechSynthesis.cancel();
+
+    setChallengeIndex(index);
+    setLoopSubPhase("SPEAKING");
+    setWaitingForTap(false);
+    pendingObservationRef.current = null;
+
+    const isLast = index === challenges.length - 1;
+
+    function complete(evidence: AxisEvidence) {
+      handleAttempt(c, evidence);
+      if (isLast) {
+        setPhase("DONE");
+        speak("Done.");
+      } else {
+        presentChallengeRef.current(index + 1);
+      }
     }
-    appendAxis("Attached to this session.");
+
+    const qIdx = c.text.indexOf(OBSERVATION_QUESTION);
+    if (c.requiredEvidence === "OBSERVATION" && qIdx > -1) {
+      const task = c.text.slice(0, qIdx).trim();
+      speak(task, () => {
+        pendingObservationRef.current = () => {
+          setWaitingForTap(false);
+          pendingObservationRef.current = null;
+          speak(OBSERVATION_QUESTION, () => {
+            setTimeout(() => startListening(c, complete), 900);
+          });
+        };
+        setWaitingForTap(true);
+      });
+    } else {
+      speak(c.text, () => {
+        setTimeout(() => startListening(c, complete), 900);
+      });
+    }
   }
 
-  function appendAxis(text: string) {
-    setThread((current) => [...current, axisMessage(text)]);
+  // Always keep ref current
+  presentChallengeRef.current = presentChallenge;
+
+  function handleGo() {
+    setPhase("CONTEXT");
+    speak("Who's here?");
+    startCamera();
   }
 
-  function appendUser(text: string) {
-    setThread((current) => [...current, { author: "You", id: crypto.randomUUID(), text }]);
+  function handleContextSelect(ctx: AxisContext) {
+    const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
+    challengesRef.current = filtered.length > 0 ? filtered : VISION_CHALLENGES;
+    setActiveContext(ctx);
+    setChallengeIndex(0);
+    setPhase("LOOP");
+    presentChallengeRef.current(0);
   }
 
-  if (voiceLoopActive && !activeContext) {
-    return (
-      <main className="context-picker">
-        <header>
-          <button
-            aria-label="Back"
-            className="back"
-            onClick={() => setVoiceLoopActive(false)}
-            type="button"
-          >
-            ←
-          </button>
-        </header>
-        <section>
-          <p className="question">Who's here?</p>
-          <div className="options">
-            {(["SOLO", "PARTNER", "TEAM", "GAME"] as AxisContext[]).map((ctx) => (
-              <button
-                className="option"
-                key={ctx}
-                onClick={() => setActiveContext(ctx)}
-                type="button"
-              >
-                {ctx === "SOLO" ? "Alone" : ctx === "PARTNER" ? "Partner" : ctx === "TEAM" ? "Practice" : "Game"}
-              </button>
-            ))}
-          </div>
-        </section>
-        <style jsx>{`
-          .context-picker {
-            background: #0d0d0a;
-            color: #f7f7f2;
-            display: grid;
-            grid-template-rows: auto 1fr;
-            min-height: 100dvh;
-          }
-          header {
-            align-items: center;
-            border-bottom: 1px solid rgba(247, 247, 242, 0.08);
-            display: flex;
-            padding: 14px clamp(18px, 5vw, 64px);
-          }
-          .back {
-            background: transparent;
-            border: 0;
-            color: rgba(247, 247, 242, 0.3);
-            cursor: pointer;
-            font: inherit;
-            font-size: 18px;
-            line-height: 1;
-            min-height: 44px;
-            min-width: 44px;
-            padding: 0;
-          }
-          .back:hover { color: rgba(247, 247, 242, 0.6); }
-          section {
-            align-content: center;
-            display: grid;
-            gap: 40px;
-            padding: 48px clamp(18px, 5vw, 64px);
-          }
-          .question {
-            color: rgba(247, 247, 242, 0.35);
-            font-size: clamp(32px, 6vw, 64px);
-            font-weight: 900;
-            line-height: 1.0;
-            margin: 0;
-          }
-          .options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-          }
-          .option {
-            background: rgba(247, 247, 242, 0.08);
-            border: 0;
-            border-radius: 999px;
-            color: #f7f7f2;
-            cursor: pointer;
-            font: inherit;
-            font-size: 14px;
-            font-weight: 850;
-            min-height: 48px;
-            padding: 0 22px;
-          }
-          .option:hover { background: rgba(247, 247, 242, 0.14); }
-        `}</style>
-      </main>
-    );
+  function handleTap() {
+    if (waitingForTap && pendingObservationRef.current) {
+      pendingObservationRef.current();
+    } else if (loopSubPhase === "LISTENING") {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+    }
   }
 
-  if (voiceLoopActive && activeContext) {
-    const filteredChallenges = VISION_CHALLENGES.filter((c) => c.contexts.includes(activeContext));
-    return (
-      <VoiceLoop
-        challenges={filteredChallenges.length > 0 ? filteredChallenges : VISION_CHALLENGES}
-        onAttempt={handleVoiceAttempt}
-        onEnd={() => { setVoiceLoopActive(false); setActiveContext(null); }}
-      />
-    );
+  function handleExit() {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    isListeningRef.current = false;
+    window.speechSynthesis?.cancel();
+    setPhase("READY");
+    setActiveContext(null);
+    setChallengeIndex(0);
+    setWaitingForTap(false);
+    pendingObservationRef.current = null;
   }
+
+  function handleAgain() {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    isListeningRef.current = false;
+    window.speechSynthesis.cancel();
+    setActiveContext(null);
+    setWaitingForTap(false);
+    pendingObservationRef.current = null;
+    setPhase("CONTEXT");
+    speak("Who's here?");
+  }
+
+  // Display text for LOOP phase
+  const challenges = challengesRef.current;
+  const challenge = challenges[challengeIndex];
+
+  function getDisplayText(): string {
+    if (!challenge) return "";
+    const qIdx = challenge.text.indexOf(OBSERVATION_QUESTION);
+    const isObs = challenge.requiredEvidence === "OBSERVATION" && qIdx > -1;
+    if (loopSubPhase === "LISTENING" && isObs) return OBSERVATION_QUESTION;
+    if (isObs) return challenge.text.slice(0, qIdx).trim();
+    return challenge.text;
+  }
+
+  const isStageTappable =
+    phase === "LOOP" && (waitingForTap || loopSubPhase === "LISTENING");
 
   return (
-    <main className="axis-chat">
-      <section className="context" aria-label="Current Context">
-        <p>CONTROL</p>
-        <h1>{missionTemplate.target}</h1>
-        <strong>{missionTemplate.constraint}</strong>
-        <span>
-          {complete
-            ? `Saved ${result}`
-            : paused
-              ? "Paused"
-              : active
-                ? `${formatElapsedTime(elapsedSeconds)} active`
-                : missionTemplate.objective}
-        </span>
-      </section>
+    <main className="shell">
+      <video ref={videoBgRef} muted playsInline aria-hidden className="camera-bg" />
 
-      <section className="thread" aria-label="Axis Conversation">
-        {thread.map((message) => (
-          <article className={message.author === "Axis" ? "message axis" : "message user"} key={message.id}>
-            <span>{message.author}</span>
-            <p>{message.text}</p>
-          </article>
-        ))}
-      </section>
+      {phase !== "READY" && (
+        <header>
+          <button aria-label="Exit" className="back" onClick={handleExit} type="button">
+            ←
+          </button>
+          <span className="context-label">
+            {activeContext ? CONTEXT_LABELS[activeContext] : ""}
+          </span>
+          {phase === "LOOP" && challenge && (
+            <span className="challenge-count">
+              {challengeIndex + 1}&thinsp;/&thinsp;{challenges.length}
+            </span>
+          )}
+        </header>
+      )}
 
-      <section className="composer" aria-label="Mission input">
-        {composerMode === "MENU" ? (
-          <div className="utility-menu">
-            <button onClick={() => handleUtility("Upload File", fileInputRef)} type="button">
-              Upload File
+      <section
+        className={`stage${isStageTappable ? " tappable" : ""}`}
+        onClick={isStageTappable ? handleTap : undefined}
+        role={isStageTappable ? "button" : undefined}
+        aria-label={
+          waitingForTap
+            ? "Tap when ready"
+            : loopSubPhase === "LISTENING"
+              ? "Tap to finish"
+              : undefined
+        }
+      >
+        {phase === "READY" && (
+          <>
+            <p className="wordmark">Axis</p>
+            <button
+              className="go"
+              disabled={!isVoiceSupported}
+              onClick={handleGo}
+              type="button"
+            >
+              Go
             </button>
-            <button onClick={() => handleUtility("Take Picture", photoInputRef)} type="button">
-              Take Picture
-            </button>
-            <button onClick={() => handleUtility("Choose Photo", photoInputRef)} type="button">
-              Choose Photo
-            </button>
-            <button onClick={() => handleUtility("Import Video", videoInputRef)} type="button">
-              Import Video
-            </button>
-            <button onClick={() => handleUtility("Import Audio")} type="button">
-              Import Audio
-            </button>
-          </div>
-        ) : null}
+          </>
+        )}
 
-        <div className="bar">
-          <button aria-label="Open attachment menu" onClick={() => setComposerMode(composerMode === "MENU" ? "IDLE" : "MENU")} type="button">
-            +
-          </button>
-          <button aria-label="Quick capture" onClick={quickCapture} type="button">
-            Camera
-          </button>
-          <button
-            aria-label="Voice loop"
-            onClick={() => setVoiceLoopActive(true)}
-            type="button"
-          >
-            Voice
-          </button>
-          <input
-            aria-label="Message Axis"
-            onChange={(event) => setInputValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") submitCommand();
-            }}
-            placeholder="count 43, done, failed, again"
-            value={inputValue}
-          />
-          <button aria-label="Send" className="send" onClick={submitCommand} type="button">
-            Send
-          </button>
-        </div>
+        {phase === "CONTEXT" && (
+          <>
+            <p className="headline dim">Who's here?</p>
+            <div className="context-options">
+              {(["SOLO", "PARTNER", "TEAM", "GAME"] as AxisContext[]).map((ctx) => (
+                <button
+                  className="option"
+                  key={ctx}
+                  onClick={() => handleContextSelect(ctx)}
+                  type="button"
+                >
+                  {CONTEXT_LABELS[ctx]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
-        <input hidden ref={fileInputRef} type="file" />
-        <input accept="image/*" capture="environment" hidden ref={photoInputRef} type="file" />
-        <input accept="video/*" hidden ref={videoInputRef} type="file" />
+        {phase === "LOOP" && (
+          <>
+            {loopSubPhase === "SPEAKING" && !waitingForTap && <span className="dot" />}
+            {waitingForTap && <span className="dot waiting" />}
+            {loopSubPhase === "LISTENING" && <span className="dot listening" />}
+            <p className="headline">{getDisplayText()}</p>
+            {waitingForTap && <p className="tap-hint">tap when ready</p>}
+          </>
+        )}
+
+        {phase === "DONE" && (
+          <>
+            <p className="headline dim">Done.</p>
+            <button className="option" onClick={handleAgain} type="button">
+              Again
+            </button>
+          </>
+        )}
       </section>
 
       <style jsx>{`
-        .axis-chat {
-          background: #f7f7f2;
-          color: #12120f;
-          display: grid;
-          grid-template-rows: auto 1fr auto;
-          min-height: 100dvh;
-        }
-
-        .context {
-          border-bottom: 1px solid rgba(18, 18, 15, 0.1);
-          display: grid;
-          gap: 2px;
-          padding: 28px clamp(18px, 5vw, 64px) 22px;
-        }
-
-        .context p,
-        .context span,
-        .message span {
-          color: rgba(18, 18, 15, 0.52);
-          font-size: 12px;
-          font-weight: 800;
-          letter-spacing: 0;
-          margin: 0;
-          text-transform: uppercase;
-        }
-
-        .context h1 {
-          font-size: clamp(70px, 18vw, 180px);
-          font-weight: 950;
-          line-height: 0.82;
-          margin: 0;
-        }
-
-        .context strong {
-          color: #12120f;
-          font-size: clamp(24px, 5vw, 56px);
-          font-weight: 900;
-          line-height: 0.96;
-          text-transform: uppercase;
-        }
-
-        .thread {
-          align-content: start;
-          display: grid;
-          gap: 18px;
-          margin: 0 auto;
-          max-width: 840px;
-          overflow-y: auto;
-          padding: 34px clamp(18px, 5vw, 64px) 150px;
-          width: 100%;
-        }
-
-        .message {
-          display: grid;
-          gap: 6px;
-          max-width: 680px;
-        }
-
-        .message.user {
-          justify-self: end;
-          text-align: right;
-        }
-
-        .message p {
-          background: #ffffff;
-          border: 1px solid rgba(18, 18, 15, 0.08);
-          border-radius: 18px;
-          box-shadow: 0 10px 30px rgba(18, 18, 15, 0.04);
-          font-size: clamp(18px, 2.2vw, 24px);
-          line-height: 1.25;
-          margin: 0;
-          padding: 14px 16px;
-        }
-
-        .message.axis p {
-          background: transparent;
-          border-color: transparent;
-          box-shadow: none;
-          padding-left: 0;
-        }
-
-        .message.user p {
-          background: #12120f;
+        .shell {
+          background: #0d0d0a;
           color: #f7f7f2;
-        }
-
-        .composer {
-          background: linear-gradient(180deg, rgba(247, 247, 242, 0), #f7f7f2 22%);
-          bottom: 0;
-          left: 0;
-          padding: 18px clamp(14px, 4vw, 36px) 22px;
-          position: fixed;
-          right: 0;
-        }
-
-        .bar,
-        .utility-menu {
-          background: #ffffff;
-          border: 1px solid rgba(18, 18, 15, 0.1);
-          box-shadow: 0 18px 50px rgba(18, 18, 15, 0.1);
-          margin: 0 auto;
-          max-width: 900px;
-        }
-
-        .bar {
-          align-items: center;
-          border-radius: 28px;
-          display: grid;
-          gap: 8px;
-          grid-template-columns: auto auto auto 1fr auto;
-          min-height: 62px;
-          padding: 8px;
-        }
-
-        .utility-menu {
-          border-radius: 22px;
           display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-bottom: 10px;
-          padding: 10px;
+          flex-direction: column;
+          min-height: 100dvh;
+          overflow: hidden;
+          position: relative;
         }
 
-        button {
-          background: rgba(18, 18, 15, 0.06);
+        .camera-bg {
+          filter: blur(24px);
+          height: 100%;
+          left: 0;
+          object-fit: cover;
+          opacity: 0.18;
+          pointer-events: none;
+          position: absolute;
+          top: 0;
+          transform: scaleX(-1);
+          width: 100%;
+          z-index: 0;
+        }
+
+        header,
+        .stage {
+          position: relative;
+          z-index: 1;
+        }
+
+        header {
+          align-items: center;
+          border-bottom: 1px solid rgba(247, 247, 242, 0.08);
+          display: grid;
+          gap: 12px;
+          grid-template-columns: auto 1fr auto;
+          padding: 14px clamp(18px, 5vw, 64px);
+        }
+
+        .back {
+          background: transparent;
           border: 0;
-          border-radius: 999px;
-          color: #12120f;
+          color: rgba(247, 247, 242, 0.3);
           cursor: pointer;
           font: inherit;
-          font-size: 13px;
-          font-weight: 850;
+          font-size: 18px;
+          line-height: 1;
           min-height: 44px;
-          padding: 0 14px;
+          min-width: 44px;
+          padding: 0;
         }
 
-        button.listening {
+        .back:hover {
+          color: rgba(247, 247, 242, 0.6);
+        }
+
+        .context-label {
+          color: rgba(247, 247, 242, 0.4);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        .challenge-count {
+          color: rgba(247, 247, 242, 0.25);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .stage {
+          align-content: center;
+          display: grid;
+          flex: 1;
+          gap: 24px;
+          padding: 48px clamp(18px, 5vw, 64px);
+        }
+
+        .stage.tappable {
+          cursor: pointer;
+        }
+
+        .wordmark {
+          color: rgba(247, 247, 242, 0.15);
+          font-size: clamp(48px, 10vw, 96px);
+          font-weight: 950;
+          letter-spacing: -0.02em;
+          line-height: 1;
+          margin: 0;
+        }
+
+        .headline {
+          font-size: clamp(32px, 6vw, 64px);
+          font-weight: 900;
+          line-height: 1;
+          margin: 0;
+          max-width: 18ch;
+        }
+
+        .headline.dim {
+          color: rgba(247, 247, 242, 0.35);
+        }
+
+        .dot {
+          background: rgba(247, 247, 242, 0.2);
+          border-radius: 50%;
+          display: block;
+          height: 8px;
+          width: 8px;
+        }
+
+        .dot.waiting {
+          animation: breathe 2.4s ease-in-out infinite;
+          background: rgba(247, 247, 242, 0.35);
+        }
+
+        .dot.listening {
+          animation: pulse 1.1s ease-in-out infinite;
           background: #b8ff3d;
         }
 
-        button.send {
-          background: #12120f;
-          color: #f7f7f2;
+        @keyframes breathe {
+          0%,
+          100% {
+            opacity: 0.35;
+          }
+          50% {
+            opacity: 0.8;
+          }
         }
 
-        input {
-          background: transparent;
+        @keyframes pulse {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.2;
+          }
+        }
+
+        .tap-hint {
+          color: rgba(247, 247, 242, 0.25);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .context-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .go {
+          background: #f7f7f2;
           border: 0;
-          color: #12120f;
+          border-radius: 999px;
+          color: #0d0d0a;
+          cursor: pointer;
           font: inherit;
-          font-size: 16px;
-          min-width: 0;
-          outline: none;
-          width: 100%;
+          font-size: 14px;
+          font-weight: 850;
+          min-height: 48px;
+          padding: 0 28px;
+          width: fit-content;
         }
 
-        @media (max-width: 720px) {
-          .context {
-            padding-top: 22px;
-          }
+        .go:disabled {
+          cursor: not-allowed;
+          opacity: 0.4;
+        }
 
-          .thread {
-            padding-bottom: 190px;
-          }
+        .option {
+          background: rgba(247, 247, 242, 0.08);
+          border: 0;
+          border-radius: 999px;
+          color: #f7f7f2;
+          cursor: pointer;
+          font: inherit;
+          font-size: 14px;
+          font-weight: 850;
+          min-height: 48px;
+          padding: 0 22px;
+        }
 
-          .bar {
-            grid-template-columns: auto auto auto;
-          }
-
-          .bar input,
-          .bar .send {
-            grid-column: 1 / -1;
-          }
-
-          .bar input {
-            min-height: 42px;
-            padding: 0 8px;
-          }
+        .option:hover {
+          background: rgba(247, 247, 242, 0.14);
         }
       `}</style>
     </main>
   );
 }
 
-async function saveRemoteMemory({
-  attempt,
-  session,
-}: {
-  attempt: MissionAttempt;
-  session?: MissionSession;
-}) {
+async function saveRemoteMemory({ attempt }: { attempt: MissionAttempt }) {
   const token = await getAxisAccessToken();
   if (!token) return;
-
-  if (session) {
-    await axisFetchWithAccessToken(token, "/api/axis/mission-memory", {
-      body: JSON.stringify({ session }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    }).catch(() => null);
-  }
-
   await axisFetchWithAccessToken(token, "/api/axis/mission-memory", {
     body: JSON.stringify({ attempt }),
     headers: { "Content-Type": "application/json" },
     method: "POST",
   }).catch(() => null);
-}
-
-function axisMessage(text: string): ThreadMessage {
-  return {
-    author: "Axis",
-    id: crypto.randomUUID(),
-    text,
-  };
-}
-
-function formatElapsedTime(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = Math.floor(totalSeconds % 60)
-    .toString()
-    .padStart(2, "0");
-  return `${minutes}:${seconds}`;
 }
