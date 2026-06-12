@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
 import {
   appendMissionEvent,
@@ -15,7 +15,14 @@ import {
 } from "../../../lib/axis-mission-memory";
 import { createMissionContextSnapshot } from "../../../lib/axis-context-engine";
 
-type ScreenState = "ACTIVE" | "BRIEF" | "DEBRIEF";
+type ComposerMode = "IDLE" | "MENU";
+type MicState = "LISTENING" | "OFF";
+
+type ThreadMessage = {
+  id: string;
+  author: "Axis" | "You";
+  text: string;
+};
 
 const missionTemplate = {
   constraint: "Weak Hand Only",
@@ -26,21 +33,29 @@ const missionTemplate = {
 
 export default function AxisMissionPage() {
   const missionMemory = useMemo(() => createLocalMissionMemoryAdapter(), []);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const [composerMode, setComposerMode] = useState<ComposerMode>("IDLE");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [note, setNote] = useState("");
-  const [progressInput, setProgressInput] = useState("0");
+  const [inputValue, setInputValue] = useState("");
+  const [micState, setMicState] = useState<MicState>("OFF");
   const [saveState, setSaveState] = useState<"IDLE" | "SAVED" | "SAVING">("IDLE");
-  const [screenState, setScreenState] = useState<ScreenState>("BRIEF");
   const [session, setSession] = useState<MissionSession | null>(null);
+  const [thread, setThread] = useState<ThreadMessage[]>(() => [
+    axisMessage("Last attempt was 43."),
+    axisMessage("Target is 50."),
+    axisMessage("Weak hand only."),
+    axisMessage("Let's see it."),
+  ]);
 
   const result = session?.result ?? 0;
-  const passed = result >= missionTemplate.target;
+  const active = session?.status === "ACTIVE";
+  const paused = session?.status === "PAUSED";
+  const complete = session?.status === "EVALUATED";
 
   useEffect(() => {
-    if (!session || screenState !== "ACTIVE") {
-      setElapsedSeconds(0);
-      return;
-    }
+    if (!session || !active) return;
 
     const updateElapsed = () => {
       setElapsedSeconds(Math.max(0, Math.floor((Date.now() - Date.parse(session.startedAt)) / 1000)));
@@ -48,73 +63,121 @@ export default function AxisMissionPage() {
     updateElapsed();
     const interval = window.setInterval(updateElapsed, 1000);
     return () => window.clearInterval(interval);
-  }, [screenState, session?.id, session?.startedAt]);
+  }, [active, session?.id, session?.startedAt]);
 
-  function startSession() {
+  function ensureSession() {
+    if (session) return session;
+
     const nextSession = createMissionSession(missionTemplate);
-    setElapsedSeconds(0);
-    setNote("");
-    setProgressInput("0");
-    setSaveState("IDLE");
     setSession(nextSession);
-    setScreenState("ACTIVE");
+    setElapsedSeconds(0);
+    appendAxis("Begin.");
+    return nextSession;
   }
 
-  function addProgress() {
-    if (!session || screenState !== "ACTIVE") return;
+  function submitCommand() {
+    const command = inputValue.trim();
+    if (!command) return;
 
-    const nextResult = Math.max(0, Number.parseInt(progressInput, 10) || 0);
+    setInputValue("");
+    appendUser(command);
+    handleCommand(command);
+  }
+
+  function handleCommand(command: string) {
+    const normalized = command.toLowerCase();
+    const countMatch = normalized.match(/(?:count\s*)?(\d+)/);
+
+    if (normalized === "again") {
+      resetMission();
+      appendAxis("Again.");
+      return;
+    }
+
+    if (normalized === "pause") {
+      updateSessionStatus("PAUSED");
+      appendAxis("Paused.");
+      return;
+    }
+
+    if (normalized === "resume") {
+      updateSessionStatus("ACTIVE");
+      appendAxis("Continue.");
+      return;
+    }
+
+    if (normalized === "failed") {
+      finishSession("FAILED");
+      appendAxis("Failed. Save the attempt.");
+      return;
+    }
+
+    if (normalized === "done") {
+      finishSession("COMPLETE");
+      appendAxis(result >= missionTemplate.target ? "Complete." : `Need ${missionTemplate.target - result} more.`);
+      return;
+    }
+
+    if (countMatch) {
+      updateProgress(Number.parseInt(countMatch[1], 10));
+      return;
+    }
+
+    appendAxis("Send a count, done, failed, pause, resume, or again.");
+  }
+
+  function updateProgress(nextResult: number) {
+    const currentSession = ensureSession();
     const nextSession = appendMissionEvent(
-      session,
+      { ...currentSession, status: currentSession.status === "PAUSED" ? "ACTIVE" : currentSession.status },
       createMissionEvent({
         payload: { result: nextResult },
         type: "PROGRESS_UPDATE",
       }),
     );
     setSession(nextSession);
+    appendAxis(nextResult >= missionTemplate.target ? `${nextResult}. Complete.` : `${nextResult}. Need ${missionTemplate.target - nextResult}. Continue.`);
   }
 
-  function pauseSession() {
-    if (!session || screenState !== "ACTIVE") return;
-
+  function updateSessionStatus(status: "ACTIVE" | "PAUSED") {
+    const currentSession = ensureSession();
     const nextSession = appendMissionEvent(
-      { ...session, status: session.status === "PAUSED" ? "ACTIVE" : "PAUSED" },
+      { ...currentSession, status },
       createMissionEvent({
-        payload: { state: session.status === "PAUSED" ? "resume" : "pause" },
+        payload: { state: status === "PAUSED" ? "pause" : "resume" },
         type: "BREAK",
       }),
     );
     setSession(nextSession);
   }
 
-  function finishSession() {
-    if (!session || screenState !== "ACTIVE") return;
-
-    const endedSession = endMissionSession(session);
+  function finishSession(status: "COMPLETE" | "FAILED") {
+    const currentSession = ensureSession();
+    const endedSession = {
+      ...endMissionSession(currentSession),
+      status: "ENDED" as const,
+    };
     setSession(endedSession);
-    setScreenState("DEBRIEF");
+    void saveDebrief(endedSession, status);
   }
 
-  async function saveDebrief() {
-    if (!session || screenState !== "DEBRIEF" || saveState === "SAVING") return;
+  async function saveDebrief(finalSessionInput: MissionSession, finalStatus: "COMPLETE" | "FAILED") {
+    if (saveState === "SAVING") return;
 
     setSaveState("SAVING");
-    const baseSession = { ...session, status: "EVALUATED" as const };
-    const finalSession = note.trim()
-      ? appendMissionEvent(
-          baseSession,
-          createMissionEvent({
-            payload: { note: note.trim(), passed, result: session.result },
-            type: "COACH_NOTE",
-          }),
-        )
-      : baseSession;
+    const finalSession = appendMissionEvent(
+      { ...finalSessionInput, status: "EVALUATED" as const },
+      createMissionEvent({
+        payload: { result: finalSessionInput.result, status: finalStatus },
+        type: "FINISHED",
+      }),
+    );
     const previousBest = missionMemory.getPersonalBest(finalSession.objective, finalSession.constraint);
     const context = createMissionContextSnapshot({
       audioContext: null,
       cameraContext: null,
       constraint: finalSession.constraint,
-      notes: note.trim() || null,
+      notes: null,
       objective: finalSession.objective,
       result: finalSession.result,
       timestamp: finalSession.endedAt ?? new Date().toISOString(),
@@ -124,7 +187,7 @@ export default function AxisMissionPage() {
       cameraContext: context.cameraContext,
       constraint: finalSession.constraint,
       moment: createMoment({ previousBest, result: finalSession.result, target: finalSession.target }),
-      notes: context.notes,
+      notes: null,
       objective: finalSession.objective,
       result: finalSession.result,
       sessionId: finalSession.id,
@@ -136,287 +199,297 @@ export default function AxisMissionPage() {
     setSession(finalSession);
     await saveRemoteMemory({ attempt, session: finalSession });
     setSaveState("SAVED");
+    appendAxis(finalStatus === "COMPLETE" ? "Saved. New session when ready." : "Saved. Again when ready.");
   }
 
-  function resetLoop() {
+  function resetMission() {
     setElapsedSeconds(0);
-    setNote("");
-    setProgressInput("0");
     setSaveState("IDLE");
-    setScreenState("BRIEF");
     setSession(null);
   }
 
+  function quickCapture() {
+    appendUser("Camera");
+    appendAxis("Camera context is ready later. Continue the mission.");
+  }
+
+  function handleUtility(label: string, inputRef?: React.RefObject<HTMLInputElement | null>) {
+    setComposerMode("IDLE");
+    appendUser(label);
+    if (inputRef?.current) {
+      inputRef.current.click();
+      return;
+    }
+    appendAxis("Attached to this session.");
+  }
+
+  function appendAxis(text: string) {
+    setThread((current) => [...current, axisMessage(text)]);
+  }
+
+  function appendUser(text: string) {
+    setThread((current) => [...current, { author: "You", id: crypto.randomUUID(), text }]);
+  }
+
   return (
-    <main className="mission-v0">
-      <section className="mission-shell" aria-label="Axis Mission Control">
-        <header>
-          <span>AXIS</span>
-          <strong>THE GUY IN THE CHAIR</strong>
-        </header>
+    <main className="axis-chat">
+      <section className="context" aria-label="Current Context">
+        <p>CONTROL</p>
+        <h1>{missionTemplate.target}</h1>
+        <strong>{missionTemplate.constraint}</strong>
+        <span>
+          {complete
+            ? `Saved ${result}`
+            : paused
+              ? "Paused"
+              : active
+                ? `${formatElapsedTime(elapsedSeconds)} active`
+                : missionTemplate.objective}
+        </span>
+      </section>
 
-        {screenState === "BRIEF" ? (
-          <section className="mission-panel" aria-label="Mission brief">
-            <span>Mission Brief</span>
-            <h1>{missionTemplate.objective}</h1>
-            <dl>
-              <div>
-                <dt>Constraint</dt>
-                <dd>{missionTemplate.constraint}</dd>
-              </div>
-              <div>
-                <dt>Reason</dt>
-                <dd>{missionTemplate.reason}</dd>
-              </div>
-            </dl>
-            <button onClick={startSession} type="button">
-              Start
+      <section className="thread" aria-label="Axis Conversation">
+        {thread.map((message) => (
+          <article className={message.author === "Axis" ? "message axis" : "message user"} key={message.id}>
+            <span>{message.author}</span>
+            <p>{message.text}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="composer" aria-label="Mission input">
+        {composerMode === "MENU" ? (
+          <div className="utility-menu">
+            <button onClick={() => handleUtility("Upload File", fileInputRef)} type="button">
+              Upload File
             </button>
-          </section>
+            <button onClick={() => handleUtility("Take Picture", photoInputRef)} type="button">
+              Take Picture
+            </button>
+            <button onClick={() => handleUtility("Choose Photo", photoInputRef)} type="button">
+              Choose Photo
+            </button>
+            <button onClick={() => handleUtility("Import Video", videoInputRef)} type="button">
+              Import Video
+            </button>
+            <button onClick={() => handleUtility("Import Audio")} type="button">
+              Import Audio
+            </button>
+          </div>
         ) : null}
 
-        {screenState === "ACTIVE" ? (
-          <section className="mission-panel active" aria-label="Session active">
-            <span>Session Active</span>
-            <h1>{missionTemplate.objective}</h1>
-            <div className="active-grid">
-              <div>
-                <small>Constraint</small>
-                <strong>{missionTemplate.constraint}</strong>
-              </div>
-              <div>
-                <small>Elapsed Time</small>
-                <strong>{formatElapsedTime(elapsedSeconds)}</strong>
-              </div>
-            </div>
-            <label>
-              Add Progress
-              <input
-                inputMode="numeric"
-                min="0"
-                onChange={(event) => setProgressInput(event.target.value)}
-                type="number"
-                value={progressInput}
-              />
-            </label>
-            <div className="actions">
-              <button className="quiet" onClick={addProgress} type="button">
-                Add Progress
-              </button>
-              <button className="quiet" onClick={pauseSession} type="button">
-                {session?.status === "PAUSED" ? "Resume" : "Pause"}
-              </button>
-              <button onClick={finishSession} type="button">
-                End
-              </button>
-            </div>
-          </section>
-        ) : null}
+        <div className="bar">
+          <button aria-label="Open attachment menu" onClick={() => setComposerMode(composerMode === "MENU" ? "IDLE" : "MENU")} type="button">
+            +
+          </button>
+          <button aria-label="Quick capture" onClick={quickCapture} type="button">
+            Camera
+          </button>
+          <button
+            aria-label="Toggle listening"
+            className={micState === "LISTENING" ? "listening" : ""}
+            onClick={() => setMicState(micState === "LISTENING" ? "OFF" : "LISTENING")}
+            type="button"
+          >
+            {micState === "LISTENING" ? "Listening" : "Mic"}
+          </button>
+          <input
+            aria-label="Message Axis"
+            onChange={(event) => setInputValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") submitCommand();
+            }}
+            placeholder="count 43, done, failed, again"
+            value={inputValue}
+          />
+          <button aria-label="Send" className="send" onClick={submitCommand} type="button">
+            Send
+          </button>
+        </div>
 
-        {screenState === "DEBRIEF" ? (
-          <section className="mission-panel" aria-label="Debrief">
-            <span>Debrief</span>
-            <h1>{result}</h1>
-            <dl>
-              <div>
-                <dt>Result</dt>
-                <dd>
-                  {result} / {missionTemplate.target}
-                </dd>
-              </div>
-              <div>
-                <dt>Pass / Fail</dt>
-                <dd>{passed ? "Pass" : "Fail"}</dd>
-              </div>
-              <div>
-                <dt>Next Recommendation</dt>
-                <dd>Placeholder</dd>
-              </div>
-            </dl>
-            <label>
-              Note
-              <textarea onChange={(event) => setNote(event.target.value)} value={note} />
-            </label>
-            <div className="actions">
-              <button onClick={() => void saveDebrief()} type="button">
-                {saveState === "SAVING" ? "Saving" : saveState === "SAVED" ? "Saved" : "Save"}
-              </button>
-              <button className="quiet" onClick={resetLoop} type="button">
-                New Brief
-              </button>
-            </div>
-          </section>
-        ) : null}
+        <input hidden ref={fileInputRef} type="file" />
+        <input accept="image/*" capture="environment" hidden ref={photoInputRef} type="file" />
+        <input accept="video/*" hidden ref={videoInputRef} type="file" />
       </section>
 
       <style jsx>{`
-        .mission-v0 {
-          background:
-            linear-gradient(rgba(184, 255, 61, 0.07) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(184, 255, 61, 0.04) 1px, transparent 1px),
-            #030403;
-          background-size: 44px 44px;
-          color: #f4f4ef;
+        .axis-chat {
+          background: #f7f7f2;
+          color: #12120f;
           display: grid;
+          grid-template-rows: auto 1fr auto;
           min-height: 100dvh;
-          padding: 18px;
         }
 
-        .mission-shell {
-          border: 1px solid rgba(244, 244, 239, 0.14);
+        .context {
+          border-bottom: 1px solid rgba(18, 18, 15, 0.1);
           display: grid;
-          gap: 24px;
-          grid-template-rows: auto 1fr;
-          padding: clamp(18px, 4vw, 42px);
+          gap: 2px;
+          padding: 28px clamp(18px, 5vw, 64px) 22px;
         }
 
-        header {
-          align-items: center;
-          display: flex;
-          justify-content: space-between;
+        .context p,
+        .context span,
+        .message span {
+          color: rgba(18, 18, 15, 0.52);
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0;
+          margin: 0;
           text-transform: uppercase;
         }
 
-        header span {
-          color: #b8ff3d;
-          font-size: 14px;
+        .context h1 {
+          font-size: clamp(70px, 18vw, 180px);
           font-weight: 950;
+          line-height: 0.82;
+          margin: 0;
         }
 
-        header strong,
-        .mission-panel > span,
-        dt,
-        label,
-        small {
-          color: rgba(244, 244, 239, 0.58);
-          font-size: 11px;
-          font-weight: 850;
+        .context strong {
+          color: #12120f;
+          font-size: clamp(24px, 5vw, 56px);
+          font-weight: 900;
+          line-height: 0.96;
           text-transform: uppercase;
         }
 
-        .mission-panel {
-          align-content: center;
+        .thread {
+          align-content: start;
           display: grid;
           gap: 18px;
-          min-height: 70dvh;
-          max-width: 1100px;
+          margin: 0 auto;
+          max-width: 840px;
+          overflow-y: auto;
+          padding: 34px clamp(18px, 5vw, 64px) 150px;
+          width: 100%;
         }
 
-        h1 {
-          font-size: clamp(48px, 12vw, 138px);
-          font-weight: 950;
-          line-height: 0.86;
-          margin: 0;
-          text-transform: uppercase;
-        }
-
-        dl {
+        .message {
           display: grid;
-          gap: 10px;
+          gap: 6px;
+          max-width: 680px;
+        }
+
+        .message.user {
+          justify-self: end;
+          text-align: right;
+        }
+
+        .message p {
+          background: #ffffff;
+          border: 1px solid rgba(18, 18, 15, 0.08);
+          border-radius: 18px;
+          box-shadow: 0 10px 30px rgba(18, 18, 15, 0.04);
+          font-size: clamp(18px, 2.2vw, 24px);
+          line-height: 1.25;
           margin: 0;
-          max-width: 720px;
+          padding: 14px 16px;
         }
 
-        dl div,
-        .active-grid div {
-          border: 1px solid rgba(244, 244, 239, 0.12);
-          display: grid;
-          gap: 8px;
-          padding: 14px;
+        .message.axis p {
+          background: transparent;
+          border-color: transparent;
+          box-shadow: none;
+          padding-left: 0;
         }
 
-        dd {
-          font-size: clamp(18px, 3vw, 30px);
-          font-weight: 850;
-          margin: 0;
-          text-transform: uppercase;
+        .message.user p {
+          background: #12120f;
+          color: #f7f7f2;
         }
 
-        .active-grid {
-          display: grid;
-          gap: 10px;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+        .composer {
+          background: linear-gradient(180deg, rgba(247, 247, 242, 0), #f7f7f2 22%);
+          bottom: 0;
+          left: 0;
+          padding: 18px clamp(14px, 4vw, 36px) 22px;
+          position: fixed;
+          right: 0;
+        }
+
+        .bar,
+        .utility-menu {
+          background: #ffffff;
+          border: 1px solid rgba(18, 18, 15, 0.1);
+          box-shadow: 0 18px 50px rgba(18, 18, 15, 0.1);
+          margin: 0 auto;
           max-width: 900px;
         }
 
-        .active-grid strong {
-          font-size: clamp(28px, 7vw, 76px);
-          font-weight: 950;
-          line-height: 0.9;
-          text-transform: uppercase;
-        }
-
-        label {
+        .bar {
+          align-items: center;
+          border-radius: 28px;
           display: grid;
           gap: 8px;
-          max-width: 460px;
+          grid-template-columns: auto auto auto 1fr auto;
+          min-height: 62px;
+          padding: 8px;
         }
 
-        input,
-        textarea {
-          background: rgba(244, 244, 239, 0.08);
-          border: 1px solid rgba(244, 244, 239, 0.14);
-          color: #f4f4ef;
-          font: inherit;
-          font-size: 22px;
-          font-weight: 850;
-          min-height: 54px;
-          padding: 10px 12px;
-        }
-
-        textarea {
-          min-height: 110px;
-          resize: vertical;
-        }
-
-        .actions {
+        .utility-menu {
+          border-radius: 22px;
           display: flex;
           flex-wrap: wrap;
-          gap: 10px;
+          gap: 8px;
+          margin-bottom: 10px;
+          padding: 10px;
         }
 
         button {
-          background: #b8ff3d;
+          background: rgba(18, 18, 15, 0.06);
           border: 0;
-          color: #030403;
+          border-radius: 999px;
+          color: #12120f;
           cursor: pointer;
           font: inherit;
           font-size: 13px;
-          font-weight: 950;
-          min-height: 58px;
-          min-width: 160px;
-          padding: 0 18px;
-          text-transform: uppercase;
+          font-weight: 850;
+          min-height: 44px;
+          padding: 0 14px;
         }
 
-        button.quiet {
-          background: rgba(244, 244, 239, 0.09);
-          color: #f4f4ef;
+        button.listening {
+          background: #b8ff3d;
+        }
+
+        button.send {
+          background: #12120f;
+          color: #f7f7f2;
+        }
+
+        input {
+          background: transparent;
+          border: 0;
+          color: #12120f;
+          font: inherit;
+          font-size: 16px;
+          min-width: 0;
+          outline: none;
+          width: 100%;
         }
 
         @media (max-width: 720px) {
-          .mission-v0 {
-            padding: 0;
+          .context {
+            padding-top: 22px;
           }
 
-          .mission-shell {
-            border-left: 0;
-            border-right: 0;
-            min-height: 100dvh;
+          .thread {
+            padding-bottom: 190px;
           }
 
-          header {
-            align-items: flex-start;
-            display: grid;
-            gap: 6px;
+          .bar {
+            grid-template-columns: auto auto auto;
           }
 
-          .active-grid {
-            grid-template-columns: 1fr;
+          .bar input,
+          .bar .send {
+            grid-column: 1 / -1;
           }
 
-          button {
-            width: 100%;
+          .bar input {
+            min-height: 42px;
+            padding: 0 8px;
           }
         }
       `}</style>
@@ -445,6 +518,14 @@ async function saveRemoteMemory({
     headers: { "Content-Type": "application/json" },
     method: "POST",
   }).catch(() => null);
+}
+
+function axisMessage(text: string): ThreadMessage {
+  return {
+    author: "Axis",
+    id: crypto.randomUUID(),
+    text,
+  };
 }
 
 function formatElapsedTime(totalSeconds: number) {
