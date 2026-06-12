@@ -64,7 +64,7 @@ function isMissionAttempt(value: unknown): value is MissionAttempt {
 }
 
 function isStatus(value: unknown): value is MissionAttempt["status"] {
-  return value === "ACTIVE" || value === "ENDED" || value === "EVALUATED" || value === "PAUSED" || value === "READY";
+  return value === "ACTIVE" || value === "ENDED" || value === "EVALUATED" || value === "PAUSED";
 }
 
 function isMoment(value: unknown): value is MissionAttempt["moment"] {
@@ -102,13 +102,11 @@ function isMissionEvent(value: unknown): value is MissionEvent {
 
 function isEventType(value: unknown): value is MissionEvent["type"] {
   return (
-    value === "COMMAND" ||
-    value === "COUNT_RECORDED" ||
-    value === "MISSION_PAUSED" ||
-    value === "MISSION_RESUMED" ||
-    value === "RESULT_RECORDED" ||
-    value === "SESSION_ENDED" ||
-    value === "SESSION_EVALUATED" ||
+    value === "BREAK" ||
+    value === "COACH_NOTE" ||
+    value === "CORRECTION" ||
+    value === "FINISHED" ||
+    value === "PROGRESS_UPDATE" ||
     value === "SESSION_STARTED"
   );
 }

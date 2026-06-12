@@ -13,6 +13,7 @@ import {
   type MissionAttempt,
   type MissionSession,
   type MissionStatus,
+  type SessionStatus,
 } from "../../../lib/axis-mission-memory";
 import { createMissionContextSnapshot } from "../../../lib/axis-context-engine";
 import {
@@ -60,16 +61,19 @@ export default function AxisMissionPage() {
   const [mission, setMission] = useState<Mission>(() => createMission());
   const [memoryState, setMemoryState] = useState<"LOCAL" | "REMOTE" | "SYNCING">("LOCAL");
   const [voiceState, setVoiceState] = useState<"LISTENING" | "OFF" | "PAUSED" | "UNAVAILABLE">("OFF");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  const recentAttempts = useMemo(
-    () => missionMemory.listRecentAttempts(mission.objective, mission.constraint, 5),
-    [attempts, mission.constraint, mission.objective, missionMemory],
-  );
   const lastAttempt = missionMemory.getLastAttempt(mission.objective, mission.constraint);
   const personalBest = missionMemory.getPersonalBest(mission.objective, mission.constraint);
   const streak = missionMemory.getStreak(mission.objective, mission.constraint);
   const axisPrompt = useMemo(() => createAxisPrompt({ lastAttempt, target: mission.target }), [lastAttempt, mission.target]);
-  const recentEvents = activeSession?.events.slice(-5).reverse() ?? [];
+  const screenState: "AFTER" | "BEFORE" | "DURING" = activeSession?.status === "EVALUATED" ? "AFTER" : activeSession ? "DURING" : "BEFORE";
+  const nextObjective = createNextObjective({ lastResult: activeSession?.result ?? mission.progress, target: mission.target });
+  const missionContext = {
+    best: personalBest || "--",
+    last: lastAttempt?.result ?? "--",
+    streak,
+  };
 
   useEffect(() => {
     setAttempts(missionMemory.listAttempts());
@@ -86,22 +90,50 @@ export default function AxisMissionPage() {
     };
   }, []);
 
-  function beginMission() {
+  useEffect(() => {
+    if (!activeSession || activeSession.status === "EVALUATED") {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - Date.parse(activeSession.startedAt)) / 1000)));
+    };
+    updateElapsed();
+    const interval = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(interval);
+  }, [activeSession?.id, activeSession?.startedAt, activeSession?.status]);
+
+  function beginMission(source: "touch" | "voice" = "touch") {
+    if (activeSession && activeSession.status !== "EVALUATED") {
+      speak("Session active.");
+      return;
+    }
+
     const session = createMissionSession({
       constraint: defaultConstraint,
       objective: defaultObjective,
       target: defaultTarget,
     });
+    const sourcedSession =
+      source === "voice"
+        ? {
+            ...session,
+            events: session.events.map((event, index) =>
+              index === 0 ? { ...event, payload: { ...event.payload, source } } : event,
+            ),
+          }
+        : session;
     const nextMission = {
       ...createMission(),
-      progress: session.result,
-      status: "ACTIVE" as const,
-      timestamp: session.startedAt,
+      progress: sourcedSession.result,
+      status: "READY" as const,
+      timestamp: sourcedSession.startedAt,
     };
-    setActiveSession(session);
+    setActiveSession(sourcedSession);
     setMission(nextMission);
-    missionMemory.saveSession(session);
-    void saveRemoteMissionSession(session);
+    missionMemory.saveSession(sourcedSession);
+    void saveRemoteMissionSession(sourcedSession);
     speak(axisPrompt);
     startListening();
   }
@@ -113,39 +145,43 @@ export default function AxisMissionPage() {
     speak("Ready.");
   }
 
-  function pauseMission() {
+  function pauseMission(source: "touch" | "voice" = "touch") {
     shouldListenRef.current = false;
     recognitionRef.current?.stop();
     if (activeSession) {
       const nextSession = appendMissionEvent(
         { ...activeSession, status: "PAUSED" },
-        createMissionEvent({ payload: { progress: mission.progress }, type: "MISSION_PAUSED" }),
+        createMissionEvent({ payload: { progress: mission.progress, source }, type: "BREAK" }),
       );
       setActiveSession(nextSession);
       missionMemory.saveSession(nextSession);
       void saveRemoteMissionSession(nextSession);
     }
-    setMission((current) => ({ ...current, status: "PAUSED", timestamp: new Date().toISOString() }));
+    setMission((current) => ({ ...current, status: "READY", timestamp: new Date().toISOString() }));
     setVoiceState("PAUSED");
     speak("Paused.");
   }
 
-  function resumeMission() {
+  function resumeMission(source: "touch" | "voice" = "touch") {
     if (activeSession) {
       const nextSession = appendMissionEvent(
         { ...activeSession, status: "ACTIVE" },
-        createMissionEvent({ payload: { progress: mission.progress }, type: "MISSION_RESUMED" }),
+        createMissionEvent({ payload: { action: "resume", progress: mission.progress, source }, type: "PROGRESS_UPDATE" }),
       );
       setActiveSession(nextSession);
       missionMemory.saveSession(nextSession);
       void saveRemoteMissionSession(nextSession);
     }
-    setMission((current) => ({ ...current, status: "ACTIVE", timestamp: new Date().toISOString() }));
+    setMission((current) => ({ ...current, status: "READY", timestamp: new Date().toISOString() }));
     speak("Resume.");
     startListening();
   }
 
-  function recordSessionResult(result: number, type: "COUNT_RECORDED" | "RESULT_RECORDED" = "RESULT_RECORDED") {
+  function recordSessionResult(
+    result: number,
+    type: "CORRECTION" | "PROGRESS_UPDATE" = "PROGRESS_UPDATE",
+    source: "touch" | "voice" = "touch",
+  ) {
     if (!activeSession || activeSession.status === "ENDED" || activeSession.status === "EVALUATED") {
       speak("Begin first.");
       return;
@@ -155,7 +191,7 @@ export default function AxisMissionPage() {
     const nextSession = appendMissionEvent(
       activeSession,
       createMissionEvent({
-        payload: { result: boundedResult },
+        payload: { result: boundedResult, source },
         type,
       }),
     );
@@ -165,13 +201,13 @@ export default function AxisMissionPage() {
     setMission({
       ...mission,
       progress: Math.max(0, Math.min(mission.target, boundedResult)),
-      status: activeSession.status === "PAUSED" ? "PAUSED" : "ACTIVE",
+      status: "READY",
       timestamp: new Date().toISOString(),
     });
     speak(`${boundedResult}. Logged.`);
   }
 
-  function endSession() {
+  function endSession(source: "touch" | "voice" = "touch") {
     if (!activeSession) {
       speak("No active session.");
       return;
@@ -188,14 +224,14 @@ export default function AxisMissionPage() {
     const evaluatedSession = appendMissionEvent(
       { ...endedSession, status: "EVALUATED" },
       createMissionEvent({
-        payload: { moment, previousBest, result },
-        type: "SESSION_EVALUATED",
+        payload: { moment, previousBest, result, source },
+        type: "FINISHED",
       }),
     );
     const evaluatedMission: Mission = {
       ...mission,
       progress: Math.max(0, Math.min(mission.target, result)),
-      status: "EVALUATED",
+      status: "READY",
       timestamp: evaluatedSession.endedAt ?? new Date().toISOString(),
     };
     const context = createMissionContextSnapshot({
@@ -316,40 +352,45 @@ export default function AxisMissionPage() {
     const normalized = command.toLowerCase().trim();
     setHeard(command);
 
-    const count = normalized.match(/\bcount\s+(\d+)\b/)?.[1];
-    if (count) {
-      recordSessionResult(Number(count), "COUNT_RECORDED");
+    if (/\b(start|started|begin)\b/.test(normalized)) {
+      beginMission("voice");
       return;
     }
 
-    if (/\bpause\b/.test(normalized)) {
-      pauseMission();
+    const count = normalized.match(/\bcount\s+(\d+)\b/)?.[1];
+    if (count) {
+      recordSessionResult(Number(count), "PROGRESS_UPDATE", "voice");
+      return;
+    }
+
+    if (/\b(break|pause)\b/.test(normalized)) {
+      pauseMission("voice");
       return;
     }
 
     if (/\bresume\b/.test(normalized)) {
-      resumeMission();
+      resumeMission("voice");
+      return;
+    }
+
+    if (/^(finished|finish|end|ended|close|closed|checkout|check out)$/.test(normalized)) {
+      endSession("voice");
       return;
     }
 
     const number = normalized.match(/\b\d+\b/)?.[0];
     if (number) {
-      recordSessionResult(Number(number), "COUNT_RECORDED");
+      recordSessionResult(Number(number), "PROGRESS_UPDATE", "voice");
       return;
     }
 
-    if (/\b(done|complete|completed|finished)\b/.test(normalized)) {
-      recordSessionResult(mission.target, "RESULT_RECORDED");
+    if (/\b(done|complete|completed)\b/.test(normalized)) {
+      recordSessionResult(mission.target, "PROGRESS_UPDATE", "voice");
       return;
     }
 
     if (/\b(failed|fail|missed|stop)\b/.test(normalized)) {
-      recordSessionResult(mission.progress, "RESULT_RECORDED");
-      return;
-    }
-
-    if (/\b(end|close|evaluate|checkout|check out)\b/.test(normalized)) {
-      endSession();
+      recordSessionResult(mission.progress, "CORRECTION", "voice");
       return;
     }
 
@@ -481,124 +522,66 @@ export default function AxisMissionPage() {
           <strong>MISSION CONTROL</strong>
         </header>
 
-        <div className="prompt">
-          <span>Axis Prompt</span>
-          <p>{axisPrompt}</p>
-        </div>
-
-        <div className="mission-grid">
-          <div className="mission-block wide">
+        {screenState === "BEFORE" ? (
+          <section className="mission-state mission-state-before" aria-label="Mission before session">
             <span>Mission</span>
             <strong>{mission.objective}</strong>
-          </div>
-          <div className="mission-block wide">
-            <span>Constraint</span>
-            <strong>{mission.constraint}</strong>
-          </div>
-          <div className="mission-block progress">
-            <span>Progress</span>
+            <p>{axisPrompt}</p>
+            <MissionContextSummary context={missionContext} />
+            <button onClick={() => beginMission("touch")} type="button">
+              BEGIN SESSION
+            </button>
+          </section>
+        ) : null}
+
+        {screenState === "DURING" ? (
+          <section className="mission-state mission-state-during" aria-label="Mission during session">
+            <div>
+              <span>Mission</span>
+              <strong>{mission.objective}</strong>
+            </div>
+            <div>
+              <span>Constraint</span>
+              <strong>{mission.constraint}</strong>
+            </div>
+            <div>
+              <span>Elapsed Time</span>
+              <strong>{formatElapsedTime(elapsedSeconds)}</strong>
+            </div>
+            <div className="mission-actions">
+              <button className="quiet" onClick={() => recordSessionResult(mission.target, "PROGRESS_UPDATE", "touch")} type="button">
+                DONE
+              </button>
+              <button className="quiet" onClick={() => recordSessionResult(mission.progress, "CORRECTION", "touch")} type="button">
+                FAILED
+              </button>
+              <button
+                className="quiet"
+                onClick={() => (activeSession?.status === "ACTIVE" && voiceState !== "PAUSED" ? pauseMission("touch") : resumeMission("touch"))}
+                type="button"
+              >
+                {activeSession?.status === "ACTIVE" && voiceState !== "PAUSED" ? "PAUSE" : "RESUME"}
+              </button>
+              <button onClick={() => endSession("touch")} type="button">
+                END SESSION
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {screenState === "AFTER" ? (
+          <section className="mission-state mission-state-after" aria-label="Mission after session">
+            <span>Result</span>
             <strong>
-              {mission.progress} / {mission.target}
+              {activeSession?.result ?? mission.progress} / {mission.target}
             </strong>
-          </div>
-          <div className="mission-block">
-            <span>Status</span>
-            <strong>{mission.status}</strong>
-          </div>
-          <div className="mission-block">
-            <span>Personal Best</span>
-            <strong>{personalBest || "--"}</strong>
-          </div>
-          <div className="mission-block">
-            <span>Last Attempt</span>
-            <strong>{lastAttempt ? lastAttempt.result : "--"}</strong>
-          </div>
-        </div>
-
-        <div className="mission-actions">
-          <button onClick={beginMission} type="button">
-            {mission.status === "ACTIVE" ? "LISTENING" : "BEGIN"}
-          </button>
-          <button className="quiet" onClick={() => recordSessionResult(mission.target, "RESULT_RECORDED")} type="button">
-            DONE
-          </button>
-          <button className="quiet" onClick={() => recordSessionResult(mission.progress, "RESULT_RECORDED")} type="button">
-            FAILED
-          </button>
-          <button className="quiet" onClick={endSession} type="button">
-            END SESSION
-          </button>
-          <button className="quiet" onClick={resetMission} type="button">
-            AGAIN
-          </button>
-          <button className="quiet" onClick={mission.status === "ACTIVE" && voiceState !== "PAUSED" ? pauseMission : resumeMission} type="button">
-            {mission.status === "ACTIVE" && voiceState !== "PAUSED" ? "PAUSE" : "RESUME"}
-          </button>
-        </div>
-
-        <footer>
-          <span>Voice {voiceState}</span>
-          <span>Streak {streak}</span>
-          <span>Events {activeSession?.events.length ?? 0}</span>
-          <span>Memory {memoryState}</span>
-          <span>{heard ? `Heard: ${heard}` : "Awaiting result"}</span>
-        </footer>
-
-        <section className="session-events" aria-label="Session events">
-          <span>Session Events</span>
-          {recentEvents.length ? (
-            <ol>
-              {recentEvents.map((event) => (
-                <li key={event.id}>
-                  <strong>{event.type.replaceAll("_", " ")}</strong>
-                  <time>{formatAttemptTime(event.timestamp)}</time>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p>No session events yet.</p>
-          )}
-        </section>
-
-        <section className="camera-foundation" aria-label="Camera foundation">
-          <div>
-            <span>Camera</span>
-            <strong>{cameraFoundation.powerState}</strong>
-          </div>
-          <div>
-            <span>Calibration</span>
-            <strong>{cameraFoundation.calibrationState}</strong>
-          </div>
-          <video muted playsInline ref={cameraVideoRef} />
-          <div className="camera-actions">
-            <button className="quiet" onClick={() => void turnCameraOn()} type="button">
-              CAMERA ON
+            <p>Next Objective: {nextObjective}</p>
+            <MissionContextSummary context={missionContext} />
+            <button onClick={resetMission} type="button">
+              NEXT MISSION
             </button>
-            <button className="quiet" onClick={turnCameraOff} type="button">
-              CAMERA OFF
-            </button>
-            <button className="quiet" disabled={cameraFoundation.powerState !== "ON"} onClick={saveReferenceFrame} type="button">
-              SAVE REFERENCE FRAME
-            </button>
-          </div>
-        </section>
-
-        <section className="recent-attempts" aria-label="Recent attempts">
-          <span>Recent Attempts</span>
-          {recentAttempts.length ? (
-            <ol>
-              {recentAttempts.map((attempt) => (
-                <li key={attempt.id}>
-                  <strong>{attempt.result}</strong>
-                  <em>{attempt.moment ?? attempt.status}</em>
-                  <time>{formatAttemptTime(attempt.timestamp)}</time>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p>No attempts recorded.</p>
-          )}
-        </section>
+          </section>
+        ) : null}
       </section>
 
       <style jsx>{`
@@ -622,7 +605,7 @@ export default function AxisMissionPage() {
           border: 1px solid rgba(244, 244, 239, 0.14);
           display: grid;
           gap: 18px;
-          grid-template-rows: auto auto 1fr auto auto auto;
+          grid-template-rows: auto 1fr;
           padding: clamp(18px, 4vw, 42px);
         }
 
@@ -665,6 +648,80 @@ export default function AxisMissionPage() {
           line-height: 0.98;
           margin: 0;
           max-width: 980px;
+        }
+
+        .mission-state {
+          align-content: center;
+          display: grid;
+          gap: 18px;
+          min-height: 65dvh;
+        }
+
+        .mission-state span {
+          color: rgba(244, 244, 239, 0.56);
+          font-size: 11px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .mission-state strong {
+          font-size: clamp(44px, 12vw, 140px);
+          font-weight: 950;
+          line-height: 0.86;
+          max-width: 1120px;
+          text-transform: uppercase;
+        }
+
+        .mission-state p {
+          color: rgba(244, 244, 239, 0.7);
+          font-size: clamp(16px, 2vw, 24px);
+          font-weight: 800;
+          margin: 0;
+          max-width: 720px;
+          text-transform: uppercase;
+        }
+
+        .mission-context {
+          border: 1px solid rgba(244, 244, 239, 0.12);
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          max-width: 520px;
+          padding: 12px;
+        }
+
+        .mission-context span {
+          color: rgba(244, 244, 239, 0.7);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .mission-state-before button,
+        .mission-state-after button {
+          max-width: 360px;
+        }
+
+        .mission-state-during {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .mission-state-during > div {
+          align-content: space-between;
+          border: 1px solid rgba(244, 244, 239, 0.12);
+          display: grid;
+          min-height: 240px;
+          padding: 18px;
+        }
+
+        .mission-state-during > div:first-child,
+        .mission-state-during .mission-actions {
+          grid-column: 1 / -1;
+        }
+
+        .mission-state-during .mission-actions {
+          border: 0;
+          min-height: auto;
+          padding: 0;
         }
 
         .mission-grid {
@@ -731,8 +788,7 @@ export default function AxisMissionPage() {
           white-space: nowrap;
         }
 
-        .recent-attempts,
-        .session-events {
+        .recent-attempts {
           border-top: 1px solid rgba(244, 244, 239, 0.12);
           display: grid;
           gap: 10px;
@@ -780,16 +836,14 @@ export default function AxisMissionPage() {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
-        .recent-attempts > span,
-        .session-events > span {
+        .recent-attempts > span {
           color: rgba(244, 244, 239, 0.56);
           font-size: 11px;
           font-weight: 800;
           text-transform: uppercase;
         }
 
-        .recent-attempts ol,
-        .session-events ol {
+        .recent-attempts ol {
           display: grid;
           gap: 6px;
           list-style: none;
@@ -797,8 +851,7 @@ export default function AxisMissionPage() {
           padding: 0;
         }
 
-        .recent-attempts li,
-        .session-events li {
+        .recent-attempts li {
           align-items: center;
           border: 1px solid rgba(244, 244, 239, 0.1);
           display: grid;
@@ -815,17 +868,9 @@ export default function AxisMissionPage() {
           line-height: 1;
         }
 
-        .session-events strong {
-          color: #f4f4ef;
-          font-size: 12px;
-          line-height: 1;
-        }
-
         .recent-attempts em,
         .recent-attempts time,
-        .recent-attempts p,
-        .session-events time,
-        .session-events p {
+        .recent-attempts p {
           color: rgba(244, 244, 239, 0.58);
           font-size: 11px;
           font-style: normal;
@@ -846,6 +891,20 @@ export default function AxisMissionPage() {
 
           .mission-actions {
             grid-template-columns: 1fr;
+          }
+
+          .mission-state {
+            min-height: 72dvh;
+          }
+
+          .mission-state-during {
+            grid-template-columns: 1fr;
+          }
+
+          .mission-state-during > div,
+          .mission-state-during > div:first-child,
+          .mission-state-during .mission-actions {
+            grid-column: auto;
           }
 
           footer {
@@ -872,6 +931,24 @@ function createMission(): Mission {
     target: defaultTarget,
     timestamp: new Date().toISOString(),
   };
+}
+
+function MissionContextSummary({
+  context,
+}: {
+  context: {
+    best: number | string;
+    last: number | string;
+    streak: number;
+  };
+}) {
+  return (
+    <div className="mission-context" aria-label="Mission context">
+      <span>Last: {context.last}</span>
+      <span>Best: {context.best}</span>
+      <span>Streak: {context.streak}</span>
+    </div>
+  );
 }
 
 function createAxisPrompt({
@@ -902,6 +979,27 @@ function createEvaluationPrompt({
   if (result >= target) return `${result}. Complete.`;
   if (moment === "ALMOST") return "Almost. Again.";
   return `${result}. Need ${Math.max(0, target - result)}. Again.`;
+}
+
+function createNextObjective({
+  lastResult,
+  target,
+}: {
+  lastResult: number;
+  target: number;
+}) {
+  if (lastResult >= target) return "Repeat the standard tomorrow.";
+  return `${target - lastResult} more. Same constraint.`;
+}
+
+function formatElapsedTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.floor(totalSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
 
 function speak(text: string) {

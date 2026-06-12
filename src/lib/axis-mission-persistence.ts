@@ -287,7 +287,7 @@ async function upsertMission(
       {
         constraint: source.constraint,
         objective: source.objective,
-        status: source.status,
+        status: "READY",
         target: source.target,
         updated_at: new Date().toISOString(),
         user_id: userId,
@@ -445,18 +445,16 @@ function getStreak(attempts: MissionAttempt[]) {
 }
 
 function isStatus(value: unknown): value is MissionAttempt["status"] {
-  return value === "ACTIVE" || value === "ENDED" || value === "EVALUATED" || value === "PAUSED" || value === "READY";
+  return value === "ACTIVE" || value === "ENDED" || value === "EVALUATED" || value === "PAUSED";
 }
 
 function isEventType(value: unknown): value is MissionEvent["type"] {
   return (
-    value === "COMMAND" ||
-    value === "COUNT_RECORDED" ||
-    value === "MISSION_PAUSED" ||
-    value === "MISSION_RESUMED" ||
-    value === "RESULT_RECORDED" ||
-    value === "SESSION_ENDED" ||
-    value === "SESSION_EVALUATED" ||
+    value === "BREAK" ||
+    value === "COACH_NOTE" ||
+    value === "CORRECTION" ||
+    value === "FINISHED" ||
+    value === "PROGRESS_UPDATE" ||
     value === "SESSION_STARTED"
   );
 }

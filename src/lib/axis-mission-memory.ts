@@ -1,17 +1,17 @@
 import type { AxisMissionContext } from "./axis-context-engine";
 
-export type MissionStatus = "ACTIVE" | "ENDED" | "EVALUATED" | "PAUSED" | "READY";
+export type MissionStatus = "READY";
+
+export type SessionStatus = "ACTIVE" | "ENDED" | "EVALUATED" | "PAUSED";
 
 export type MissionMoment = "ALMOST" | "COMPLETE" | "FAILED" | "RECORD" | "STREAK" | null;
 
 export type MissionEventType =
-  | "COMMAND"
-  | "COUNT_RECORDED"
-  | "MISSION_PAUSED"
-  | "MISSION_RESUMED"
-  | "RESULT_RECORDED"
-  | "SESSION_ENDED"
-  | "SESSION_EVALUATED"
+  | "BREAK"
+  | "COACH_NOTE"
+  | "CORRECTION"
+  | "FINISHED"
+  | "PROGRESS_UPDATE"
   | "SESSION_STARTED";
 
 export type MissionEvent = {
@@ -29,7 +29,7 @@ export type MissionSession = {
   objective: string;
   result: number;
   startedAt: string;
-  status: MissionStatus;
+  status: SessionStatus;
   target: number;
 };
 
@@ -44,7 +44,7 @@ export type MissionAttempt = {
   playerId?: string;
   result: number;
   sessionId?: string;
-  status: MissionStatus;
+  status: SessionStatus;
   target: number;
   timestamp: string;
 };
@@ -169,7 +169,7 @@ export function endMissionSession(session: MissionSession): MissionSession {
       createMissionEvent({
         payload: { result: session.result },
         timestamp,
-        type: "SESSION_ENDED",
+        type: "FINISHED",
       }),
     ),
     endedAt: timestamp,
@@ -199,7 +199,7 @@ export function createMissionAttempt({
   playerId?: string;
   result: number;
   sessionId?: string;
-  status?: MissionStatus;
+  status?: SessionStatus;
   target: number;
 }): MissionAttempt {
   return {
@@ -224,7 +224,7 @@ function readAttempts() {
   const parsed = parseAttempts(window.localStorage.getItem(missionStorageKey));
   if (parsed.length) return parsed;
 
-  const legacy = parseAttempts(window.localStorage.getItem(legacyMissionStorageKey));
+  const legacy = parseLegacyAttempts(window.localStorage.getItem(legacyMissionStorageKey));
   if (legacy.length) {
     writeAttempts(legacy);
     return legacy;
@@ -331,7 +331,7 @@ function isMissionAttempt(value: unknown): value is MissionAttempt {
     isOptionalAudioContext(record.audioContext) &&
     isOptionalCameraContext(record.cameraContext) &&
     isOptionalNotes(record.notes) &&
-    isMissionStatus(record.status) &&
+    isSessionStatus(record.status) &&
     isMissionMoment(record.moment)
   );
 }
@@ -346,7 +346,7 @@ function isMissionSession(value: unknown): value is MissionSession {
     typeof record.target === "number" &&
     typeof record.result === "number" &&
     typeof record.startedAt === "string" &&
-    isMissionStatus(record.status) &&
+    isSessionStatus(record.status) &&
     Array.isArray(record.events) &&
     record.events.every(isMissionEvent)
   );
@@ -366,18 +366,20 @@ function isMissionEvent(value: unknown): value is MissionEvent {
 }
 
 function isMissionStatus(value: unknown): value is MissionStatus {
-  return value === "ACTIVE" || value === "ENDED" || value === "EVALUATED" || value === "PAUSED" || value === "READY";
+  return value === "READY";
+}
+
+function isSessionStatus(value: unknown): value is SessionStatus {
+  return value === "ACTIVE" || value === "ENDED" || value === "EVALUATED" || value === "PAUSED";
 }
 
 function isMissionEventType(value: unknown): value is MissionEventType {
   return (
-    value === "COMMAND" ||
-    value === "COUNT_RECORDED" ||
-    value === "MISSION_PAUSED" ||
-    value === "MISSION_RESUMED" ||
-    value === "RESULT_RECORDED" ||
-    value === "SESSION_ENDED" ||
-    value === "SESSION_EVALUATED" ||
+    value === "BREAK" ||
+    value === "COACH_NOTE" ||
+    value === "CORRECTION" ||
+    value === "FINISHED" ||
+    value === "PROGRESS_UPDATE" ||
     value === "SESSION_STARTED"
   );
 }
