@@ -10,7 +10,10 @@ import {
   type MissionAttempt,
 } from "../../../lib/axis-mission-memory";
 
-type ShellPhase = "READY" | "CONTEXT" | "LOOP" | "DONE";
+// Default false — enable only when camera observations are reliable on court
+const OBSERVATION_EXCHANGE_ENABLED = false;
+
+type ShellPhase = "READY" | "CONTEXT" | "LOOP" | "EXCHANGE" | "DONE";
 type LoopSubPhase = "SPEAKING" | "LISTENING";
 
 const OBSERVATION_QUESTION = "What did you notice?";
@@ -75,6 +78,10 @@ export default function AxisShell() {
   const [waitingForTap, setWaitingForTap] = useState(false);
   const [fallbackVisible, setFallbackVisible] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
+  const [exchangeData, setExchangeData] = useState<{
+    human: string | null;
+    machine: string | null;
+  } | null>(null);
 
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -84,6 +91,8 @@ export default function AxisShell() {
   const challengesRef = useRef<AxisChallenge[]>([]);
   const presentChallengeRef = useRef<(index: number) => void>(() => null);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exchangeAdvanceRef = useRef<(() => void) | null>(null);
 
   // Optimistic true — corrected client-side after hydration
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
@@ -95,6 +104,7 @@ export default function AxisShell() {
   useEffect(() => {
     return () => {
       clearTimeout(fallbackTimerRef.current ?? undefined);
+      clearTimeout(exchangeTimerRef.current ?? undefined);
       recognitionRef.current?.abort();
       window.speechSynthesis?.cancel();
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -337,16 +347,20 @@ export default function AxisShell() {
     recognitionRef.current = null;
     isListeningRef.current = false;
     window.speechSynthesis.cancel();
+    clearTimeout(exchangeTimerRef.current ?? undefined);
 
     setChallengeIndex(index);
     setLoopSubPhase("SPEAKING");
     setWaitingForTap(false);
+    setExchangeData(null);
+    exchangeAdvanceRef.current = null;
     pendingObservationRef.current = null;
 
     const isLast = index === challenges.length - 1;
 
-    function complete(evidence: AxisEvidence) {
-      handleAttempt(c, evidence);
+    function advance() {
+      setExchangeData(null);
+      exchangeAdvanceRef.current = null;
       if (isLast) {
         setPhase("DONE");
         setFallbackVisible(false);
@@ -357,20 +371,52 @@ export default function AxisShell() {
       }
     }
 
+    async function complete(evidence: AxisEvidence) {
+      handleAttempt(c, evidence);
+
+      const video = videoBgRef.current;
+      const shouldExchange =
+        OBSERVATION_EXCHANGE_ENABLED &&
+        c.requiredEvidence === "OBSERVATION" &&
+        video !== null &&
+        video.readyState >= 2;
+
+      if (shouldExchange && video) {
+        const { createHeadPositionEvidence } = await import(
+          "../../../lib/axis-vision-evidence"
+        );
+        const cameraEvidence = await createHeadPositionEvidence(video);
+
+        if (cameraEvidence.value !== null) {
+          handleAttempt(c, cameraEvidence);
+          setExchangeData({
+            human: typeof evidence.value === "string" ? evidence.value : null,
+            machine: typeof cameraEvidence.value === "string" ? cameraEvidence.value : null,
+          });
+          setPhase("EXCHANGE");
+          exchangeAdvanceRef.current = advance;
+          exchangeTimerRef.current = setTimeout(advance, 3200);
+          return;
+        }
+      }
+
+      advance();
+    }
+
     const qIdx = c.text.indexOf(OBSERVATION_QUESTION);
     if (c.requiredEvidence === "OBSERVATION" && qIdx > -1) {
       const task = c.text.slice(0, qIdx).trim();
       speak(task, () => {
-        const advance = () => {
+        const advanceToQuestion = () => {
           setWaitingForTap(false);
           pendingObservationRef.current = null;
           speak(OBSERVATION_QUESTION, () => {
             setTimeout(() => startListening(c, complete), 900);
           });
         };
-        pendingObservationRef.current = advance;
+        pendingObservationRef.current = advanceToQuestion;
         setWaitingForTap(true);
-        listenForReadyVoice(advance);
+        listenForReadyVoice(advanceToQuestion);
       });
     } else {
       speak(c.text, () => {
@@ -402,6 +448,11 @@ export default function AxisShell() {
   }
 
   function handleTap() {
+    if (phase === "EXCHANGE") {
+      clearTimeout(exchangeTimerRef.current ?? undefined);
+      exchangeAdvanceRef.current?.();
+      return;
+    }
     if (waitingForTap && pendingObservationRef.current) {
       pendingObservationRef.current();
     } else if (loopSubPhase === "LISTENING") {
@@ -412,6 +463,7 @@ export default function AxisShell() {
 
   function handleExit() {
     clearTimeout(fallbackTimerRef.current ?? undefined);
+    clearTimeout(exchangeTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     isListeningRef.current = false;
@@ -422,11 +474,14 @@ export default function AxisShell() {
     setWaitingForTap(false);
     setFallbackVisible(false);
     setVoiceActive(false);
+    setExchangeData(null);
+    exchangeAdvanceRef.current = null;
     pendingObservationRef.current = null;
   }
 
   function handleAgain() {
     clearTimeout(fallbackTimerRef.current ?? undefined);
+    clearTimeout(exchangeTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     isListeningRef.current = false;
@@ -435,6 +490,8 @@ export default function AxisShell() {
     setWaitingForTap(false);
     setFallbackVisible(false);
     setVoiceActive(false);
+    setExchangeData(null);
+    exchangeAdvanceRef.current = null;
     pendingObservationRef.current = null;
     setPhase("CONTEXT");
     speak("Who's here?", () => listenForContextVoice());
@@ -453,7 +510,8 @@ export default function AxisShell() {
   }
 
   const isStageTappable =
-    phase === "LOOP" && (waitingForTap || loopSubPhase === "LISTENING");
+    phase === "EXCHANGE" ||
+    (phase === "LOOP" && (waitingForTap || loopSubPhase === "LISTENING"));
 
   return (
     <main className="shell">
@@ -480,11 +538,13 @@ export default function AxisShell() {
         onClick={isStageTappable ? handleTap : undefined}
         role={isStageTappable ? "button" : undefined}
         aria-label={
-          waitingForTap
-            ? "Tap when ready"
-            : loopSubPhase === "LISTENING"
-              ? "Tap to finish"
-              : undefined
+          phase === "EXCHANGE"
+            ? "Tap to continue"
+            : waitingForTap
+              ? "Tap when ready"
+              : loopSubPhase === "LISTENING"
+                ? "Tap to finish"
+                : undefined
         }
       >
         {/* READY — threshold only */}
@@ -529,6 +589,22 @@ export default function AxisShell() {
             {loopSubPhase === "LISTENING" && <span className="dot listening" />}
             <p className="headline">{getDisplayText()}</p>
             {waitingForTap && <p className="tap-hint">say ready — or tap</p>}
+          </>
+        )}
+
+        {/* EXCHANGE — two witnesses, same moment */}
+        {phase === "EXCHANGE" && exchangeData && (
+          <>
+            <div className="witness">
+              <p className="witness-label">You noticed</p>
+              <p className="witness-value human">
+                &ldquo;{exchangeData.human}&rdquo;
+              </p>
+            </div>
+            <div className="witness">
+              <p className="witness-label">Camera noticed</p>
+              <p className="witness-value machine">{exchangeData.machine}</p>
+            </div>
           </>
         )}
 
@@ -713,6 +789,37 @@ export default function AxisShell() {
 
         .context-choice:hover {
           color: #f7f7f2;
+        }
+
+        /* Observation Exchange — two witnesses, same moment */
+        .witness {
+          display: grid;
+          gap: 8px;
+        }
+
+        .witness-label {
+          color: rgba(247, 247, 242, 0.25);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .witness-value {
+          font-size: clamp(24px, 4vw, 44px);
+          font-weight: 900;
+          line-height: 1.1;
+          margin: 0;
+          max-width: 20ch;
+        }
+
+        .witness-value.human {
+          color: #f7f7f2;
+        }
+
+        .witness-value.machine {
+          color: rgba(247, 247, 242, 0.5);
         }
 
         .go {
