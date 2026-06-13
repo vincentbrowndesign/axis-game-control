@@ -13,7 +13,8 @@ import {
 // Default false — enable only when camera observations are reliable on court
 const OBSERVATION_EXCHANGE_ENABLED = false;
 
-type ShellPhase = "READY" | "CONTEXT" | "LOOP" | "EXCHANGE" | "DONE";
+// READY removed — clerk is the entry. THINKING is a brief transition beat.
+type ShellPhase = "CONTEXT" | "THINKING" | "LOOP" | "EXCHANGE" | "DONE";
 type LoopSubPhase = "SPEAKING" | "LISTENING";
 
 const OBSERVATION_QUESTION = "What did you notice?";
@@ -48,9 +49,10 @@ function classifyIntent(transcript: string): AxisContext {
     t.includes("with my")
   )
     return "PARTNER";
-  // Default — solo is the base context
   return "SOLO";
 }
+
+const DONE_KEYWORDS = ["again", "yes", "yeah", "sure", "more", "another", "next", "yep", "go"];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSpeechAPI(): any {
@@ -61,12 +63,12 @@ function getSpeechAPI(): any {
 export default function AxisShell() {
   const missionMemory = useMemo(() => createLocalMissionMemoryAdapter(), []);
 
-  const [phase, setPhase] = useState<ShellPhase>("READY");
+  // Start in CONTEXT — clerk is already here
+  const [phase, setPhase] = useState<ShellPhase>("CONTEXT");
   const [activeContext, setActiveContext] = useState<AxisContext | null>(null);
   const [loopSubPhase, setLoopSubPhase] = useState<LoopSubPhase>("SPEAKING");
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [waitingForTap, setWaitingForTap] = useState(false);
-  const [fallbackVisible, setFallbackVisible] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
   const [exchangeData, setExchangeData] = useState<{
     human: string | null;
@@ -75,17 +77,18 @@ export default function AxisShell() {
 
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraStartedRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const isListeningRef = useRef(false);
   const pendingObservationRef = useRef<(() => void) | null>(null);
   const challengesRef = useRef<AxisChallenge[]>([]);
   const presentChallengeRef = useRef<(index: number) => void>(() => null);
-  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const thinkingNextRef = useRef<(() => void) | null>(null);
   const exchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exchangeAdvanceRef = useRef<(() => void) | null>(null);
   const intentInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Optimistic true — corrected client-side after hydration
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
 
   useEffect(() => {
@@ -94,7 +97,7 @@ export default function AxisShell() {
 
   useEffect(() => {
     return () => {
-      clearTimeout(fallbackTimerRef.current ?? undefined);
+      clearTimeout(thinkingTimerRef.current ?? undefined);
       clearTimeout(exchangeTimerRef.current ?? undefined);
       recognitionRef.current?.abort();
       window.speechSynthesis?.cancel();
@@ -102,7 +105,10 @@ export default function AxisShell() {
     };
   }, []);
 
+  // Camera starts on first user interaction — no Go button required
   function startCamera() {
+    if (cameraStartedRef.current) return;
+    cameraStartedRef.current = true;
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "user" } })
       .then((stream) => {
@@ -113,7 +119,22 @@ export default function AxisShell() {
           v.play().catch(() => null);
         }
       })
-      .catch(() => null);
+      .catch(() => {
+        cameraStartedRef.current = false;
+      });
+  }
+
+  // Brief thinking beat between major transitions — clerk is processing
+  function showThinking(then: () => void) {
+    clearTimeout(thinkingTimerRef.current ?? undefined);
+    thinkingNextRef.current = then;
+    setPhase("THINKING");
+    thinkingTimerRef.current = setTimeout(() => {
+      const next = thinkingNextRef.current;
+      thinkingNextRef.current = null;
+      thinkingTimerRef.current = null;
+      next?.();
+    }, 800);
   }
 
   const speak = useCallback((text: string, onDone?: () => void) => {
@@ -126,122 +147,95 @@ export default function AxisShell() {
     window.speechSynthesis.speak(u);
   }, []);
 
-  // Opens mic after "What are you working on?" — accepts any speech,
-  // classifies silently, starts session. Box appears after 5s if voice fails.
+  // Conversation Mode listening — non-continuous, writes to input field in real time.
+  // Voice and text are peers through the same field.
   function listenForIntentVoice() {
-    clearTimeout(fallbackTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
 
     const SpeechAPI = getSpeechAPI();
-    if (!SpeechAPI) {
-      setFallbackVisible(true);
-      return;
-    }
+    if (!SpeechAPI) return;
 
-    // Non-continuous: stops naturally after a pause — intent is one utterance
     const rec: SpeechRecognition = new SpeechAPI();
     rec.continuous = false;
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.lang = "en-US";
     let handled = false;
 
     setVoiceActive(true);
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      if (handled) return;
-      handled = true;
-      clearTimeout(fallbackTimerRef.current ?? undefined);
-      recognitionRef.current = null;
-      setVoiceActive(false);
-      const transcript = e.results[0][0].transcript;
-      handleContextSelect(classifyIntent(transcript));
+      const result = e.results[0];
+      const transcript = result[0].transcript;
+      if (intentInputRef.current) intentInputRef.current.value = transcript;
+      if (result.isFinal && !handled) {
+        handled = true;
+        recognitionRef.current = null;
+        setVoiceActive(false);
+        startCamera();
+        showThinking(() => handleContextSelect(classifyIntent(transcript)));
+      }
     };
 
     rec.onerror = () => {
-      if (!handled) {
-        setVoiceActive(false);
-        setFallbackVisible(true);
-      }
+      if (!handled) setVoiceActive(false);
     };
 
     rec.onend = () => {
-      if (!handled) {
-        setVoiceActive(false);
-        setFallbackVisible(true);
-      }
+      if (!handled) setVoiceActive(false);
     };
 
     recognitionRef.current = rec;
     rec.start();
-
-    fallbackTimerRef.current = setTimeout(() => {
-      if (!handled) {
-        setVoiceActive(false);
-        setFallbackVisible(true);
-      }
-    }, 8000);
   }
 
-  // Opens mic after "Done." — listens for "again"/"yes"/"more" etc.
-  // Falls back to visible button after 6s if no voice match
-  function listenForAgainVoice() {
-    clearTimeout(fallbackTimerRef.current ?? undefined);
+  // DONE mode listening — same field, handles both "again" and new intent
+  function listenForDoneVoice() {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
 
     const SpeechAPI = getSpeechAPI();
-    if (!SpeechAPI) {
-      setFallbackVisible(true);
-      return;
-    }
+    if (!SpeechAPI) return;
 
-    const AGAIN = ["again", "yes", "yeah", "sure", "go", "ready", "more", "another", "next"];
     const rec: SpeechRecognition = new SpeechAPI();
-    rec.continuous = true;
+    rec.continuous = false;
     rec.interimResults = true;
     rec.lang = "en-US";
-    let matched = false;
+    let handled = false;
 
     setVoiceActive(true);
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(
-        { length: e.results.length },
-        (_, i) => e.results[i][0].transcript,
-      )
-        .join(" ")
-        .toLowerCase();
-      if (!matched && AGAIN.some((k) => transcript.includes(k))) {
-        matched = true;
-        clearTimeout(fallbackTimerRef.current ?? undefined);
-        recognitionRef.current?.abort();
+      const result = e.results[0];
+      const transcript = result[0].transcript;
+      if (intentInputRef.current) intentInputRef.current.value = transcript;
+      if (result.isFinal && !handled) {
+        handled = true;
         recognitionRef.current = null;
         setVoiceActive(false);
-        handleAgain();
+        if (DONE_KEYWORDS.some((k) => transcript.toLowerCase().includes(k))) {
+          handleAgain();
+        } else {
+          const ctx = classifyIntent(transcript);
+          resetSession();
+          showThinking(() => handleContextSelect(ctx));
+        }
       }
     };
 
     rec.onerror = () => {
-      if (!matched) {
-        setVoiceActive(false);
-        setFallbackVisible(true);
-      }
+      if (!handled) setVoiceActive(false);
+    };
+
+    rec.onend = () => {
+      if (!handled) setVoiceActive(false);
     };
 
     recognitionRef.current = rec;
     rec.start();
-
-    fallbackTimerRef.current = setTimeout(() => {
-      if (!matched) {
-        setVoiceActive(false);
-        setFallbackVisible(true);
-      }
-    }, 6000);
   }
 
-  // Opens mic during OBSERVATION "waiting for ready" state
-  // Tap always works too
+  // Opens mic during OBSERVATION "waiting for ready" — tap also works
   function listenForReadyVoice(onReady: () => void) {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
@@ -355,10 +349,10 @@ export default function AxisShell() {
       setExchangeData(null);
       exchangeAdvanceRef.current = null;
       if (isLast) {
-        setPhase("DONE");
-        setFallbackVisible(false);
-        setVoiceActive(false);
-        speak("Done.", () => listenForAgainVoice());
+        showThinking(() => {
+          setPhase("DONE");
+          speak("Done.", () => listenForDoneVoice());
+        });
       } else {
         presentChallengeRef.current(index + 1);
       }
@@ -379,7 +373,6 @@ export default function AxisShell() {
           "../../../lib/axis-vision-evidence"
         );
         const cameraEvidence = await createHeadPositionEvidence(video);
-
         if (cameraEvidence.value !== null) {
           handleAttempt(c, cameraEvidence);
           setExchangeData({
@@ -420,21 +413,11 @@ export default function AxisShell() {
 
   presentChallengeRef.current = presentChallenge;
 
-  function handleGo() {
-    setFallbackVisible(false);
-    setVoiceActive(false);
-    setPhase("CONTEXT");
-    speak("What are you working on?", () => listenForIntentVoice());
-    startCamera();
-  }
-
   function handleContextSelect(ctx: AxisContext) {
-    clearTimeout(fallbackTimerRef.current ?? undefined);
     const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
     challengesRef.current = filtered.length > 0 ? filtered : VISION_CHALLENGES;
     setActiveContext(ctx);
     setChallengeIndex(0);
-    setFallbackVisible(false);
     setVoiceActive(false);
     setPhase("LOOP");
     presentChallengeRef.current(0);
@@ -444,10 +427,42 @@ export default function AxisShell() {
     e.preventDefault();
     const val = intentInputRef.current?.value.trim();
     if (!val) return;
-    clearTimeout(fallbackTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
-    handleContextSelect(classifyIntent(val));
+    setVoiceActive(false);
+    startCamera();
+    showThinking(() => handleContextSelect(classifyIntent(val)));
+  }
+
+  function handleDoneSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const val = intentInputRef.current?.value.trim();
+    if (!val) return;
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    setVoiceActive(false);
+    if (DONE_KEYWORDS.some((k) => val.toLowerCase().includes(k))) {
+      handleAgain();
+    } else {
+      const ctx = classifyIntent(val);
+      resetSession();
+      showThinking(() => handleContextSelect(ctx));
+    }
+  }
+
+  function handleMicToggle() {
+    if (voiceActive) {
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
+      setVoiceActive(false);
+    } else {
+      if (phase === "CONTEXT") {
+        startCamera();
+        listenForIntentVoice();
+      } else if (phase === "DONE") {
+        listenForDoneVoice();
+      }
+    }
   }
 
   function handleTap() {
@@ -464,40 +479,31 @@ export default function AxisShell() {
     }
   }
 
-  function handleExit() {
-    clearTimeout(fallbackTimerRef.current ?? undefined);
+  function resetSession() {
+    clearTimeout(thinkingTimerRef.current ?? undefined);
     clearTimeout(exchangeTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     isListeningRef.current = false;
     window.speechSynthesis?.cancel();
-    setPhase("READY");
     setActiveContext(null);
     setChallengeIndex(0);
     setWaitingForTap(false);
-    setFallbackVisible(false);
     setVoiceActive(false);
     setExchangeData(null);
     exchangeAdvanceRef.current = null;
     pendingObservationRef.current = null;
+    thinkingNextRef.current = null;
+  }
+
+  function handleExit() {
+    resetSession();
+    setPhase("CONTEXT");
   }
 
   function handleAgain() {
-    clearTimeout(fallbackTimerRef.current ?? undefined);
-    clearTimeout(exchangeTimerRef.current ?? undefined);
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-    isListeningRef.current = false;
-    window.speechSynthesis.cancel();
-    setActiveContext(null);
-    setWaitingForTap(false);
-    setFallbackVisible(false);
-    setVoiceActive(false);
-    setExchangeData(null);
-    exchangeAdvanceRef.current = null;
-    pendingObservationRef.current = null;
-    setPhase("CONTEXT");
-    speak("What are you working on?", () => listenForIntentVoice());
+    resetSession();
+    showThinking(() => setPhase("CONTEXT"));
   }
 
   const challenges = challengesRef.current;
@@ -520,12 +526,12 @@ export default function AxisShell() {
     <main className="shell">
       <video ref={videoBgRef} muted playsInline aria-hidden className="camera-bg" />
 
-      {phase !== "READY" && (
+      {/* Header — Session Mode only */}
+      {(phase === "LOOP" || phase === "EXCHANGE") && (
         <header>
           <button aria-label="Exit" className="back" onClick={handleExit} type="button">
             ←
           </button>
-          {/* Classification is hidden — player never sees SOLO / TEAM / GAME labels */}
           <span />
           {phase === "LOOP" && challenge && (
             <span className="challenge-count">
@@ -549,40 +555,40 @@ export default function AxisShell() {
                 : undefined
         }
       >
-        {/* READY — threshold only */}
-        {phase === "READY" && (
-          <button
-            className="go"
-            disabled={!isVoiceSupported}
-            onClick={handleGo}
-            type="button"
-          >
-            Go
-          </button>
-        )}
-
-        {/* CONTEXT — one box, infinite intent, hidden classification */}
+        {/* CONTEXT — Conversation Mode */}
         {phase === "CONTEXT" && (
           <>
             <p className="headline dim">What are you working on?</p>
-            {voiceActive && <span className="dot listening" />}
-            {fallbackVisible && (
-              <form className="intent-form" onSubmit={handleIntentSubmit}>
+            <div className="peer-input">
+              <form className="peer-form" onSubmit={handleIntentSubmit}>
                 <input
                   ref={intentInputRef}
-                  autoFocus
                   autoComplete="off"
-                  className="intent-input"
+                  autoFocus
+                  className="peer-text"
                   placeholder="handles, game day, team…"
                   spellCheck={false}
                   type="text"
                 />
               </form>
-            )}
+              {isVoiceSupported && (
+                <button
+                  aria-label={voiceActive ? "Stop listening" : "Start listening"}
+                  className={`mic${voiceActive ? " active" : ""}`}
+                  onClick={handleMicToggle}
+                  type="button"
+                >
+                  <span className={`mic-dot${voiceActive ? " listening" : ""}`} />
+                </button>
+              )}
+            </div>
           </>
         )}
 
-        {/* LOOP */}
+        {/* THINKING — brief beat between major transitions */}
+        {phase === "THINKING" && <span className="dot thinking" />}
+
+        {/* LOOP — Session Mode */}
         {phase === "LOOP" && (
           <>
             {loopSubPhase === "SPEAKING" && !waitingForTap && <span className="dot" />}
@@ -598,9 +604,7 @@ export default function AxisShell() {
           <>
             <div className="witness">
               <p className="witness-label">You noticed</p>
-              <p className="witness-value human">
-                &ldquo;{exchangeData.human}&rdquo;
-              </p>
+              <p className="witness-value human">&ldquo;{exchangeData.human}&rdquo;</p>
             </div>
             <div className="witness">
               <p className="witness-label">Camera noticed</p>
@@ -609,16 +613,33 @@ export default function AxisShell() {
           </>
         )}
 
-        {/* DONE — voice primary, button is fallback */}
+        {/* DONE — Conversation Mode returns */}
         {phase === "DONE" && (
           <>
             <p className="headline dim">Done.</p>
-            {voiceActive && <span className="dot listening" />}
-            {fallbackVisible && (
-              <button className="again" onClick={handleAgain} type="button">
-                again
-              </button>
-            )}
+            <div className="peer-input">
+              <form className="peer-form" onSubmit={handleDoneSubmit}>
+                <input
+                  ref={intentInputRef}
+                  autoComplete="off"
+                  autoFocus
+                  className="peer-text"
+                  placeholder="again, or try something new…"
+                  spellCheck={false}
+                  type="text"
+                />
+              </form>
+              {isVoiceSupported && (
+                <button
+                  aria-label={voiceActive ? "Stop listening" : "Start listening"}
+                  className={`mic${voiceActive ? " active" : ""}`}
+                  onClick={handleMicToggle}
+                  type="button"
+                >
+                  <span className={`mic-dot${voiceActive ? " listening" : ""}`} />
+                </button>
+              )}
+            </div>
           </>
         )}
       </section>
@@ -692,7 +713,7 @@ export default function AxisShell() {
           align-content: center;
           display: grid;
           flex: 1;
-          gap: 32px;
+          gap: 28px;
           padding: 56px clamp(18px, 5vw, 64px) 48px;
         }
 
@@ -712,6 +733,75 @@ export default function AxisShell() {
           color: rgba(247, 247, 242, 0.35);
         }
 
+        /* Peer input — voice and text, always both present */
+        .peer-input {
+          align-items: center;
+          display: flex;
+          gap: 12px;
+          max-width: 560px;
+        }
+
+        .peer-form {
+          flex: 1;
+        }
+
+        .peer-text {
+          background: transparent;
+          border: 0;
+          border-bottom: 1px solid rgba(247, 247, 242, 0.12);
+          color: #f7f7f2;
+          font: inherit;
+          font-size: clamp(22px, 3.5vw, 40px);
+          font-weight: 800;
+          outline: none;
+          padding: 6px 0 8px;
+          width: 100%;
+        }
+
+        .peer-text::placeholder {
+          color: rgba(247, 247, 242, 0.16);
+          font-weight: 700;
+        }
+
+        /* Mic button — peer to text, always visible */
+        .mic {
+          align-items: center;
+          background: transparent;
+          border: 1px solid rgba(247, 247, 242, 0.1);
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          flex-shrink: 0;
+          height: 44px;
+          justify-content: center;
+          padding: 0;
+          transition: border-color 0.15s;
+          width: 44px;
+        }
+
+        .mic:hover {
+          border-color: rgba(247, 247, 242, 0.3);
+        }
+
+        .mic.active {
+          border-color: rgba(184, 255, 61, 0.5);
+        }
+
+        .mic-dot {
+          background: rgba(247, 247, 242, 0.3);
+          border-radius: 50%;
+          display: block;
+          height: 8px;
+          transition: background 0.15s;
+          width: 8px;
+        }
+
+        .mic-dot.listening {
+          animation: pulse 1.1s ease-in-out infinite;
+          background: #b8ff3d;
+        }
+
+        /* Status dots — Session Mode */
         .dot {
           background: rgba(247, 247, 242, 0.2);
           border-radius: 50%;
@@ -730,13 +820,20 @@ export default function AxisShell() {
           background: #b8ff3d;
         }
 
+        .dot.thinking {
+          animation: breathe 0.6s ease-in-out infinite;
+          background: rgba(247, 247, 242, 0.3);
+          height: 10px;
+          width: 10px;
+        }
+
         @keyframes breathe {
           0%,
           100% {
             opacity: 0.35;
           }
           50% {
-            opacity: 0.8;
+            opacity: 0.9;
           }
         }
 
@@ -759,30 +856,7 @@ export default function AxisShell() {
           text-transform: uppercase;
         }
 
-        /* One Box — appears if voice fails */
-        .intent-form {
-          display: grid;
-        }
-
-        .intent-input {
-          background: transparent;
-          border: 0;
-          border-bottom: 1px solid rgba(247, 247, 242, 0.15);
-          color: #f7f7f2;
-          font: inherit;
-          font-size: clamp(24px, 4vw, 44px);
-          font-weight: 900;
-          outline: none;
-          padding: 8px 0 10px;
-          width: 100%;
-        }
-
-        .intent-input::placeholder {
-          color: rgba(247, 247, 242, 0.18);
-          font-weight: 700;
-        }
-
-        /* Observation Exchange — two witnesses, same moment */
+        /* Observation Exchange */
         .witness {
           display: grid;
           gap: 8px;
@@ -810,45 +884,6 @@ export default function AxisShell() {
         }
 
         .witness-value.machine {
-          color: rgba(247, 247, 242, 0.5);
-        }
-
-        .go {
-          background: #f7f7f2;
-          border: 0;
-          border-radius: 999px;
-          color: #0d0d0a;
-          cursor: pointer;
-          font: inherit;
-          font-size: 15px;
-          font-weight: 850;
-          min-height: 52px;
-          padding: 0 32px;
-          width: fit-content;
-        }
-
-        .go:disabled {
-          cursor: not-allowed;
-          opacity: 0.4;
-        }
-
-        .again {
-          background: transparent;
-          border: 0;
-          color: rgba(247, 247, 242, 0.22);
-          cursor: pointer;
-          font: inherit;
-          font-size: 12px;
-          font-weight: 800;
-          letter-spacing: 0.1em;
-          min-height: 44px;
-          padding: 0;
-          text-align: left;
-          text-transform: uppercase;
-          transition: color 0.1s;
-        }
-
-        .again:hover {
           color: rgba(247, 247, 242, 0.5);
         }
       `}</style>
