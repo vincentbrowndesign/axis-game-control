@@ -19,7 +19,7 @@ export const AXIS_CHALLENGES: AxisChallenge[] = [
     id: "ch-001",
     objective: "5 Free Throws",
     requiredEvidence: "COUNT",
-    text: "Five free throws. Weak hand only.",
+    text: "Weak hand only. Five free throws.",
   },
   {
     constraint: "Finish at the Rim",
@@ -27,7 +27,7 @@ export const AXIS_CHALLENGES: AxisChallenge[] = [
     id: "ch-002",
     objective: "Baseline Drive",
     requiredEvidence: "OBSERVATION",
-    text: "Baseline drive. Finish at the rim.",
+    text: "Finish at the rim. Drive baseline.",
   },
   {
     constraint: "Both Sides",
@@ -35,7 +35,7 @@ export const AXIS_CHALLENGES: AxisChallenge[] = [
     id: "ch-003",
     objective: "Post Moves",
     requiredEvidence: "COUNT",
-    text: "Post moves. Both sides.",
+    text: "Both sides. Post moves.",
   },
   {
     constraint: "Three Arc Spots",
@@ -43,7 +43,7 @@ export const AXIS_CHALLENGES: AxisChallenge[] = [
     id: "ch-004",
     objective: "Catch and Shoot",
     requiredEvidence: "COUNT",
-    text: "Catch and shoot. Three spots.",
+    text: "Three spots. Catch and shoot.",
   },
   {
     constraint: "Eyes Up",
@@ -51,7 +51,7 @@ export const AXIS_CHALLENGES: AxisChallenge[] = [
     id: "ch-005",
     objective: "10 Dribbles",
     requiredEvidence: "OBSERVATION",
-    text: "Ten dribbles. Left hand. Eyes up. What did you notice?",
+    text: "Eyes Up. Ten dribbles. Left hand.",
   },
 ];
 
@@ -68,7 +68,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v01",
     objective: "Eyes Up Dribble",
     requiredEvidence: "OBSERVATION",
-    text: "Ten dribbles. Left hand. Eyes up. What did you notice?",
+    text: "Eyes Up. Ten dribbles. Left hand.",
   },
   {
     constraint: "Locate Help",
@@ -76,7 +76,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v02",
     objective: "Find Help Defender",
     requiredEvidence: "OBSERVATION",
-    text: "Drive baseline. Find the help defender. What did you notice?",
+    text: "Find the helper. Drive baseline.",
   },
   {
     constraint: "Corner First",
@@ -84,7 +84,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v03",
     objective: "See The Corner",
     requiredEvidence: "OBSERVATION",
-    text: "Catch and shoot. See the corner before you catch. What did you notice?",
+    text: "See the corner first. Catch and shoot.",
   },
   // Level 2 — Recognition
   {
@@ -93,7 +93,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v04",
     objective: "Read First Movement",
     requiredEvidence: "OBSERVATION",
-    text: "Drive to the rim. Which defender moved first? What did you notice?",
+    text: "Read first movement. Drive to the rim.",
   },
   {
     constraint: "Help Side",
@@ -101,7 +101,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v05",
     objective: "Identify Helper",
     requiredEvidence: "OBSERVATION",
-    text: "Attack the lane. Who was helping? What did you notice?",
+    text: "Name the helper. Attack the lane.",
   },
   {
     constraint: "Open Space",
@@ -109,7 +109,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v06",
     objective: "Find Open Space",
     requiredEvidence: "OBSERVATION",
-    text: "Make three passes. Where was the open space? What did you notice?",
+    text: "Find open space. Three passes.",
   },
   // Level 3 — Anticipation
   {
@@ -118,7 +118,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v07",
     objective: "Anticipate Action",
     requiredEvidence: "OBSERVATION",
-    text: "Set a screen. What was about to happen? What did you notice?",
+    text: "See it before it happens. Set a screen.",
   },
   {
     constraint: "Pass Ahead",
@@ -126,7 +126,7 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v08",
     objective: "Locate Next Pass",
     requiredEvidence: "OBSERVATION",
-    text: "Receive the entry pass. Where was the next pass going? What did you notice?",
+    text: "Locate the next pass. Receive the entry.",
   },
   {
     constraint: "Pre-Catch Read",
@@ -134,6 +134,6 @@ export const VISION_CHALLENGES: AxisChallenge[] = [
     id: "ch-v09",
     objective: "Pre-Catch Awareness",
     requiredEvidence: "OBSERVATION",
-    text: "Catch on the wing. Which player was open before you caught it? What did you notice?",
+    text: "Know before you catch. Catch on the wing.",
   },
 ];

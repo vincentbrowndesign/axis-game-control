@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
 import { type AxisChallenge, type AxisContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
 import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
@@ -10,49 +10,65 @@ import {
   type MissionAttempt,
 } from "../../../lib/axis-mission-memory";
 
-// Default false — enable only when camera observations are reliable on court
+// ---------------------------------------------------------------------------
+// Feature flags
+// ---------------------------------------------------------------------------
+
 const OBSERVATION_EXCHANGE_ENABLED = false;
 
-// READY removed — clerk is the entry. THINKING is a brief transition beat.
-type ShellPhase = "CONTEXT" | "THINKING" | "LOOP" | "EXCHANGE" | "DONE";
-type LoopSubPhase = "SPEAKING" | "LISTENING";
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-const OBSERVATION_QUESTION = "What did you notice?";
+type ShellPhase = "CONTEXT" | "THINKING" | "CHALLENGE" | "DONE";
 
-// Hidden classification — player never sees these labels
-function classifyIntent(transcript: string): AxisContext {
-  const t = transcript.toLowerCase();
-  if (
-    t.includes("game") ||
-    t.includes("match") ||
-    t.includes("playing") ||
-    t.includes("competition") ||
-    t.includes("scrimmage") ||
-    t.includes("against")
-  )
+// Thread message — accumulates over the session
+interface Message {
+  id: string;
+  role: "user" | "axis";
+  // type controls visual treatment
+  type: "intent" | "challenge" | "obs-prompt" | "observation" | "witness" | "done";
+  text: string;
+}
+
+interface LearningToken {
+  intent: string;
+  challengeText: string;
+  machineWitness: string | null;
+  humanObservation: string | null;
+  outcome: "COMPLETE" | "FAILED";
+  timestamp: number;
+  sessionId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Pure helpers
+// ---------------------------------------------------------------------------
+
+function classifyIntent(t: string): AxisContext {
+  const s = t.toLowerCase();
+  if (["game", "match", "playing", "competition", "scrimmage", "against"].some((k) => s.includes(k)))
     return "GAME";
-  if (
-    t.includes("team") ||
-    t.includes("practice") ||
-    t.includes("group") ||
-    t.includes("squad") ||
-    t.includes("we're") ||
-    t.includes("we are")
-  )
+  if (["team", "practice", "group", "squad", "we're", "we are"].some((k) => s.includes(k)))
     return "TEAM";
-  if (
-    t.includes("partner") ||
-    t.includes("one on one") ||
-    t.includes("1v1") ||
-    t.includes("with someone") ||
-    t.includes("with a friend") ||
-    t.includes("with my")
-  )
+  if (["partner", "one on one", "1v1", "with someone", "with my"].some((k) => s.includes(k)))
     return "PARTNER";
   return "SOLO";
 }
 
-const DONE_KEYWORDS = ["again", "yes", "yeah", "sure", "more", "another", "next", "yep", "go"];
+// "I noticed:" — witness speaks as a presence, not a telemetry readout
+function formatMachineWitness(value: string): string {
+  const map: Record<string, string> = {
+    "Head Down": "I noticed: you were looking down.",
+    "Head Up": "I noticed: you kept your head up.",
+  };
+  return map[value] ?? `I noticed: ${value.toLowerCase()}.`;
+}
+
+function getChallengeText(c: AxisChallenge): string {
+  const i = c.text.indexOf("What did you notice?");
+  return i > -1 ? c.text.slice(0, i).trim() : c.text;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSpeechAPI(): any {
@@ -60,36 +76,100 @@ function getSpeechAPI(): any {
   return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 }
 
+function storeLearningToken(token: LearningToken) {
+  try {
+    const prev: LearningToken[] = JSON.parse(
+      localStorage.getItem("axis_learning_tokens") ?? "[]",
+    );
+    localStorage.setItem("axis_learning_tokens", JSON.stringify([...prev, token]));
+  } catch {}
+}
+
+let _id = 0;
+const uid = () => (++_id).toString(36);
+
+const AGAIN_WORDS = ["again", "yes", "yeah", "sure", "more", "another", "next", "yep"];
+
+// ---------------------------------------------------------------------------
+// InputBox — mic (left) · field (center) · send (right)
+// Industry pattern: everything in one box.
+// ---------------------------------------------------------------------------
+
+type InputBoxProps = {
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onSubmit: (e: React.FormEvent) => void;
+  onMicToggle: () => void;
+  voiceActive: boolean;
+  isVoiceSupported: boolean;
+  placeholder: string;
+  autoFocus?: boolean;
+};
+
+function InputBox({
+  inputRef,
+  onSubmit,
+  onMicToggle,
+  voiceActive,
+  isVoiceSupported,
+  placeholder,
+  autoFocus,
+}: InputBoxProps) {
+  return (
+    <form className="ibox" onSubmit={onSubmit}>
+      {isVoiceSupported && (
+        <button
+          aria-label={voiceActive ? "Stop listening" : "Speak"}
+          className={`ibox-mic${voiceActive ? " active" : ""}`}
+          onClick={onMicToggle}
+          type="button"
+        >
+          <span className={`mic-dot${voiceActive ? " active" : ""}`} />
+        </button>
+      )}
+      <input
+        ref={inputRef}
+        autoComplete="off"
+        // eslint-disable-next-line jsx-a11y/no-autofocus
+        autoFocus={autoFocus}
+        className="ibox-field"
+        placeholder={placeholder}
+        spellCheck={false}
+        type="text"
+      />
+      <button aria-label="Send" className="ibox-send" type="submit">
+        ↑
+      </button>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------------
+
 export default function AxisShell() {
   const missionMemory = useMemo(() => createLocalMissionMemoryAdapter(), []);
 
-  // Start in CONTEXT — clerk is already here
   const [phase, setPhase] = useState<ShellPhase>("CONTEXT");
-  const [activeContext, setActiveContext] = useState<AxisContext | null>(null);
-  const [loopSubPhase, setLoopSubPhase] = useState<LoopSubPhase>("SPEAKING");
+  const [messages, setMessages] = useState<Message[]>([]);
   const [challengeIndex, setChallengeIndex] = useState(0);
-  const [waitingForTap, setWaitingForTap] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
-  const [exchangeData, setExchangeData] = useState<{
-    human: string | null;
-    machine: string | null;
-  } | null>(null);
+  const [witnessText, setWitnessText] = useState<string | null>(null);
+  const [isVoiceSupported, setIsVoiceSupported] = useState(true);
 
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const cameraStartedRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const isListeningRef = useRef(false);
-  const pendingObservationRef = useRef<(() => void) | null>(null);
   const challengesRef = useRef<AxisChallenge[]>([]);
-  const presentChallengeRef = useRef<(index: number) => void>(() => null);
+  const intentInputRef = useRef<HTMLInputElement | null>(null);
+  const observationInputRef = useRef<HTMLInputElement | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkingNextRef = useRef<(() => void) | null>(null);
-  const exchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const exchangeAdvanceRef = useRef<(() => void) | null>(null);
-  const intentInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [isVoiceSupported, setIsVoiceSupported] = useState(true);
+  const witnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentRef = useRef("");
+  const sessionIdRef = useRef(Date.now().toString(36));
 
   useEffect(() => {
     setIsVoiceSupported("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
@@ -98,14 +178,57 @@ export default function AxisShell() {
   useEffect(() => {
     return () => {
       clearTimeout(thinkingTimerRef.current ?? undefined);
-      clearTimeout(exchangeTimerRef.current ?? undefined);
+      clearTimeout(witnessTimerRef.current ?? undefined);
       recognitionRef.current?.abort();
-      window.speechSynthesis?.cancel();
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
-  // Camera starts on first user interaction — no Go button required
+  // Scroll to latest message whenever thread or thinking state changes
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, phase]);
+
+  // Camera witness — captured 3s into drill when exchange is enabled
+  useEffect(() => {
+    if (phase !== "CHALLENGE" || !OBSERVATION_EXCHANGE_ENABLED) return;
+    witnessTimerRef.current = setTimeout(async () => {
+      const video = videoBgRef.current;
+      if (!video || video.readyState < 2) return;
+      const { createHeadPositionEvidence } = await import(
+        "../../../lib/axis-vision-evidence"
+      );
+      const evidence = await createHeadPositionEvidence(video);
+      if (evidence.value) {
+        const text = formatMachineWitness(evidence.value as string);
+        setWitnessText(text);
+        appendMessage({ role: "axis", type: "witness", text });
+      }
+    }, 3000);
+    return () => clearTimeout(witnessTimerRef.current ?? undefined);
+  }, [phase, challengeIndex]);
+
+  // Focus observation input when a challenge is shown or advances
+  useEffect(() => {
+    if (phase !== "CHALLENGE") return;
+    const t = setTimeout(() => observationInputRef.current?.focus(), 80);
+    return () => clearTimeout(t);
+  }, [phase, challengeIndex]);
+
+  // -------------------------------------------------------------------------
+  // Thread
+  // -------------------------------------------------------------------------
+
+  function appendMessage(m: Omit<Message, "id">) {
+    setMessages((prev) => [...prev, { ...m, id: uid() }]);
+  }
+
+  // -------------------------------------------------------------------------
+  // Camera
+  // -------------------------------------------------------------------------
+
   function startCamera() {
     if (cameraStartedRef.current) return;
     cameraStartedRef.current = true;
@@ -114,17 +237,15 @@ export default function AxisShell() {
       .then((stream) => {
         streamRef.current = stream;
         const v = videoBgRef.current;
-        if (v) {
-          v.srcObject = stream;
-          v.play().catch(() => null);
-        }
+        if (v) { v.srcObject = stream; v.play().catch(() => null); }
       })
-      .catch(() => {
-        cameraStartedRef.current = false;
-      });
+      .catch(() => { cameraStartedRef.current = false; });
   }
 
-  // Brief thinking beat between major transitions — clerk is processing
+  // -------------------------------------------------------------------------
+  // Thinking — quiet beat, shows as dot at bottom of thread
+  // -------------------------------------------------------------------------
+
   function showThinking(then: () => void) {
     clearTimeout(thinkingTimerRef.current ?? undefined);
     thinkingNextRef.current = then;
@@ -137,179 +258,50 @@ export default function AxisShell() {
     }, 800);
   }
 
-  const speak = useCallback((text: string, onDone?: () => void) => {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.88;
-    u.pitch = 1.0;
-    u.onend = () => onDone?.();
-    u.onerror = () => onDone?.();
-    window.speechSynthesis.speak(u);
-  }, []);
+  // -------------------------------------------------------------------------
+  // Voice — one function, writes into whichever input is active
+  // -------------------------------------------------------------------------
 
-  // Conversation Mode listening — non-continuous, writes to input field in real time.
-  // Voice and text are peers through the same field.
-  function listenForIntentVoice() {
+  function startVoiceCapture(
+    inputRef: React.RefObject<HTMLInputElement | null>,
+    onFinal: (text: string) => void,
+  ) {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
-
     const SpeechAPI = getSpeechAPI();
     if (!SpeechAPI) return;
-
     const rec: SpeechRecognition = new SpeechAPI();
     rec.continuous = false;
     rec.interimResults = true;
     rec.lang = "en-US";
     let handled = false;
-
     setVoiceActive(true);
-
     rec.onresult = (e: SpeechRecognitionEvent) => {
       const result = e.results[0];
-      const transcript = result[0].transcript;
-      if (intentInputRef.current) intentInputRef.current.value = transcript;
+      const text = result[0].transcript;
+      if (inputRef.current) inputRef.current.value = text;
       if (result.isFinal && !handled) {
         handled = true;
         recognitionRef.current = null;
         setVoiceActive(false);
-        startCamera();
-        showThinking(() => handleContextSelect(classifyIntent(transcript)));
+        onFinal(text);
       }
     };
-
-    rec.onerror = () => {
-      if (!handled) setVoiceActive(false);
-    };
-
-    rec.onend = () => {
-      if (!handled) setVoiceActive(false);
-    };
-
+    rec.onerror = () => { if (!handled) setVoiceActive(false); };
+    rec.onend = () => { if (!handled) setVoiceActive(false); };
     recognitionRef.current = rec;
     rec.start();
   }
 
-  // DONE mode listening — same field, handles both "again" and new intent
-  function listenForDoneVoice() {
+  function stopVoice() {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
-
-    const SpeechAPI = getSpeechAPI();
-    if (!SpeechAPI) return;
-
-    const rec: SpeechRecognition = new SpeechAPI();
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-    let handled = false;
-
-    setVoiceActive(true);
-
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const result = e.results[0];
-      const transcript = result[0].transcript;
-      if (intentInputRef.current) intentInputRef.current.value = transcript;
-      if (result.isFinal && !handled) {
-        handled = true;
-        recognitionRef.current = null;
-        setVoiceActive(false);
-        if (DONE_KEYWORDS.some((k) => transcript.toLowerCase().includes(k))) {
-          handleAgain();
-        } else {
-          const ctx = classifyIntent(transcript);
-          resetSession();
-          showThinking(() => handleContextSelect(ctx));
-        }
-      }
-    };
-
-    rec.onerror = () => {
-      if (!handled) setVoiceActive(false);
-    };
-
-    rec.onend = () => {
-      if (!handled) setVoiceActive(false);
-    };
-
-    recognitionRef.current = rec;
-    rec.start();
+    setVoiceActive(false);
   }
 
-  // Opens mic during OBSERVATION "waiting for ready" — tap also works
-  function listenForReadyVoice(onReady: () => void) {
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-
-    const SpeechAPI = getSpeechAPI();
-    if (!SpeechAPI) return;
-
-    const READY = ["ready", "yes", "yeah", "go", "done", "ok", "okay"];
-    const rec: SpeechRecognition = new SpeechAPI();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-    let matched = false;
-
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(
-        { length: e.results.length },
-        (_, i) => e.results[i][0].transcript,
-      )
-        .join(" ")
-        .toLowerCase();
-      if (!matched && READY.some((k) => transcript.includes(k))) {
-        matched = true;
-        recognitionRef.current?.abort();
-        recognitionRef.current = null;
-        onReady();
-      }
-    };
-
-    rec.onerror = () => null;
-    recognitionRef.current = rec;
-    rec.start();
-  }
-
-  const startListening = useCallback(
-    (challenge: AxisChallenge, onComplete: (evidence: AxisEvidence) => void) => {
-      recognitionRef.current?.abort();
-      recognitionRef.current = null;
-
-      const SpeechAPI = getSpeechAPI();
-      if (!SpeechAPI) return;
-
-      const rec: SpeechRecognition = new SpeechAPI();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "en-US";
-
-      let latest = "";
-      isListeningRef.current = true;
-
-      rec.onresult = (e: SpeechRecognitionEvent) => {
-        let acc = "";
-        for (let i = 0; i < e.results.length; i++) {
-          if (i > 0) acc += " ";
-          acc += e.results[i][0].transcript;
-        }
-        latest = acc.trim();
-      };
-
-      const finish = () => {
-        if (!isListeningRef.current) return;
-        isListeningRef.current = false;
-        onComplete({ kind: challenge.requiredEvidence, source: "VOICE", value: latest || null });
-      };
-
-      rec.onend = finish;
-      rec.onerror = finish;
-
-      recognitionRef.current = rec;
-      rec.start();
-      setLoopSubPhase("LISTENING");
-    },
-    [],
-  );
+  // -------------------------------------------------------------------------
+  // Core loop — architecture unchanged
+  // -------------------------------------------------------------------------
 
   function handleAttempt(challenge: AxisChallenge, evidence: AxisEvidence) {
     const evaluation = evaluateEvidence(challenge.requiredEvidence, evidence);
@@ -325,342 +317,282 @@ export default function AxisShell() {
     void saveRemoteMemory({ attempt });
   }
 
-  function presentChallenge(index: number) {
+  // Builds challenge thread messages for the given index.
+  // "What did you notice?" is a reflection gate — shown only at the end of a set
+  // so action can accumulate before the player is asked to interpret it.
+  function pushChallenge(index: number) {
+    const c = challengesRef.current[index];
+    if (!c) return;
+    appendMessage({ role: "axis", type: "challenge", text: getChallengeText(c) });
+    const isReflection = index === challengesRef.current.length - 1;
+    if (isReflection) {
+      appendMessage({ role: "axis", type: "obs-prompt", text: "What did you notice?" });
+    }
+  }
+
+  function startSession(ctx: AxisContext) {
+    const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
+    challengesRef.current = filtered.length > 0 ? filtered : VISION_CHALLENGES;
+    setChallengeIndex(0);
+    setWitnessText(null);
+    setPhase("CHALLENGE");
+    pushChallenge(0);
+  }
+
+  function completeChallenge(observation: string) {
+    clearTimeout(witnessTimerRef.current ?? undefined);
+    stopVoice();
+
     const challenges = challengesRef.current;
-    const c = challenges[index];
+    const c = challenges[challengeIndex];
     if (!c) return;
 
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-    isListeningRef.current = false;
-    window.speechSynthesis.cancel();
-    clearTimeout(exchangeTimerRef.current ?? undefined);
-
-    setChallengeIndex(index);
-    setLoopSubPhase("SPEAKING");
-    setWaitingForTap(false);
-    setExchangeData(null);
-    exchangeAdvanceRef.current = null;
-    pendingObservationRef.current = null;
-
-    const isLast = index === challenges.length - 1;
-
-    function advance() {
-      setExchangeData(null);
-      exchangeAdvanceRef.current = null;
-      if (isLast) {
-        showThinking(() => {
-          setPhase("DONE");
-          speak("Done.", () => listenForDoneVoice());
-        });
-      } else {
-        presentChallengeRef.current(index + 1);
-      }
+    if (observation.trim()) {
+      appendMessage({ role: "user", type: "observation", text: observation.trim() });
     }
 
-    async function complete(evidence: AxisEvidence) {
-      handleAttempt(c, evidence);
+    handleAttempt(c, { kind: c.requiredEvidence, source: "VOICE", value: observation || null });
+    storeLearningToken({
+      intent: intentRef.current,
+      challengeText: c.text,
+      machineWitness: witnessText,
+      humanObservation: observation || null,
+      outcome: "COMPLETE",
+      timestamp: Date.now(),
+      sessionId: sessionIdRef.current,
+    });
 
-      const video = videoBgRef.current;
-      const shouldExchange =
-        OBSERVATION_EXCHANGE_ENABLED &&
-        c.requiredEvidence === "OBSERVATION" &&
-        video !== null &&
-        video.readyState >= 2;
+    const nextIndex = challengeIndex + 1;
+    setWitnessText(null);
+    if (observationInputRef.current) observationInputRef.current.value = "";
 
-      if (shouldExchange && video) {
-        const { createHeadPositionEvidence } = await import(
-          "../../../lib/axis-vision-evidence"
-        );
-        const cameraEvidence = await createHeadPositionEvidence(video);
-        if (cameraEvidence.value !== null) {
-          handleAttempt(c, cameraEvidence);
-          setExchangeData({
-            human: typeof evidence.value === "string" ? evidence.value : null,
-            machine: typeof cameraEvidence.value === "string" ? cameraEvidence.value : null,
-          });
-          setPhase("EXCHANGE");
-          exchangeAdvanceRef.current = advance;
-          exchangeTimerRef.current = setTimeout(advance, 3200);
-          return;
-        }
-      }
-
-      advance();
-    }
-
-    const qIdx = c.text.indexOf(OBSERVATION_QUESTION);
-    if (c.requiredEvidence === "OBSERVATION" && qIdx > -1) {
-      const task = c.text.slice(0, qIdx).trim();
-      speak(task, () => {
-        const advanceToQuestion = () => {
-          setWaitingForTap(false);
-          pendingObservationRef.current = null;
-          speak(OBSERVATION_QUESTION, () => {
-            setTimeout(() => startListening(c, complete), 900);
-          });
-        };
-        pendingObservationRef.current = advanceToQuestion;
-        setWaitingForTap(true);
-        listenForReadyVoice(advanceToQuestion);
+    if (nextIndex >= challenges.length) {
+      showThinking(() => {
+        setPhase("DONE");
+        appendMessage({ role: "axis", type: "done", text: "Done." });
       });
     } else {
-      speak(c.text, () => {
-        setTimeout(() => startListening(c, complete), 900);
+      showThinking(() => {
+        setChallengeIndex(nextIndex);
+        setPhase("CHALLENGE");
+        pushChallenge(nextIndex);
       });
     }
   }
 
-  presentChallengeRef.current = presentChallenge;
+  // -------------------------------------------------------------------------
+  // Opening / CONTEXT
+  // -------------------------------------------------------------------------
 
-  function handleContextSelect(ctx: AxisContext) {
-    const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
-    challengesRef.current = filtered.length > 0 ? filtered : VISION_CHALLENGES;
-    setActiveContext(ctx);
-    setChallengeIndex(0);
-    setVoiceActive(false);
-    setPhase("LOOP");
-    presentChallengeRef.current(0);
+  function submitIntent(val: string) {
+    stopVoice();
+    if (!val.trim()) return;
+    intentRef.current = val.trim();
+    sessionIdRef.current = Date.now().toString(36);
+    startCamera();
+    appendMessage({ role: "user", type: "intent", text: val.trim() });
+    if (intentInputRef.current) intentInputRef.current.value = "";
+    showThinking(() => startSession(classifyIntent(val)));
   }
 
   function handleIntentSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const val = intentInputRef.current?.value.trim();
-    if (!val) return;
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-    setVoiceActive(false);
+    submitIntent(intentInputRef.current?.value ?? "");
+  }
+
+  function handleIntentMicToggle() {
+    if (voiceActive) { stopVoice(); return; }
     startCamera();
-    showThinking(() => handleContextSelect(classifyIntent(val)));
+    startVoiceCapture(intentInputRef, submitIntent);
+  }
+
+  // -------------------------------------------------------------------------
+  // CHALLENGE
+  // -------------------------------------------------------------------------
+
+  function handleObsSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    completeChallenge(observationInputRef.current?.value ?? "");
+  }
+
+  function handleObsMicToggle() {
+    if (voiceActive) { stopVoice(); return; }
+    startVoiceCapture(observationInputRef, completeChallenge);
+  }
+
+  // -------------------------------------------------------------------------
+  // DONE — "again" restarts session in same thread; new intent starts fresh
+  // -------------------------------------------------------------------------
+
+  function submitDone(val: string) {
+    stopVoice();
+    if (!val.trim()) return;
+    if (intentInputRef.current) intentInputRef.current.value = "";
+    appendMessage({ role: "user", type: "intent", text: val.trim() });
+    if (AGAIN_WORDS.some((k) => val.toLowerCase().includes(k))) {
+      reset();
+      showThinking(() => startSession(classifyIntent(intentRef.current)));
+    } else {
+      intentRef.current = val.trim();
+      sessionIdRef.current = Date.now().toString(36);
+      showThinking(() => startSession(classifyIntent(val)));
+    }
   }
 
   function handleDoneSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const val = intentInputRef.current?.value.trim();
-    if (!val) return;
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-    setVoiceActive(false);
-    if (DONE_KEYWORDS.some((k) => val.toLowerCase().includes(k))) {
-      handleAgain();
-    } else {
-      const ctx = classifyIntent(val);
-      resetSession();
-      showThinking(() => handleContextSelect(ctx));
-    }
+    submitDone(intentInputRef.current?.value ?? "");
   }
 
-  function handleMicToggle() {
-    if (voiceActive) {
-      recognitionRef.current?.abort();
-      recognitionRef.current = null;
-      setVoiceActive(false);
-    } else {
-      if (phase === "CONTEXT") {
-        startCamera();
-        listenForIntentVoice();
-      } else if (phase === "DONE") {
-        listenForDoneVoice();
-      }
-    }
+  function handleDoneMicToggle() {
+    if (voiceActive) { stopVoice(); return; }
+    startVoiceCapture(intentInputRef, submitDone);
   }
 
-  function handleTap() {
-    if (phase === "EXCHANGE") {
-      clearTimeout(exchangeTimerRef.current ?? undefined);
-      exchangeAdvanceRef.current?.();
-      return;
-    }
-    if (waitingForTap && pendingObservationRef.current) {
-      pendingObservationRef.current();
-    } else if (loopSubPhase === "LISTENING") {
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
-    }
-  }
+  // -------------------------------------------------------------------------
+  // Navigation
+  // -------------------------------------------------------------------------
 
-  function resetSession() {
+  function reset() {
     clearTimeout(thinkingTimerRef.current ?? undefined);
-    clearTimeout(exchangeTimerRef.current ?? undefined);
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-    isListeningRef.current = false;
-    window.speechSynthesis?.cancel();
-    setActiveContext(null);
-    setChallengeIndex(0);
-    setWaitingForTap(false);
-    setVoiceActive(false);
-    setExchangeData(null);
-    exchangeAdvanceRef.current = null;
-    pendingObservationRef.current = null;
+    clearTimeout(witnessTimerRef.current ?? undefined);
+    stopVoice();
+    setWitnessText(null);
     thinkingNextRef.current = null;
   }
 
+  // ← New: clears thread, returns to opening state
   function handleExit() {
-    resetSession();
+    reset();
+    setMessages([]);
     setPhase("CONTEXT");
   }
 
-  function handleAgain() {
-    resetSession();
-    showThinking(() => setPhase("CONTEXT"));
-  }
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
 
   const challenges = challengesRef.current;
   const challenge = challenges[challengeIndex];
-
-  function getDisplayText(): string {
-    if (!challenge) return "";
-    const qIdx = challenge.text.indexOf(OBSERVATION_QUESTION);
-    const isObs = challenge.requiredEvidence === "OBSERVATION" && qIdx > -1;
-    if (loopSubPhase === "LISTENING" && isObs) return OBSERVATION_QUESTION;
-    if (isObs) return challenge.text.slice(0, qIdx).trim();
-    return challenge.text;
-  }
-
-  const isStageTappable =
-    phase === "EXCHANGE" ||
-    (phase === "LOOP" && (waitingForTap || loopSubPhase === "LISTENING"));
+  const isLastChallenge = challenges.length > 0 && challengeIndex === challenges.length - 1;
+  // Show thread view once any message exists, or while thinking (dot must appear somewhere)
+  const inThread = messages.length > 0 || phase === "THINKING";
 
   return (
     <main className="shell">
-      <video ref={videoBgRef} muted playsInline aria-hidden className="camera-bg" />
+      <video ref={videoBgRef} muted playsInline aria-hidden className="cam-bg" />
 
-      {/* Header — Session Mode only */}
-      {(phase === "LOOP" || phase === "EXCHANGE") && (
-        <header>
-          <button aria-label="Exit" className="back" onClick={handleExit} type="button">
-            ←
-          </button>
-          <span />
-          {phase === "LOOP" && challenge && (
-            <span className="challenge-count">
-              {challengeIndex + 1}&thinsp;/&thinsp;{challenges.length}
-            </span>
-          )}
-        </header>
+      {/* ── OPENING STATE ──────────────────────────────────────────────── */}
+      {/* No messages yet. Mirrors ChatGPT's empty-state: centered, one box. */}
+      {!inThread && (
+        <div className="opening">
+          <p className="opening-q">What are you working on?</p>
+          <InputBox
+            inputRef={intentInputRef}
+            onSubmit={handleIntentSubmit}
+            onMicToggle={handleIntentMicToggle}
+            voiceActive={voiceActive}
+            isVoiceSupported={isVoiceSupported}
+            placeholder="I keep looking at the ball…"
+            autoFocus
+          />
+        </div>
       )}
 
-      <section
-        className={`stage${isStageTappable ? " tappable" : ""}`}
-        onClick={isStageTappable ? handleTap : undefined}
-        role={isStageTappable ? "button" : undefined}
-        aria-label={
-          phase === "EXCHANGE"
-            ? "Tap to continue"
-            : waitingForTap
-              ? "Tap when ready"
-              : loopSubPhase === "LISTENING"
-                ? "Tap to finish"
-                : undefined
-        }
-      >
-        {/* CONTEXT — Conversation Mode */}
-        {phase === "CONTEXT" && (
-          <>
-            <p className="headline dim">What are you working on?</p>
-            <div className="peer-input">
-              <form className="peer-form" onSubmit={handleIntentSubmit}>
-                <input
-                  ref={intentInputRef}
-                  autoComplete="off"
-                  autoFocus
-                  className="peer-text"
-                  placeholder="handles, game day, team…"
-                  spellCheck={false}
-                  type="text"
-                />
-              </form>
-              {isVoiceSupported && (
-                <button
-                  aria-label={voiceActive ? "Stop listening" : "Start listening"}
-                  className={`mic${voiceActive ? " active" : ""}`}
-                  onClick={handleMicToggle}
-                  type="button"
-                >
-                  <span className={`mic-dot${voiceActive ? " listening" : ""}`} />
-                </button>
-              )}
-            </div>
-          </>
-        )}
+      {/* ── THREAD VIEW ────────────────────────────────────────────────── */}
+      {/* Conversation in progress. One thread, one input at bottom. */}
+      {inThread && (
+        <div className="thread-view">
 
-        {/* THINKING — brief beat between major transitions */}
-        {phase === "THINKING" && <span className="dot thinking" />}
+          {/* Minimal header — only exit */}
+          <div className="thread-hd">
+            <button
+              aria-label="New session"
+              className="exit-btn"
+              onClick={handleExit}
+              type="button"
+            >
+              ←
+            </button>
+            <span />
+            {phase === "CHALLENGE" && challenge && (
+              <span className="progress">
+                {challengeIndex + 1}&thinsp;/&thinsp;{challenges.length}
+              </span>
+            )}
+          </div>
 
-        {/* LOOP — Session Mode */}
-        {phase === "LOOP" && (
-          <>
-            {loopSubPhase === "SPEAKING" && !waitingForTap && <span className="dot" />}
-            {waitingForTap && <span className="dot waiting" />}
-            {loopSubPhase === "LISTENING" && <span className="dot listening" />}
-            <p className="headline">{getDisplayText()}</p>
-            {waitingForTap && <p className="tap-hint">say ready — or tap</p>}
-          </>
-        )}
+          {/* Scrollable thread */}
+          <div className="thread" ref={threadRef}>
+            {messages.map((m) => (
+              <div key={m.id} className={`msg r-${m.role} t-${m.type}`}>
+                {m.text}
+              </div>
+            ))}
 
-        {/* EXCHANGE — two witnesses, same moment */}
-        {phase === "EXCHANGE" && exchangeData && (
-          <>
-            <div className="witness">
-              <p className="witness-label">You noticed</p>
-              <p className="witness-value human">&ldquo;{exchangeData.human}&rdquo;</p>
-            </div>
-            <div className="witness">
-              <p className="witness-label">Camera noticed</p>
-              <p className="witness-value machine">{exchangeData.machine}</p>
-            </div>
-          </>
-        )}
+            {/* Thinking indicator — three dots, industry pattern */}
+            {phase === "THINKING" && (
+              <div className="msg r-axis t-thinking">
+                <span className="dot-wave">
+                  <span /><span /><span />
+                </span>
+              </div>
+            )}
+          </div>
 
-        {/* DONE — Conversation Mode returns */}
-        {phase === "DONE" && (
-          <>
-            <p className="headline dim">Done.</p>
-            <div className="peer-input">
-              <form className="peer-form" onSubmit={handleDoneSubmit}>
-                <input
-                  ref={intentInputRef}
-                  autoComplete="off"
-                  autoFocus
-                  className="peer-text"
-                  placeholder="again, or try something new…"
-                  spellCheck={false}
-                  type="text"
-                />
-              </form>
-              {isVoiceSupported && (
-                <button
-                  aria-label={voiceActive ? "Stop listening" : "Start listening"}
-                  className={`mic${voiceActive ? " active" : ""}`}
-                  onClick={handleMicToggle}
-                  type="button"
-                >
-                  <span className={`mic-dot${voiceActive ? " listening" : ""}`} />
-                </button>
-              )}
-            </div>
-          </>
-        )}
-      </section>
+          {/* Pinned input — routes by phase */}
+          <div className="thread-footer">
+            {phase === "CHALLENGE" && (
+              <InputBox
+                key="obs"
+                inputRef={observationInputRef}
+                onSubmit={handleObsSubmit}
+                onMicToggle={handleObsMicToggle}
+                voiceActive={voiceActive}
+                isVoiceSupported={isVoiceSupported}
+                placeholder={isLastChallenge ? "what did you see…" : "done, or what you noticed…"}
+              />
+            )}
+            {phase === "DONE" && (
+              <InputBox
+                key="done"
+                inputRef={intentInputRef}
+                onSubmit={handleDoneSubmit}
+                onMicToggle={handleDoneMicToggle}
+                voiceActive={voiceActive}
+                isVoiceSupported={isVoiceSupported}
+                placeholder="again, or try something new…"
+                autoFocus
+              />
+            )}
+          </div>
+
+        </div>
+      )}
 
       <style jsx>{`
+        /* ------------------------------------------------------------------ */
+        /* Shell                                                               */
+        /* ------------------------------------------------------------------ */
+
         .shell {
           background: #0d0d0a;
           color: #f7f7f2;
           display: flex;
           flex-direction: column;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
           min-height: 100dvh;
           overflow: hidden;
           position: relative;
         }
 
-        .camera-bg {
-          filter: blur(24px);
+        /* Ambient camera — atmosphere, never a homepage */
+        .cam-bg {
+          filter: blur(32px);
           height: 100%;
           left: 0;
           object-fit: cover;
-          opacity: 0.18;
+          opacity: 0.1;
           pointer-events: none;
           position: absolute;
           top: 0;
@@ -669,227 +601,304 @@ export default function AxisShell() {
           z-index: 0;
         }
 
-        header,
-        .stage {
+        /* ------------------------------------------------------------------ */
+        /* Opening state — ChatGPT empty state pattern                        */
+        /* ------------------------------------------------------------------ */
+
+        .opening {
+          align-items: flex-start;
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          gap: 20px;
+          justify-content: center;
+          margin: 0 auto;
+          max-width: 640px;
+          padding: 0 clamp(20px, 5vw, 48px);
+          position: relative;
+          width: 100%;
+          z-index: 1;
+        }
+
+        .opening-q {
+          color: rgba(247, 247, 242, 0.55);
+          font-size: clamp(22px, 3.5vw, 34px);
+          font-weight: 700;
+          line-height: 1.1;
+          margin: 0;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Thread view                                                         */
+        /* ------------------------------------------------------------------ */
+
+        .thread-view {
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          min-height: 0;
           position: relative;
           z-index: 1;
         }
 
-        header {
+        .thread-hd {
           align-items: center;
-          border-bottom: 1px solid rgba(247, 247, 242, 0.06);
+          border-bottom: 1px solid rgba(247, 247, 242, 0.05);
           display: grid;
+          flex-shrink: 0;
           gap: 12px;
           grid-template-columns: auto 1fr auto;
-          padding: 14px clamp(18px, 5vw, 64px);
+          padding: 12px clamp(20px, 5vw, 48px);
         }
 
-        .back {
+        .exit-btn {
           background: transparent;
           border: 0;
-          color: rgba(247, 247, 242, 0.25);
+          color: rgba(247, 247, 242, 0.2);
           cursor: pointer;
           font: inherit;
-          font-size: 18px;
+          font-size: 17px;
           line-height: 1;
           min-height: 44px;
           min-width: 44px;
           padding: 0;
+          transition: color 0.12s;
         }
 
-        .back:hover {
+        .exit-btn:hover {
           color: rgba(247, 247, 242, 0.5);
         }
 
-        .challenge-count {
-          color: rgba(247, 247, 242, 0.2);
+        .progress {
+          color: rgba(247, 247, 242, 0.18);
           font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.1em;
+          font-weight: 700;
+          letter-spacing: 0.09em;
+          text-align: right;
           text-transform: uppercase;
         }
 
-        .stage {
-          align-content: center;
-          display: grid;
-          flex: 1;
-          gap: 28px;
-          padding: 56px clamp(18px, 5vw, 64px) 48px;
-        }
-
-        .stage.tappable {
-          cursor: pointer;
-        }
-
-        .headline {
-          font-size: clamp(40px, 7vw, 80px);
-          font-weight: 900;
-          line-height: 1;
-          margin: 0;
-          max-width: 16ch;
-        }
-
-        .headline.dim {
-          color: rgba(247, 247, 242, 0.35);
-        }
-
-        /* Peer input — voice and text, always both present */
-        .peer-input {
-          align-items: center;
+        /* Scrollable thread */
+        .thread {
           display: flex;
-          gap: 12px;
-          max-width: 560px;
-        }
-
-        .peer-form {
           flex: 1;
-        }
-
-        .peer-text {
-          background: transparent;
-          border: 0;
-          border-bottom: 1px solid rgba(247, 247, 242, 0.12);
-          color: #f7f7f2;
-          font: inherit;
-          font-size: clamp(22px, 3.5vw, 40px);
-          font-weight: 800;
-          outline: none;
-          padding: 6px 0 8px;
+          flex-direction: column;
+          gap: 4px;
+          margin: 0 auto;
+          max-width: 640px;
+          min-height: 0;
+          overflow-y: auto;
+          padding: 28px clamp(20px, 5vw, 48px) 20px;
+          scroll-behavior: smooth;
           width: 100%;
         }
 
-        .peer-text::placeholder {
-          color: rgba(247, 247, 242, 0.16);
-          font-weight: 700;
-        }
-
-        /* Mic button — peer to text, always visible */
-        .mic {
-          align-items: center;
-          background: transparent;
-          border: 1px solid rgba(247, 247, 242, 0.1);
-          border-radius: 50%;
-          cursor: pointer;
-          display: flex;
+        /* Pinned input */
+        .thread-footer {
+          border-top: 1px solid rgba(247, 247, 242, 0.05);
           flex-shrink: 0;
-          height: 44px;
-          justify-content: center;
-          padding: 0;
-          transition: border-color 0.15s;
-          width: 44px;
+          margin: 0 auto;
+          max-width: 640px;
+          padding: 14px clamp(20px, 5vw, 48px) 24px;
+          width: 100%;
         }
 
-        .mic:hover {
-          border-color: rgba(247, 247, 242, 0.3);
-        }
+        /* ------------------------------------------------------------------ */
+        /* Messages                                                            */
+        /* ------------------------------------------------------------------ */
 
-        .mic.active {
-          border-color: rgba(184, 255, 61, 0.5);
-        }
-
-        .mic-dot {
-          background: rgba(247, 247, 242, 0.3);
-          border-radius: 50%;
-          display: block;
-          height: 8px;
-          transition: background 0.15s;
-          width: 8px;
-        }
-
-        .mic-dot.listening {
-          animation: pulse 1.1s ease-in-out infinite;
-          background: #b8ff3d;
-        }
-
-        /* Status dots — Session Mode */
-        .dot {
-          background: rgba(247, 247, 242, 0.2);
-          border-radius: 50%;
-          display: block;
-          height: 8px;
-          width: 8px;
-        }
-
-        .dot.waiting {
-          animation: breathe 2.4s ease-in-out infinite;
-          background: rgba(247, 247, 242, 0.35);
-        }
-
-        .dot.listening {
-          animation: pulse 1.1s ease-in-out infinite;
-          background: #b8ff3d;
-        }
-
-        .dot.thinking {
-          animation: breathe 0.6s ease-in-out infinite;
-          background: rgba(247, 247, 242, 0.3);
-          height: 10px;
-          width: 10px;
-        }
-
-        @keyframes breathe {
-          0%,
-          100% {
-            opacity: 0.35;
-          }
-          50% {
-            opacity: 0.9;
-          }
-        }
-
-        @keyframes pulse {
-          0%,
-          100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.2;
-          }
-        }
-
-        .tap-hint {
-          color: rgba(247, 247, 242, 0.22);
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
+        .msg {
+          line-height: 1.45;
           margin: 0;
-          text-transform: uppercase;
         }
 
-        /* Observation Exchange */
-        .witness {
-          display: grid;
-          gap: 8px;
+        /* User — right, dim */
+        .r-user {
+          align-self: flex-end;
+          color: rgba(247, 247, 242, 0.42);
+          font-size: 15px;
+          font-weight: 500;
+          max-width: 75%;
+          padding: 2px 0;
+          text-align: right;
         }
 
-        .witness-label {
-          color: rgba(247, 247, 242, 0.25);
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          margin: 0;
-          text-transform: uppercase;
+        /* Axis — left */
+        .r-axis {
+          align-self: flex-start;
         }
 
-        .witness-value {
-          font-size: clamp(24px, 4vw, 44px);
-          font-weight: 900;
-          line-height: 1.1;
-          margin: 0;
+        /* Challenge — the constraint. Dominant. Readable at a distance. */
+        .t-challenge {
+          color: #f7f7f2;
+          font-size: clamp(26px, 4.5vw, 44px);
+          font-weight: 600;
+          line-height: 1.15;
+          margin-top: 12px;
           max-width: 20ch;
         }
 
-        .witness-value.human {
+        /* Observation prompt — protected, always visible */
+        .t-obs-prompt {
+          color: rgba(247, 247, 242, 0.35);
+          font-size: 15px;
+          font-weight: 500;
+          margin-top: 4px;
+          padding: 0;
+        }
+
+        /* Machine Witness — one sentence, earns the question */
+        .t-witness {
+          color: rgba(247, 247, 242, 0.38);
+          font-size: 14px;
+          font-weight: 400;
+          margin-top: 6px;
+        }
+
+        /* Done */
+        .t-done {
+          color: rgba(247, 247, 242, 0.28);
+          font-size: clamp(20px, 3vw, 28px);
+          font-weight: 600;
+          margin-top: 12px;
+        }
+
+        /* Thinking indicator — sits naturally in thread flow */
+        .t-thinking {
+          margin-top: 8px;
+          padding: 6px 0;
+        }
+
+        .dot-wave {
+          align-items: center;
+          display: flex;
+          gap: 5px;
+        }
+
+        .dot-wave span {
+          animation: dotrise 1.4s ease-in-out infinite;
+          background: rgba(247, 247, 242, 0.28);
+          border-radius: 50%;
+          display: block;
+          height: 6px;
+          width: 6px;
+        }
+
+        .dot-wave span:nth-child(2) { animation-delay: 0.18s; }
+        .dot-wave span:nth-child(3) { animation-delay: 0.36s; }
+
+        @keyframes dotrise {
+          0%, 60%, 100% { opacity: 0.28; transform: translateY(0); }
+          30% { opacity: 0.75; transform: translateY(-4px); }
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* InputBox                                                            */
+        /* ------------------------------------------------------------------ */
+
+        :global(.ibox) {
+          align-items: center;
+          background: rgba(247, 247, 242, 0.05);
+          border: 1px solid rgba(247, 247, 242, 0.1);
+          border-radius: 14px;
+          display: flex;
+          gap: 4px;
+          padding: 10px 10px 10px 14px;
+          transition: border-color 0.18s;
+        }
+
+        :global(.ibox:focus-within) {
+          border-color: rgba(247, 247, 242, 0.22);
+        }
+
+        :global(.ibox-field) {
+          background: transparent;
+          border: 0;
+          color: #f7f7f2;
+          flex: 1;
+          font: inherit;
+          font-size: 17px;
+          font-weight: 400;
+          line-height: 1.5;
+          min-width: 0;
+          outline: none;
+          padding: 2px 4px;
+        }
+
+        :global(.ibox-field::placeholder) {
+          color: rgba(247, 247, 242, 0.2);
+        }
+
+        :global(.ibox-mic) {
+          align-items: center;
+          background: transparent;
+          border: 0;
+          color: rgba(247, 247, 242, 0.28);
+          cursor: pointer;
+          display: flex;
+          flex-shrink: 0;
+          height: 30px;
+          justify-content: center;
+          padding: 0;
+          transition: color 0.15s;
+          width: 30px;
+        }
+
+        :global(.ibox-mic:hover) {
+          color: rgba(247, 247, 242, 0.55);
+        }
+
+        :global(.ibox-mic.active) {
+          color: #b8ff3d;
+        }
+
+        :global(.mic-dot) {
+          background: currentColor;
+          border-radius: 50%;
+          display: block;
+          height: 7px;
+          width: 7px;
+        }
+
+        :global(.mic-dot.active) {
+          animation: pulse 1.1s ease-in-out infinite;
+        }
+
+        :global(.ibox-send) {
+          align-items: center;
+          background: rgba(247, 247, 242, 0.09);
+          border: 0;
+          border-radius: 9px;
+          color: rgba(247, 247, 242, 0.55);
+          cursor: pointer;
+          display: flex;
+          flex-shrink: 0;
+          font: inherit;
+          font-size: 14px;
+          height: 34px;
+          justify-content: center;
+          padding: 0;
+          transition: background 0.15s, color 0.15s;
+          width: 34px;
+        }
+
+        :global(.ibox-send:hover) {
+          background: rgba(247, 247, 242, 0.16);
           color: #f7f7f2;
         }
 
-        .witness-value.machine {
-          color: rgba(247, 247, 242, 0.5);
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.15; }
         }
       `}</style>
     </main>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Remote persistence — unchanged
+// ---------------------------------------------------------------------------
 
 async function saveRemoteMemory({ attempt }: { attempt: MissionAttempt }) {
   const token = await getAxisAccessToken();
