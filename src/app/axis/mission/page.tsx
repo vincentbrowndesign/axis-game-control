@@ -18,48 +18,38 @@ type LoopSubPhase = "SPEAKING" | "LISTENING";
 
 const OBSERVATION_QUESTION = "What did you notice?";
 
-const CONTEXT_LABELS: Record<AxisContext, string> = {
-  GAME: "Game",
-  PARTNER: "Partner",
-  SOLO: "Alone",
-  TEAM: "Practice",
-};
-
-function matchContextKeyword(transcript: string): AxisContext | null {
+// Hidden classification — player never sees these labels
+function classifyIntent(transcript: string): AxisContext {
   const t = transcript.toLowerCase();
-  if (
-    t.includes("solo") ||
-    t.includes("alone") ||
-    t.includes("myself") ||
-    t.includes("just me") ||
-    t.includes("by myself")
-  )
-    return "SOLO";
-  if (
-    t.includes("partner") ||
-    t.includes("one on one") ||
-    t.includes("1v1") ||
-    t.includes("with someone") ||
-    t.includes("with a friend")
-  )
-    return "PARTNER";
-  if (
-    t.includes("team") ||
-    t.includes("practice") ||
-    t.includes("group") ||
-    t.includes("squad") ||
-    t.includes("drill")
-  )
-    return "TEAM";
   if (
     t.includes("game") ||
     t.includes("match") ||
     t.includes("playing") ||
     t.includes("competition") ||
-    t.includes("scrimmage")
+    t.includes("scrimmage") ||
+    t.includes("against")
   )
     return "GAME";
-  return null;
+  if (
+    t.includes("team") ||
+    t.includes("practice") ||
+    t.includes("group") ||
+    t.includes("squad") ||
+    t.includes("we're") ||
+    t.includes("we are")
+  )
+    return "TEAM";
+  if (
+    t.includes("partner") ||
+    t.includes("one on one") ||
+    t.includes("1v1") ||
+    t.includes("with someone") ||
+    t.includes("with a friend") ||
+    t.includes("with my")
+  )
+    return "PARTNER";
+  // Default — solo is the base context
+  return "SOLO";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,6 +83,7 @@ export default function AxisShell() {
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exchangeAdvanceRef = useRef<(() => void) | null>(null);
+  const intentInputRef = useRef<HTMLInputElement | null>(null);
 
   // Optimistic true — corrected client-side after hydration
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
@@ -135,9 +126,9 @@ export default function AxisShell() {
     window.speechSynthesis.speak(u);
   }, []);
 
-  // Opens mic after "Who's here?" — listens for context keyword
-  // Falls back to visible buttons after 5s if no voice match
-  function listenForContextVoice() {
+  // Opens mic after "What are you working on?" — accepts any speech,
+  // classifies silently, starts session. Box appears after 5s if voice fails.
+  function listenForIntentVoice() {
     clearTimeout(fallbackTimerRef.current ?? undefined);
     recognitionRef.current?.abort();
     recognitionRef.current = null;
@@ -148,32 +139,34 @@ export default function AxisShell() {
       return;
     }
 
+    // Non-continuous: stops naturally after a pause — intent is one utterance
     const rec: SpeechRecognition = new SpeechAPI();
-    rec.continuous = true;
-    rec.interimResults = true;
+    rec.continuous = false;
+    rec.interimResults = false;
     rec.lang = "en-US";
-    let matched = false;
+    let handled = false;
 
     setVoiceActive(true);
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(
-        { length: e.results.length },
-        (_, i) => e.results[i][0].transcript,
-      ).join(" ");
-      const ctx = matchContextKeyword(transcript);
-      if (!matched && ctx) {
-        matched = true;
-        clearTimeout(fallbackTimerRef.current ?? undefined);
-        recognitionRef.current?.abort();
-        recognitionRef.current = null;
-        setVoiceActive(false);
-        handleContextSelect(ctx);
-      }
+      if (handled) return;
+      handled = true;
+      clearTimeout(fallbackTimerRef.current ?? undefined);
+      recognitionRef.current = null;
+      setVoiceActive(false);
+      const transcript = e.results[0][0].transcript;
+      handleContextSelect(classifyIntent(transcript));
     };
 
     rec.onerror = () => {
-      if (!matched) {
+      if (!handled) {
+        setVoiceActive(false);
+        setFallbackVisible(true);
+      }
+    };
+
+    rec.onend = () => {
+      if (!handled) {
         setVoiceActive(false);
         setFallbackVisible(true);
       }
@@ -183,11 +176,11 @@ export default function AxisShell() {
     rec.start();
 
     fallbackTimerRef.current = setTimeout(() => {
-      if (!matched) {
+      if (!handled) {
         setVoiceActive(false);
         setFallbackVisible(true);
       }
-    }, 5000);
+    }, 8000);
   }
 
   // Opens mic after "Done." — listens for "again"/"yes"/"more" etc.
@@ -248,7 +241,7 @@ export default function AxisShell() {
   }
 
   // Opens mic during OBSERVATION "waiting for ready" state
-  // Listens for "ready"/"yes"/"go" — tap always works too
+  // Tap always works too
   function listenForReadyVoice(onReady: () => void) {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
@@ -431,7 +424,7 @@ export default function AxisShell() {
     setFallbackVisible(false);
     setVoiceActive(false);
     setPhase("CONTEXT");
-    speak("Who's here?", () => listenForContextVoice());
+    speak("What are you working on?", () => listenForIntentVoice());
     startCamera();
   }
 
@@ -445,6 +438,16 @@ export default function AxisShell() {
     setVoiceActive(false);
     setPhase("LOOP");
     presentChallengeRef.current(0);
+  }
+
+  function handleIntentSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const val = intentInputRef.current?.value.trim();
+    if (!val) return;
+    clearTimeout(fallbackTimerRef.current ?? undefined);
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    handleContextSelect(classifyIntent(val));
   }
 
   function handleTap() {
@@ -494,7 +497,7 @@ export default function AxisShell() {
     exchangeAdvanceRef.current = null;
     pendingObservationRef.current = null;
     setPhase("CONTEXT");
-    speak("Who's here?", () => listenForContextVoice());
+    speak("What are you working on?", () => listenForIntentVoice());
   }
 
   const challenges = challengesRef.current;
@@ -522,9 +525,8 @@ export default function AxisShell() {
           <button aria-label="Exit" className="back" onClick={handleExit} type="button">
             ←
           </button>
-          <span className="context-label">
-            {activeContext ? CONTEXT_LABELS[activeContext] : ""}
-          </span>
+          {/* Classification is hidden — player never sees SOLO / TEAM / GAME labels */}
+          <span />
           {phase === "LOOP" && challenge && (
             <span className="challenge-count">
               {challengeIndex + 1}&thinsp;/&thinsp;{challenges.length}
@@ -559,24 +561,23 @@ export default function AxisShell() {
           </button>
         )}
 
-        {/* CONTEXT — Axis speaks first, player speaks back, buttons are fallback */}
+        {/* CONTEXT — one box, infinite intent, hidden classification */}
         {phase === "CONTEXT" && (
           <>
-            <p className="headline dim">Who's here?</p>
+            <p className="headline dim">What are you working on?</p>
             {voiceActive && <span className="dot listening" />}
             {fallbackVisible && (
-              <div className="context-options">
-                {(["SOLO", "PARTNER", "TEAM", "GAME"] as AxisContext[]).map((ctx) => (
-                  <button
-                    className="context-choice"
-                    key={ctx}
-                    onClick={() => handleContextSelect(ctx)}
-                    type="button"
-                  >
-                    {CONTEXT_LABELS[ctx]}
-                  </button>
-                ))}
-              </div>
+              <form className="intent-form" onSubmit={handleIntentSubmit}>
+                <input
+                  ref={intentInputRef}
+                  autoFocus
+                  autoComplete="off"
+                  className="intent-input"
+                  placeholder="handles, game day, team…"
+                  spellCheck={false}
+                  type="text"
+                />
+              </form>
             )}
           </>
         )}
@@ -679,14 +680,6 @@ export default function AxisShell() {
           color: rgba(247, 247, 242, 0.5);
         }
 
-        .context-label {
-          color: rgba(247, 247, 242, 0.35);
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-        }
-
         .challenge-count {
           color: rgba(247, 247, 242, 0.2);
           font-size: 11px;
@@ -766,29 +759,27 @@ export default function AxisShell() {
           text-transform: uppercase;
         }
 
-        .context-options {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
+        /* One Box — appears if voice fails */
+        .intent-form {
+          display: grid;
         }
 
-        .context-choice {
+        .intent-input {
           background: transparent;
           border: 0;
-          color: rgba(247, 247, 242, 0.55);
-          cursor: pointer;
+          border-bottom: 1px solid rgba(247, 247, 242, 0.15);
+          color: #f7f7f2;
           font: inherit;
-          font-size: clamp(28px, 5vw, 52px);
+          font-size: clamp(24px, 4vw, 44px);
           font-weight: 900;
-          line-height: 1.1;
-          min-height: 52px;
-          padding: 0;
-          text-align: left;
-          transition: color 0.1s;
+          outline: none;
+          padding: 8px 0 10px;
+          width: 100%;
         }
 
-        .context-choice:hover {
-          color: #f7f7f2;
+        .intent-input::placeholder {
+          color: rgba(247, 247, 242, 0.18);
+          font-weight: 700;
         }
 
         /* Observation Exchange — two witnesses, same moment */
