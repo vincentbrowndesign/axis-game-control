@@ -172,6 +172,7 @@ export default function AxisShell() {
   const intentRef = useRef("");
   const sessionIdRef = useRef(Date.now().toString(36));
   const expansionConstraintRef = useRef<GeneratedConstraint | null>(null);
+  const expandAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setIsVoiceSupported("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
@@ -336,18 +337,53 @@ export default function AxisShell() {
   // Expansion Engine — Intent → Expand → Constrain
   // -------------------------------------------------------------------------
 
-  // Entry point for all new intents. Replaces direct routing with analysis.
-  function runExpansion(intent: string) {
+  // Primary path: LLM generates the most useful clarifying question or a direct constraint.
+  // Falls back to static rules if the API is unavailable.
+  async function runExpansion(intent: string) {
+    const sid = sessionIdRef.current; // capture — if user exits mid-call, sid changes
+    try {
+      expandAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      expandAbortRef.current = ctrl;
+
+      const res = await fetch("/api/axis/expand", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent }),
+        signal: ctrl.signal,
+      });
+      expandAbortRef.current = null;
+
+      if (sessionIdRef.current !== sid) return; // user exited while in flight
+      if (!res.ok) throw new Error("expand api error");
+
+      const data = await res.json() as { confidence: number; clarification_question?: string; constraint?: string };
+      if (sessionIdRef.current !== sid) return;
+
+      if (data.clarification_question) {
+        appendMessage({ role: "axis", type: "question", text: data.clarification_question });
+        setPhase("EXPAND");
+      } else if (data.constraint) {
+        startSessionWithConstraint({ constraint: data.constraint, duration: "90 seconds" });
+      } else {
+        throw new Error("unexpected response shape");
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      if (sessionIdRef.current !== sid) return;
+      runExpansionStatic(intent);
+    }
+  }
+
+  // Fallback: static knowledge base (no network required)
+  function runExpansionStatic(intent: string) {
     const analysis = analyzeIntent(intent);
     if (!analysis.needsExpansion && analysis.directConstraint) {
-      // Specific enough — go straight to constraint
       startSessionWithConstraint(analysis.directConstraint);
     } else if (analysis.needsExpansion && analysis.question) {
-      // Needs one question — ask it, wait for EXPAND answer
       appendMessage({ role: "axis", type: "question", text: analysis.question.text });
       setPhase("EXPAND");
     } else {
-      // Unknown domain — fall back to context routing
       startSession(classifyIntent(intent));
     }
   }
@@ -370,15 +406,43 @@ export default function AxisShell() {
     pushChallenge(0);
   }
 
-  // Called when player answers the expansion question (text or voice)
+  // Called when player answers the expansion question (text or voice).
+  // Calls the LLM with intent + answer to generate an earned constraint.
   function handleExpandAnswer(val: string) {
     stopVoice();
     if (!val.trim()) return;
     if (observationInputRef.current) observationInputRef.current.value = "";
     appendMessage({ role: "user", type: "observation", text: val.trim() });
-    showThinking(() => {
-      const generated = generateConstraint(intentRef.current, val.trim());
-      startSessionWithConstraint(generated);
+    const capturedVal = val.trim();
+    const sid = sessionIdRef.current;
+    showThinking(async () => {
+      try {
+        expandAbortRef.current?.abort();
+        const ctrl = new AbortController();
+        expandAbortRef.current = ctrl;
+        const res = await fetch("/api/axis/expand", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intent: intentRef.current, answer: capturedVal }),
+          signal: ctrl.signal,
+        });
+        expandAbortRef.current = null;
+        if (sessionIdRef.current !== sid) return;
+        if (!res.ok) throw new Error("expand api error");
+        const data = await res.json() as { confidence: number; constraint?: string };
+        if (sessionIdRef.current !== sid) return;
+        if (data.constraint) {
+          startSessionWithConstraint({ constraint: data.constraint, duration: "90 seconds" });
+        } else {
+          throw new Error("no constraint");
+        }
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        if (sessionIdRef.current !== sid) return;
+        // Fallback to static constraint generation
+        const generated = generateConstraint(intentRef.current, capturedVal);
+        startSessionWithConstraint(generated);
+      }
     });
   }
 
@@ -521,6 +585,8 @@ export default function AxisShell() {
   // -------------------------------------------------------------------------
 
   function reset() {
+    expandAbortRef.current?.abort();
+    expandAbortRef.current = null;
     clearTimeout(thinkingTimerRef.current ?? undefined);
     clearTimeout(witnessTimerRef.current ?? undefined);
     stopVoice();
@@ -528,9 +594,11 @@ export default function AxisShell() {
     thinkingNextRef.current = null;
   }
 
-  // ← New: clears thread, returns to opening state
+  // Clears thread, returns to opening state.
+  // Bumps sessionIdRef so any in-flight async expansion calls discard their results.
   function handleExit() {
     reset();
+    sessionIdRef.current = Date.now().toString(36);
     setMessages([]);
     setPhase("CONTEXT");
   }
