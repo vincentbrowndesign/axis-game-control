@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
 import { type AxisChallenge, type AxisContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
+import { analyzeIntent, generateConstraint, type GeneratedConstraint } from "../../../lib/axis-expansion";
 import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
 import {
   createLocalMissionMemoryAdapter,
@@ -20,14 +21,14 @@ const OBSERVATION_EXCHANGE_ENABLED = false;
 // Types
 // ---------------------------------------------------------------------------
 
-type ShellPhase = "CONTEXT" | "THINKING" | "CHALLENGE" | "DONE";
+type ShellPhase = "CONTEXT" | "THINKING" | "EXPAND" | "CHALLENGE" | "DONE";
 
 // Thread message — accumulates over the session
 interface Message {
   id: string;
   role: "user" | "axis";
   // type controls visual treatment
-  type: "intent" | "challenge" | "obs-prompt" | "observation" | "witness" | "done";
+  type: "intent" | "question" | "challenge" | "obs-prompt" | "observation" | "witness" | "done";
   text: string;
 }
 
@@ -170,6 +171,7 @@ export default function AxisShell() {
   const witnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intentRef = useRef("");
   const sessionIdRef = useRef(Date.now().toString(36));
+  const expansionConstraintRef = useRef<GeneratedConstraint | null>(null);
 
   useEffect(() => {
     setIsVoiceSupported("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
@@ -210,9 +212,9 @@ export default function AxisShell() {
     return () => clearTimeout(witnessTimerRef.current ?? undefined);
   }, [phase, challengeIndex]);
 
-  // Focus observation input when a challenge is shown or advances
+  // Focus response input when a challenge or expansion question appears
   useEffect(() => {
-    if (phase !== "CHALLENGE") return;
+    if (phase !== "CHALLENGE" && phase !== "EXPAND") return;
     const t = setTimeout(() => observationInputRef.current?.focus(), 80);
     return () => clearTimeout(t);
   }, [phase, challengeIndex]);
@@ -330,6 +332,66 @@ export default function AxisShell() {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Expansion Engine — Intent → Expand → Constrain
+  // -------------------------------------------------------------------------
+
+  // Entry point for all new intents. Replaces direct routing with analysis.
+  function runExpansion(intent: string) {
+    const analysis = analyzeIntent(intent);
+    if (!analysis.needsExpansion && analysis.directConstraint) {
+      // Specific enough — go straight to constraint
+      startSessionWithConstraint(analysis.directConstraint);
+    } else if (analysis.needsExpansion && analysis.question) {
+      // Needs one question — ask it, wait for EXPAND answer
+      appendMessage({ role: "axis", type: "question", text: analysis.question.text });
+      setPhase("EXPAND");
+    } else {
+      // Unknown domain — fall back to context routing
+      startSession(classifyIntent(intent));
+    }
+  }
+
+  // Build a one-constraint session from a dynamically generated constraint
+  function startSessionWithConstraint(generated: GeneratedConstraint) {
+    const synthetic: AxisChallenge = {
+      id: `dynamic-${Date.now()}`,
+      constraint: generated.constraint,
+      objective: generated.constraint,
+      requiredEvidence: "OBSERVATION",
+      contexts: ["SOLO", "PARTNER", "TEAM", "GAME"],
+      text: `${generated.constraint}. ${generated.duration}.`,
+    };
+    expansionConstraintRef.current = generated;
+    challengesRef.current = [synthetic];
+    setChallengeIndex(0);
+    setWitnessText(null);
+    setPhase("CHALLENGE");
+    pushChallenge(0);
+  }
+
+  // Called when player answers the expansion question (text or voice)
+  function handleExpandAnswer(val: string) {
+    stopVoice();
+    if (!val.trim()) return;
+    if (observationInputRef.current) observationInputRef.current.value = "";
+    appendMessage({ role: "user", type: "observation", text: val.trim() });
+    showThinking(() => {
+      const generated = generateConstraint(intentRef.current, val.trim());
+      startSessionWithConstraint(generated);
+    });
+  }
+
+  function handleExpandSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    handleExpandAnswer(observationInputRef.current?.value ?? "");
+  }
+
+  function handleExpandMicToggle() {
+    if (voiceActive) { stopVoice(); return; }
+    startVoiceCapture(observationInputRef, handleExpandAnswer);
+  }
+
   function startSession(ctx: AxisContext) {
     const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
     challengesRef.current = filtered.length > 0 ? filtered : VISION_CHALLENGES;
@@ -392,7 +454,7 @@ export default function AxisShell() {
     startCamera();
     appendMessage({ role: "user", type: "intent", text: val.trim() });
     if (intentInputRef.current) intentInputRef.current.value = "";
-    showThinking(() => startSession(classifyIntent(val)));
+    showThinking(() => runExpansion(val.trim()));
   }
 
   function handleIntentSubmit(e: React.FormEvent) {
@@ -431,11 +493,16 @@ export default function AxisShell() {
     appendMessage({ role: "user", type: "intent", text: val.trim() });
     if (AGAIN_WORDS.some((k) => val.toLowerCase().includes(k))) {
       reset();
-      showThinking(() => startSession(classifyIntent(intentRef.current)));
+      // Reuse the last generated constraint if available; otherwise re-route
+      if (expansionConstraintRef.current) {
+        showThinking(() => startSessionWithConstraint(expansionConstraintRef.current!));
+      } else {
+        showThinking(() => startSession(classifyIntent(intentRef.current)));
+      }
     } else {
       intentRef.current = val.trim();
       sessionIdRef.current = Date.now().toString(36);
-      showThinking(() => startSession(classifyIntent(val)));
+      showThinking(() => runExpansion(val.trim()));
     }
   }
 
@@ -542,6 +609,17 @@ export default function AxisShell() {
 
           {/* Pinned input — routes by phase */}
           <div className="thread-footer">
+            {phase === "EXPAND" && (
+              <InputBox
+                key="expand"
+                inputRef={observationInputRef}
+                onSubmit={handleExpandSubmit}
+                onMicToggle={handleExpandMicToggle}
+                voiceActive={voiceActive}
+                isVoiceSupported={isVoiceSupported}
+                placeholder="tell me more…"
+              />
+            )}
             {phase === "CHALLENGE" && (
               <InputBox
                 key="obs"
@@ -736,6 +814,15 @@ export default function AxisShell() {
           line-height: 1.15;
           margin-top: 12px;
           max-width: 20ch;
+        }
+
+        /* Expansion question — one question that earns the constraint */
+        .t-question {
+          color: rgba(247, 247, 242, 0.88);
+          font-size: clamp(20px, 3.2vw, 28px);
+          font-weight: 500;
+          line-height: 1.3;
+          margin-top: 12px;
         }
 
         /* Observation prompt — protected, always visible */
