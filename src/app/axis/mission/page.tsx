@@ -36,6 +36,8 @@ import {
 // ---------------------------------------------------------------------------
 
 const OBSERVATION_EXCHANGE_ENABLED = false;
+const LEGACY_EYES_UP_TEXT = "Eyes Up. Ten dribbles. Left hand.";
+const GENERIC_CLARIFICATION = "What part are you trying to improve?";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,11 +66,20 @@ interface LearningToken {
   sessionId: string;
 }
 
+interface UnderstandResponse {
+  confidence: number;
+  leveragePoint?: string;
+  mentalModel?: string;
+  commonMistake?: string;
+  experimentCandidate?: string;
+  clarificationQuestion?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-function classifyIntent(t: string): SessionContext {
+function classifyLegacyContext(t: string): SessionContext {
   const s = t.toLowerCase();
   if (["game", "match", "playing", "competition", "scrimmage", "against"].some((k) => s.includes(k)))
     return "GAME";
@@ -90,7 +101,27 @@ function formatMachineWitness(value: string): string {
 
 function getChallengeText(c: AxisChallenge): string {
   const i = c.text.indexOf("What did you notice?");
-  return i > -1 ? c.text.slice(0, i).trim() : c.text;
+  return sanitizeAxisText(i > -1 ? c.text.slice(0, i).trim() : c.text);
+}
+
+function sanitizeAxisText(text: string): string {
+  return text.trim() === LEGACY_EYES_UP_TEXT ? GENERIC_CLARIFICATION : text;
+}
+
+function fallbackClarification(intent: string): string {
+  const s = intent.toLowerCase();
+  if (s.includes("form")) return "What part of your form?";
+  if (s.includes("triple threat") || s.includes("triple-threat")) return "What happens when they don't move?";
+  return GENERIC_CLARIFICATION;
+}
+
+function candidateToConstraint(candidate: string): GeneratedConstraint {
+  const trimmed = candidate.trim();
+  const withoutPeriod = trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
+  const match = withoutPeriod.match(/^(.*?)(?:\s*\.?\s*)(\d+\s*(?:seconds?|minutes?))$/i);
+  if (!match) return { constraint: trimmed, duration: "90 seconds" };
+  const constraint = match[1].replace(/[.\s]+$/, "").trim();
+  return { constraint: constraint || trimmed, duration: match[2].trim() };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -259,7 +290,7 @@ export default function AxisShell() {
   // -------------------------------------------------------------------------
 
   function appendMessage(m: Omit<Message, "id">) {
-    setMessages((prev) => [...prev, { ...m, id: uid() }]);
+    setMessages((prev) => [...prev, { ...m, text: sanitizeAxisText(m.text), id: uid() }]);
   }
 
   // -------------------------------------------------------------------------
@@ -438,11 +469,11 @@ export default function AxisShell() {
   }
 
   // -------------------------------------------------------------------------
-  // Expansion Engine — Intent → Expand → Constrain
+  // Understanding Engine — Intent → Understand → Experiment
   // -------------------------------------------------------------------------
 
-  // Primary path: LLM generates the most useful clarifying question or a direct constraint.
-  // Falls back to static rules if the API is unavailable.
+  // Primary path: locate a leverage point before any challenge can start.
+  // No failed/unknown intent may fall through to the static vision list.
   async function runExpansion(intent: string) {
     const sid = sessionIdRef.current; // capture — if user exits mid-call, sid changes
     try {
@@ -450,7 +481,7 @@ export default function AxisShell() {
       const ctrl = new AbortController();
       expandAbortRef.current = ctrl;
 
-      const res = await fetch("/api/axis/expand", {
+      const res = await fetch("/api/axis/understand", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ intent }),
@@ -459,16 +490,16 @@ export default function AxisShell() {
       expandAbortRef.current = null;
 
       if (sessionIdRef.current !== sid) return; // user exited while in flight
-      if (!res.ok) throw new Error("expand api error");
+      if (!res.ok) throw new Error("understand api error");
 
-      const data = await res.json() as { confidence: number; clarification_question?: string; constraint?: string };
+      const data = await res.json() as UnderstandResponse;
       if (sessionIdRef.current !== sid) return;
 
-      if (data.clarification_question) {
-        appendMessage({ role: "axis", type: "question", text: data.clarification_question });
+      if (data.clarificationQuestion) {
+        appendMessage({ role: "axis", type: "question", text: data.clarificationQuestion });
         setPhase("EXPAND");
-      } else if (data.constraint) {
-        startSessionWithConstraint({ constraint: data.constraint, duration: "90 seconds" });
+      } else if (data.experimentCandidate) {
+        startSessionWithConstraint(candidateToConstraint(data.experimentCandidate));
       } else {
         throw new Error("unexpected response shape");
       }
@@ -479,17 +510,15 @@ export default function AxisShell() {
     }
   }
 
-  // Fallback: static knowledge base (no network required)
+  // Fallback: static clarification only. Never routes to VISION_CHALLENGES.
   function runExpansionStatic(intent: string) {
     const analysis = analyzeIntent(intent);
-    if (!analysis.needsExpansion && analysis.directConstraint) {
-      startSessionWithConstraint(analysis.directConstraint);
-    } else if (analysis.needsExpansion && analysis.question) {
-      appendMessage({ role: "axis", type: "question", text: analysis.question.text });
-      setPhase("EXPAND");
-    } else {
-      startSession(classifyIntent(intent));
-    }
+    appendMessage({
+      role: "axis",
+      type: "question",
+      text: analysis.question?.text ?? fallbackClarification(intent),
+    });
+    setPhase("EXPAND");
   }
 
   // Build a one-constraint session from a dynamically generated constraint
@@ -566,7 +595,7 @@ export default function AxisShell() {
     startVoiceCapture(observationInputRef, handleExpandAnswer);
   }
 
-  function startSession(ctx: SessionContext) {
+  function startLegacyVisionSession(ctx: SessionContext) {
     const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
     const list = filtered.length > 0 ? filtered : VISION_CHALLENGES;
     challengesRef.current = list;
@@ -719,7 +748,7 @@ export default function AxisShell() {
       if (expansionConstraintRef.current) {
         showThinking(() => startSessionWithConstraint(expansionConstraintRef.current!));
       } else {
-        showThinking(() => startSession(classifyIntent(intentRef.current)));
+        showThinking(() => runExpansion(intentRef.current || val.trim()));
       }
     } else {
       intentRef.current = val.trim();
