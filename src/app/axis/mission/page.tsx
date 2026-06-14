@@ -1,5 +1,6 @@
 "use client";
 
+import { CameraIcon, Eye, Mic, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
 import { type AxisChallenge, type AxisContext as SessionContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
@@ -21,6 +22,7 @@ import {
   recordExperiment as recordCtxExperiment,
   recordIntent as recordCtxIntent,
   recordObservation as recordCtxObservation,
+  recordOutcome as recordCtxOutcome,
 } from "../../../lib/context-store";
 import {
   COACH_TAPS,
@@ -40,6 +42,8 @@ const OBSERVATION_EXCHANGE_ENABLED = false;
 // ---------------------------------------------------------------------------
 
 type ShellPhase = "CONTEXT" | "THINKING" | "EXPAND" | "CHALLENGE" | "DONE";
+type CameraStatus = "OFF" | "STARTING" | "ON" | "BLOCKED";
+type WitnessStatus = "QUIET" | "READY" | "WATCHING" | "SAVING" | "RECORDED";
 
 // Thread message — accumulates over the session
 interface Message {
@@ -172,8 +176,10 @@ export default function AxisShell() {
   const [phase, setPhase] = useState<ShellPhase>("CONTEXT");
   const [messages, setMessages] = useState<Message[]>([]);
   const [challengeIndex, setChallengeIndex] = useState(0);
+  const [cameraStatus, setCameraStatus] = useState<CameraStatus>("OFF");
   const [voiceActive, setVoiceActive] = useState(false);
   const [witnessText, setWitnessText] = useState<string | null>(null);
+  const [witnessStatus, setWitnessStatus] = useState<WitnessStatus>("QUIET");
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
 
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
@@ -261,8 +267,12 @@ export default function AxisShell() {
   // -------------------------------------------------------------------------
 
   function startWitness(experimentId: string, constraint: string) {
+    setWitnessStatus("WATCHING");
     const video = videoBgRef.current;
-    if (!video) return;
+    if (!video) {
+      setWitnessStatus("READY");
+      return;
+    }
     cameraWitnessRef.current = startCameraWitness({
       intent_id: sessionIdRef.current,
       experiment_id: experimentId,
@@ -274,13 +284,21 @@ export default function AxisShell() {
   function stopWitness() {
     const handle = cameraWitnessRef.current;
     cameraWitnessRef.current = null;
-    if (!handle) return;
+    if (!handle) {
+      setWitnessStatus("READY");
+      return;
+    }
+    setWitnessStatus("SAVING");
     const capturedSid = sessionIdRef.current;
     handle.stop().then((event) => {
-      if (!event || sessionIdRef.current !== capturedSid) return;
+      if (!event || sessionIdRef.current !== capturedSid) {
+        setWitnessStatus("READY");
+        return;
+      }
       record(event);
+      setWitnessStatus("RECORDED");
       appendMessage({ role: "axis", type: "witness", text: `I noticed: ${event.claim.summary}` });
-    }).catch(() => null);
+    }).catch(() => setWitnessStatus("READY"));
   }
 
   // -------------------------------------------------------------------------
@@ -290,14 +308,45 @@ export default function AxisShell() {
   function startCamera() {
     if (cameraStartedRef.current) return;
     cameraStartedRef.current = true;
+    setCameraStatus("STARTING");
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "user" } })
       .then((stream) => {
         streamRef.current = stream;
         const v = videoBgRef.current;
         if (v) { v.srcObject = stream; v.play().catch(() => null); }
+        setCameraStatus("ON");
+        setWitnessStatus((current) => current === "QUIET" ? "READY" : current);
       })
-      .catch(() => { cameraStartedRef.current = false; });
+      .catch(() => {
+        cameraStartedRef.current = false;
+        setCameraStatus("BLOCKED");
+      });
+  }
+
+  function openUpload() {
+    window.location.href = "/axis-ball";
+  }
+
+  function toggleVisibleVoice() {
+    if (!isVoiceSupported) return;
+    if (voiceActive) { stopVoice(); return; }
+    if (phase === "CONTEXT") {
+      startCamera();
+      startVoiceCapture(intentInputRef, submitIntent);
+      return;
+    }
+    if (phase === "EXPAND") {
+      startVoiceCapture(observationInputRef, handleExpandAnswer);
+      return;
+    }
+    if (phase === "CHALLENGE") {
+      startVoiceCapture(observationInputRef, completeChallenge);
+      return;
+    }
+    if (phase === "DONE") {
+      startVoiceCapture(intentInputRef, submitDone);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -565,6 +614,10 @@ export default function AxisShell() {
     if (nextIndex >= challenges.length) {
       showThinking(() => {
         setPhase("DONE");
+        if (activeContextIdRef.current) {
+          recordCtxOutcome(activeContextIdRef.current, "Done");
+          setContexts(listSummaries());
+        }
         appendMessage({ role: "axis", type: "done", text: "Done." });
       });
     } else {
@@ -618,6 +671,7 @@ export default function AxisShell() {
 
   function fireCoachWitness(event: ReturnType<typeof coachTapEvent>) {
     record(event);
+    setWitnessStatus("RECORDED");
     appendMessage({ role: "axis", type: "witness", text: `Coach: ${event.claim.summary}` });
   }
 
@@ -696,6 +750,7 @@ export default function AxisShell() {
     clearTimeout(witnessTimerRef.current ?? undefined);
     stopVoice();
     setWitnessText(null);
+    setWitnessStatus(cameraStatus === "ON" ? "READY" : "QUIET");
     thinkingNextRef.current = null;
   }
 
@@ -715,8 +770,9 @@ export default function AxisShell() {
   const challenges = challengesRef.current;
   const challenge = challenges[challengeIndex];
   const isLastChallenge = challenges.length > 0 && challengeIndex === challenges.length - 1;
-  // Show thread view once any message exists, or while thinking (dot must appear somewhere)
+  // Show thread view once any message exists, or while thinking.
   const inThread = messages.length > 0 || phase === "THINKING";
+  const witnessStatusText = witnessText ?? `Witness: ${witnessStatus.toLowerCase()}`;
 
   return (
     <main className="shell">
@@ -728,9 +784,39 @@ export default function AxisShell() {
         onClose={() => setSidebarOpen(false)}
       />
       <video ref={videoBgRef} muted playsInline aria-hidden className="cam-bg" />
+      <div className="capability-rail" aria-label="Axis capabilities">
+        <button
+          className={`cap-btn${cameraStatus === "ON" ? " active" : ""}`}
+          onClick={startCamera}
+          type="button"
+        >
+          <CameraIcon aria-hidden className="cap-icon" size={15} strokeWidth={1.8} />
+          <span>Camera</span>
+          <strong>{cameraStatus}</strong>
+        </button>
+        <button className="cap-btn" onClick={openUpload} type="button">
+          <Upload aria-hidden className="cap-icon" size={15} strokeWidth={1.8} />
+          <span>Upload</span>
+          <strong>READY</strong>
+        </button>
+        <button
+          className={`cap-btn${voiceActive ? " active" : ""}`}
+          disabled={!isVoiceSupported}
+          onClick={toggleVisibleVoice}
+          type="button"
+        >
+          <Mic aria-hidden className="cap-icon" size={15} strokeWidth={1.8} />
+          <span>Voice</span>
+          <strong>{voiceActive ? "LIVE" : isVoiceSupported ? "READY" : "OFF"}</strong>
+        </button>
+        <div className={`cap-status ${witnessStatus.toLowerCase()}`}>
+          <Eye aria-hidden className="cap-icon" size={15} strokeWidth={1.8} />
+          <span>Witness</span>
+          <strong>{witnessStatusText}</strong>
+        </div>
+      </div>
 
       {/* ── OPENING STATE ──────────────────────────────────────────────── */}
-      {/* No messages yet. Mirrors ChatGPT's empty-state: centered, one box. */}
       {!inThread && (
         <div className="opening">
           <button
@@ -755,7 +841,7 @@ export default function AxisShell() {
       )}
 
       {/* ── THREAD VIEW ────────────────────────────────────────────────── */}
-      {/* Conversation in progress. One thread, one input at bottom. */}
+      {/* Context in progress. One thread, one input at bottom. */}
       {inThread && (
         <div className="thread-view">
 
@@ -930,6 +1016,103 @@ export default function AxisShell() {
           gap: 2px;
         }
 
+        .capability-rail {
+          align-items: stretch;
+          border-bottom: 1px solid rgba(247, 247, 242, 0.05);
+          display: grid;
+          gap: 1px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          position: relative;
+          z-index: 2;
+        }
+
+        .cap-btn,
+        .cap-status {
+          background: rgba(247, 247, 242, 0.025);
+          border: 0;
+          border-right: 1px solid rgba(247, 247, 242, 0.05);
+          color: rgba(247, 247, 242, 0.42);
+          display: flex;
+          flex-direction: column;
+          font: inherit;
+          gap: 3px;
+          justify-content: center;
+          min-height: 52px;
+          min-width: 0;
+          padding: 9px 12px;
+          text-align: left;
+        }
+
+        .cap-btn {
+          cursor: pointer;
+        }
+
+        .cap-btn:hover {
+          background: rgba(247, 247, 242, 0.045);
+          color: rgba(247, 247, 242, 0.62);
+        }
+
+        .cap-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+        }
+
+        .cap-icon {
+          color: rgba(247, 247, 242, 0.24);
+          margin-bottom: 1px;
+        }
+
+        .cap-btn.active .cap-icon,
+        .cap-status.watching .cap-icon,
+        .cap-status.saving .cap-icon,
+        .cap-status.recorded .cap-icon {
+          color: rgba(189, 255, 91, 0.72);
+        }
+
+        .cap-btn span,
+        .cap-status span {
+          color: rgba(247, 247, 242, 0.22);
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        .cap-btn strong,
+        .cap-status strong {
+          color: rgba(247, 247, 242, 0.58);
+          display: block;
+          font-size: 12px;
+          font-weight: 650;
+          line-height: 1.2;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .cap-btn.active strong,
+        .cap-status.watching strong,
+        .cap-status.saving strong,
+        .cap-status.recorded strong {
+          color: rgba(189, 255, 91, 0.78);
+        }
+
+        .cap-status {
+          border-right: 0;
+          grid-column: 1 / -1;
+        }
+
+        @media (min-width: 860px) {
+          .capability-rail {
+            grid-template-columns: repeat(3, 112px) minmax(180px, 1fr);
+          }
+
+          .cap-status {
+            grid-column: auto;
+          }
+        }
+
         /* Ambient camera — atmosphere, never a homepage */
         .cam-bg {
           filter: blur(32px);
@@ -946,7 +1129,7 @@ export default function AxisShell() {
         }
 
         /* ------------------------------------------------------------------ */
-        /* Opening state — ChatGPT empty state pattern                        */
+        /* Opening state                                                       */
         /* ------------------------------------------------------------------ */
 
         .opening {

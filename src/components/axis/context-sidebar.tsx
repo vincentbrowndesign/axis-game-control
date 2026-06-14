@@ -3,20 +3,20 @@
 import { type ContextSummary } from "../../lib/context-model";
 
 // ---------------------------------------------------------------------------
-// Capability → emoji prefix
+// Capability thumbnail
 // ---------------------------------------------------------------------------
 
-function capabilityEmoji(capability?: string): string {
-  if (!capability) return "";
+function capabilityInitial(capability?: string): string {
+  if (!capability) return "AX";
   const map: Record<string, string> = {
-    basketball: "🏀 ",
-    music: "🎵 ",
-    build: "🏗 ",
-    research: "📚 ",
-    film: "🎬 ",
-    writing: "✍️ ",
+    basketball: "BK",
+    music: "MS",
+    build: "BD",
+    research: "RS",
+    film: "FM",
+    writing: "WR",
   };
-  return map[capability.toLowerCase()] ?? "";
+  return map[capability.toLowerCase()] ?? capability.slice(0, 2).toUpperCase();
 }
 
 // ---------------------------------------------------------------------------
@@ -68,17 +68,6 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
           </button>
         </div>
 
-        {/* Search — future-ready placeholder, not yet active */}
-        <div className="search-slot">
-          <input
-            className="search-input"
-            disabled
-            placeholder="Search contexts…"
-            type="text"
-            aria-label="Search contexts (coming soon)"
-          />
-        </div>
-
         {/* List */}
         <div className="ctx-list">
           {contexts.length === 0 ? (
@@ -94,13 +83,28 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
                 onClick={() => onSelect(ctx)}
                 type="button"
               >
-                <span className="ctx-title">
-                  {capabilityEmoji(ctx.capability)}{ctx.title}
+                <span className="ctx-top">
+                  <span className="ctx-thumb" aria-hidden>
+                    {capabilityInitial(ctx.capability)}
+                  </span>
+                  <span className="ctx-copy">
+                    <span className="ctx-title">{ctx.title}</span>
+                    <span className="ctx-time">{relativeTime(ctx.updatedAt)}</span>
+                  </span>
                 </span>
-                {ctx.lastExperiment && (
-                  <span className="ctx-exp">{ctx.lastExperiment}</span>
-                )}
-                <span className="ctx-time">{relativeTime(ctx.updatedAt)}</span>
+                <span className="ctx-history">
+                  {ctx.lastExperiment ? (
+                    <span className="ctx-line">Experiment: {ctx.lastExperiment}</span>
+                  ) : null}
+                  {ctx.lastObservation ? (
+                    <span className="ctx-line">Last: {ctx.lastObservation}</span>
+                  ) : ctx.lastIntent ? (
+                    <span className="ctx-line">Intent: {ctx.lastIntent}</span>
+                  ) : null}
+                  {ctx.lastOutcome ? (
+                    <span className="ctx-line">Outcome: {ctx.lastOutcome}</span>
+                  ) : null}
+                </span>
               </button>
             ))
           )}
@@ -195,27 +199,6 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
           }
         }
 
-        /* Search placeholder */
-        .search-slot {
-          border-bottom: 1px solid rgba(247, 247, 242, 0.04);
-          flex-shrink: 0;
-          padding: 9px 10px;
-        }
-
-        .search-input {
-          background: rgba(247, 247, 242, 0.04);
-          border: 1px solid rgba(247, 247, 242, 0.06);
-          border-radius: 6px;
-          color: rgba(247, 247, 242, 0.2);
-          cursor: not-allowed;
-          font: inherit;
-          font-size: 13px;
-          outline: none;
-          padding: 6px 10px;
-          width: 100%;
-          box-sizing: border-box;
-        }
-
         /* Context list */
         .ctx-list {
           flex: 1;
@@ -253,12 +236,12 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
           cursor: pointer;
           display: flex;
           flex-direction: column;
-          gap: 2px;
-          padding: 9px 14px;
+          gap: 7px;
+          padding: 11px 12px;
           text-align: left;
           transition: background 0.1s;
           width: 100%;
-          min-height: 44px;
+          min-height: 64px;
         }
 
         .ctx-row:hover {
@@ -267,6 +250,33 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
 
         .ctx-row.active {
           background: rgba(247, 247, 242, 0.06);
+        }
+
+        .ctx-top {
+          align-items: center;
+          display: grid;
+          gap: 9px;
+          grid-template-columns: 32px minmax(0, 1fr);
+        }
+
+        .ctx-thumb {
+          align-items: center;
+          background: rgba(189, 255, 91, 0.08);
+          border: 1px solid rgba(189, 255, 91, 0.18);
+          color: rgba(189, 255, 91, 0.72);
+          display: flex;
+          font-size: 10px;
+          font-weight: 800;
+          height: 32px;
+          justify-content: center;
+          letter-spacing: 0.06em;
+          width: 32px;
+        }
+
+        .ctx-copy {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
         }
 
         /* Title — largest, readable */
@@ -284,8 +294,15 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
           color: #f7f7f2;
         }
 
-        /* Last experiment — small, muted */
-        .ctx-exp {
+        .ctx-history {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          padding-left: 41px;
+        }
+
+        /* Learning record — small, muted */
+        .ctx-line {
           color: rgba(247, 247, 242, 0.32);
           font-size: 12px;
           font-weight: 400;

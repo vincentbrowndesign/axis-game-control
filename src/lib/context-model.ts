@@ -32,7 +32,10 @@ export interface ContextSummary {
   id: string;
   title: string;
   capability?: string;
+  lastIntent?: string;
   lastExperiment?: string;
+  lastObservation?: string;
+  lastOutcome?: string;
   updatedAt: string;
 }
 
@@ -41,7 +44,10 @@ export function toSummary(ctx: AxisContext): ContextSummary {
     id: ctx.id,
     title: ctx.title,
     capability: ctx.capability,
+    lastIntent: ctx.lastIntent,
     lastExperiment: ctx.lastExperiment,
+    lastObservation: ctx.lastObservation,
+    lastOutcome: ctx.lastOutcome,
     updatedAt: ctx.updatedAt,
   };
 }
