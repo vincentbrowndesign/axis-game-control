@@ -53,7 +53,7 @@ interface Message {
   id: string;
   role: "user" | "axis";
   // type controls visual treatment
-  type: "intent" | "question" | "challenge" | "obs-prompt" | "observation" | "witness" | "done";
+  type: "intent" | "question" | "challenge" | "observation" | "witness" | "done";
   text: string;
 }
 
@@ -554,7 +554,6 @@ export default function AxisShell() {
 
   function renderExperimentChallenge(challenge: RuntimeChallenge) {
     appendMessage({ role: "axis", type: "challenge", text: challenge.text });
-    appendMessage({ role: "axis", type: "obs-prompt", text: "What did you notice?" });
   }
 
   // -------------------------------------------------------------------------
@@ -1379,15 +1378,6 @@ export default function AxisShell() {
           font-weight: 500;
           line-height: 1.3;
           margin-top: 12px;
-        }
-
-        /* Observation prompt — protected, always visible */
-        .t-obs-prompt {
-          color: rgba(247, 247, 242, 0.35);
-          font-size: 15px;
-          font-weight: 500;
-          margin-top: 4px;
-          padding: 0;
         }
 
         /* Machine Witness — one sentence, earns the question */

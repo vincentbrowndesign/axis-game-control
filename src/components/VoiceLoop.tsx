@@ -6,8 +6,6 @@ import { type AxisEvidence } from "../lib/axis-evidence";
 
 type LoopPhase = "IDLE" | "SPEAKING" | "LISTENING" | "DONE";
 
-const OBSERVATION_QUESTION = "What did you notice?";
-
 type Props = {
   challenges?: AxisChallenge[];
   onAttempt: (challenge: AxisChallenge, evidence: AxisEvidence) => void;
@@ -19,13 +17,11 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
 
   const [phase, setPhase] = useState<LoopPhase>("IDLE");
   const [challengeIndex, setChallengeIndex] = useState(0);
-  const [waitingForTap, setWaitingForTap] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const isListeningRef = useRef(false);
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
   const presentChallengeRef = useRef<(index: number) => void>(() => null);
-  const pendingObservationRef = useRef<(() => void) | null>(null);
 
   const isSupported =
     typeof window !== "undefined" &&
@@ -119,8 +115,6 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
     window.speechSynthesis.cancel();
     setChallengeIndex(index);
     setPhase("SPEAKING");
-    setWaitingForTap(false);
-    pendingObservationRef.current = null;
 
     const isLast = index === activeChallenges.length - 1;
 
@@ -134,35 +128,16 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
       }
     }
 
-    const qIdx = c.text.indexOf(OBSERVATION_QUESTION);
-    if (c.requiredEvidence === "OBSERVATION" && qIdx > -1) {
-      const task = c.text.slice(0, qIdx).trim();
-      speak(task, () => {
-        // Wait for player to do the challenge, then tap when ready
-        pendingObservationRef.current = () => {
-          setWaitingForTap(false);
-          pendingObservationRef.current = null;
-          speak(OBSERVATION_QUESTION, () => {
-            setTimeout(() => startListening(c, complete), 900);
-          });
-        };
-        setWaitingForTap(true);
-      });
-    } else {
-      speak(c.text, () => {
-        setTimeout(() => startListening(c, complete), 900);
-      });
-    }
+    speak(c.text, () => {
+      setTimeout(() => startListening(c, complete), 900);
+    });
   }
 
   // Keep ref current every render
   presentChallengeRef.current = presentChallenge;
 
   function handleTap() {
-    if (waitingForTap && pendingObservationRef.current) {
-      pendingObservationRef.current();
-    } else if (phase === "LISTENING") {
-      // Manual mic stop — triggers recognition.onend → auto-advances
+    if (phase === "LISTENING") {
       recognitionRef.current?.stop();
       recognitionRef.current = null;
     }
@@ -184,22 +159,11 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
     displayText = incomingChallenge.text;
   } else if (phase === "DONE") {
     displayText = "Done.";
-  } else if (phase === "LISTENING") {
-    // During listening, show the question being answered
-    displayText =
-      challenge.requiredEvidence === "OBSERVATION"
-        ? OBSERVATION_QUESTION
-        : challenge.text;
   } else {
-    // SPEAKING — show task part only (strip question if present)
-    const qIdx = challenge.text.indexOf(OBSERVATION_QUESTION);
-    displayText =
-      challenge.requiredEvidence === "OBSERVATION" && qIdx > -1
-        ? challenge.text.slice(0, qIdx).trim()
-        : challenge.text;
+    displayText = challenge.text;
   }
 
-  const isTappable = waitingForTap || phase === "LISTENING";
+  const isTappable = phase === "LISTENING";
 
   return (
     <main className="voice-loop">
@@ -220,12 +184,9 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
         className={`stage${isTappable ? " tappable" : ""}`}
         onClick={isTappable ? handleTap : undefined}
         role={isTappable ? "button" : undefined}
-        aria-label={
-          waitingForTap ? "Tap when ready" : phase === "LISTENING" ? "Tap to finish" : undefined
-        }
+        aria-label={phase === "LISTENING" ? "Tap to finish" : undefined}
       >
-        {phase === "SPEAKING" && !waitingForTap && <span className="dot" />}
-        {waitingForTap && <span className="dot waiting" />}
+        {phase === "SPEAKING" && <span className="dot" />}
         {phase === "LISTENING" && <span className="dot listening" />}
 
         <p
@@ -235,8 +196,6 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
         >
           {displayText}
         </p>
-
-        {waitingForTap && <p className="tap-hint">tap when ready</p>}
       </section>
 
       <footer>
@@ -342,19 +301,9 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
           width: 8px;
         }
 
-        .dot.waiting {
-          animation: breathe 2.4s ease-in-out infinite;
-          background: rgba(247, 247, 242, 0.35);
-        }
-
         .dot.listening {
           animation: pulse 1.1s ease-in-out infinite;
           background: #b8ff3d;
-        }
-
-        @keyframes breathe {
-          0%, 100% { opacity: 0.35; }
-          50% { opacity: 0.8; }
         }
 
         @keyframes pulse {
@@ -372,15 +321,6 @@ export default function VoiceLoop({ challenges, onAttempt, onEnd }: Props) {
 
         .challenge-text.dim {
           color: rgba(247, 247, 242, 0.35);
-        }
-
-        .tap-hint {
-          color: rgba(247, 247, 242, 0.25);
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          margin: 8px 0 0;
-          text-transform: uppercase;
         }
 
         footer {
