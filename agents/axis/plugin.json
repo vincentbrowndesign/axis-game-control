@@ -1,0 +1,19 @@
+{
+  "name": "axis",
+  "description": "Axis athletic OS — personal sports continuity system",
+  "version": "1.0.0",
+  "skills": [
+    "agents/axis/skills/intelligence-layer/SKILL.md",
+    "agents/axis/skills/build-check/SKILL.md",
+    "agents/axis/skills/product-gate/SKILL.md",
+    "agents/axis/skills/taste/SKILL.md",
+    "agents/axis/skills/codegraph/SKILL.md"
+  ],
+  "commands": [],
+  "context": [
+    "CLAUDE.md",
+    "AGENTS.md",
+    "AXIS_ENGINEERING_CONSTITUTION.md",
+    "docs/axis/codebase-research.md"
+  ]
+}

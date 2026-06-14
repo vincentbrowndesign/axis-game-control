@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s https://raw.githubusercontent.com/affaan-m/ecc/main/hooks/hooks.json)",
+      "Bash(git clone *)",
+      "Read(//c/Users/tina9/AppData/Local/Temp/ecc_repo/hooks/**)",
+      "Read(//c/Users/tina9/AppData/Local/Temp/ecc_repo/scripts/hooks/**)",
+      "Read(//c/Users/tina9/AppData/Local/Temp/ecc_repo/**)",
+      "Read(//c/Users/tina9/AppData/Local/Temp/knowledge-work-plugins/**)",
+      "Read(//c/Users/tina9/AppData/Local/Temp/taste-skill/**)",
+      "PowerShell(ls -la \"$env:TEMP\\\\taste-skill\")",
+      "PowerShell(Get-ChildItem -Path \"$env:TEMP\\\\taste-skill\" -Recurse -Filter \"SKILL.md\")"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"process.stderr.write('[axis] Loop: show up → check in → participate → history → return\\n[axis] Gate: does this improve Record/Moment/Film/Share/Return?\\n[axis] Frozen: axis-core.ts — do not add types without approval\\n[axis] Clean: learning-engine.ts must not know cameras, basketball, or AI providers\\n');\"",
+            "description": "Print Axis architectural boundaries at session start",
+            "id": "axis:session:start"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const cmd = process.env.CLAUDE_TOOL_INPUT_COMMAND || ''; if (cmd.includes('git push') && !cmd.includes('--dry-run')) { process.stderr.write('[axis] Run npx tsc --noEmit && npm run build before pushing.\\n'); }\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const path = process.env.CLAUDE_TOOL_INPUT_FILE_PATH || ''; if (path.includes('axis-core.ts')) { process.stderr.write('[axis] axis-core.ts is frozen vocabulary. Confirm this change is intentional.\\n'); }\""
+          }
+        ]
+      }
+    ]
+  }
+}
