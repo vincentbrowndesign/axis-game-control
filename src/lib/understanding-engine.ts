@@ -102,16 +102,16 @@ export async function understand(
 function buildExperimentFromRegistry(leveragePoint: string): string {
   // Strip to imperative form — "Waiting for information" → "Create information first"
   // This is intentionally simple. The LLM path produces richer candidates.
-  if (leveragePoint.toLowerCase().includes("waiting")) return "Create a reaction before attacking. 90 seconds.";
-  if (leveragePoint.toLowerCase().includes("ball")) return "Eyes up. No ball contact. 90 seconds.";
-  if (leveragePoint.toLowerCase().includes("contact")) return "Finish through contact. 90 seconds.";
-  if (leveragePoint.toLowerCase().includes("deciding")) return "Know before you catch. 90 seconds.";
-  if (leveragePoint.toLowerCase().includes("reacting")) return "Watch the hips. 90 seconds.";
+  if (leveragePoint.toLowerCase().includes("waiting")) return "Create a reaction before you commit to an action.";
+  if (leveragePoint.toLowerCase().includes("ball")) return "Eyes up. No ball contact.";
+  if (leveragePoint.toLowerCase().includes("contact")) return "Finish through contact.";
+  if (leveragePoint.toLowerCase().includes("deciding")) return "Know before you catch.";
+  if (leveragePoint.toLowerCase().includes("reacting")) return "Watch the hips.";
   if (leveragePoint.toLowerCase().includes("last thing") && leveragePoint.toLowerCase().includes("breaks")) {
-    return "Set your base before release. 90 seconds.";
+    return "Set your base before release.";
   }
-  if (leveragePoint.toLowerCase().includes("place to be seen")) return "Create a passing signal before you cut. 90 seconds.";
-  return "Apply this. 90 seconds.";
+  if (leveragePoint.toLowerCase().includes("place to be seen")) return "Create a passing signal before you cut.";
+  return "Apply this to your next rep.";
 }
 
 function createInsightObject(input: {
@@ -169,7 +169,7 @@ function normalizeOutput(data: Partial<UnderstandingOutput>, intent: string): Un
       : undefined,
     experimentCandidate: typeof data.experimentCandidate === "string" && data.experimentCandidate.trim()
       ? data.experimentCandidate.trim()
-      : `Work on ${intent}. 90 seconds.`,
+      : `Work on ${intent}.`,
     clarificationQuestion: typeof data.clarificationQuestion === "string" && data.clarificationQuestion.trim()
       ? data.clarificationQuestion.trim()
       : undefined,
@@ -206,7 +206,7 @@ function fallback(intent: string): UnderstandingOutput {
     confidence: 0.3,
     leveragePoint: `The constraint hiding inside "${intent}"`,
     mentalModel: "What would change if you already had this?",
-    experimentCandidate: `${intent}. 90 seconds.`,
+    experimentCandidate: `${intent}.`,
     clarificationQuestion: `What's the hardest moment inside this?`,
   };
   return { ...output, insights: [createInsightObject(output)] };

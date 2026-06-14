@@ -12,15 +12,12 @@
 // Output always: { constraint, duration }.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_DURATION = "90 seconds";
-
 export interface ExpansionQuestion {
   text: string;
 }
 
 export interface GeneratedConstraint {
   constraint: string;
-  duration: string;
 }
 
 export interface ExpansionAnalysis {
@@ -234,7 +231,7 @@ export function analyzeIntent(intent: string): ExpansionAnalysis {
       return {
         needsExpansion: false,
         question: null,
-        directConstraint: { constraint: rule.constraint, duration: DEFAULT_DURATION },
+        directConstraint: { constraint: rule.constraint },
       };
     }
   }
@@ -258,10 +255,10 @@ export function generateConstraint(intent: string, answer: string): GeneratedCon
   for (const rule of RULES) {
     if (matchesTriggers(intent, rule.triggers)) {
       const found = findAnswerConstraint(answer, rule.answers);
-      return { constraint: found ?? rule.fallback, duration: DEFAULT_DURATION };
+      return { constraint: found ?? rule.fallback };
     }
   }
   // No matching domain — extract from the answer text itself
   const constraint = extractConstraintFromAnswer(answer) || "Eyes Up";
-  return { constraint, duration: DEFAULT_DURATION };
+  return { constraint };
 }

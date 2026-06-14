@@ -39,25 +39,25 @@ Rules:
 - leveragePoint: 1 sentence. The real problem underneath the intent.
 - mentalModel: 2-3 sentences. The conceptual reframe that unlocks the constraint.
 - commonMistake: 1 sentence. What athletes usually do wrong here.
-- experimentCandidate: 1 imperative sentence + "90 seconds." e.g. "Create a reaction before attacking. 90 seconds."
+- experimentCandidate: 1 imperative sentence. Specific, observable, constraint-based. Do not append a time limit unless the insight is explicitly about timing or repetition count.
 - clarificationQuestion: only if confidence < 0.70. ONE question, specific to the domain. Name 2-3 sub-problems.
 - confidence: 0.0–1.0 — how certain you are that you found the real leverage point.
 
 If confidence >= 0.70: omit clarificationQuestion entirely.
 If confidence < 0.70: include clarificationQuestion, omit nothing else.
 
-No essays. No lists. No coaching paragraphs. JSON only.
+No essays. No lists. No coaching paragraphs. No time appended. JSON only.
 
 Few-shot examples:
 
 Intent: "triple threat"
-{"confidence":0.85,"leveragePoint":"Waiting for information the defender isn't going to give you.","mentalModel":"The defender is also waiting. Nothing changes until someone creates information. The triple threat stops being a threat the moment it becomes a pause.","commonMistake":"Reading the defender instead of making the defender read you.","experimentCandidate":"Create a reaction before attacking. 90 seconds."}
+{"confidence":0.85,"leveragePoint":"Waiting for information the defender isn't going to give you.","mentalModel":"The defender is also waiting. Nothing changes until someone creates information. The triple threat stops being a threat the moment it becomes a pause.","commonMistake":"Reading the defender instead of making the defender read you.","experimentCandidate":"Create a reaction before you commit to an action."}
 
 Intent: "handles"
-{"confidence":0.40,"leveragePoint":"Using the dribble to manage rather than to create.","mentalModel":"Every dribble should put the defense in a worse position. Dribbling to think is just possession risk.","commonMistake":"Dribbling in place instead of attacking angles.","experimentCandidate":"Change the angle with every dribble. 90 seconds.","clarificationQuestion":"Is it pressure, eyes, or changing speeds that's getting you?"}
+{"confidence":0.40,"leveragePoint":"Using the dribble to manage rather than to create.","mentalModel":"Every dribble should put the defense in a worse position. Dribbling to think is just possession risk.","commonMistake":"Dribbling in place instead of attacking angles.","experimentCandidate":"Change your attack angle with every dribble.","clarificationQuestion":"Is it pressure, eyes, or changing speeds that's getting you?"}
 
 Intent: "I freeze when my man doesn't move"
-{"confidence":0.92,"leveragePoint":"Mistaking stillness for safety.","mentalModel":"A defender who isn't moving is telling you they've made a choice. That choice creates a gap — but only for someone who's ready to attack it.","commonMistake":"Waiting for the defender to commit before deciding.","experimentCandidate":"Attack the first gap you see. 90 seconds."}`;
+{"confidence":0.92,"leveragePoint":"Mistaking stillness for safety.","mentalModel":"A defender who isn't moving is telling you they've made a choice. That choice creates a gap — but only for someone who's ready to attack it.","commonMistake":"Waiting for the defender to commit before deciding.","experimentCandidate":"Attack the first gap you see without waiting for permission."}`;
 
 function safeParse(raw: string): UnderstandResponse {
   try {
@@ -78,7 +78,7 @@ function safeParse(raw: string): UnderstandResponse {
         : undefined,
       experimentCandidate: typeof parsed.experimentCandidate === "string" && parsed.experimentCandidate.trim()
         ? parsed.experimentCandidate.trim()
-        : "Apply this. 90 seconds.",
+        : "Apply this to your next rep.",
       clarificationQuestion: typeof parsed.clarificationQuestion === "string" && parsed.clarificationQuestion.trim()
         ? parsed.clarificationQuestion.trim()
         : undefined,
@@ -88,7 +88,7 @@ function safeParse(raw: string): UnderstandResponse {
       confidence: 0,
       leveragePoint: "Could not parse understanding.",
       mentalModel: "Try again.",
-      experimentCandidate: "Apply this. 90 seconds.",
+      experimentCandidate: "Apply this to your next rep.",
     };
   }
 }

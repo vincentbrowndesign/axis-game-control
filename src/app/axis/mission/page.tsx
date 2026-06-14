@@ -83,7 +83,6 @@ interface UnderstandingOutput {
 
 interface GeneratedConstraint {
   constraint: string;
-  duration: string;
 }
 
 interface RuntimeChallenge {
@@ -108,12 +107,7 @@ function formatMachineWitness(value: string): string {
 }
 
 function candidateToConstraint(candidate: string): GeneratedConstraint {
-  const trimmed = candidate.trim();
-  const withoutPeriod = trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
-  const match = withoutPeriod.match(/^(.*?)(?:\s*\.?\s*)(\d+\s*(?:seconds?|minutes?))$/i);
-  if (!match) return { constraint: trimmed, duration: "90 seconds" };
-  const constraint = match[1].replace(/[.\s]+$/, "").trim();
-  return { constraint: constraint || trimmed, duration: match[2].trim() };
+  return { constraint: candidate.trim() };
 }
 
 function titleFromInsight(text: string): string {
@@ -578,7 +572,7 @@ export default function AxisShell() {
       constraint: generated.constraint,
       objective: generated.constraint,
       requiredEvidence: "OBSERVATION",
-      text: `${generated.constraint}. ${generated.duration}.`,
+      text: generated.constraint,
     };
     expansionConstraintRef.current = generated;
     challengesRef.current = [synthetic];
