@@ -96,6 +96,12 @@ interface EvidenceCard {
   url?: string;
 }
 
+interface DeepModelResult {
+  deepModel: string;
+  leveragePoint: string;
+  caution?: string;
+}
+
 interface ThreadEntry {
   id: string;
   intent: string;
@@ -108,6 +114,7 @@ interface ThreadEntry {
   adjustment: AdjustmentResult | null;
   orchestration: OrchestratorDecision | null;
   evidence: EvidenceCard[];
+  deepModel: DeepModelResult | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +271,26 @@ export default function AxisPage() {
       let experimentSpec: ExperimentSpec | null = null;
       let witnessPlan: WitnessPlan | null = null;
 
+      // Deep Model — fired concurrently with secondary engine, non-fatal
+      const deepModelPromise: Promise<DeepModelResult | null> = response?.insight
+        ? fetch("/api/axis/deep-model", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              intent: val,
+              insight: response.insight,
+              discoveries: evidence.map((e) => ({
+                statement: e.summary,
+                relevance: e.relevance,
+                source: e.source,
+              })),
+            }),
+            signal: ctrl.signal,
+          })
+            .then((r) => (r.ok ? (r.json() as Promise<DeepModelResult>) : null))
+            .catch(() => null)
+        : Promise.resolve(null);
+
       if (response?.insight) {
         if (response.nextRequiredCard === "Mental Model") {
           try {
@@ -320,6 +347,8 @@ export default function AxisPage() {
         }
       }
 
+      const deepModel = await deepModelPromise;
+
       const entry: ThreadEntry = {
         id: uid(),
         intent: val,
@@ -332,6 +361,7 @@ export default function AxisPage() {
         adjustment: null,
         orchestration: null,
         evidence,
+        deepModel,
       };
 
       setThread((prev) => [...prev, entry]);
@@ -767,6 +797,24 @@ export default function AxisPage() {
                       </section>
                     )}
                   </>
+                )}
+
+                {/* Deep Model */}
+                {entry.deepModel && (
+                  <section className="deep-model-card" aria-label="Deep Model">
+                    <span className="section-label">Deep Model</span>
+                    <p className="dm-model">{entry.deepModel.deepModel}</p>
+                    <div className="dm-field">
+                      <span className="dm-label">Leverage Point</span>
+                      <p className="dm-value">{entry.deepModel.leveragePoint}</p>
+                    </div>
+                    {entry.deepModel.caution && (
+                      <div className="dm-field">
+                        <span className="dm-label">Caution</span>
+                        <p className="dm-value dm-caution">{entry.deepModel.caution}</p>
+                      </div>
+                    )}
+                  </section>
                 )}
 
                 {/* Discovery */}
@@ -1459,6 +1507,52 @@ export default function AxisPage() {
         }
 
         .witness-def--evidence {
+          color: rgba(26, 26, 24, 0.44);
+          font-style: italic;
+        }
+
+        /* ── Deep Model ─────────────────────────────────────────────────── */
+
+        .deep-model-card {
+          background: rgba(26, 26, 24, 0.03);
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 16px;
+        }
+
+        .dm-model {
+          color: #1a1a18;
+          font-size: 15px;
+          font-weight: 500;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        .dm-field {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .dm-label {
+          color: rgba(26, 26, 24, 0.36);
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .dm-value {
+          color: rgba(26, 26, 24, 0.72);
+          font-size: 13px;
+          line-height: 1.5;
+          margin: 0;
+        }
+
+        .dm-caution {
           color: rgba(26, 26, 24, 0.44);
           font-style: italic;
         }
