@@ -9,7 +9,7 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
-      window.location.replace("/axis");
+      setError("Auth is not configured.");
       return;
     }
 

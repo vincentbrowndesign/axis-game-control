@@ -2,6 +2,21 @@
 
 import { Mic, Paperclip } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DevSidebar } from "../../components/axis/dev-sidebar";
+import {
+  createDevThread,
+  listBreakthroughs,
+  listDevEvidence,
+  listDevThreads,
+  loadDevEntries,
+  saveBreakthrough,
+  saveDevEntry,
+  touchDevThread,
+  type Breakthrough,
+  type DevEvidence,
+  type DevThread,
+} from "../../lib/axis-dev-persistence";
+import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -141,6 +156,19 @@ const uid = () => (++_ctr).toString(36);
 // Page
 // ---------------------------------------------------------------------------
 
+const LOADING_LABELS = [
+  "Preparing insight…",
+  "Preparing demonstration…",
+  "Generating experiment…",
+  "Building session…",
+] as const;
+
+const REVIEW_LABELS = [
+  "Reviewing evidence…",
+  "Running adjustment…",
+  "Orchestrating…",
+] as const;
+
 export default function AxisPage() {
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [thread, setThread] = useState<ThreadEntry[]>([]);
@@ -150,6 +178,20 @@ export default function AxisPage() {
   const [isVoiceSupported, setIsVoiceSupported] = useState(false);
   const [witnessInputs, setWitnessInputs] = useState<Record<string, string>>({});
   const [reviewLoadingId, setReviewLoadingId] = useState<string | null>(null);
+  const [isActive, setIsActive] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState<string>(LOADING_LABELS[0]);
+  const [reviewLabel, setReviewLabel] = useState<string>(REVIEW_LABELS[0]);
+  const [revealMap, setRevealMap] = useState<Record<string, number>>({});
+
+  // ── Persistence + auth ──────────────────────────────────────────────────
+  const [userId, setUserId] = useState<string | null>(null);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  const [threadList, setThreadList] = useState<DevThread[]>([]);
+  const [breakthroughList, setBreakthroughList] = useState<Breakthrough[]>([]);
+  const [evidenceList, setEvidenceList] = useState<DevEvidence[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Supabase entry IDs keyed by local ThreadEntry.id (so we can reference them for breakthroughs)
+  const entryIdMapRef = useRef<Record<string, string>>({});
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -157,8 +199,10 @@ export default function AxisPage() {
   const abortRef = useRef<AbortController | null>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = useRef<string[]>([]);
-
-  const isEmpty = thread.length === 0 && phase === "IDLE";
+  const draftRef = useRef("");
+  const loadingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reviewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevThreadLenRef = useRef(0);
 
   useEffect(() => {
     setIsVoiceSupported(
@@ -176,15 +220,87 @@ export default function AxisPage() {
     const el = threadRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [thread, phase]);
+  }, [thread, phase, revealMap]);
 
-  // Focus input when thread exists
+  // On session activation: transfer draft value then focus
   useEffect(() => {
-    if (!isEmpty) {
-      const t = setTimeout(() => inputRef.current?.focus(), 80);
-      return () => clearTimeout(t);
+    if (!isActive) return;
+    const draft = draftRef.current;
+    draftRef.current = "";
+    requestAnimationFrame(() => {
+      if (!inputRef.current) return;
+      inputRef.current.value = draft;
+      inputRef.current.focus();
+      const len = draft.length;
+      inputRef.current.setSelectionRange(len, len);
+    });
+  }, [isActive]);
+
+  // Cycle loading labels while a query is in flight
+  useEffect(() => {
+    if (phase !== "LOADING") {
+      if (loadingTimerRef.current) clearInterval(loadingTimerRef.current);
+      return;
     }
-  }, [isEmpty]);
+    setLoadingLabel(LOADING_LABELS[0]);
+    let idx = 0;
+    loadingTimerRef.current = setInterval(() => {
+      idx = Math.min(idx + 1, LOADING_LABELS.length - 1);
+      setLoadingLabel(LOADING_LABELS[idx]);
+    }, 1100);
+    return () => { if (loadingTimerRef.current) clearInterval(loadingTimerRef.current); };
+  }, [phase]);
+
+  // Cycle review labels while witness review is in flight
+  useEffect(() => {
+    if (!reviewLoadingId) {
+      if (reviewTimerRef.current) clearInterval(reviewTimerRef.current);
+      return;
+    }
+    setReviewLabel(REVIEW_LABELS[0]);
+    let idx = 0;
+    reviewTimerRef.current = setInterval(() => {
+      idx = Math.min(idx + 1, REVIEW_LABELS.length - 1);
+      setReviewLabel(REVIEW_LABELS[idx]);
+    }, 1800);
+    return () => { if (reviewTimerRef.current) clearInterval(reviewTimerRef.current); };
+  }, [reviewLoadingId]);
+
+  // Auth gate + load sidebar data on mount
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) { window.location.replace("/auth"); return; }
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) {
+        window.location.replace("/auth");
+        return;
+      }
+      setUserId(data.session.user.id);
+      const [threads, bts, ev] = await Promise.all([
+        listDevThreads(),
+        listBreakthroughs(),
+        listDevEvidence(),
+      ]);
+      setThreadList(threads);
+      setBreakthroughList(bts);
+      setEvidenceList(ev);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reveal insight immediately when an entry arrives; further cards advance on user action
+  useEffect(() => {
+    if (thread.length <= prevThreadLenRef.current) return;
+    prevThreadLenRef.current = thread.length;
+    const id = thread[thread.length - 1]?.id;
+    if (!id) return;
+    setRevealMap(prev => ({ ...prev, [id]: 1 }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread.length]);
+
+  function advance(id: string) {
+    setRevealMap(prev => ({ ...prev, [id]: (prev[id] ?? 1) + 1 }));
+  }
 
   // -------------------------------------------------------------------------
   // Camera + Upload — native file inputs, no navigation
@@ -197,7 +313,92 @@ export default function AxisPage() {
     setPendingAttachment({ name: file.name, url, type: file.type });
   }
 
+  function activateSession() {
+    if (isActive) return;
+    draftRef.current = inputRef.current?.value ?? "";
+    setIsActive(true);
+  }
+
+  // ── Persistence helpers ─────────────────────────────────────────────────
+
+  async function persistEntry(localId: string, entry: ThreadEntry, threadId: string, position: number) {
+    const dbId = await saveDevEntry({
+      threadId,
+      intent: entry.intent,
+      insight: entry.response?.insight,
+      reasoning: entry.response?.reasoning,
+      mentalModel: entry.mentalModelCard?.mentalModel,
+      demonstration: entry.demonstrationSpec
+        ? {
+            currentState: entry.demonstrationSpec.currentState,
+            targetState: entry.demonstrationSpec.targetState,
+            keyDifference: entry.demonstrationSpec.keyDifference,
+            executionCue: entry.demonstrationSpec.executionCue,
+          }
+        : undefined,
+      experiment: entry.experimentSpec?.hypothesis,
+      confidence: entry.response?.confidence,
+      position,
+    });
+    if (dbId) entryIdMapRef.current[localId] = dbId;
+    await touchDevThread(threadId);
+    setThreadList(await listDevThreads());
+  }
+
+  async function loadThread(threadId: string) {
+    const entries = await loadDevEntries(threadId);
+    if (!entries.length) return;
+    const reconstructed: ThreadEntry[] = entries.map((e) => ({
+      id: e.id,
+      intent: e.intent,
+      response: e.insight
+        ? {
+            insight: e.insight,
+            reasoning: e.reasoning ?? "",
+            confidence: e.confidence ?? 0.8,
+            nextRequiredCard: "Experiment" as CardType,
+            mentalModel: e.mental_model ?? undefined,
+            demonstration: e.demonstration as InsightResponse["demonstration"] ?? undefined,
+            experimentCandidate: e.experiment ?? undefined,
+          }
+        : null,
+      mentalModelCard: e.mental_model
+        ? { mentalModel: e.mental_model, rule: "", failurePattern: "", recognitionCue: "" }
+        : null,
+      demonstrationSpec: e.demonstration
+        ? { ...(e.demonstration as { currentState: string; targetState: string; keyDifference: string; executionCue: string }), commonFailure: "", recommendedViewpoints: [], animationNotes: "", comparisonRequired: false, complexity: "Intermediate" as const }
+        : null,
+      experimentSpec: e.experiment
+        ? { hypothesis: e.experiment, constraint: "", repetitions: "", successCriteria: "", failureCriteria: "", evidenceRequired: "", expectedLearning: "" }
+        : null,
+      witnessPlan: null,
+      witnessReview: null,
+      adjustment: null,
+      orchestration: null,
+      evidence: [],
+      deepModel: null,
+      attachment: null,
+    }));
+    // Mark all loaded entries as fully revealed
+    const newReveal: Record<string, number> = {};
+    reconstructed.forEach((e) => { newReveal[e.id] = 4; });
+    setRevealMap(newReveal);
+    setThread(reconstructed);
+    setCurrentThreadId(threadId);
+    setIsActive(true);
+    prevThreadLenRef.current = reconstructed.length;
+  }
+
+  async function markBreakthrough(localEntryId: string, text: string) {
+    const dbEntryId = entryIdMapRef.current[localEntryId];
+    const id = await saveBreakthrough(text, currentThreadId ?? undefined, dbEntryId);
+    if (id) {
+      setBreakthroughList(await listBreakthroughs());
+    }
+  }
+
   function openAttach() {
+    activateSession();
     attachInputRef.current?.click();
   }
 
@@ -217,6 +418,7 @@ export default function AxisPage() {
       setVoicePhase("OFF");
       return;
     }
+    activateSession();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechAPI) return;
@@ -252,6 +454,8 @@ export default function AxisPage() {
     const val = intentText.trim();
     if (!val || phase === "LOADING") return;
     if (inputRef.current) inputRef.current.value = "";
+
+    if (!isActive) setIsActive(true);
 
     const attachment = pendingAttachment;
     setPendingAttachment(null);
@@ -364,7 +568,23 @@ export default function AxisPage() {
         attachment,
       };
 
-      setThread((prev) => [...prev, entry]);
+      setThread((prev) => {
+        const next = [...prev, entry];
+
+        // Persist to Supabase (fire-and-forget; non-fatal)
+        if (userId) {
+          void (async () => {
+            let threadId = currentThreadId;
+            if (!threadId) {
+              threadId = await createDevThread(val.slice(0, 120));
+              if (threadId) setCurrentThreadId(threadId);
+            }
+            if (threadId) await persistEntry(entry.id, entry, threadId, next.length - 1);
+          })();
+        }
+
+        return next;
+      });
       setPhase("RESULTS");
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
@@ -376,6 +596,18 @@ export default function AxisPage() {
     e.preventDefault();
     const val = inputRef.current?.value ?? "";
     void run(val);
+  }
+
+  function startNewThread() {
+    abortRef.current?.abort();
+    setThread([]);
+    setCurrentThreadId(null);
+    setRevealMap({});
+    setPhase("IDLE");
+    setIsActive(false);
+    prevThreadLenRef.current = 0;
+    entryIdMapRef.current = {};
+    if (inputRef.current) inputRef.current.value = "";
   }
 
   async function reviewWitness(entry: ThreadEntry) {
@@ -459,22 +691,45 @@ export default function AxisPage() {
   // Render
   // -------------------------------------------------------------------------
 
+  const lastEntry = thread[thread.length - 1];
+  const lastReveal = lastEntry ? (revealMap[lastEntry.id] ?? 0) : 0;
+  const bottomPlaceholder = phase === "RESULTS" && lastReveal >= 4 && lastEntry?.experimentSpec
+    ? "What happened?"
+    : "What are you working on?";
+
   return (
     <main className="root">
 
-      {/* ── EMPTY STATE ─────────────────────────────────────────────────── */}
-      {isEmpty && (
-        <div className="empty">
-          <p className="main-q">What are you working on?</p>
-          <form className="main-form" onSubmit={handleSubmit}>
+      <DevSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        activeThreadId={currentThreadId}
+        threads={threadList}
+        breakthroughs={breakthroughList}
+        evidence={evidenceList}
+        onSelectThread={(id) => void loadThread(id)}
+        onNewThread={startNewThread}
+      />
+
+      {/* ── HOME ────────────────────────────────────────────────────────── */}
+      {!isActive && (
+        <div className="home">
+          <div className="home-hero">
+            <span className="home-mark">Axis</span>
+            <p className="home-q">What are you working on?</p>
+          </div>
+          <form className="home-form" onSubmit={handleSubmit}>
             <input
               ref={inputRef}
-              className="main-input"
+              className="home-input"
               placeholder="Describe what you're trying to improve…"
               type="text"
               spellCheck={false}
               autoComplete="off"
               enterKeyHint="send"
+              onInput={(e: React.FormEvent<HTMLInputElement>) => {
+                if (e.currentTarget.value.trim()) activateSession();
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -494,7 +749,7 @@ export default function AxisPage() {
                 <button type="button" className="attachment-remove" onClick={removePendingAttachment} aria-label="Remove">×</button>
               </div>
             )}
-            <div className="main-controls">
+            <div className="home-controls">
               <button
                 className={`ctrl-btn${pendingAttachment ? " on" : ""}`}
                 onClick={openAttach}
@@ -528,385 +783,351 @@ export default function AxisPage() {
       )}
 
       {/* ── THREAD ──────────────────────────────────────────────────────── */}
-      {!isEmpty && (
+      {isActive && (
         <div className="thread-shell">
 
           <header className="hd">
+            <button
+              className="sidebar-toggle"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open history"
+              type="button"
+            >
+              ☰
+            </button>
             <span className="wordmark">Axis</span>
-            {thread.length > 1 && (
-              <span className="thread-count">{thread.length} sessions</span>
-            )}
+            <div className="hd-right">
+              {thread.length > 0 && thread[thread.length - 1]?.response?.insight && (
+                <button
+                  className="breakthrough-btn"
+                  type="button"
+                  onClick={() => {
+                    const last = thread[thread.length - 1];
+                    if (last?.response?.insight) {
+                      void markBreakthrough(last.id, last.response.insight);
+                    }
+                  }}
+                  title="Mark current insight as a breakthrough"
+                >
+                  ★
+                </button>
+              )}
+            </div>
           </header>
 
           <div className="thread" ref={threadRef}>
 
-            {thread.map((entry, i) => (
-              <div key={entry.id} className="entry">
+            {thread.map((entry, i) => {
+              // Past entries are always fully revealed; only the current entry is paced
+              const reveal = i < thread.length - 1 ? 4 : (revealMap[entry.id] ?? 0);
+              return (
+                <div key={entry.id} className="entry">
 
-                {i > 0 && <hr className="entry-divider" />}
+                  {i > 0 && <hr className="entry-divider" />}
 
-                {/* Intent echo */}
-                <p className="intent-echo">{entry.intent}</p>
+                  {/* Intent echo */}
+                  <p className="intent-echo">{entry.intent}</p>
 
-                {/* Attachment */}
-                {entry.attachment && (
-                  <div className="entry-attachment">
-                    {entry.attachment.type.startsWith("image/") ? (
-                      <img className="entry-thumb" src={entry.attachment.url} alt={entry.attachment.name} />
-                    ) : (
-                      <span className="entry-file">{entry.attachment.name}</span>
-                    )}
-                  </div>
-                )}
-
-                {entry.response && (
-                  <>
-                    {/* Clarification — shown above insight when confidence is low */}
-                    {entry.response.clarificationQuestion && (
-                      <p className="clarification">{entry.response.clarificationQuestion}</p>
-                    )}
-
-                    {/* Insight block */}
-                    <article className="insight-card">
-                      <span className="badge badge-insight">Insight</span>
-                      <p className="ins-body">{entry.response.insight}</p>
-                      <div className="ins-sub">
-                        <p className="ins-sub-body">{entry.response.reasoning}</p>
-                      </div>
-                    </article>
-
-                    {/* Mental Model */}
-                    {entry.mentalModelCard && (
-                      <section className="next-card" aria-label="Mental Model">
-                        <span className="next-card-label">Mental Model</span>
-                        <div className="mm-card">
-                          <p className="mm-framework">{entry.mentalModelCard.mentalModel}</p>
-                          {(entry.mentalModelCard.rule || entry.mentalModelCard.failurePattern || entry.mentalModelCard.recognitionCue) && (
-                            <dl className="mm-rows">
-                              {entry.mentalModelCard.rule && (
-                                <div className="mm-row">
-                                  <dt className="mm-term">Rule</dt>
-                                  <dd className="mm-def mm-def--rule">{entry.mentalModelCard.rule}</dd>
-                                </div>
-                              )}
-                              {entry.mentalModelCard.failurePattern && (
-                                <div className="mm-row">
-                                  <dt className="mm-term">Failure Pattern</dt>
-                                  <dd className="mm-def">{entry.mentalModelCard.failurePattern}</dd>
-                                </div>
-                              )}
-                              {entry.mentalModelCard.recognitionCue && (
-                                <div className="mm-row">
-                                  <dt className="mm-term">Recognition Cue</dt>
-                                  <dd className="mm-def">{entry.mentalModelCard.recognitionCue}</dd>
-                                </div>
-                              )}
-                            </dl>
-                          )}
-                        </div>
-                      </section>
-                    )}
-
-                    {/* Demonstration */}
-                    {entry.demonstrationSpec && (
-                      <section className="next-card" aria-label="Demonstration">
-                        <span className="next-card-label">Demonstration</span>
-                        <div className="demo-spec">
-                          <dl className="demo-rows">
-                            <div className="demo-row">
-                              <dt className="demo-term">Current State</dt>
-                              <dd className="demo-def">{entry.demonstrationSpec.currentState}</dd>
-                            </div>
-                            <div className="demo-row">
-                              <dt className="demo-term">Target State</dt>
-                              <dd className="demo-def">{entry.demonstrationSpec.targetState}</dd>
-                            </div>
-                            <div className="demo-row">
-                              <dt className="demo-term">Key Difference</dt>
-                              <dd className="demo-def demo-def--key">{entry.demonstrationSpec.keyDifference}</dd>
-                            </div>
-                            <div className="demo-row">
-                              <dt className="demo-term">Execution Cue</dt>
-                              <dd className="demo-def">{entry.demonstrationSpec.executionCue}</dd>
-                            </div>
-                            {entry.demonstrationSpec.commonFailure && (
-                              <div className="demo-row">
-                                <dt className="demo-term">Common Failure</dt>
-                                <dd className="demo-def">{entry.demonstrationSpec.commonFailure}</dd>
-                              </div>
-                            )}
-                            {entry.demonstrationSpec.recommendedViewpoints.length > 0 && (
-                              <div className="demo-row">
-                                <dt className="demo-term">Recommended Viewpoints</dt>
-                                <dd className="demo-def">
-                                  <ul className="demo-viewpoints">
-                                    {entry.demonstrationSpec.recommendedViewpoints.map((vp, i) => (
-                                      <li key={i}>{vp}</li>
-                                    ))}
-                                  </ul>
-                                </dd>
-                              </div>
-                            )}
-                            {entry.demonstrationSpec.animationNotes && (
-                              <div className="demo-row">
-                                <dt className="demo-term">Animation Notes</dt>
-                                <dd className="demo-def demo-def--dim">{entry.demonstrationSpec.animationNotes}</dd>
-                              </div>
-                            )}
-                          </dl>
-                        </div>
-                      </section>
-                    )}
-
-                    {/* Experiment */}
-                    {entry.experimentSpec && (
-                      <section className="next-card" aria-label="Experiment">
-                        <span className="next-card-label">Experiment</span>
-                        <div className="exp-spec">
-                          <dl className="exp-rows">
-                            <div className="exp-row">
-                              <dt className="exp-term">Hypothesis</dt>
-                              <dd className="exp-def exp-def--hyp">{entry.experimentSpec.hypothesis}</dd>
-                            </div>
-                            {entry.experimentSpec.constraint && (
-                              <div className="exp-row">
-                                <dt className="exp-term">Constraint</dt>
-                                <dd className="exp-def">{entry.experimentSpec.constraint}</dd>
-                              </div>
-                            )}
-                            {entry.experimentSpec.repetitions && (
-                              <div className="exp-row">
-                                <dt className="exp-term">Repetitions</dt>
-                                <dd className="exp-def">{entry.experimentSpec.repetitions}</dd>
-                              </div>
-                            )}
-                            {(entry.experimentSpec.successCriteria || entry.experimentSpec.failureCriteria) && (
-                              <div className="exp-criteria">
-                                {entry.experimentSpec.successCriteria && (
-                                  <div className="exp-row">
-                                    <dt className="exp-term">Success Criteria</dt>
-                                    <dd className="exp-def exp-def--success">{entry.experimentSpec.successCriteria}</dd>
-                                  </div>
-                                )}
-                                {entry.experimentSpec.failureCriteria && (
-                                  <div className="exp-row">
-                                    <dt className="exp-term">Failure Criteria</dt>
-                                    <dd className="exp-def exp-def--failure">{entry.experimentSpec.failureCriteria}</dd>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {entry.experimentSpec.evidenceRequired && (
-                              <div className="exp-row">
-                                <dt className="exp-term">Evidence Required</dt>
-                                <dd className="exp-def">{entry.experimentSpec.evidenceRequired}</dd>
-                              </div>
-                            )}
-                            {entry.experimentSpec.expectedLearning && (
-                              <div className="exp-row">
-                                <dt className="exp-term">Expected Learning</dt>
-                                <dd className="exp-def exp-def--learn">{entry.experimentSpec.expectedLearning}</dd>
-                              </div>
-                            )}
-                          </dl>
-                        </div>
-                      </section>
-                    )}
-
-                    {/* Witness (when model explicitly requests one) */}
-                    {entry.response.nextRequiredCard === "Witness" && (
-                      <section className="next-card" aria-label="Witness">
-                        <span className="next-card-label">Witness</span>
-                        {entry.witnessPlan?.witnesses.length ? (
-                          <div className="witness-plan">
-                            {entry.witnessPlan.witnesses.map((w, i) => (
-                              <div key={i} className="witness-row">
-                                <div className="witness-header">
-                                  <span className="witness-name">{w.witness}</span>
-                                  <span className={`witness-importance wi-${w.confidenceImportance.toLowerCase()}`}>
-                                    {w.confidenceImportance}
-                                  </span>
-                                </div>
-                                <dl className="witness-fields">
-                                  <div className="witness-field">
-                                    <dt className="witness-term">Purpose</dt>
-                                    <dd className="witness-def">{w.purpose}</dd>
-                                  </div>
-                                  <div className="witness-field">
-                                    <dt className="witness-term">Expected Claim</dt>
-                                    <dd className="witness-def">{w.expectedClaim}</dd>
-                                  </div>
-                                  <div className="witness-field">
-                                    <dt className="witness-term">Required Evidence</dt>
-                                    <dd className="witness-def witness-def--evidence">{w.requiredEvidence}</dd>
-                                  </div>
-                                </dl>
-                              </div>
-                            ))}
-                          </div>
-                        ) : entry.response.witnessPrompt ? (
-                          <p className="next-card-body">{entry.response.witnessPrompt}</p>
-                        ) : null}
-                        {entry.witnessPlan?.witnesses.length && !entry.witnessReview ? (
-                          <div className="witness-observe">
-                            <label className="witness-observe-label" htmlFor={`obs-${entry.id}`}>
-                              What did you observe?
-                            </label>
-                            <textarea
-                              id={`obs-${entry.id}`}
-                              className="witness-observe-input"
-                              placeholder={"One observation per line.\nBe specific — what you saw, not what you felt."}
-                              rows={4}
-                              value={witnessInputs[entry.id] ?? ""}
-                              onChange={(e) => setWitnessInputs((prev) => ({ ...prev, [entry.id]: e.target.value }))}
-                            />
-                            <button
-                              className="witness-review-btn"
-                              type="button"
-                              onClick={() => void reviewWitness(entry)}
-                              disabled={!witnessInputs[entry.id]?.trim() || reviewLoadingId === entry.id}
-                            >
-                              {reviewLoadingId === entry.id ? "Reviewing…" : "Review Evidence"}
-                            </button>
-                          </div>
-                        ) : null}
-                      </section>
-                    )}
-
-                    {/* Witness Review */}
-                    {entry.witnessReview && (
-                      <section className={`review-card review-${entry.witnessReview.verdict.toLowerCase()}`}>
-                        <div className="review-header">
-                          <span className={`review-verdict rv-${entry.witnessReview.verdict.toLowerCase()}`}>
-                            {entry.witnessReview.verdict}
-                          </span>
-                          <span className="review-conf">
-                            {Math.round(entry.witnessReview.confidence * 100)}%
-                          </span>
-                        </div>
-                        <p className="review-claim">{entry.witnessReview.claim}</p>
-                        {entry.witnessReview.supportingEvidence.length > 0 && (
-                          <div className="review-ev-group">
-                            <span className="review-ev-label">Supporting</span>
-                            <ul className="review-ev-list">
-                              {entry.witnessReview.supportingEvidence.map((ev, i) => (
-                                <li key={i} className="review-ev-item review-ev-item--support">{ev}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {entry.witnessReview.contradictingEvidence.length > 0 && (
-                          <div className="review-ev-group">
-                            <span className="review-ev-label">Contradicting</span>
-                            <ul className="review-ev-list">
-                              {entry.witnessReview.contradictingEvidence.map((ev, i) => (
-                                <li key={i} className="review-ev-item review-ev-item--contra">{ev}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        <div className="review-next">
-                          <span className="review-next-label">Recommended Next Card</span>
-                          <span className="review-next-card">{entry.witnessReview.recommendedNextCard}</span>
-                        </div>
-                      </section>
-                    )}
-
-                    {/* Adjustment */}
-                    {entry.adjustment && (
-                      <section className={`adj-card${entry.adjustment.nextCard === null ? " adj-card--complete" : ""}`}>
-                        <div className="adj-header">
-                          <span className="adj-decision">{entry.adjustment.decision}</span>
-                          {entry.adjustment.nextCard && (
-                            <span className="adj-next-pill">{entry.adjustment.nextCard}</span>
-                          )}
-                        </div>
-                        <p className="adj-reason">{entry.adjustment.reason}</p>
-                        <p className="adj-benefit">{entry.adjustment.expectedBenefit}</p>
-                      </section>
-                    )}
-
-                    {/* Orchestration */}
-                    {entry.orchestration && (
-                      <section className={`orch-card${entry.orchestration.nextCard === null ? " orch-card--done" : ""}`}>
-                        <div className="orch-header">
-                          <span className="orch-label">Thread</span>
-                          {entry.orchestration.nextCard ? (
-                            <span className="orch-next">{entry.orchestration.nextCard}</span>
-                          ) : (
-                            <span className="orch-done">Complete</span>
-                          )}
-                        </div>
-                        <p className="orch-reason">{entry.orchestration.reason}</p>
-                        {entry.orchestration.requiredInputs.length > 0 && (
-                          <div className="orch-inputs">
-                            <span className="orch-inputs-label">Required</span>
-                            <ul className="orch-inputs-list">
-                              {entry.orchestration.requiredInputs.map((inp, i) => (
-                                <li key={i}>{inp}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        <p className="orch-outcome">{entry.orchestration.expectedOutcome}</p>
-                      </section>
-                    )}
-                  </>
-                )}
-
-                {/* Deep Model */}
-                {entry.deepModel && (
-                  <section className="deep-model-card" aria-label="Deep Model">
-                    <span className="section-label">Deep Model</span>
-                    <p className="dm-model">{entry.deepModel.deepModel}</p>
-                    <div className="dm-field">
-                      <span className="dm-label">Leverage Point</span>
-                      <p className="dm-value">{entry.deepModel.leveragePoint}</p>
+                  {/* Attachment */}
+                  {entry.attachment && (
+                    <div className="entry-attachment">
+                      {entry.attachment.type.startsWith("image/") ? (
+                        <img className="entry-thumb" src={entry.attachment.url} alt={entry.attachment.name} />
+                      ) : (
+                        <span className="entry-file">{entry.attachment.name}</span>
+                      )}
                     </div>
-                    {entry.deepModel.caution && (
-                      <div className="dm-field">
-                        <span className="dm-label">Caution</span>
-                        <p className="dm-value dm-caution">{entry.deepModel.caution}</p>
-                      </div>
-                    )}
-                  </section>
-                )}
+                  )}
 
-                {/* Discovery */}
-                {entry.evidence.length > 0 && (
-                  <section className="research-group" aria-label="Discovery">
-                    <span className="section-label">Discovery</span>
-                    {entry.evidence.map((card, i) => (
-                      <article key={i} className="research-card">
-                        <span className="discovery-index">Discovery {i + 1}</span>
-                        <p className="research-body">{card.summary}</p>
-                        <p className="research-why">{card.relevance}</p>
-                        {card.url ? (
-                          <a
-                            className="badge badge-source badge-link"
-                            href={card.url}
-                            rel="noreferrer noopener"
-                            target="_blank"
-                          >
-                            {card.source}
-                          </a>
-                        ) : (
-                          <span className="badge badge-source">{card.source}</span>
+                  {/* ── Level 1: Insight ───────────────────────────────────── */}
+                  {reveal >= 1 && entry.response && (
+                    <>
+                      {entry.response.clarificationQuestion && (
+                        <p className="clarification">{entry.response.clarificationQuestion}</p>
+                      )}
+                      <article className="insight-card card-reveal">
+                        <p className="ins-body">{entry.response.insight}</p>
+                        {entry.response.reasoning && (
+                          <p className="ins-reasoning">{entry.response.reasoning}</p>
                         )}
                       </article>
-                    ))}
-                  </section>
-                )}
+                    </>
+                  )}
 
-              </div>
-            ))}
+                  {/* Advance: Insight → Mental Model */}
+                  {reveal === 1 && entry.mentalModelCard && (
+                    <button className="advance-btn" onClick={() => advance(entry.id)}>
+                      Got it <span className="advance-arrow">→</span>
+                    </button>
+                  )}
 
-            {/* Thinking */}
+                  {/* ── Level 2: Mental Model ──────────────────────────────── */}
+                  {reveal >= 2 && entry.mentalModelCard && (
+                    <section className="next-card card-reveal" aria-label="The principle">
+                      <span className="next-card-label">The principle</span>
+                      <p className="mm-framework">{entry.mentalModelCard.mentalModel}</p>
+                    </section>
+                  )}
+
+                  {/* Advance: Mental Model → Demonstration */}
+                  {reveal === 2 && entry.demonstrationSpec && (
+                    <button className="advance-btn" onClick={() => advance(entry.id)}>
+                      Show me <span className="advance-arrow">→</span>
+                    </button>
+                  )}
+
+                  {/* ── Level 3: Demonstration ─────────────────────────────── */}
+                  {reveal >= 3 && entry.demonstrationSpec && (
+                    <section className="next-card card-reveal" aria-label="What it looks like">
+                      <span className="next-card-label">What it looks like</span>
+                      <div className="demo-body">
+                        <p className="demo-state demo-state--now">{entry.demonstrationSpec.currentState}</p>
+                        <span className="demo-arrow" aria-hidden>→</span>
+                        <p className="demo-state demo-state--target">{entry.demonstrationSpec.targetState}</p>
+                        {entry.demonstrationSpec.keyDifference && (
+                          <p className="demo-diff">{entry.demonstrationSpec.keyDifference}</p>
+                        )}
+                        {entry.demonstrationSpec.executionCue && (
+                          <p className="demo-cue">{entry.demonstrationSpec.executionCue}</p>
+                        )}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Advance: Demonstration → Experiment ("Try it" — the pivot moment) */}
+                  {reveal === 3 && entry.experimentSpec && (
+                    <button className="advance-btn advance-btn--try" onClick={() => advance(entry.id)}>
+                      Try it
+                    </button>
+                  )}
+
+                  {/* ── Level 4: Experiment ────────────────────────────────── */}
+                  {reveal >= 4 && entry.experimentSpec && (
+                    <section className="next-card card-reveal" aria-label="Try this">
+                      <span className="next-card-label">Try this</span>
+                      <p className="exp-instruction">{entry.experimentSpec.hypothesis}</p>
+                      {entry.experimentSpec.repetitions && (
+                        <p className="exp-reps">{entry.experimentSpec.repetitions}</p>
+                      )}
+                    </section>
+                  )}
+
+                  {/* ── Level 4: Witness (model-requested, after experiment) ─ */}
+                  {reveal >= 4 && entry.response?.nextRequiredCard === "Witness" && (
+                    <section className="next-card card-reveal" aria-label="Witness">
+                      <span className="next-card-label">Witness</span>
+                      {entry.witnessPlan?.witnesses.length ? (
+                        <div className="witness-plan">
+                          {entry.witnessPlan.witnesses.map((w, wi) => (
+                            <div key={wi} className="witness-row">
+                              <div className="witness-header">
+                                <span className="witness-name">{w.witness}</span>
+                                <span className={`witness-importance wi-${w.confidenceImportance.toLowerCase()}`}>
+                                  {w.confidenceImportance}
+                                </span>
+                              </div>
+                              <dl className="witness-fields">
+                                <div className="witness-field">
+                                  <dt className="witness-term">Purpose</dt>
+                                  <dd className="witness-def">{w.purpose}</dd>
+                                </div>
+                                <div className="witness-field">
+                                  <dt className="witness-term">Expected Claim</dt>
+                                  <dd className="witness-def">{w.expectedClaim}</dd>
+                                </div>
+                                <div className="witness-field">
+                                  <dt className="witness-term">Required Evidence</dt>
+                                  <dd className="witness-def witness-def--evidence">{w.requiredEvidence}</dd>
+                                </div>
+                              </dl>
+                            </div>
+                          ))}
+                        </div>
+                      ) : entry.response?.witnessPrompt ? (
+                        <p className="next-card-body">{entry.response.witnessPrompt}</p>
+                      ) : null}
+                      {entry.witnessPlan?.witnesses.length && !entry.witnessReview ? (
+                        <div className="witness-observe">
+                          <label className="witness-observe-label" htmlFor={`obs-${entry.id}`}>
+                            What did you observe?
+                          </label>
+                          <textarea
+                            id={`obs-${entry.id}`}
+                            className="witness-observe-input"
+                            placeholder={"One observation per line.\nBe specific — what you saw, not what you felt."}
+                            rows={4}
+                            value={witnessInputs[entry.id] ?? ""}
+                            onChange={(e) => setWitnessInputs((prev) => ({ ...prev, [entry.id]: e.target.value }))}
+                          />
+                          <button
+                            className="witness-review-btn"
+                            type="button"
+                            onClick={() => void reviewWitness(entry)}
+                            disabled={!witnessInputs[entry.id]?.trim() || reviewLoadingId === entry.id}
+                          >
+                            Review Evidence
+                          </button>
+                        </div>
+                      ) : null}
+                      {reviewLoadingId === entry.id && (
+                        <div className="progress-block progress-block--inline">
+                          <span className="progress-dot" />
+                          <span key={reviewLabel} className="progress-label">{reviewLabel}</span>
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {/* ── User-action results: ungated, appear as data arrives ─ */}
+                  {entry.witnessReview && (
+                    <section className={`review-card card-reveal review-${entry.witnessReview.verdict.toLowerCase()}`}>
+                      <div className="review-header">
+                        <span className={`review-verdict rv-${entry.witnessReview.verdict.toLowerCase()}`}>
+                          {entry.witnessReview.verdict}
+                        </span>
+                        <span className="review-conf">
+                          {Math.round(entry.witnessReview.confidence * 100)}%
+                        </span>
+                      </div>
+                      <p className="review-claim">{entry.witnessReview.claim}</p>
+                      {entry.witnessReview.supportingEvidence.length > 0 && (
+                        <div className="review-ev-group">
+                          <span className="review-ev-label">Supporting</span>
+                          <ul className="review-ev-list">
+                            {entry.witnessReview.supportingEvidence.map((ev, ei) => (
+                              <li key={ei} className="review-ev-item review-ev-item--support">{ev}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {entry.witnessReview.contradictingEvidence.length > 0 && (
+                        <div className="review-ev-group">
+                          <span className="review-ev-label">Contradicting</span>
+                          <ul className="review-ev-list">
+                            {entry.witnessReview.contradictingEvidence.map((ev, ei) => (
+                              <li key={ei} className="review-ev-item review-ev-item--contra">{ev}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="review-next">
+                        <span className="review-next-label">Recommended Next Card</span>
+                        <span className="review-next-card">{entry.witnessReview.recommendedNextCard}</span>
+                      </div>
+                    </section>
+                  )}
+
+                  {entry.adjustment && (
+                    <section className={`adj-card card-reveal${entry.adjustment.nextCard === null ? " adj-card--complete" : ""}`}>
+                      <div className="adj-header">
+                        <span className="adj-decision">{entry.adjustment.decision}</span>
+                        {entry.adjustment.nextCard && (
+                          <span className="adj-next-pill">{entry.adjustment.nextCard}</span>
+                        )}
+                      </div>
+                      <p className="adj-reason">{entry.adjustment.reason}</p>
+                      <p className="adj-benefit">{entry.adjustment.expectedBenefit}</p>
+                    </section>
+                  )}
+
+                  {entry.orchestration && (
+                    <section className={`orch-card card-reveal${entry.orchestration.nextCard === null ? " orch-card--done" : ""}`}>
+                      <div className="orch-header">
+                        <span className="orch-label">Thread</span>
+                        {entry.orchestration.nextCard ? (
+                          <span className="orch-next">{entry.orchestration.nextCard}</span>
+                        ) : (
+                          <span className="orch-done">Complete</span>
+                        )}
+                      </div>
+                      <p className="orch-reason">{entry.orchestration.reason}</p>
+                      {entry.orchestration.requiredInputs.length > 0 && (
+                        <div className="orch-inputs">
+                          <span className="orch-inputs-label">Required</span>
+                          <ul className="orch-inputs-list">
+                            {entry.orchestration.requiredInputs.map((inp, ii) => (
+                              <li key={ii}>{inp}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <p className="orch-outcome">{entry.orchestration.expectedOutcome}</p>
+                    </section>
+                  )}
+
+                  {/* ── Deep Model + Discovery: past entries only ──────────── */}
+                  {i < thread.length - 1 && entry.deepModel && (
+                    <section className="deep-model-card card-reveal" aria-label="Deep Model">
+                      <span className="section-label">Deep Model</span>
+                      <p className="dm-model">{entry.deepModel.deepModel}</p>
+                      <div className="dm-field">
+                        <span className="dm-label">Leverage Point</span>
+                        <p className="dm-value">{entry.deepModel.leveragePoint}</p>
+                      </div>
+                      {entry.deepModel.caution && (
+                        <div className="dm-field">
+                          <span className="dm-label">Caution</span>
+                          <p className="dm-value dm-caution">{entry.deepModel.caution}</p>
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {i < thread.length - 1 && entry.evidence.length > 0 && (
+                    <section className="research-group card-reveal" aria-label="Discovery">
+                      <span className="section-label">Discovery</span>
+                      {entry.evidence.map((card, ci) => (
+                        <article key={ci} className="research-card">
+                          <span className="discovery-index">Discovery {ci + 1}</span>
+                          <p className="research-body">{card.summary}</p>
+                          <p className="research-why">{card.relevance}</p>
+                          {card.url ? (
+                            <a
+                              className="badge badge-source badge-link"
+                              href={card.url}
+                              rel="noreferrer noopener"
+                              target="_blank"
+                            >
+                              {card.source}
+                            </a>
+                          ) : (
+                            <span className="badge badge-source">{card.source}</span>
+                          )}
+                        </article>
+                      ))}
+                    </section>
+                  )}
+
+                </div>
+              );
+            })}
+
+            {/* Session status — shown only after full reveal completes */}
+            {phase === "RESULTS" && thread.length > 0 && (() => {
+              const last = thread[thread.length - 1];
+              if (!last || (revealMap[last.id] ?? 0) < 4) return null;
+              const label = last.response?.clarificationQuestion
+                ? "Answer below."
+                : last.experimentSpec
+                ? "Go. Come back with what you noticed."
+                : last.witnessReview
+                ? "Done."
+                : "Keep going.";
+              return (
+                <div className="session-status">
+                  <span className="session-status-dot" />
+                  <span className="session-status-text">{label}</span>
+                </div>
+              );
+            })()}
+
+            {/* Loading — cycling progression labels */}
             {phase === "LOADING" && (
               <div className="entry">
                 <p className="intent-echo intent-echo--loading">{activeIntent}</p>
-                <div className="thinking" aria-label="Thinking">
-                  <span /><span /><span />
+                <div className="progress-block" aria-label="Working">
+                  <span className="progress-dot" />
+                  <span key={loadingLabel} className="progress-label">{loadingLabel}</span>
                 </div>
               </div>
             )}
@@ -954,7 +1175,7 @@ export default function AxisPage() {
               <input
                 ref={inputRef}
                 className="bottom-input"
-                placeholder="What are you working on?"
+                placeholder={bottomPlaceholder}
                 type="text"
                 spellCheck={false}
                 autoComplete="off"
@@ -1009,7 +1230,45 @@ export default function AxisPage() {
           border-bottom: 1px solid rgba(26, 26, 24, 0.07);
           display: flex;
           flex-shrink: 0;
-          padding: 14px clamp(20px, 5vw, 48px);
+          gap: 10px;
+          padding: 12px clamp(16px, 4vw, 40px);
+        }
+
+        .sidebar-toggle {
+          background: none;
+          border: none;
+          color: rgba(26, 26, 24, 0.3);
+          cursor: pointer;
+          font-size: 16px;
+          line-height: 1;
+          padding: 4px;
+          transition: color 0.12s;
+        }
+
+        .sidebar-toggle:hover {
+          color: rgba(26, 26, 24, 0.62);
+        }
+
+        .hd-right {
+          align-items: center;
+          display: flex;
+          gap: 8px;
+          margin-left: auto;
+        }
+
+        .breakthrough-btn {
+          background: none;
+          border: none;
+          color: rgba(26, 26, 24, 0.22);
+          cursor: pointer;
+          font-size: 15px;
+          line-height: 1;
+          padding: 4px;
+          transition: color 0.15s;
+        }
+
+        .breakthrough-btn:hover {
+          color: rgba(200, 160, 0, 0.8);
         }
 
         .wordmark {
@@ -1028,14 +1287,15 @@ export default function AxisPage() {
           margin-left: auto;
         }
 
-        /* ── Empty state ─────────────────────────────────────────────────── */
+        /* ── Home state ──────────────────────────────────────────────────── */
 
-        .empty {
+        .home {
           align-items: flex-start;
+          animation: homeEnter 0.35s ease both;
           display: flex;
           flex: 1;
           flex-direction: column;
-          gap: 28px;
+          gap: 40px;
           justify-content: flex-start;
           margin: 0 auto;
           max-width: 640px;
@@ -1043,25 +1303,46 @@ export default function AxisPage() {
           width: 100%;
         }
 
-        .main-q {
+        @keyframes homeEnter {
+          from { opacity: 0; transform: translateY(14px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .home-hero {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+
+        .home-mark {
+          color: rgba(26, 26, 24, 0.22);
+          font-size: 11px;
+          font-weight: 750;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+        }
+
+        .home-q {
           color: #1a1a18;
-          font-size: clamp(28px, 5vw, 44px);
-          font-weight: 700;
-          line-height: 1.1;
+          font-size: clamp(36px, 6.5vw, 54px);
+          font-weight: 720;
+          letter-spacing: -0.01em;
+          line-height: 1.04;
           margin: 0;
         }
 
-        .main-form {
+        .home-form {
           display: flex;
           flex-direction: column;
           gap: 10px;
           width: 100%;
         }
 
-        .main-input {
+        .home-input {
           background: #fff;
           border: 1.5px solid rgba(26, 26, 24, 0.12);
           border-radius: 12px;
+          box-sizing: border-box;
           color: #1a1a18;
           font: inherit;
           font-size: 17px;
@@ -1070,18 +1351,17 @@ export default function AxisPage() {
           padding: 14px 18px;
           transition: border-color 0.15s;
           width: 100%;
-          box-sizing: border-box;
         }
 
-        .main-input:focus {
+        .home-input:focus {
           border-color: rgba(26, 26, 24, 0.28);
         }
 
-        .main-input::placeholder {
+        .home-input::placeholder {
           color: rgba(26, 26, 24, 0.28);
         }
 
-        .main-controls {
+        .home-controls {
           align-items: center;
           display: flex;
           gap: 6px;
@@ -1246,10 +1526,16 @@ export default function AxisPage() {
         /* ── Thread shell ─────────────────────────────────────────────────── */
 
         .thread-shell {
+          animation: sessionEnter 0.28s ease both;
           display: flex;
           flex: 1;
           flex-direction: column;
           min-height: 0;
+        }
+
+        @keyframes sessionEnter {
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
 
         .thread {
@@ -1302,29 +1588,70 @@ export default function AxisPage() {
           margin: 0;
         }
 
-        /* ── Thinking ────────────────────────────────────────────────────── */
+        /* ── Progress block ──────────────────────────────────────────────── */
 
-        .thinking {
+        .progress-block {
           align-items: center;
           display: flex;
-          gap: 5px;
+          gap: 10px;
+          padding: 16px 0 4px;
         }
 
-        .thinking span {
-          animation: dotrise 1.4s ease-in-out infinite;
-          background: rgba(26, 26, 24, 0.2);
+        .progress-block--inline {
+          padding: 14px 0 0;
+        }
+
+        .progress-dot {
+          animation: pulseDot 1.2s ease-in-out infinite;
+          background: rgba(140, 190, 40, 0.85);
           border-radius: 50%;
-          display: block;
+          flex-shrink: 0;
           height: 6px;
           width: 6px;
         }
 
-        .thinking span:nth-child(2) { animation-delay: 0.18s; }
-        .thinking span:nth-child(3) { animation-delay: 0.36s; }
+        @keyframes pulseDot {
+          0%, 100% { opacity: 0.35; transform: scale(0.85); }
+          50%       { opacity: 1;    transform: scale(1.15); }
+        }
 
-        @keyframes dotrise {
-          0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
-          30% { opacity: 0.6; transform: translateY(-4px); }
+        .progress-label {
+          animation: progressIn 0.25s ease both;
+          color: rgba(26, 26, 24, 0.36);
+          font-size: 13px;
+          font-weight: 500;
+          letter-spacing: 0.01em;
+        }
+
+        @keyframes progressIn {
+          from { opacity: 0; transform: translateX(-5px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+
+        /* ── Session status ──────────────────────────────────────────────── */
+
+        .session-status {
+          align-items: center;
+          display: flex;
+          gap: 10px;
+          padding: 20px 0 4px;
+        }
+
+        .session-status-dot {
+          animation: pulseDot 2.2s ease-in-out infinite;
+          background: rgba(140, 190, 40, 0.55);
+          border-radius: 50%;
+          flex-shrink: 0;
+          height: 5px;
+          width: 5px;
+        }
+
+        .session-status-text {
+          color: rgba(26, 26, 24, 0.26);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
         }
 
         /* ── Badges ──────────────────────────────────────────────────────── */
@@ -1374,19 +1701,78 @@ export default function AxisPage() {
           font-size: clamp(17px, 2.6vw, 22px);
           font-weight: 500;
           line-height: 1.45;
-          margin: 0 0 14px;
-        }
-
-        .ins-sub {
-          border-top: 1px solid rgba(26, 26, 24, 0.06);
-          padding-top: 12px;
-        }
-
-        .ins-sub-body {
-          color: rgba(26, 26, 24, 0.52);
-          font-size: 14px;
-          line-height: 1.55;
           margin: 0;
+        }
+
+        .ins-reasoning {
+          color: rgba(26, 26, 24, 0.38);
+          font-size: 13px;
+          line-height: 1.6;
+          margin: 14px 0 0;
+        }
+
+        /* ── Advance controls ────────────────────────────────────────────── */
+
+        .advance-btn {
+          align-items: center;
+          animation: cardReveal 0.3s ease both;
+          background: none;
+          border: none;
+          border-top: 1px solid rgba(26, 26, 24, 0.07);
+          color: rgba(26, 26, 24, 0.32);
+          cursor: pointer;
+          display: flex;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 600;
+          gap: 7px;
+          justify-content: center;
+          letter-spacing: 0.08em;
+          margin-top: 20px;
+          padding: 18px 0 4px;
+          text-transform: uppercase;
+          transition: color 0.15s;
+          width: 100%;
+        }
+
+        .advance-btn:hover {
+          color: rgba(26, 26, 24, 0.7);
+        }
+
+        .advance-arrow {
+          font-size: 14px;
+          font-weight: 400;
+          letter-spacing: 0;
+          text-transform: none;
+          transition: transform 0.15s;
+        }
+
+        .advance-btn:hover .advance-arrow {
+          transform: translateX(3px);
+        }
+
+        /* "Try it" — the pivot from understanding to doing */
+        .advance-btn--try {
+          border-top-color: rgba(62, 140, 38, 0.18);
+          color: rgba(62, 140, 38, 0.65);
+          font-size: 13px;
+          letter-spacing: 0.1em;
+          padding-top: 20px;
+        }
+
+        .advance-btn--try:hover {
+          color: rgba(62, 140, 38, 0.9);
+        }
+
+        /* ── Card reveal animation ───────────────────────────────────────── */
+
+        .card-reveal {
+          animation: cardReveal 0.4s ease both;
+        }
+
+        @keyframes cardReveal {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
 
         /* ── Next Required Card ──────────────────────────────────────────── */
@@ -1421,201 +1807,80 @@ export default function AxisPage() {
           font-style: italic;
         }
 
-        /* ── Mental Model card ───────────────────────────────────────────── */
-
-        .mm-card {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
+        /* ── Mental Model ────────────────────────────────────────────────── */
 
         .mm-framework {
           color: #1a1a18;
           font-size: 15px;
           font-weight: 450;
-          line-height: 1.6;
+          line-height: 1.65;
           margin: 0;
         }
 
-        .mm-rows {
-          border-top: 1px solid rgba(62, 140, 38, 0.12);
+        /* ── Demonstration ───────────────────────────────────────────────── */
+
+        .demo-body {
           display: flex;
           flex-direction: column;
           gap: 12px;
+        }
+
+        .demo-state {
+          font-size: 14px;
+          line-height: 1.55;
           margin: 0;
-          padding-top: 14px;
         }
 
-        .mm-row {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
+        .demo-state--now {
+          color: rgba(26, 26, 24, 0.52);
         }
 
-        .mm-term {
-          color: rgba(26, 26, 24, 0.32);
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
+        .demo-state--target {
+          color: #1a1a18;
+          font-weight: 500;
         }
 
-        .mm-def {
-          color: rgba(26, 26, 24, 0.62);
+        .demo-arrow {
+          color: rgba(62, 140, 38, 0.5);
+          font-size: 16px;
+          line-height: 1;
+        }
+
+        .demo-diff {
+          border-left: 2px solid rgba(62, 140, 38, 0.35);
+          color: #1a1a18;
+          font-size: 14px;
+          font-weight: 500;
+          line-height: 1.5;
+          margin: 4px 0 0;
+          padding-left: 12px;
+        }
+
+        .demo-cue {
+          color: rgba(26, 26, 24, 0.44);
           font-size: 13px;
+          font-style: italic;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        /* ── Experiment ──────────────────────────────────────────────────── */
+
+        .exp-instruction {
+          color: #1a1a18;
+          font-size: clamp(15px, 2.2vw, 18px);
+          font-weight: 500;
           line-height: 1.5;
           margin: 0;
         }
 
-        .mm-def--rule {
-          color: #1a1a18;
-          font-size: 14px;
-          font-weight: 550;
-        }
-
-        /* ── Demonstration spec ──────────────────────────────────────────── */
-
-        .demo-spec {
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
-        }
-
-        .demo-badges {
-          display: flex;
-          gap: 6px;
-        }
-
-        .demo-badge {
-          background: rgba(26, 26, 24, 0.05);
-          border: 1px solid rgba(26, 26, 24, 0.08);
-          border-radius: 4px;
-          color: rgba(26, 26, 24, 0.42);
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.08em;
-          padding: 3px 7px;
-          text-transform: uppercase;
-        }
-
-        .demo-rows {
-          border-top: 1px solid rgba(62, 140, 38, 0.12);
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin: 0;
-          padding-top: 14px;
-        }
-
-        .demo-row {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
-
-        .demo-term {
-          color: rgba(26, 26, 24, 0.32);
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-        }
-
-        .demo-def {
-          color: rgba(26, 26, 24, 0.68);
-          font-size: 13px;
-          line-height: 1.55;
-          margin: 0;
-        }
-
-        .demo-def--key {
-          color: #1a1a18;
-          font-size: 14px;
+        .exp-reps {
+          color: rgba(26, 26, 24, 0.38);
+          font-size: 12px;
           font-weight: 500;
-        }
-
-        .demo-def--dim {
-          color: rgba(26, 26, 24, 0.42);
-          font-style: italic;
-        }
-
-        .demo-viewpoints {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          list-style: none;
-          margin: 0;
-          padding: 0;
-        }
-
-        .demo-viewpoints li::before {
-          color: rgba(62, 140, 38, 0.6);
-          content: "→ ";
-        }
-
-        /* ── Experiment spec ─────────────────────────────────────────────── */
-
-        .exp-spec {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .exp-rows {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin: 0;
-        }
-
-        .exp-row {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
-
-        .exp-criteria {
-          background: rgba(26, 26, 24, 0.02);
-          border: 1px solid rgba(26, 26, 24, 0.06);
-          border-radius: 8px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          padding: 12px 14px;
-        }
-
-        .exp-term {
-          color: rgba(26, 26, 24, 0.32);
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.1em;
+          letter-spacing: 0.04em;
+          margin: 10px 0 0;
           text-transform: uppercase;
-        }
-
-        .exp-def {
-          color: rgba(26, 26, 24, 0.68);
-          font-size: 13px;
-          line-height: 1.55;
-          margin: 0;
-        }
-
-        .exp-def--hyp {
-          color: #1a1a18;
-          font-size: 14px;
-          font-weight: 500;
-          line-height: 1.45;
-        }
-
-        .exp-def--success {
-          color: #3d7a28;
-        }
-
-        .exp-def--failure {
-          color: rgba(26, 26, 24, 0.52);
-        }
-
-        .exp-def--learn {
-          color: rgba(26, 26, 24, 0.55);
-          font-style: italic;
         }
 
         /* ── Witness plan ────────────────────────────────────────────────── */
