@@ -1,5 +1,6 @@
 "use client";
 
+import type { User } from "@supabase/supabase-js";
 import { Mic, Paperclip } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DevSidebar } from "../../components/axis/dev-sidebar";
@@ -152,7 +153,52 @@ interface ThreadEntry {
 let _ctr = 0;
 const uid = () => (++_ctr).toString(36);
 
+type AxisAuthState =
+  | { status: "LOADING" }
+  | { status: "SIGNED_OUT" }
+  | { status: "SIGNED_IN"; userId: string; label: string; authType: string; isGuest: boolean };
+
 type ProgressState = "UNDERSTANDING" | "DEMONSTRATING" | "EXPERIMENTING" | "REVIEWING";
+
+function authReturnPath() {
+  return "/axis";
+}
+
+function authUrl() {
+  return `/auth?next=${encodeURIComponent(authReturnPath())}`;
+}
+
+function isGuestUser(user: User) {
+  return Boolean((user as User & { is_anonymous?: boolean }).is_anonymous);
+}
+
+function userLabel(user: User) {
+  if (isGuestUser(user)) return "Guest session";
+  const metadata = user.user_metadata as Record<string, unknown>;
+  const name = metadata.full_name ?? metadata.name;
+  return typeof name === "string" && name.trim()
+    ? name.trim()
+    : user.email ?? "Axis account";
+}
+
+function userAuthType(user: User) {
+  if (isGuestUser(user)) return "Guest";
+  const provider = user.app_metadata?.provider;
+  if (typeof provider === "string" && provider.trim()) {
+    return provider === "email" ? "Email" : provider.charAt(0).toUpperCase() + provider.slice(1);
+  }
+  return "Account";
+}
+
+function authStateFromUser(user: User): AxisAuthState {
+  return {
+    status: "SIGNED_IN",
+    userId: user.id,
+    label: userLabel(user),
+    authType: userAuthType(user),
+    isGuest: isGuestUser(user),
+  };
+}
 
 function compactTitle(text: string, fallback = "Current Thread") {
   const cleaned = text.trim().replace(/\s+/g, " ");
@@ -240,6 +286,54 @@ const REVIEW_LABELS = [
   "Orchestrating…",
 ] as const;
 
+const authGateStyles = `
+  .auth-root {
+    align-items: center;
+    background: #fafaf9;
+    color: #1a1a18;
+    display: flex;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    justify-content: center;
+    min-height: 100dvh;
+  }
+
+  .auth-gate {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+  }
+
+  .auth-wordmark {
+    color: rgba(26, 26, 24, 0.28);
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .auth-gate p,
+  .auth-gate strong {
+    color: rgba(26, 26, 24, 0.58);
+    font-size: 15px;
+    font-weight: 500;
+    margin: 0;
+  }
+
+  .auth-gate button {
+    background: #1a1a18;
+    border: 0;
+    border-radius: 10px;
+    color: #fafaf9;
+    cursor: pointer;
+    font: inherit;
+    font-size: 14px;
+    height: 38px;
+    padding: 0 18px;
+  }
+`;
+
 export default function AxisPage() {
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [thread, setThread] = useState<ThreadEntry[]>([]);
@@ -255,6 +349,7 @@ export default function AxisPage() {
   const [revealMap, setRevealMap] = useState<Record<string, number>>({});
 
   // ── Persistence + auth ──────────────────────────────────────────────────
+  const [authState, setAuthState] = useState<AxisAuthState>({ status: "LOADING" });
   const [userId, setUserId] = useState<string | null>(null);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [threadList, setThreadList] = useState<DevThread[]>([]);
@@ -339,23 +434,34 @@ export default function AxisPage() {
 
   // Auth gate + load sidebar data on mount
   useEffect(() => {
+    let cancelled = false;
     const supabase = getSupabaseBrowserClient();
-    if (!supabase) { window.location.replace("/auth"); return; }
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) {
-        window.location.replace("/auth");
+    if (!supabase) {
+      setAuthState({ status: "SIGNED_OUT" });
+      window.location.replace(authUrl());
+      return;
+    }
+
+    supabase.auth.getUser().then(async ({ data, error }) => {
+      if (cancelled) return;
+      if (error || !data.user) {
+        setAuthState({ status: "SIGNED_OUT" });
+        window.location.replace(authUrl());
         return;
       }
-      setUserId(data.session.user.id);
+      setAuthState(authStateFromUser(data.user));
+      setUserId(data.user.id);
       const [threads, bts, ev] = await Promise.all([
         listDevThreads(),
         listBreakthroughs(),
         listDevEvidence(),
       ]);
+      if (cancelled) return;
       setThreadList(threads);
       setBreakthroughList(bts);
       setEvidenceList(ev);
     });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -681,6 +787,37 @@ export default function AxisPage() {
     if (inputRef.current) inputRef.current.value = "";
   }
 
+  function handleSignIn() {
+    window.location.replace(authUrl());
+  }
+
+  async function handleSignOut() {
+    const supabase = getSupabaseBrowserClient();
+    abortRef.current?.abort();
+    recognitionRef.current?.abort();
+    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    objectUrlsRef.current = [];
+    entryIdMapRef.current = {};
+    prevThreadLenRef.current = 0;
+    setThread([]);
+    setCurrentThreadId(null);
+    setThreadList([]);
+    setBreakthroughList([]);
+    setEvidenceList([]);
+    setRevealMap({});
+    setPendingAttachment(null);
+    setIsActive(false);
+    setPhase("IDLE");
+    setUserId(null);
+    setAuthState({ status: "SIGNED_OUT" });
+    if (inputRef.current) inputRef.current.value = "";
+    try {
+      await supabase?.auth.signOut();
+    } finally {
+      window.location.replace(authUrl());
+    }
+  }
+
   async function reviewWitness(entry: ThreadEntry) {
     const text = (witnessInputs[entry.id] ?? "").trim();
     if (!text || !entry.response?.insight || reviewLoadingId) return;
@@ -802,6 +939,31 @@ export default function AxisPage() {
     ? "What happened?"
     : "What are you working on?";
 
+  if (authState.status === "LOADING") {
+    return (
+      <main className="auth-root">
+        <div className="auth-gate">
+          <span className="auth-wordmark">Axis</span>
+          <p>Checking session.</p>
+        </div>
+        <style jsx>{authGateStyles}</style>
+      </main>
+    );
+  }
+
+  if (authState.status === "SIGNED_OUT") {
+    return (
+      <main className="auth-root">
+        <div className="auth-gate">
+          <span className="auth-wordmark">Axis</span>
+          <strong>Not signed in</strong>
+          <button type="button" onClick={handleSignIn}>Sign In</button>
+        </div>
+        <style jsx>{authGateStyles}</style>
+      </main>
+    );
+  }
+
   return (
     <main className="root">
 
@@ -812,8 +974,13 @@ export default function AxisPage() {
         threads={threadList}
         breakthroughs={breakthroughList}
         evidence={evidenceList}
+        authLabel={authState.isGuest ? "Guest session" : authState.label}
+        authType={authState.authType}
+        isGuest={authState.isGuest}
         onSelectThread={(id) => void loadThread(id)}
         onNewThread={startNewThread}
+        onSignIn={handleSignIn}
+        onSignOut={() => void handleSignOut()}
       />
 
       {/* ── HOME ────────────────────────────────────────────────────────── */}
@@ -902,6 +1069,9 @@ export default function AxisPage() {
             </button>
             <span className="wordmark">Axis</span>
             <div className="hd-right">
+              <div className={`auth-chip${authState.isGuest ? " auth-chip--guest" : ""}`}>
+                {authState.isGuest ? "Guest session" : `Signed in as ${authState.label}`}
+              </div>
               {thread.length > 0 && thread[thread.length - 1]?.response?.insight && (
                 <button
                   className="breakthrough-btn"
@@ -1454,6 +1624,25 @@ export default function AxisPage() {
           display: flex;
           gap: 8px;
           margin-left: auto;
+        }
+
+        .auth-chip {
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 999px;
+          color: rgba(26, 26, 24, 0.46);
+          font-size: 11px;
+          font-weight: 550;
+          line-height: 1;
+          max-width: min(42vw, 280px);
+          overflow: hidden;
+          padding: 7px 10px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .auth-chip--guest {
+          border-color: rgba(140, 190, 40, 0.18);
+          color: rgba(62, 120, 38, 0.72);
         }
 
         .breakthrough-btn {

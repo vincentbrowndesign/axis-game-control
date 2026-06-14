@@ -15,8 +15,13 @@ interface DevSidebarProps {
   threads: DevThread[];
   breakthroughs: Breakthrough[];
   evidence: DevEvidence[];
+  authLabel: string;
+  authType: string;
+  isGuest: boolean;
   onSelectThread: (id: string) => void;
   onNewThread: () => void;
+  onSignIn: () => void;
+  onSignOut: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,8 +57,13 @@ export function DevSidebar({
   threads,
   breakthroughs,
   evidence,
+  authLabel,
+  authType,
+  isGuest,
   onSelectThread,
   onNewThread,
+  onSignIn,
+  onSignOut,
 }: DevSidebarProps) {
   const [tab, setTab] = React.useState<Tab>("threads");
 
@@ -150,6 +160,20 @@ export function DevSidebar({
             </ul>
           )}
 
+        </div>
+
+        <div className="account-control" aria-label="Account">
+          <span className="account-kicker">Account</span>
+          <strong className="account-id">{authLabel}</strong>
+          <span className="account-type">{authType}</span>
+          {isGuest && (
+            <button className="account-link" type="button" onClick={onSignIn}>
+              Save with account
+            </button>
+          )}
+          <button className="sign-out-btn" type="button" onClick={onSignOut}>
+            Sign Out
+          </button>
         </div>
 
       </aside>
@@ -264,6 +288,70 @@ export function DevSidebar({
           flex: 1;
           overflow-y: auto;
           padding: 8px 0;
+        }
+
+        .account-control {
+          border-top: 1px solid rgba(250, 250, 249, 0.07);
+          display: flex;
+          flex-direction: column;
+          flex-shrink: 0;
+          gap: 6px;
+          padding: 14px 18px 18px;
+        }
+
+        .account-kicker {
+          color: rgba(250, 250, 249, 0.26);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        .account-id {
+          color: rgba(250, 250, 249, 0.82);
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1.35;
+          overflow-wrap: anywhere;
+        }
+
+        .account-type {
+          color: rgba(250, 250, 249, 0.32);
+          font-size: 11px;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .account-link,
+        .sign-out-btn {
+          align-self: flex-start;
+          background: transparent;
+          border: 0;
+          cursor: pointer;
+          font: inherit;
+          font-size: 12px;
+          padding: 0;
+          transition: color 0.12s;
+        }
+
+        .account-link {
+          color: rgba(140, 190, 40, 0.78);
+          margin-top: 3px;
+        }
+
+        .account-link:hover {
+          color: rgba(140, 190, 40, 1);
+        }
+
+        .sign-out-btn {
+          color: rgba(250, 250, 249, 0.4);
+          margin-top: 5px;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+
+        .sign-out-btn:hover {
+          color: rgba(250, 250, 249, 0.7);
         }
 
         /* ── Thread list ── */

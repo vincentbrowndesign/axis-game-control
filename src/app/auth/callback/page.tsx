@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "../../../lib/supabase-browser";
 
+function getReturnPath() {
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/auth")) {
+    return "/axis";
+  }
+  return next;
+}
+
 export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
@@ -12,13 +20,14 @@ export default function AuthCallbackPage() {
       setError("Auth is not configured.");
       return;
     }
+    const returnPath = getReturnPath();
 
     // Supabase sets the session from the URL hash/query params automatically.
     // Listen for the auth state change and redirect when it resolves.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         subscription.unsubscribe();
-        window.location.replace("/axis");
+        window.location.replace(returnPath);
       }
     });
 
@@ -30,7 +39,7 @@ export default function AuthCallbackPage() {
       }
       if (data.session) {
         subscription.unsubscribe();
-        window.location.replace("/axis");
+        window.location.replace(returnPath);
       }
     });
 

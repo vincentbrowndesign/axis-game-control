@@ -1,6 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+function redirectToAuth(request: NextRequest) {
+  const dest = request.nextUrl.clone();
+  const returnPath = request.nextUrl.pathname === "/"
+    ? "/axis"
+    : `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  dest.pathname = "/auth";
+  dest.search = "";
+  dest.searchParams.set("next", returnPath);
+  return NextResponse.redirect(dest);
+}
+
 export async function middleware(request: NextRequest) {
   // Pass request headers through so cookies set during this request are visible
   // to the page handler that runs after middleware.
@@ -11,9 +22,7 @@ export async function middleware(request: NextRequest) {
 
   // If Supabase is not configured, block access rather than silently allow it.
   if (!url || !key) {
-    const dest = request.nextUrl.clone();
-    dest.pathname = "/auth";
-    return NextResponse.redirect(dest);
+    return redirectToAuth(request);
   }
 
   const supabase = createServerClient(url, key, {
@@ -33,20 +42,16 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // getSession reads from the cookie. For /axis this is sufficient —
-  // full token verification happens on the Supabase server for sensitive operations.
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user }, error } = await supabase.auth.getUser();
 
-  if (!session) {
-    const dest = request.nextUrl.clone();
-    dest.pathname = "/auth";
-    return NextResponse.redirect(dest);
+  if (error || !user) {
+    return redirectToAuth(request);
   }
 
   return response;
 }
 
-// Protect /axis and all sub-paths. Auth routes are left unmatched.
+// Protect the Axis surfaces. Auth routes are left unmatched.
 export const config = {
-  matcher: ["/axis", "/axis/:path*"],
+  matcher: ["/", "/axis", "/axis/:path*"],
 };

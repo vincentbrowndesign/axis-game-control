@@ -6,6 +6,14 @@ import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
 type Phase = "IDLE" | "LOADING" | "SENT" | "OAUTH_LOADING" | "AUTHENTICATED";
 type OAuthProvider = "google" | "apple";
 
+function getReturnPath() {
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/auth")) {
+    return "/axis";
+  }
+  return next;
+}
+
 export default function AuthPage() {
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [email, setEmail] = useState("");
@@ -18,7 +26,7 @@ export default function AuthPage() {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         setPhase("AUTHENTICATED");
-        window.location.replace("/axis");
+        window.location.replace(getReturnPath());
       }
     });
   }, []);
@@ -30,7 +38,9 @@ export default function AuthPage() {
     setError(null);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(getReturnPath())}`,
+      },
     });
     if (oauthError) {
       setError(oauthError.message);
@@ -50,7 +60,7 @@ export default function AuthPage() {
       setPhase("IDLE");
       return;
     }
-    window.location.replace("/axis");
+    window.location.replace(getReturnPath());
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -63,7 +73,9 @@ export default function AuthPage() {
     setError(null);
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: val,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(getReturnPath())}`,
+      },
     });
     if (signInError) {
       setError(signInError.message);
