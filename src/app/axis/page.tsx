@@ -497,6 +497,13 @@ export default function AxisPage() {
               type="text"
               spellCheck={false}
               autoComplete="off"
+              enterKeyHint="send"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void run(inputRef.current?.value ?? "");
+                }
+              }}
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
             />
@@ -965,6 +972,13 @@ export default function AxisPage() {
                 type="text"
                 spellCheck={false}
                 autoComplete="off"
+                enterKeyHint="send"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void run(inputRef.current?.value ?? "");
+                  }
+                }}
               />
               <button className="bottom-send" type="submit" aria-label="Send">
                 →
