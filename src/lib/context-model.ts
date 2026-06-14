@@ -31,6 +31,7 @@ export interface AxisContext {
 export interface ContextSummary {
   id: string;
   title: string;
+  capability?: string;
   lastExperiment?: string;
   updatedAt: string;
 }
@@ -39,6 +40,7 @@ export function toSummary(ctx: AxisContext): ContextSummary {
   return {
     id: ctx.id,
     title: ctx.title,
+    capability: ctx.capability,
     lastExperiment: ctx.lastExperiment,
     updatedAt: ctx.updatedAt,
   };

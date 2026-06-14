@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
-import { type AxisChallenge, type AxisContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
+import { type AxisChallenge, type AxisContext as SessionContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
 import { analyzeIntent, generateConstraint, type GeneratedConstraint } from "../../../lib/axis-expansion";
 import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
 import { startCameraWitness, type CameraWitnessHandle } from "../../../lib/camera-witness";
@@ -12,6 +12,16 @@ import {
   createMissionAttempt,
   type MissionAttempt,
 } from "../../../lib/axis-mission-memory";
+import { type ContextSummary } from "../../../lib/context-model";
+import ContextSidebar from "../../../components/axis/context-sidebar";
+import {
+  createContext as createDevContext,
+  findMatchingContext,
+  listSummaries,
+  recordExperiment as recordCtxExperiment,
+  recordIntent as recordCtxIntent,
+  recordObservation as recordCtxObservation,
+} from "../../../lib/context-store";
 
 // ---------------------------------------------------------------------------
 // Feature flags
@@ -48,7 +58,7 @@ interface LearningToken {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-function classifyIntent(t: string): AxisContext {
+function classifyIntent(t: string): SessionContext {
   const s = t.toLowerCase();
   if (["game", "match", "playing", "competition", "scrimmage", "against"].some((k) => s.includes(k)))
     return "GAME";
@@ -176,6 +186,14 @@ export default function AxisShell() {
   const expansionConstraintRef = useRef<GeneratedConstraint | null>(null);
   const expandAbortRef = useRef<AbortController | null>(null);
   const cameraWitnessRef = useRef<CameraWitnessHandle | null>(null);
+  const activeContextIdRef = useRef<string | null>(null);
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [contexts, setContexts] = useState<ContextSummary[]>([]);
+
+  useEffect(() => {
+    setContexts(listSummaries());
+  }, []);
 
   useEffect(() => {
     setIsVoiceSupported("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
@@ -436,6 +454,10 @@ export default function AxisShell() {
     setPhase("CHALLENGE");
     pushChallenge(0);
     startWitness(experimentId, generated.constraint);
+    if (activeContextIdRef.current) {
+      recordCtxExperiment(activeContextIdRef.current, generated.constraint);
+      setContexts(listSummaries());
+    }
   }
 
   // Called when player answers the expansion question (text or voice).
@@ -488,7 +510,7 @@ export default function AxisShell() {
     startVoiceCapture(observationInputRef, handleExpandAnswer);
   }
 
-  function startSession(ctx: AxisContext) {
+  function startSession(ctx: SessionContext) {
     const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
     const list = filtered.length > 0 ? filtered : VISION_CHALLENGES;
     challengesRef.current = list;
@@ -509,6 +531,10 @@ export default function AxisShell() {
 
     if (observation.trim()) {
       appendMessage({ role: "user", type: "observation", text: observation.trim() });
+      if (activeContextIdRef.current) {
+        recordCtxObservation(activeContextIdRef.current, observation.trim());
+        setContexts(listSummaries());
+      }
     }
 
     // Stop camera witness — fires async, records to learning engine when done
@@ -556,6 +582,15 @@ export default function AxisShell() {
     startCamera();
     appendMessage({ role: "user", type: "intent", text: val.trim() });
     if (intentInputRef.current) intentInputRef.current.value = "";
+    const match = findMatchingContext(val.trim());
+    if (match) {
+      activeContextIdRef.current = match.context.id;
+      recordCtxIntent(match.context.id, val.trim());
+    } else {
+      const ctx = createDevContext({ intent: val.trim() });
+      activeContextIdRef.current = ctx.id;
+    }
+    setContexts(listSummaries());
     showThinking(() => runExpansion(val.trim()));
   }
 
@@ -654,12 +689,27 @@ export default function AxisShell() {
 
   return (
     <main className="shell">
+      <ContextSidebar
+        contexts={contexts}
+        activeId={activeContextIdRef.current ?? undefined}
+        isOpen={sidebarOpen}
+        onSelect={(ctx) => { activeContextIdRef.current = ctx.id; setSidebarOpen(false); }}
+        onClose={() => setSidebarOpen(false)}
+      />
       <video ref={videoBgRef} muted playsInline aria-hidden className="cam-bg" />
 
       {/* ── OPENING STATE ──────────────────────────────────────────────── */}
       {/* No messages yet. Mirrors ChatGPT's empty-state: centered, one box. */}
       {!inThread && (
         <div className="opening">
+          <button
+            aria-label="Open context history"
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(true)}
+            type="button"
+          >
+            ☰
+          </button>
           <p className="opening-q">What are you working on?</p>
           <InputBox
             inputRef={intentInputRef}
@@ -680,14 +730,24 @@ export default function AxisShell() {
 
           {/* Minimal header — only exit */}
           <div className="thread-hd">
-            <button
-              aria-label="New session"
-              className="exit-btn"
-              onClick={handleExit}
-              type="button"
-            >
-              ←
-            </button>
+            <div className="hd-nav">
+              <button
+                aria-label="Open context history"
+                className="sidebar-toggle"
+                onClick={() => setSidebarOpen(true)}
+                type="button"
+              >
+                ☰
+              </button>
+              <button
+                aria-label="New session"
+                className="exit-btn"
+                onClick={handleExit}
+                type="button"
+              >
+                ←
+              </button>
+            </div>
             <span />
             {phase === "CHALLENGE" && challenge && (
               <span className="progress">
@@ -769,6 +829,45 @@ export default function AxisShell() {
           min-height: 100dvh;
           overflow: hidden;
           position: relative;
+        }
+
+        @media (min-width: 768px) {
+          .shell {
+            margin-left: 256px;
+          }
+        }
+
+        .sidebar-toggle {
+          align-items: center;
+          background: transparent;
+          border: 0;
+          color: rgba(247, 247, 242, 0.2);
+          cursor: pointer;
+          display: flex;
+          font-size: 17px;
+          height: 36px;
+          justify-content: center;
+          line-height: 1;
+          padding: 0;
+          transition: color 0.12s;
+          width: 36px;
+        }
+
+        .sidebar-toggle:hover {
+          color: rgba(247, 247, 242, 0.5);
+        }
+
+        /* Hide toggle on desktop — sidebar is always visible */
+        @media (min-width: 768px) {
+          .sidebar-toggle {
+            display: none;
+          }
+        }
+
+        .hd-nav {
+          align-items: center;
+          display: flex;
+          gap: 2px;
         }
 
         /* Ambient camera — atmosphere, never a homepage */
