@@ -10,13 +10,13 @@ export interface EvidenceCard {
   url?: string;
 }
 
-const COMPRESS_SYSTEM = `You receive raw search results for a sports development query. Extract up to 3 pieces of evidence that directly support the query.
+const COMPRESS_SYSTEM = `You receive raw search results for a sports development query. Convert up to 3 results into discovery statements.
 
 Rules:
 - Max 3. Return fewer if fewer are relevant.
 - Skip: Wikipedia, Spotify, YouTube, Instagram, TikTok, Twitter, Facebook, Reddit, news sites, product pages, e-commerce. Only keep sports science, coaching, biomechanics, or athletic development sources.
-- summary: 1 sentence. What the source actually says or found.
-- relevance: 1 sentence. Why this matters to the player's intent.
+- summary: 1 sentence. State the finding as fact — not what a source says. Never start with "A study found", "Research shows", or "According to". State it directly: "Athletes who X tend to Y." Write it as something the player now knows.
+- relevance: 1 sentence. Why this changes how the player should think or train. Concrete and player-facing. Not abstract.
 - source: bare domain only (e.g. "ncbi.nlm.nih.gov")
 
 Return JSON only: {"evidence":[{"source":"...","summary":"...","relevance":"...","url":"..."}]}

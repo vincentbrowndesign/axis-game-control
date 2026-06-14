@@ -769,12 +769,15 @@ export default function AxisPage() {
                   </>
                 )}
 
-                {/* Evidence */}
+                {/* Discovery */}
                 {entry.evidence.length > 0 && (
-                  <section className="research-group" aria-label="Evidence">
-                    <span className="section-label">Evidence</span>
+                  <section className="research-group" aria-label="Discovery">
+                    <span className="section-label">Discovery</span>
                     {entry.evidence.map((card, i) => (
                       <article key={i} className="research-card">
+                        <span className="discovery-index">Discovery {i + 1}</span>
+                        <p className="research-body">{card.summary}</p>
+                        <p className="research-why">{card.relevance}</p>
                         {card.url ? (
                           <a
                             className="badge badge-source badge-link"
@@ -787,8 +790,6 @@ export default function AxisPage() {
                         ) : (
                           <span className="badge badge-source">{card.source}</span>
                         )}
-                        <p className="research-body">{card.summary}</p>
-                        <p className="research-why">{card.relevance}</p>
                       </article>
                     ))}
                   </section>
@@ -1475,6 +1476,16 @@ export default function AxisPage() {
           border: 1px solid rgba(26, 26, 24, 0.06);
           border-radius: 10px;
           padding: 14px 16px;
+        }
+
+        .discovery-index {
+          color: rgba(26, 26, 24, 0.28);
+          display: block;
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: 0.06em;
+          margin-bottom: 8px;
+          text-transform: uppercase;
         }
 
         .badge-link {
