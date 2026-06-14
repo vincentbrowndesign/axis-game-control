@@ -1,103 +1,127 @@
 export const runtime = "nodejs";
 
 // ---------------------------------------------------------------------------
-// Understanding API
+// Axis Insight Engine
 //
-// Input:  { intent, context?, threadHistory? }
-// Output: { confidence, leveragePoint, mentalModel, commonMistake?,
-//           experimentCandidate, clarificationQuestion? }
+// Input:  { intent, evidence?, witnessClaims?, context?, threadHistory? }
+// Output: { insight, confidence, reasoning, nextRequiredCard,
+//           mentalModel?, experimentCandidate?, witnessPrompt?,
+//           clarificationQuestion? }
 //
-// Claude's job: find the leverage point and mental model.
-// Not essays. Not coaching. Not chatty explanations.
+// Job: identify the highest-leverage observation. Not solve the problem.
 // ---------------------------------------------------------------------------
 
 interface UnderstandRequest {
   intent: string;
+  evidence?: string[];
+  witnessClaims?: string[];
   context?: string;
   threadHistory?: string[];
 }
 
-interface UnderstandResponse {
+export interface InsightResponse {
+  insight: string;
   confidence: number;
-  leveragePoint: string;
-  mentalModel: string;
-  commonMistake?: string;
-  experimentCandidate: string;
+  reasoning: string;
+  nextRequiredCard: "Mental Model" | "Demonstration" | "Experiment" | "Witness";
+  mentalModel?: string;
+  experimentCandidate?: string;
+  witnessPrompt?: string;
   clarificationQuestion?: string;
 }
 
-const UNDERSTAND_SYSTEM = `You are a sports development intelligence. Find the leverage point inside what someone is working on.
+const UNDERSTAND_SYSTEM = `You are the Axis Insight Engine.
 
-A leverage point is a SPECIFIC MECHANISM — the hidden constraint that, if named, changes what the athlete does next.
+Your job is not to solve the problem.
+Your job is to identify the highest-leverage observation.
 
-NOT a leverage point:
-- "Unclear what the problem is" — this is a diagnosis of your own uncertainty
-- "Needs more consistency" — symptom, not mechanism
-- "Inefficient mechanics" — category, not constraint
-- "You don't know which variable is breaking it" — you're describing the player's ignorance, not the constraint
+Given a player's intent, find the single observation that, if named, changes what the player does next.
 
-YES a leverage point:
-- "The dribble is going to where the defense is, not creating space away from it" — specific mechanism
-- "Every second in triple threat gives the defense time to organize" — names what's actually happening
-- "The shot fires at different heights each rep — the rhythm is variable, not the mechanic" — isolates the constraint
-- "A still defender has already made their decision — the gap already exists" — reveals a hidden assumption
+Output fields:
+- insight: 1 sentence. The single highest-leverage observation. Specific mechanism or hidden assumption. Not a diagnosis. Not a category.
+- confidence: 0.0–1.0
+- reasoning: 2-3 sentences. Why this observation matters. What constraint it names. Not coaching — analysis of the mechanism.
+- nextRequiredCard: exactly one of "Mental Model" | "Demonstration" | "Experiment" | "Witness"
+  - Mental Model → insight is conceptual; player needs the frame before acting
+  - Demonstration → insight is perceptual; player needs to see it on video or live
+  - Experiment → insight is action-ready; player can apply it in the next rep
+  - Witness → player needs to observe specific behavior in themselves or the environment
+- mentalModel: 2-3 sentences. The frame that makes the constraint visible. Populate only when nextRequiredCard is "Mental Model".
+- experimentCandidate: 1 imperative sentence. Specific and observable. Populate only when nextRequiredCard is "Experiment".
+- witnessPrompt: 1 sentence. What exactly to observe. Populate only when nextRequiredCard is "Witness".
+- clarificationQuestion: only when confidence < 0.72. ONE question. Name 2-3 specific sub-problems.
 
 Rules:
-- leveragePoint: 1 sentence. Specific mechanism or hidden assumption. No consulting language. No vague categories.
-- mentalModel: 2-3 sentences. The reframe that makes the constraint feel obvious once named. Should feel like "I never thought of it that way."
-- commonMistake: 1 sentence. What athletes do that makes this constraint worse.
-- experimentCandidate: 1 imperative sentence. Specific, observable. No time appended.
-- clarificationQuestion: only if confidence < 0.72. ONE question. Name 2-3 specific sub-problems from this domain.
-- confidence: 0.0–1.0. Under 3 words of input, or no clear domain → confidence must be below 0.72.
+- confidence >= 0.72: insight must be specific. Omit clarificationQuestion. Populate the field for the selected card.
+- confidence < 0.72: include clarificationQuestion. insight may be directional.
+- Do not populate mentalModel, experimentCandidate, and witnessPrompt simultaneously. Populate only the one matching nextRequiredCard.
+- Under 3 words of input, or no clear athletic domain → confidence must be below 0.72.
 
-If confidence >= 0.72: real leveragePoint required. No diagnostic non-answers. Omit clarificationQuestion.
-If confidence < 0.72: clarificationQuestion required. leveragePoint may be partial but must not be a placeholder diagnosis.
+Language: direct, coaching voice. No consultant framing. No generic advice. No "unclear" constructions.
 
-Language: direct, specific, coaching voice. No consultant framing. No startup language. No "unclear what" constructions.
-
-JSON only. No markdown. No lists.
+JSON only. No markdown.
 
 Few-shot examples:
 
 Intent: "triple threat"
-{"confidence":0.88,"leveragePoint":"Every second standing still in triple threat is time the defense uses to take an option away.","mentalModel":"The triple threat only works if the defender can't read your next action. A still triple threat is an empty threat — the defender relaxes, picks a lane, and waits. The body has to stay live so the read stays alive.","commonMistake":"Holding the position until the defender commits, which gives the defense the first decision.","experimentCandidate":"Attack before the defender settles."}
-
-Intent: "I freeze when my man doesn't move"
-{"confidence":0.91,"leveragePoint":"A defender who stops moving has already made their decision — the gap already exists, you're just not taking it.","mentalModel":"Stillness from a defender is information, not indecision. They've committed to a position, which means one path is already open. The freeze happens because you're waiting for movement as permission to act, but that permission isn't coming.","commonMistake":"Reading the defender's movement as a signal, which means a still defender sends no signal at all.","experimentCandidate":"Act on the first gap you see — movement from the defense is not required."}
+{"insight":"Every second standing still in triple threat is time the defense uses to take an option away.","confidence":0.88,"reasoning":"The triple threat only works while the defender can't read your next action. The moment the body goes still, the defender relaxes and eliminates a lane. The threat isn't the ball position — it's the time pressure on the defense.","nextRequiredCard":"Experiment","experimentCandidate":"Attack before the defender settles."}
 
 Intent: "spacing"
-{"confidence":0.38,"leveragePoint":"Players are finding space where the defense isn't, not where the next pass goes.","mentalModel":"Good spacing isn't about spreading out — it's about being in the right position at the right moment in the sequence. Space that isn't connected to the ball movement is just distance.","commonMistake":"Moving to empty spots instead of spots that stress the defense.","experimentCandidate":"Get to a spot that makes the defense choose between two threats.","clarificationQuestion":"Is it getting open without the ball, timing cuts with the pass, or finding the gaps the defense leaves?"}`;
+{"insight":"Players are finding space where the defense isn't — not where the next pass goes.","confidence":0.84,"reasoning":"Good spacing isn't about spreading out — it's about being in the right position at the right moment in the ball sequence. Space that isn't connected to what the ball is about to do is just distance.","nextRequiredCard":"Mental Model","mentalModel":"Think of spacing as timing, not geography. The space that matters is the one that will be open in two seconds, not the one that's empty now."}
 
-function safeParse(raw: string): UnderstandResponse {
+Intent: "my jump shot"
+{"insight":"Jump shot inconsistency most often lives in when in the jump the shot fires — the timing variable is shifting, not the mechanics.","confidence":0.65,"reasoning":"If release point within the jump shifts rep to rep, the same hand mechanics produce different arcs every time. Adjusting grip or wrist when the real variable is timing produces no consistent improvement.","nextRequiredCard":"Demonstration","clarificationQuestion":"Is it consistency off the catch, off the dribble, or under fatigue?"}`;
+
+const CARD_TYPES = ["Mental Model", "Demonstration", "Experiment", "Witness"] as const;
+type CardType = typeof CARD_TYPES[number];
+
+function isCardType(val: unknown): val is CardType {
+  return typeof val === "string" && CARD_TYPES.includes(val as CardType);
+}
+
+function safeParse(raw: string): InsightResponse {
   try {
     const start = raw.indexOf("{");
     const end = raw.lastIndexOf("}");
     const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
     const parsed = JSON.parse(slice) as Record<string, unknown>;
+
+    const confidence = typeof parsed.confidence === "number"
+      ? Math.min(1, Math.max(0, parsed.confidence))
+      : 0.5;
+
+    const nextRequiredCard: CardType = isCardType(parsed.nextRequiredCard)
+      ? parsed.nextRequiredCard
+      : "Mental Model";
+
     return {
-      confidence: typeof parsed.confidence === "number" ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
-      leveragePoint: typeof parsed.leveragePoint === "string" && parsed.leveragePoint.trim()
-        ? parsed.leveragePoint.trim()
+      insight: typeof parsed.insight === "string" && parsed.insight.trim()
+        ? parsed.insight.trim()
         : "The real constraint underneath this intent.",
+      confidence,
+      reasoning: typeof parsed.reasoning === "string" && parsed.reasoning.trim()
+        ? parsed.reasoning.trim()
+        : "What would change if this constraint was already resolved?",
+      nextRequiredCard,
       mentalModel: typeof parsed.mentalModel === "string" && parsed.mentalModel.trim()
         ? parsed.mentalModel.trim()
-        : "What would change if you already had this?",
-      commonMistake: typeof parsed.commonMistake === "string" && parsed.commonMistake.trim()
-        ? parsed.commonMistake.trim()
         : undefined,
       experimentCandidate: typeof parsed.experimentCandidate === "string" && parsed.experimentCandidate.trim()
         ? parsed.experimentCandidate.trim()
-        : "Apply this to your next rep.",
+        : undefined,
+      witnessPrompt: typeof parsed.witnessPrompt === "string" && parsed.witnessPrompt.trim()
+        ? parsed.witnessPrompt.trim()
+        : undefined,
       clarificationQuestion: typeof parsed.clarificationQuestion === "string" && parsed.clarificationQuestion.trim()
         ? parsed.clarificationQuestion.trim()
         : undefined,
     };
   } catch {
     return {
+      insight: "Could not parse understanding.",
       confidence: 0,
-      leveragePoint: "Could not parse understanding.",
-      mentalModel: "Try again.",
-      experimentCandidate: "Apply this to your next rep.",
+      reasoning: "Try again.",
+      nextRequiredCard: "Mental Model",
     };
   }
 }
@@ -115,13 +139,15 @@ export async function POST(req: Request) {
     return Response.json({ confidence: 0 }, { status: 400 });
   }
 
-  const { intent, context, threadHistory } = body;
+  const { intent, evidence, witnessClaims, context, threadHistory } = body;
   if (!intent?.trim()) {
     return Response.json({ confidence: 0 }, { status: 400 });
   }
 
   const userContent = [
     `Intent: "${intent.trim()}"`,
+    evidence?.length ? `Evidence available: ${evidence.join(", ")}` : null,
+    witnessClaims?.length ? `Witness claims:\n${witnessClaims.join("\n")}` : null,
     context ? `Context: ${context}` : null,
     threadHistory?.length
       ? `Prior exchange:\n${threadHistory.slice(-4).join("\n")}`

@@ -9,12 +9,17 @@ import { useEffect, useRef, useState } from "react";
 
 type Phase = "IDLE" | "LOADING" | "RESULTS";
 
-interface InsightObject {
-  id: string;
-  title: string;
+type CardType = "Mental Model" | "Demonstration" | "Experiment" | "Witness";
+
+interface InsightResponse {
   insight: string;
+  confidence: number;
+  reasoning: string;
+  nextRequiredCard: CardType;
   mentalModel?: string;
   experimentCandidate?: string;
+  witnessPrompt?: string;
+  clarificationQuestion?: string;
 }
 
 interface EvidenceCard {
@@ -27,9 +32,8 @@ interface EvidenceCard {
 interface ThreadEntry {
   id: string;
   intent: string;
-  insights: InsightObject[];
+  response: InsightResponse | null;
   evidence: EvidenceCard[];
-  clarificationQuestion?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,40 +42,6 @@ interface ThreadEntry {
 
 let _ctr = 0;
 const uid = () => (++_ctr).toString(36);
-
-function titleFromText(text: string): string {
-  return text
-    .replace(/[.?!]+$/g, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function normalizeInsights(data: any): InsightObject[] {
-  if (Array.isArray(data?.insights) && data.insights.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return data.insights.map((ins: any, i: number) => ({
-      id: typeof ins.id === "string" && ins.id ? ins.id : `ins-${i}`,
-      title: ins.title || titleFromText(ins.insight ?? data.leveragePoint ?? "Insight"),
-      insight: ins.insight || data.leveragePoint || "",
-      mentalModel: ins.mentalModel || data.mentalModel,
-      experimentCandidate: ins.experimentCandidate || data.experimentCandidate,
-    })).filter((ins: InsightObject) => ins.insight);
-  }
-  if (data?.leveragePoint) {
-    return [{
-      id: `ins-${Date.now().toString(36)}`,
-      title: titleFromText(data.leveragePoint),
-      insight: data.leveragePoint,
-      mentalModel: data.mentalModel,
-      experimentCandidate: data.experimentCandidate,
-    }];
-  }
-  return [];
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -203,11 +173,11 @@ export default function AxisPage() {
         }),
       ]);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const understandData: any = understandRes.ok ? await understandRes.json() : {};
-      const researchData = researchRes.ok ? await researchRes.json() : { claims: [] };
+      const response: InsightResponse | null = understandRes.ok
+        ? await understandRes.json() as InsightResponse
+        : null;
+      const researchData = researchRes.ok ? await researchRes.json() : { evidence: [] };
 
-      const insights = normalizeInsights(understandData);
       const evidence: EvidenceCard[] = Array.isArray(researchData.evidence)
         ? researchData.evidence
         : [];
@@ -215,9 +185,8 @@ export default function AxisPage() {
       const entry: ThreadEntry = {
         id: uid(),
         intent: val,
-        insights,
+        response,
         evidence,
-        clarificationQuestion: understandData.clarificationQuestion,
       };
 
       setThread((prev) => [...prev, entry]);
@@ -309,31 +278,44 @@ export default function AxisPage() {
                 {/* Intent echo */}
                 <p className="intent-echo">{entry.intent}</p>
 
-                {/* Clarification (only if no insights) */}
-                {entry.clarificationQuestion && entry.insights.length === 0 && (
-                  <p className="clarification">{entry.clarificationQuestion}</p>
+                {entry.response && (
+                  <>
+                    {/* Clarification — shown above insight when confidence is low */}
+                    {entry.response.clarificationQuestion && (
+                      <p className="clarification">{entry.response.clarificationQuestion}</p>
+                    )}
+
+                    {/* Insight block */}
+                    <article className="insight-card">
+                      <span className="badge badge-insight">Insight</span>
+                      <p className="ins-body">{entry.response.insight}</p>
+                      <div className="ins-sub">
+                        <p className="ins-sub-body">{entry.response.reasoning}</p>
+                      </div>
+                    </article>
+
+                    {/* Next Required Card */}
+                    <section className="next-card" aria-label={entry.response.nextRequiredCard}>
+                      <span className="next-card-label">{entry.response.nextRequiredCard}</span>
+                      {entry.response.nextRequiredCard === "Mental Model" && entry.response.mentalModel && (
+                        <p className="next-card-body">{entry.response.mentalModel}</p>
+                      )}
+                      {entry.response.nextRequiredCard === "Experiment" && entry.response.experimentCandidate && (
+                        <p className="next-card-body">{entry.response.experimentCandidate}</p>
+                      )}
+                      {entry.response.nextRequiredCard === "Witness" && entry.response.witnessPrompt && (
+                        <p className="next-card-body">{entry.response.witnessPrompt}</p>
+                      )}
+                      {entry.response.nextRequiredCard === "Demonstration" && (
+                        <p className="next-card-body next-card-body--dim">
+                          Film your next session and look for where this shows up.
+                        </p>
+                      )}
+                    </section>
+                  </>
                 )}
 
-                {/* Insight cards — always before experiment */}
-                {entry.insights.length > 0 && (
-                  <section className="insight-group" aria-label="Insights">
-                    {entry.insights.map((ins) => (
-                      <article key={ins.id} className="insight-card">
-                        <span className="badge badge-insight">Insight</span>
-                        <h2 className="ins-title">{ins.title}</h2>
-                        <p className="ins-body">{ins.insight}</p>
-                        {ins.mentalModel && (
-                          <div className="ins-sub">
-                            <span className="ins-sub-label">Mental Model</span>
-                            <p className="ins-sub-body">{ins.mentalModel}</p>
-                          </div>
-                        )}
-                      </article>
-                    ))}
-                  </section>
-                )}
-
-                {/* Evidence cards */}
+                {/* Evidence */}
                 {entry.evidence.length > 0 && (
                   <section className="research-group" aria-label="Evidence">
                     <span className="section-label">Evidence</span>
@@ -355,17 +337,6 @@ export default function AxisPage() {
                         <p className="research-why">{card.relevance}</p>
                       </article>
                     ))}
-                  </section>
-                )}
-
-                {/* Suggested experiment — last, never auto-run */}
-                {entry.insights[0]?.experimentCandidate && (
-                  <section className="experiment-block" aria-label="Suggested experiment">
-                    <span className="section-label">Suggested Experiment</span>
-                    <p className="experiment-text">{entry.insights[0].experimentCandidate}</p>
-                    <p className="experiment-note">
-                      Try this in your next session and return with what you noticed.
-                    </p>
                   </section>
                 )}
 
@@ -689,13 +660,7 @@ export default function AxisPage() {
           text-transform: uppercase;
         }
 
-        /* ── Insight cards ───────────────────────────────────────────────── */
-
-        .insight-group {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
+        /* ── Insight card ────────────────────────────────────────────────── */
 
         .insight-card {
           background: #fff;
@@ -704,42 +669,56 @@ export default function AxisPage() {
           padding: 18px 20px 20px;
         }
 
-        .ins-title {
-          color: #1a1a18;
-          font-size: clamp(20px, 3.2vw, 28px);
-          font-weight: 650;
-          line-height: 1.12;
-          margin: 0 0 10px;
-        }
-
         .ins-body {
-          color: rgba(26, 26, 24, 0.68);
-          font-size: 16px;
-          line-height: 1.55;
-          margin: 0;
+          color: #1a1a18;
+          font-size: clamp(17px, 2.6vw, 22px);
+          font-weight: 500;
+          line-height: 1.45;
+          margin: 0 0 14px;
         }
 
         .ins-sub {
           border-top: 1px solid rgba(26, 26, 24, 0.06);
-          margin-top: 14px;
           padding-top: 12px;
         }
 
-        .ins-sub-label {
-          color: rgba(26, 26, 24, 0.28);
+        .ins-sub-body {
+          color: rgba(26, 26, 24, 0.52);
+          font-size: 14px;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        /* ── Next Required Card ──────────────────────────────────────────── */
+
+        .next-card {
+          background: rgba(62, 140, 38, 0.04);
+          border: 1px solid rgba(62, 140, 38, 0.14);
+          border-radius: 10px;
+          padding: 16px 18px;
+        }
+
+        .next-card-label {
+          color: #3d7a28;
           display: block;
           font-size: 10px;
           font-weight: 750;
           letter-spacing: 0.1em;
-          margin-bottom: 6px;
+          margin-bottom: 10px;
           text-transform: uppercase;
         }
 
-        .ins-sub-body {
-          color: rgba(26, 26, 24, 0.55);
-          font-size: 14px;
+        .next-card-body {
+          color: #1a1a18;
+          font-size: 16px;
+          font-weight: 450;
           line-height: 1.5;
           margin: 0;
+        }
+
+        .next-card-body--dim {
+          color: rgba(26, 26, 24, 0.42);
+          font-style: italic;
         }
 
         /* ── Research cards ──────────────────────────────────────────────── */
@@ -779,29 +758,6 @@ export default function AxisPage() {
           margin: 0;
         }
 
-        /* ── Suggested experiment ────────────────────────────────────────── */
-
-        .experiment-block {
-          background: rgba(62, 140, 38, 0.04);
-          border: 1px solid rgba(62, 140, 38, 0.14);
-          border-radius: 10px;
-          padding: 16px 18px;
-        }
-
-        .experiment-text {
-          color: #1a1a18;
-          font-size: 17px;
-          font-weight: 500;
-          line-height: 1.45;
-          margin: 8px 0 6px;
-        }
-
-        .experiment-note {
-          color: rgba(26, 26, 24, 0.38);
-          font-size: 13px;
-          line-height: 1.4;
-          margin: 0;
-        }
 
         /* ── Bottom bar ──────────────────────────────────────────────────── */
 
