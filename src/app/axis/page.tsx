@@ -1,0 +1,883 @@
+"use client";
+
+import { CameraIcon, Mic, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type Phase = "IDLE" | "LOADING" | "RESULTS";
+
+interface InsightObject {
+  id: string;
+  title: string;
+  insight: string;
+  mentalModel?: string;
+  experimentCandidate?: string;
+}
+
+interface ResearchClaim {
+  source: string;
+  title?: string;
+  claim: string;
+  url?: string;
+  confidence?: number;
+}
+
+interface ThreadEntry {
+  id: string;
+  intent: string;
+  insights: InsightObject[];
+  researchClaims: ResearchClaim[];
+  clarificationQuestion?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Pure helpers
+// ---------------------------------------------------------------------------
+
+let _ctr = 0;
+const uid = () => (++_ctr).toString(36);
+
+function titleFromText(text: string): string {
+  return text
+    .replace(/[.?!]+$/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 5)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeInsights(data: any): InsightObject[] {
+  if (Array.isArray(data?.insights) && data.insights.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return data.insights.map((ins: any, i: number) => ({
+      id: typeof ins.id === "string" && ins.id ? ins.id : `ins-${i}`,
+      title: ins.title || titleFromText(ins.insight ?? data.leveragePoint ?? "Insight"),
+      insight: ins.insight || data.leveragePoint || "",
+      mentalModel: ins.mentalModel || data.mentalModel,
+      experimentCandidate: ins.experimentCandidate || data.experimentCandidate,
+    })).filter((ins: InsightObject) => ins.insight);
+  }
+  if (data?.leveragePoint) {
+    return [{
+      id: `ins-${Date.now().toString(36)}`,
+      title: titleFromText(data.leveragePoint),
+      insight: data.leveragePoint,
+      mentalModel: data.mentalModel,
+      experimentCandidate: data.experimentCandidate,
+    }];
+  }
+  return [];
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function AxisPage() {
+  const [phase, setPhase] = useState<Phase>("IDLE");
+  const [thread, setThread] = useState<ThreadEntry[]>([]);
+  const [activeIntent, setActiveIntent] = useState("");
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [isVoiceSupported, setIsVoiceSupported] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const isEmpty = thread.length === 0 && phase === "IDLE";
+
+  useEffect(() => {
+    setIsVoiceSupported(
+      typeof window !== "undefined" &&
+      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window),
+    );
+    return () => {
+      recognitionRef.current?.abort();
+      abortRef.current?.abort();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [thread, phase]);
+
+  // Focus input when thread exists
+  useEffect(() => {
+    if (!isEmpty) {
+      const t = setTimeout(() => inputRef.current?.focus(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [isEmpty]);
+
+  // -------------------------------------------------------------------------
+  // Camera
+  // -------------------------------------------------------------------------
+
+  function startCamera() {
+    if (cameraOn) return;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "user" } })
+      .then((stream) => {
+        streamRef.current = stream;
+        setCameraOn(true);
+      })
+      .catch(() => null);
+  }
+
+  // -------------------------------------------------------------------------
+  // Voice
+  // -------------------------------------------------------------------------
+
+  function toggleVoice() {
+    if (voiceActive) {
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
+      setVoiceActive(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechAPI) return;
+    const rec: SpeechRecognition = new SpeechAPI();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    let handled = false;
+    setVoiceActive(true);
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const result = e.results[0];
+      const text = result[0].transcript;
+      if (inputRef.current) inputRef.current.value = text;
+      if (result.isFinal && !handled) {
+        handled = true;
+        recognitionRef.current = null;
+        setVoiceActive(false);
+        void run(text);
+      }
+    };
+    rec.onerror = () => { if (!handled) setVoiceActive(false); };
+    rec.onend = () => { if (!handled) setVoiceActive(false); };
+    recognitionRef.current = rec;
+    rec.start();
+  }
+
+  // -------------------------------------------------------------------------
+  // Core: intent → OpenAI + Tavily in parallel → insight cards
+  // -------------------------------------------------------------------------
+
+  async function run(intentText: string) {
+    const val = intentText.trim();
+    if (!val || phase === "LOADING") return;
+    if (inputRef.current) inputRef.current.value = "";
+
+    setActiveIntent(val);
+    setPhase("LOADING");
+
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    try {
+      const [understandRes, researchRes] = await Promise.all([
+        fetch("/api/axis/understand", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intent: val }),
+          signal: ctrl.signal,
+        }),
+        fetch("/api/axis/research", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: val }),
+          signal: ctrl.signal,
+        }),
+      ]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const understandData: any = understandRes.ok ? await understandRes.json() : {};
+      const researchData = researchRes.ok ? await researchRes.json() : { claims: [] };
+
+      const insights = normalizeInsights(understandData);
+      const researchClaims: ResearchClaim[] = Array.isArray(researchData.claims)
+        ? researchData.claims
+        : [];
+
+      const entry: ThreadEntry = {
+        id: uid(),
+        intent: val,
+        insights,
+        researchClaims,
+        clarificationQuestion: understandData.clarificationQuestion,
+      };
+
+      setThread((prev) => [...prev, entry]);
+      setPhase("RESULTS");
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      setPhase(thread.length > 0 ? "RESULTS" : "IDLE");
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const val = inputRef.current?.value ?? "";
+    void run(val);
+  }
+
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
+
+  return (
+    <main className="root">
+
+      {/* ── EMPTY STATE ─────────────────────────────────────────────────── */}
+      {isEmpty && (
+        <div className="empty">
+          <p className="main-q">What are you working on?</p>
+          <form className="main-form" onSubmit={handleSubmit}>
+            <input
+              ref={inputRef}
+              className="main-input"
+              placeholder="Describe what you're trying to improve…"
+              type="text"
+              spellCheck={false}
+              autoComplete="off"
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+            />
+            <div className="main-controls">
+              <button
+                className={`ctrl-btn${cameraOn ? " on" : ""}`}
+                onClick={startCamera}
+                type="button"
+                aria-label="Camera"
+              >
+                <CameraIcon size={15} strokeWidth={1.8} />
+                <span>Camera</span>
+              </button>
+              <button
+                className="ctrl-btn"
+                onClick={() => { window.location.href = "/axis-ball"; }}
+                type="button"
+                aria-label="Upload"
+              >
+                <Upload size={15} strokeWidth={1.8} />
+                <span>Upload</span>
+              </button>
+              <button
+                className={`ctrl-btn${voiceActive ? " on" : ""}`}
+                onClick={toggleVoice}
+                type="button"
+                aria-label="Voice"
+                disabled={!isVoiceSupported}
+              >
+                <Mic size={15} strokeWidth={1.8} />
+                <span>Voice</span>
+              </button>
+              <button className="send-btn" type="submit" aria-label="Send">
+                →
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── THREAD ──────────────────────────────────────────────────────── */}
+      {!isEmpty && (
+        <div className="thread-shell">
+
+          <header className="hd">
+            <span className="wordmark">Axis</span>
+          </header>
+
+          <div className="thread" ref={threadRef}>
+
+            {thread.map((entry) => (
+              <div key={entry.id} className="entry">
+
+                {/* Intent echo */}
+                <p className="intent-echo">{entry.intent}</p>
+
+                {/* Clarification (only if no insights) */}
+                {entry.clarificationQuestion && entry.insights.length === 0 && (
+                  <p className="clarification">{entry.clarificationQuestion}</p>
+                )}
+
+                {/* Insight cards — always before experiment */}
+                {entry.insights.length > 0 && (
+                  <section className="insight-group" aria-label="Insights">
+                    {entry.insights.map((ins) => (
+                      <article key={ins.id} className="insight-card">
+                        <span className="badge badge-insight">Insight</span>
+                        <h2 className="ins-title">{ins.title}</h2>
+                        <p className="ins-body">{ins.insight}</p>
+                        {ins.mentalModel && (
+                          <div className="ins-sub">
+                            <span className="ins-sub-label">Mental Model</span>
+                            <p className="ins-sub-body">{ins.mentalModel}</p>
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </section>
+                )}
+
+                {/* Research claims */}
+                {entry.researchClaims.length > 0 && (
+                  <section className="research-group" aria-label="Research">
+                    <span className="section-label">Research</span>
+                    {entry.researchClaims.map((claim, i) => (
+                      <article key={i} className="research-card">
+                        <span className="badge badge-source">{claim.source}</span>
+                        {claim.title && <p className="research-title">{claim.title}</p>}
+                        <p className="research-body">{claim.claim}</p>
+                        {claim.url && (
+                          <a
+                            className="research-url"
+                            href={claim.url}
+                            rel="noreferrer noopener"
+                            target="_blank"
+                          >
+                            {claim.url}
+                          </a>
+                        )}
+                      </article>
+                    ))}
+                  </section>
+                )}
+
+                {/* Suggested experiment — last, never auto-run */}
+                {entry.insights[0]?.experimentCandidate && (
+                  <section className="experiment-block" aria-label="Suggested experiment">
+                    <span className="section-label">Suggested Experiment</span>
+                    <p className="experiment-text">{entry.insights[0].experimentCandidate}</p>
+                    <p className="experiment-note">
+                      Try this in your next session and return with what you noticed.
+                    </p>
+                  </section>
+                )}
+
+              </div>
+            ))}
+
+            {/* Thinking */}
+            {phase === "LOADING" && (
+              <div className="entry">
+                <p className="intent-echo intent-echo--loading">{activeIntent}</p>
+                <div className="thinking" aria-label="Thinking">
+                  <span /><span /><span />
+                </div>
+              </div>
+            )}
+
+          </div>
+
+          {/* Pinned bottom input */}
+          <div className="bottom-bar">
+            <form className="bottom-form" onSubmit={handleSubmit}>
+              <div className="bottom-ctls">
+                <button
+                  className={`ctrl-btn sm${cameraOn ? " on" : ""}`}
+                  onClick={startCamera}
+                  type="button"
+                  aria-label="Camera"
+                >
+                  <CameraIcon size={13} strokeWidth={1.8} />
+                </button>
+                <button
+                  className="ctrl-btn sm"
+                  onClick={() => { window.location.href = "/axis-ball"; }}
+                  type="button"
+                  aria-label="Upload"
+                >
+                  <Upload size={13} strokeWidth={1.8} />
+                </button>
+                <button
+                  className={`ctrl-btn sm${voiceActive ? " on" : ""}`}
+                  onClick={toggleVoice}
+                  type="button"
+                  aria-label="Voice"
+                  disabled={!isVoiceSupported}
+                >
+                  <Mic size={13} strokeWidth={1.8} />
+                </button>
+              </div>
+              <input
+                ref={inputRef}
+                className="bottom-input"
+                placeholder="What are you working on?"
+                type="text"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button className="bottom-send" type="submit" aria-label="Send">
+                →
+              </button>
+            </form>
+          </div>
+
+        </div>
+      )}
+
+      <style jsx>{`
+
+        /* ── Root ────────────────────────────────────────────────────────── */
+
+        .root {
+          background: #fafaf9;
+          color: #1a1a18;
+          display: flex;
+          flex-direction: column;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+          min-height: 100dvh;
+          overflow: hidden;
+        }
+
+        /* ── Header ──────────────────────────────────────────────────────── */
+
+        .hd {
+          align-items: center;
+          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
+          display: flex;
+          flex-shrink: 0;
+          padding: 14px clamp(20px, 5vw, 48px);
+        }
+
+        .wordmark {
+          color: rgba(26, 26, 24, 0.28);
+          font-size: 12px;
+          font-weight: 750;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+
+        /* ── Empty state ─────────────────────────────────────────────────── */
+
+        .empty {
+          align-items: flex-start;
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          gap: 28px;
+          justify-content: center;
+          margin: 0 auto;
+          max-width: 640px;
+          padding: 0 clamp(20px, 5vw, 48px) 80px;
+          width: 100%;
+        }
+
+        .main-q {
+          color: #1a1a18;
+          font-size: clamp(28px, 5vw, 44px);
+          font-weight: 700;
+          line-height: 1.1;
+          margin: 0;
+        }
+
+        .main-form {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          width: 100%;
+        }
+
+        .main-input {
+          background: #fff;
+          border: 1.5px solid rgba(26, 26, 24, 0.12);
+          border-radius: 12px;
+          color: #1a1a18;
+          font: inherit;
+          font-size: 17px;
+          line-height: 1.5;
+          outline: none;
+          padding: 14px 18px;
+          transition: border-color 0.15s;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .main-input:focus {
+          border-color: rgba(26, 26, 24, 0.28);
+        }
+
+        .main-input::placeholder {
+          color: rgba(26, 26, 24, 0.28);
+        }
+
+        .main-controls {
+          align-items: center;
+          display: flex;
+          gap: 6px;
+        }
+
+        /* ── Controls ─────────────────────────────────────────────────────── */
+
+        .ctrl-btn {
+          align-items: center;
+          background: rgba(26, 26, 24, 0.04);
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 8px;
+          color: rgba(26, 26, 24, 0.42);
+          cursor: pointer;
+          display: flex;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 500;
+          gap: 5px;
+          min-height: 36px;
+          padding: 0 11px;
+          transition: background 0.12s, color 0.12s, border-color 0.12s;
+        }
+
+        .ctrl-btn:hover {
+          background: rgba(26, 26, 24, 0.07);
+          color: rgba(26, 26, 24, 0.7);
+        }
+
+        .ctrl-btn.on {
+          background: rgba(62, 140, 38, 0.07);
+          border-color: rgba(62, 140, 38, 0.2);
+          color: #3d7a28;
+        }
+
+        .ctrl-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.38;
+        }
+
+        .ctrl-btn.sm {
+          min-height: 30px;
+          padding: 0 8px;
+        }
+
+        .send-btn {
+          align-items: center;
+          background: #1a1a18;
+          border: 0;
+          border-radius: 8px;
+          color: #fafaf9;
+          cursor: pointer;
+          display: flex;
+          font: inherit;
+          font-size: 16px;
+          height: 36px;
+          justify-content: center;
+          margin-left: auto;
+          padding: 0 18px;
+          transition: opacity 0.15s;
+        }
+
+        .send-btn:hover { opacity: 0.78; }
+
+        /* ── Thread shell ─────────────────────────────────────────────────── */
+
+        .thread-shell {
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          min-height: 0;
+        }
+
+        .thread {
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          gap: 52px;
+          margin: 0 auto;
+          max-width: 680px;
+          min-height: 0;
+          overflow-y: auto;
+          padding: 36px clamp(20px, 5vw, 48px) 24px;
+          width: 100%;
+        }
+
+        /* ── Entry ───────────────────────────────────────────────────────── */
+
+        .entry {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .intent-echo {
+          color: rgba(26, 26, 24, 0.32);
+          font-size: 12px;
+          font-weight: 650;
+          letter-spacing: 0.05em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .intent-echo--loading {
+          opacity: 0.55;
+        }
+
+        .clarification {
+          color: #1a1a18;
+          font-size: 18px;
+          line-height: 1.45;
+          margin: 0;
+        }
+
+        /* ── Thinking ────────────────────────────────────────────────────── */
+
+        .thinking {
+          align-items: center;
+          display: flex;
+          gap: 5px;
+        }
+
+        .thinking span {
+          animation: dotrise 1.4s ease-in-out infinite;
+          background: rgba(26, 26, 24, 0.2);
+          border-radius: 50%;
+          display: block;
+          height: 6px;
+          width: 6px;
+        }
+
+        .thinking span:nth-child(2) { animation-delay: 0.18s; }
+        .thinking span:nth-child(3) { animation-delay: 0.36s; }
+
+        @keyframes dotrise {
+          0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
+          30% { opacity: 0.6; transform: translateY(-4px); }
+        }
+
+        /* ── Badges ──────────────────────────────────────────────────────── */
+
+        .badge {
+          border-radius: 4px;
+          display: inline-block;
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          margin-bottom: 10px;
+          padding: 3px 7px;
+          text-transform: uppercase;
+        }
+
+        .badge-insight {
+          background: rgba(62, 140, 38, 0.08);
+          color: #3d7a28;
+        }
+
+        .badge-source {
+          background: rgba(26, 26, 24, 0.05);
+          color: rgba(26, 26, 24, 0.4);
+        }
+
+        .section-label {
+          color: rgba(26, 26, 24, 0.28);
+          display: block;
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          margin-bottom: 10px;
+          text-transform: uppercase;
+        }
+
+        /* ── Insight cards ───────────────────────────────────────────────── */
+
+        .insight-group {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .insight-card {
+          background: #fff;
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 12px;
+          padding: 18px 20px 20px;
+        }
+
+        .ins-title {
+          color: #1a1a18;
+          font-size: clamp(20px, 3.2vw, 28px);
+          font-weight: 650;
+          line-height: 1.12;
+          margin: 0 0 10px;
+        }
+
+        .ins-body {
+          color: rgba(26, 26, 24, 0.68);
+          font-size: 16px;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        .ins-sub {
+          border-top: 1px solid rgba(26, 26, 24, 0.06);
+          margin-top: 14px;
+          padding-top: 12px;
+        }
+
+        .ins-sub-label {
+          color: rgba(26, 26, 24, 0.28);
+          display: block;
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          margin-bottom: 6px;
+          text-transform: uppercase;
+        }
+
+        .ins-sub-body {
+          color: rgba(26, 26, 24, 0.55);
+          font-size: 14px;
+          line-height: 1.5;
+          margin: 0;
+        }
+
+        /* ── Research cards ──────────────────────────────────────────────── */
+
+        .research-group {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .research-card {
+          background: rgba(26, 26, 24, 0.02);
+          border: 1px solid rgba(26, 26, 24, 0.06);
+          border-radius: 10px;
+          padding: 14px 16px;
+        }
+
+        .research-title {
+          color: #1a1a18;
+          font-size: 15px;
+          font-weight: 600;
+          line-height: 1.35;
+          margin: 6px 0 6px;
+        }
+
+        .research-body {
+          color: rgba(26, 26, 24, 0.6);
+          font-size: 14px;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        .research-url {
+          color: rgba(26, 26, 24, 0.26);
+          display: block;
+          font-size: 11px;
+          margin-top: 8px;
+          overflow: hidden;
+          text-decoration: none;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .research-url:hover { color: rgba(26, 26, 24, 0.52); }
+
+        /* ── Suggested experiment ────────────────────────────────────────── */
+
+        .experiment-block {
+          background: rgba(62, 140, 38, 0.04);
+          border: 1px solid rgba(62, 140, 38, 0.14);
+          border-radius: 10px;
+          padding: 16px 18px;
+        }
+
+        .experiment-text {
+          color: #1a1a18;
+          font-size: 17px;
+          font-weight: 500;
+          line-height: 1.45;
+          margin: 8px 0 6px;
+        }
+
+        .experiment-note {
+          color: rgba(26, 26, 24, 0.38);
+          font-size: 13px;
+          line-height: 1.4;
+          margin: 0;
+        }
+
+        /* ── Bottom bar ──────────────────────────────────────────────────── */
+
+        .bottom-bar {
+          border-top: 1px solid rgba(26, 26, 24, 0.07);
+          flex-shrink: 0;
+          margin: 0 auto;
+          max-width: 680px;
+          padding: 12px clamp(20px, 5vw, 48px) 28px;
+          width: 100%;
+        }
+
+        .bottom-form {
+          align-items: center;
+          background: #fff;
+          border: 1.5px solid rgba(26, 26, 24, 0.1);
+          border-radius: 12px;
+          display: flex;
+          gap: 6px;
+          padding: 7px 9px;
+          transition: border-color 0.15s;
+        }
+
+        .bottom-form:focus-within {
+          border-color: rgba(26, 26, 24, 0.22);
+        }
+
+        .bottom-ctls {
+          align-items: center;
+          display: flex;
+          flex-shrink: 0;
+          gap: 2px;
+        }
+
+        .bottom-input {
+          background: transparent;
+          border: 0;
+          color: #1a1a18;
+          flex: 1;
+          font: inherit;
+          font-size: 15px;
+          min-width: 0;
+          outline: none;
+          padding: 4px 6px;
+        }
+
+        .bottom-input::placeholder {
+          color: rgba(26, 26, 24, 0.26);
+        }
+
+        .bottom-send {
+          align-items: center;
+          background: #1a1a18;
+          border: 0;
+          border-radius: 8px;
+          color: #fafaf9;
+          cursor: pointer;
+          display: flex;
+          flex-shrink: 0;
+          font: inherit;
+          font-size: 14px;
+          height: 30px;
+          justify-content: center;
+          padding: 0 12px;
+          transition: opacity 0.15s;
+        }
+
+        .bottom-send:hover { opacity: 0.78; }
+
+      `}</style>
+    </main>
+  );
+}
