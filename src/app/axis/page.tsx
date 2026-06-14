@@ -29,6 +29,18 @@ interface MentalModelCard {
   recognitionCue: string;
 }
 
+interface DemonstrationSpec {
+  currentState: string;
+  targetState: string;
+  keyDifference: string;
+  executionCue: string;
+  commonFailure: string;
+  recommendedViewpoints: string[];
+  animationNotes: string;
+  comparisonRequired: boolean;
+  complexity: "Beginner" | "Intermediate" | "Advanced";
+}
+
 interface EvidenceCard {
   source: string;
   summary: string;
@@ -41,6 +53,7 @@ interface ThreadEntry {
   intent: string;
   response: InsightResponse | null;
   mentalModelCard: MentalModelCard | null;
+  demonstrationSpec: DemonstrationSpec | null;
   evidence: EvidenceCard[];
 }
 
@@ -190,19 +203,35 @@ export default function AxisPage() {
         ? researchData.evidence
         : [];
 
-      // Mental Model engine — called only when the Insight Engine selects that card
+      // Secondary engines — called only when the Insight Engine selects that card type
       let mentalModelCard: MentalModelCard | null = null;
-      if (response?.nextRequiredCard === "Mental Model" && response.insight) {
-        try {
-          const mmRes = await fetch("/api/axis/mental-model", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ insight: response.insight, reasoning: response.reasoning }),
-            signal: ctrl.signal,
-          });
-          if (mmRes.ok) mentalModelCard = await mmRes.json() as MentalModelCard;
-        } catch {
-          // non-fatal — insight card still renders without it
+      let demonstrationSpec: DemonstrationSpec | null = null;
+
+      if (response?.insight) {
+        if (response.nextRequiredCard === "Mental Model") {
+          try {
+            const mmRes = await fetch("/api/axis/mental-model", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ insight: response.insight, reasoning: response.reasoning }),
+              signal: ctrl.signal,
+            });
+            if (mmRes.ok) mentalModelCard = await mmRes.json() as MentalModelCard;
+          } catch { /* non-fatal */ }
+        } else if (response.nextRequiredCard === "Demonstration") {
+          try {
+            const demoRes = await fetch("/api/axis/demonstration", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                insight: response.insight,
+                mentalModel: response.mentalModel,
+                reasoning: response.reasoning,
+              }),
+              signal: ctrl.signal,
+            });
+            if (demoRes.ok) demonstrationSpec = await demoRes.json() as DemonstrationSpec;
+          } catch { /* non-fatal */ }
         }
       }
 
@@ -211,6 +240,7 @@ export default function AxisPage() {
         intent: val,
         response,
         mentalModelCard,
+        demonstrationSpec,
         evidence,
       };
 
@@ -351,7 +381,53 @@ export default function AxisPage() {
                       {entry.response.nextRequiredCard === "Witness" && entry.response.witnessPrompt && (
                         <p className="next-card-body">{entry.response.witnessPrompt}</p>
                       )}
-                      {entry.response.nextRequiredCard === "Demonstration" && (
+                      {entry.response.nextRequiredCard === "Demonstration" && entry.demonstrationSpec && (
+                        <div className="demo-spec">
+                          <div className="demo-badges">
+                            <span className="demo-badge">{entry.demonstrationSpec.complexity}</span>
+                            {entry.demonstrationSpec.comparisonRequired && (
+                              <span className="demo-badge">Comparison Required</span>
+                            )}
+                          </div>
+                          <dl className="demo-rows">
+                            <div className="demo-row">
+                              <dt className="demo-term">Current State</dt>
+                              <dd className="demo-def">{entry.demonstrationSpec.currentState}</dd>
+                            </div>
+                            <div className="demo-row">
+                              <dt className="demo-term">Target State</dt>
+                              <dd className="demo-def">{entry.demonstrationSpec.targetState}</dd>
+                            </div>
+                            <div className="demo-row">
+                              <dt className="demo-term">Key Difference</dt>
+                              <dd className="demo-def demo-def--key">{entry.demonstrationSpec.keyDifference}</dd>
+                            </div>
+                            <div className="demo-row">
+                              <dt className="demo-term">Execution Cue</dt>
+                              <dd className="demo-def">{entry.demonstrationSpec.executionCue}</dd>
+                            </div>
+                            <div className="demo-row">
+                              <dt className="demo-term">Common Failure</dt>
+                              <dd className="demo-def">{entry.demonstrationSpec.commonFailure}</dd>
+                            </div>
+                            <div className="demo-row">
+                              <dt className="demo-term">Recommended Viewpoints</dt>
+                              <dd className="demo-def">
+                                <ul className="demo-viewpoints">
+                                  {entry.demonstrationSpec.recommendedViewpoints.map((vp, i) => (
+                                    <li key={i}>{vp}</li>
+                                  ))}
+                                </ul>
+                              </dd>
+                            </div>
+                            <div className="demo-row">
+                              <dt className="demo-term">Animation Notes</dt>
+                              <dd className="demo-def demo-def--dim">{entry.demonstrationSpec.animationNotes}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      )}
+                      {entry.response.nextRequiredCard === "Demonstration" && !entry.demonstrationSpec && (
                         <p className="next-card-body next-card-body--dim">
                           Film your next session and look for where this shows up.
                         </p>
@@ -816,6 +892,86 @@ export default function AxisPage() {
           color: #1a1a18;
           font-size: 14px;
           font-weight: 550;
+        }
+
+        /* ── Demonstration spec ──────────────────────────────────────────── */
+
+        .demo-spec {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .demo-badges {
+          display: flex;
+          gap: 6px;
+        }
+
+        .demo-badge {
+          background: rgba(26, 26, 24, 0.05);
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 4px;
+          color: rgba(26, 26, 24, 0.42);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.08em;
+          padding: 3px 7px;
+          text-transform: uppercase;
+        }
+
+        .demo-rows {
+          border-top: 1px solid rgba(62, 140, 38, 0.12);
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin: 0;
+          padding-top: 14px;
+        }
+
+        .demo-row {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .demo-term {
+          color: rgba(26, 26, 24, 0.32);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .demo-def {
+          color: rgba(26, 26, 24, 0.68);
+          font-size: 13px;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        .demo-def--key {
+          color: #1a1a18;
+          font-size: 14px;
+          font-weight: 500;
+        }
+
+        .demo-def--dim {
+          color: rgba(26, 26, 24, 0.42);
+          font-style: italic;
+        }
+
+        .demo-viewpoints {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .demo-viewpoints li::before {
+          color: rgba(62, 140, 38, 0.6);
+          content: "→ ";
         }
 
         /* ── Research cards ──────────────────────────────────────────────── */
