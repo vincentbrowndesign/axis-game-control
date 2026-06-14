@@ -1,6 +1,6 @@
 "use client";
 
-import { CameraIcon, Mic, Upload } from "lucide-react";
+import { Mic, Paperclip } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
@@ -149,8 +149,7 @@ export default function AxisPage() {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const attachInputRef = useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = useRef<string[]>([]);
 
   const isEmpty = thread.length === 0 && phase === "IDLE";
@@ -192,12 +191,8 @@ export default function AxisPage() {
     setPendingAttachment({ name: file.name, url, type: file.type });
   }
 
-  function openCamera() {
-    cameraInputRef.current?.click();
-  }
-
-  function openUpload() {
-    uploadInputRef.current?.click();
+  function openAttach() {
+    attachInputRef.current?.click();
   }
 
   function removePendingAttachment() {
@@ -520,21 +515,12 @@ export default function AxisPage() {
             <div className="main-controls">
               <button
                 className={`ctrl-btn${pendingAttachment ? " on" : ""}`}
-                onClick={openCamera}
+                onClick={openAttach}
                 type="button"
-                aria-label="Camera"
+                aria-label="Attach"
               >
-                <CameraIcon size={15} strokeWidth={1.8} />
-                <span>Camera</span>
-              </button>
-              <button
-                className="ctrl-btn"
-                onClick={openUpload}
-                type="button"
-                aria-label="Upload"
-              >
-                <Upload size={15} strokeWidth={1.8} />
-                <span>Upload</span>
+                <Paperclip size={15} strokeWidth={1.8} />
+                <span>Attach</span>
               </button>
               <button
                 className={`ctrl-btn${voicePhase === "LISTENING" ? " voice-listening" : voicePhase === "PROCESSING" ? " voice-processing" : ""}`}
@@ -935,19 +921,11 @@ export default function AxisPage() {
               <div className="bottom-ctls">
                 <button
                   className={`ctrl-btn sm${pendingAttachment ? " on" : ""}`}
-                  onClick={openCamera}
+                  onClick={openAttach}
                   type="button"
-                  aria-label="Camera"
+                  aria-label="Attach"
                 >
-                  <CameraIcon size={13} strokeWidth={1.8} />
-                </button>
-                <button
-                  className="ctrl-btn sm"
-                  onClick={openUpload}
-                  type="button"
-                  aria-label="Upload"
-                >
-                  <Upload size={13} strokeWidth={1.8} />
+                  <Paperclip size={13} strokeWidth={1.8} />
                 </button>
                 <button
                   className={`ctrl-btn sm${voicePhase === "LISTENING" ? " voice-listening" : voicePhase === "PROCESSING" ? " voice-processing" : ""}`}
@@ -989,21 +967,9 @@ export default function AxisPage() {
         </div>
       )}
 
-      {/* Hidden native file inputs — no navigation, stays on page */}
+      {/* Hidden native file input — Photo Library, Take Photo/Video, Browse */}
       <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*,video/*"
-        capture="environment"
-        style={{ display: "none" }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFileSelected(file);
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={uploadInputRef}
+        ref={attachInputRef}
         type="file"
         accept="image/*,video/*,application/pdf,.doc,.docx,.txt"
         style={{ display: "none" }}
