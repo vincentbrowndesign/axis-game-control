@@ -152,6 +152,77 @@ interface ThreadEntry {
 let _ctr = 0;
 const uid = () => (++_ctr).toString(36);
 
+type ProgressState = "UNDERSTANDING" | "DEMONSTRATING" | "EXPERIMENTING" | "REVIEWING";
+
+function compactTitle(text: string, fallback = "Current Thread") {
+  const cleaned = text.trim().replace(/\s+/g, " ");
+  if (!cleaned) return fallback;
+  return cleaned
+    .split(" ")
+    .slice(0, 5)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function shortSignal(text: string) {
+  return text
+    .replace(/[.?!]+$/g, "")
+    .split(/\s+/)
+    .filter((word) => word.length > 3)
+    .slice(0, 3)
+    .join(" ");
+}
+
+function getProgressState(entry: ThreadEntry | undefined, reveal: number, phase: Phase, reviewLoadingId: string | null): ProgressState {
+  if (reviewLoadingId || entry?.witnessReview || entry?.adjustment || entry?.orchestration) return "REVIEWING";
+  if (entry?.experimentSpec && reveal >= 4) return "EXPERIMENTING";
+  if (entry?.demonstrationSpec && reveal >= 3) return "DEMONSTRATING";
+  if (phase === "LOADING" || entry?.response || reveal >= 1) return "UNDERSTANDING";
+  return "UNDERSTANDING";
+}
+
+function nextActionFor(entry: ThreadEntry | undefined, reveal: number, phase: Phase, reviewLoadingId: string | null) {
+  if (phase === "LOADING") return "Wait for the next note";
+  if (!entry) return "Name the skill";
+  if (reviewLoadingId) return "Hold while evidence is reviewed";
+  if (entry.orchestration?.nextCard) return `Open ${entry.orchestration.nextCard}`;
+  if (entry.witnessReview) return "Use the adjustment";
+  if (entry.response?.nextRequiredCard === "Witness" && !entry.witnessReview) return "Add an observation";
+  if (entry.experimentSpec && reveal >= 4) return "Try it and report back";
+  if (entry.experimentSpec && reveal === 3) return "Start the experiment";
+  if (entry.demonstrationSpec && reveal === 2) return "Look at the demonstration";
+  if (entry.mentalModelCard && reveal === 1) return "Read the principle";
+  if (entry.response?.clarificationQuestion) return "Answer the question";
+  return "Keep developing this";
+}
+
+function CardContext({
+  why,
+  trigger,
+  next,
+}: {
+  why: string;
+  trigger: string;
+  next: string;
+}) {
+  return (
+    <div className="card-context" aria-label="Card context">
+      <div>
+        <span>Why</span>
+        <p>{why}</p>
+      </div>
+      <div>
+        <span>Triggered By</span>
+        <p>{trigger}</p>
+      </div>
+      <div>
+        <span>Next</span>
+        <p>{next}</p>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -693,6 +764,40 @@ export default function AxisPage() {
 
   const lastEntry = thread[thread.length - 1];
   const lastReveal = lastEntry ? (revealMap[lastEntry.id] ?? 0) : 0;
+  const currentThread = currentThreadId ? threadList.find((item) => item.id === currentThreadId) : null;
+  const currentTitle = currentThread?.title ?? thread[0]?.intent ?? activeIntent;
+  const currentFocus = lastEntry?.deepModel?.leveragePoint
+    ?? lastEntry?.response?.insight
+    ?? "Listening for the bottleneck";
+  const activeExperiment = lastEntry?.experimentSpec?.hypothesis
+    ?? lastEntry?.response?.experimentCandidate
+    ?? "No experiment yet";
+  const photoCount = thread.filter((entry) => entry.attachment?.type.startsWith("image/")).length;
+  const videoCount = thread.filter((entry) => entry.attachment?.type.startsWith("video/")).length;
+  const persistedEvidence = currentThreadId
+    ? evidenceList.filter((item) => item.thread_id === currentThreadId)
+    : [];
+  const observationCount = persistedEvidence.length
+    + thread.filter((entry) => entry.witnessReview).length
+    + thread.filter((entry) => entry.attachment && !entry.attachment.type.startsWith("image/") && !entry.attachment.type.startsWith("video/")).length;
+  const evidenceSummary = [
+    photoCount ? `${photoCount} Photo${photoCount === 1 ? "" : "s"}` : null,
+    videoCount ? `${videoCount} Video${videoCount === 1 ? "" : "s"}` : null,
+    observationCount ? `${observationCount} Observation${observationCount === 1 ? "" : "s"}` : null,
+  ].filter((item): item is string => Boolean(item));
+  const signals = Array.from(new Set([
+    lastEntry?.deepModel?.leveragePoint ? shortSignal(lastEntry.deepModel.leveragePoint) : null,
+    lastEntry?.demonstrationSpec?.keyDifference ? shortSignal(lastEntry.demonstrationSpec.keyDifference) : null,
+    lastEntry?.response?.insight ? shortSignal(lastEntry.response.insight) : null,
+  ].filter((item): item is string => Boolean(item)))).slice(0, 3);
+  const confirmedBreakthroughs = currentThreadId
+    ? breakthroughList.filter((item) => item.thread_id === currentThreadId).length
+    : breakthroughList.length;
+  const hasCandidateBreakthrough = Boolean(lastEntry?.response?.insight)
+    && !breakthroughList.some((item) => item.description === lastEntry?.response?.insight);
+  const progressState = getProgressState(lastEntry, lastReveal, phase, reviewLoadingId);
+  const nextAction = nextActionFor(lastEntry, lastReveal, phase, reviewLoadingId);
+  const progressStates: ProgressState[] = ["UNDERSTANDING", "DEMONSTRATING", "EXPERIMENTING", "REVIEWING"];
   const bottomPlaceholder = phase === "RESULTS" && lastReveal >= 4 && lastEntry?.experimentSpec
     ? "What happened?"
     : "What are you working on?";
@@ -815,6 +920,51 @@ export default function AxisPage() {
             </div>
           </header>
 
+          <section className="context-rail" aria-label="Current development context">
+            <div className="rail-primary">
+              <div className="rail-cell rail-cell--thread">
+                <span>Current Thread</span>
+                <strong>{compactTitle(currentTitle, "Current Thread")}</strong>
+              </div>
+              <div className="rail-cell rail-cell--focus">
+                <span>Current Focus</span>
+                <strong>{currentFocus}</strong>
+              </div>
+              <div className="rail-cell">
+                <span>Active Experiment</span>
+                <strong>{activeExperiment}</strong>
+              </div>
+              <div className="rail-cell">
+                <span>Next Action</span>
+                <strong>{nextAction}</strong>
+              </div>
+            </div>
+
+            <div className="rail-secondary">
+              <div className="rail-note">
+                <span>Evidence</span>
+                <p>{evidenceSummary.length ? evidenceSummary.join(" / ") : "No evidence yet"}</p>
+              </div>
+              <div className="rail-note">
+                <span>Signals</span>
+                <p>{signals.length ? signals.join(" / ") : "Waiting for signal"}</p>
+              </div>
+              <div className="rail-note">
+                <span>Breakthroughs</span>
+                <p>{confirmedBreakthroughs} Confirmed / {hasCandidateBreakthrough ? 1 : 0} Candidate</p>
+              </div>
+            </div>
+
+            <div className="progress-state-bar" aria-label="Progress state">
+              {progressStates.map((state) => (
+                <span key={state} className={`progress-state${progressState === state ? " active" : ""}`}>
+                  <span className="state-dot" aria-hidden />
+                  {state}
+                </span>
+              ))}
+            </div>
+          </section>
+
           <div className="thread" ref={threadRef}>
 
             {thread.map((entry, i) => {
@@ -846,6 +996,11 @@ export default function AxisPage() {
                         <p className="clarification">{entry.response.clarificationQuestion}</p>
                       )}
                       <article className="insight-card card-reveal">
+                        <CardContext
+                          why="Axis is naming the bottleneck before choosing work."
+                          trigger={entry.intent}
+                          next={entry.mentalModelCard ? "Read the principle" : nextActionFor(entry, reveal, phase, reviewLoadingId)}
+                        />
                         <p className="ins-body">{entry.response.insight}</p>
                         {entry.response.reasoning && (
                           <p className="ins-reasoning">{entry.response.reasoning}</p>
@@ -865,6 +1020,11 @@ export default function AxisPage() {
                   {reveal >= 2 && entry.mentalModelCard && (
                     <section className="next-card card-reveal" aria-label="The principle">
                       <span className="next-card-label">The principle</span>
+                      <CardContext
+                        why="This is the rule Axis wants you to carry into the next rep."
+                        trigger={entry.response?.insight ?? entry.intent}
+                        next={entry.demonstrationSpec ? "Look at the demonstration" : nextActionFor(entry, reveal, phase, reviewLoadingId)}
+                      />
                       <p className="mm-framework">{entry.mentalModelCard.mentalModel}</p>
                     </section>
                   )}
@@ -880,6 +1040,11 @@ export default function AxisPage() {
                   {reveal >= 3 && entry.demonstrationSpec && (
                     <section className="next-card card-reveal" aria-label="What it looks like">
                       <span className="next-card-label">What it looks like</span>
+                      <CardContext
+                        why="This shows the gap between the current habit and the target shape."
+                        trigger={entry.mentalModelCard?.mentalModel ?? entry.intent}
+                        next={entry.experimentSpec ? "Start the experiment" : nextActionFor(entry, reveal, phase, reviewLoadingId)}
+                      />
                       <div className="demo-body">
                         <p className="demo-state demo-state--now">{entry.demonstrationSpec.currentState}</p>
                         <span className="demo-arrow" aria-hidden>→</span>
@@ -905,6 +1070,11 @@ export default function AxisPage() {
                   {reveal >= 4 && entry.experimentSpec && (
                     <section className="next-card card-reveal" aria-label="Try this">
                       <span className="next-card-label">Try this</span>
+                      <CardContext
+                        why="This turns the insight into a testable piece of work."
+                        trigger={entry.demonstrationSpec?.keyDifference || entry.response?.insight || entry.intent}
+                        next="Try it and report what happened"
+                      />
                       <p className="exp-instruction">{entry.experimentSpec.hypothesis}</p>
                       {entry.experimentSpec.repetitions && (
                         <p className="exp-reps">{entry.experimentSpec.repetitions}</p>
@@ -916,6 +1086,11 @@ export default function AxisPage() {
                   {reveal >= 4 && entry.response?.nextRequiredCard === "Witness" && (
                     <section className="next-card card-reveal" aria-label="Witness">
                       <span className="next-card-label">Witness</span>
+                      <CardContext
+                        why="Axis needs evidence before treating this as confirmed."
+                        trigger={entry.experimentSpec?.hypothesis ?? entry.intent}
+                        next={entry.witnessReview ? "Review the result" : "Add an observation"}
+                      />
                       {entry.witnessPlan?.witnesses.length ? (
                         <div className="witness-plan">
                           {entry.witnessPlan.witnesses.map((w, wi) => (
@@ -981,6 +1156,11 @@ export default function AxisPage() {
                   {/* ── User-action results: ungated, appear as data arrives ─ */}
                   {entry.witnessReview && (
                     <section className={`review-card card-reveal review-${entry.witnessReview.verdict.toLowerCase()}`}>
+                      <CardContext
+                        why="This checks whether the evidence supports the working belief."
+                        trigger={entry.response?.witnessPrompt ?? entry.experimentSpec?.hypothesis ?? entry.intent}
+                        next={entry.adjustment ? "Use the adjustment" : "Keep the evidence with this thread"}
+                      />
                       <div className="review-header">
                         <span className={`review-verdict rv-${entry.witnessReview.verdict.toLowerCase()}`}>
                           {entry.witnessReview.verdict}
@@ -1019,6 +1199,11 @@ export default function AxisPage() {
 
                   {entry.adjustment && (
                     <section className={`adj-card card-reveal${entry.adjustment.nextCard === null ? " adj-card--complete" : ""}`}>
+                      <CardContext
+                        why="This updates the work after evidence came back."
+                        trigger={entry.witnessReview?.claim ?? entry.intent}
+                        next={entry.adjustment.nextCard ? `Open ${entry.adjustment.nextCard}` : "Keep this as the current note"}
+                      />
                       <div className="adj-header">
                         <span className="adj-decision">{entry.adjustment.decision}</span>
                         {entry.adjustment.nextCard && (
@@ -1032,6 +1217,11 @@ export default function AxisPage() {
 
                   {entry.orchestration && (
                     <section className={`orch-card card-reveal${entry.orchestration.nextCard === null ? " orch-card--done" : ""}`}>
+                      <CardContext
+                        why="This keeps the thread moving in the right order."
+                        trigger={entry.adjustment?.decision ?? entry.intent}
+                        next={entry.orchestration.nextCard ? `Open ${entry.orchestration.nextCard}` : "Return with new evidence"}
+                      />
                       <div className="orch-header">
                         <span className="orch-label">Thread</span>
                         {entry.orchestration.nextCard ? (
@@ -1059,6 +1249,11 @@ export default function AxisPage() {
                   {i < thread.length - 1 && entry.deepModel && (
                     <section className="deep-model-card card-reveal" aria-label="Deep Model">
                       <span className="section-label">Deep Model</span>
+                      <CardContext
+                        why="This preserves the deeper pattern Axis noticed in the old work."
+                        trigger={entry.response?.insight ?? entry.intent}
+                        next="Use it to compare the next rep"
+                      />
                       <p className="dm-model">{entry.deepModel.deepModel}</p>
                       <div className="dm-field">
                         <span className="dm-label">Leverage Point</span>
@@ -1076,6 +1271,11 @@ export default function AxisPage() {
                   {i < thread.length - 1 && entry.evidence.length > 0 && (
                     <section className="research-group card-reveal" aria-label="Discovery">
                       <span className="section-label">Discovery</span>
+                      <CardContext
+                        why="This is the outside reference material attached to the thread."
+                        trigger={entry.intent}
+                        next="Keep the useful evidence"
+                      />
                       {entry.evidence.map((card, ci) => (
                         <article key={ci} className="research-card">
                           <span className="discovery-index">Discovery {ci + 1}</span>
@@ -1288,6 +1488,137 @@ export default function AxisPage() {
         }
 
         /* ── Home state ──────────────────────────────────────────────────── */
+
+        .context-rail {
+          background: rgba(250, 250, 249, 0.97);
+          border-bottom: 1px solid rgba(26, 26, 24, 0.08);
+          flex-shrink: 0;
+          padding: 12px clamp(16px, 4vw, 40px) 11px;
+          position: relative;
+          z-index: 4;
+        }
+
+        .rail-primary {
+          display: grid;
+          gap: 12px;
+          grid-template-columns: minmax(130px, 0.85fr) minmax(180px, 1.35fr) minmax(150px, 1fr) minmax(150px, 1fr);
+          margin: 0 auto;
+          max-width: 1120px;
+        }
+
+        .rail-cell {
+          border-left: 1px solid rgba(26, 26, 24, 0.08);
+          min-width: 0;
+          padding-left: 11px;
+        }
+
+        .rail-cell span,
+        .rail-note span {
+          color: rgba(26, 26, 24, 0.28);
+          display: block;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin-bottom: 5px;
+          text-transform: uppercase;
+        }
+
+        .rail-cell strong {
+          color: rgba(26, 26, 24, 0.76);
+          display: block;
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.25;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .rail-cell--focus strong {
+          color: #1a1a18;
+          white-space: normal;
+        }
+
+        .rail-secondary {
+          display: grid;
+          gap: 12px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          margin: 12px auto 0;
+          max-width: 1120px;
+        }
+
+        .rail-note {
+          min-width: 0;
+        }
+
+        .rail-note p {
+          color: rgba(26, 26, 24, 0.54);
+          font-size: 12px;
+          line-height: 1.3;
+          margin: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .progress-state-bar {
+          align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px 16px;
+          margin: 13px auto 0;
+          max-width: 1120px;
+        }
+
+        .progress-state {
+          align-items: center;
+          color: rgba(26, 26, 24, 0.28);
+          display: inline-flex;
+          font-size: 10px;
+          font-weight: 800;
+          gap: 6px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .state-dot {
+          border: 1px solid rgba(26, 26, 24, 0.2);
+          border-radius: 50%;
+          display: inline-block;
+          height: 7px;
+          width: 7px;
+        }
+
+        .progress-state.active {
+          color: rgba(26, 26, 24, 0.76);
+        }
+
+        .progress-state.active .state-dot {
+          background: rgba(62, 140, 38, 0.9);
+          border-color: rgba(62, 140, 38, 0.9);
+        }
+
+        @media (max-width: 760px) {
+          .context-rail {
+            padding: 10px 16px;
+          }
+
+          .rail-primary {
+            gap: 9px;
+            grid-template-columns: 1fr;
+          }
+
+          .rail-secondary {
+            gap: 8px;
+            grid-template-columns: 1fr;
+            margin-top: 10px;
+          }
+
+          .rail-cell strong,
+          .rail-note p {
+            white-space: normal;
+          }
+        }
 
         .home {
           align-items: flex-start;
@@ -1688,6 +2019,43 @@ export default function AxisPage() {
         }
 
         /* ── Insight card ────────────────────────────────────────────────── */
+
+        .card-context {
+          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
+          display: grid;
+          gap: 12px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          margin: 0 0 15px;
+          padding: 0 0 13px;
+        }
+
+        .card-context div {
+          min-width: 0;
+        }
+
+        .card-context span {
+          color: rgba(26, 26, 24, 0.26);
+          display: block;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin-bottom: 5px;
+          text-transform: uppercase;
+        }
+
+        .card-context p {
+          color: rgba(26, 26, 24, 0.54);
+          font-size: 12px;
+          line-height: 1.35;
+          margin: 0;
+        }
+
+        @media (max-width: 640px) {
+          .card-context {
+            gap: 9px;
+            grid-template-columns: 1fr;
+          }
+        }
 
         .insight-card {
           background: #fff;
