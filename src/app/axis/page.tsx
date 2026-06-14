@@ -22,6 +22,13 @@ interface InsightResponse {
   clarificationQuestion?: string;
 }
 
+interface MentalModelCard {
+  mentalModel: string;
+  rule: string;
+  failurePattern: string;
+  recognitionCue: string;
+}
+
 interface EvidenceCard {
   source: string;
   summary: string;
@@ -33,6 +40,7 @@ interface ThreadEntry {
   id: string;
   intent: string;
   response: InsightResponse | null;
+  mentalModelCard: MentalModelCard | null;
   evidence: EvidenceCard[];
 }
 
@@ -182,10 +190,27 @@ export default function AxisPage() {
         ? researchData.evidence
         : [];
 
+      // Mental Model engine — called only when the Insight Engine selects that card
+      let mentalModelCard: MentalModelCard | null = null;
+      if (response?.nextRequiredCard === "Mental Model" && response.insight) {
+        try {
+          const mmRes = await fetch("/api/axis/mental-model", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ insight: response.insight, reasoning: response.reasoning }),
+            signal: ctrl.signal,
+          });
+          if (mmRes.ok) mentalModelCard = await mmRes.json() as MentalModelCard;
+        } catch {
+          // non-fatal — insight card still renders without it
+        }
+      }
+
       const entry: ThreadEntry = {
         id: uid(),
         intent: val,
         response,
+        mentalModelCard,
         evidence,
       };
 
@@ -297,9 +322,29 @@ export default function AxisPage() {
                     {/* Next Required Card */}
                     <section className="next-card" aria-label={entry.response.nextRequiredCard}>
                       <span className="next-card-label">{entry.response.nextRequiredCard}</span>
-                      {entry.response.nextRequiredCard === "Mental Model" && entry.response.mentalModel && (
+
+                      {entry.response.nextRequiredCard === "Mental Model" && entry.mentalModelCard ? (
+                        <div className="mm-card">
+                          <p className="mm-framework">{entry.mentalModelCard.mentalModel}</p>
+                          <dl className="mm-rows">
+                            <div className="mm-row">
+                              <dt className="mm-term">Rule</dt>
+                              <dd className="mm-def mm-def--rule">{entry.mentalModelCard.rule}</dd>
+                            </div>
+                            <div className="mm-row">
+                              <dt className="mm-term">Failure Pattern</dt>
+                              <dd className="mm-def">{entry.mentalModelCard.failurePattern}</dd>
+                            </div>
+                            <div className="mm-row">
+                              <dt className="mm-term">Recognition Cue</dt>
+                              <dd className="mm-def">{entry.mentalModelCard.recognitionCue}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      ) : entry.response.nextRequiredCard === "Mental Model" && entry.response.mentalModel ? (
                         <p className="next-card-body">{entry.response.mentalModel}</p>
-                      )}
+                      ) : null}
+
                       {entry.response.nextRequiredCard === "Experiment" && entry.response.experimentCandidate && (
                         <p className="next-card-body">{entry.response.experimentCandidate}</p>
                       )}
@@ -719,6 +764,58 @@ export default function AxisPage() {
         .next-card-body--dim {
           color: rgba(26, 26, 24, 0.42);
           font-style: italic;
+        }
+
+        /* ── Mental Model card ───────────────────────────────────────────── */
+
+        .mm-card {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .mm-framework {
+          color: #1a1a18;
+          font-size: 15px;
+          font-weight: 450;
+          line-height: 1.6;
+          margin: 0;
+        }
+
+        .mm-rows {
+          border-top: 1px solid rgba(62, 140, 38, 0.12);
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin: 0;
+          padding-top: 14px;
+        }
+
+        .mm-row {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .mm-term {
+          color: rgba(26, 26, 24, 0.32);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .mm-def {
+          color: rgba(26, 26, 24, 0.62);
+          font-size: 13px;
+          line-height: 1.5;
+          margin: 0;
+        }
+
+        .mm-def--rule {
+          color: #1a1a18;
+          font-size: 14px;
+          font-weight: 550;
         }
 
         /* ── Research cards ──────────────────────────────────────────────── */
