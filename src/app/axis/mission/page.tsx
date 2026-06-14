@@ -5,6 +5,8 @@ import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-
 import { type AxisChallenge, type AxisContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
 import { analyzeIntent, generateConstraint, type GeneratedConstraint } from "../../../lib/axis-expansion";
 import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
+import { startCameraWitness, type CameraWitnessHandle } from "../../../lib/camera-witness";
+import { record } from "../../../lib/learning-engine";
 import {
   createLocalMissionMemoryAdapter,
   createMissionAttempt,
@@ -173,6 +175,7 @@ export default function AxisShell() {
   const sessionIdRef = useRef(Date.now().toString(36));
   const expansionConstraintRef = useRef<GeneratedConstraint | null>(null);
   const expandAbortRef = useRef<AbortController | null>(null);
+  const cameraWitnessRef = useRef<CameraWitnessHandle | null>(null);
 
   useEffect(() => {
     setIsVoiceSupported("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
@@ -226,6 +229,33 @@ export default function AxisShell() {
 
   function appendMessage(m: Omit<Message, "id">) {
     setMessages((prev) => [...prev, { ...m, id: uid() }]);
+  }
+
+  // -------------------------------------------------------------------------
+  // Camera Witness
+  // -------------------------------------------------------------------------
+
+  function startWitness(experimentId: string, constraint: string) {
+    const video = videoBgRef.current;
+    if (!video) return;
+    cameraWitnessRef.current = startCameraWitness({
+      intent_id: sessionIdRef.current,
+      experiment_id: experimentId,
+      constraint,
+      video,
+    });
+  }
+
+  function stopWitness() {
+    const handle = cameraWitnessRef.current;
+    cameraWitnessRef.current = null;
+    if (!handle) return;
+    const capturedSid = sessionIdRef.current;
+    handle.stop().then((event) => {
+      if (!event || sessionIdRef.current !== capturedSid) return;
+      record(event);
+      appendMessage({ role: "axis", type: "witness", text: `I noticed: ${event.claim.summary}` });
+    }).catch(() => null);
   }
 
   // -------------------------------------------------------------------------
@@ -390,8 +420,9 @@ export default function AxisShell() {
 
   // Build a one-constraint session from a dynamically generated constraint
   function startSessionWithConstraint(generated: GeneratedConstraint) {
+    const experimentId = `dynamic-${Date.now()}`;
     const synthetic: AxisChallenge = {
-      id: `dynamic-${Date.now()}`,
+      id: experimentId,
       constraint: generated.constraint,
       objective: generated.constraint,
       requiredEvidence: "OBSERVATION",
@@ -404,6 +435,7 @@ export default function AxisShell() {
     setWitnessText(null);
     setPhase("CHALLENGE");
     pushChallenge(0);
+    startWitness(experimentId, generated.constraint);
   }
 
   // Called when player answers the expansion question (text or voice).
@@ -458,11 +490,13 @@ export default function AxisShell() {
 
   function startSession(ctx: AxisContext) {
     const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
-    challengesRef.current = filtered.length > 0 ? filtered : VISION_CHALLENGES;
+    const list = filtered.length > 0 ? filtered : VISION_CHALLENGES;
+    challengesRef.current = list;
     setChallengeIndex(0);
     setWitnessText(null);
     setPhase("CHALLENGE");
     pushChallenge(0);
+    startWitness(list[0].id, list[0].constraint);
   }
 
   function completeChallenge(observation: string) {
@@ -476,6 +510,9 @@ export default function AxisShell() {
     if (observation.trim()) {
       appendMessage({ role: "user", type: "observation", text: observation.trim() });
     }
+
+    // Stop camera witness — fires async, records to learning engine when done
+    stopWitness();
 
     handleAttempt(c, { kind: c.requiredEvidence, source: "VOICE", value: observation || null });
     storeLearningToken({
@@ -502,6 +539,7 @@ export default function AxisShell() {
         setChallengeIndex(nextIndex);
         setPhase("CHALLENGE");
         pushChallenge(nextIndex);
+        startWitness(challenges[nextIndex].id, challenges[nextIndex].constraint);
       });
     }
   }
@@ -587,6 +625,7 @@ export default function AxisShell() {
   function reset() {
     expandAbortRef.current?.abort();
     expandAbortRef.current = null;
+    cameraWitnessRef.current = null; // discard in-flight witness — session is ending
     clearTimeout(thinkingTimerRef.current ?? undefined);
     clearTimeout(witnessTimerRef.current ?? undefined);
     stopVoice();
