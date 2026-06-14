@@ -9,6 +9,8 @@
 // in the same file: import type { AxisContext as SessionContext } from "./axis-challenges"
 // ---------------------------------------------------------------------------
 
+import type { InsightObject } from "./understanding-engine";
+
 export interface AxisContext {
   id: string;
   title: string;         // "Reading Defenders", "Triple Threat", "Axis Build"
@@ -16,6 +18,8 @@ export interface AxisContext {
 
   // Development state — the thumbnail
   lastIntent?: string;
+  insights?: InsightObject[];
+  lastInsight?: string;
   lastExperiment?: string;
   lastObservation?: string;
   lastOutcome?: string;
@@ -33,6 +37,7 @@ export interface ContextSummary {
   title: string;
   capability?: string;
   lastIntent?: string;
+  lastInsight?: string;
   lastExperiment?: string;
   lastObservation?: string;
   lastOutcome?: string;
@@ -45,6 +50,7 @@ export function toSummary(ctx: AxisContext): ContextSummary {
     title: ctx.title,
     capability: ctx.capability,
     lastIntent: ctx.lastIntent,
+    lastInsight: ctx.lastInsight,
     lastExperiment: ctx.lastExperiment,
     lastObservation: ctx.lastObservation,
     lastOutcome: ctx.lastOutcome,

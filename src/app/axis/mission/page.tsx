@@ -3,9 +3,7 @@
 import { CameraIcon, Eye, Mic, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { axisFetchWithAccessToken, getAxisAccessToken } from "../../../lib/axis-client-auth";
-import { type AxisChallenge, type AxisContext as SessionContext, VISION_CHALLENGES } from "../../../lib/axis-challenges";
-import { analyzeIntent, generateConstraint, type GeneratedConstraint } from "../../../lib/axis-expansion";
-import { type AxisEvidence, evaluateEvidence } from "../../../lib/axis-evidence";
+import { type AxisEvidence, type EvidenceKind, evaluateEvidence } from "../../../lib/axis-evidence";
 import { startCameraWitness, type CameraWitnessHandle } from "../../../lib/camera-witness";
 import { record } from "../../../lib/learning-engine";
 import {
@@ -20,6 +18,7 @@ import {
   findMatchingContext,
   listSummaries,
   recordExperiment as recordCtxExperiment,
+  recordInsights as recordCtxInsights,
   recordIntent as recordCtxIntent,
   recordObservation as recordCtxObservation,
   recordOutcome as recordCtxOutcome,
@@ -36,8 +35,10 @@ import {
 // ---------------------------------------------------------------------------
 
 const OBSERVATION_EXCHANGE_ENABLED = false;
-const LEGACY_EYES_UP_TEXT = "Eyes Up. Ten dribbles. Left hand.";
 const GENERIC_CLARIFICATION = "What part are you trying to improve?";
+const FORBIDDEN = [
+  "Eyes Up. Ten dribbles. Left hand.",
+];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,29 +67,40 @@ interface LearningToken {
   sessionId: string;
 }
 
-interface UnderstandResponse {
+interface InsightObject {
+  id: string;
+  title: string;
+  insight: string;
+  mentalModel?: string;
+  experimentCandidate?: string;
+}
+
+interface UnderstandingOutput {
   confidence: number;
   leveragePoint?: string;
   mentalModel?: string;
   commonMistake?: string;
   experimentCandidate?: string;
   clarificationQuestion?: string;
+  insights: InsightObject[];
+}
+
+interface GeneratedConstraint {
+  constraint: string;
+  duration: string;
+}
+
+interface RuntimeChallenge {
+  id: string;
+  constraint: string;
+  objective: string;
+  requiredEvidence: EvidenceKind;
+  text: string;
 }
 
 // ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
-
-function classifyLegacyContext(t: string): SessionContext {
-  const s = t.toLowerCase();
-  if (["game", "match", "playing", "competition", "scrimmage", "against"].some((k) => s.includes(k)))
-    return "GAME";
-  if (["team", "practice", "group", "squad", "we're", "we are"].some((k) => s.includes(k)))
-    return "TEAM";
-  if (["partner", "one on one", "1v1", "with someone", "with my"].some((k) => s.includes(k)))
-    return "PARTNER";
-  return "SOLO";
-}
 
 // "I noticed:" — witness speaks as a presence, not a telemetry readout
 function formatMachineWitness(value: string): string {
@@ -99,20 +111,8 @@ function formatMachineWitness(value: string): string {
   return map[value] ?? `I noticed: ${value.toLowerCase()}.`;
 }
 
-function getChallengeText(c: AxisChallenge): string {
-  const i = c.text.indexOf("What did you notice?");
-  return sanitizeAxisText(i > -1 ? c.text.slice(0, i).trim() : c.text);
-}
-
 function sanitizeAxisText(text: string): string {
-  return text.trim() === LEGACY_EYES_UP_TEXT ? GENERIC_CLARIFICATION : text;
-}
-
-function fallbackClarification(intent: string): string {
-  const s = intent.toLowerCase();
-  if (s.includes("form")) return "What part of your form?";
-  if (s.includes("triple threat") || s.includes("triple-threat")) return "What happens when they don't move?";
-  return GENERIC_CLARIFICATION;
+  return FORBIDDEN.includes(text.trim()) ? GENERIC_CLARIFICATION : text;
 }
 
 function candidateToConstraint(candidate: string): GeneratedConstraint {
@@ -122,6 +122,82 @@ function candidateToConstraint(candidate: string): GeneratedConstraint {
   if (!match) return { constraint: trimmed, duration: "90 seconds" };
   const constraint = match[1].replace(/[.\s]+$/, "").trim();
   return { constraint: constraint || trimmed, duration: match[2].trim() };
+}
+
+function titleFromInsight(text: string): string {
+  return text
+    .replace(/[.?!]+$/g, "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function insightFromApi(data: Partial<UnderstandingOutput>): InsightObject[] {
+  if (Array.isArray(data.insights) && data.insights.length > 0) {
+    return data.insights
+      .map((insight, index) => ({
+        id: typeof insight.id === "string" && insight.id.trim() ? insight.id.trim() : `api-insight-${index}`,
+        title: typeof insight.title === "string" && insight.title.trim()
+          ? insight.title.trim()
+          : titleFromInsight(insight.insight ?? data.leveragePoint ?? "Insight"),
+        insight: typeof insight.insight === "string" && insight.insight.trim()
+          ? insight.insight.trim()
+          : data.leveragePoint?.trim() ?? "",
+        mentalModel: typeof insight.mentalModel === "string" && insight.mentalModel.trim()
+          ? insight.mentalModel.trim()
+          : data.mentalModel?.trim(),
+        experimentCandidate: typeof insight.experimentCandidate === "string" && insight.experimentCandidate.trim()
+          ? insight.experimentCandidate.trim()
+          : data.experimentCandidate?.trim(),
+      }))
+      .filter((insight) => insight.insight);
+  }
+
+  if (typeof data.leveragePoint === "string" && data.leveragePoint.trim()) {
+    return [{
+      id: `api-insight-${Date.now().toString(36)}`,
+      title: titleFromInsight(data.leveragePoint),
+      insight: data.leveragePoint.trim(),
+      mentalModel: data.mentalModel?.trim(),
+      experimentCandidate: data.experimentCandidate?.trim(),
+    }];
+  }
+
+  return [];
+}
+
+async function requestUnderstanding(
+  input: { intent: string; threadHistory?: string[] },
+  signal?: AbortSignal,
+): Promise<UnderstandingOutput> {
+  const res = await fetch("/api/axis/understand", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal,
+  });
+
+  if (!res.ok) throw new Error("understand api error");
+
+  const data = await res.json() as Partial<UnderstandingOutput>;
+  const insights = insightFromApi(data);
+  const hasClarification = typeof data.clarificationQuestion === "string" && data.clarificationQuestion.trim();
+  const hasExperiment = typeof data.experimentCandidate === "string" && data.experimentCandidate.trim();
+  if (!hasClarification && insights.length === 0 && !hasExperiment) {
+    throw new Error("unusable understand response");
+  }
+
+  return {
+    confidence: typeof data.confidence === "number" ? data.confidence : 0,
+    leveragePoint: data.leveragePoint?.trim(),
+    mentalModel: data.mentalModel?.trim(),
+    commonMistake: data.commonMistake?.trim(),
+    experimentCandidate: data.experimentCandidate?.trim(),
+    clarificationQuestion: data.clarificationQuestion?.trim(),
+    insights,
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -206,6 +282,7 @@ export default function AxisShell() {
 
   const [phase, setPhase] = useState<ShellPhase>("CONTEXT");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [insights, setInsights] = useState<InsightObject[]>([]);
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("OFF");
   const [voiceActive, setVoiceActive] = useState(false);
@@ -217,7 +294,7 @@ export default function AxisShell() {
   const streamRef = useRef<MediaStream | null>(null);
   const cameraStartedRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const challengesRef = useRef<AxisChallenge[]>([]);
+  const challengesRef = useRef<RuntimeChallenge[]>([]);
   const intentInputRef = useRef<HTMLInputElement | null>(null);
   const observationInputRef = useRef<HTMLInputElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -291,6 +368,26 @@ export default function AxisShell() {
 
   function appendMessage(m: Omit<Message, "id">) {
     setMessages((prev) => [...prev, { ...m, text: sanitizeAxisText(m.text), id: uid() }]);
+  }
+
+  function applyUnderstanding(output: UnderstandingOutput) {
+    setInsights(output.insights);
+    if (activeContextIdRef.current) {
+      recordCtxInsights(activeContextIdRef.current, output.insights);
+      setContexts(listSummaries());
+    }
+    if (output.clarificationQuestion) {
+      appendMessage({ role: "axis", type: "question", text: output.clarificationQuestion });
+      setPhase("EXPAND");
+      return;
+    }
+    const candidate = output.insights[0]?.experimentCandidate ?? output.experimentCandidate;
+    if (candidate) {
+      startApiExperiment(candidateToConstraint(candidate));
+      return;
+    }
+    appendMessage({ role: "axis", type: "question", text: GENERIC_CLARIFICATION });
+    setPhase("EXPAND");
   }
 
   // -------------------------------------------------------------------------
@@ -441,7 +538,7 @@ export default function AxisShell() {
   // Core loop — architecture unchanged
   // -------------------------------------------------------------------------
 
-  function handleAttempt(challenge: AxisChallenge, evidence: AxisEvidence) {
+  function handleAttempt(challenge: RuntimeChallenge, evidence: AxisEvidence) {
     const evaluation = evaluateEvidence(challenge.requiredEvidence, evidence);
     const attempt = createMissionAttempt({
       constraint: challenge.constraint,
@@ -455,17 +552,9 @@ export default function AxisShell() {
     void saveRemoteMemory({ attempt });
   }
 
-  // Builds challenge thread messages for the given index.
-  // "What did you notice?" is a reflection gate — shown only at the end of a set
-  // so action can accumulate before the player is asked to interpret it.
-  function pushChallenge(index: number) {
-    const c = challengesRef.current[index];
-    if (!c) return;
-    appendMessage({ role: "axis", type: "challenge", text: getChallengeText(c) });
-    const isReflection = index === challengesRef.current.length - 1;
-    if (isReflection) {
-      appendMessage({ role: "axis", type: "obs-prompt", text: "What did you notice?" });
-    }
+  function renderExperimentChallenge(challenge: RuntimeChallenge) {
+    appendMessage({ role: "axis", type: "challenge", text: challenge.text });
+    appendMessage({ role: "axis", type: "obs-prompt", text: "What did you notice?" });
   }
 
   // -------------------------------------------------------------------------
@@ -481,55 +570,39 @@ export default function AxisShell() {
       const ctrl = new AbortController();
       expandAbortRef.current = ctrl;
 
-      const res = await fetch("/api/axis/understand", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent }),
-        signal: ctrl.signal,
-      });
+      const output = await requestUnderstanding({
+        intent,
+        threadHistory: messages.map((m) => `${m.role}: ${m.text}`),
+      }, ctrl.signal);
       expandAbortRef.current = null;
 
       if (sessionIdRef.current !== sid) return; // user exited while in flight
-      if (!res.ok) throw new Error("understand api error");
-
-      const data = await res.json() as UnderstandResponse;
-      if (sessionIdRef.current !== sid) return;
-
-      if (data.clarificationQuestion) {
-        appendMessage({ role: "axis", type: "question", text: data.clarificationQuestion });
-        setPhase("EXPAND");
-      } else if (data.experimentCandidate) {
-        startSessionWithConstraint(candidateToConstraint(data.experimentCandidate));
-      } else {
-        throw new Error("unexpected response shape");
-      }
+      applyUnderstanding(output);
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
       if (sessionIdRef.current !== sid) return;
-      runExpansionStatic(intent);
+      runExpansionStatic();
     }
   }
 
-  // Fallback: static clarification only. Never routes to VISION_CHALLENGES.
-  function runExpansionStatic(intent: string) {
-    const analysis = analyzeIntent(intent);
+  // Fallback: static clarification only. Never routes to a local challenge list.
+  function runExpansionStatic() {
     appendMessage({
       role: "axis",
       type: "question",
-      text: analysis.question?.text ?? fallbackClarification(intent),
+      text: GENERIC_CLARIFICATION,
     });
     setPhase("EXPAND");
   }
 
-  // Build a one-constraint session from a dynamically generated constraint
-  function startSessionWithConstraint(generated: GeneratedConstraint) {
+  // Build a one-experiment session from API-returned content.
+  function startApiExperiment(generated: GeneratedConstraint) {
     const experimentId = `dynamic-${Date.now()}`;
-    const synthetic: AxisChallenge = {
+    const synthetic: RuntimeChallenge = {
       id: experimentId,
       constraint: generated.constraint,
       objective: generated.constraint,
       requiredEvidence: "OBSERVATION",
-      contexts: ["SOLO", "PARTNER", "TEAM", "GAME"],
       text: `${generated.constraint}. ${generated.duration}.`,
     };
     expansionConstraintRef.current = generated;
@@ -537,7 +610,7 @@ export default function AxisShell() {
     setChallengeIndex(0);
     setWitnessText(null);
     setPhase("CHALLENGE");
-    pushChallenge(0);
+    renderExperimentChallenge(synthetic);
     startWitness(experimentId, generated.constraint);
     if (activeContextIdRef.current) {
       recordCtxExperiment(activeContextIdRef.current, generated.constraint);
@@ -559,28 +632,18 @@ export default function AxisShell() {
         expandAbortRef.current?.abort();
         const ctrl = new AbortController();
         expandAbortRef.current = ctrl;
-        const res = await fetch("/api/axis/expand", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intent: intentRef.current, answer: capturedVal }),
-          signal: ctrl.signal,
-        });
+        const output = await requestUnderstanding({
+          intent: `${intentRef.current} ${capturedVal}`,
+          threadHistory: messages.map((m) => `${m.role}: ${m.text}`).concat(`user: ${capturedVal}`),
+        }, ctrl.signal);
         expandAbortRef.current = null;
         if (sessionIdRef.current !== sid) return;
-        if (!res.ok) throw new Error("expand api error");
-        const data = await res.json() as { confidence: number; constraint?: string };
-        if (sessionIdRef.current !== sid) return;
-        if (data.constraint) {
-          startSessionWithConstraint({ constraint: data.constraint, duration: "90 seconds" });
-        } else {
-          throw new Error("no constraint");
-        }
+        applyUnderstanding({ ...output, clarificationQuestion: undefined });
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         if (sessionIdRef.current !== sid) return;
-        // Fallback to static constraint generation
-        const generated = generateConstraint(intentRef.current, capturedVal);
-        startSessionWithConstraint(generated);
+        appendMessage({ role: "axis", type: "question", text: GENERIC_CLARIFICATION });
+        setPhase("EXPAND");
       }
     });
   }
@@ -593,17 +656,6 @@ export default function AxisShell() {
   function handleExpandMicToggle() {
     if (voiceActive) { stopVoice(); return; }
     startVoiceCapture(observationInputRef, handleExpandAnswer);
-  }
-
-  function startLegacyVisionSession(ctx: SessionContext) {
-    const filtered = VISION_CHALLENGES.filter((c) => c.contexts.includes(ctx));
-    const list = filtered.length > 0 ? filtered : VISION_CHALLENGES;
-    challengesRef.current = list;
-    setChallengeIndex(0);
-    setWitnessText(null);
-    setPhase("CHALLENGE");
-    pushChallenge(0);
-    startWitness(list[0].id, list[0].constraint);
   }
 
   function completeChallenge(observation: string) {
@@ -653,7 +705,7 @@ export default function AxisShell() {
       showThinking(() => {
         setChallengeIndex(nextIndex);
         setPhase("CHALLENGE");
-        pushChallenge(nextIndex);
+        renderExperimentChallenge(challenges[nextIndex]);
         startWitness(challenges[nextIndex].id, challenges[nextIndex].constraint);
       });
     }
@@ -668,6 +720,7 @@ export default function AxisShell() {
     if (!val.trim()) return;
     intentRef.current = val.trim();
     sessionIdRef.current = Date.now().toString(36);
+    setInsights([]);
     startCamera();
     appendMessage({ role: "user", type: "intent", text: val.trim() });
     if (intentInputRef.current) intentInputRef.current.value = "";
@@ -746,7 +799,7 @@ export default function AxisShell() {
       reset();
       // Reuse the last generated constraint if available; otherwise re-route
       if (expansionConstraintRef.current) {
-        showThinking(() => startSessionWithConstraint(expansionConstraintRef.current!));
+        showThinking(() => startApiExperiment(expansionConstraintRef.current!));
       } else {
         showThinking(() => runExpansion(intentRef.current || val.trim()));
       }
@@ -778,6 +831,7 @@ export default function AxisShell() {
     clearTimeout(thinkingTimerRef.current ?? undefined);
     clearTimeout(witnessTimerRef.current ?? undefined);
     stopVoice();
+    setInsights([]);
     setWitnessText(null);
     setWitnessStatus(cameraStatus === "ON" ? "READY" : "QUIET");
     thinkingNextRef.current = null;
@@ -909,6 +963,30 @@ export default function AxisShell() {
                 {m.text}
               </div>
             ))}
+
+            {insights.length > 0 && (
+              <div className="insight-stack" aria-label="Insights">
+                {insights.map((insight) => (
+                  <article className="insight-object" key={insight.id}>
+                    <span className="insight-label">Insight</span>
+                    <h2>{insight.title}</h2>
+                    <p className="insight-text">{insight.insight}</p>
+                    {insight.mentalModel ? (
+                      <div className="insight-block">
+                        <span>Mental Model</span>
+                        <p>{insight.mentalModel}</p>
+                      </div>
+                    ) : null}
+                    {insight.experimentCandidate ? (
+                      <div className="insight-block">
+                        <span>Experiment</span>
+                        <p>{insight.experimentCandidate}</p>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
 
             {/* Thinking indicator — three dots, industry pattern */}
             {phase === "THINKING" && (
@@ -1355,6 +1433,73 @@ export default function AxisShell() {
         @keyframes dotrise {
           0%, 60%, 100% { opacity: 0.28; transform: translateY(0); }
           30% { opacity: 0.75; transform: translateY(-4px); }
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Insight Objects                                                     */
+        /* ------------------------------------------------------------------ */
+
+        .insight-stack {
+          align-self: stretch;
+          display: grid;
+          gap: 10px;
+          margin: 14px 0 8px;
+        }
+
+        .insight-object {
+          background: rgba(247, 247, 242, 0.035);
+          border: 1px solid rgba(247, 247, 242, 0.08);
+          border-radius: 8px;
+          padding: 15px 16px 16px;
+        }
+
+        .insight-label {
+          color: rgba(189, 255, 91, 0.68);
+          display: block;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          line-height: 1;
+          margin-bottom: 10px;
+          text-transform: uppercase;
+        }
+
+        .insight-object h2 {
+          color: #f7f7f2;
+          font-size: clamp(22px, 4vw, 34px);
+          font-weight: 650;
+          line-height: 1.08;
+          margin: 0;
+        }
+
+        .insight-text {
+          color: rgba(247, 247, 242, 0.72);
+          font-size: 16px;
+          line-height: 1.45;
+          margin: 12px 0 0;
+        }
+
+        .insight-block {
+          border-top: 1px solid rgba(247, 247, 242, 0.07);
+          margin-top: 14px;
+          padding-top: 12px;
+        }
+
+        .insight-block span {
+          color: rgba(247, 247, 242, 0.28);
+          display: block;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin-bottom: 6px;
+          text-transform: uppercase;
+        }
+
+        .insight-block p {
+          color: rgba(247, 247, 242, 0.64);
+          font-size: 15px;
+          line-height: 1.45;
+          margin: 0;
         }
 
         /* ------------------------------------------------------------------ */

@@ -6,15 +6,15 @@ import { type ContextSummary } from "../../lib/context-model";
 // Capability thumbnail
 // ---------------------------------------------------------------------------
 
-function capabilityInitial(capability?: string): string {
+function capabilityMark(capability?: string): string {
   if (!capability) return "AX";
   const map: Record<string, string> = {
-    basketball: "BK",
-    music: "MS",
-    build: "BD",
-    research: "RS",
-    film: "FM",
-    writing: "WR",
+    basketball: "🏀",
+    music: "🎵",
+    build: "🏗",
+    research: "📚",
+    film: "🎬",
+    writing: "✍",
   };
   return map[capability.toLowerCase()] ?? capability.slice(0, 2).toUpperCase();
 }
@@ -85,7 +85,7 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
               >
                 <span className="ctx-top">
                   <span className="ctx-thumb" aria-hidden>
-                    {capabilityInitial(ctx.capability)}
+                    {capabilityMark(ctx.capability)}
                   </span>
                   <span className="ctx-copy">
                     <span className="ctx-title">{ctx.title}</span>
@@ -93,16 +93,11 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
                   </span>
                 </span>
                 <span className="ctx-history">
+                  {ctx.lastInsight ? (
+                    <span className="ctx-line">Insight: {ctx.lastInsight}</span>
+                  ) : null}
                   {ctx.lastExperiment ? (
                     <span className="ctx-line">Experiment: {ctx.lastExperiment}</span>
-                  ) : null}
-                  {ctx.lastObservation ? (
-                    <span className="ctx-line">Last: {ctx.lastObservation}</span>
-                  ) : ctx.lastIntent ? (
-                    <span className="ctx-line">Intent: {ctx.lastIntent}</span>
-                  ) : null}
-                  {ctx.lastOutcome ? (
-                    <span className="ctx-line">Outcome: {ctx.lastOutcome}</span>
                   ) : null}
                 </span>
               </button>
@@ -265,11 +260,11 @@ export default function ContextSidebar({ contexts, activeId, isOpen, onSelect, o
           border: 1px solid rgba(189, 255, 91, 0.18);
           color: rgba(189, 255, 91, 0.72);
           display: flex;
-          font-size: 10px;
+          font-size: 15px;
           font-weight: 800;
           height: 32px;
           justify-content: center;
-          letter-spacing: 0.06em;
+          letter-spacing: 0;
           width: 32px;
         }
 

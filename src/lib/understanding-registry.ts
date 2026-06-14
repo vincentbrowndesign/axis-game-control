@@ -103,6 +103,18 @@ export const UNDERSTANDING_REGISTRY: UnderstandingEntry[] = [
     ],
   },
   {
+    id: "u-moving-without-ball",
+    triggers: ["moving without the ball", "off ball", "off-ball", "cutting", "getting open", "movement"],
+    leveragePoint: "Waiting to be found instead of creating a place to be seen.",
+    mentalModel: "Movement creates the pass before the ball arrives. A useful cut gives the passer a signal, not just a target.",
+    commonMistake: "Drifting into space instead of changing the defender's decision.",
+    examples: [
+      "Standing on the wing waiting for the ball",
+      "Cutting after the passing window has already closed",
+      "Moving without forcing the defender to turn their head",
+    ],
+  },
+  {
     id: "u-handles",
     triggers: ["handles", "dribbling", "ball handling", "dribble", "crossover"],
     leveragePoint: "Dribbling to manage the ball instead of to create options.",

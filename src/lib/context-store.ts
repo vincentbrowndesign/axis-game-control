@@ -1,4 +1,5 @@
 import { type AxisContext, type ContextMatch, type ContextSummary, toSummary } from "./context-model";
+import type { InsightObject } from "./understanding-engine";
 
 // ---------------------------------------------------------------------------
 // Context Store
@@ -44,6 +45,18 @@ function titleFromIntent(intent: string): string {
     .join(" ");
 }
 
+function inferCapability(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  if (/\b(vbz|music|song|beat|track|audio)\b/.test(lower)) return "music";
+  if (/\b(axis build|build|code|product|ship|ui|runtime|engine)\b/.test(lower)) return "build";
+  if (/\b(research|study|reading|paper|notes)\b/.test(lower)) return "research";
+  if (/\b(film|replay|clip|upload|video)\b/.test(lower)) return "film";
+  if (
+    /\b(triple threat|defender|defense|off ball|moving without the ball|finishing|contact|form|shooting|shot|dribble|basketball|rim|pass|cut)\b/.test(lower)
+  ) return "basketball";
+  return undefined;
+}
+
 // Strip emoji and leading/trailing whitespace for comparison
 function normalize(text: string): string {
   return text
@@ -73,7 +86,7 @@ export function createContext(input: { title?: string; intent?: string; capabili
   const ctx: AxisContext = {
     id: `ctx-${Date.now().toString(36)}`,
     title,
-    capability: input.capability,
+    capability: input.capability ?? inferCapability(input.intent ?? title),
     lastIntent: input.intent,
     createdAt: now,
     updatedAt: now,
@@ -146,6 +159,11 @@ export function findMatchingContext(intent: string): ContextMatch | null {
 
 export function recordIntent(id: string, intent: string): AxisContext | null {
   return updateContext(id, { lastIntent: intent });
+}
+
+export function recordInsights(id: string, insights: InsightObject[]): AxisContext | null {
+  const lastInsight = insights[0]?.title;
+  return updateContext(id, { insights, lastInsight });
 }
 
 export function recordExperiment(id: string, experiment: string): AxisContext | null {
