@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import AxisPage from "./axis/page";
 
 export default function Home() {
-  redirect("/auth");
+  return <AxisPage />;
 }
