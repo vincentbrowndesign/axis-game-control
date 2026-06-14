@@ -22,6 +22,12 @@ import {
   recordIntent as recordCtxIntent,
   recordObservation as recordCtxObservation,
 } from "../../../lib/context-store";
+import {
+  COACH_TAPS,
+  type CoachTap,
+  coachNoteEvent,
+  coachTapEvent,
+} from "../../../lib/coach-witness";
 
 // ---------------------------------------------------------------------------
 // Feature flags
@@ -187,6 +193,7 @@ export default function AxisShell() {
   const expandAbortRef = useRef<AbortController | null>(null);
   const cameraWitnessRef = useRef<CameraWitnessHandle | null>(null);
   const activeContextIdRef = useRef<string | null>(null);
+  const coachNoteRef = useRef<HTMLInputElement | null>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [contexts, setContexts] = useState<ContextSummary[]>([]);
@@ -606,6 +613,30 @@ export default function AxisShell() {
   }
 
   // -------------------------------------------------------------------------
+  // Coach Witness — synchronous, high-trust, no API
+  // -------------------------------------------------------------------------
+
+  function fireCoachWitness(event: ReturnType<typeof coachTapEvent>) {
+    record(event);
+    appendMessage({ role: "axis", type: "witness", text: `Coach: ${event.claim.summary}` });
+  }
+
+  function handleCoachTap(tap: CoachTap) {
+    const c = challengesRef.current[challengeIndex];
+    if (!c) return;
+    fireCoachWitness(coachTapEvent(sessionIdRef.current, c.id, tap));
+  }
+
+  function handleCoachNote() {
+    const note = coachNoteRef.current?.value?.trim();
+    if (!note) return;
+    const c = challengesRef.current[challengeIndex];
+    if (!c) return;
+    fireCoachWitness(coachNoteEvent(sessionIdRef.current, c.id, note));
+    if (coachNoteRef.current) coachNoteRef.current.value = "";
+  }
+
+  // -------------------------------------------------------------------------
   // CHALLENGE
   // -------------------------------------------------------------------------
 
@@ -788,15 +819,44 @@ export default function AxisShell() {
               />
             )}
             {phase === "CHALLENGE" && (
-              <InputBox
-                key="obs"
-                inputRef={observationInputRef}
-                onSubmit={handleObsSubmit}
-                onMicToggle={handleObsMicToggle}
-                voiceActive={voiceActive}
-                isVoiceSupported={isVoiceSupported}
-                placeholder={isLastChallenge ? "what did you see…" : "done, or what you noticed…"}
-              />
+              <>
+                <InputBox
+                  key="obs"
+                  inputRef={observationInputRef}
+                  onSubmit={handleObsSubmit}
+                  onMicToggle={handleObsMicToggle}
+                  voiceActive={voiceActive}
+                  isVoiceSupported={isVoiceSupported}
+                  placeholder={isLastChallenge ? "what did you see…" : "done, or what you noticed…"}
+                />
+                <div className="coach-strip">
+                  <span className="coach-lbl">Coach</span>
+                  <div className="coach-taps">
+                    {COACH_TAPS.map((tap) => (
+                      <button
+                        key={tap}
+                        className="coach-tap"
+                        onClick={() => handleCoachTap(tap)}
+                        type="button"
+                      >
+                        {tap}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="coach-note-row">
+                    <input
+                      ref={coachNoteRef}
+                      className="coach-note"
+                      placeholder="note…"
+                      type="text"
+                      onKeyDown={(e) => { if (e.key === "Enter") handleCoachNote(); }}
+                    />
+                    <button className="coach-send" onClick={handleCoachNote} type="button">
+                      ↑
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
             {phase === "DONE" && (
               <InputBox
@@ -1183,6 +1243,106 @@ export default function AxisShell() {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.15; }
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Coach Witness strip                                                 */
+        /* Tiny, secondary. Below the athlete input. Not the focus.           */
+        /* ------------------------------------------------------------------ */
+
+        .coach-strip {
+          align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 10px;
+          padding-top: 10px;
+          border-top: 1px solid rgba(247, 247, 242, 0.04);
+        }
+
+        .coach-lbl {
+          color: rgba(247, 247, 242, 0.18);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          flex-shrink: 0;
+        }
+
+        .coach-taps {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          flex: 1;
+        }
+
+        .coach-tap {
+          background: rgba(247, 247, 242, 0.04);
+          border: 1px solid rgba(247, 247, 242, 0.08);
+          border-radius: 20px;
+          color: rgba(247, 247, 242, 0.3);
+          cursor: pointer;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 500;
+          line-height: 1;
+          padding: 4px 10px;
+          transition: background 0.1s, color 0.1s, border-color 0.1s;
+          white-space: nowrap;
+        }
+
+        .coach-tap:hover {
+          background: rgba(247, 247, 242, 0.08);
+          border-color: rgba(247, 247, 242, 0.18);
+          color: rgba(247, 247, 242, 0.65);
+        }
+
+        .coach-note-row {
+          align-items: center;
+          background: rgba(247, 247, 242, 0.03);
+          border: 1px solid rgba(247, 247, 242, 0.06);
+          border-radius: 8px;
+          display: flex;
+          gap: 2px;
+          padding: 3px 4px 3px 8px;
+          width: 100%;
+        }
+
+        .coach-note {
+          background: transparent;
+          border: 0;
+          color: rgba(247, 247, 242, 0.4);
+          flex: 1;
+          font: inherit;
+          font-size: 12px;
+          min-width: 0;
+          outline: none;
+          padding: 2px 0;
+        }
+
+        .coach-note::placeholder {
+          color: rgba(247, 247, 242, 0.14);
+        }
+
+        .coach-send {
+          align-items: center;
+          background: transparent;
+          border: 0;
+          border-radius: 5px;
+          color: rgba(247, 247, 242, 0.2);
+          cursor: pointer;
+          display: flex;
+          font: inherit;
+          font-size: 12px;
+          height: 22px;
+          justify-content: center;
+          padding: 0;
+          transition: color 0.1s;
+          width: 22px;
+        }
+
+        .coach-send:hover {
+          color: rgba(247, 247, 242, 0.5);
         }
       `}</style>
     </main>
