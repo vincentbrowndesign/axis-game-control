@@ -17,6 +17,12 @@ interface InsightResponse {
   reasoning: string;
   nextRequiredCard: CardType;
   mentalModel?: string;
+  demonstration?: {
+    currentState: string;
+    targetState: string;
+    keyDifference: string;
+    executionCue: string;
+  };
   experimentCandidate?: string;
   witnessPrompt?: string;
   clarificationQuestion?: string;
@@ -282,13 +288,45 @@ export default function AxisPage() {
         ? researchData.evidence
         : [];
 
-      // Secondary engines — called only when the Insight Engine selects that card type
+      // Build all four cards directly from the unified understand response
       let mentalModelCard: MentalModelCard | null = null;
       let demonstrationSpec: DemonstrationSpec | null = null;
       let experimentSpec: ExperimentSpec | null = null;
       let witnessPlan: WitnessPlan | null = null;
 
-      // Deep Model — fired concurrently with secondary engine, non-fatal
+      if (response?.insight) {
+        if (response.mentalModel) {
+          mentalModelCard = {
+            mentalModel: response.mentalModel,
+            rule: "",
+            failurePattern: "",
+            recognitionCue: "",
+          };
+        }
+        if (response.demonstration) {
+          demonstrationSpec = {
+            ...response.demonstration,
+            commonFailure: "",
+            recommendedViewpoints: [],
+            animationNotes: "",
+            comparisonRequired: false,
+            complexity: "Intermediate",
+          };
+        }
+        if (response.experimentCandidate) {
+          experimentSpec = {
+            hypothesis: response.experimentCandidate,
+            constraint: "",
+            repetitions: "",
+            successCriteria: "",
+            failureCriteria: "",
+            evidenceRequired: "",
+            expectedLearning: "",
+          };
+        }
+      }
+
+      // Deep Model — fired concurrently, non-fatal
       const deepModelPromise: Promise<DeepModelResult | null> = response?.insight
         ? fetch("/api/axis/deep-model", {
             method: "POST",
@@ -307,62 +345,6 @@ export default function AxisPage() {
             .then((r) => (r.ok ? (r.json() as Promise<DeepModelResult>) : null))
             .catch(() => null)
         : Promise.resolve(null);
-
-      if (response?.insight) {
-        if (response.nextRequiredCard === "Mental Model") {
-          try {
-            const mmRes = await fetch("/api/axis/mental-model", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ insight: response.insight, reasoning: response.reasoning }),
-              signal: ctrl.signal,
-            });
-            if (mmRes.ok) mentalModelCard = await mmRes.json() as MentalModelCard;
-          } catch { /* non-fatal */ }
-        } else if (response.nextRequiredCard === "Demonstration") {
-          try {
-            const demoRes = await fetch("/api/axis/demonstration", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                insight: response.insight,
-                mentalModel: response.mentalModel,
-                reasoning: response.reasoning,
-              }),
-              signal: ctrl.signal,
-            });
-            if (demoRes.ok) demonstrationSpec = await demoRes.json() as DemonstrationSpec;
-          } catch { /* non-fatal */ }
-        } else if (response.nextRequiredCard === "Experiment") {
-          try {
-            const expRes = await fetch("/api/axis/experiment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                insight: response.insight,
-                reasoning: response.reasoning,
-                experimentCandidate: response.experimentCandidate,
-              }),
-              signal: ctrl.signal,
-            });
-            if (expRes.ok) experimentSpec = await expRes.json() as ExperimentSpec;
-          } catch { /* non-fatal */ }
-        } else if (response.nextRequiredCard === "Witness") {
-          try {
-            const witnessRes = await fetch("/api/axis/witness", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                insight: response.insight,
-                reasoning: response.reasoning,
-                witnessPrompt: response.witnessPrompt,
-              }),
-              signal: ctrl.signal,
-            });
-            if (witnessRes.ok) witnessPlan = await witnessRes.json() as WitnessPlan;
-          } catch { /* non-fatal */ }
-        }
-      }
 
       const deepModel = await deepModelPromise;
 
@@ -593,133 +575,43 @@ export default function AxisPage() {
                       </div>
                     </article>
 
-                    {/* Next Required Card */}
-                    <section className="next-card" aria-label={entry.response.nextRequiredCard}>
-                      <span className="next-card-label">{entry.response.nextRequiredCard}</span>
-
-                      {entry.response.nextRequiredCard === "Mental Model" && entry.mentalModelCard ? (
+                    {/* Mental Model */}
+                    {entry.mentalModelCard && (
+                      <section className="next-card" aria-label="Mental Model">
+                        <span className="next-card-label">Mental Model</span>
                         <div className="mm-card">
                           <p className="mm-framework">{entry.mentalModelCard.mentalModel}</p>
-                          <dl className="mm-rows">
-                            <div className="mm-row">
-                              <dt className="mm-term">Rule</dt>
-                              <dd className="mm-def mm-def--rule">{entry.mentalModelCard.rule}</dd>
-                            </div>
-                            <div className="mm-row">
-                              <dt className="mm-term">Failure Pattern</dt>
-                              <dd className="mm-def">{entry.mentalModelCard.failurePattern}</dd>
-                            </div>
-                            <div className="mm-row">
-                              <dt className="mm-term">Recognition Cue</dt>
-                              <dd className="mm-def">{entry.mentalModelCard.recognitionCue}</dd>
-                            </div>
-                          </dl>
+                          {(entry.mentalModelCard.rule || entry.mentalModelCard.failurePattern || entry.mentalModelCard.recognitionCue) && (
+                            <dl className="mm-rows">
+                              {entry.mentalModelCard.rule && (
+                                <div className="mm-row">
+                                  <dt className="mm-term">Rule</dt>
+                                  <dd className="mm-def mm-def--rule">{entry.mentalModelCard.rule}</dd>
+                                </div>
+                              )}
+                              {entry.mentalModelCard.failurePattern && (
+                                <div className="mm-row">
+                                  <dt className="mm-term">Failure Pattern</dt>
+                                  <dd className="mm-def">{entry.mentalModelCard.failurePattern}</dd>
+                                </div>
+                              )}
+                              {entry.mentalModelCard.recognitionCue && (
+                                <div className="mm-row">
+                                  <dt className="mm-term">Recognition Cue</dt>
+                                  <dd className="mm-def">{entry.mentalModelCard.recognitionCue}</dd>
+                                </div>
+                              )}
+                            </dl>
+                          )}
                         </div>
-                      ) : entry.response.nextRequiredCard === "Mental Model" && entry.response.mentalModel ? (
-                        <p className="next-card-body">{entry.response.mentalModel}</p>
-                      ) : null}
+                      </section>
+                    )}
 
-                      {entry.response.nextRequiredCard === "Experiment" && entry.experimentSpec ? (
-                        <div className="exp-spec">
-                          <dl className="exp-rows">
-                            <div className="exp-row">
-                              <dt className="exp-term">Hypothesis</dt>
-                              <dd className="exp-def exp-def--hyp">{entry.experimentSpec.hypothesis}</dd>
-                            </div>
-                            <div className="exp-row">
-                              <dt className="exp-term">Constraint</dt>
-                              <dd className="exp-def">{entry.experimentSpec.constraint}</dd>
-                            </div>
-                            <div className="exp-row">
-                              <dt className="exp-term">Repetitions</dt>
-                              <dd className="exp-def">{entry.experimentSpec.repetitions}</dd>
-                            </div>
-                            <div className="exp-criteria">
-                              <div className="exp-row">
-                                <dt className="exp-term">Success Criteria</dt>
-                                <dd className="exp-def exp-def--success">{entry.experimentSpec.successCriteria}</dd>
-                              </div>
-                              <div className="exp-row">
-                                <dt className="exp-term">Failure Criteria</dt>
-                                <dd className="exp-def exp-def--failure">{entry.experimentSpec.failureCriteria}</dd>
-                              </div>
-                            </div>
-                            <div className="exp-row">
-                              <dt className="exp-term">Evidence Required</dt>
-                              <dd className="exp-def">{entry.experimentSpec.evidenceRequired}</dd>
-                            </div>
-                            <div className="exp-row">
-                              <dt className="exp-term">Expected Learning</dt>
-                              <dd className="exp-def exp-def--learn">{entry.experimentSpec.expectedLearning}</dd>
-                            </div>
-                          </dl>
-                        </div>
-                      ) : entry.response.nextRequiredCard === "Experiment" && entry.response.experimentCandidate ? (
-                        <p className="next-card-body">{entry.response.experimentCandidate}</p>
-                      ) : null}
-                      {entry.response.nextRequiredCard === "Witness" && entry.witnessPlan?.witnesses.length ? (
-                        <div className="witness-plan">
-                          {entry.witnessPlan.witnesses.map((w, i) => (
-                            <div key={i} className="witness-row">
-                              <div className="witness-header">
-                                <span className="witness-name">{w.witness}</span>
-                                <span className={`witness-importance wi-${w.confidenceImportance.toLowerCase()}`}>
-                                  {w.confidenceImportance}
-                                </span>
-                              </div>
-                              <dl className="witness-fields">
-                                <div className="witness-field">
-                                  <dt className="witness-term">Purpose</dt>
-                                  <dd className="witness-def">{w.purpose}</dd>
-                                </div>
-                                <div className="witness-field">
-                                  <dt className="witness-term">Expected Claim</dt>
-                                  <dd className="witness-def">{w.expectedClaim}</dd>
-                                </div>
-                                <div className="witness-field">
-                                  <dt className="witness-term">Required Evidence</dt>
-                                  <dd className="witness-def witness-def--evidence">{w.requiredEvidence}</dd>
-                                </div>
-                              </dl>
-                            </div>
-                          ))}
-                        </div>
-                      ) : entry.response.nextRequiredCard === "Witness" && entry.response.witnessPrompt ? (
-                        <p className="next-card-body">{entry.response.witnessPrompt}</p>
-                      ) : null}
-
-                      {/* Witness observation input — shown after witness plan, hidden once reviewed */}
-                      {entry.response.nextRequiredCard === "Witness" && entry.witnessPlan?.witnesses.length && !entry.witnessReview && (
-                        <div className="witness-observe">
-                          <label className="witness-observe-label" htmlFor={`obs-${entry.id}`}>
-                            What did you observe?
-                          </label>
-                          <textarea
-                            id={`obs-${entry.id}`}
-                            className="witness-observe-input"
-                            placeholder={"One observation per line.\nBe specific — what you saw, not what you felt."}
-                            rows={4}
-                            value={witnessInputs[entry.id] ?? ""}
-                            onChange={(e) => setWitnessInputs((prev) => ({ ...prev, [entry.id]: e.target.value }))}
-                          />
-                          <button
-                            className="witness-review-btn"
-                            type="button"
-                            onClick={() => void reviewWitness(entry)}
-                            disabled={!witnessInputs[entry.id]?.trim() || reviewLoadingId === entry.id}
-                          >
-                            {reviewLoadingId === entry.id ? "Reviewing…" : "Review Evidence"}
-                          </button>
-                        </div>
-                      )}
-                      {entry.response.nextRequiredCard === "Demonstration" && entry.demonstrationSpec && (
+                    {/* Demonstration */}
+                    {entry.demonstrationSpec && (
+                      <section className="next-card" aria-label="Demonstration">
+                        <span className="next-card-label">Demonstration</span>
                         <div className="demo-spec">
-                          <div className="demo-badges">
-                            <span className="demo-badge">{entry.demonstrationSpec.complexity}</span>
-                            {entry.demonstrationSpec.comparisonRequired && (
-                              <span className="demo-badge">Comparison Required</span>
-                            )}
-                          </div>
                           <dl className="demo-rows">
                             <div className="demo-row">
                               <dt className="demo-term">Current State</dt>
@@ -737,33 +629,149 @@ export default function AxisPage() {
                               <dt className="demo-term">Execution Cue</dt>
                               <dd className="demo-def">{entry.demonstrationSpec.executionCue}</dd>
                             </div>
-                            <div className="demo-row">
-                              <dt className="demo-term">Common Failure</dt>
-                              <dd className="demo-def">{entry.demonstrationSpec.commonFailure}</dd>
-                            </div>
-                            <div className="demo-row">
-                              <dt className="demo-term">Recommended Viewpoints</dt>
-                              <dd className="demo-def">
-                                <ul className="demo-viewpoints">
-                                  {entry.demonstrationSpec.recommendedViewpoints.map((vp, i) => (
-                                    <li key={i}>{vp}</li>
-                                  ))}
-                                </ul>
-                              </dd>
-                            </div>
-                            <div className="demo-row">
-                              <dt className="demo-term">Animation Notes</dt>
-                              <dd className="demo-def demo-def--dim">{entry.demonstrationSpec.animationNotes}</dd>
-                            </div>
+                            {entry.demonstrationSpec.commonFailure && (
+                              <div className="demo-row">
+                                <dt className="demo-term">Common Failure</dt>
+                                <dd className="demo-def">{entry.demonstrationSpec.commonFailure}</dd>
+                              </div>
+                            )}
+                            {entry.demonstrationSpec.recommendedViewpoints.length > 0 && (
+                              <div className="demo-row">
+                                <dt className="demo-term">Recommended Viewpoints</dt>
+                                <dd className="demo-def">
+                                  <ul className="demo-viewpoints">
+                                    {entry.demonstrationSpec.recommendedViewpoints.map((vp, i) => (
+                                      <li key={i}>{vp}</li>
+                                    ))}
+                                  </ul>
+                                </dd>
+                              </div>
+                            )}
+                            {entry.demonstrationSpec.animationNotes && (
+                              <div className="demo-row">
+                                <dt className="demo-term">Animation Notes</dt>
+                                <dd className="demo-def demo-def--dim">{entry.demonstrationSpec.animationNotes}</dd>
+                              </div>
+                            )}
                           </dl>
                         </div>
-                      )}
-                      {entry.response.nextRequiredCard === "Demonstration" && !entry.demonstrationSpec && (
-                        <p className="next-card-body next-card-body--dim">
-                          Film your next session and look for where this shows up.
-                        </p>
-                      )}
-                    </section>
+                      </section>
+                    )}
+
+                    {/* Experiment */}
+                    {entry.experimentSpec && (
+                      <section className="next-card" aria-label="Experiment">
+                        <span className="next-card-label">Experiment</span>
+                        <div className="exp-spec">
+                          <dl className="exp-rows">
+                            <div className="exp-row">
+                              <dt className="exp-term">Hypothesis</dt>
+                              <dd className="exp-def exp-def--hyp">{entry.experimentSpec.hypothesis}</dd>
+                            </div>
+                            {entry.experimentSpec.constraint && (
+                              <div className="exp-row">
+                                <dt className="exp-term">Constraint</dt>
+                                <dd className="exp-def">{entry.experimentSpec.constraint}</dd>
+                              </div>
+                            )}
+                            {entry.experimentSpec.repetitions && (
+                              <div className="exp-row">
+                                <dt className="exp-term">Repetitions</dt>
+                                <dd className="exp-def">{entry.experimentSpec.repetitions}</dd>
+                              </div>
+                            )}
+                            {(entry.experimentSpec.successCriteria || entry.experimentSpec.failureCriteria) && (
+                              <div className="exp-criteria">
+                                {entry.experimentSpec.successCriteria && (
+                                  <div className="exp-row">
+                                    <dt className="exp-term">Success Criteria</dt>
+                                    <dd className="exp-def exp-def--success">{entry.experimentSpec.successCriteria}</dd>
+                                  </div>
+                                )}
+                                {entry.experimentSpec.failureCriteria && (
+                                  <div className="exp-row">
+                                    <dt className="exp-term">Failure Criteria</dt>
+                                    <dd className="exp-def exp-def--failure">{entry.experimentSpec.failureCriteria}</dd>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {entry.experimentSpec.evidenceRequired && (
+                              <div className="exp-row">
+                                <dt className="exp-term">Evidence Required</dt>
+                                <dd className="exp-def">{entry.experimentSpec.evidenceRequired}</dd>
+                              </div>
+                            )}
+                            {entry.experimentSpec.expectedLearning && (
+                              <div className="exp-row">
+                                <dt className="exp-term">Expected Learning</dt>
+                                <dd className="exp-def exp-def--learn">{entry.experimentSpec.expectedLearning}</dd>
+                              </div>
+                            )}
+                          </dl>
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Witness (when model explicitly requests one) */}
+                    {entry.response.nextRequiredCard === "Witness" && (
+                      <section className="next-card" aria-label="Witness">
+                        <span className="next-card-label">Witness</span>
+                        {entry.witnessPlan?.witnesses.length ? (
+                          <div className="witness-plan">
+                            {entry.witnessPlan.witnesses.map((w, i) => (
+                              <div key={i} className="witness-row">
+                                <div className="witness-header">
+                                  <span className="witness-name">{w.witness}</span>
+                                  <span className={`witness-importance wi-${w.confidenceImportance.toLowerCase()}`}>
+                                    {w.confidenceImportance}
+                                  </span>
+                                </div>
+                                <dl className="witness-fields">
+                                  <div className="witness-field">
+                                    <dt className="witness-term">Purpose</dt>
+                                    <dd className="witness-def">{w.purpose}</dd>
+                                  </div>
+                                  <div className="witness-field">
+                                    <dt className="witness-term">Expected Claim</dt>
+                                    <dd className="witness-def">{w.expectedClaim}</dd>
+                                  </div>
+                                  <div className="witness-field">
+                                    <dt className="witness-term">Required Evidence</dt>
+                                    <dd className="witness-def witness-def--evidence">{w.requiredEvidence}</dd>
+                                  </div>
+                                </dl>
+                              </div>
+                            ))}
+                          </div>
+                        ) : entry.response.witnessPrompt ? (
+                          <p className="next-card-body">{entry.response.witnessPrompt}</p>
+                        ) : null}
+                        {entry.witnessPlan?.witnesses.length && !entry.witnessReview ? (
+                          <div className="witness-observe">
+                            <label className="witness-observe-label" htmlFor={`obs-${entry.id}`}>
+                              What did you observe?
+                            </label>
+                            <textarea
+                              id={`obs-${entry.id}`}
+                              className="witness-observe-input"
+                              placeholder={"One observation per line.\nBe specific — what you saw, not what you felt."}
+                              rows={4}
+                              value={witnessInputs[entry.id] ?? ""}
+                              onChange={(e) => setWitnessInputs((prev) => ({ ...prev, [entry.id]: e.target.value }))}
+                            />
+                            <button
+                              className="witness-review-btn"
+                              type="button"
+                              onClick={() => void reviewWitness(entry)}
+                              disabled={!witnessInputs[entry.id]?.trim() || reviewLoadingId === entry.id}
+                            >
+                              {reviewLoadingId === entry.id ? "Reviewing…" : "Review Evidence"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </section>
+                    )}
 
                     {/* Witness Review */}
                     {entry.witnessReview && (
@@ -1028,10 +1036,10 @@ export default function AxisPage() {
           flex: 1;
           flex-direction: column;
           gap: 28px;
-          justify-content: center;
+          justify-content: flex-start;
           margin: 0 auto;
           max-width: 640px;
-          padding: 0 clamp(20px, 5vw, 48px) 80px;
+          padding: clamp(52px, 13vh, 88px) clamp(20px, 5vw, 48px) 80px;
           width: 100%;
         }
 
