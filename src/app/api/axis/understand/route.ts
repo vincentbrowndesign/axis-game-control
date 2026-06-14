@@ -1,5 +1,3 @@
-import OpenAI from "openai";
-
 export const runtime = "nodejs";
 
 // ---------------------------------------------------------------------------
@@ -9,7 +7,7 @@ export const runtime = "nodejs";
 // Output: { confidence, leveragePoint, mentalModel, commonMistake?,
 //           experimentCandidate, clarificationQuestion? }
 //
-// OpenAI's job: find the leverage point and mental model.
+// Claude's job: find the leverage point and mental model.
 // Not essays. Not coaching. Not chatty explanations.
 // ---------------------------------------------------------------------------
 
@@ -64,7 +62,9 @@ Intent: "I freeze when my man doesn't move"
 function safeParse(raw: string): UnderstandResponse {
   try {
     const start = raw.indexOf("{");
-    const parsed = JSON.parse(start >= 0 ? raw.slice(start) : raw) as Record<string, unknown>;
+    const end = raw.lastIndexOf("}");
+    const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
+    const parsed = JSON.parse(slice) as Record<string, unknown>;
     return {
       confidence: typeof parsed.confidence === "number" ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
       leveragePoint: typeof parsed.leveragePoint === "string" && parsed.leveragePoint.trim()
@@ -94,7 +94,7 @@ function safeParse(raw: string): UnderstandResponse {
 }
 
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return Response.json({ confidence: 0 }, { status: 503 });
   }
@@ -121,23 +121,34 @@ export async function POST(req: Request) {
     .filter(Boolean)
     .join("\n\n");
 
-  const openai = new OpenAI({ apiKey });
-
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 300,
-      messages: [
-        { role: "system", content: UNDERSTAND_SYSTEM },
-        { role: "user", content: userContent },
-      ],
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        system: UNDERSTAND_SYSTEM,
+        messages: [{ role: "user", content: userContent }],
+      }),
     });
 
-    const raw = completion.choices[0]?.message?.content ?? "{}";
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[axis/understand]", response.status, errText);
+      return Response.json({ confidence: 0 }, { status: 500 });
+    }
+
+    const data = await response.json() as { content: Array<{ type: string; text: string }> };
+    const raw = data.content.find((c) => c.type === "text")?.text ?? "{}";
     return Response.json(safeParse(raw));
   } catch (err) {
-    console.error("[axis/understand]", err);
+    const e = err as Error;
+    console.error("[axis/understand]", e.message);
     return Response.json({ confidence: 0 }, { status: 500 });
   }
 }
