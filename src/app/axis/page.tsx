@@ -139,7 +139,7 @@ export default function AxisPage() {
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [thread, setThread] = useState<ThreadEntry[]>([]);
   const [activeIntent, setActiveIntent] = useState("");
-  const [voiceActive, setVoiceActive] = useState(false);
+  const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING" | "PROCESSING">("OFF");
   const [pendingAttachment, setPendingAttachment] = useState<Attachment | null>(null);
   const [isVoiceSupported, setIsVoiceSupported] = useState(false);
   const [witnessInputs, setWitnessInputs] = useState<Record<string, string>>({});
@@ -210,10 +210,10 @@ export default function AxisPage() {
   // -------------------------------------------------------------------------
 
   function toggleVoice() {
-    if (voiceActive) {
+    if (voicePhase !== "OFF") {
       recognitionRef.current?.abort();
       recognitionRef.current = null;
-      setVoiceActive(false);
+      setVoicePhase("OFF");
       return;
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -224,7 +224,7 @@ export default function AxisPage() {
     rec.interimResults = true;
     rec.lang = "en-US";
     let handled = false;
-    setVoiceActive(true);
+    setVoicePhase("LISTENING");
     rec.onresult = (e: SpeechRecognitionEvent) => {
       const result = e.results[0];
       const text = result[0].transcript;
@@ -232,12 +232,13 @@ export default function AxisPage() {
       if (result.isFinal && !handled) {
         handled = true;
         recognitionRef.current = null;
-        setVoiceActive(false);
+        setVoicePhase("PROCESSING");
         void run(text);
+        setTimeout(() => setVoicePhase("OFF"), 900);
       }
     };
-    rec.onerror = () => { if (!handled) setVoiceActive(false); };
-    rec.onend = () => { if (!handled) setVoiceActive(false); };
+    rec.onerror = () => { if (!handled) setVoicePhase("OFF"); };
+    rec.onend = () => { if (!handled) setVoicePhase("OFF"); };
     recognitionRef.current = rec;
     rec.start();
   }
@@ -529,14 +530,19 @@ export default function AxisPage() {
                 <span>Upload</span>
               </button>
               <button
-                className={`ctrl-btn${voiceActive ? " on" : ""}`}
+                className={`ctrl-btn${voicePhase === "LISTENING" ? " voice-listening" : voicePhase === "PROCESSING" ? " voice-processing" : ""}`}
                 onClick={toggleVoice}
                 type="button"
-                aria-label="Voice"
+                aria-label={voicePhase === "LISTENING" ? "Listening" : voicePhase === "PROCESSING" ? "Processing" : "Voice"}
                 disabled={!isVoiceSupported}
               >
-                <Mic size={15} strokeWidth={1.8} />
-                <span>Voice</span>
+                {voicePhase === "LISTENING" ? (
+                  <><span className="voice-dot" /><span>Listening</span></>
+                ) : voicePhase === "PROCESSING" ? (
+                  <span>Processing…</span>
+                ) : (
+                  <><Mic size={15} strokeWidth={1.8} /><span>Voice</span></>
+                )}
               </button>
               <button className="send-btn" type="submit" aria-label="Send">
                 →
@@ -937,13 +943,19 @@ export default function AxisPage() {
                   <Upload size={13} strokeWidth={1.8} />
                 </button>
                 <button
-                  className={`ctrl-btn sm${voiceActive ? " on" : ""}`}
+                  className={`ctrl-btn sm${voicePhase === "LISTENING" ? " voice-listening" : voicePhase === "PROCESSING" ? " voice-processing" : ""}`}
                   onClick={toggleVoice}
                   type="button"
-                  aria-label="Voice"
+                  aria-label={voicePhase === "LISTENING" ? "Listening" : voicePhase === "PROCESSING" ? "Processing" : "Voice"}
                   disabled={!isVoiceSupported}
                 >
-                  <Mic size={13} strokeWidth={1.8} />
+                  {voicePhase === "LISTENING" ? (
+                    <span className="voice-dot" />
+                  ) : voicePhase === "PROCESSING" ? (
+                    <span className="voice-processing-dots">···</span>
+                  ) : (
+                    <Mic size={13} strokeWidth={1.8} />
+                  )}
                 </button>
               </div>
               <input
@@ -1115,6 +1127,39 @@ export default function AxisPage() {
           background: rgba(62, 140, 38, 0.07);
           border-color: rgba(62, 140, 38, 0.2);
           color: #3d7a28;
+        }
+
+        .ctrl-btn.voice-listening {
+          background: rgba(62, 140, 38, 0.08);
+          border-color: rgba(62, 140, 38, 0.24);
+          color: #3d7a28;
+        }
+
+        .ctrl-btn.voice-processing {
+          background: rgba(180, 90, 15, 0.07);
+          border-color: rgba(180, 90, 15, 0.2);
+          color: rgb(160, 80, 12);
+        }
+
+        .voice-dot {
+          animation: voice-pulse 1s ease-in-out infinite;
+          background: currentColor;
+          border-radius: 50%;
+          display: inline-block;
+          flex-shrink: 0;
+          height: 7px;
+          width: 7px;
+        }
+
+        @keyframes voice-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
+
+        .voice-processing-dots {
+          font-size: 16px;
+          letter-spacing: 0.05em;
+          line-height: 1;
         }
 
         .ctrl-btn:disabled {
