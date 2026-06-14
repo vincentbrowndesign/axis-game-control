@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "../styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "Axis Mission Control",
-  description: "Objective, constraint, progress, memory, and the next mission.",
+  title: "Axis",
+  description: "Personal athletic continuity.",
 };
 
 export default function RootLayout({
