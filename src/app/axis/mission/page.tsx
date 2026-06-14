@@ -31,20 +31,16 @@ import {
 } from "../../../lib/coach-witness";
 
 // ---------------------------------------------------------------------------
-// Feature flags
+// Constants
 // ---------------------------------------------------------------------------
 
-const OBSERVATION_EXCHANGE_ENABLED = false;
 const GENERIC_CLARIFICATION = "What part are you trying to improve?";
-const FORBIDDEN = [
-  "Eyes Up. Ten dribbles. Left hand.",
-];
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ShellPhase = "CONTEXT" | "THINKING" | "EXPAND" | "CHALLENGE" | "DONE";
+type ShellPhase = "CONTEXT" | "THINKING" | "EXPAND" | "INSIGHTS" | "CHALLENGE" | "DONE";
 type CameraStatus = "OFF" | "STARTING" | "ON" | "BLOCKED";
 type WitnessStatus = "QUIET" | "READY" | "WATCHING" | "SAVING" | "RECORDED";
 
@@ -109,10 +105,6 @@ function formatMachineWitness(value: string): string {
     "Head Up": "I noticed: you kept your head up.",
   };
   return map[value] ?? `I noticed: ${value.toLowerCase()}.`;
-}
-
-function sanitizeAxisText(text: string): string {
-  return FORBIDDEN.includes(text.trim()) ? GENERIC_CLARIFICATION : text;
 }
 
 function candidateToConstraint(candidate: string): GeneratedConstraint {
@@ -336,28 +328,9 @@ export default function AxisShell() {
     el.scrollTop = el.scrollHeight;
   }, [messages, phase]);
 
-  // Camera witness — captured 3s into drill when exchange is enabled
+  // Focus response input when a challenge, expansion question, or insight appears
   useEffect(() => {
-    if (phase !== "CHALLENGE" || !OBSERVATION_EXCHANGE_ENABLED) return;
-    witnessTimerRef.current = setTimeout(async () => {
-      const video = videoBgRef.current;
-      if (!video || video.readyState < 2) return;
-      const { createHeadPositionEvidence } = await import(
-        "../../../lib/axis-vision-evidence"
-      );
-      const evidence = await createHeadPositionEvidence(video);
-      if (evidence.value) {
-        const text = formatMachineWitness(evidence.value as string);
-        setWitnessText(text);
-        appendMessage({ role: "axis", type: "witness", text });
-      }
-    }, 3000);
-    return () => clearTimeout(witnessTimerRef.current ?? undefined);
-  }, [phase, challengeIndex]);
-
-  // Focus response input when a challenge or expansion question appears
-  useEffect(() => {
-    if (phase !== "CHALLENGE" && phase !== "EXPAND") return;
+    if (phase !== "CHALLENGE" && phase !== "EXPAND" && phase !== "INSIGHTS") return;
     const t = setTimeout(() => observationInputRef.current?.focus(), 80);
     return () => clearTimeout(t);
   }, [phase, challengeIndex]);
@@ -367,7 +340,7 @@ export default function AxisShell() {
   // -------------------------------------------------------------------------
 
   function appendMessage(m: Omit<Message, "id">) {
-    setMessages((prev) => [...prev, { ...m, text: sanitizeAxisText(m.text), id: uid() }]);
+    setMessages((prev) => [...prev, { ...m, id: uid() }]);
   }
 
   function applyUnderstanding(output: UnderstandingOutput) {
@@ -381,9 +354,8 @@ export default function AxisShell() {
       setPhase("EXPAND");
       return;
     }
-    const candidate = output.insights[0]?.experimentCandidate ?? output.experimentCandidate;
-    if (candidate) {
-      startApiExperiment(candidateToConstraint(candidate));
+    if (output.insights.length > 0) {
+      setPhase("INSIGHTS");
       return;
     }
     appendMessage({ role: "axis", type: "question", text: GENERIC_CLARIFICATION });
@@ -466,6 +438,10 @@ export default function AxisShell() {
     }
     if (phase === "EXPAND") {
       startVoiceCapture(observationInputRef, handleExpandAnswer);
+      return;
+    }
+    if (phase === "INSIGHTS") {
+      startVoiceCapture(observationInputRef, handleInsightsInput);
       return;
     }
     if (phase === "CHALLENGE") {
@@ -655,6 +631,54 @@ export default function AxisShell() {
   function handleExpandMicToggle() {
     if (voiceActive) { stopVoice(); return; }
     startVoiceCapture(observationInputRef, handleExpandAnswer);
+  }
+
+  // -------------------------------------------------------------------------
+  // INSIGHTS — user reads insight, then decides: refine or run
+  // -------------------------------------------------------------------------
+
+  function handleTryExperiment() {
+    const candidate = insights[0]?.experimentCandidate;
+    if (!candidate) return;
+    startApiExperiment(candidateToConstraint(candidate));
+  }
+
+  function handleInsightsInput(val: string) {
+    stopVoice();
+    const trimmed = val.trim();
+    if (observationInputRef.current) observationInputRef.current.value = "";
+    if (!trimmed) return;
+    appendMessage({ role: "user", type: "observation", text: trimmed });
+    const sid = sessionIdRef.current;
+    showThinking(async () => {
+      try {
+        expandAbortRef.current?.abort();
+        const ctrl = new AbortController();
+        expandAbortRef.current = ctrl;
+        const output = await requestUnderstanding({
+          intent: `${intentRef.current} ${trimmed}`,
+          threadHistory: messages.map((m) => `${m.role}: ${m.text}`).concat(`user: ${trimmed}`),
+        }, ctrl.signal);
+        expandAbortRef.current = null;
+        if (sessionIdRef.current !== sid) return;
+        applyUnderstanding({ ...output, clarificationQuestion: undefined });
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        if (sessionIdRef.current !== sid) return;
+        appendMessage({ role: "axis", type: "question", text: GENERIC_CLARIFICATION });
+        setPhase("EXPAND");
+      }
+    });
+  }
+
+  function handleInsightsSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    handleInsightsInput(observationInputRef.current?.value ?? "");
+  }
+
+  function handleInsightsMicToggle() {
+    if (voiceActive) { stopVoice(); return; }
+    startVoiceCapture(observationInputRef, handleInsightsInput);
   }
 
   function completeChallenge(observation: string) {
@@ -1010,6 +1034,24 @@ export default function AxisShell() {
                 placeholder="tell me more…"
               />
             )}
+            {phase === "INSIGHTS" && (
+              <>
+                {insights[0]?.experimentCandidate && (
+                  <button className="try-it-btn" onClick={handleTryExperiment} type="button">
+                    Try it →
+                  </button>
+                )}
+                <InputBox
+                  key="insights"
+                  inputRef={observationInputRef}
+                  onSubmit={handleInsightsSubmit}
+                  onMicToggle={handleInsightsMicToggle}
+                  voiceActive={voiceActive}
+                  isVoiceSupported={isVoiceSupported}
+                  placeholder="dig deeper…"
+                />
+              </>
+            )}
             {phase === "CHALLENGE" && (
               <>
                 <InputBox
@@ -1019,7 +1061,7 @@ export default function AxisShell() {
                   onMicToggle={handleObsMicToggle}
                   voiceActive={voiceActive}
                   isVoiceSupported={isVoiceSupported}
-                  placeholder={isLastChallenge ? "what did you see…" : "done, or what you noticed…"}
+                  placeholder="what happened…"
                 />
                 <div className="coach-strip">
                   <span className="coach-lbl">Coach</span>
@@ -1490,6 +1532,31 @@ export default function AxisShell() {
           font-size: 15px;
           line-height: 1.45;
           margin: 0;
+        }
+
+        /* Try it — explicit action from INSIGHTS phase */
+        .try-it-btn {
+          background: rgba(189, 255, 91, 0.08);
+          border: 1px solid rgba(189, 255, 91, 0.22);
+          border-radius: 8px;
+          color: rgba(189, 255, 91, 0.72);
+          cursor: pointer;
+          font: inherit;
+          font-size: 14px;
+          font-weight: 650;
+          letter-spacing: 0.03em;
+          margin-bottom: 10px;
+          min-height: 44px;
+          padding: 0 18px;
+          text-align: left;
+          transition: background 0.15s, border-color 0.15s, color 0.15s;
+          width: 100%;
+        }
+
+        .try-it-btn:hover {
+          background: rgba(189, 255, 91, 0.13);
+          border-color: rgba(189, 255, 91, 0.38);
+          color: rgba(189, 255, 91, 0.92);
         }
 
         /* ------------------------------------------------------------------ */
