@@ -17,19 +17,18 @@ interface InsightObject {
   experimentCandidate?: string;
 }
 
-interface ResearchClaim {
+interface EvidenceCard {
   source: string;
-  title?: string;
-  claim: string;
+  summary: string;
+  relevance: string;
   url?: string;
-  confidence?: number;
 }
 
 interface ThreadEntry {
   id: string;
   intent: string;
   insights: InsightObject[];
-  researchClaims: ResearchClaim[];
+  evidence: EvidenceCard[];
   clarificationQuestion?: string;
 }
 
@@ -209,15 +208,15 @@ export default function AxisPage() {
       const researchData = researchRes.ok ? await researchRes.json() : { claims: [] };
 
       const insights = normalizeInsights(understandData);
-      const researchClaims: ResearchClaim[] = Array.isArray(researchData.claims)
-        ? researchData.claims
+      const evidence: EvidenceCard[] = Array.isArray(researchData.evidence)
+        ? researchData.evidence
         : [];
 
       const entry: ThreadEntry = {
         id: uid(),
         intent: val,
         insights,
-        researchClaims,
+        evidence,
         clarificationQuestion: understandData.clarificationQuestion,
       };
 
@@ -334,25 +333,26 @@ export default function AxisPage() {
                   </section>
                 )}
 
-                {/* Research claims */}
-                {entry.researchClaims.length > 0 && (
-                  <section className="research-group" aria-label="Research">
-                    <span className="section-label">Research</span>
-                    {entry.researchClaims.map((claim, i) => (
+                {/* Evidence cards */}
+                {entry.evidence.length > 0 && (
+                  <section className="research-group" aria-label="Evidence">
+                    <span className="section-label">Evidence</span>
+                    {entry.evidence.map((card, i) => (
                       <article key={i} className="research-card">
-                        <span className="badge badge-source">{claim.source}</span>
-                        {claim.title && <p className="research-title">{claim.title}</p>}
-                        <p className="research-body">{claim.claim}</p>
-                        {claim.url && (
+                        {card.url ? (
                           <a
-                            className="research-url"
-                            href={claim.url}
+                            className="badge badge-source badge-link"
+                            href={card.url}
                             rel="noreferrer noopener"
                             target="_blank"
                           >
-                            {claim.url}
+                            {card.source}
                           </a>
+                        ) : (
+                          <span className="badge badge-source">{card.source}</span>
                         )}
+                        <p className="research-body">{card.summary}</p>
+                        <p className="research-why">{card.relevance}</p>
                       </article>
                     ))}
                   </section>
@@ -757,33 +757,27 @@ export default function AxisPage() {
           padding: 14px 16px;
         }
 
-        .research-title {
-          color: #1a1a18;
-          font-size: 15px;
-          font-weight: 600;
-          line-height: 1.35;
-          margin: 6px 0 6px;
+        .badge-link {
+          cursor: pointer;
+          text-decoration: none;
+          transition: opacity 0.12s;
         }
+
+        .badge-link:hover { opacity: 0.7; }
 
         .research-body {
-          color: rgba(26, 26, 24, 0.6);
+          color: rgba(26, 26, 24, 0.72);
           font-size: 14px;
           line-height: 1.55;
+          margin: 0 0 6px;
+        }
+
+        .research-why {
+          color: rgba(26, 26, 24, 0.38);
+          font-size: 13px;
+          line-height: 1.45;
           margin: 0;
         }
-
-        .research-url {
-          color: rgba(26, 26, 24, 0.26);
-          display: block;
-          font-size: 11px;
-          margin-top: 8px;
-          overflow: hidden;
-          text-decoration: none;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .research-url:hover { color: rgba(26, 26, 24, 0.52); }
 
         /* ── Suggested experiment ────────────────────────────────────────── */
 
