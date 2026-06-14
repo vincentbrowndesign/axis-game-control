@@ -8,8 +8,6 @@ import type { Breakthrough, DevEvidence, DevThread } from "../../lib/axis-dev-pe
 
 type Tab = "threads" | "breakthroughs" | "evidence";
 
-type ProgressState = "UNDERSTANDING" | "DEMONSTRATING" | "EXPERIMENTING" | "REVIEWING";
-
 interface ThreadContext {
   currentThread: string;
   currentFocus: string;
@@ -18,8 +16,14 @@ interface ThreadContext {
   signals: string;
   breakthroughs: string;
   nextAction: string;
-  progressState: ProgressState;
-  progressStates: ProgressState[];
+  progressState: string;
+  progressStates: string[];
+  timeline: string;
+  uploads: string;
+  claims: string;
+  confidence: string;
+  experimentHistory: string;
+  witnessData: string;
 }
 
 interface DevSidebarProps {
@@ -82,6 +86,7 @@ export function DevSidebar({
   onSignOut,
 }: DevSidebarProps) {
   const [tab, setTab] = React.useState<Tab>("threads");
+  const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
 
   if (!isOpen) return null;
 
@@ -100,44 +105,51 @@ export function DevSidebar({
 
         <section className="thread-context" aria-label="Current thread context">
           <div className="context-field context-field--primary">
-            <span>Current Thread</span>
+            <span>Working On</span>
             <strong>{threadContext.currentThread}</strong>
           </div>
           <div className="context-field">
-            <span>Current Focus</span>
+            <span>Focus</span>
             <p>{threadContext.currentFocus}</p>
           </div>
-          <div className="context-field">
-            <span>Active Experiment</span>
-            <p>{threadContext.activeExperiment}</p>
-          </div>
-          <div className="context-field">
-            <span>Evidence</span>
-            <p>{threadContext.evidence}</p>
-          </div>
-          <div className="context-field">
-            <span>Signals</span>
-            <p>{threadContext.signals}</p>
-          </div>
-          <div className="context-field">
-            <span>Breakthroughs</span>
-            <p>{threadContext.breakthroughs}</p>
-          </div>
           <div className="context-field context-field--next">
-            <span>Next Action</span>
+            <span>Next</span>
             <p>{threadContext.nextAction}</p>
           </div>
           <div className="context-field">
-            <span>Status</span>
-            <div className="sidebar-status" aria-label="Progress state">
-              {threadContext.progressStates.map((state) => (
-                <span key={state} className={`sidebar-state${threadContext.progressState === state ? " active" : ""}`}>
-                  <span className="sidebar-state-dot" aria-hidden />
-                  {state}
-                </span>
-              ))}
-            </div>
+            <span>Right Now</span>
+            <p>{threadContext.progressState}</p>
           </div>
+          <button
+            className="details-toggle"
+            type="button"
+            onClick={() => setIsDetailsOpen((value) => !value)}
+            aria-expanded={isDetailsOpen}
+          >
+            {isDetailsOpen ? "Hide Details" : "View Details"}
+          </button>
+          {isDetailsOpen && (
+            <div className="context-details">
+              <div><span>Uploads</span><p>{threadContext.evidence}</p></div>
+              <div><span>Patterns</span><p>{threadContext.signals}</p></div>
+              <div><span>Uploads</span><p>{threadContext.uploads}</p></div>
+              <div><span>Big Wins</span><p>{threadContext.breakthroughs}</p></div>
+              <div><span>History</span><p>{threadContext.timeline}</p></div>
+              <div><span>Notes</span><p>{threadContext.claims}</p></div>
+              <div><span>How Sure</span><p>{threadContext.confidence}</p></div>
+              <div><span>Things Tried</span><p>{threadContext.experimentHistory}</p></div>
+              <div><span>Checks</span><p>{threadContext.witnessData}</p></div>
+              <div><span>Trying</span><p>{threadContext.activeExperiment}</p></div>
+              <div className="sidebar-status" aria-label="Progress state">
+                {threadContext.progressStates.map((state) => (
+                  <span key={state} className={`sidebar-state${threadContext.progressState === state ? " active" : ""}`}>
+                    <span className="sidebar-state-dot" aria-hidden />
+                    {state}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* New thread */}
@@ -155,7 +167,7 @@ export function DevSidebar({
               className={`tab-btn${tab === t ? " tab-btn--active" : ""}`}
               onClick={() => setTab(t)}
             >
-              {t === "threads" ? "Sessions" : t === "breakthroughs" ? "Breakthroughs" : "Evidence"}
+              {t === "threads" ? "Work Sessions" : t === "breakthroughs" ? "Big Wins" : "Uploads"}
             </button>
           ))}
         </div>
@@ -167,7 +179,7 @@ export function DevSidebar({
           {tab === "threads" && (
             <ul className="thread-list">
               {threads.length === 0 && (
-                <li className="empty-state">No sessions yet.</li>
+                <li className="empty-state">No work sessions yet.</li>
               )}
               {threads.map((t) => (
                 <li key={t.id}>
@@ -187,7 +199,7 @@ export function DevSidebar({
           {tab === "breakthroughs" && (
             <ul className="bt-list">
               {breakthroughs.length === 0 && (
-                <li className="empty-state">No breakthroughs yet.<br />Mark a key insight as a breakthrough during a session.</li>
+                <li className="empty-state">No big wins yet.<br />Save an important takeaway from this work session.</li>
               )}
               {breakthroughs.map((b) => (
                 <li key={b.id} className="bt-item">
@@ -204,7 +216,7 @@ export function DevSidebar({
           {tab === "evidence" && (
             <ul className="ev-list">
               {evidence.length === 0 && (
-                <li className="empty-state">No evidence collected yet.</li>
+                <li className="empty-state">No uploads or notes yet.</li>
               )}
               {evidence.map((e) => (
                 <li key={e.id} className="ev-item">
@@ -296,13 +308,12 @@ export function DevSidebar({
 
         .thread-context {
           border-bottom: 1px solid rgba(250, 250, 249, 0.07);
-          display: flex;
-          flex-direction: column;
+          display: grid;
           flex-shrink: 0;
-          gap: 12px;
-          max-height: 52vh;
+          gap: 10px;
+          max-height: 58vh;
           overflow-y: auto;
-          padding: 16px 18px 17px;
+          padding: 12px 18px 13px;
         }
 
         .context-field {
@@ -316,22 +327,22 @@ export function DevSidebar({
           font-size: 9px;
           font-weight: 800;
           letter-spacing: 0.12em;
-          margin-bottom: 5px;
+          margin-bottom: 3px;
           text-transform: uppercase;
         }
 
         .context-field strong,
         .context-field p {
           color: rgba(250, 250, 249, 0.76);
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 560;
-          line-height: 1.35;
+          line-height: 1.28;
           margin: 0;
         }
 
         .context-field--primary strong {
           color: #fafaf9;
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 720;
         }
 
@@ -341,6 +352,48 @@ export function DevSidebar({
 
         .context-field--next p {
           color: rgba(190, 232, 90, 0.82);
+        }
+
+        .details-toggle {
+          align-self: flex-start;
+          background: transparent;
+          border: 0;
+          color: rgba(140, 190, 40, 0.78);
+          cursor: pointer;
+          font: inherit;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.11em;
+          padding: 2px 0 0;
+          text-transform: uppercase;
+        }
+
+        .details-toggle:hover {
+          color: rgba(140, 190, 40, 1);
+        }
+
+        .context-details {
+          border-top: 1px solid rgba(250, 250, 249, 0.07);
+          display: grid;
+          gap: 9px;
+          padding-top: 10px;
+        }
+
+        .context-details span {
+          color: rgba(250, 250, 249, 0.24);
+          display: block;
+          font-size: 8px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin-bottom: 3px;
+          text-transform: uppercase;
+        }
+
+        .context-details p {
+          color: rgba(250, 250, 249, 0.54);
+          font-size: 11px;
+          line-height: 1.3;
+          margin: 0;
         }
 
         .sidebar-status {

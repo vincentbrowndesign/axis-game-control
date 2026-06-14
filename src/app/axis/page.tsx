@@ -160,6 +160,15 @@ type AxisAuthState =
 
 type ProgressState = "UNDERSTANDING" | "DEMONSTRATING" | "EXPERIMENTING" | "REVIEWING";
 
+function progressLabel(state: ProgressState) {
+  switch (state) {
+    case "UNDERSTANDING": return "Figuring It Out";
+    case "DEMONSTRATING": return "Showing It";
+    case "EXPERIMENTING": return "Trying It";
+    case "REVIEWING": return "Looking At Results";
+  }
+}
+
 function authReturnPath() {
   return "/axis";
 }
@@ -200,7 +209,7 @@ function authStateFromUser(user: User): AxisAuthState {
   };
 }
 
-function compactTitle(text: string, fallback = "Current Thread") {
+function compactTitle(text: string, fallback = "This Work") {
   const cleaned = text.trim().replace(/\s+/g, " ");
   if (!cleaned) return fallback;
   return cleaned
@@ -230,43 +239,16 @@ function getProgressState(entry: ThreadEntry | undefined, reveal: number, phase:
 function nextActionFor(entry: ThreadEntry | undefined, reveal: number, phase: Phase, reviewLoadingId: string | null) {
   if (phase === "LOADING") return "Wait for the next note";
   if (!entry) return "Name the skill";
-  if (reviewLoadingId) return "Hold while evidence is reviewed";
-  if (entry.orchestration?.nextCard) return `Open ${entry.orchestration.nextCard}`;
-  if (entry.witnessReview) return "Use the adjustment";
-  if (entry.response?.nextRequiredCard === "Witness" && !entry.witnessReview) return "Add an observation";
+  if (reviewLoadingId) return "Hold while results are checked";
+  if (entry.orchestration?.nextCard) return "Open the next step";
+  if (entry.witnessReview) return "Try the change";
+  if (entry.response?.nextRequiredCard === "Witness" && !entry.witnessReview) return "Add what you noticed";
   if (entry.experimentSpec && reveal >= 4) return "Try it and report back";
-  if (entry.experimentSpec && reveal === 3) return "Start the experiment";
-  if (entry.demonstrationSpec && reveal === 2) return "Look at the demonstration";
+  if (entry.experimentSpec && reveal === 3) return "Try it";
+  if (entry.demonstrationSpec && reveal === 2) return "See what good looks like";
   if (entry.mentalModelCard && reveal === 1) return "Read the principle";
   if (entry.response?.clarificationQuestion) return "Answer the question";
-  return "Keep developing this";
-}
-
-function CardContext({
-  why,
-  trigger,
-  next,
-}: {
-  why: string;
-  trigger: string;
-  next: string;
-}) {
-  return (
-    <div className="card-context" aria-label="Card context">
-      <div>
-        <span>Why</span>
-        <p>{why}</p>
-      </div>
-      <div>
-        <span>Triggered By</span>
-        <p>{trigger}</p>
-      </div>
-      <div>
-        <span>Next</span>
-        <p>{next}</p>
-      </div>
-    </div>
-  );
+  return "Keep working on this";
 }
 
 // ---------------------------------------------------------------------------
@@ -274,16 +256,16 @@ function CardContext({
 // ---------------------------------------------------------------------------
 
 const LOADING_LABELS = [
-  "Preparing insight…",
-  "Preparing demonstration…",
-  "Generating experiment…",
-  "Building session…",
+  "Finding the main idea…",
+  "Getting the example ready…",
+  "Building something to try…",
+  "Getting your work ready…",
 ] as const;
 
 const REVIEW_LABELS = [
-  "Reviewing evidence…",
-  "Running adjustment…",
-  "Orchestrating…",
+  "Looking at results…",
+  "Updating the next step…",
+  "Choosing the next step…",
 ] as const;
 
 const authGateStyles = `
@@ -347,6 +329,7 @@ export default function AxisPage() {
   const [loadingLabel, setLoadingLabel] = useState<string>(LOADING_LABELS[0]);
   const [reviewLabel, setReviewLabel] = useState<string>(REVIEW_LABELS[0]);
   const [revealMap, setRevealMap] = useState<Record<string, number>>({});
+  const [isContextDetailsOpen, setIsContextDetailsOpen] = useState(false);
 
   // ── Persistence + auth ──────────────────────────────────────────────────
   const [authState, setAuthState] = useState<AxisAuthState>({ status: "LOADING" });
@@ -905,7 +888,7 @@ export default function AxisPage() {
   const currentTitle = currentThread?.title ?? thread[0]?.intent ?? activeIntent;
   const currentFocus = lastEntry?.deepModel?.leveragePoint
     ?? lastEntry?.response?.insight
-    ?? "Listening for the bottleneck";
+    ?? "Finding what matters";
   const activeExperiment = lastEntry?.experimentSpec?.hypothesis
     ?? lastEntry?.response?.experimentCandidate
     ?? "No experiment yet";
@@ -935,16 +918,29 @@ export default function AxisPage() {
   const progressState = getProgressState(lastEntry, lastReveal, phase, reviewLoadingId);
   const nextAction = nextActionFor(lastEntry, lastReveal, phase, reviewLoadingId);
   const progressStates: ProgressState[] = ["UNDERSTANDING", "DEMONSTRATING", "EXPERIMENTING", "REVIEWING"];
+  const attachmentCount = photoCount + videoCount + thread.filter((entry) => entry.attachment && !entry.attachment.type.startsWith("image/") && !entry.attachment.type.startsWith("video/")).length;
+  const claimCount = thread.filter((entry) => entry.witnessReview?.claim).length;
+  const confidenceLabel = lastEntry?.response?.confidence
+    ? `${Math.round(lastEntry.response.confidence * 100)}%`
+    : "Not measured";
+  const experimentCount = thread.filter((entry) => entry.experimentSpec || entry.response?.experimentCandidate).length;
+  const witnessDataCount = thread.filter((entry) => entry.witnessPlan || entry.witnessReview).length;
   const threadContext = {
-    currentThread: compactTitle(currentTitle, "Current Thread"),
+    currentThread: compactTitle(currentTitle, "This Work"),
     currentFocus,
     activeExperiment,
-    evidence: evidenceSummary.length ? evidenceSummary.join(" / ") : "No evidence yet",
+    evidence: evidenceSummary.length ? evidenceSummary.join(" / ") : "No uploads yet",
     signals: signals.length ? signals.join(" / ") : "Waiting for signal",
-    breakthroughs: `${confirmedBreakthroughs} Confirmed / ${hasCandidateBreakthrough ? 1 : 0} Candidate`,
+    breakthroughs: `${confirmedBreakthroughs} Saved / ${hasCandidateBreakthrough ? 1 : 0} New`,
     nextAction,
-    progressState,
-    progressStates,
+    progressState: progressLabel(progressState),
+    progressStates: progressStates.map(progressLabel),
+    timeline: thread.length ? `${thread.length} Note${thread.length === 1 ? "" : "s"}` : "No notes yet",
+    uploads: attachmentCount ? `${attachmentCount} Upload${attachmentCount === 1 ? "" : "s"}` : "No uploads yet",
+    claims: claimCount ? `${claimCount} Note${claimCount === 1 ? "" : "s"}` : "No notes yet",
+    confidence: confidenceLabel,
+    experimentHistory: experimentCount ? `${experimentCount} Thing${experimentCount === 1 ? "" : "s"} Tried` : "Nothing tried yet",
+    witnessData: witnessDataCount ? `${witnessDataCount} Check${witnessDataCount === 1 ? "" : "s"}` : "No checks yet",
   };
   const bottomPlaceholder = phase === "RESULTS" && lastReveal >= 4 && lastEntry?.experimentSpec
     ? "What happened?"
@@ -1106,46 +1102,45 @@ export default function AxisPage() {
           <section className="context-rail" aria-label="Current development context">
             <div className="rail-primary">
               <div className="rail-cell rail-cell--thread">
-                <span>Current Thread</span>
-                <strong>{compactTitle(currentTitle, "Current Thread")}</strong>
+                <span>Working On</span>
+                <strong>{threadContext.currentThread}</strong>
               </div>
               <div className="rail-cell rail-cell--focus">
-                <span>Current Focus</span>
-                <strong>{currentFocus}</strong>
+                <span>Focus</span>
+                <strong>{threadContext.currentFocus}</strong>
               </div>
               <div className="rail-cell">
-                <span>Active Experiment</span>
-                <strong>{activeExperiment}</strong>
+                <span>Next</span>
+                <strong>{threadContext.nextAction}</strong>
               </div>
-              <div className="rail-cell">
-                <span>Next Action</span>
-                <strong>{nextAction}</strong>
+              <div className="rail-cell rail-cell--now">
+                <span>Right Now</span>
+                <strong>{threadContext.progressState}</strong>
               </div>
+              <button
+                className="rail-details-toggle"
+                type="button"
+                onClick={() => setIsContextDetailsOpen((value) => !value)}
+                aria-expanded={isContextDetailsOpen}
+              >
+                {isContextDetailsOpen ? "Hide Details" : "View Details"}
+              </button>
             </div>
 
-            <div className="rail-secondary">
-              <div className="rail-note">
-                <span>Evidence</span>
-                <p>{evidenceSummary.length ? evidenceSummary.join(" / ") : "No evidence yet"}</p>
+            {isContextDetailsOpen && (
+              <div className="rail-details">
+                <div><span>Uploads</span><p>{threadContext.evidence}</p></div>
+                <div><span>Patterns</span><p>{threadContext.signals}</p></div>
+                <div><span>Uploads</span><p>{threadContext.uploads}</p></div>
+                <div><span>Big Wins</span><p>{threadContext.breakthroughs}</p></div>
+                <div><span>History</span><p>{threadContext.timeline}</p></div>
+                <div><span>Notes</span><p>{threadContext.claims}</p></div>
+                <div><span>How Sure</span><p>{threadContext.confidence}</p></div>
+                <div><span>Things Tried</span><p>{threadContext.experimentHistory}</p></div>
+                <div><span>Checks</span><p>{threadContext.witnessData}</p></div>
+                <div><span>Trying</span><p>{threadContext.activeExperiment}</p></div>
               </div>
-              <div className="rail-note">
-                <span>Signals</span>
-                <p>{signals.length ? signals.join(" / ") : "Waiting for signal"}</p>
-              </div>
-              <div className="rail-note">
-                <span>Breakthroughs</span>
-                <p>{confirmedBreakthroughs} Confirmed / {hasCandidateBreakthrough ? 1 : 0} Candidate</p>
-              </div>
-            </div>
-
-            <div className="progress-state-bar" aria-label="Progress state">
-              {progressStates.map((state) => (
-                <span key={state} className={`progress-state${progressState === state ? " active" : ""}`}>
-                  <span className="state-dot" aria-hidden />
-                  {state}
-                </span>
-              ))}
-            </div>
+            )}
           </section>
           )}
 
@@ -1180,15 +1175,8 @@ export default function AxisPage() {
                         <p className="clarification">{entry.response.clarificationQuestion}</p>
                       )}
                       <article className="insight-card card-reveal">
-                        <CardContext
-                          why="Axis is naming the bottleneck before choosing work."
-                          trigger={entry.intent}
-                          next={entry.mentalModelCard ? "Read the principle" : nextActionFor(entry, reveal, phase, reviewLoadingId)}
-                        />
+                        <span className="teaching-label">Insight</span>
                         <p className="ins-body">{entry.response.insight}</p>
-                        {entry.response.reasoning && (
-                          <p className="ins-reasoning">{entry.response.reasoning}</p>
-                        )}
                       </article>
                     </>
                   )}
@@ -1203,12 +1191,7 @@ export default function AxisPage() {
                   {/* ── Level 2: Mental Model ──────────────────────────────── */}
                   {reveal >= 2 && entry.mentalModelCard && (
                     <section className="next-card card-reveal" aria-label="The principle">
-                      <span className="next-card-label">The principle</span>
-                      <CardContext
-                        why="This is the rule Axis wants you to carry into the next rep."
-                        trigger={entry.response?.insight ?? entry.intent}
-                        next={entry.demonstrationSpec ? "Look at the demonstration" : nextActionFor(entry, reveal, phase, reviewLoadingId)}
-                      />
+                      <span className="next-card-label">Principle</span>
                       <p className="mm-framework">{entry.mentalModelCard.mentalModel}</p>
                     </section>
                   )}
@@ -1223,12 +1206,7 @@ export default function AxisPage() {
                   {/* ── Level 3: Demonstration ─────────────────────────────── */}
                   {reveal >= 3 && entry.demonstrationSpec && (
                     <section className="next-card card-reveal" aria-label="What it looks like">
-                      <span className="next-card-label">What it looks like</span>
-                      <CardContext
-                        why="This shows the gap between the current habit and the target shape."
-                        trigger={entry.mentalModelCard?.mentalModel ?? entry.intent}
-                        next={entry.experimentSpec ? "Start the experiment" : nextActionFor(entry, reveal, phase, reviewLoadingId)}
-                      />
+                      <span className="next-card-label">Demonstration</span>
                       <div className="demo-body">
                         <p className="demo-state demo-state--now">{entry.demonstrationSpec.currentState}</p>
                         <span className="demo-arrow" aria-hidden>→</span>
@@ -1253,12 +1231,7 @@ export default function AxisPage() {
                   {/* ── Level 4: Experiment ────────────────────────────────── */}
                   {reveal >= 4 && entry.experimentSpec && (
                     <section className="next-card card-reveal" aria-label="Try this">
-                      <span className="next-card-label">Try this</span>
-                      <CardContext
-                        why="This turns the insight into a testable piece of work."
-                        trigger={entry.demonstrationSpec?.keyDifference || entry.response?.insight || entry.intent}
-                        next="Try it and report what happened"
-                      />
+                      <span className="next-card-label">Experiment</span>
                       <p className="exp-instruction">{entry.experimentSpec.hypothesis}</p>
                       {entry.experimentSpec.repetitions && (
                         <p className="exp-reps">{entry.experimentSpec.repetitions}</p>
@@ -1268,47 +1241,15 @@ export default function AxisPage() {
 
                   {/* ── Level 4: Witness (model-requested, after experiment) ─ */}
                   {reveal >= 4 && entry.response?.nextRequiredCard === "Witness" && (
-                    <section className="next-card card-reveal" aria-label="Witness">
-                      <span className="next-card-label">Witness</span>
-                      <CardContext
-                        why="Axis needs evidence before treating this as confirmed."
-                        trigger={entry.experimentSpec?.hypothesis ?? entry.intent}
-                        next={entry.witnessReview ? "Review the result" : "Add an observation"}
-                      />
-                      {entry.witnessPlan?.witnesses.length ? (
-                        <div className="witness-plan">
-                          {entry.witnessPlan.witnesses.map((w, wi) => (
-                            <div key={wi} className="witness-row">
-                              <div className="witness-header">
-                                <span className="witness-name">{w.witness}</span>
-                                <span className={`witness-importance wi-${w.confidenceImportance.toLowerCase()}`}>
-                                  {w.confidenceImportance}
-                                </span>
-                              </div>
-                              <dl className="witness-fields">
-                                <div className="witness-field">
-                                  <dt className="witness-term">Purpose</dt>
-                                  <dd className="witness-def">{w.purpose}</dd>
-                                </div>
-                                <div className="witness-field">
-                                  <dt className="witness-term">Expected Claim</dt>
-                                  <dd className="witness-def">{w.expectedClaim}</dd>
-                                </div>
-                                <div className="witness-field">
-                                  <dt className="witness-term">Required Evidence</dt>
-                                  <dd className="witness-def witness-def--evidence">{w.requiredEvidence}</dd>
-                                </div>
-                              </dl>
-                            </div>
-                          ))}
-                        </div>
-                      ) : entry.response?.witnessPrompt ? (
+                    <section className="next-card card-reveal" aria-label="Review">
+                      <span className="next-card-label">Review</span>
+                      {entry.response?.witnessPrompt ? (
                         <p className="next-card-body">{entry.response.witnessPrompt}</p>
                       ) : null}
                       {entry.witnessPlan?.witnesses.length && !entry.witnessReview ? (
                         <div className="witness-observe">
                           <label className="witness-observe-label" htmlFor={`obs-${entry.id}`}>
-                            What did you observe?
+                            What happened?
                           </label>
                           <textarea
                             id={`obs-${entry.id}`}
@@ -1324,7 +1265,7 @@ export default function AxisPage() {
                             onClick={() => void reviewWitness(entry)}
                             disabled={!witnessInputs[entry.id]?.trim() || reviewLoadingId === entry.id}
                           >
-                            Review Evidence
+                            Check Results
                           </button>
                         </div>
                       ) : null}
@@ -1340,11 +1281,7 @@ export default function AxisPage() {
                   {/* ── User-action results: ungated, appear as data arrives ─ */}
                   {entry.witnessReview && (
                     <section className={`review-card card-reveal review-${entry.witnessReview.verdict.toLowerCase()}`}>
-                      <CardContext
-                        why="This checks whether the evidence supports the working belief."
-                        trigger={entry.response?.witnessPrompt ?? entry.experimentSpec?.hypothesis ?? entry.intent}
-                        next={entry.adjustment ? "Use the adjustment" : "Keep the evidence with this thread"}
-                      />
+                      <span className="next-card-label">Review</span>
                       <div className="review-header">
                         <span className={`review-verdict rv-${entry.witnessReview.verdict.toLowerCase()}`}>
                           {entry.witnessReview.verdict}
@@ -1354,131 +1291,6 @@ export default function AxisPage() {
                         </span>
                       </div>
                       <p className="review-claim">{entry.witnessReview.claim}</p>
-                      {entry.witnessReview.supportingEvidence.length > 0 && (
-                        <div className="review-ev-group">
-                          <span className="review-ev-label">Supporting</span>
-                          <ul className="review-ev-list">
-                            {entry.witnessReview.supportingEvidence.map((ev, ei) => (
-                              <li key={ei} className="review-ev-item review-ev-item--support">{ev}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {entry.witnessReview.contradictingEvidence.length > 0 && (
-                        <div className="review-ev-group">
-                          <span className="review-ev-label">Contradicting</span>
-                          <ul className="review-ev-list">
-                            {entry.witnessReview.contradictingEvidence.map((ev, ei) => (
-                              <li key={ei} className="review-ev-item review-ev-item--contra">{ev}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      <div className="review-next">
-                        <span className="review-next-label">Recommended Next Card</span>
-                        <span className="review-next-card">{entry.witnessReview.recommendedNextCard}</span>
-                      </div>
-                    </section>
-                  )}
-
-                  {entry.adjustment && (
-                    <section className={`adj-card card-reveal${entry.adjustment.nextCard === null ? " adj-card--complete" : ""}`}>
-                      <CardContext
-                        why="This updates the work after evidence came back."
-                        trigger={entry.witnessReview?.claim ?? entry.intent}
-                        next={entry.adjustment.nextCard ? `Open ${entry.adjustment.nextCard}` : "Keep this as the current note"}
-                      />
-                      <div className="adj-header">
-                        <span className="adj-decision">{entry.adjustment.decision}</span>
-                        {entry.adjustment.nextCard && (
-                          <span className="adj-next-pill">{entry.adjustment.nextCard}</span>
-                        )}
-                      </div>
-                      <p className="adj-reason">{entry.adjustment.reason}</p>
-                      <p className="adj-benefit">{entry.adjustment.expectedBenefit}</p>
-                    </section>
-                  )}
-
-                  {entry.orchestration && (
-                    <section className={`orch-card card-reveal${entry.orchestration.nextCard === null ? " orch-card--done" : ""}`}>
-                      <CardContext
-                        why="This keeps the thread moving in the right order."
-                        trigger={entry.adjustment?.decision ?? entry.intent}
-                        next={entry.orchestration.nextCard ? `Open ${entry.orchestration.nextCard}` : "Return with new evidence"}
-                      />
-                      <div className="orch-header">
-                        <span className="orch-label">Thread</span>
-                        {entry.orchestration.nextCard ? (
-                          <span className="orch-next">{entry.orchestration.nextCard}</span>
-                        ) : (
-                          <span className="orch-done">Complete</span>
-                        )}
-                      </div>
-                      <p className="orch-reason">{entry.orchestration.reason}</p>
-                      {entry.orchestration.requiredInputs.length > 0 && (
-                        <div className="orch-inputs">
-                          <span className="orch-inputs-label">Required</span>
-                          <ul className="orch-inputs-list">
-                            {entry.orchestration.requiredInputs.map((inp, ii) => (
-                              <li key={ii}>{inp}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      <p className="orch-outcome">{entry.orchestration.expectedOutcome}</p>
-                    </section>
-                  )}
-
-                  {/* ── Deep Model + Discovery: past entries only ──────────── */}
-                  {i < thread.length - 1 && entry.deepModel && (
-                    <section className="deep-model-card card-reveal" aria-label="Deep Model">
-                      <span className="section-label">Deep Model</span>
-                      <CardContext
-                        why="This preserves the deeper pattern Axis noticed in the old work."
-                        trigger={entry.response?.insight ?? entry.intent}
-                        next="Use it to compare the next rep"
-                      />
-                      <p className="dm-model">{entry.deepModel.deepModel}</p>
-                      <div className="dm-field">
-                        <span className="dm-label">Leverage Point</span>
-                        <p className="dm-value">{entry.deepModel.leveragePoint}</p>
-                      </div>
-                      {entry.deepModel.caution && (
-                        <div className="dm-field">
-                          <span className="dm-label">Caution</span>
-                          <p className="dm-value dm-caution">{entry.deepModel.caution}</p>
-                        </div>
-                      )}
-                    </section>
-                  )}
-
-                  {i < thread.length - 1 && entry.evidence.length > 0 && (
-                    <section className="research-group card-reveal" aria-label="Discovery">
-                      <span className="section-label">Discovery</span>
-                      <CardContext
-                        why="This is the outside reference material attached to the thread."
-                        trigger={entry.intent}
-                        next="Keep the useful evidence"
-                      />
-                      {entry.evidence.map((card, ci) => (
-                        <article key={ci} className="research-card">
-                          <span className="discovery-index">Discovery {ci + 1}</span>
-                          <p className="research-body">{card.summary}</p>
-                          <p className="research-why">{card.relevance}</p>
-                          {card.url ? (
-                            <a
-                              className="badge badge-source badge-link"
-                              href={card.url}
-                              rel="noreferrer noopener"
-                              target="_blank"
-                            >
-                              {card.source}
-                            </a>
-                          ) : (
-                            <span className="badge badge-source">{card.source}</span>
-                          )}
-                        </article>
-                      ))}
                     </section>
                   )}
 
@@ -1696,42 +1508,55 @@ export default function AxisPage() {
           background: rgba(250, 250, 249, 0.97);
           border-bottom: 1px solid rgba(26, 26, 24, 0.08);
           flex-shrink: 0;
-          padding: 12px clamp(16px, 4vw, 40px) 11px;
+          padding: 7px clamp(14px, 4vw, 40px);
           position: relative;
           z-index: 4;
         }
 
         .rail-primary {
-          display: grid;
-          gap: 12px;
-          grid-template-columns: minmax(130px, 0.85fr) minmax(180px, 1.35fr) minmax(150px, 1fr) minmax(150px, 1fr);
+          align-items: center;
+          display: flex;
+          gap: 10px;
           margin: 0 auto;
           max-width: 1120px;
         }
 
         .rail-cell {
           border-left: 1px solid rgba(26, 26, 24, 0.08);
+          flex: 1;
           min-width: 0;
-          padding-left: 11px;
+          padding-left: 9px;
+        }
+
+        .rail-cell--thread {
+          flex: 0.9;
+        }
+
+        .rail-cell--focus {
+          flex: 1.55;
+        }
+
+        .rail-cell--now {
+          flex: 0.72;
         }
 
         .rail-cell span,
-        .rail-note span {
+        .rail-details span {
           color: rgba(26, 26, 24, 0.28);
           display: block;
-          font-size: 9px;
+          font-size: 8px;
           font-weight: 800;
           letter-spacing: 0.12em;
-          margin-bottom: 5px;
+          margin-bottom: 2px;
           text-transform: uppercase;
         }
 
         .rail-cell strong {
           color: rgba(26, 26, 24, 0.76);
           display: block;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 650;
-          line-height: 1.25;
+          line-height: 1.15;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1739,87 +1564,74 @@ export default function AxisPage() {
 
         .rail-cell--focus strong {
           color: #1a1a18;
-          white-space: normal;
         }
 
-        .rail-secondary {
+        .rail-details-toggle {
+          background: transparent;
+          border: 0;
+          color: rgba(62, 120, 38, 0.68);
+          cursor: pointer;
+          flex-shrink: 0;
+          font: inherit;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          padding: 6px 0 6px 4px;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        .rail-details-toggle:hover {
+          color: rgba(62, 120, 38, 0.95);
+        }
+
+        .rail-details {
+          border-top: 1px solid rgba(26, 26, 24, 0.07);
           display: grid;
-          gap: 12px;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          margin: 12px auto 0;
+          gap: 8px 14px;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          margin: 8px auto 1px;
           max-width: 1120px;
+          padding-top: 8px;
         }
 
-        .rail-note {
-          min-width: 0;
-        }
-
-        .rail-note p {
+        .rail-details p {
           color: rgba(26, 26, 24, 0.54);
-          font-size: 12px;
-          line-height: 1.3;
+          font-size: 11px;
+          line-height: 1.2;
           margin: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
 
-        .progress-state-bar {
-          align-items: center;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px 16px;
-          margin: 13px auto 0;
-          max-width: 1120px;
-        }
-
-        .progress-state {
-          align-items: center;
-          color: rgba(26, 26, 24, 0.28);
-          display: inline-flex;
-          font-size: 10px;
-          font-weight: 800;
-          gap: 6px;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-        }
-
-        .state-dot {
-          border: 1px solid rgba(26, 26, 24, 0.2);
-          border-radius: 50%;
-          display: inline-block;
-          height: 7px;
-          width: 7px;
-        }
-
-        .progress-state.active {
-          color: rgba(26, 26, 24, 0.76);
-        }
-
-        .progress-state.active .state-dot {
-          background: rgba(62, 140, 38, 0.9);
-          border-color: rgba(62, 140, 38, 0.9);
-        }
-
         @media (max-width: 760px) {
           .context-rail {
-            padding: 10px 16px;
+            padding: 7px 14px;
           }
 
           .rail-primary {
-            gap: 9px;
-            grid-template-columns: 1fr;
+            align-items: stretch;
+            display: grid;
+            gap: 7px;
+            grid-template-columns: 1fr 1fr;
           }
 
-          .rail-secondary {
-            gap: 8px;
-            grid-template-columns: 1fr;
-            margin-top: 10px;
+          .rail-cell {
+            padding-left: 8px;
           }
 
-          .rail-cell strong,
-          .rail-note p {
+          .rail-cell strong {
             white-space: normal;
+          }
+
+          .rail-details-toggle {
+            justify-self: start;
+            padding: 2px 0;
+          }
+
+          .rail-details {
+            grid-template-columns: 1fr 1fr;
           }
         }
 
