@@ -935,6 +935,17 @@ export default function AxisPage() {
   const progressState = getProgressState(lastEntry, lastReveal, phase, reviewLoadingId);
   const nextAction = nextActionFor(lastEntry, lastReveal, phase, reviewLoadingId);
   const progressStates: ProgressState[] = ["UNDERSTANDING", "DEMONSTRATING", "EXPERIMENTING", "REVIEWING"];
+  const threadContext = {
+    currentThread: compactTitle(currentTitle, "Current Thread"),
+    currentFocus,
+    activeExperiment,
+    evidence: evidenceSummary.length ? evidenceSummary.join(" / ") : "No evidence yet",
+    signals: signals.length ? signals.join(" / ") : "Waiting for signal",
+    breakthroughs: `${confirmedBreakthroughs} Confirmed / ${hasCandidateBreakthrough ? 1 : 0} Candidate`,
+    nextAction,
+    progressState,
+    progressStates,
+  };
   const bottomPlaceholder = phase === "RESULTS" && lastReveal >= 4 && lastEntry?.experimentSpec
     ? "What happened?"
     : "What are you working on?";
@@ -977,6 +988,7 @@ export default function AxisPage() {
         authLabel={authState.isGuest ? "Guest session" : authState.label}
         authType={authState.authType}
         isGuest={authState.isGuest}
+        threadContext={threadContext}
         onSelectThread={(id) => void loadThread(id)}
         onNewThread={startNewThread}
         onSignIn={handleSignIn}
@@ -1090,6 +1102,7 @@ export default function AxisPage() {
             </div>
           </header>
 
+          {!isSidebarOpen && (
           <section className="context-rail" aria-label="Current development context">
             <div className="rail-primary">
               <div className="rail-cell rail-cell--thread">
@@ -1134,6 +1147,7 @@ export default function AxisPage() {
               ))}
             </div>
           </section>
+          )}
 
           <div className="thread" ref={threadRef}>
 

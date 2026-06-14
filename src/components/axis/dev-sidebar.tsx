@@ -8,6 +8,20 @@ import type { Breakthrough, DevEvidence, DevThread } from "../../lib/axis-dev-pe
 
 type Tab = "threads" | "breakthroughs" | "evidence";
 
+type ProgressState = "UNDERSTANDING" | "DEMONSTRATING" | "EXPERIMENTING" | "REVIEWING";
+
+interface ThreadContext {
+  currentThread: string;
+  currentFocus: string;
+  activeExperiment: string;
+  evidence: string;
+  signals: string;
+  breakthroughs: string;
+  nextAction: string;
+  progressState: ProgressState;
+  progressStates: ProgressState[];
+}
+
 interface DevSidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,6 +32,7 @@ interface DevSidebarProps {
   authLabel: string;
   authType: string;
   isGuest: boolean;
+  threadContext: ThreadContext;
   onSelectThread: (id: string) => void;
   onNewThread: () => void;
   onSignIn: () => void;
@@ -60,6 +75,7 @@ export function DevSidebar({
   authLabel,
   authType,
   isGuest,
+  threadContext,
   onSelectThread,
   onNewThread,
   onSignIn,
@@ -74,13 +90,55 @@ export function DevSidebar({
       {/* Backdrop */}
       <div className="backdrop" onClick={onClose} aria-hidden />
 
-      <aside className="sidebar" role="dialog" aria-label="Development history">
+      <aside className="sidebar" role="dialog" aria-label="Thread context">
 
         {/* Header */}
         <div className="sidebar-hd">
           <span className="sidebar-wordmark">Axis</span>
           <button className="sidebar-close" onClick={onClose} aria-label="Close">×</button>
         </div>
+
+        <section className="thread-context" aria-label="Current thread context">
+          <div className="context-field context-field--primary">
+            <span>Current Thread</span>
+            <strong>{threadContext.currentThread}</strong>
+          </div>
+          <div className="context-field">
+            <span>Current Focus</span>
+            <p>{threadContext.currentFocus}</p>
+          </div>
+          <div className="context-field">
+            <span>Active Experiment</span>
+            <p>{threadContext.activeExperiment}</p>
+          </div>
+          <div className="context-field">
+            <span>Evidence</span>
+            <p>{threadContext.evidence}</p>
+          </div>
+          <div className="context-field">
+            <span>Signals</span>
+            <p>{threadContext.signals}</p>
+          </div>
+          <div className="context-field">
+            <span>Breakthroughs</span>
+            <p>{threadContext.breakthroughs}</p>
+          </div>
+          <div className="context-field context-field--next">
+            <span>Next Action</span>
+            <p>{threadContext.nextAction}</p>
+          </div>
+          <div className="context-field">
+            <span>Status</span>
+            <div className="sidebar-status" aria-label="Progress state">
+              {threadContext.progressStates.map((state) => (
+                <span key={state} className={`sidebar-state${threadContext.progressState === state ? " active" : ""}`}>
+                  <span className="sidebar-state-dot" aria-hidden />
+                  {state}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {/* New thread */}
         <button className="new-thread-btn" onClick={() => { onNewThread(); onClose(); }}>
@@ -234,6 +292,89 @@ export function DevSidebar({
 
         .sidebar-close:hover {
           color: rgba(250, 250, 249, 0.72);
+        }
+
+        .thread-context {
+          border-bottom: 1px solid rgba(250, 250, 249, 0.07);
+          display: flex;
+          flex-direction: column;
+          flex-shrink: 0;
+          gap: 12px;
+          max-height: 52vh;
+          overflow-y: auto;
+          padding: 16px 18px 17px;
+        }
+
+        .context-field {
+          border-left: 1px solid rgba(250, 250, 249, 0.08);
+          padding-left: 10px;
+        }
+
+        .context-field span {
+          color: rgba(250, 250, 249, 0.28);
+          display: block;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          margin-bottom: 5px;
+          text-transform: uppercase;
+        }
+
+        .context-field strong,
+        .context-field p {
+          color: rgba(250, 250, 249, 0.76);
+          font-size: 13px;
+          font-weight: 560;
+          line-height: 1.35;
+          margin: 0;
+        }
+
+        .context-field--primary strong {
+          color: #fafaf9;
+          font-size: 16px;
+          font-weight: 720;
+        }
+
+        .context-field--next {
+          border-left-color: rgba(140, 190, 40, 0.35);
+        }
+
+        .context-field--next p {
+          color: rgba(190, 232, 90, 0.82);
+        }
+
+        .sidebar-status {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+
+        .sidebar-state {
+          align-items: center;
+          color: rgba(250, 250, 249, 0.28);
+          display: inline-flex;
+          font-size: 10px;
+          font-weight: 800;
+          gap: 7px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .sidebar-state-dot {
+          border: 1px solid rgba(250, 250, 249, 0.22);
+          border-radius: 50%;
+          display: inline-block;
+          height: 7px;
+          width: 7px;
+        }
+
+        .sidebar-state.active {
+          color: rgba(250, 250, 249, 0.8);
+        }
+
+        .sidebar-state.active .sidebar-state-dot {
+          background: rgba(140, 190, 40, 0.95);
+          border-color: rgba(140, 190, 40, 0.95);
         }
 
         .new-thread-btn {
