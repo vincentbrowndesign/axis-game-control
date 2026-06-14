@@ -991,7 +991,7 @@ export default function AxisPage() {
           flex-direction: column;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
           min-height: 100dvh;
-          overflow: hidden;
+          overflow-x: hidden;
         }
 
         /* ── Header ──────────────────────────────────────────────────────── */
@@ -1252,9 +1252,12 @@ export default function AxisPage() {
           margin: 0 auto;
           max-width: 680px;
           min-height: 0;
+          overflow-wrap: break-word;
+          overflow-x: hidden;
           overflow-y: auto;
-          padding: 36px clamp(20px, 5vw, 48px) 24px;
+          padding: 36px clamp(20px, 5vw, 48px) 88px;
           width: 100%;
+          word-break: break-word;
         }
 
         /* ── Entry ───────────────────────────────────────────────────────── */
