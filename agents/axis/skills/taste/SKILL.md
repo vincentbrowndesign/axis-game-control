@@ -1,6 +1,6 @@
 ---
 name: axis-taste
-description: Axis-specific UI taste rules. Prevents generic AI interfaces. Enforces the Axis visual identity on /axis/mission, the shell, and any one-box surface.
+description: Axis-specific UI taste rules. Prevents generic AI interfaces. Enforces the Axis visual identity on /axis, the shell, and any one-box surface.
 origin: Axis (adapted from Taste-Skill)
 tools: Read, Edit, Write
 ---
@@ -10,7 +10,7 @@ tools: Read, Edit, Write
 ## When to Activate
 
 Any time you touch:
-- `src/app/axis/mission/page.tsx`
+- `src/app/axis/page.tsx`
 - Any Axis UI surface
 - CSS or Tailwind classes in an Axis component
 - Typography, spacing, color, or layout decisions
@@ -45,13 +45,14 @@ Never use medium-weight body copy as a primary element. It reads as a productivi
 ## Color Rules
 
 ```
-Background  — layered blacks. #0a0a0a base. #111111 cards. #1a1a1a elevated.
-Primary text — near-white. #f7f7f2. Never pure #ffffff.
-Accent      — muted lime. #a3e635 or similar. One per surface. Signal only.
-Metadata    — rgba(247, 247, 242, 0.40) to rgba(247, 247, 242, 0.60)
+Background  — white. #fafaf9 base. #ffffff cards. Never dark as default.
+Primary text — near-black. #1a1a18. Never pure #000000.
+Accent      — muted green. #3d7a28. One per surface. Signal only.
+Metadata    — rgba(26, 26, 24, 0.28) to rgba(26, 26, 24, 0.52)
+Border      — rgba(26, 26, 24, 0.08) to rgba(26, 26, 24, 0.12)
 ```
 
-**Never:** bright gradients, glows, purple/blue neon, cyberpunk palettes, frosted glass as primary surface.
+**Never:** dark backgrounds as primary, SaaS blue, bright gradients, cyberpunk palettes, frosted glass as primary surface.
 
 ## Spacing Rules
 

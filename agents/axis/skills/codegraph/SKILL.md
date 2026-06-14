@@ -64,7 +64,7 @@ codegraph query "experiment_id" --json --limit 20
 | `observe` | `src/lib/learning-engine.ts` | function |
 | `evaluate` | `src/lib/learning-engine.ts` | function |
 | `analyzeIntent` | `src/lib/axis-expansion.ts` | function |
-| `runExpansion` | `src/app/axis/mission/page.tsx` | function |
+| `run` | `src/app/axis/page.tsx` | function |
 
 ## When to Prefer CodeGraph Over Grep
 

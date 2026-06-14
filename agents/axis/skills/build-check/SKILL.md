@@ -36,7 +36,7 @@ Next.js build output symbols:
 ●  ISR page       — expected for some dynamic pages
 ```
 
-`/axis/mission` should build as `○` (static). If it becomes `λ` unexpectedly, investigate before pushing.
+`/axis` should build as `○` (static). If it becomes `λ` unexpectedly, investigate before pushing.
 
 ## Common Failures
 

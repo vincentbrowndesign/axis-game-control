@@ -1050,9 +1050,9 @@ input {
 }
 
 body {
-  background: var(--axis-bg);
-  color: var(--axis-ink);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #fafaf9;
+  color: #1a1a18;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 
 .axis-home-page {

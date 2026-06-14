@@ -51,6 +51,44 @@ interface ExperimentSpec {
   expectedLearning: string;
 }
 
+type WitnessType = "Camera" | "Computer Vision" | "Coach" | "User" | "Research" | "Audio" | "Sensor";
+type ConfidenceImportance = "Critical" | "High" | "Medium" | "Low";
+
+interface WitnessRequirement {
+  witness: WitnessType;
+  purpose: string;
+  expectedClaim: string;
+  confidenceImportance: ConfidenceImportance;
+  requiredEvidence: string;
+}
+
+interface WitnessPlan {
+  witnesses: WitnessRequirement[];
+}
+
+interface WitnessReviewResult {
+  claim: string;
+  confidence: number;
+  supportingEvidence: string[];
+  contradictingEvidence: string[];
+  verdict: "PASS" | "FAIL" | "INCONCLUSIVE";
+  recommendedNextCard: CardType;
+}
+
+interface AdjustmentResult {
+  decision: string;
+  reason: string;
+  expectedBenefit: string;
+  nextCard: CardType | null;
+}
+
+interface OrchestratorDecision {
+  nextCard: CardType | null;
+  reason: string;
+  requiredInputs: string[];
+  expectedOutcome: string;
+}
+
 interface EvidenceCard {
   source: string;
   summary: string;
@@ -65,6 +103,10 @@ interface ThreadEntry {
   mentalModelCard: MentalModelCard | null;
   demonstrationSpec: DemonstrationSpec | null;
   experimentSpec: ExperimentSpec | null;
+  witnessPlan: WitnessPlan | null;
+  witnessReview: WitnessReviewResult | null;
+  adjustment: AdjustmentResult | null;
+  orchestration: OrchestratorDecision | null;
   evidence: EvidenceCard[];
 }
 
@@ -86,6 +128,8 @@ export default function AxisPage() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [isVoiceSupported, setIsVoiceSupported] = useState(false);
+  const [witnessInputs, setWitnessInputs] = useState<Record<string, string>>({});
+  const [reviewLoadingId, setReviewLoadingId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -218,6 +262,7 @@ export default function AxisPage() {
       let mentalModelCard: MentalModelCard | null = null;
       let demonstrationSpec: DemonstrationSpec | null = null;
       let experimentSpec: ExperimentSpec | null = null;
+      let witnessPlan: WitnessPlan | null = null;
 
       if (response?.insight) {
         if (response.nextRequiredCard === "Mental Model") {
@@ -258,6 +303,20 @@ export default function AxisPage() {
             });
             if (expRes.ok) experimentSpec = await expRes.json() as ExperimentSpec;
           } catch { /* non-fatal */ }
+        } else if (response.nextRequiredCard === "Witness") {
+          try {
+            const witnessRes = await fetch("/api/axis/witness", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                insight: response.insight,
+                reasoning: response.reasoning,
+                witnessPrompt: response.witnessPrompt,
+              }),
+              signal: ctrl.signal,
+            });
+            if (witnessRes.ok) witnessPlan = await witnessRes.json() as WitnessPlan;
+          } catch { /* non-fatal */ }
         }
       }
 
@@ -268,6 +327,10 @@ export default function AxisPage() {
         mentalModelCard,
         demonstrationSpec,
         experimentSpec,
+        witnessPlan,
+        witnessReview: null,
+        adjustment: null,
+        orchestration: null,
         evidence,
       };
 
@@ -283,6 +346,83 @@ export default function AxisPage() {
     e.preventDefault();
     const val = inputRef.current?.value ?? "";
     void run(val);
+  }
+
+  async function reviewWitness(entry: ThreadEntry) {
+    const text = (witnessInputs[entry.id] ?? "").trim();
+    if (!text || !entry.response?.insight || reviewLoadingId) return;
+
+    const observations = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    setReviewLoadingId(entry.id);
+    try {
+      const res = await fetch("/api/axis/witness-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          insight: entry.response.insight,
+          reasoning: entry.response.reasoning,
+          observations,
+        }),
+      });
+      if (!res.ok) { setReviewLoadingId(null); return; }
+
+      const review = await res.json() as WitnessReviewResult;
+      setThread((prev) =>
+        prev.map((e) => e.id === entry.id ? { ...e, witnessReview: review } : e),
+      );
+
+      // Auto-chain adjustment engine
+      let adjustment: AdjustmentResult | null = null;
+      try {
+        const adjRes = await fetch("/api/axis/adjustment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            insight: entry.response.insight,
+            reasoning: entry.response.reasoning,
+            review,
+          }),
+        });
+        if (adjRes.ok) {
+          adjustment = await adjRes.json() as AdjustmentResult;
+          setThread((prev) =>
+            prev.map((e) => e.id === entry.id ? { ...e, adjustment } : e),
+          );
+        }
+      } catch { /* non-fatal */ }
+
+      // Auto-chain orchestrator with full thread history
+      if (adjustment) {
+        try {
+          const history = [
+            { card: "Insight", outcome: `nextRequiredCard: ${entry.response.nextRequiredCard}, confidence: ${entry.response.confidence}` },
+            entry.mentalModelCard ? { card: "Mental Model", outcome: `rule: ${entry.mentalModelCard.rule}` } : null,
+            entry.demonstrationSpec ? { card: "Demonstration", outcome: `complexity: ${entry.demonstrationSpec.complexity}` } : null,
+            entry.experimentSpec ? { card: "Experiment", outcome: `hypothesis: ${entry.experimentSpec.hypothesis}` } : null,
+            entry.witnessPlan ? { card: "Witness", outcome: `plan: ${entry.witnessPlan.witnesses.map((w) => w.witness).join(", ")}` } : null,
+            { card: "Witness Review", outcome: `${review.verdict}, confidence: ${review.confidence}` },
+            { card: "Adjustment", outcome: `decision: ${adjustment.decision}` },
+          ].filter((h): h is { card: string; outcome: string } => h !== null);
+
+          const orchRes = await fetch("/api/axis/orchestrator", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              insight: entry.response.insight,
+              reasoning: entry.response.reasoning,
+              history,
+            }),
+          });
+          if (orchRes.ok) {
+            const orchestration = await orchRes.json() as OrchestratorDecision;
+            setThread((prev) =>
+              prev.map((e) => e.id === entry.id ? { ...e, orchestration } : e),
+            );
+          }
+        } catch { /* non-fatal */ }
+      }
+    } catch { /* non-fatal */ }
+    setReviewLoadingId(null);
   }
 
   // -------------------------------------------------------------------------
@@ -440,8 +580,60 @@ export default function AxisPage() {
                       ) : entry.response.nextRequiredCard === "Experiment" && entry.response.experimentCandidate ? (
                         <p className="next-card-body">{entry.response.experimentCandidate}</p>
                       ) : null}
-                      {entry.response.nextRequiredCard === "Witness" && entry.response.witnessPrompt && (
+                      {entry.response.nextRequiredCard === "Witness" && entry.witnessPlan?.witnesses.length ? (
+                        <div className="witness-plan">
+                          {entry.witnessPlan.witnesses.map((w, i) => (
+                            <div key={i} className="witness-row">
+                              <div className="witness-header">
+                                <span className="witness-name">{w.witness}</span>
+                                <span className={`witness-importance wi-${w.confidenceImportance.toLowerCase()}`}>
+                                  {w.confidenceImportance}
+                                </span>
+                              </div>
+                              <dl className="witness-fields">
+                                <div className="witness-field">
+                                  <dt className="witness-term">Purpose</dt>
+                                  <dd className="witness-def">{w.purpose}</dd>
+                                </div>
+                                <div className="witness-field">
+                                  <dt className="witness-term">Expected Claim</dt>
+                                  <dd className="witness-def">{w.expectedClaim}</dd>
+                                </div>
+                                <div className="witness-field">
+                                  <dt className="witness-term">Required Evidence</dt>
+                                  <dd className="witness-def witness-def--evidence">{w.requiredEvidence}</dd>
+                                </div>
+                              </dl>
+                            </div>
+                          ))}
+                        </div>
+                      ) : entry.response.nextRequiredCard === "Witness" && entry.response.witnessPrompt ? (
                         <p className="next-card-body">{entry.response.witnessPrompt}</p>
+                      ) : null}
+
+                      {/* Witness observation input — shown after witness plan, hidden once reviewed */}
+                      {entry.response.nextRequiredCard === "Witness" && entry.witnessPlan?.witnesses.length && !entry.witnessReview && (
+                        <div className="witness-observe">
+                          <label className="witness-observe-label" htmlFor={`obs-${entry.id}`}>
+                            What did you observe?
+                          </label>
+                          <textarea
+                            id={`obs-${entry.id}`}
+                            className="witness-observe-input"
+                            placeholder={"One observation per line.\nBe specific — what you saw, not what you felt."}
+                            rows={4}
+                            value={witnessInputs[entry.id] ?? ""}
+                            onChange={(e) => setWitnessInputs((prev) => ({ ...prev, [entry.id]: e.target.value }))}
+                          />
+                          <button
+                            className="witness-review-btn"
+                            type="button"
+                            onClick={() => void reviewWitness(entry)}
+                            disabled={!witnessInputs[entry.id]?.trim() || reviewLoadingId === entry.id}
+                          >
+                            {reviewLoadingId === entry.id ? "Reviewing…" : "Review Evidence"}
+                          </button>
+                        </div>
                       )}
                       {entry.response.nextRequiredCard === "Demonstration" && entry.demonstrationSpec && (
                         <div className="demo-spec">
@@ -495,6 +687,85 @@ export default function AxisPage() {
                         </p>
                       )}
                     </section>
+
+                    {/* Witness Review */}
+                    {entry.witnessReview && (
+                      <section className={`review-card review-${entry.witnessReview.verdict.toLowerCase()}`}>
+                        <div className="review-header">
+                          <span className={`review-verdict rv-${entry.witnessReview.verdict.toLowerCase()}`}>
+                            {entry.witnessReview.verdict}
+                          </span>
+                          <span className="review-conf">
+                            {Math.round(entry.witnessReview.confidence * 100)}%
+                          </span>
+                        </div>
+                        <p className="review-claim">{entry.witnessReview.claim}</p>
+                        {entry.witnessReview.supportingEvidence.length > 0 && (
+                          <div className="review-ev-group">
+                            <span className="review-ev-label">Supporting</span>
+                            <ul className="review-ev-list">
+                              {entry.witnessReview.supportingEvidence.map((ev, i) => (
+                                <li key={i} className="review-ev-item review-ev-item--support">{ev}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {entry.witnessReview.contradictingEvidence.length > 0 && (
+                          <div className="review-ev-group">
+                            <span className="review-ev-label">Contradicting</span>
+                            <ul className="review-ev-list">
+                              {entry.witnessReview.contradictingEvidence.map((ev, i) => (
+                                <li key={i} className="review-ev-item review-ev-item--contra">{ev}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div className="review-next">
+                          <span className="review-next-label">Recommended Next Card</span>
+                          <span className="review-next-card">{entry.witnessReview.recommendedNextCard}</span>
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Adjustment */}
+                    {entry.adjustment && (
+                      <section className={`adj-card${entry.adjustment.nextCard === null ? " adj-card--complete" : ""}`}>
+                        <div className="adj-header">
+                          <span className="adj-decision">{entry.adjustment.decision}</span>
+                          {entry.adjustment.nextCard && (
+                            <span className="adj-next-pill">{entry.adjustment.nextCard}</span>
+                          )}
+                        </div>
+                        <p className="adj-reason">{entry.adjustment.reason}</p>
+                        <p className="adj-benefit">{entry.adjustment.expectedBenefit}</p>
+                      </section>
+                    )}
+
+                    {/* Orchestration */}
+                    {entry.orchestration && (
+                      <section className={`orch-card${entry.orchestration.nextCard === null ? " orch-card--done" : ""}`}>
+                        <div className="orch-header">
+                          <span className="orch-label">Thread</span>
+                          {entry.orchestration.nextCard ? (
+                            <span className="orch-next">{entry.orchestration.nextCard}</span>
+                          ) : (
+                            <span className="orch-done">Complete</span>
+                          )}
+                        </div>
+                        <p className="orch-reason">{entry.orchestration.reason}</p>
+                        {entry.orchestration.requiredInputs.length > 0 && (
+                          <div className="orch-inputs">
+                            <span className="orch-inputs-label">Required</span>
+                            <ul className="orch-inputs-list">
+                              {entry.orchestration.requiredInputs.map((inp, i) => (
+                                <li key={i}>{inp}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <p className="orch-outcome">{entry.orchestration.expectedOutcome}</p>
+                      </section>
+                    )}
                   </>
                 )}
 
@@ -1101,6 +1372,96 @@ export default function AxisPage() {
           font-style: italic;
         }
 
+        /* ── Witness plan ────────────────────────────────────────────────── */
+
+        .witness-plan {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .witness-row {
+          border: 1px solid rgba(26, 26, 24, 0.07);
+          border-radius: 8px;
+          padding: 12px 14px;
+        }
+
+        .witness-header {
+          align-items: center;
+          display: flex;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+
+        .witness-name {
+          color: #1a1a18;
+          font-size: 13px;
+          font-weight: 650;
+          letter-spacing: 0.02em;
+        }
+
+        .witness-importance {
+          border-radius: 4px;
+          font-size: 9px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          padding: 2px 6px;
+          text-transform: uppercase;
+        }
+
+        .wi-critical {
+          background: rgba(62, 140, 38, 0.1);
+          color: #3d7a28;
+        }
+
+        .wi-high {
+          background: rgba(26, 26, 24, 0.06);
+          color: rgba(26, 26, 24, 0.52);
+        }
+
+        .wi-medium {
+          background: rgba(26, 26, 24, 0.04);
+          color: rgba(26, 26, 24, 0.36);
+        }
+
+        .wi-low {
+          background: transparent;
+          color: rgba(26, 26, 24, 0.26);
+        }
+
+        .witness-fields {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin: 0;
+        }
+
+        .witness-field {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .witness-term {
+          color: rgba(26, 26, 24, 0.28);
+          font-size: 9px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .witness-def {
+          color: rgba(26, 26, 24, 0.62);
+          font-size: 13px;
+          line-height: 1.5;
+          margin: 0;
+        }
+
+        .witness-def--evidence {
+          color: rgba(26, 26, 24, 0.44);
+          font-style: italic;
+        }
+
         /* ── Research cards ──────────────────────────────────────────────── */
 
         .research-group {
@@ -1206,6 +1567,376 @@ export default function AxisPage() {
         }
 
         .bottom-send:hover { opacity: 0.78; }
+
+        /* ── Witness observation input ───────────────────────────────────── */
+
+        .witness-observe {
+          border-top: 1px solid rgba(62, 140, 38, 0.1);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-top: 14px;
+          padding-top: 14px;
+        }
+
+        .witness-observe-label {
+          color: rgba(26, 26, 24, 0.42);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .witness-observe-input {
+          background: rgba(26, 26, 24, 0.02);
+          border: 1px solid rgba(26, 26, 24, 0.1);
+          border-radius: 8px;
+          color: #1a1a18;
+          font: inherit;
+          font-size: 13px;
+          line-height: 1.55;
+          outline: none;
+          padding: 10px 12px;
+          resize: vertical;
+          transition: border-color 0.12s;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .witness-observe-input::placeholder {
+          color: rgba(26, 26, 24, 0.28);
+        }
+
+        .witness-observe-input:focus {
+          border-color: rgba(26, 26, 24, 0.22);
+        }
+
+        .witness-review-btn {
+          align-self: flex-start;
+          background: rgba(26, 26, 24, 0.06);
+          border: 1px solid rgba(26, 26, 24, 0.1);
+          border-radius: 7px;
+          color: rgba(26, 26, 24, 0.62);
+          cursor: pointer;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          padding: 6px 14px;
+          transition: background 0.12s, color 0.12s;
+        }
+
+        .witness-review-btn:hover:not(:disabled) {
+          background: rgba(26, 26, 24, 0.1);
+          color: #1a1a18;
+        }
+
+        .witness-review-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.4;
+        }
+
+        /* ── Review card ─────────────────────────────────────────────────── */
+
+        .review-card {
+          border-radius: 10px;
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          padding: 16px 18px;
+        }
+
+        .review-pass {
+          background: rgba(62, 140, 38, 0.04);
+          border-color: rgba(62, 140, 38, 0.16);
+        }
+
+        .review-fail {
+          background: rgba(26, 26, 24, 0.03);
+          border-color: rgba(26, 26, 24, 0.1);
+        }
+
+        .review-inconclusive {
+          background: rgba(26, 26, 24, 0.02);
+          border-color: rgba(26, 26, 24, 0.07);
+        }
+
+        .review-header {
+          align-items: center;
+          display: flex;
+          gap: 10px;
+        }
+
+        .review-verdict {
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          padding: 3px 8px;
+          text-transform: uppercase;
+        }
+
+        .rv-pass {
+          background: rgba(62, 140, 38, 0.1);
+          color: #3d7a28;
+        }
+
+        .rv-fail {
+          background: rgba(26, 26, 24, 0.08);
+          color: rgba(26, 26, 24, 0.58);
+        }
+
+        .rv-inconclusive {
+          background: rgba(26, 26, 24, 0.05);
+          color: rgba(26, 26, 24, 0.38);
+        }
+
+        .review-conf {
+          color: rgba(26, 26, 24, 0.36);
+          font-size: 12px;
+          font-variant-numeric: tabular-nums;
+          font-weight: 600;
+        }
+
+        .review-claim {
+          color: #1a1a18;
+          font-size: 15px;
+          font-weight: 450;
+          line-height: 1.5;
+          margin: 0;
+        }
+
+        .review-ev-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .review-ev-label {
+          color: rgba(26, 26, 24, 0.28);
+          font-size: 9px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .review-ev-list {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .review-ev-item {
+          font-size: 13px;
+          line-height: 1.5;
+          padding-left: 14px;
+          position: relative;
+        }
+
+        .review-ev-item::before {
+          left: 0;
+          position: absolute;
+        }
+
+        .review-ev-item--support {
+          color: rgba(26, 26, 24, 0.68);
+        }
+
+        .review-ev-item--support::before {
+          color: #3d7a28;
+          content: "✓";
+          font-size: 10px;
+          top: 2px;
+        }
+
+        .review-ev-item--contra {
+          color: rgba(26, 26, 24, 0.52);
+        }
+
+        .review-ev-item--contra::before {
+          color: rgba(26, 26, 24, 0.36);
+          content: "×";
+          font-size: 11px;
+          top: 1px;
+        }
+
+        .review-next {
+          align-items: center;
+          border-top: 1px solid rgba(26, 26, 24, 0.06);
+          display: flex;
+          gap: 8px;
+          padding-top: 12px;
+        }
+
+        .review-next-label {
+          color: rgba(26, 26, 24, 0.28);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .review-next-card {
+          color: rgba(26, 26, 24, 0.58);
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        /* ── Adjustment card ─────────────────────────────────────────────── */
+
+        .adj-card {
+          background: rgba(26, 26, 24, 0.025);
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 14px 16px;
+        }
+
+        .adj-card--complete {
+          background: rgba(62, 140, 38, 0.03);
+          border-color: rgba(62, 140, 38, 0.12);
+        }
+
+        .adj-header {
+          align-items: center;
+          display: flex;
+          gap: 10px;
+        }
+
+        .adj-decision {
+          color: #1a1a18;
+          font-size: 13px;
+          font-weight: 650;
+          letter-spacing: 0.01em;
+        }
+
+        .adj-next-pill {
+          background: rgba(26, 26, 24, 0.05);
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 4px;
+          color: rgba(26, 26, 24, 0.42);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.08em;
+          padding: 2px 7px;
+          text-transform: uppercase;
+        }
+
+        .adj-reason {
+          color: rgba(26, 26, 24, 0.62);
+          font-size: 13px;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        .adj-benefit {
+          color: rgba(26, 26, 24, 0.38);
+          font-size: 12px;
+          font-style: italic;
+          line-height: 1.5;
+          margin: 0;
+        }
+
+        /* ── Orchestration card ──────────────────────────────────────────── */
+
+        .orch-card {
+          background: #fff;
+          border: 1.5px solid rgba(26, 26, 24, 0.1);
+          border-radius: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 14px 16px;
+        }
+
+        .orch-card--done {
+          background: rgba(62, 140, 38, 0.03);
+          border-color: rgba(62, 140, 38, 0.18);
+        }
+
+        .orch-header {
+          align-items: center;
+          display: flex;
+          gap: 10px;
+        }
+
+        .orch-label {
+          color: rgba(26, 26, 24, 0.28);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .orch-next {
+          color: #1a1a18;
+          font-size: 13px;
+          font-weight: 650;
+        }
+
+        .orch-done {
+          color: #3d7a28;
+          font-size: 13px;
+          font-weight: 650;
+        }
+
+        .orch-reason {
+          color: rgba(26, 26, 24, 0.62);
+          font-size: 13px;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        .orch-inputs {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .orch-inputs-label {
+          color: rgba(26, 26, 24, 0.28);
+          font-size: 9px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .orch-inputs-list {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .orch-inputs-list li {
+          color: rgba(26, 26, 24, 0.48);
+          font-size: 12px;
+          padding-left: 10px;
+          position: relative;
+        }
+
+        .orch-inputs-list li::before {
+          color: rgba(26, 26, 24, 0.24);
+          content: "—";
+          left: 0;
+          position: absolute;
+        }
+
+        .orch-outcome {
+          color: rgba(26, 26, 24, 0.36);
+          font-size: 12px;
+          font-style: italic;
+          line-height: 1.5;
+          margin: 0;
+        }
 
       `}</style>
     </main>
