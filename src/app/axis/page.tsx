@@ -96,6 +96,12 @@ interface EvidenceCard {
   url?: string;
 }
 
+interface Attachment {
+  name: string;
+  url: string;
+  type: string;
+}
+
 interface DeepModelResult {
   deepModel: string;
   leveragePoint: string;
@@ -115,6 +121,7 @@ interface ThreadEntry {
   orchestration: OrchestratorDecision | null;
   evidence: EvidenceCard[];
   deepModel: DeepModelResult | null;
+  attachment: Attachment | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +140,7 @@ export default function AxisPage() {
   const [thread, setThread] = useState<ThreadEntry[]>([]);
   const [activeIntent, setActiveIntent] = useState("");
   const [voiceActive, setVoiceActive] = useState(false);
-  const [cameraOn, setCameraOn] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<Attachment | null>(null);
   const [isVoiceSupported, setIsVoiceSupported] = useState(false);
   const [witnessInputs, setWitnessInputs] = useState<Record<string, string>>({});
   const [reviewLoadingId, setReviewLoadingId] = useState<string | null>(null);
@@ -142,7 +149,9 @@ export default function AxisPage() {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const objectUrlsRef = useRef<string[]>([]);
 
   const isEmpty = thread.length === 0 && phase === "IDLE";
 
@@ -154,7 +163,7 @@ export default function AxisPage() {
     return () => {
       recognitionRef.current?.abort();
       abortRef.current?.abort();
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      objectUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     };
   }, []);
 
@@ -173,18 +182,27 @@ export default function AxisPage() {
   }, [isEmpty]);
 
   // -------------------------------------------------------------------------
-  // Camera
+  // Camera + Upload — native file inputs, no navigation
   // -------------------------------------------------------------------------
 
-  function startCamera() {
-    if (cameraOn) return;
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "user" } })
-      .then((stream) => {
-        streamRef.current = stream;
-        setCameraOn(true);
-      })
-      .catch(() => null);
+  function handleFileSelected(file: File) {
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.url);
+    const url = URL.createObjectURL(file);
+    objectUrlsRef.current.push(url);
+    setPendingAttachment({ name: file.name, url, type: file.type });
+  }
+
+  function openCamera() {
+    cameraInputRef.current?.click();
+  }
+
+  function openUpload() {
+    uploadInputRef.current?.click();
+  }
+
+  function removePendingAttachment() {
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.url);
+    setPendingAttachment(null);
   }
 
   // -------------------------------------------------------------------------
@@ -232,6 +250,9 @@ export default function AxisPage() {
     const val = intentText.trim();
     if (!val || phase === "LOADING") return;
     if (inputRef.current) inputRef.current.value = "";
+
+    const attachment = pendingAttachment;
+    setPendingAttachment(null);
 
     setActiveIntent(val);
     setPhase("LOADING");
@@ -362,6 +383,7 @@ export default function AxisPage() {
         orchestration: null,
         evidence,
         deepModel,
+        attachment,
       };
 
       setThread((prev) => [...prev, entry]);
@@ -477,10 +499,20 @@ export default function AxisPage() {
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
             />
+            {pendingAttachment && (
+              <div className="attachment-pending">
+                {pendingAttachment.type.startsWith("image/") ? (
+                  <img className="attachment-thumb" src={pendingAttachment.url} alt={pendingAttachment.name} />
+                ) : (
+                  <span className="attachment-name">{pendingAttachment.name}</span>
+                )}
+                <button type="button" className="attachment-remove" onClick={removePendingAttachment} aria-label="Remove">×</button>
+              </div>
+            )}
             <div className="main-controls">
               <button
-                className={`ctrl-btn${cameraOn ? " on" : ""}`}
-                onClick={startCamera}
+                className={`ctrl-btn${pendingAttachment ? " on" : ""}`}
+                onClick={openCamera}
                 type="button"
                 aria-label="Camera"
               >
@@ -489,7 +521,7 @@ export default function AxisPage() {
               </button>
               <button
                 className="ctrl-btn"
-                onClick={() => { window.location.href = "/axis-ball"; }}
+                onClick={openUpload}
                 type="button"
                 aria-label="Upload"
               >
@@ -529,6 +561,17 @@ export default function AxisPage() {
 
                 {/* Intent echo */}
                 <p className="intent-echo">{entry.intent}</p>
+
+                {/* Attachment */}
+                {entry.attachment && (
+                  <div className="entry-attachment">
+                    {entry.attachment.type.startsWith("image/") ? (
+                      <img className="entry-thumb" src={entry.attachment.url} alt={entry.attachment.name} />
+                    ) : (
+                      <span className="entry-file">{entry.attachment.name}</span>
+                    )}
+                  </div>
+                )}
 
                 {entry.response && (
                   <>
@@ -860,11 +903,21 @@ export default function AxisPage() {
 
           {/* Pinned bottom input */}
           <div className="bottom-bar">
+            {pendingAttachment && (
+              <div className="attachment-pending attachment-pending--bottom">
+                {pendingAttachment.type.startsWith("image/") ? (
+                  <img className="attachment-thumb" src={pendingAttachment.url} alt={pendingAttachment.name} />
+                ) : (
+                  <span className="attachment-name">{pendingAttachment.name}</span>
+                )}
+                <button type="button" className="attachment-remove" onClick={removePendingAttachment} aria-label="Remove">×</button>
+              </div>
+            )}
             <form className="bottom-form" onSubmit={handleSubmit}>
               <div className="bottom-ctls">
                 <button
-                  className={`ctrl-btn sm${cameraOn ? " on" : ""}`}
-                  onClick={startCamera}
+                  className={`ctrl-btn sm${pendingAttachment ? " on" : ""}`}
+                  onClick={openCamera}
                   type="button"
                   aria-label="Camera"
                 >
@@ -872,7 +925,7 @@ export default function AxisPage() {
                 </button>
                 <button
                   className="ctrl-btn sm"
-                  onClick={() => { window.location.href = "/axis-ball"; }}
+                  onClick={openUpload}
                   type="button"
                   aria-label="Upload"
                 >
@@ -904,6 +957,31 @@ export default function AxisPage() {
 
         </div>
       )}
+
+      {/* Hidden native file inputs — no navigation, stays on page */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*,video/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileSelected(file);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept="image/*,video/*,application/pdf,.doc,.docx,.txt"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileSelected(file);
+          e.target.value = "";
+        }}
+      />
 
       <style jsx>{`
 
@@ -1034,6 +1112,70 @@ export default function AxisPage() {
         .ctrl-btn.sm {
           min-height: 30px;
           padding: 0 8px;
+        }
+
+        /* ── Attachment ──────────────────────────────────────────────────── */
+
+        .attachment-pending {
+          align-items: center;
+          background: rgba(26, 26, 24, 0.03);
+          border: 1px solid rgba(26, 26, 24, 0.08);
+          border-radius: 8px;
+          display: flex;
+          gap: 8px;
+          margin-bottom: 8px;
+          padding: 6px 8px;
+        }
+
+        .attachment-pending--bottom {
+          margin: 0 16px 8px;
+        }
+
+        .attachment-thumb {
+          border-radius: 4px;
+          height: 36px;
+          object-fit: cover;
+          width: 36px;
+        }
+
+        .attachment-name {
+          color: rgba(26, 26, 24, 0.6);
+          flex: 1;
+          font-size: 12px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .attachment-remove {
+          background: none;
+          border: none;
+          color: rgba(26, 26, 24, 0.36);
+          cursor: pointer;
+          font-size: 16px;
+          line-height: 1;
+          padding: 0 2px;
+        }
+
+        .attachment-remove:hover {
+          color: rgba(26, 26, 24, 0.6);
+        }
+
+        .entry-attachment {
+          margin: 4px 0 8px;
+        }
+
+        .entry-thumb {
+          border-radius: 8px;
+          display: block;
+          max-height: 200px;
+          max-width: 100%;
+          object-fit: cover;
+        }
+
+        .entry-file {
+          color: rgba(26, 26, 24, 0.44);
+          font-size: 12px;
         }
 
         .send-btn {
