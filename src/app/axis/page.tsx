@@ -1147,8 +1147,10 @@ export default function AxisPage() {
           <div className="thread" ref={threadRef}>
 
             {thread.map((entry, i) => {
-              // Past entries are always fully revealed; only the current entry is paced
-              const reveal = i < thread.length - 1 ? 4 : (revealMap[entry.id] ?? 0);
+              const isCurrentEntry = i === thread.length - 1;
+              const reveal = isCurrentEntry ? (revealMap[entry.id] ?? 0) : 4;
+              const hasQuestion = Boolean(entry.response?.clarificationQuestion);
+              const needsReview = entry.response?.nextRequiredCard === "Witness";
               return (
                 <div key={entry.id} className="entry">
 
@@ -1169,27 +1171,31 @@ export default function AxisPage() {
                   )}
 
                   {/* ── Level 1: Insight ───────────────────────────────────── */}
-                  {reveal >= 1 && entry.response && (
+                  {reveal === 1 && entry.response && (
                     <>
-                      {entry.response.clarificationQuestion && (
-                        <p className="clarification">{entry.response.clarificationQuestion}</p>
+                      {hasQuestion ? (
+                        <article className="insight-card card-reveal">
+                          <span className="teaching-label">Question</span>
+                          <p className="ins-body">{entry.response.clarificationQuestion}</p>
+                        </article>
+                      ) : (
+                        <article className="insight-card card-reveal">
+                          <span className="teaching-label">Insight</span>
+                          <p className="ins-body">{entry.response.insight}</p>
+                        </article>
                       )}
-                      <article className="insight-card card-reveal">
-                        <span className="teaching-label">Insight</span>
-                        <p className="ins-body">{entry.response.insight}</p>
-                      </article>
                     </>
                   )}
 
                   {/* Advance: Insight → Mental Model */}
-                  {reveal === 1 && entry.mentalModelCard && (
+                  {reveal === 1 && !hasQuestion && entry.mentalModelCard && (
                     <button className="advance-btn" onClick={() => advance(entry.id)}>
                       Got it <span className="advance-arrow">→</span>
                     </button>
                   )}
 
                   {/* ── Level 2: Mental Model ──────────────────────────────── */}
-                  {reveal >= 2 && entry.mentalModelCard && (
+                  {reveal === 2 && entry.mentalModelCard && (
                     <section className="next-card card-reveal" aria-label="The principle">
                       <span className="next-card-label">Principle</span>
                       <p className="mm-framework">{entry.mentalModelCard.mentalModel}</p>
@@ -1204,7 +1210,7 @@ export default function AxisPage() {
                   )}
 
                   {/* ── Level 3: Demonstration ─────────────────────────────── */}
-                  {reveal >= 3 && entry.demonstrationSpec && (
+                  {reveal === 3 && entry.demonstrationSpec && (
                     <section className="next-card card-reveal" aria-label="What it looks like">
                       <span className="next-card-label">Demonstration</span>
                       <div className="demo-body">
@@ -1229,7 +1235,7 @@ export default function AxisPage() {
                   )}
 
                   {/* ── Level 4: Experiment ────────────────────────────────── */}
-                  {reveal >= 4 && entry.experimentSpec && (
+                  {reveal === 4 && entry.experimentSpec && (
                     <section className="next-card card-reveal" aria-label="Try this">
                       <span className="next-card-label">Experiment</span>
                       <p className="exp-instruction">{entry.experimentSpec.hypothesis}</p>
@@ -1239,8 +1245,14 @@ export default function AxisPage() {
                     </section>
                   )}
 
+                  {reveal === 4 && entry.experimentSpec && needsReview && (
+                    <button className="advance-btn" onClick={() => advance(entry.id)}>
+                      I tried it <span className="advance-arrow">→</span>
+                    </button>
+                  )}
+
                   {/* ── Level 4: Witness (model-requested, after experiment) ─ */}
-                  {reveal >= 4 && entry.response?.nextRequiredCard === "Witness" && (
+                  {reveal === 5 && needsReview && (
                     <section className="next-card card-reveal" aria-label="Review">
                       <span className="next-card-label">Review</span>
                       {entry.response?.witnessPrompt ? (
@@ -1279,7 +1291,7 @@ export default function AxisPage() {
                   )}
 
                   {/* ── User-action results: ungated, appear as data arrives ─ */}
-                  {entry.witnessReview && (
+                  {entry.witnessReview && (reveal >= 5 || !isCurrentEntry) && (
                     <section className={`review-card card-reveal review-${entry.witnessReview.verdict.toLowerCase()}`}>
                       <span className="next-card-label">Review</span>
                       <div className="review-header">
@@ -1301,13 +1313,18 @@ export default function AxisPage() {
             {/* Session status — shown only after full reveal completes */}
             {phase === "RESULTS" && thread.length > 0 && (() => {
               const last = thread[thread.length - 1];
-              if (!last || (revealMap[last.id] ?? 0) < 4) return null;
+              if (!last) return null;
+              const reveal = revealMap[last.id] ?? 0;
+              const hasQuestion = Boolean(last.response?.clarificationQuestion);
+              const needsReview = last.response?.nextRequiredCard === "Witness";
+              const doneAt = hasQuestion ? 1 : needsReview ? 5 : 4;
+              if (reveal < doneAt) return null;
               const label = last.response?.clarificationQuestion
                 ? "Answer below."
-                : last.experimentSpec
-                ? "Go. Come back with what you noticed."
                 : last.witnessReview
                 ? "Done."
+                : last.experimentSpec
+                ? "Go. Come back with what you noticed."
                 : "Keep going.";
               return (
                 <div className="session-status">
