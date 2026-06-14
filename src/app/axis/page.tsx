@@ -552,12 +552,17 @@ export default function AxisPage() {
 
           <header className="hd">
             <span className="wordmark">Axis</span>
+            {thread.length > 1 && (
+              <span className="thread-count">{thread.length} sessions</span>
+            )}
           </header>
 
           <div className="thread" ref={threadRef}>
 
-            {thread.map((entry) => (
+            {thread.map((entry, i) => (
               <div key={entry.id} className="entry">
+
+                {i > 0 && <hr className="entry-divider" />}
 
                 {/* Intent echo */}
                 <p className="intent-echo">{entry.intent}</p>
@@ -1015,6 +1020,14 @@ export default function AxisPage() {
           text-transform: uppercase;
         }
 
+        .thread-count {
+          color: rgba(26, 26, 24, 0.22);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          margin-left: auto;
+        }
+
         /* ── Empty state ─────────────────────────────────────────────────── */
 
         .empty {
@@ -1225,6 +1238,12 @@ export default function AxisPage() {
           display: flex;
           flex-direction: column;
           gap: 20px;
+        }
+
+        .entry-divider {
+          border: none;
+          border-top: 1px solid rgba(26, 26, 24, 0.06);
+          margin: 0 0 12px;
         }
 
         .intent-echo {
