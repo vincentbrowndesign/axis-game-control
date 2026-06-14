@@ -41,6 +41,16 @@ interface DemonstrationSpec {
   complexity: "Beginner" | "Intermediate" | "Advanced";
 }
 
+interface ExperimentSpec {
+  hypothesis: string;
+  constraint: string;
+  repetitions: string;
+  successCriteria: string;
+  failureCriteria: string;
+  evidenceRequired: string;
+  expectedLearning: string;
+}
+
 interface EvidenceCard {
   source: string;
   summary: string;
@@ -54,6 +64,7 @@ interface ThreadEntry {
   response: InsightResponse | null;
   mentalModelCard: MentalModelCard | null;
   demonstrationSpec: DemonstrationSpec | null;
+  experimentSpec: ExperimentSpec | null;
   evidence: EvidenceCard[];
 }
 
@@ -206,6 +217,7 @@ export default function AxisPage() {
       // Secondary engines — called only when the Insight Engine selects that card type
       let mentalModelCard: MentalModelCard | null = null;
       let demonstrationSpec: DemonstrationSpec | null = null;
+      let experimentSpec: ExperimentSpec | null = null;
 
       if (response?.insight) {
         if (response.nextRequiredCard === "Mental Model") {
@@ -232,6 +244,20 @@ export default function AxisPage() {
             });
             if (demoRes.ok) demonstrationSpec = await demoRes.json() as DemonstrationSpec;
           } catch { /* non-fatal */ }
+        } else if (response.nextRequiredCard === "Experiment") {
+          try {
+            const expRes = await fetch("/api/axis/experiment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                insight: response.insight,
+                reasoning: response.reasoning,
+                experimentCandidate: response.experimentCandidate,
+              }),
+              signal: ctrl.signal,
+            });
+            if (expRes.ok) experimentSpec = await expRes.json() as ExperimentSpec;
+          } catch { /* non-fatal */ }
         }
       }
 
@@ -241,6 +267,7 @@ export default function AxisPage() {
         response,
         mentalModelCard,
         demonstrationSpec,
+        experimentSpec,
         evidence,
       };
 
@@ -375,9 +402,44 @@ export default function AxisPage() {
                         <p className="next-card-body">{entry.response.mentalModel}</p>
                       ) : null}
 
-                      {entry.response.nextRequiredCard === "Experiment" && entry.response.experimentCandidate && (
+                      {entry.response.nextRequiredCard === "Experiment" && entry.experimentSpec ? (
+                        <div className="exp-spec">
+                          <dl className="exp-rows">
+                            <div className="exp-row">
+                              <dt className="exp-term">Hypothesis</dt>
+                              <dd className="exp-def exp-def--hyp">{entry.experimentSpec.hypothesis}</dd>
+                            </div>
+                            <div className="exp-row">
+                              <dt className="exp-term">Constraint</dt>
+                              <dd className="exp-def">{entry.experimentSpec.constraint}</dd>
+                            </div>
+                            <div className="exp-row">
+                              <dt className="exp-term">Repetitions</dt>
+                              <dd className="exp-def">{entry.experimentSpec.repetitions}</dd>
+                            </div>
+                            <div className="exp-criteria">
+                              <div className="exp-row">
+                                <dt className="exp-term">Success Criteria</dt>
+                                <dd className="exp-def exp-def--success">{entry.experimentSpec.successCriteria}</dd>
+                              </div>
+                              <div className="exp-row">
+                                <dt className="exp-term">Failure Criteria</dt>
+                                <dd className="exp-def exp-def--failure">{entry.experimentSpec.failureCriteria}</dd>
+                              </div>
+                            </div>
+                            <div className="exp-row">
+                              <dt className="exp-term">Evidence Required</dt>
+                              <dd className="exp-def">{entry.experimentSpec.evidenceRequired}</dd>
+                            </div>
+                            <div className="exp-row">
+                              <dt className="exp-term">Expected Learning</dt>
+                              <dd className="exp-def exp-def--learn">{entry.experimentSpec.expectedLearning}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      ) : entry.response.nextRequiredCard === "Experiment" && entry.response.experimentCandidate ? (
                         <p className="next-card-body">{entry.response.experimentCandidate}</p>
-                      )}
+                      ) : null}
                       {entry.response.nextRequiredCard === "Witness" && entry.response.witnessPrompt && (
                         <p className="next-card-body">{entry.response.witnessPrompt}</p>
                       )}
@@ -972,6 +1034,71 @@ export default function AxisPage() {
         .demo-viewpoints li::before {
           color: rgba(62, 140, 38, 0.6);
           content: "→ ";
+        }
+
+        /* ── Experiment spec ─────────────────────────────────────────────── */
+
+        .exp-spec {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .exp-rows {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin: 0;
+        }
+
+        .exp-row {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .exp-criteria {
+          background: rgba(26, 26, 24, 0.02);
+          border: 1px solid rgba(26, 26, 24, 0.06);
+          border-radius: 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 12px 14px;
+        }
+
+        .exp-term {
+          color: rgba(26, 26, 24, 0.32);
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .exp-def {
+          color: rgba(26, 26, 24, 0.68);
+          font-size: 13px;
+          line-height: 1.55;
+          margin: 0;
+        }
+
+        .exp-def--hyp {
+          color: #1a1a18;
+          font-size: 14px;
+          font-weight: 500;
+          line-height: 1.45;
+        }
+
+        .exp-def--success {
+          color: #3d7a28;
+        }
+
+        .exp-def--failure {
+          color: rgba(26, 26, 24, 0.52);
+        }
+
+        .exp-def--learn {
+          color: rgba(26, 26, 24, 0.55);
+          font-style: italic;
         }
 
         /* ── Research cards ──────────────────────────────────────────────── */
