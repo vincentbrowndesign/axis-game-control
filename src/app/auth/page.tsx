@@ -36,10 +36,12 @@ export default function AuthPage() {
     if (!supabase) { setError("Auth is not configured."); return; }
     setPhase("OAUTH_LOADING");
     setError(null);
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(getReturnPath())}`;
+    console.log("AXIS_AUTH_TRACE oauth_redirect", { provider, redirectTo });
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(getReturnPath())}`,
+        redirectTo,
       },
     });
     if (oauthError) {

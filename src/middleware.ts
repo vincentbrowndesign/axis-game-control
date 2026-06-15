@@ -9,10 +9,18 @@ function redirectToAuth(request: NextRequest) {
   dest.pathname = "/auth";
   dest.search = "";
   dest.searchParams.set("next", returnPath);
+  console.log("AXIS_AUTH_TRACE middleware_redirect", {
+    path: request.nextUrl.pathname,
+    destination: `${dest.pathname}${dest.search}`,
+  });
   return NextResponse.redirect(dest);
 }
 
 export async function middleware(request: NextRequest) {
+  console.log("AXIS_AUTH_TRACE middleware_start", {
+    path: request.nextUrl.pathname,
+  });
+
   // Pass request headers through so cookies set during this request are visible
   // to the page handler that runs after middleware.
   let response = NextResponse.next({ request: { headers: request.headers } });
@@ -22,6 +30,10 @@ export async function middleware(request: NextRequest) {
 
   // If Supabase is not configured, block access rather than silently allow it.
   if (!url || !key) {
+    console.log("AXIS_AUTH_TRACE middleware_get_user", {
+      ok: false,
+      reason: "missing_supabase_env",
+    });
     return redirectToAuth(request);
   }
 
@@ -43,6 +55,12 @@ export async function middleware(request: NextRequest) {
   });
 
   const { data: { user }, error } = await supabase.auth.getUser();
+
+  console.log("AXIS_AUTH_TRACE middleware_get_user", {
+    ok: Boolean(user) && !error,
+    hasUser: Boolean(user),
+    error: error?.message ?? null,
+  });
 
   if (error || !user) {
     return redirectToAuth(request);
