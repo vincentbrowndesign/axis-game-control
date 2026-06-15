@@ -8,6 +8,7 @@ import {
   createDevThread,
   EMPTY_THREAD_MEMORY,
   listBreakthroughs,
+  listDevEvidence,
   listDevThreads,
   loadDevEntries,
   loadThreadMemory,
@@ -15,7 +16,9 @@ import {
   saveDevEntry,
   saveThreadMemory,
   touchDevThread,
+  updateDevThreadTitle,
   type Breakthrough,
+  type DevEvidence,
   type DevThread,
   type ThreadEvidenceItem,
   type ThreadExperiment,
@@ -438,6 +441,7 @@ export default function AxisPage() {
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [threadList, setThreadList] = useState<DevThread[]>([]);
   const [breakthroughList, setBreakthroughList] = useState<Breakthrough[]>([]);
+  const [evidenceList, setEvidenceList] = useState<DevEvidence[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [threadMemory, setThreadMemory] = useState<ThreadMemory>({ ...EMPTY_THREAD_MEMORY });
   // Supabase entry IDs keyed by local ThreadEntry.id (so we can reference them for breakthroughs)
@@ -520,13 +524,15 @@ export default function AxisPage() {
       }
       setAuthState(authStateFromUser(data.user));
       setUserId(data.user.id);
-      const [threads, bts] = await Promise.all([
+      const [threads, bts, ev] = await Promise.all([
         listDevThreads(),
         listBreakthroughs(),
+        listDevEvidence(100),
       ]);
       if (cancelled) return;
       setThreadList(threads);
       setBreakthroughList(bts);
+      setEvidenceList(ev);
     });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -836,14 +842,24 @@ export default function AxisPage() {
         if (userId) {
           void (async () => {
             let threadId = currentThreadId;
+            const isFirstEntry = next.length === 1;
             if (!threadId) {
-              threadId = await createDevThread(val.slice(0, 120));
+              // Use model-generated focus as title (title-cased) if available.
+              // Falls back to first 60 chars of raw intent.
+              const autoTitle = nextMemory.focus
+                ? nextMemory.focus.replace(/\b\w/g, (c) => c.toUpperCase())
+                : val.slice(0, 60);
+              threadId = await createDevThread(autoTitle);
               if (threadId) setCurrentThreadId(threadId);
+            } else if (isFirstEntry && nextMemory.focus) {
+              // Thread already existed but first entry just ran — update title from focus.
+              void updateDevThreadTitle(
+                threadId,
+                nextMemory.focus.replace(/\b\w/g, (c) => c.toUpperCase()),
+              );
             }
             if (threadId) {
               await persistEntry(entry.id, entry, threadId, next.length - 1);
-              // Layer open-question + experiment tracking on top of the
-              // stateUpdate already applied synchronously above.
               const withEntryMeta = updateMemoryFromEntry(nextMemory, entry);
               setThreadMemory(withEntryMeta);
               await saveThreadMemory(threadId, withEntryMeta);
@@ -895,6 +911,7 @@ export default function AxisPage() {
     setCurrentThreadId(null);
     setThreadList([]);
     setBreakthroughList([]);
+    setEvidenceList([]);
     setRevealMap({});
     setPendingAttachment(null);
     setIsActive(false);
@@ -1039,6 +1056,7 @@ export default function AxisPage() {
         activeThreadId={currentThreadId}
         threads={threadList}
         breakthroughs={breakthroughList}
+        evidence={evidenceList}
         authLabel={authState.isGuest ? "Guest session" : authState.label}
         authType={authState.authType}
         isGuest={authState.isGuest}
@@ -1121,14 +1139,16 @@ export default function AxisPage() {
         <div className="thread-shell">
 
           <header className="hd">
-            <button
-              className="sidebar-toggle"
-              onClick={() => setIsSidebarOpen(true)}
-              aria-label="Open history"
-              type="button"
-            >
-              ☰
-            </button>
+            {threadList.length > 0 && (
+              <button
+                className="sidebar-toggle"
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Open history"
+                type="button"
+              >
+                ☰
+              </button>
+            )}
             <span className="wordmark">Axis</span>
             <div className="hd-right">
               <div className={`auth-chip${authState.isGuest ? " auth-chip--guest" : ""}`}>

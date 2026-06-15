@@ -57,6 +57,13 @@ export interface DevThread {
   created_at: string;
   updated_at: string;
   entry_count?: number;
+  memory?: {
+    focus: string | null;
+    currentBottleneck: string | null;
+    hypotheses: Array<{ id: string; status: string }>;
+    experiments: Array<{ status: string; hypothesis: string }>;
+    breakthroughs: string[];
+  } | null;
 }
 
 export interface DevEntry {
@@ -121,11 +128,21 @@ export async function listDevThreads(): Promise<DevThread[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("axis_dev_threads")
-    .select("id, title, created_at, updated_at")
+    .select("id, title, created_at, updated_at, memory")
     .order("updated_at", { ascending: false })
     .limit(50);
   if (error) { console.error("[axis-dev] listThreads", error.message); return []; }
   return (data ?? []) as DevThread[];
+}
+
+export async function updateDevThreadTitle(threadId: string, title: string): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("axis_dev_threads")
+    .update({ title })
+    .eq("id", threadId);
+  if (error) console.error("[axis-dev] updateThreadTitle", error.message);
 }
 
 export async function touchDevThread(threadId: string): Promise<void> {
