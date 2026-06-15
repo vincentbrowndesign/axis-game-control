@@ -348,7 +348,6 @@ export default function AxisPage() {
   const abortRef = useRef<AbortController | null>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = useRef<string[]>([]);
-  const draftRef = useRef("");
   const loadingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reviewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevThreadLenRef = useRef(0);
@@ -370,20 +369,6 @@ export default function AxisPage() {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [thread, phase, revealMap]);
-
-  // On session activation: transfer draft value then focus
-  useEffect(() => {
-    if (!isActive) return;
-    const draft = draftRef.current;
-    draftRef.current = "";
-    requestAnimationFrame(() => {
-      if (!inputRef.current) return;
-      inputRef.current.value = draft;
-      inputRef.current.focus();
-      const len = draft.length;
-      inputRef.current.setSelectionRange(len, len);
-    });
-  }, [isActive]);
 
   // Cycle loading labels while a query is in flight
   useEffect(() => {
@@ -473,12 +458,6 @@ export default function AxisPage() {
     setPendingAttachment({ name: file.name, url, type: file.type });
   }
 
-  function activateSession() {
-    if (isActive) return;
-    draftRef.current = inputRef.current?.value ?? "";
-    setIsActive(true);
-  }
-
   // ── Persistence helpers ─────────────────────────────────────────────────
 
   async function persistEntry(localId: string, entry: ThreadEntry, threadId: string, position: number) {
@@ -558,7 +537,6 @@ export default function AxisPage() {
   }
 
   function openAttach() {
-    activateSession();
     attachInputRef.current?.click();
   }
 
@@ -578,7 +556,6 @@ export default function AxisPage() {
       setVoicePhase("OFF");
       return;
     }
-    activateSession();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechAPI) return;
@@ -611,13 +588,16 @@ export default function AxisPage() {
   // -------------------------------------------------------------------------
 
   async function run(intentText: string) {
-    const val = intentText.trim();
-    if (!val || phase === "LOADING") return;
+    const text = intentText.trim();
+    const attachment = pendingAttachment;
+    const hasText = text.length > 0;
+    const hasAttachment = attachment != null;
+    if ((!hasText && !hasAttachment) || phase === "LOADING") return;
+    const val = hasText ? text : "Uploaded evidence";
     if (inputRef.current) inputRef.current.value = "";
 
     if (!isActive) setIsActive(true);
 
-    const attachment = pendingAttachment;
     setPendingAttachment(null);
 
     setActiveIntent(val);
@@ -1007,9 +987,6 @@ export default function AxisPage() {
               spellCheck={false}
               autoComplete="off"
               enterKeyHint="send"
-              onInput={(e: React.FormEvent<HTMLInputElement>) => {
-                if (e.currentTarget.value.trim()) activateSession();
-              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
