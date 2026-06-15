@@ -130,11 +130,72 @@ export default function AxisPage() {
 
   const isActive = conversations.length > 0 || phase === "loading";
 
+  // Mount/unmount trace — unexpected unmount during a session = remount bug
+  useEffect(() => {
+    console.log("[MOBILE_TRACE] AxisPage mounted");
+    return () => { console.log("[MOBILE_TRACE] AxisPage unmounted"); };
+  }, []);
+
+  // Deep trace: intercept history, popstate, storage, resize
+  // Catches: Supabase URL mutations, cross-tab auth changes, browser back/fwd, keyboard resize
+  useEffect(() => {
+    // Intercept history mutations (Supabase detectSessionInUrl can call replaceState)
+    const origPush = history.pushState.bind(history);
+    const origReplace = history.replaceState.bind(history);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    history.pushState = function (...args: [any, any, any]) {
+      console.log("[MOBILE_TRACE] history.pushState →", args[2]);
+      return origPush(...args);
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    history.replaceState = function (...args: [any, any, any]) {
+      console.log("[MOBILE_TRACE] history.replaceState →", args[2]);
+      return origReplace(...args);
+    };
+
+    const onPop = () =>
+      console.log("[MOBILE_TRACE] popstate, href:", window.location.href);
+    const onStorage = (e: StorageEvent) =>
+      console.log("[MOBILE_TRACE] storage event, key:", e.key, "new:", String(e.newValue).slice(0, 60));
+    const onResize = () =>
+      console.log("[MOBILE_TRACE] window resize, innerHeight:", window.innerHeight, "innerWidth:", window.innerWidth);
+    const onVisibility = () =>
+      console.log("[MOBILE_TRACE] visibilitychange →", document.visibilityState);
+
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("resize", onResize);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      history.pushState = origPush;
+      history.replaceState = origReplace;
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  // State transition trace — fires whenever isActive, authPhase, or phase change
+  useEffect(() => {
+    console.log(
+      "[MOBILE_TRACE] state transition → authPhase:", authPhase,
+      "| phase:", phase,
+      "| isActive:", isActive,
+      "| conversations:", conversations.length,
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authPhase, phase, isActive, conversations.length]);
+
   // Auth + thread restore on mount
   useEffect(() => {
     async function init() {
+      console.log("[MOBILE_TRACE] init start, href:", window.location.href);
+
       const sb = getSupabaseBrowserClient();
       if (!sb) {
+        console.log("[MOBILE_TRACE] no supabase client → guest (no thread restore)");
         setAuthPhase("guest");
         return;
       }
@@ -142,44 +203,57 @@ export default function AxisPage() {
       const {
         data: { user },
       } = await sb.auth.getUser();
+      console.log("[MOBILE_TRACE] auth resolved, user:", user ? user.id.slice(0, 8) : "null");
 
-      if (user) {
-        setAuthLabel(user.email ?? user.id.slice(0, 8));
-        setAuthType("Google");
-        setAuthPhase("signed_in");
-      } else {
-        setAuthPhase("guest");
-      }
+      // Collect auth state but DO NOT set authPhase yet.
+      // authPhase controls the loading screen — we keep it as "loading" until
+      // thread restore also completes, so the home screen never flashes while
+      // a thread fetch is in-flight (race condition that caused the iOS snap).
+      const nextPhase: AuthPhase = user ? "signed_in" : "guest";
+      const nextLabel = user ? (user.email ?? user.id.slice(0, 8)) : "Guest";
+      const nextType = user ? "Google" : "Guest";
 
-      // Restore last thread
+      // Thread restore — must finish before we exit the loading screen
       const savedId = localStorage.getItem("axis_thread_id");
+      console.log("[MOBILE_TRACE] savedId:", savedId ?? "none");
+
       if (savedId) {
         try {
+          console.log("[MOBILE_TRACE] thread restore fetch start");
           const res = await fetch(`/api/axis/thread?id=${savedId}`);
+          console.log("[MOBILE_TRACE] thread restore response:", res.status);
           if (res.ok) {
             const data = (await res.json()) as {
               conversations: Conversation[];
               sidebarThreads: SidebarThread[];
             };
             if (data.conversations?.length > 0) {
+              console.log("[MOBILE_TRACE] thread restore success,", data.conversations.length, "conversations");
               setThreadId(savedId);
               setConversations(data.conversations);
               setRevealIndex(9999);
               setPhase("results");
               setSidebarThreads(data.sidebarThreads ?? []);
             } else {
-              // Thread exists but empty — clear so we don't loop
+              console.log("[MOBILE_TRACE] thread restore: empty thread, clearing key");
               localStorage.removeItem("axis_thread_id");
             }
           } else {
-            // 404 or error — clear stale key
+            console.log("[MOBILE_TRACE] thread restore: non-ok response, clearing key");
             localStorage.removeItem("axis_thread_id");
           }
-        } catch {
-          // restore failed — clear stale key so we don't retry forever
+        } catch (err) {
+          console.log("[MOBILE_TRACE] thread restore error:", (err as Error).message);
           localStorage.removeItem("axis_thread_id");
         }
       }
+
+      // Set auth state last. This exits the loading screen.
+      // All thread state is settled before this point.
+      console.log("[MOBILE_TRACE] setting authPhase →", nextPhase);
+      setAuthLabel(nextLabel);
+      setAuthType(nextType);
+      setAuthPhase(nextPhase);
     }
     void init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,20 +277,65 @@ export default function AxisPage() {
 
   async function run(message: string) {
     const msg = message.trim();
-    const hasFile = pendingFile !== null;
+    const fileToUpload = pendingFile; // capture before clearAttachment
+    const hasFile = fileToUpload !== null;
     if (!msg && !hasFile) return;
     if (phase === "loading") return;
 
-    const fileName = pendingFile?.name ?? null;
+    const originalFileName = fileToUpload?.name ?? null;
     setPhase("loading");
     setInput("");
     clearAttachment();
+
+    // Upload attachment first if present
+    let attachmentUrl: string | null = null;
+    let attachmentMime: string | null = null;
+    let attachmentPath: string | null = null;
+    let displayFileName = originalFileName;
+
+    if (fileToUpload) {
+      try {
+        const fd = new FormData();
+        fd.append("file", fileToUpload);
+        if (threadId) fd.append("threadId", threadId);
+        const upRes = await fetch("/api/axis/evidence/upload", { method: "POST", body: fd });
+        if (upRes.ok) {
+          const up = (await upRes.json()) as {
+            attachmentUrl: string;
+            attachmentPath: string;
+            mimeType: string;
+            fileName: string;
+          };
+          attachmentUrl = up.attachmentUrl;
+          attachmentMime = up.mimeType;
+          attachmentPath = up.attachmentPath;
+          displayFileName = up.fileName;
+        } else {
+          console.error("[axis] upload failed", upRes.status);
+        }
+      } catch (err) {
+        console.error("[axis] upload error", (err as Error).message);
+      }
+
+      // File-only message with failed upload — abort
+      if (!attachmentUrl && !msg) {
+        setPhase("results");
+        return;
+      }
+    }
 
     try {
       const res = await fetch("/api/axis/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, threadId }),
+        body: JSON.stringify({
+          message: msg,
+          threadId,
+          attachmentUrl,
+          attachmentType: attachmentMime,
+          attachmentPath,
+          fileName: displayFileName,
+        }),
       });
 
       if (!res.ok) {
@@ -233,7 +352,7 @@ export default function AxisPage() {
 
       const conv: Conversation = {
         id: crypto.randomUUID(),
-        userMessage: msg || (fileName ? `[${fileName}]` : ""),
+        userMessage: msg || (displayFileName ? `[${displayFileName}]` : ""),
         cards: data.cards,
         timestamp: new Date().toISOString(),
       };
@@ -418,6 +537,8 @@ export default function AxisPage() {
               placeholder="Describe what you're trying to develop…"
               rows={3}
               inputMode="text"
+              onFocus={() => console.log("[MOBILE_TRACE] home-input focus, phase:", phase, "authPhase:", authPhase, "isActive:", isActive)}
+              onBlur={() => console.log("[MOBILE_TRACE] home-input blur")}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -572,6 +693,8 @@ export default function AxisPage() {
                 placeholder="Keep going…"
                 rows={1}
                 inputMode="text"
+                onFocus={() => console.log("[MOBILE_TRACE] bottom-input focus, phase:", phase)}
+                onBlur={() => console.log("[MOBILE_TRACE] bottom-input blur")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -618,6 +741,9 @@ export default function AxisPage() {
           color: rgba(250, 250, 249, 0.88);
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
           -webkit-font-smoothing: antialiased;
+          max-width: 100%;
+          overflow-x: hidden;
+          width: 100%;
         }
       `}</style>
       <style jsx>{`
@@ -627,9 +753,12 @@ export default function AxisPage() {
           display: flex;
           flex-direction: column;
           justify-content: center;
+          max-width: 100vw;
           min-height: 100svh;
-          padding: 48px 24px 64px;
+          overflow-x: hidden;
+          padding: 48px 20px 64px;
           position: relative;
+          width: 100%;
         }
 
         .sidebar-toggle--home {
@@ -649,12 +778,14 @@ export default function AxisPage() {
 
         .home-q {
           color: rgba(250, 250, 249, 0.88);
-          font-size: 28px;
+          font-size: clamp(24px, 7vw, 34px);
           font-weight: 640;
-          line-height: 1.25;
+          line-height: 1.15;
           margin-bottom: 28px;
-          max-width: 480px;
+          max-width: 100%;
+          overflow-wrap: break-word;
           text-align: center;
+          width: 100%;
         }
 
         .home-form {
@@ -662,6 +793,7 @@ export default function AxisPage() {
           flex-direction: column;
           gap: 12px;
           max-width: 520px;
+          min-width: 0;
           width: 100%;
         }
 
@@ -673,7 +805,9 @@ export default function AxisPage() {
           font: inherit;
           font-size: 16px;
           line-height: 1.5;
+          max-width: 100%;
           min-height: 88px;
+          min-width: 0;
           outline: none;
           padding: 16px 18px;
           resize: none;
@@ -694,6 +828,8 @@ export default function AxisPage() {
           display: flex;
           gap: 8px;
           justify-content: flex-end;
+          max-width: 100%;
+          width: 100%;
         }
 
         .send-btn {
@@ -702,10 +838,14 @@ export default function AxisPage() {
           border-radius: 8px;
           color: #0e0e0c;
           cursor: pointer;
+          flex-shrink: 0;
           font: inherit;
           font-size: 13px;
           font-weight: 700;
           letter-spacing: 0.04em;
+          max-width: 96px;
+          min-height: 44px;
+          min-width: 64px;
           padding: 9px 22px;
           transition: opacity 0.1s;
         }
@@ -907,9 +1047,11 @@ export default function AxisPage() {
           border-top: 1px solid rgba(250, 250, 249, 0.06);
           bottom: 0;
           left: 0;
-          padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+          max-width: 100vw;
+          padding: 10px max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
           position: fixed;
           right: 0;
+          width: 100%;
         }
 
         .bottom-form {
@@ -930,6 +1072,7 @@ export default function AxisPage() {
           font-size: 16px;
           line-height: 1.5;
           min-height: 44px;
+          min-width: 0;
           outline: none;
           padding: 10px 14px;
           resize: none;

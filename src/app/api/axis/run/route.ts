@@ -58,6 +58,8 @@ interface RunRequest {
   threadId?: string | null;
   attachmentUrl?: string | null;
   attachmentType?: string | null;
+  attachmentPath?: string | null;
+  fileName?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -518,6 +520,16 @@ async function applyStateUpdate(
 // ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
+  try {
+    return await handleRun(req);
+  } catch (err) {
+    // Unhandled exception — log full stack so it appears in Vercel runtime logs
+    console.error("[axis/run] UNHANDLED EXCEPTION", (err as Error).message, (err as Error).stack);
+    return Response.json({ error: "Internal error", detail: (err as Error).message }, { status: 500 });
+  }
+}
+
+async function handleRun(req: Request): Promise<Response> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "No API key" }, { status: 503 });
 
@@ -529,14 +541,17 @@ export async function POST(req: Request) {
   }
 
   const message = body.message?.trim();
-  if (!message) return Response.json({ error: "Empty message" }, { status: 400 });
+  const hasAttachment = !!body.attachmentUrl;
+  if (!message && !hasAttachment) return Response.json({ error: "Empty message" }, { status: 400 });
 
   const sb = createSupabaseFromRequest(req);
 
   // Auth (nullable — guests allowed)
   const {
     data: { user },
+    error: authError,
   } = await sb.auth.getUser();
+  if (authError) console.error("[axis/run] getUser error:", authError.message);
   const userId = user?.id ?? null;
 
   // Resolve thread
@@ -544,7 +559,8 @@ export async function POST(req: Request) {
   let thread: AxisThread | null = null;
 
   if (threadId) {
-    const { data } = await sb.from("axis_threads").select("*").eq("id", threadId).single();
+    const { data, error } = await sb.from("axis_threads").select("*").eq("id", threadId).single();
+    if (error) console.error("[axis/run] thread lookup error:", error.message, "code:", error.code);
     thread = (data as AxisThread) ?? null;
   }
 
@@ -555,7 +571,18 @@ export async function POST(req: Request) {
       .select("*")
       .single();
     if (error || !data) {
-      return Response.json({ error: "Could not create thread" }, { status: 500 });
+      // Log the actual Supabase error so it appears in Vercel runtime logs
+      console.error(
+        "[axis/run] thread insert FAILED",
+        "message:", error?.message,
+        "code:", error?.code,
+        "details:", error?.details,
+        "hint:", error?.hint,
+      );
+      return Response.json(
+        { error: "Could not create thread", supabase: error?.message ?? "no data" },
+        { status: 500 },
+      );
     }
     thread = data as AxisThread;
     threadId = thread.id;
@@ -600,7 +627,7 @@ export async function POST(req: Request) {
 
   const userContent = [
     memCtx ? `--- THREAD CONTINUITY ---\n${memCtx}\n--- END CONTINUITY ---` : null,
-    `Message: "${message}"`,
+    message ? `Message: "${message}"` : null,
     body.attachmentUrl
       ? `Attachment: ${body.attachmentType ?? "file"} at ${body.attachmentUrl}`
       : null,
@@ -652,6 +679,19 @@ export async function POST(req: Request) {
       parsed.stateUpdate,
       parsed.experimentCandidate,
     );
+    // Evidence row for uploaded file attachment
+    if (body.attachmentUrl) {
+      const src = (body.attachmentType ?? "").startsWith("video/") ? "video" : "photo";
+      await sb.from("axis_thread_evidence").insert({
+        thread_id: threadId,
+        observation: body.fileName ?? "Attachment",
+        source: src,
+        confidence: 1.0,
+        url: body.attachmentUrl,
+        file_path: body.attachmentPath ?? null,
+        file_name: body.fileName ?? null,
+      });
+    }
     await sb.from("axis_thread_events").insert({
       thread_id: threadId,
       role: "assistant",
