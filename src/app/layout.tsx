@@ -14,6 +14,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <script defer data-domain="ontheaxis.com" src="https://plausible.io/js/script.js" />
         <script async src="https://plausible.io/js/pa-NihgHMwxkzRdgi9Hyz2sg.js" />
         <script

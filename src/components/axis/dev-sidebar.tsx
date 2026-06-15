@@ -54,6 +54,14 @@ export function DevSidebar({
   onSignIn,
   onSignOut,
 }: DevSidebarProps) {
+  // Lock body scroll while sidebar is open (prevents iOS scroll-bleed)
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -176,14 +184,19 @@ export function DevSidebar({
         }
 
         .sidebar-close {
+          align-items: center;
           background: none;
           border: none;
           color: rgba(250, 250, 249, 0.38);
           cursor: pointer;
-          font-size: 18px;
+          display: flex;
+          font-size: 20px;
+          height: 44px;
+          justify-content: center;
           line-height: 1;
           padding: 0;
           transition: color 0.12s;
+          width: 44px;
         }
 
         .sidebar-close:hover {

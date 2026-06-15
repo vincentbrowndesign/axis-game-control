@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic } from "lucide-react";
+import { Mic, Paperclip } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DevSidebar } from "../../components/axis/dev-sidebar";
 import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
@@ -121,9 +121,11 @@ export default function AxisPage() {
   const [sidebarThreads, setSidebarThreads] = useState<SidebarThread[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING" | "PROCESSING">("OFF");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<SpeechRecognition | null>(null);
 
   const isActive = conversations.length > 0 || phase === "loading";
@@ -165,10 +167,17 @@ export default function AxisPage() {
               setRevealIndex(9999);
               setPhase("results");
               setSidebarThreads(data.sidebarThreads ?? []);
+            } else {
+              // Thread exists but empty — clear so we don't loop
+              localStorage.removeItem("axis_thread_id");
             }
+          } else {
+            // 404 or error — clear stale key
+            localStorage.removeItem("axis_thread_id");
           }
         } catch {
-          // restore failed — start fresh
+          // restore failed — clear stale key so we don't retry forever
+          localStorage.removeItem("axis_thread_id");
         }
       }
     }
@@ -187,12 +196,21 @@ export default function AxisPage() {
   // Actions
   // ---------------------------------------------------------------------------
 
+  function clearAttachment() {
+    setPendingFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   async function run(message: string) {
     const msg = message.trim();
-    if (!msg || phase === "loading") return;
+    const hasFile = pendingFile !== null;
+    if (!msg && !hasFile) return;
+    if (phase === "loading") return;
 
+    const fileName = pendingFile?.name ?? null;
     setPhase("loading");
     setInput("");
+    clearAttachment();
 
     try {
       const res = await fetch("/api/axis/run", {
@@ -215,7 +233,7 @@ export default function AxisPage() {
 
       const conv: Conversation = {
         id: crypto.randomUUID(),
-        userMessage: msg,
+        userMessage: msg || (fileName ? `[${fileName}]` : ""),
         cards: data.cards,
         timestamp: new Date().toISOString(),
       };
@@ -242,8 +260,8 @@ export default function AxisPage() {
     setPhase("idle");
     setInput("");
     setRevealIndex(0);
+    clearAttachment();
     localStorage.removeItem("axis_thread_id");
-    setTimeout(() => inputRef.current?.focus(), 50);
   }
 
   async function loadThread(id: string) {
@@ -399,7 +417,7 @@ export default function AxisPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Describe what you're trying to develop…"
               rows={3}
-              autoFocus
+              inputMode="text"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -407,7 +425,28 @@ export default function AxisPage() {
                 }
               }}
             />
+            {pendingFile && (
+              <div className="attachment-badge">
+                <span className="attachment-name">{pendingFile.name}</span>
+                <button
+                  type="button"
+                  className="attachment-remove"
+                  onClick={clearAttachment}
+                  aria-label="Remove attachment"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <div className="home-controls">
+              <button
+                type="button"
+                className="ctrl-btn"
+                onClick={() => fileRef.current?.click()}
+                aria-label="Attach file"
+              >
+                <Paperclip size={15} />
+              </button>
               <button
                 type="button"
                 className="ctrl-btn"
@@ -423,7 +462,7 @@ export default function AxisPage() {
               <button
                 type="submit"
                 className="send-btn"
-                disabled={!input.trim()}
+                disabled={!input.trim() && !pendingFile}
               >
                 Go
               </button>
@@ -486,6 +525,19 @@ export default function AxisPage() {
           </div>
 
           <div className="bottom-bar">
+            {pendingFile && (
+              <div className="attachment-badge attachment-badge--thread">
+                <span className="attachment-name">{pendingFile.name}</span>
+                <button
+                  type="button"
+                  className="attachment-remove"
+                  onClick={clearAttachment}
+                  aria-label="Remove attachment"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <form
               className="bottom-form"
               onSubmit={(e) => {
@@ -493,6 +545,14 @@ export default function AxisPage() {
                 void run(input);
               }}
             >
+              <button
+                type="button"
+                className="ctrl-btn ctrl-btn--bottom"
+                onClick={() => fileRef.current?.click()}
+                aria-label="Attach file"
+              >
+                <Paperclip size={15} />
+              </button>
               <button
                 type="button"
                 className="ctrl-btn ctrl-btn--bottom"
@@ -511,6 +571,7 @@ export default function AxisPage() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Keep going…"
                 rows={1}
+                inputMode="text"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -521,7 +582,7 @@ export default function AxisPage() {
               <button
                 type="submit"
                 className="bottom-send"
-                disabled={!input.trim() || phase === "loading"}
+                disabled={(!input.trim() && !pendingFile) || phase === "loading"}
                 aria-label="Send"
               >
                 →
@@ -530,6 +591,18 @@ export default function AxisPage() {
           </div>
         </div>
       )}
+
+      {/* Hidden file input — triggered by Paperclip buttons */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*,video/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0] ?? null;
+          setPendingFile(file);
+        }}
+      />
 
       <style jsx global>{`
         *,
@@ -651,10 +724,11 @@ export default function AxisPage() {
           color: rgba(250, 250, 249, 0.44);
           cursor: pointer;
           display: flex;
-          height: 36px;
+          height: 44px;
           justify-content: center;
+          min-width: 44px;
           transition: background 0.1s, color 0.1s;
-          width: 36px;
+          width: 44px;
         }
 
         .ctrl-btn:hover {
@@ -752,7 +826,8 @@ export default function AxisPage() {
           flex-direction: column;
           gap: 28px;
           overflow-y: auto;
-          padding: 24px 20px 140px;
+          -webkit-overflow-scrolling: touch;
+          padding: 24px 20px calc(140px + env(safe-area-inset-bottom));
           scroll-behavior: smooth;
         }
 
@@ -779,8 +854,9 @@ export default function AxisPage() {
           cursor: pointer;
           font: inherit;
           font-size: 16px;
-          height: 36px;
-          padding: 0 14px;
+          height: 44px;
+          min-width: 44px;
+          padding: 0 16px;
           transition: border-color 0.12s, color 0.12s;
         }
 
@@ -851,7 +927,7 @@ export default function AxisPage() {
           color: rgba(250, 250, 249, 0.88);
           flex: 1;
           font: inherit;
-          font-size: 15px;
+          font-size: 16px;
           line-height: 1.5;
           min-height: 44px;
           outline: none;
@@ -886,6 +962,45 @@ export default function AxisPage() {
         .bottom-send:disabled {
           cursor: default;
           opacity: 0.28;
+        }
+
+        /* ── Attachment badge ────────────────── */
+        .attachment-badge {
+          align-items: center;
+          background: rgba(140, 190, 40, 0.1);
+          border: 1px solid rgba(140, 190, 40, 0.2);
+          border-radius: 8px;
+          display: flex;
+          gap: 8px;
+          justify-content: space-between;
+          margin: 0 0 6px;
+          padding: 8px 12px;
+        }
+
+        .attachment-badge--thread {
+          margin: 0 14px 8px;
+        }
+
+        .attachment-name {
+          color: rgba(250, 250, 249, 0.7);
+          font-size: 12px;
+          letter-spacing: 0.02em;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .attachment-remove {
+          background: none;
+          border: none;
+          color: rgba(250, 250, 249, 0.4);
+          cursor: pointer;
+          flex-shrink: 0;
+          font-size: 16px;
+          height: 24px;
+          line-height: 1;
+          padding: 0;
+          width: 24px;
         }
       `}</style>
     </>
