@@ -158,17 +158,6 @@ type AxisAuthState =
   | { status: "SIGNED_OUT" }
   | { status: "SIGNED_IN"; userId: string; label: string; authType: string; isGuest: boolean };
 
-type ProgressState = "UNDERSTANDING" | "DEMONSTRATING" | "EXPERIMENTING" | "REVIEWING";
-
-function progressLabel(state: ProgressState) {
-  switch (state) {
-    case "UNDERSTANDING": return "Figuring It Out";
-    case "DEMONSTRATING": return "Showing It";
-    case "EXPERIMENTING": return "Trying It";
-    case "REVIEWING": return "Looking At Results";
-  }
-}
-
 function authReturnPath() {
   return "/axis";
 }
@@ -207,48 +196,6 @@ function authStateFromUser(user: User): AxisAuthState {
     authType: userAuthType(user),
     isGuest: isGuestUser(user),
   };
-}
-
-function compactTitle(text: string, fallback = "This Work") {
-  const cleaned = text.trim().replace(/\s+/g, " ");
-  if (!cleaned) return fallback;
-  return cleaned
-    .split(" ")
-    .slice(0, 5)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-function shortSignal(text: string) {
-  return text
-    .replace(/[.?!]+$/g, "")
-    .split(/\s+/)
-    .filter((word) => word.length > 3)
-    .slice(0, 3)
-    .join(" ");
-}
-
-function getProgressState(entry: ThreadEntry | undefined, reveal: number, phase: Phase, reviewLoadingId: string | null): ProgressState {
-  if (reviewLoadingId || entry?.witnessReview || entry?.adjustment || entry?.orchestration) return "REVIEWING";
-  if (entry?.experimentSpec && reveal >= 4) return "EXPERIMENTING";
-  if (entry?.demonstrationSpec && reveal >= 3) return "DEMONSTRATING";
-  if (phase === "LOADING" || entry?.response || reveal >= 1) return "UNDERSTANDING";
-  return "UNDERSTANDING";
-}
-
-function nextActionFor(entry: ThreadEntry | undefined, reveal: number, phase: Phase, reviewLoadingId: string | null) {
-  if (phase === "LOADING") return "Wait for the next note";
-  if (!entry) return "Name the skill";
-  if (reviewLoadingId) return "Hold while results are checked";
-  if (entry.orchestration?.nextCard) return "Open the next step";
-  if (entry.witnessReview) return "Try the change";
-  if (entry.response?.nextRequiredCard === "Witness" && !entry.witnessReview) return "Add what you noticed";
-  if (entry.experimentSpec && reveal >= 4) return "Try it and report back";
-  if (entry.experimentSpec && reveal === 3) return "Try it";
-  if (entry.demonstrationSpec && reveal === 2) return "See what good looks like";
-  if (entry.mentalModelCard && reveal === 1) return "Read the principle";
-  if (entry.response?.clarificationQuestion) return "Answer the question";
-  return "Keep working on this";
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +276,6 @@ export default function AxisPage() {
   const [loadingLabel, setLoadingLabel] = useState<string>(LOADING_LABELS[0]);
   const [reviewLabel, setReviewLabel] = useState<string>(REVIEW_LABELS[0]);
   const [revealMap, setRevealMap] = useState<Record<string, number>>({});
-  const [isContextDetailsOpen, setIsContextDetailsOpen] = useState(false);
 
   // ── Persistence + auth ──────────────────────────────────────────────────
   const [authState, setAuthState] = useState<AxisAuthState>({ status: "LOADING" });
@@ -864,64 +810,6 @@ export default function AxisPage() {
 
   const lastEntry = thread[thread.length - 1];
   const lastReveal = lastEntry ? (revealMap[lastEntry.id] ?? 0) : 0;
-  const currentThread = currentThreadId ? threadList.find((item) => item.id === currentThreadId) : null;
-  const currentTitle = currentThread?.title ?? thread[0]?.intent ?? activeIntent;
-  const currentFocus = lastEntry?.deepModel?.leveragePoint
-    ?? lastEntry?.response?.insight
-    ?? "Finding what matters";
-  const activeExperiment = lastEntry?.experimentSpec?.hypothesis
-    ?? lastEntry?.response?.experimentCandidate
-    ?? "No experiment yet";
-  const photoCount = thread.filter((entry) => entry.attachment?.type.startsWith("image/")).length;
-  const videoCount = thread.filter((entry) => entry.attachment?.type.startsWith("video/")).length;
-  const persistedEvidence = currentThreadId
-    ? evidenceList.filter((item) => item.thread_id === currentThreadId)
-    : [];
-  const observationCount = persistedEvidence.length
-    + thread.filter((entry) => entry.witnessReview).length
-    + thread.filter((entry) => entry.attachment && !entry.attachment.type.startsWith("image/") && !entry.attachment.type.startsWith("video/")).length;
-  const evidenceSummary = [
-    photoCount ? `${photoCount} Photo${photoCount === 1 ? "" : "s"}` : null,
-    videoCount ? `${videoCount} Video${videoCount === 1 ? "" : "s"}` : null,
-    observationCount ? `${observationCount} Observation${observationCount === 1 ? "" : "s"}` : null,
-  ].filter((item): item is string => Boolean(item));
-  const signals = Array.from(new Set([
-    lastEntry?.deepModel?.leveragePoint ? shortSignal(lastEntry.deepModel.leveragePoint) : null,
-    lastEntry?.demonstrationSpec?.keyDifference ? shortSignal(lastEntry.demonstrationSpec.keyDifference) : null,
-    lastEntry?.response?.insight ? shortSignal(lastEntry.response.insight) : null,
-  ].filter((item): item is string => Boolean(item)))).slice(0, 3);
-  const confirmedBreakthroughs = currentThreadId
-    ? breakthroughList.filter((item) => item.thread_id === currentThreadId).length
-    : breakthroughList.length;
-  const hasCandidateBreakthrough = Boolean(lastEntry?.response?.insight)
-    && !breakthroughList.some((item) => item.description === lastEntry?.response?.insight);
-  const progressState = getProgressState(lastEntry, lastReveal, phase, reviewLoadingId);
-  const nextAction = nextActionFor(lastEntry, lastReveal, phase, reviewLoadingId);
-  const progressStates: ProgressState[] = ["UNDERSTANDING", "DEMONSTRATING", "EXPERIMENTING", "REVIEWING"];
-  const attachmentCount = photoCount + videoCount + thread.filter((entry) => entry.attachment && !entry.attachment.type.startsWith("image/") && !entry.attachment.type.startsWith("video/")).length;
-  const claimCount = thread.filter((entry) => entry.witnessReview?.claim).length;
-  const confidenceLabel = lastEntry?.response?.confidence
-    ? `${Math.round(lastEntry.response.confidence * 100)}%`
-    : "Not measured";
-  const experimentCount = thread.filter((entry) => entry.experimentSpec || entry.response?.experimentCandidate).length;
-  const witnessDataCount = thread.filter((entry) => entry.witnessPlan || entry.witnessReview).length;
-  const threadContext = {
-    currentThread: compactTitle(currentTitle, "This Work"),
-    currentFocus,
-    activeExperiment,
-    evidence: evidenceSummary.length ? evidenceSummary.join(" / ") : "No uploads yet",
-    signals: signals.length ? signals.join(" / ") : "Waiting for signal",
-    breakthroughs: `${confirmedBreakthroughs} Saved / ${hasCandidateBreakthrough ? 1 : 0} New`,
-    nextAction,
-    progressState: progressLabel(progressState),
-    progressStates: progressStates.map(progressLabel),
-    timeline: thread.length ? `${thread.length} Note${thread.length === 1 ? "" : "s"}` : "No notes yet",
-    uploads: attachmentCount ? `${attachmentCount} Upload${attachmentCount === 1 ? "" : "s"}` : "No uploads yet",
-    claims: claimCount ? `${claimCount} Note${claimCount === 1 ? "" : "s"}` : "No notes yet",
-    confidence: confidenceLabel,
-    experimentHistory: experimentCount ? `${experimentCount} Thing${experimentCount === 1 ? "" : "s"} Tried` : "Nothing tried yet",
-    witnessData: witnessDataCount ? `${witnessDataCount} Check${witnessDataCount === 1 ? "" : "s"}` : "No checks yet",
-  };
   const bottomPlaceholder = phase === "RESULTS" && lastReveal >= 4 && lastEntry?.experimentSpec
     ? "What happened?"
     : "What are you working on?";
@@ -964,7 +852,6 @@ export default function AxisPage() {
         authLabel={authState.isGuest ? "Guest session" : authState.label}
         authType={authState.authType}
         isGuest={authState.isGuest}
-        threadContext={threadContext}
         onSelectThread={(id) => void loadThread(id)}
         onNewThread={startNewThread}
         onSignIn={handleSignIn}
@@ -1074,52 +961,6 @@ export default function AxisPage() {
               )}
             </div>
           </header>
-
-          {!isSidebarOpen && (
-          <section className="context-rail" aria-label="Current development context">
-            <div className="rail-primary">
-              <div className="rail-cell rail-cell--thread">
-                <span>Working On</span>
-                <strong>{threadContext.currentThread}</strong>
-              </div>
-              <div className="rail-cell rail-cell--focus">
-                <span>Focus</span>
-                <strong>{threadContext.currentFocus}</strong>
-              </div>
-              <div className="rail-cell">
-                <span>Next</span>
-                <strong>{threadContext.nextAction}</strong>
-              </div>
-              <div className="rail-cell rail-cell--now">
-                <span>Right Now</span>
-                <strong>{threadContext.progressState}</strong>
-              </div>
-              <button
-                className="rail-details-toggle"
-                type="button"
-                onClick={() => setIsContextDetailsOpen((value) => !value)}
-                aria-expanded={isContextDetailsOpen}
-              >
-                {isContextDetailsOpen ? "Hide Details" : "View Details"}
-              </button>
-            </div>
-
-            {isContextDetailsOpen && (
-              <div className="rail-details">
-                <div><span>Uploads</span><p>{threadContext.evidence}</p></div>
-                <div><span>Patterns</span><p>{threadContext.signals}</p></div>
-                <div><span>Uploads</span><p>{threadContext.uploads}</p></div>
-                <div><span>Big Wins</span><p>{threadContext.breakthroughs}</p></div>
-                <div><span>History</span><p>{threadContext.timeline}</p></div>
-                <div><span>Notes</span><p>{threadContext.claims}</p></div>
-                <div><span>How Sure</span><p>{threadContext.confidence}</p></div>
-                <div><span>Things Tried</span><p>{threadContext.experimentHistory}</p></div>
-                <div><span>Checks</span><p>{threadContext.witnessData}</p></div>
-                <div><span>Trying</span><p>{threadContext.activeExperiment}</p></div>
-              </div>
-            )}
-          </section>
-          )}
 
           <div className="thread" ref={threadRef}>
 
@@ -1497,137 +1338,6 @@ export default function AxisPage() {
         }
 
         /* ── Home state ──────────────────────────────────────────────────── */
-
-        .context-rail {
-          background: rgba(250, 250, 249, 0.97);
-          border-bottom: 1px solid rgba(26, 26, 24, 0.08);
-          flex-shrink: 0;
-          padding: 7px clamp(14px, 4vw, 40px);
-          position: relative;
-          z-index: 4;
-        }
-
-        .rail-primary {
-          align-items: center;
-          display: flex;
-          gap: 10px;
-          margin: 0 auto;
-          max-width: 1120px;
-        }
-
-        .rail-cell {
-          border-left: 1px solid rgba(26, 26, 24, 0.08);
-          flex: 1;
-          min-width: 0;
-          padding-left: 9px;
-        }
-
-        .rail-cell--thread {
-          flex: 0.9;
-        }
-
-        .rail-cell--focus {
-          flex: 1.55;
-        }
-
-        .rail-cell--now {
-          flex: 0.72;
-        }
-
-        .rail-cell span,
-        .rail-details span {
-          color: rgba(26, 26, 24, 0.28);
-          display: block;
-          font-size: 8px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          margin-bottom: 2px;
-          text-transform: uppercase;
-        }
-
-        .rail-cell strong {
-          color: rgba(26, 26, 24, 0.76);
-          display: block;
-          font-size: 12px;
-          font-weight: 650;
-          line-height: 1.15;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .rail-cell--focus strong {
-          color: #1a1a18;
-        }
-
-        .rail-details-toggle {
-          background: transparent;
-          border: 0;
-          color: rgba(62, 120, 38, 0.68);
-          cursor: pointer;
-          flex-shrink: 0;
-          font: inherit;
-          font-size: 10px;
-          font-weight: 800;
-          letter-spacing: 0.1em;
-          padding: 6px 0 6px 4px;
-          text-transform: uppercase;
-          white-space: nowrap;
-        }
-
-        .rail-details-toggle:hover {
-          color: rgba(62, 120, 38, 0.95);
-        }
-
-        .rail-details {
-          border-top: 1px solid rgba(26, 26, 24, 0.07);
-          display: grid;
-          gap: 8px 14px;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          margin: 8px auto 1px;
-          max-width: 1120px;
-          padding-top: 8px;
-        }
-
-        .rail-details p {
-          color: rgba(26, 26, 24, 0.54);
-          font-size: 11px;
-          line-height: 1.2;
-          margin: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        @media (max-width: 760px) {
-          .context-rail {
-            padding: 7px 14px;
-          }
-
-          .rail-primary {
-            align-items: stretch;
-            display: grid;
-            gap: 7px;
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .rail-cell {
-            padding-left: 8px;
-          }
-
-          .rail-cell strong {
-            white-space: normal;
-          }
-
-          .rail-details-toggle {
-            justify-self: start;
-            padding: 2px 0;
-          }
-
-          .rail-details {
-            grid-template-columns: 1fr 1fr;
-          }
-        }
 
         .home {
           align-items: flex-start;
