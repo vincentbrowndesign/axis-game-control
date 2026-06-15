@@ -16,12 +16,15 @@ interface StateUpdate {
   goal?: string;
   focus?: string;
   currentBottleneck?: string;
+  nextAction?: string;
+  newOpenQuestions?: string[];
+  resolvedQuestions?: string[];
   newHypotheses?: Array<{ id: string; statement: string; confidence: number }>;
   confirmedHypothesisIds?: string[];
   rejectedHypothesisIds?: string[];
   newEvidence?: string[];
+  experimentResult?: { result: string; verdict: "PASS" | "FAIL" | "INCONCLUSIVE" };
   newBreakthroughs?: string[];
-  resolvedQuestions?: string[];
 }
 
 interface ModelResponse {
@@ -38,6 +41,16 @@ interface ModelResponse {
   experimentCandidate?: string;
   clarificationQuestion?: string;
   stateUpdate?: StateUpdate;
+}
+
+interface AxisExperiment {
+  id: string;
+  thread_id: string;
+  hypothesis: string;
+  status: "open" | "completed" | "failed" | "inconclusive";
+  result: string | null;
+  verdict: "PASS" | "FAIL" | "INCONCLUSIVE" | null;
+  created_at: string;
 }
 
 interface RunRequest {
@@ -59,33 +72,49 @@ A breakthrough is a durable change in understanding, perception, execution, deci
 
 STATE UPDATE (required in every response)
 
-Every response must include a stateUpdate block. This is how the thread learns.
+Every response must include a stateUpdate block. This is how the thread accumulates.
 
 stateUpdate fields:
-- goal: the user's development goal (infer from the first message; persist for the entire thread — only update if user explicitly resets). Example: "Develop through live game observation"
-- focus: what specific mechanism this thread is investigating (short phrase, set from first exchange, do not change unless user shifts topics). Example: "PG effort and competitiveness"
-- currentBottleneck: the single constraint most blocking progress right now (update as evidence narrows the problem)
-- newHypotheses: hypotheses this exchange ESTABLISHES for the first time (array of {id, statement, confidence})
+- goal: the user's development goal (infer from first message; persist for entire thread — only update if user explicitly resets)
+- focus: the specific mechanism this thread investigates (short phrase; set from first exchange; do not change unless user shifts topics)
+- currentBottleneck: the single constraint most blocking progress right now
+- nextAction: what the user should do before the next session (one imperative sentence). Example: "Track 10 PG possessions and note each effort vs efficiency choice."
+- newOpenQuestions: questions that remain unanswered after this exchange (new ones only)
+- resolvedQuestions: open questions this message finally answers (verbatim from OPEN QUESTIONS)
+- newHypotheses: hypotheses ESTABLISHED for the first time this exchange (array of {id, statement, confidence})
   - id: kebab-case slug, e.g. "set-point-drift"
   - statement: one declarative sentence
   - confidence: 0.0–1.0
-- confirmedHypothesisIds: slugs of previously open hypotheses the user's message confirms
+- confirmedHypothesisIds: slugs of previously active hypotheses the user's message confirms
 - rejectedHypothesisIds: slugs of hypotheses the user's message rules out
-- newEvidence: verbatim facts the user gave you
-- newBreakthroughs: breakthroughs confirmed this exchange (usually empty)
-- resolvedQuestions: open questions this message answers
+- newEvidence: verbatim facts the user gave you this exchange
+- experimentResult: ONLY when OPEN EXPERIMENT is shown and user is reporting back — { result: "<verbatim user report>", verdict: "PASS" | "FAIL" | "INCONCLUSIVE" }
+- newBreakthroughs: durable changes in understanding confirmed this exchange (usually empty; add one when experiment verdict is PASS)
 
 ---
 
 THREAD MEMORY RULES
 
 When THREAD CONTINUITY is present:
-1. Active hypotheses drive generation. If a hypothesis explains the problem, build on it.
-2. Reference prior conclusions directly. Say "Based on your earlier answer..." when building.
+1. Active hypotheses drive generation. Build on established context — do not re-diagnose.
+2. Reference prior conclusions directly. Say "Based on your earlier answer…" when building.
 3. The current bottleneck drives the experiment. Changing it requires new evidence.
-4. Confirmed breakthroughs are closed. Do not repeat them.
+4. Confirmed breakthroughs are closed. Do not repeat them as insights.
 5. Resolved questions are closed. Do not ask them again.
-6. Each response must advance the thread, not reset it.
+6. OPEN EXPERIMENT takes priority. If user is reporting a result, handle that before generating new coaching.
+7. Each response must advance the thread, not reset it.
+
+---
+
+EXPERIMENT TRACKING
+
+When THREAD CONTINUITY shows an OPEN EXPERIMENT:
+- If the user's message is reporting a result: set experimentResult and update verdict. If PASS, add to newBreakthroughs.
+- If the user is asking something new: keep the experiment open (omit experimentResult).
+
+Example experiment result:
+experimentResult: {"result": "Bracing my core made the stop feel much more controlled.", "verdict": "PASS"}
+newBreakthroughs: ["Core brace before deceleration improves stability — confirmed by user field test."]
 
 ---
 
@@ -110,23 +139,28 @@ OUTPUT RULES:
 - Direct coaching voice. No consultant framing.
 - JSON only. No markdown. No explanation.
 
-Schema when confident (confidence >= 0.80):
-{"confidence":0.88,"insight":"...","reasoning":"...","mentalModel":"...","demonstration":{"currentState":"...","targetState":"...","keyDifference":"...","executionCue":"..."},"experimentCandidate":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","newHypotheses":[{"id":"...","statement":"...","confidence":0.85}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["..."],"newBreakthroughs":[],"resolvedQuestions":[]}}
+Schema (confident):
+{"confidence":0.88,"insight":"...","reasoning":"...","mentalModel":"...","demonstration":{"currentState":"...","targetState":"...","keyDifference":"...","executionCue":"..."},"experimentCandidate":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","nextAction":"...","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"...","statement":"...","confidence":0.85}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["..."],"experimentResult":null,"newBreakthroughs":[]}}
 
-Schema when not confident (confidence < 0.80):
-{"confidence":0.64,"clarificationQuestion":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":null,"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"newBreakthroughs":[],"resolvedQuestions":[]}}
+Schema (not confident):
+{"confidence":0.64,"clarificationQuestion":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":null,"nextAction":null,"newOpenQuestions":["..."],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
 
 ---
 
-Examples:
+Few-shot examples:
 
 Intent: "I'm skipping training today to go to a Wings game"
-{"confidence":0.68,"clarificationQuestion":"What would make tonight a development session instead of just watching — are you trying to study something specific about how pros play?","stateUpdate":{"goal":"Develop while attending Wings game","focus":"game observation as development","currentBottleneck":null,"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"newBreakthroughs":[],"resolvedQuestions":[]}}
+{"confidence":0.68,"clarificationQuestion":"What would make tonight count as development — are you trying to study something specific about how pros play?","stateUpdate":{"goal":"Develop while attending Wings game","focus":"game observation as development","currentBottleneck":null,"nextAction":null,"newOpenQuestions":["What would make tonight a development session rather than just watching?"],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
 
 THREAD CONTINUITY EXAMPLE:
-Prior state: goal="Develop while attending Wings game", focus="PG effort and competitiveness", hypotheses=[{id:"passive-observation-problem", statement:"Watching without a question produces no development", status:"active", confidence:0.8}], openQuestions=["What would make tonight a development session?"]
+Prior state: goal="Develop while attending Wings game", focus="PG effort and competitiveness", bottleneck="undefined observation structure", openQuestions=["What would make tonight a development session?"], experiment=null
 Intent: "I want to study PG effort and competitiveness. What should I focus on?"
-{"confidence":0.92,"insight":"You already answered your own question two messages ago — the goal is to develop through observation. Focus = PG effort and competitiveness. Track 10 possessions and note every moment a PG chooses effort over efficiency.","reasoning":"The hypothesis is that passive observation without a question produces nothing. The antidote is a specific observable: 10 possessions, one focus, written or mental count. That creates active observation.","mentalModel":"Observation only becomes development when it is structured around a question. The question is the lens. Without it, the game is entertainment.","demonstration":{"currentState":"Watching without a specific target","targetState":"Tracking 10 consecutive possessions with a single focus","keyDifference":"A count turns watching into measurement","executionCue":"Pick a possession number — 1 of 10 — before the PG touches the ball"},"experimentCandidate":"Track 10 PG possessions tonight. Each one: did he choose effort over efficiency? Yes or no.","stateUpdate":{"goal":"Develop while attending Wings game","focus":"PG effort and competitiveness","currentBottleneck":"undefined observation structure","newHypotheses":[{"id":"10-possession-observation","statement":"Structured 10-possession tracking converts passive watching into measurable development","confidence":0.92}],"confirmedHypothesisIds":["passive-observation-problem"],"rejectedHypothesisIds":[],"newEvidence":["User wants to study PG effort and competitiveness"],"newBreakthroughs":[],"resolvedQuestions":["What would make tonight a development session?"]}}`;
+{"confidence":0.92,"insight":"You already established the goal two messages ago — development through observation. Focus = PG effort and competitiveness. The structure is: 10 possessions, one question, yes/no answer each time.","reasoning":"The open question about what makes tonight count as development is now answered by the user's own statement. The antidote to passive watching is a countable observable.","mentalModel":"Observation only becomes development when structured around a single question. The question is the lens. Without it, the game is entertainment.","demonstration":{"currentState":"Watching without a specific target","targetState":"Tracking 10 consecutive PG possessions with one focus","keyDifference":"A count turns watching into measurement","executionCue":"Pick your possession number — 1 of 10 — before the PG touches the ball"},"experimentCandidate":"Tonight: track 10 PG possessions. For each one — did he choose effort over efficiency? Yes or no.","stateUpdate":{"goal":"Develop while attending Wings game","focus":"PG effort and competitiveness","currentBottleneck":"no structured observation target","nextAction":"Track 10 PG possessions tonight and report back with the count.","newOpenQuestions":[],"resolvedQuestions":["What would make tonight a development session?"],"newHypotheses":[{"id":"structured-10-possession-count","statement":"10-possession structured observation converts passive watching into measurable development","confidence":0.92}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["User wants to study PG effort and competitiveness"],"experimentResult":null,"newBreakthroughs":[]}}
+
+EXPERIMENT RESULT EXAMPLE:
+Prior state: open experiment = "Track 10 PG possessions tonight."
+Intent: "I tracked 8. He chose effort in 6 out of 8."
+{"confidence":0.95,"insight":"6 out of 8 is a 75% effort rate — high enough to build a model from. The 2 efficiency choices likely came at specific game moments, which is where the real teaching is.","reasoning":"The data is real. The experiment worked. Now the question shifts from 'does he choose effort?' to 'when does he choose efficiency instead, and why?'","mentalModel":"Players reveal their hierarchy of values under fatigue and pressure, not in easy possessions.","demonstration":{"currentState":"Observing PG behavior without a baseline","targetState":"Tracking when efficiency overrides effort and what triggers the switch","keyDifference":"The exception is more instructive than the rule","executionCue":"At the next game: watch the 2 efficiency possessions more carefully than the 6 effort ones"},"experimentCandidate":"Next game: identify exactly which game situations cause the shift from effort to efficiency.","stateUpdate":{"goal":"Develop while attending Wings game","focus":"PG effort and competitiveness","currentBottleneck":"no model yet for when efficiency overrides effort","nextAction":"At the next game, track the situations that cause PG to choose efficiency over effort.","newOpenQuestions":["What game situations trigger the shift from effort to efficiency?"],"resolvedQuestions":[],"newHypotheses":[{"id":"effort-efficiency-hierarchy","statement":"PG chooses effort over efficiency 75%+ of possessions but efficiency choices cluster at specific game moments","confidence":0.85}],"confirmedHypothesisIds":["structured-10-possession-count"],"rejectedHypothesisIds":[],"newEvidence":["PG chose effort in 6 out of 8 tracked possessions"],"experimentResult":{"result":"Tracked 8 possessions. PG chose effort in 6 out of 8.","verdict":"PASS"},"newBreakthroughs":["Structured 10-possession observation works — user completed the experiment and gathered real data."]}}`;
 
 // ---------------------------------------------------------------------------
 // Memory context builder
@@ -135,6 +169,7 @@ Intent: "I want to study PG effort and competitiveness. What should I focus on?"
 function buildMemoryContext(
   thread: AxisThread,
   beliefs: AxisBelief[],
+  experiments: AxisExperiment[],
   recentEvents: AxisEvent[],
 ): string | null {
   const lines: string[] = [];
@@ -142,6 +177,12 @@ function buildMemoryContext(
   if (thread.goal) lines.push(`GOAL: ${thread.goal}`);
   if (thread.focus) lines.push(`THREAD FOCUS: ${thread.focus}`);
   if (thread.current_bottleneck) lines.push(`CURRENT BOTTLENECK: ${thread.current_bottleneck}`);
+  if (thread.next_action) lines.push(`NEXT ACTION (carry forward): ${thread.next_action}`);
+
+  const openExp = experiments.find((e) => e.status === "open");
+  if (openExp) {
+    lines.push(`OPEN EXPERIMENT: "${openExp.hypothesis}"`);
+  }
 
   const active = beliefs.filter((b) => b.status === "active");
   if (active.length > 0) {
@@ -155,7 +196,24 @@ function buildMemoryContext(
   const confirmed = beliefs.filter((b) => b.status === "confirmed");
   if (confirmed.length > 0) {
     lines.push(
-      `CONFIRMED HYPOTHESES:\n${confirmed.map((b) => `- [${b.belief_id ?? "?"}] ${b.statement}`).join("\n")}`,
+      `CONFIRMED HYPOTHESES:\n${confirmed
+        .map((b) => `- [${b.belief_id ?? "?"}] ${b.statement}`)
+        .join("\n")}`,
+    );
+  }
+
+  const completedExp = experiments.filter((e) => e.status !== "open" && e.result);
+  if (completedExp.length > 0) {
+    lines.push(
+      `EXPERIMENT RESULTS:\n${completedExp
+        .map((e) => `- [${e.verdict ?? e.status.toUpperCase()}] ${e.hypothesis}: ${e.result}`)
+        .join("\n")}`,
+    );
+  }
+
+  if ((thread.open_questions ?? []).length > 0) {
+    lines.push(
+      `OPEN QUESTIONS:\n${thread.open_questions.map((q) => `- ${q}`).join("\n")}`,
     );
   }
 
@@ -210,29 +268,38 @@ function parseStateUpdate(val: unknown): StateUpdate | undefined {
       })
     : [];
 
+  const experimentResult = (() => {
+    if (!u.experimentResult || typeof u.experimentResult !== "object") return undefined;
+    const r = u.experimentResult as Record<string, unknown>;
+    if (typeof r.result !== "string" || !r.result.trim()) return undefined;
+    const verdict: "PASS" | "FAIL" | "INCONCLUSIVE" =
+      r.verdict === "PASS" || r.verdict === "FAIL" || r.verdict === "INCONCLUSIVE"
+        ? r.verdict
+        : "INCONCLUSIVE";
+    return { result: r.result.trim(), verdict };
+  })();
+
   return {
-    goal:
-      typeof u.goal === "string" && u.goal.trim() ? u.goal.trim() : undefined,
-    focus:
-      typeof u.focus === "string" && u.focus.trim() ? u.focus.trim() : undefined,
+    goal: typeof u.goal === "string" && u.goal.trim() ? u.goal.trim() : undefined,
+    focus: typeof u.focus === "string" && u.focus.trim() ? u.focus.trim() : undefined,
     currentBottleneck:
       typeof u.currentBottleneck === "string" && u.currentBottleneck.trim()
         ? u.currentBottleneck.trim()
         : undefined,
+    nextAction:
+      typeof u.nextAction === "string" && u.nextAction.trim()
+        ? u.nextAction.trim()
+        : undefined,
+    newOpenQuestions: strArr("newOpenQuestions").length > 0 ? strArr("newOpenQuestions") : undefined,
+    resolvedQuestions: strArr("resolvedQuestions").length > 0 ? strArr("resolvedQuestions") : undefined,
     newHypotheses: newHypotheses.length > 0 ? newHypotheses : undefined,
     confirmedHypothesisIds:
-      strArr("confirmedHypothesisIds").length > 0
-        ? strArr("confirmedHypothesisIds")
-        : undefined,
+      strArr("confirmedHypothesisIds").length > 0 ? strArr("confirmedHypothesisIds") : undefined,
     rejectedHypothesisIds:
-      strArr("rejectedHypothesisIds").length > 0
-        ? strArr("rejectedHypothesisIds")
-        : undefined,
+      strArr("rejectedHypothesisIds").length > 0 ? strArr("rejectedHypothesisIds") : undefined,
     newEvidence: strArr("newEvidence").length > 0 ? strArr("newEvidence") : undefined,
-    newBreakthroughs:
-      strArr("newBreakthroughs").length > 0 ? strArr("newBreakthroughs") : undefined,
-    resolvedQuestions:
-      strArr("resolvedQuestions").length > 0 ? strArr("resolvedQuestions") : undefined,
+    experimentResult,
+    newBreakthroughs: strArr("newBreakthroughs").length > 0 ? strArr("newBreakthroughs") : undefined,
   };
 }
 
@@ -340,27 +407,39 @@ type SupabaseClient = ReturnType<typeof createSupabaseFromRequest>;
 async function applyStateUpdate(
   sb: SupabaseClient,
   threadId: string,
-  existingBeliefs: AxisBelief[],
   thread: AxisThread,
+  beliefs: AxisBelief[],
+  openExperiment: AxisExperiment | null,
   update: StateUpdate | undefined,
+  experimentCandidate: string | undefined,
 ): Promise<void> {
   const now = new Date().toISOString();
 
-  // Thread-level fields
-  const threadPatch: Record<string, string | null> = { updated_at: now };
+  // --- Thread scalar fields ---
+  const threadPatch: Record<string, unknown> = { updated_at: now };
   if (update?.goal && !thread.goal) threadPatch.goal = update.goal;
   if (update?.focus) threadPatch.focus = update.focus;
   if (update?.currentBottleneck) threadPatch.current_bottleneck = update.currentBottleneck;
+  if (update?.nextAction) threadPatch.next_action = update.nextAction;
 
-  // Auto-title from focus if thread has no title
+  // Auto-title from focus or goal if thread has no title
   if (!thread.title && (update?.focus ?? update?.goal)) {
-    const src = update.focus ?? update.goal ?? "";
+    const src = update?.focus ?? update?.goal ?? "";
     threadPatch.title = src.replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  // --- Open questions ---
+  const existing = thread.open_questions ?? [];
+  const resolved = new Set(update?.resolvedQuestions ?? []);
+  const fresh = (update?.newOpenQuestions ?? []).filter((q) => !existing.includes(q));
+  const updated = [...existing.filter((q) => !resolved.has(q)), ...fresh];
+  if (updated.length !== existing.length || fresh.length > 0) {
+    threadPatch.open_questions = updated;
   }
 
   await sb.from("axis_threads").update(threadPatch).eq("id", threadId);
 
-  // New beliefs
+  // --- New beliefs ---
   if (update?.newHypotheses?.length) {
     await sb.from("axis_thread_beliefs").insert(
       update.newHypotheses.map((h) => ({
@@ -373,29 +452,21 @@ async function applyStateUpdate(
     );
   }
 
-  // Confirmed
+  // --- Belief status changes ---
   for (const slug of update?.confirmedHypothesisIds ?? []) {
-    const match = existingBeliefs.find((b) => b.belief_id === slug);
+    const match = beliefs.find((b) => b.belief_id === slug);
     if (match) {
-      await sb
-        .from("axis_thread_beliefs")
-        .update({ status: "confirmed" })
-        .eq("id", match.id);
+      await sb.from("axis_thread_beliefs").update({ status: "confirmed" }).eq("id", match.id);
     }
   }
-
-  // Rejected
   for (const slug of update?.rejectedHypothesisIds ?? []) {
-    const match = existingBeliefs.find((b) => b.belief_id === slug);
+    const match = beliefs.find((b) => b.belief_id === slug);
     if (match) {
-      await sb
-        .from("axis_thread_beliefs")
-        .update({ status: "rejected" })
-        .eq("id", match.id);
+      await sb.from("axis_thread_beliefs").update({ status: "rejected" }).eq("id", match.id);
     }
   }
 
-  // Evidence
+  // --- Evidence ---
   if (update?.newEvidence?.length) {
     await sb.from("axis_thread_evidence").insert(
       update.newEvidence.map((obs) => ({
@@ -407,7 +478,34 @@ async function applyStateUpdate(
     );
   }
 
-  // Breakthroughs
+  // --- Experiment: close open + record result ---
+  if (update?.experimentResult && openExperiment) {
+    const statusMap: Record<"PASS" | "FAIL" | "INCONCLUSIVE", string> = {
+      PASS: "completed",
+      FAIL: "failed",
+      INCONCLUSIVE: "inconclusive",
+    };
+    await sb
+      .from("axis_thread_experiments")
+      .update({
+        status: statusMap[update.experimentResult.verdict],
+        result: update.experimentResult.result,
+        verdict: update.experimentResult.verdict,
+      })
+      .eq("id", openExperiment.id);
+  }
+
+  // --- Experiment: create new experiment from candidate ---
+  if (experimentCandidate && !update?.experimentResult) {
+    // Only create a new experiment if we're not closing the current one
+    await sb.from("axis_thread_experiments").insert({
+      thread_id: threadId,
+      hypothesis: experimentCandidate,
+      status: "open",
+    });
+  }
+
+  // --- Breakthroughs ---
   if (update?.newBreakthroughs?.length) {
     await sb.from("axis_thread_breakthroughs").insert(
       update.newBreakthroughs.map((d) => ({ thread_id: threadId, description: d })),
@@ -446,11 +544,7 @@ export async function POST(req: Request) {
   let thread: AxisThread | null = null;
 
   if (threadId) {
-    const { data } = await sb
-      .from("axis_threads")
-      .select("*")
-      .eq("id", threadId)
-      .single();
+    const { data } = await sb.from("axis_threads").select("*").eq("id", threadId).single();
     thread = (data as AxisThread) ?? null;
   }
 
@@ -467,23 +561,32 @@ export async function POST(req: Request) {
     threadId = thread.id;
   }
 
-  // Load beliefs + recent events in parallel
-  const [{ data: beliefRows }, { data: eventRows }] = await Promise.all([
-    sb
-      .from("axis_thread_beliefs")
-      .select("*")
-      .eq("thread_id", threadId)
-      .order("created_at", { ascending: true }),
-    sb
-      .from("axis_thread_events")
-      .select("*")
-      .eq("thread_id", threadId)
-      .order("created_at", { ascending: true })
-      .limit(30),
-  ]);
+  // Load beliefs + events + open experiments in parallel
+  const [{ data: beliefRows }, { data: eventRows }, { data: experimentRows }] =
+    await Promise.all([
+      sb
+        .from("axis_thread_beliefs")
+        .select("*")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true }),
+      sb
+        .from("axis_thread_events")
+        .select("*")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true })
+        .limit(30),
+      sb
+        .from("axis_thread_experiments")
+        .select("*")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
 
   const beliefs = (beliefRows ?? []) as AxisBelief[];
   const recentEvents = (eventRows ?? []) as AxisEvent[];
+  const experiments = (experimentRows ?? []) as AxisExperiment[];
+  const openExperiment = experiments.find((e) => e.status === "open") ?? null;
 
   // Append user event
   void sb.from("axis_thread_events").insert({
@@ -493,7 +596,7 @@ export async function POST(req: Request) {
   });
 
   // Build memory context
-  const memCtx = buildMemoryContext(thread, beliefs, recentEvents);
+  const memCtx = buildMemoryContext(thread, beliefs, experiments, recentEvents);
 
   const userContent = [
     memCtx ? `--- THREAD CONTINUITY ---\n${memCtx}\n--- END CONTINUITY ---` : null,
@@ -517,14 +620,16 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1400,
+        max_tokens: 1500,
         system: SYSTEM,
         messages: [{ role: "user", content: userContent }],
       }),
     });
 
     if (anthropicRes.ok) {
-      const raw = await anthropicRes.json() as { content?: Array<{ type: string; text: string }> };
+      const raw = (await anthropicRes.json()) as {
+        content?: Array<{ type: string; text: string }>;
+      };
       const text = raw.content?.find((c) => c.type === "text")?.text ?? "{}";
       parsed = safeParse(text);
     } else {
@@ -536,9 +641,17 @@ export async function POST(req: Request) {
 
   const cards = toCards(parsed);
 
-  // Persist state update + assistant event (fire-and-forget)
+  // Persist state + assistant event (fire-and-forget)
   void (async () => {
-    await applyStateUpdate(sb, threadId!, beliefs, thread!, parsed.stateUpdate);
+    await applyStateUpdate(
+      sb,
+      threadId!,
+      thread!,
+      beliefs,
+      openExperiment,
+      parsed.stateUpdate,
+      parsed.experimentCandidate,
+    );
     await sb.from("axis_thread_events").insert({
       thread_id: threadId,
       role: "assistant",
@@ -553,9 +666,5 @@ export async function POST(req: Request) {
     .order("updated_at", { ascending: false })
     .limit(30);
 
-  return Response.json({
-    threadId,
-    cards,
-    sidebarThreads: sidebarData ?? [],
-  });
+  return Response.json({ threadId, cards, sidebarThreads: sidebarData ?? [] });
 }

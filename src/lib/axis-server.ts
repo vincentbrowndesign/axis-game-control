@@ -7,6 +7,8 @@ export interface AxisThread {
   goal: string | null;
   focus: string | null;
   current_bottleneck: string | null;
+  open_questions: string[];
+  next_action: string | null;
   created_at: string;
   updated_at: string;
 }
