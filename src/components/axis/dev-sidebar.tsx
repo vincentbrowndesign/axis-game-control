@@ -1,17 +1,13 @@
 "use client";
 
 import React from "react";
-import type { Breakthrough, DevEvidence, DevThread } from "../../lib/axis-dev-persistence";
-
-type Tab = "threads" | "breakthroughs" | "evidence";
+import type { SidebarThread } from "../../lib/axis-server";
 
 interface DevSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   activeThreadId: string | null;
-  threads: DevThread[];
-  breakthroughs: Breakthrough[];
-  evidence: DevEvidence[];
+  threads: SidebarThread[];
   authLabel: string;
   authType: string;
   isGuest: boolean;
@@ -39,18 +35,8 @@ function shortTitle(title: string | null, fallback = "Untitled"): string {
   return title.length > 38 ? `${title.slice(0, 38)}…` : title;
 }
 
-function threadStatus(t: DevThread): "experiment" | "breakthrough" | null {
-  const m = t.memory;
-  if (!m) return null;
-  if ((m.breakthroughs?.length ?? 0) > 0) return "breakthrough";
-  if (m.experiments?.some((e) => e.status === "open")) return "experiment";
-  return null;
-}
-
-function threadSubtitle(t: DevThread): string | null {
-  const m = t.memory;
-  if (!m) return null;
-  const s = m.currentBottleneck ?? m.focus;
+function threadSubtitle(t: SidebarThread): string | null {
+  const s = t.current_bottleneck ?? t.focus;
   if (!s) return null;
   return s.length > 52 ? `${s.slice(0, 52)}…` : s;
 }
@@ -60,8 +46,6 @@ export function DevSidebar({
   onClose,
   activeThreadId,
   threads,
-  breakthroughs,
-  evidence,
   authLabel,
   authType,
   isGuest,
@@ -70,123 +54,81 @@ export function DevSidebar({
   onSignIn,
   onSignOut,
 }: DevSidebarProps) {
-  // Determine which tabs have real data
-  const availableTabs: Tab[] = [
-    "threads",
-    ...(breakthroughs.length > 0 ? (["breakthroughs"] as Tab[]) : []),
-    ...(evidence.length > 0 ? (["evidence"] as Tab[]) : []),
-  ];
-
-  const [tab, setTab] = React.useState<Tab>("threads");
-
-  // If the active tab's data disappears, fall back to threads
-  const activeTab = availableTabs.includes(tab) ? tab : "threads";
-
   if (!isOpen) return null;
 
   return (
     <>
       <div className="backdrop" onClick={onClose} aria-hidden />
 
-      <aside className="sidebar" role="dialog" aria-label="Axis sidebar">
+      <aside className="sidebar" role="dialog" aria-label="Axis threads">
         <div className="sidebar-hd">
           <span className="sidebar-wordmark">Axis</span>
-          <button className="sidebar-close" onClick={onClose} aria-label="Close" type="button">×</button>
+          <button
+            className="sidebar-close"
+            onClick={onClose}
+            aria-label="Close"
+            type="button"
+          >
+            ×
+          </button>
         </div>
 
-        <button className="new-thread-btn" onClick={() => { onNewThread(); onClose(); }} type="button">
+        <button
+          className="new-thread-btn"
+          onClick={() => {
+            onNewThread();
+            onClose();
+          }}
+          type="button"
+        >
           + New thread
         </button>
 
-        {/* Tab bar — only rendered when more than one tab has data */}
-        {availableTabs.length > 1 && (
-          <div className="tab-bar" role="tablist">
-            {availableTabs.map((t) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={activeTab === t}
-                className={`tab-btn${activeTab === t ? " tab-btn--active" : ""}`}
-                onClick={() => setTab(t)}
-                type="button"
-              >
-                {t === "threads" ? "Threads" : t === "breakthroughs" ? "Breakthroughs" : "Evidence"}
-              </button>
-            ))}
-          </div>
-        )}
-
         <div className="sidebar-body">
-          {activeTab === "threads" && (
-            <ul className="thread-list">
-              {threads.length === 0 && (
-                <li className="empty-state">No threads yet.</li>
-              )}
-              {threads.map((t) => {
-                const status = threadStatus(t);
-                const subtitle = threadSubtitle(t);
-                return (
-                  <li key={t.id}>
-                    <button
-                      className={`thread-item${t.id === activeThreadId ? " thread-item--active" : ""}`}
-                      onClick={() => { onSelectThread(t.id); onClose(); }}
-                      type="button"
-                    >
-                      <div className="thread-row-top">
-                        <span className="thread-title">{shortTitle(t.title)}</span>
-                        <span className="thread-time">{relTime(t.updated_at)}</span>
-                      </div>
-                      {subtitle && (
-                        <span className="thread-subtitle">{subtitle}</span>
-                      )}
-                      {status && (
-                        <span className={`thread-badge thread-badge--${status}`}>
-                          {status === "experiment" ? "Experiment" : "Breakthrough"}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {activeTab === "breakthroughs" && (
-            <ul className="bt-list">
-              {breakthroughs.map((b) => (
-                <li key={b.id} className="bt-item">
-                  <p className="bt-desc">{b.description}</p>
-                  <span className="bt-meta">{relTime(b.created_at)}</span>
+          <ul className="thread-list">
+            {threads.length === 0 && (
+              <li className="empty-state">No threads yet.</li>
+            )}
+            {threads.map((t) => {
+              const subtitle = threadSubtitle(t);
+              return (
+                <li key={t.id}>
+                  <button
+                    className={`thread-item${t.id === activeThreadId ? " thread-item--active" : ""}`}
+                    onClick={() => {
+                      onSelectThread(t.id);
+                      onClose();
+                    }}
+                    type="button"
+                  >
+                    <div className="thread-row-top">
+                      <span className="thread-title">{shortTitle(t.title)}</span>
+                      <span className="thread-time">{relTime(t.updated_at)}</span>
+                    </div>
+                    {subtitle && (
+                      <span className="thread-subtitle">{subtitle}</span>
+                    )}
+                  </button>
                 </li>
-              ))}
-            </ul>
-          )}
-
-          {activeTab === "evidence" && (
-            <ul className="ev-list">
-              {evidence.map((e) => (
-                <li key={e.id} className="ev-item">
-                  <p className="ev-obs">{e.observation}</p>
-                  {e.claim && <p className="ev-claim">{e.claim}</p>}
-                  <span className="ev-meta">{e.source} · {relTime(e.created_at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+              );
+            })}
+          </ul>
         </div>
 
-        <div className="account-control" aria-label="Account">
+        <div className="account-control">
           <span className="account-kicker">Account</span>
           <strong className="account-id">{authLabel}</strong>
           <span className="account-type">{authType}</span>
           {isGuest && (
             <button className="account-link" type="button" onClick={onSignIn}>
-              Save with account
+              Sign in with Google
             </button>
           )}
-          <button className="sign-out-btn" type="button" onClick={onSignOut}>
-            Sign Out
-          </button>
+          {!isGuest && (
+            <button className="sign-out-btn" type="button" onClick={onSignOut}>
+              Sign out
+            </button>
+          )}
         </div>
       </aside>
 
@@ -269,42 +211,13 @@ export function DevSidebar({
           color: rgba(140, 190, 40, 1);
         }
 
-        .tab-bar {
-          border-bottom: 1px solid rgba(250, 250, 249, 0.07);
-          display: flex;
-          flex-shrink: 0;
-        }
-
-        .tab-btn {
-          background: none;
-          border: none;
-          border-bottom: 2px solid transparent;
-          color: rgba(250, 250, 249, 0.32);
-          cursor: pointer;
-          flex: 1;
-          font: inherit;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.06em;
-          padding: 11px 0;
-          text-transform: uppercase;
-          transition: color 0.12s, border-color 0.12s;
-        }
-
-        .tab-btn--active {
-          border-bottom-color: rgba(140, 190, 40, 0.7);
-          color: rgba(250, 250, 249, 0.88);
-        }
-
         .sidebar-body {
           flex: 1;
           overflow-y: auto;
           padding: 4px 0;
         }
 
-        .thread-list,
-        .bt-list,
-        .ev-list {
+        .thread-list {
           list-style: none;
           margin: 0;
           padding: 0;
@@ -313,7 +226,6 @@ export function DevSidebar({
         .empty-state {
           color: rgba(250, 250, 249, 0.24);
           font-size: 12px;
-          line-height: 1.6;
           padding: 24px 18px;
         }
 
@@ -377,60 +289,6 @@ export function DevSidebar({
           white-space: nowrap;
         }
 
-        .thread-badge {
-          align-self: flex-start;
-          border-radius: 4px;
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          margin-top: 2px;
-          padding: 2px 5px;
-          text-transform: uppercase;
-        }
-
-        .thread-badge--experiment {
-          background: rgba(26, 100, 200, 0.15);
-          color: rgba(100, 160, 255, 0.8);
-        }
-
-        .thread-badge--breakthrough {
-          background: rgba(140, 190, 40, 0.12);
-          color: rgba(140, 190, 40, 0.9);
-        }
-
-        .bt-item,
-        .ev-item {
-          border-bottom: 1px solid rgba(250, 250, 249, 0.05);
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          padding: 13px 18px;
-        }
-
-        .bt-desc,
-        .ev-obs {
-          color: rgba(250, 250, 249, 0.82);
-          font-size: 12px;
-          font-weight: 450;
-          line-height: 1.5;
-          margin: 0;
-        }
-
-        .ev-claim {
-          color: rgba(140, 190, 40, 0.72);
-          font-size: 11px;
-          line-height: 1.45;
-          margin: 0;
-        }
-
-        .bt-meta,
-        .ev-meta {
-          color: rgba(250, 250, 249, 0.26);
-          font-size: 10px;
-          letter-spacing: 0.03em;
-          text-transform: uppercase;
-        }
-
         .account-control {
           border-top: 1px solid rgba(250, 250, 249, 0.07);
           display: flex;
@@ -471,13 +329,13 @@ export function DevSidebar({
           cursor: pointer;
           font: inherit;
           font-size: 12px;
+          margin-top: 3px;
           padding: 0;
           transition: color 0.12s;
         }
 
         .account-link {
           color: rgba(140, 190, 40, 0.78);
-          margin-top: 3px;
         }
 
         .account-link:hover {
@@ -486,7 +344,6 @@ export function DevSidebar({
 
         .sign-out-btn {
           color: rgba(250, 250, 249, 0.4);
-          margin-top: 5px;
           text-decoration: underline;
           text-underline-offset: 3px;
         }
