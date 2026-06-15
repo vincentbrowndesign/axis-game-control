@@ -4,6 +4,53 @@ import { getSupabaseBrowserClient } from "./supabase-browser";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface ThreadHypothesis {
+  id: string;
+  statement: string;
+  status: "active" | "confirmed" | "rejected";
+  confidence: number;
+  evidence: string[];
+  createdAt: string;
+}
+
+export interface ThreadExperiment {
+  id: string;
+  hypothesis: string;
+  status: "open" | "completed" | "failed" | "inconclusive";
+  result?: string;
+  verdict?: "PASS" | "FAIL" | "INCONCLUSIVE";
+  createdAt: string;
+}
+
+export interface ThreadEvidenceItem {
+  id: string;
+  observation: string;
+  source: "user_report" | "photo" | "video" | "voice" | "cv" | "research";
+  claim?: string;
+  confidence: number;
+  createdAt: string;
+}
+
+export interface ThreadMemory {
+  focus: string | null;
+  currentBottleneck: string | null;
+  hypotheses: ThreadHypothesis[];
+  experiments: ThreadExperiment[];
+  evidence: ThreadEvidenceItem[];
+  breakthroughs: string[];
+  openQuestions: string[];
+}
+
+export const EMPTY_THREAD_MEMORY: ThreadMemory = {
+  focus: null,
+  currentBottleneck: null,
+  hypotheses: [],
+  experiments: [],
+  evidence: [],
+  breakthroughs: [],
+  openQuestions: [],
+};
+
 export interface DevThread {
   id: string;
   title: string | null;
@@ -88,6 +135,37 @@ export async function touchDevThread(threadId: string): Promise<void> {
     .from("axis_dev_threads")
     .update({ updated_at: new Date().toISOString() })
     .eq("id", threadId);
+}
+
+export async function loadThreadMemory(threadId: string): Promise<ThreadMemory> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { ...EMPTY_THREAD_MEMORY };
+  const { data, error } = await supabase
+    .from("axis_dev_threads")
+    .select("memory")
+    .eq("id", threadId)
+    .single();
+  if (error || !data?.memory) return { ...EMPTY_THREAD_MEMORY };
+  const m = data.memory as Partial<ThreadMemory>;
+  return {
+    focus: m.focus ?? null,
+    currentBottleneck: m.currentBottleneck ?? null,
+    hypotheses: m.hypotheses ?? [],
+    experiments: m.experiments ?? [],
+    evidence: m.evidence ?? [],
+    breakthroughs: m.breakthroughs ?? [],
+    openQuestions: m.openQuestions ?? [],
+  };
+}
+
+export async function saveThreadMemory(threadId: string, memory: ThreadMemory): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("axis_dev_threads")
+    .update({ memory, updated_at: new Date().toISOString() })
+    .eq("id", threadId);
+  if (error) console.error("[axis-dev] saveThreadMemory", error.message);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import type { Breakthrough, DevEvidence, DevThread } from "../../lib/axis-dev-persistence";
+import type { Breakthrough, DevThread } from "../../lib/axis-dev-persistence";
 
-type Tab = "threads" | "discoveries" | "uploads";
+type Tab = "threads" | "discoveries";
 
 interface DevSidebarProps {
   isOpen: boolean;
@@ -11,7 +11,6 @@ interface DevSidebarProps {
   activeThreadId: string | null;
   threads: DevThread[];
   breakthroughs: Breakthrough[];
-  evidence: DevEvidence[];
   authLabel: string;
   authType: string;
   isGuest: boolean;
@@ -45,7 +44,6 @@ export function DevSidebar({
   activeThreadId,
   threads,
   breakthroughs,
-  evidence,
   authLabel,
   authType,
   isGuest,
@@ -73,7 +71,7 @@ export function DevSidebar({
         </button>
 
         <div className="tab-bar" role="tablist">
-          {(["threads", "discoveries", "uploads"] as Tab[]).map((t) => (
+          {(["threads", "discoveries"] as Tab[]).map((t) => (
             <button
               key={t}
               role="tab"
@@ -82,7 +80,7 @@ export function DevSidebar({
               onClick={() => setTab(t)}
               type="button"
             >
-              {t === "threads" ? "Threads" : t === "discoveries" ? "Discoveries" : "Uploads"}
+              {t === "threads" ? "Threads" : "Breakthroughs"}
             </button>
           ))}
         </div>
@@ -108,23 +106,11 @@ export function DevSidebar({
 
           {tab === "discoveries" && (
             <ul className="bt-list">
-              {breakthroughs.length === 0 && <li className="empty-state">No discoveries saved yet.</li>}
+              {breakthroughs.length === 0 && <li className="empty-state">No breakthroughs yet. Complete an experiment to record one.</li>}
               {breakthroughs.map((b) => (
                 <li key={b.id} className="bt-item">
                   <p className="bt-desc">{b.description}</p>
                   <span className="bt-meta">{relTime(b.created_at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {tab === "uploads" && (
-            <ul className="ev-list">
-              {evidence.length === 0 && <li className="empty-state">No uploads yet.</li>}
-              {evidence.map((e) => (
-                <li key={e.id} className="ev-item">
-                  <p className="ev-obs">{e.observation}</p>
-                  <span className="ev-meta">{relTime(e.created_at)}</span>
                 </li>
               ))}
             </ul>

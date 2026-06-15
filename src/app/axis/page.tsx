@@ -6,16 +6,21 @@ import { useEffect, useRef, useState } from "react";
 import { DevSidebar } from "../../components/axis/dev-sidebar";
 import {
   createDevThread,
+  EMPTY_THREAD_MEMORY,
   listBreakthroughs,
-  listDevEvidence,
   listDevThreads,
   loadDevEntries,
+  loadThreadMemory,
   saveBreakthrough,
   saveDevEntry,
+  saveThreadMemory,
   touchDevThread,
   type Breakthrough,
-  type DevEvidence,
   type DevThread,
+  type ThreadEvidenceItem,
+  type ThreadExperiment,
+  type ThreadHypothesis,
+  type ThreadMemory,
 } from "../../lib/axis-dev-persistence";
 import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
 
@@ -26,6 +31,17 @@ import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
 type Phase = "IDLE" | "LOADING" | "RESULTS";
 
 type CardType = "Mental Model" | "Demonstration" | "Experiment" | "Witness";
+
+interface StateUpdate {
+  focus?: string;
+  currentBottleneck?: string;
+  newHypotheses?: Array<{ id: string; statement: string; confidence: number }>;
+  confirmedHypothesisIds?: string[];
+  rejectedHypothesisIds?: string[];
+  newEvidence?: string[];
+  newBreakthroughs?: string[];
+  resolvedQuestions?: string[];
+}
 
 interface InsightResponse {
   insight: string;
@@ -42,6 +58,7 @@ interface InsightResponse {
   experimentCandidate?: string;
   witnessPrompt?: string;
   clarificationQuestion?: string;
+  stateUpdate?: StateUpdate;
 }
 
 interface MentalModelCard {
@@ -199,6 +216,144 @@ function authStateFromUser(user: User): AxisAuthState {
 }
 
 // ---------------------------------------------------------------------------
+// Thread memory helpers
+// ---------------------------------------------------------------------------
+
+function applyStateUpdate(prev: ThreadMemory, update: StateUpdate): ThreadMemory {
+  const next: ThreadMemory = { ...prev };
+
+  if (update.focus && !next.focus) next.focus = update.focus;
+  if (update.currentBottleneck) next.currentBottleneck = update.currentBottleneck;
+
+  if (update.newHypotheses?.length) {
+    const existingIds = new Set(next.hypotheses.map((h) => h.id));
+    const toAdd: ThreadHypothesis[] = update.newHypotheses
+      .filter((h) => !existingIds.has(h.id))
+      .map((h) => ({
+        id: h.id,
+        statement: h.statement,
+        status: "active" as const,
+        confidence: h.confidence,
+        evidence: [],
+        createdAt: new Date().toISOString(),
+      }));
+    next.hypotheses = [...next.hypotheses, ...toAdd];
+  }
+
+  if (update.confirmedHypothesisIds?.length) {
+    const confirmed = new Set(update.confirmedHypothesisIds);
+    next.hypotheses = next.hypotheses.map((h) =>
+      confirmed.has(h.id) ? { ...h, status: "confirmed" as const } : h,
+    );
+  }
+
+  if (update.rejectedHypothesisIds?.length) {
+    const rejected = new Set(update.rejectedHypothesisIds);
+    next.hypotheses = next.hypotheses.map((h) =>
+      rejected.has(h.id) ? { ...h, status: "rejected" as const } : h,
+    );
+  }
+
+  if (update.newEvidence?.length) {
+    const existingObs = new Set(next.evidence.map((e) => e.observation));
+    const toAdd: ThreadEvidenceItem[] = update.newEvidence
+      .filter((obs) => !existingObs.has(obs))
+      .map((obs) => ({
+        id: uid(),
+        observation: obs,
+        source: "user_report" as const,
+        confidence: 0.8,
+        createdAt: new Date().toISOString(),
+      }));
+    next.evidence = [...next.evidence, ...toAdd];
+  }
+
+  if (update.newBreakthroughs?.length) {
+    const existingBts = new Set(next.breakthroughs);
+    const toAdd = update.newBreakthroughs.filter((b) => !existingBts.has(b));
+    next.breakthroughs = [...next.breakthroughs, ...toAdd];
+  }
+
+  if (update.resolvedQuestions?.length) {
+    const resolved = new Set(update.resolvedQuestions);
+    next.openQuestions = next.openQuestions.filter((q) => !resolved.has(q));
+  }
+
+  return next;
+}
+
+function updateMemoryFromEntry(prev: ThreadMemory, entry: ThreadEntry): ThreadMemory {
+  const next: ThreadMemory = { ...prev };
+
+  // Surface clarification questions as open questions
+  if (entry.response?.clarificationQuestion) {
+    const q = entry.response.clarificationQuestion;
+    if (!next.openQuestions.includes(q)) {
+      next.openQuestions = [...next.openQuestions, q];
+    }
+  }
+
+  // Track experiment candidates so witness review can close them
+  if (entry.experimentSpec?.hypothesis) {
+    const alreadyTracked = next.experiments.some(
+      (e) => e.hypothesis === entry.experimentSpec!.hypothesis,
+    );
+    if (!alreadyTracked) {
+      const exp: ThreadExperiment = {
+        id: entry.id,
+        hypothesis: entry.experimentSpec.hypothesis,
+        status: "open",
+        createdAt: new Date().toISOString(),
+      };
+      next.experiments = [...next.experiments, exp];
+    }
+  }
+
+  return next;
+}
+
+function updateMemoryFromWitnessReview(
+  prev: ThreadMemory,
+  entry: ThreadEntry,
+  review: { verdict: "PASS" | "FAIL" | "INCONCLUSIVE"; claim: string },
+): ThreadMemory {
+  const next: ThreadMemory = { ...prev };
+
+  // Resolve the open experiment this review corresponds to
+  next.experiments = next.experiments.map((e) =>
+    e.id === entry.id
+      ? {
+          ...e,
+          status: review.verdict === "PASS"
+            ? "completed"
+            : review.verdict === "FAIL"
+              ? "failed"
+              : "inconclusive",
+          verdict: review.verdict,
+          result: review.claim,
+        }
+      : e,
+  );
+
+  // PASS witness reviews become confirmed breakthroughs
+  if (review.verdict === "PASS" && entry.response?.insight) {
+    const b = entry.response.insight;
+    if (!next.breakthroughs.includes(b)) {
+      next.breakthroughs = [...next.breakthroughs, b];
+    }
+  }
+
+  // Close open questions that the witness review resolved
+  if (review.verdict !== "INCONCLUSIVE") {
+    next.openQuestions = next.openQuestions.filter(
+      (q) => !entry.response?.clarificationQuestion || q !== entry.response.clarificationQuestion,
+    );
+  }
+
+  return next;
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -283,8 +438,8 @@ export default function AxisPage() {
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [threadList, setThreadList] = useState<DevThread[]>([]);
   const [breakthroughList, setBreakthroughList] = useState<Breakthrough[]>([]);
-  const [evidenceList, setEvidenceList] = useState<DevEvidence[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [threadMemory, setThreadMemory] = useState<ThreadMemory>({ ...EMPTY_THREAD_MEMORY });
   // Supabase entry IDs keyed by local ThreadEntry.id (so we can reference them for breakthroughs)
   const entryIdMapRef = useRef<Record<string, string>>({});
 
@@ -365,15 +520,13 @@ export default function AxisPage() {
       }
       setAuthState(authStateFromUser(data.user));
       setUserId(data.user.id);
-      const [threads, bts, ev] = await Promise.all([
+      const [threads, bts] = await Promise.all([
         listDevThreads(),
         listBreakthroughs(),
-        listDevEvidence(),
       ]);
       if (cancelled) return;
       setThreadList(threads);
       setBreakthroughList(bts);
-      setEvidenceList(ev);
     });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -472,6 +625,8 @@ export default function AxisPage() {
     setCurrentThreadId(threadId);
     setIsActive(true);
     prevThreadLenRef.current = reconstructed.length;
+    const memory = await loadThreadMemory(threadId);
+    setThreadMemory(memory);
   }
 
   async function markBreakthrough(localEntryId: string, text: string) {
@@ -558,7 +713,18 @@ export default function AxisPage() {
         fetch("/api/axis/understand", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intent: val }),
+          body: JSON.stringify({
+            intent: val,
+            threadMemory: {
+              focus: threadMemory.focus,
+              currentBottleneck: threadMemory.currentBottleneck,
+              hypotheses: threadMemory.hypotheses,
+              experiments: threadMemory.experiments,
+              evidence: threadMemory.evidence,
+              breakthroughs: threadMemory.breakthroughs,
+              openQuestions: threadMemory.openQuestions,
+            },
+          }),
           signal: ctrl.signal,
         }),
         fetch("/api/axis/research", {
@@ -577,6 +743,15 @@ export default function AxisPage() {
       const evidence: EvidenceCard[] = Array.isArray(researchData.evidence)
         ? researchData.evidence
         : [];
+
+      // Apply state update from model NOW — before building the entry.
+      // This is the key architectural fix: state changes driven by user messages
+      // propagate immediately so the next message inherits the updated hypotheses.
+      let nextMemory = threadMemory;
+      if (response?.stateUpdate) {
+        nextMemory = applyStateUpdate(threadMemory, response.stateUpdate);
+        setThreadMemory(nextMemory);
+      }
 
       // Build all four cards directly from the unified understand response
       let mentalModelCard: MentalModelCard | null = null;
@@ -665,7 +840,14 @@ export default function AxisPage() {
               threadId = await createDevThread(val.slice(0, 120));
               if (threadId) setCurrentThreadId(threadId);
             }
-            if (threadId) await persistEntry(entry.id, entry, threadId, next.length - 1);
+            if (threadId) {
+              await persistEntry(entry.id, entry, threadId, next.length - 1);
+              // Layer open-question + experiment tracking on top of the
+              // stateUpdate already applied synchronously above.
+              const withEntryMeta = updateMemoryFromEntry(nextMemory, entry);
+              setThreadMemory(withEntryMeta);
+              await saveThreadMemory(threadId, withEntryMeta);
+            }
           })();
         }
 
@@ -688,6 +870,7 @@ export default function AxisPage() {
     abortRef.current?.abort();
     setThread([]);
     setCurrentThreadId(null);
+    setThreadMemory({ ...EMPTY_THREAD_MEMORY });
     setRevealMap({});
     setPhase("IDLE");
     setIsActive(false);
@@ -712,7 +895,6 @@ export default function AxisPage() {
     setCurrentThreadId(null);
     setThreadList([]);
     setBreakthroughList([]);
-    setEvidenceList([]);
     setRevealMap({});
     setPendingAttachment(null);
     setIsActive(false);
@@ -749,6 +931,15 @@ export default function AxisPage() {
       setThread((prev) =>
         prev.map((e) => e.id === entry.id ? { ...e, witnessReview: review } : e),
       );
+
+      // Update thread memory from witness result (fire-and-forget; non-fatal)
+      if (currentThreadId) {
+        void (async () => {
+          const updated = updateMemoryFromWitnessReview(threadMemory, entry, review);
+          setThreadMemory(updated);
+          await saveThreadMemory(currentThreadId, updated);
+        })();
+      }
 
       // Auto-chain adjustment engine
       let adjustment: AdjustmentResult | null = null;
@@ -848,7 +1039,6 @@ export default function AxisPage() {
         activeThreadId={currentThreadId}
         threads={threadList}
         breakthroughs={breakthroughList}
-        evidence={evidenceList}
         authLabel={authState.isGuest ? "Guest session" : authState.label}
         authType={authState.authType}
         isGuest={authState.isGuest}
