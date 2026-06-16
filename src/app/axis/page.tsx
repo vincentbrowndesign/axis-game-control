@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, Mic, Paperclip } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
 import type { AxisCard, AxisUnderstanding, SidebarThread } from "../../lib/axis-server";
 
@@ -14,17 +14,6 @@ interface Conversation {
 
 type AuthPhase = "loading" | "guest" | "signed_in";
 type Phase = "idle" | "loading" | "results";
-
-const STARTING_TIMELINES = [
-  "Hailey",
-  "Hudson",
-  "Bridge",
-  "My Jumpshot",
-  "Axis",
-  "VBZ",
-  "Business",
-  "Health",
-];
 
 function sentenceFromCard(card: AxisCard): string | null {
   const text = [card.content, card.secondary].filter(Boolean).join(" ");
@@ -48,41 +37,19 @@ function AxisReply({ cards }: { cards: AxisCard[] }) {
   );
 }
 
-function TimelineRail({
-  activeThreadId,
-  threads,
-  onSelectThread,
-}: {
-  activeThreadId: string | null;
-  threads: SidebarThread[];
-  onSelectThread: (id: string) => void;
-}) {
-  const names = threads.length
-    ? threads.map((thread) => ({
-        id: thread.id,
-        name: thread.title || thread.focus || "Untitled",
-        live: true,
-      }))
-    : STARTING_TIMELINES.map((name) => ({ id: name, name, live: false }));
+function rememberFrom(threads: SidebarThread[], conversations: Conversation[]): string {
+  if (conversations.length > 0) return "";
 
-  return (
-    <nav className="timeline-rail" aria-label="Memory">
-      {names.map((item) => {
-        const active = item.live && item.id === activeThreadId;
-        return (
-          <button
-            key={item.id}
-            className={`timeline-name${active ? " timeline-name--active" : ""}`}
-            disabled={!item.live}
-            onClick={() => item.live && onSelectThread(item.id)}
-            type="button"
-          >
-            {item.name}
-          </button>
-        );
-      })}
-    </nav>
-  );
+  const remembered = threads
+    .filter((thread) => thread.title || thread.focus)
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0];
+
+  if (!remembered) return "";
+
+  const subject = remembered.title || remembered.focus;
+  if (!subject) return "";
+
+  return `You were thinking about ${subject.toLowerCase()} last time.`;
 }
 
 export default function AxisPage() {
@@ -101,13 +68,7 @@ export default function AxisPage() {
   const voiceRef = useRef<SpeechRecognition | null>(null);
 
   const isActive = conversations.length > 0 || phase !== "idle";
-  const sortedTimelines = useMemo(
-    () =>
-      [...sidebarThreads].sort(
-        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-      ),
-    [sidebarThreads],
-  );
+  const memorySentence = rememberFrom(sidebarThreads, conversations);
 
   useEffect(() => {
     async function init() {
@@ -259,36 +220,6 @@ export default function AxisPage() {
     }
   }
 
-  function startNewTimeline() {
-    setThreadId(null);
-    setConversations([]);
-    setCurrentUnderstanding(null);
-    setPhase("idle");
-    setInput("");
-    clearAttachment();
-    localStorage.removeItem("axis_thread_id");
-  }
-
-  async function loadThread(id: string) {
-    try {
-      const res = await fetch(`/api/axis/thread?id=${id}`);
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        conversations: Conversation[];
-        currentUnderstanding: AxisUnderstanding | null;
-        sidebarThreads: SidebarThread[];
-      };
-      setThreadId(id);
-      setConversations(data.conversations ?? []);
-      setCurrentUnderstanding(data.currentUnderstanding ?? null);
-      setPhase(data.conversations?.length || data.currentUnderstanding?.belief ? "results" : "idle");
-      setSidebarThreads(data.sidebarThreads ?? []);
-      localStorage.setItem("axis_thread_id", id);
-    } catch {
-      // Keep the current conversation in place.
-    }
-  }
-
   function toggleVoice() {
     if (voicePhase === "LISTENING") {
       voiceRef.current?.stop();
@@ -333,26 +264,18 @@ export default function AxisPage() {
   return (
     <>
       <main className="axis-shell">
-        <TimelineRail
-          activeThreadId={threadId}
-          threads={sortedTimelines}
-          onSelectThread={loadThread}
-        />
-
-        <section className={`conversation${isActive ? " conversation--active" : ""}`}>
-          {!isActive && (
-            <div className="first-prompt">
-              <h1>What are you working on?</h1>
-            </div>
-          )}
+        <section className={`page${isActive ? " page--written" : ""}`}>
+          {!isActive && <div className="quiet-memory">{memorySentence}</div>}
+          {!isActive && <h1 className="page-question">What happened today?</h1>}
 
           {isActive && (
-            <div className="conversation-scroll" ref={threadRef}>
+            <div className="page-body" ref={threadRef}>
+              {memorySentence && <p className="margin-memory">{memorySentence}</p>}
               {conversations.map((conv) => (
-                <article key={conv.id} className="turn">
-                  {conv.userMessage && <p className="user-line">{conv.userMessage}</p>}
+                <section key={conv.id} className="page-entry">
+                  {conv.userMessage && <p className="page-writing">{conv.userMessage}</p>}
                   <AxisReply cards={conv.cards} />
-                </article>
+                </section>
               ))}
 
               {phase === "loading" && (
@@ -368,7 +291,7 @@ export default function AxisPage() {
           <div className="composer-wrap">
             {pendingFile && (
               <div className="moment-pill">
-                <span>{pendingFile.name}</span>
+                <span>A moment from today</span>
                 <button type="button" onClick={clearAttachment} aria-label="Remove upload">
                   x
                 </button>
@@ -431,12 +354,6 @@ export default function AxisPage() {
               </button>
             </form>
           </div>
-
-          {isActive && (
-            <button className="quiet-new" type="button" onClick={startNewTimeline}>
-              New page
-            </button>
-          )}
         </section>
       </main>
 
@@ -478,75 +395,47 @@ export default function AxisPage() {
         }
 
         .axis-shell {
-          background:
-            linear-gradient(90deg, rgba(25, 24, 21, 0.035), transparent 260px),
-            #fbfaf7;
-          display: grid;
-          grid-template-columns: 220px minmax(0, 1fr);
+          background: #fbfaf7;
+          display: block;
           min-height: 100svh;
         }
 
-        .timeline-rail {
+        .page {
           display: flex;
           flex-direction: column;
-          gap: 17px;
-          padding: 34px 26px;
-        }
-
-        .timeline-name {
-          background: transparent;
-          border: 0;
-          color: rgba(25, 24, 21, 0.48);
-          cursor: pointer;
-          font: inherit;
-          font-size: 15px;
-          line-height: 1.2;
-          padding: 0;
-          text-align: left;
-          transition: color 0.14s ease;
-        }
-
-        .timeline-name:hover,
-        .timeline-name--active {
-          color: rgba(25, 24, 21, 0.92);
-        }
-
-        .timeline-name:disabled {
-          color: rgba(25, 24, 21, 0.28);
-          cursor: default;
-        }
-
-        .conversation {
-          display: flex;
-          flex-direction: column;
+          margin: 0 auto;
+          max-width: 760px;
           min-height: 100svh;
-          padding: 40px clamp(22px, 5vw, 72px) 30px;
+          padding: 12vh clamp(22px, 5vw, 52px) 30px;
           position: relative;
         }
 
-        .conversation--active {
-          padding-top: 42px;
+        .page--written {
+          padding-top: 8vh;
         }
 
-        .first-prompt {
-          align-items: center;
-          display: flex;
-          flex: 1;
-          justify-content: center;
-          padding-bottom: 84px;
+        .quiet-memory,
+        .margin-memory {
+          color: rgba(25, 24, 21, 0.42);
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+          font-size: clamp(17px, 2vw, 21px);
+          font-style: italic;
+          letter-spacing: 0;
+          line-height: 1.55;
+          margin: 0 0 18px;
         }
 
-        .first-prompt h1 {
+        .page-question {
           color: rgba(25, 24, 21, 0.9);
           font-size: clamp(28px, 5vw, 48px);
           font-weight: 560;
           letter-spacing: 0;
           line-height: 1.08;
           margin: 0;
-          text-align: center;
+          text-align: left;
         }
 
-        .conversation-scroll {
+        .page-body {
           display: flex;
           flex: 1;
           flex-direction: column;
@@ -558,19 +447,19 @@ export default function AxisPage() {
           width: 100%;
         }
 
-        .turn {
+        .page-entry {
           display: flex;
           flex-direction: column;
-          gap: 13px;
+          gap: 18px;
         }
 
-        .user-line {
-          align-self: flex-end;
-          color: rgba(25, 24, 21, 0.46);
-          font-size: 15px;
-          line-height: 1.55;
+        .page-writing {
+          color: rgba(25, 24, 21, 0.9);
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+          font-size: clamp(20px, 2.3vw, 27px);
+          line-height: 1.52;
           margin: 0;
-          max-width: 82%;
+          max-width: 100%;
           white-space: pre-wrap;
         }
 
@@ -579,7 +468,7 @@ export default function AxisPage() {
           display: flex;
           flex-direction: column;
           gap: 12px;
-          max-width: 620px;
+          max-width: 660px;
         }
 
         .axis-reply p {
@@ -630,17 +519,18 @@ export default function AxisPage() {
 
         .composer-wrap {
           bottom: 24px;
-          left: calc(220px + clamp(22px, 5vw, 72px));
+          left: clamp(16px, 5vw, 52px);
           position: fixed;
-          right: clamp(22px, 5vw, 72px);
+          right: clamp(16px, 5vw, 52px);
           z-index: 2;
         }
 
         .composer {
           align-items: flex-end;
           background: rgba(251, 250, 247, 0.9);
-          border: 1px solid rgba(25, 24, 21, 0.1);
-          border-radius: 18px;
+          border: 0;
+          border-bottom: 1px solid rgba(25, 24, 21, 0.18);
+          border-radius: 0;
           display: flex;
           gap: 8px;
           margin: 0 auto;
@@ -655,7 +545,8 @@ export default function AxisPage() {
           color: rgba(25, 24, 21, 0.92);
           flex: 1;
           font: inherit;
-          font-size: 17px;
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+          font-size: 21px;
           line-height: 1.45;
           min-height: 42px;
           min-width: 0;
@@ -715,57 +606,26 @@ export default function AxisPage() {
           padding: 0;
         }
 
-        .quiet-new {
-          background: transparent;
-          border: 0;
-          color: rgba(25, 24, 21, 0.28);
-          cursor: pointer;
-          font: inherit;
-          font-size: 13px;
-          position: fixed;
-          right: 24px;
-          top: 22px;
-        }
-
-        .quiet-new:hover {
-          color: rgba(25, 24, 21, 0.62);
-        }
-
         @media (max-width: 760px) {
           .axis-shell {
             background: #fbfaf7;
             display: block;
           }
 
-          .timeline-rail {
-            display: none;
-          }
-
-          .conversation,
-          .conversation--active {
+          .page,
+          .page--written {
             min-height: 100svh;
-            padding: 24px 18px 26px;
+            padding: 18vh 18px 26px;
           }
 
-          .first-prompt {
-            align-items: flex-start;
-            justify-content: flex-start;
-            padding-bottom: 110px;
-            padding-top: 22vh;
-          }
-
-          .first-prompt h1 {
+          .page-question {
             font-size: 32px;
             text-align: left;
           }
 
-          .conversation-scroll {
+          .page-body {
             gap: 34px;
-            padding: 12px 0 140px;
-          }
-
-          .user-line {
-            max-width: 92%;
+            padding: 0 0 140px;
           }
 
           .axis-reply p {
@@ -795,9 +655,6 @@ export default function AxisPage() {
             width: 38px;
           }
 
-          .quiet-new {
-            display: none;
-          }
         }
       `}</style>
     </>
