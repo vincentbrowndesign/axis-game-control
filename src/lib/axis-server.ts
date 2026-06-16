@@ -7,6 +7,44 @@ export type AxisCapability =
   | "COMPARE"
   | "LIVE_INTERVENTION";
 
+export type AxisPrimitive =
+  | "position"
+  | "direction"
+  | "distance"
+  | "timing"
+  | "angle"
+  | "balance"
+  | "force"
+  | "acceleration"
+  | "deceleration"
+  | "orientation"
+  | "advantage"
+  | "ball_path"
+  | "center_of_mass"
+  | "plant_foot";
+
+export interface AxisPattern {
+  label: string;
+  objects: string[];
+  relationships: string[];
+  motion: string[];
+}
+
+export interface AxisUnderstanding {
+  id: string;
+  threadId: string;
+  concept: string;
+  focus: string;
+  belief: string;
+  confidence: number;
+  primitives: AxisPrimitive[];
+  currentPattern: AxisPattern;
+  targetPattern: AxisPattern;
+  coachingCue: string;
+  experiment: string;
+  evidenceRequest: string;
+}
+
 export interface AxisThread {
   id: string;
   user_id: string | null;
@@ -49,7 +87,11 @@ export interface AxisCard {
     | "demonstration"
     | "evidence_received"
     | "compare"
-    | "live_intervention";
+    | "live_intervention"
+    | "belief"
+    | "see_it"
+    | "try_this"
+    | "show_me";
   content: string;
   secondary?: string;
   cue?: string;

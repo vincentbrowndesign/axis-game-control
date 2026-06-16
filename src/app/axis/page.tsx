@@ -31,18 +31,88 @@ const CARD_LABELS: Record<string, string> = {
   evidence_received: "RECEIVED",
   compare: "GAP",
   live_intervention: "SAY THIS",
+  belief: "BELIEF",
+  see_it: "SEE IT",
+  try_this: "TRY THIS",
+  show_me: "SHOW ME",
 };
 
 // ---------------------------------------------------------------------------
 // Card component
 // ---------------------------------------------------------------------------
 
+function SeeItRenderer({ data }: { data: Record<string, unknown> }) {
+  const current = data.currentPattern as { label?: string; objects?: string[]; relationships?: string[]; motion?: string[] } | undefined;
+  const target = data.targetPattern as { label?: string; objects?: string[]; relationships?: string[]; motion?: string[] } | undefined;
+  const primitives = data.primitives as string[] | undefined;
+  return (
+    <div className="see-it">
+      {primitives && primitives.length > 0 && (
+        <div className="see-it-primitives">
+          {primitives.map((p) => (
+            <span key={p} className="primitive-tag">{p}</span>
+          ))}
+        </div>
+      )}
+      <div className="see-it-patterns">
+        {current && (
+          <div className="pattern pattern--current">
+            <span className="pattern-label">NOW</span>
+            {current.label && <p className="pattern-name">{current.label}</p>}
+            {(current.objects ?? []).length > 0 && (
+              <p className="pattern-objects">{(current.objects ?? []).join(" · ")}</p>
+            )}
+            {(current.motion ?? []).length > 0 && (
+              <p className="pattern-motion">{(current.motion ?? []).join(" → ")}</p>
+            )}
+          </div>
+        )}
+        {target && (
+          <div className="pattern pattern--target">
+            <span className="pattern-label">TARGET</span>
+            {target.label && <p className="pattern-name">{target.label}</p>}
+            {(target.objects ?? []).length > 0 && (
+              <p className="pattern-objects">{(target.objects ?? []).join(" · ")}</p>
+            )}
+            {(target.motion ?? []).length > 0 && (
+              <p className="pattern-motion">{(target.motion ?? []).join(" → ")}</p>
+            )}
+          </div>
+        )}
+      </div>
+      <style jsx>{`
+        .see-it { margin-top: 14px; }
+        .see-it-primitives { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .primitive-tag {
+          font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+          text-transform: uppercase;
+          background: rgba(26,26,24,0.07); color: rgba(26,26,24,0.5);
+          border-radius: 4px; padding: 3px 7px;
+        }
+        .see-it-patterns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .pattern { border-radius: 8px; padding: 12px 14px; }
+        .pattern--current { background: rgba(200,80,40,0.07); border: 1px solid rgba(200,80,40,0.14); }
+        .pattern--target { background: rgba(60,140,60,0.07); border: 1px solid rgba(60,140,60,0.14); }
+        .pattern-label {
+          display: block; font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
+          text-transform: uppercase; color: rgba(26,26,24,0.35); margin-bottom: 6px;
+        }
+        .pattern-name { font-size: 13px; font-weight: 600; color: rgba(26,26,24,0.88); margin: 0 0 4px; }
+        .pattern-objects { font-size: 11px; color: rgba(26,26,24,0.45); margin: 0 0 4px; }
+        .pattern-motion { font-size: 11px; font-style: italic; color: rgba(26,26,24,0.55); margin: 0; }
+      `}</style>
+    </div>
+  );
+}
+
 function CardView({ card }: { card: AxisCard }) {
+  const isSeeIt = card.type === "see_it";
   return (
     <div className={`axis-card axis-card--${card.type}`}>
       <span className="card-label">{CARD_LABELS[card.type] ?? card.type.toUpperCase()}</span>
       <p className="card-body">{card.content}</p>
-      {card.secondary && <p className="card-secondary">{card.secondary}</p>}
+      {!isSeeIt && card.secondary && <p className="card-secondary">{card.secondary}</p>}
+      {isSeeIt && card.data && <SeeItRenderer data={card.data} />}
       {card.cue && <p className="card-cue">{card.cue}</p>}
       <style jsx>{`
         .axis-card {
@@ -79,6 +149,22 @@ function CardView({ card }: { card: AxisCard }) {
           background: rgba(140, 190, 40, 0.13);
           border: 2px solid rgba(140, 190, 40, 0.3);
         }
+        .axis-card--belief {
+          background: #fff;
+          border: 1px solid rgba(26, 26, 24, 0.1);
+        }
+        .axis-card--see_it {
+          background: #fff;
+          border: 1px solid rgba(26, 26, 24, 0.08);
+        }
+        .axis-card--try_this {
+          background: rgba(26, 26, 24, 0.96);
+          border: none;
+        }
+        .axis-card--show_me {
+          background: rgba(250, 250, 249, 0.055);
+          border: 1px solid rgba(250, 250, 249, 0.12);
+        }
         .card-label {
           display: block;
           font-size: 10px;
@@ -89,7 +175,8 @@ function CardView({ card }: { card: AxisCard }) {
           margin-bottom: 10px;
         }
         .axis-card--question .card-label,
-        .axis-card--evidence_received .card-label {
+        .axis-card--evidence_received .card-label,
+        .axis-card--show_me .card-label {
           color: rgba(250, 250, 249, 0.3);
         }
         .axis-card--breakthrough .card-label,
@@ -102,6 +189,9 @@ function CardView({ card }: { card: AxisCard }) {
         .axis-card--compare .card-label {
           color: rgba(200, 80, 40, 0.6);
         }
+        .axis-card--try_this .card-label {
+          color: rgba(140, 190, 40, 0.7);
+        }
         .card-body {
           font-size: 16px;
           line-height: 1.55;
@@ -112,7 +202,9 @@ function CardView({ card }: { card: AxisCard }) {
         .axis-card--question .card-body,
         .axis-card--breakthrough .card-body,
         .axis-card--evidence_received .card-body,
-        .axis-card--live_intervention .card-body {
+        .axis-card--live_intervention .card-body,
+        .axis-card--try_this .card-body,
+        .axis-card--show_me .card-body {
           color: rgba(250, 250, 249, 0.88);
         }
         .card-secondary {

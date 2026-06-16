@@ -3,10 +3,12 @@ export const runtime = "nodejs";
 import {
   createSupabaseFromRequest,
   type AxisBelief,
-  type AxisCapability,
   type AxisCard,
   type AxisEvent,
+  type AxisPattern,
+  type AxisPrimitive,
   type AxisThread,
+  type AxisUnderstanding,
 } from "../../../../lib/axis-server";
 
 // ---------------------------------------------------------------------------
@@ -28,42 +30,6 @@ interface StateUpdate {
   newBreakthroughs?: string[];
 }
 
-interface ModelResponse {
-  // UNDERSTAND
-  confidence: number;
-  insight?: string;
-  reasoning?: string;
-  mentalModel?: string;
-  demonstration?: {
-    currentState: string;
-    targetState: string;
-    keyDifference: string;
-    executionCue: string;
-  };
-  experimentCandidate?: string;
-  clarificationQuestion?: string;
-  stateUpdate?: StateUpdate;
-  // DEMONSTRATE
-  concept?: string;
-  objects?: string[];
-  relationships?: Array<{ from: string; to: string; type: string }>;
-  motion?: string;
-  currentState?: string;
-  targetState?: string;
-  // EVIDENCE
-  received?: string;
-  observation_request?: string;
-  // COMPARE
-  expected?: string;
-  observed?: string;
-  difference?: string;
-  adjustment?: string;
-  // LIVE_INTERVENTION
-  belief?: string;
-  intervention?: string;
-  watchFor?: string;
-  nextRepRule?: string;
-}
 
 interface AxisExperiment {
   id: string;
@@ -85,206 +51,72 @@ interface RunRequest {
 }
 
 // ---------------------------------------------------------------------------
-// System prompt
+// System prompt — single Understanding object drives all cards
 // ---------------------------------------------------------------------------
 
-const SYSTEM_UNDERSTAND = `You are Axis. Your job is not to answer questions. Your job is to evolve a player's understanding over time.
+const SYSTEM_UNDERSTANDING = `You are Axis. Your job is not to answer questions. Your job is not to route to a capability. Your job is to produce one AxisUnderstanding object that is the source of truth for coaching, demonstration, experiment, and evidence.
 
-A breakthrough is a durable change in understanding, perception, execution, decision-making, or behavior.
+Explanation and demonstration must come from the same object. Do not generate explanation separately from demonstration. Same belief. Same primitives. Same target.
 
 ---
 
-STATE UPDATE (required in every response)
+FIELDS
 
-Every response must include a stateUpdate block. This is how the thread accumulates.
+- concept: the mechanism being worked on (short noun phrase, e.g. "ball path", "plant foot timing", "pre-catch scan")
+- focus: what this thread specifically investigates (one phrase, set from first message)
+- belief: one declarative sentence about what Axis currently believes is happening. A belief, not a question. Not advice. Direct. Example: "Hudson's ball path is drifting away from the target line."
+- confidence: 0.0–1.0. Below 0.60 — return belief as a hypothesis, set evidenceRequest to ask the single question that would raise confidence.
+- primitives: 2–5 values from ["position","direction","distance","timing","angle","balance","force","acceleration","deceleration","orientation","advantage","ball_path","center_of_mass","plant_foot"]
+- currentPattern: { label, objects, relationships, motion }
+  - label: short phrase (e.g. "drifting path", "wait after catch")
+  - objects: 2–5 nouns (e.g. ["ball","target_line","foot","defender"])
+  - relationships: 1–3 statements of how objects relate now
+  - motion: 1–3 motion keywords (e.g. ["curve_out","late_correct","pause"])
+- targetPattern: same structure — what the corrected pattern looks like
+- coachingCue: one phrase, 8 words max, deliverable in one breath. No explanation. Just the cue.
+- experiment: one imperative sentence. The smallest action that tests the belief.
+- evidenceRequest: one sentence. The specific upload or observation that would confirm or deny the belief.
+- stateUpdate: required every response — thread accumulation schema (see below)
 
 stateUpdate fields:
-- goal: the user's development goal (infer from first message; persist for entire thread — only update if user explicitly resets)
-- focus: the specific mechanism this thread investigates (short phrase; set from first exchange; do not change unless user shifts topics)
-- currentBottleneck: the single constraint most blocking progress right now
-- nextAction: what the user should do before the next session (one imperative sentence). Example: "Track 10 PG possessions and note each effort vs efficiency choice."
-- newOpenQuestions: questions that remain unanswered after this exchange (new ones only)
-- resolvedQuestions: open questions this message finally answers (verbatim from OPEN QUESTIONS)
-- newHypotheses: hypotheses ESTABLISHED for the first time this exchange (array of {id, statement, confidence})
-  - id: kebab-case slug, e.g. "set-point-drift"
-  - statement: one declarative sentence
-  - confidence: 0.0–1.0
-- confirmedHypothesisIds: slugs of previously active hypotheses the user's message confirms
-- rejectedHypothesisIds: slugs of hypotheses the user's message rules out
-- newEvidence: verbatim facts the user gave you this exchange
-- experimentResult: ONLY when OPEN EXPERIMENT is shown and user is reporting back — { result: "<verbatim user report>", verdict: "PASS" | "FAIL" | "INCONCLUSIVE" }
-- newBreakthroughs: durable changes in understanding confirmed this exchange (usually empty; add one when experiment verdict is PASS)
-
----
+- goal: the user's development goal (infer from first message; persist — only reset if user explicitly changes it)
+- focus: same as Understanding.focus
+- currentBottleneck: the single constraint most blocking progress
+- nextAction: what the user should do before the next session (one imperative sentence)
+- newOpenQuestions: new unanswered questions this exchange raises
+- resolvedQuestions: open questions this message answers (verbatim match)
+- newHypotheses: [{id: kebab-slug, statement: one sentence, confidence: 0.0–1.0}]
+- confirmedHypothesisIds: slugs confirmed by this message
+- rejectedHypothesisIds: slugs ruled out by this message
+- newEvidence: verbatim facts the user gave you
+- experimentResult: only when user reports back on OPEN EXPERIMENT — {result: "...", verdict: "PASS"|"FAIL"|"INCONCLUSIVE"}
+- newBreakthroughs: durable changes confirmed this exchange (usually empty; add one when experiment verdict is PASS)
 
 THREAD MEMORY RULES
 
 When THREAD CONTINUITY is present:
-1. Active hypotheses drive generation. Build on established context — do not re-diagnose.
-2. Reference prior conclusions directly. Say "Based on your earlier answer…" when building.
-3. The current bottleneck drives the experiment. Changing it requires new evidence.
-4. Confirmed breakthroughs are closed. Do not repeat them as insights.
-5. Resolved questions are closed. Do not ask them again.
-6. OPEN EXPERIMENT takes priority. If user is reporting a result, handle that before generating new coaching.
-7. Each response must advance the thread, not reset it.
+1. Build on established context — do not re-diagnose what is already known.
+2. Confirmed breakthroughs are closed. Do not repeat them.
+3. Resolved questions are closed. Do not ask them again.
+4. OPEN EXPERIMENT takes priority — if user is reporting a result, handle that first.
+5. Each response must advance the thread, not reset it.
 
 ---
 
-EXPERIMENT TRACKING
+JSON only. No markdown. No explanation.
 
-When THREAD CONTINUITY shows an OPEN EXPERIMENT:
-- If the user's message is reporting a result: set experimentResult and update verdict. If PASS, add to newBreakthroughs.
-- If the user is asking something new: keep the experiment open (omit experimentResult).
-
-Example experiment result:
-experimentResult: {"result": "Bracing my core made the stop feel much more controlled.", "verdict": "PASS"}
-newBreakthroughs: ["Core brace before deceleration improves stability — confirmed by user field test."]
-
----
-
-COACHING STEPS (when confidence >= 0.80)
-
-
-STEP 1 — INSIGHT
-One observation. The single mechanism most likely to create immediate progress. Specific and structural.
-
-STEP 2 — MENTAL MODEL
-One transferable principle. State it as a structural law.
-
-STEP 3 — DEMONSTRATION
-Four fields: currentState, targetState, keyDifference, executionCue.
-
-STEP 4 — EXPERIMENT
-The smallest possible action that tests the insight. One imperative sentence.
-
-OUTPUT RULES:
-- confidence >= 0.80: return insight, reasoning, mentalModel, demonstration, experimentCandidate, stateUpdate.
-- confidence < 0.80: return confidence, clarificationQuestion, stateUpdate only.
-- Never write generic advice. Name a specific mechanism.
-- Direct coaching voice. No consultant framing.
-- JSON only. No markdown. No explanation.
-
-Schema (confident):
-{"confidence":0.88,"insight":"...","reasoning":"...","mentalModel":"...","demonstration":{"currentState":"...","targetState":"...","keyDifference":"...","executionCue":"..."},"experimentCandidate":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","nextAction":"...","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"...","statement":"...","confidence":0.85}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["..."],"experimentResult":null,"newBreakthroughs":[]}}
-
-Schema (not confident):
-{"confidence":0.64,"clarificationQuestion":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":null,"nextAction":null,"newOpenQuestions":["..."],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
+Schema:
+{"concept":"...","focus":"...","belief":"...","confidence":0.82,"primitives":["ball_path","direction"],"currentPattern":{"label":"...","objects":["ball","target_line"],"relationships":["ball moves away from target line"],"motion":["curve_out","late_correct"]},"targetPattern":{"label":"...","objects":["ball","target_line"],"relationships":["ball stays near target line"],"motion":["straight","repeat"]},"coachingCue":"...","experiment":"...","evidenceRequest":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","nextAction":"...","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"...","statement":"...","confidence":0.85}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["..."],"experimentResult":null,"newBreakthroughs":[]}}
 
 ---
 
 Few-shot examples:
 
-Intent: "I'm skipping training today to go to a Wings game"
-{"confidence":0.68,"clarificationQuestion":"What would make tonight count as development — are you trying to study something specific about how pros play?","stateUpdate":{"goal":"Develop while attending Wings game","focus":"game observation as development","currentBottleneck":null,"nextAction":null,"newOpenQuestions":["What would make tonight a development session rather than just watching?"],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
+Input: "Hudson said ball path."
+{"concept":"ball path","focus":"repeatable ball path","belief":"Hudson's ball path is drifting instead of staying connected to his target line.","confidence":0.74,"primitives":["ball_path","direction","distance"],"currentPattern":{"label":"drifting path","objects":["ball","target_line"],"relationships":["ball moves away from target line"],"motion":["curve_out","late_correct"]},"targetPattern":{"label":"clean path","objects":["ball","target_line"],"relationships":["ball stays near target line"],"motion":["straight","repeat"]},"coachingCue":"Keep the ball inside your frame.","experiment":"10 reps. Track whether the ball stays inside the foot line.","evidenceRequest":"Show me one rep from the front.","stateUpdate":{"goal":"improve Hudson's shooting","focus":"repeatable ball path","currentBottleneck":"ball path drifts away from target line","nextAction":"Run 10 reps tracking ball path inside foot line.","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"ball-path-drift","statement":"Hudson's ball path drifts away from the target line instead of staying connected.","confidence":0.74}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["Hudson reported ball path issue"],"experimentResult":null,"newBreakthroughs":[]}}
 
-THREAD CONTINUITY EXAMPLE:
-Prior state: goal="Develop while attending Wings game", focus="PG effort and competitiveness", bottleneck="undefined observation structure", openQuestions=["What would make tonight a development session?"], experiment=null
-Intent: "I want to study PG effort and competitiveness. What should I focus on?"
-{"confidence":0.92,"insight":"You already established the goal two messages ago — development through observation. Focus = PG effort and competitiveness. The structure is: 10 possessions, one question, yes/no answer each time.","reasoning":"The open question about what makes tonight count as development is now answered by the user's own statement. The antidote to passive watching is a countable observable.","mentalModel":"Observation only becomes development when structured around a single question. The question is the lens. Without it, the game is entertainment.","demonstration":{"currentState":"Watching without a specific target","targetState":"Tracking 10 consecutive PG possessions with one focus","keyDifference":"A count turns watching into measurement","executionCue":"Pick your possession number — 1 of 10 — before the PG touches the ball"},"experimentCandidate":"Tonight: track 10 PG possessions. For each one — did he choose effort over efficiency? Yes or no.","stateUpdate":{"goal":"Develop while attending Wings game","focus":"PG effort and competitiveness","currentBottleneck":"no structured observation target","nextAction":"Track 10 PG possessions tonight and report back with the count.","newOpenQuestions":[],"resolvedQuestions":["What would make tonight a development session?"],"newHypotheses":[{"id":"structured-10-possession-count","statement":"10-possession structured observation converts passive watching into measurable development","confidence":0.92}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["User wants to study PG effort and competitiveness"],"experimentResult":null,"newBreakthroughs":[]}}
-
-EXPERIMENT RESULT EXAMPLE:
-Prior state: open experiment = "Track 10 PG possessions tonight."
-Intent: "I tracked 8. He chose effort in 6 out of 8."
-{"confidence":0.95,"insight":"6 out of 8 is a 75% effort rate — high enough to build a model from. The 2 efficiency choices likely came at specific game moments, which is where the real teaching is.","reasoning":"The data is real. The experiment worked. Now the question shifts from 'does he choose effort?' to 'when does he choose efficiency instead, and why?'","mentalModel":"Players reveal their hierarchy of values under fatigue and pressure, not in easy possessions.","demonstration":{"currentState":"Observing PG behavior without a baseline","targetState":"Tracking when efficiency overrides effort and what triggers the switch","keyDifference":"The exception is more instructive than the rule","executionCue":"At the next game: watch the 2 efficiency possessions more carefully than the 6 effort ones"},"experimentCandidate":"Next game: identify exactly which game situations cause the shift from effort to efficiency.","stateUpdate":{"goal":"Develop while attending Wings game","focus":"PG effort and competitiveness","currentBottleneck":"no model yet for when efficiency overrides effort","nextAction":"At the next game, track the situations that cause PG to choose efficiency over effort.","newOpenQuestions":["What game situations trigger the shift from effort to efficiency?"],"resolvedQuestions":[],"newHypotheses":[{"id":"effort-efficiency-hierarchy","statement":"PG chooses effort over efficiency 75%+ of possessions but efficiency choices cluster at specific game moments","confidence":0.85}],"confirmedHypothesisIds":["structured-10-possession-count"],"rejectedHypothesisIds":[],"newEvidence":["PG chose effort in 6 out of 8 tracked possessions"],"experimentResult":{"result":"Tracked 8 possessions. PG chose effort in 6 out of 8.","verdict":"PASS"},"newBreakthroughs":["Structured 10-possession observation works — user completed the experiment and gathered real data."]}}`;
-
-const SYSTEM_DEMONSTRATE = `You are Axis. The user wants to see a concept demonstrated as motion — not described in paragraphs.
-
-Return structure that makes invisible relationships visible. Think in objects and movement, not words.
-
-JSON only. No markdown. No explanation.
-
-Schema:
-{"confidence":0.9,"concept":"...","objects":["A","B","C"],"relationships":[{"from":"A","to":"B","type":"moves_toward"}],"motion":"...","currentState":"...","targetState":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","nextAction":"...","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
-
-Field rules:
-- concept: the thing being demonstrated (short noun phrase, e.g. "hip load before first step")
-- objects: 2–5 moving parts (e.g. "ball", "defender", "space", "left foot", "shooting shoulder")
-- relationships: connections between objects — type must be one of: moves_toward, moves_away, follows, blocks, creates_space, passes_to, rotates, leads, trails
-- motion: one sentence describing the primary movement sequence from currentState to targetState
-- currentState: what the body or situation looks like before the adjustment
-- targetState: what it looks like after
-- stateUpdate: required every response — same schema as UNDERSTAND`;
-
-const SYSTEM_EVIDENCE = `You are Axis. The user uploaded a file (image or video) as evidence of what they are working on.
-
-Acknowledge what you can observe. Ask for the one human annotation that would most advance the thread.
-
-JSON only. No markdown. No explanation.
-
-Schema:
-{"confidence":0.8,"received":"...","observation_request":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","nextAction":"...","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
-
-Field rules:
-- received: what you can observe from the file — be specific about body position, spacing, timing, contact point if visible. If you cannot see the file, acknowledge the upload and ask for a verbal description.
-- observation_request: one concrete question about what the file shows — the single piece of context that would most advance the thread
-- stateUpdate: required every response`;
-
-const SYSTEM_COMPARE = `You are Axis. The user is comparing something they did (or saw) against a model or expectation.
-
-Identify the gap. Name the single most actionable adjustment. No generic advice.
-
-JSON only. No markdown. No explanation.
-
-Schema:
-{"confidence":0.9,"expected":"...","observed":"...","difference":"...","adjustment":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","nextAction":"...","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
-
-Field rules:
-- expected: what the ideal or model execution looks like (one sentence, specific)
-- observed: what the user described or showed (one sentence, specific)
-- difference: the structural gap — mechanical, timing, spacing, or decision — named precisely
-- adjustment: one imperative sentence. The smallest change that closes the gap.
-- stateUpdate: required every response`;
-
-const SYSTEM_LIVE_INTERVENTION = `You are Axis. The user needs a coaching cue they can deliver right now — at practice, in the gym, mid-drill.
-
-Return one cue. Short enough to say in 3 seconds. Built on the thread's current belief about what is blocking progress.
-
-JSON only. No markdown. No explanation.
-
-Schema:
-{"confidence":0.9,"belief":"...","intervention":"...","watchFor":"...","nextRepRule":"...","stateUpdate":{"goal":"...","focus":"...","currentBottleneck":"...","nextAction":"...","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":[],"experimentResult":null,"newBreakthroughs":[]}}
-
-Field rules:
-- belief: the underlying principle this cue is built on (one declarative sentence)
-- intervention: the exact words to say out loud, right now (8 words maximum — must be sayable in one breath)
-- watchFor: what to observe in the very next rep to know if the cue worked
-- nextRepRule: the adjustment rule if it doesn't work ("If X, then Y")
-- stateUpdate: required every response`;
-
-// ---------------------------------------------------------------------------
-// Capability routing
-// ---------------------------------------------------------------------------
-
-function classifyCapability(message: string, hasAttachment: boolean): AxisCapability {
-  if (hasAttachment) return "EVIDENCE";
-  const m = message.toLowerCase();
-  if (/show me|demonstrate|what does that look|visuali[sz]e/.test(m)) return "DEMONSTRATE";
-  if (/compare|versus|\bvs\b|is this right|does this match|how does this compare/.test(m))
-    return "COMPARE";
-  if (
-    /tell (her|him|them|me) right now|right now|at practice|in the gym|what do i (say|tell)|what should i (say|tell)|coaching cue/.test(
-      m,
-    )
-  )
-    return "LIVE_INTERVENTION";
-  if (/\bvideo\b|\bphoto\b|\bimage\b|here'?s|look at this|watch this/.test(m)) return "EVIDENCE";
-  return "UNDERSTAND";
-}
-
-function buildSystemPrompt(capability: AxisCapability): string {
-  switch (capability) {
-    case "DEMONSTRATE":
-      return SYSTEM_DEMONSTRATE;
-    case "EVIDENCE":
-      return SYSTEM_EVIDENCE;
-    case "COMPARE":
-      return SYSTEM_COMPARE;
-    case "LIVE_INTERVENTION":
-      return SYSTEM_LIVE_INTERVENTION;
-    default:
-      return SYSTEM_UNDERSTAND;
-  }
-}
+Input: "Hailey takes too long deciding."
+{"concept":"decision timing","focus":"pre-catch scan and decision","belief":"Hailey is recognizing the advantage late — she scans after the catch instead of before.","confidence":0.79,"primitives":["timing","advantage","orientation","position"],"currentPattern":{"label":"wait after catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey receives ball before scanning","defender reads hesitation"],"motion":["catch","pause","scan","decide"]},"targetPattern":{"label":"scan before catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey scans before ball arrives","decision made at catch"],"motion":["scan","catch_and_go"]},"coachingCue":"Know where you're going before it arrives.","experiment":"On every catch: scan, decide, act in one second.","evidenceRequest":"Upload one possession where she catches and pauses.","stateUpdate":{"goal":"improve Hailey's decision speed","focus":"pre-catch scan and decision","currentBottleneck":"scanning after catch instead of before","nextAction":"Practice pre-catch scan on every possession.","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"late-scan-timing","statement":"Hailey scans after the catch instead of before, causing decision delay.","confidence":0.79}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["Hailey takes too long deciding"],"experimentResult":null,"newBreakthroughs":[]}}`;
 
 // ---------------------------------------------------------------------------
 // Memory context builder
@@ -427,221 +259,107 @@ function parseStateUpdate(val: unknown): StateUpdate | undefined {
   };
 }
 
-function safeParse(raw: string): ModelResponse {
+const EMPTY_PATTERN: AxisPattern = { label: "", objects: [], relationships: [], motion: [] };
+
+function parseUnderstanding(
+  raw: string,
+): { understanding: AxisUnderstanding; stateUpdate?: StateUpdate } {
   try {
     const start = raw.indexOf("{");
     const end = raw.lastIndexOf("}");
     const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
-    const parsed = JSON.parse(slice) as Record<string, unknown>;
+    const p = JSON.parse(slice) as Record<string, unknown>;
 
-    const confidence =
-      typeof parsed.confidence === "number"
-        ? Math.min(1, Math.max(0, parsed.confidence))
-        : 0.5;
+    const strArr = (v: unknown): string[] =>
+      Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === "string") : [];
 
-    const demo = (() => {
-      if (!parsed.demonstration || typeof parsed.demonstration !== "object") return undefined;
-      const d = parsed.demonstration as Record<string, unknown>;
-      if (!d.currentState && !d.keyDifference) return undefined;
+    const parsePattern = (v: unknown): AxisPattern => {
+      const d = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
       return {
-        currentState: String(d.currentState ?? ""),
-        targetState: String(d.targetState ?? ""),
-        keyDifference: String(d.keyDifference ?? ""),
-        executionCue: String(d.executionCue ?? ""),
+        label: typeof d.label === "string" ? d.label.trim() : "",
+        objects: strArr(d.objects),
+        relationships: strArr(d.relationships),
+        motion: strArr(d.motion),
       };
-    })();
-
-    return {
-      confidence,
-      insight:
-        typeof parsed.insight === "string" && parsed.insight.trim()
-          ? parsed.insight.trim()
-          : undefined,
-      reasoning:
-        typeof parsed.reasoning === "string" && parsed.reasoning.trim()
-          ? parsed.reasoning.trim()
-          : undefined,
-      mentalModel:
-        typeof parsed.mentalModel === "string" && parsed.mentalModel.trim()
-          ? parsed.mentalModel.trim()
-          : undefined,
-      demonstration: demo,
-      experimentCandidate:
-        typeof parsed.experimentCandidate === "string" && parsed.experimentCandidate.trim()
-          ? parsed.experimentCandidate.trim()
-          : undefined,
-      clarificationQuestion:
-        typeof parsed.clarificationQuestion === "string" &&
-        parsed.clarificationQuestion.trim()
-          ? parsed.clarificationQuestion.trim()
-          : undefined,
-      stateUpdate: parseStateUpdate(parsed.stateUpdate),
-      // DEMONSTRATE fields
-      concept:
-        typeof parsed.concept === "string" && parsed.concept.trim()
-          ? parsed.concept.trim()
-          : undefined,
-      objects: Array.isArray(parsed.objects)
-        ? (parsed.objects as unknown[]).filter((o): o is string => typeof o === "string")
-        : undefined,
-      relationships: Array.isArray(parsed.relationships)
-        ? (parsed.relationships as unknown[]).flatMap((r) => {
-            if (!r || typeof r !== "object") return [];
-            const rel = r as Record<string, unknown>;
-            if (
-              typeof rel.from !== "string" ||
-              typeof rel.to !== "string" ||
-              typeof rel.type !== "string"
-            )
-              return [];
-            return [{ from: rel.from, to: rel.to, type: rel.type }];
-          })
-        : undefined,
-      motion:
-        typeof parsed.motion === "string" && parsed.motion.trim()
-          ? parsed.motion.trim()
-          : undefined,
-      currentState:
-        typeof parsed.currentState === "string" && parsed.currentState.trim()
-          ? parsed.currentState.trim()
-          : undefined,
-      targetState:
-        typeof parsed.targetState === "string" && parsed.targetState.trim()
-          ? parsed.targetState.trim()
-          : undefined,
-      // EVIDENCE fields
-      received:
-        typeof parsed.received === "string" && parsed.received.trim()
-          ? parsed.received.trim()
-          : undefined,
-      observation_request:
-        typeof parsed.observation_request === "string" && parsed.observation_request.trim()
-          ? parsed.observation_request.trim()
-          : undefined,
-      // COMPARE fields
-      expected:
-        typeof parsed.expected === "string" && parsed.expected.trim()
-          ? parsed.expected.trim()
-          : undefined,
-      observed:
-        typeof parsed.observed === "string" && parsed.observed.trim()
-          ? parsed.observed.trim()
-          : undefined,
-      difference:
-        typeof parsed.difference === "string" && parsed.difference.trim()
-          ? parsed.difference.trim()
-          : undefined,
-      adjustment:
-        typeof parsed.adjustment === "string" && parsed.adjustment.trim()
-          ? parsed.adjustment.trim()
-          : undefined,
-      // LIVE_INTERVENTION fields
-      belief:
-        typeof parsed.belief === "string" && parsed.belief.trim()
-          ? parsed.belief.trim()
-          : undefined,
-      intervention:
-        typeof parsed.intervention === "string" && parsed.intervention.trim()
-          ? parsed.intervention.trim()
-          : undefined,
-      watchFor:
-        typeof parsed.watchFor === "string" && parsed.watchFor.trim()
-          ? parsed.watchFor.trim()
-          : undefined,
-      nextRepRule:
-        typeof parsed.nextRepRule === "string" && parsed.nextRepRule.trim()
-          ? parsed.nextRepRule.trim()
-          : undefined,
     };
+
+    const understanding: AxisUnderstanding = {
+      id: crypto.randomUUID(),
+      threadId: "",
+      concept: typeof p.concept === "string" ? p.concept.trim() : "",
+      focus: typeof p.focus === "string" ? p.focus.trim() : "",
+      belief: typeof p.belief === "string" ? p.belief.trim() : "",
+      confidence:
+        typeof p.confidence === "number" ? Math.min(1, Math.max(0, p.confidence)) : 0.5,
+      primitives: strArr(p.primitives) as AxisPrimitive[],
+      currentPattern: parsePattern(p.currentPattern),
+      targetPattern: parsePattern(p.targetPattern),
+      coachingCue: typeof p.coachingCue === "string" ? p.coachingCue.trim() : "",
+      experiment: typeof p.experiment === "string" ? p.experiment.trim() : "",
+      evidenceRequest: typeof p.evidenceRequest === "string" ? p.evidenceRequest.trim() : "",
+    };
+
+    return { understanding, stateUpdate: parseStateUpdate(p.stateUpdate) };
   } catch {
-    return { confidence: 0 };
+    return {
+      understanding: {
+        id: crypto.randomUUID(),
+        threadId: "",
+        concept: "",
+        focus: "",
+        belief: "",
+        confidence: 0,
+        primitives: [],
+        currentPattern: EMPTY_PATTERN,
+        targetPattern: EMPTY_PATTERN,
+        coachingCue: "",
+        experiment: "",
+        evidenceRequest: "",
+      },
+    };
   }
 }
 
-function toCards(r: ModelResponse, capability: AxisCapability): AxisCard[] {
+function understandingToCards(u: AxisUnderstanding, stateUpdate: StateUpdate | undefined): AxisCard[] {
   const cards: AxisCard[] = [];
 
-  switch (capability) {
-    case "DEMONSTRATE": {
-      if (r.concept) {
-        cards.push({
-          type: "demonstration",
-          content: r.concept,
-          secondary: r.motion,
-          data: {
-            objects: r.objects ?? [],
-            relationships: r.relationships ?? [],
-            currentState: r.currentState,
-            targetState: r.targetState,
-          },
-        });
-      }
-      break;
-    }
-    case "EVIDENCE": {
-      if (r.received || r.observation_request) {
-        cards.push({
-          type: "evidence_received",
-          content: r.received ?? "Evidence received.",
-          secondary: r.observation_request,
-        });
-      }
-      break;
-    }
-    case "COMPARE": {
-      if (r.difference || r.adjustment) {
-        cards.push({
-          type: "compare",
-          content: r.adjustment ?? r.difference ?? "",
-          secondary: r.difference,
-          data: {
-            expected: r.expected,
-            observed: r.observed,
-          },
-        });
-      }
-      break;
-    }
-    case "LIVE_INTERVENTION": {
-      if (r.intervention) {
-        cards.push({
-          type: "live_intervention",
-          content: r.intervention,
-          secondary: r.watchFor,
-          cue: r.nextRepRule,
-          data: { belief: r.belief },
-        });
-      }
-      break;
-    }
-    default: {
-      // UNDERSTAND
-      if (r.clarificationQuestion) {
-        cards.push({ type: "question", content: r.clarificationQuestion });
-        return cards;
-      }
-      if (r.insight) {
-        cards.push({ type: "insight", content: r.insight, secondary: r.reasoning });
-      }
-      if (r.mentalModel) {
-        cards.push({ type: "insight", content: r.mentalModel });
-      }
-      if (r.demonstration) {
-        cards.push({
-          type: "experiment",
-          content: r.demonstration.keyDifference,
-          secondary: r.demonstration.targetState || undefined,
-          cue: r.demonstration.executionCue || undefined,
-        });
-      }
-      if (r.experimentCandidate) {
-        cards.push({ type: "experiment", content: r.experimentCandidate });
-      }
-      break;
-    }
+  if (u.belief) {
+    cards.push({
+      type: "belief",
+      content: u.belief,
+      data: { confidence: u.confidence },
+    });
   }
 
-  for (const b of r.stateUpdate?.newBreakthroughs ?? []) {
+  if (u.currentPattern.label || u.targetPattern.label || u.primitives.length > 0) {
+    cards.push({
+      type: "see_it",
+      content: u.currentPattern.label || u.concept,
+      secondary: u.targetPattern.label || undefined,
+      data: {
+        currentPattern: u.currentPattern,
+        targetPattern: u.targetPattern,
+        primitives: u.primitives,
+      },
+    });
+  }
+
+  if (u.experiment) {
+    cards.push({
+      type: "try_this",
+      content: u.experiment,
+      cue: u.coachingCue || undefined,
+    });
+  }
+
+  if (u.evidenceRequest) {
+    cards.push({
+      type: "show_me",
+      content: u.evidenceRequest,
+    });
+  }
+
+  for (const b of stateUpdate?.newBreakthroughs ?? []) {
     cards.push({ type: "breakthrough", content: b });
   }
 
@@ -796,8 +514,6 @@ async function handleRun(req: Request): Promise<Response> {
   const hasAttachment = !!body.attachmentUrl;
   if (!message && !hasAttachment) return Response.json({ error: "Empty message" }, { status: 400 });
 
-  const capability = classifyCapability(message ?? "", hasAttachment);
-
   const sb = createSupabaseFromRequest(req);
 
   // Auth (nullable — guests allowed)
@@ -890,7 +606,22 @@ async function handleRun(req: Request): Promise<Response> {
     .join("\n\n");
 
   // Call Anthropic
-  let parsed: ModelResponse = { confidence: 0 };
+  let understanding: AxisUnderstanding = {
+    id: crypto.randomUUID(),
+    threadId: "",
+    concept: "",
+    focus: "",
+    belief: "",
+    confidence: 0,
+    primitives: [],
+    currentPattern: EMPTY_PATTERN,
+    targetPattern: EMPTY_PATTERN,
+    coachingCue: "",
+    experiment: "",
+    evidenceRequest: "",
+  };
+  let stateUpdate: StateUpdate | undefined;
+
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -902,7 +633,7 @@ async function handleRun(req: Request): Promise<Response> {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
-        system: buildSystemPrompt(capability),
+        system: SYSTEM_UNDERSTANDING,
         messages: [{ role: "user", content: userContent }],
       }),
     });
@@ -912,7 +643,10 @@ async function handleRun(req: Request): Promise<Response> {
         content?: Array<{ type: string; text: string }>;
       };
       const text = raw.content?.find((c) => c.type === "text")?.text ?? "{}";
-      parsed = safeParse(text);
+      const result = parseUnderstanding(text);
+      understanding = result.understanding;
+      understanding.threadId = threadId!;
+      stateUpdate = result.stateUpdate;
     } else {
       console.error("[axis/run] Anthropic error", anthropicRes.status);
     }
@@ -920,7 +654,7 @@ async function handleRun(req: Request): Promise<Response> {
     console.error("[axis/run] fetch error", (err as Error).message);
   }
 
-  const cards = toCards(parsed, capability);
+  const cards = understandingToCards(understanding, stateUpdate);
 
   // Persist state + assistant event (fire-and-forget)
   void (async () => {
@@ -930,8 +664,8 @@ async function handleRun(req: Request): Promise<Response> {
       thread!,
       beliefs,
       openExperiment,
-      parsed.stateUpdate,
-      parsed.experimentCandidate,
+      stateUpdate,
+      understanding.experiment || undefined,
     );
     // Evidence row for uploaded file attachment
     if (body.attachmentUrl) {
@@ -949,7 +683,7 @@ async function handleRun(req: Request): Promise<Response> {
     await sb.from("axis_thread_events").insert({
       thread_id: threadId,
       role: "assistant",
-      content: { cards, capability },
+      content: { cards, understanding },
     });
   })();
 
