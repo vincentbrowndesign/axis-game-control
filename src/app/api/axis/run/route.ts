@@ -61,6 +61,34 @@ interface RunRequest {
   fileName?: string | null;
 }
 
+interface ThreadState {
+  threadId: string;
+  thread: AxisThread;
+  beliefs: AxisBelief[];
+  recentEvents: AxisEvent[];
+  experiments: AxisExperiment[];
+  openExperiment: AxisExperiment | null;
+}
+
+interface BuildUnderstandingInput {
+  apiKey: string;
+  priorUnderstanding: AxisUnderstanding;
+  threadId: string;
+  userContent: string;
+}
+
+interface BuildUnderstandingResult {
+  understanding: AxisUnderstanding;
+  stateUpdate?: StateUpdate;
+}
+
+interface AxisRunResponse {
+  understanding: AxisUnderstanding;
+  cards: AxisCard[];
+  comparison: ReturnType<typeof compareEvidenceToUnderstanding> | null;
+  operatingSystem: ReturnType<typeof runAxisOperatingSystem>;
+}
+
 // ---------------------------------------------------------------------------
 // System prompt — single Understanding object drives all cards
 // ---------------------------------------------------------------------------
@@ -483,12 +511,11 @@ async function applyStateUpdate(
   openExperiment: AxisExperiment | null,
   update: StateUpdate | undefined,
   experimentCandidate: string | undefined,
-  understanding: AxisUnderstanding,
 ): Promise<void> {
   const now = new Date().toISOString();
 
   // --- Thread scalar fields ---
-  const threadPatch: Record<string, unknown> = { updated_at: now, current_understanding: understanding };
+  const threadPatch: Record<string, unknown> = { updated_at: now };
   if (update?.goal && !thread.goal) threadPatch.goal = update.goal;
   if (update?.focus) threadPatch.focus = update.focus;
   if (update?.currentBottleneck) threadPatch.current_bottleneck = update.currentBottleneck;
@@ -585,45 +612,43 @@ async function applyStateUpdate(
   }
 }
 
-// ---------------------------------------------------------------------------
-// POST handler
-// ---------------------------------------------------------------------------
+async function persistCanonicalUnderstanding(
+  sb: SupabaseClient,
+  threadId: string,
+  understanding: AxisUnderstanding,
+): Promise<void> {
+  const { error } = await sb
+    .from("axis_threads")
+    .update({
+      current_understanding: understanding,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", threadId);
 
-export async function POST(req: Request) {
-  try {
-    return await handleRun(req);
-  } catch (err) {
-    // Unhandled exception — log full stack so it appears in Vercel runtime logs
-    console.error("[axis/run] UNHANDLED EXCEPTION", (err as Error).message, (err as Error).stack);
-    return Response.json({ error: "Internal error", detail: (err as Error).message }, { status: 500 });
-  }
+  if (error) throw new Error(`Could not persist canonical understanding: ${error.message}`);
 }
 
-async function handleRun(req: Request): Promise<Response> {
-  let body: RunRequest;
-  try {
-    body = (await req.json()) as RunRequest;
-  } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+async function writeAxisEvent(
+  sb: SupabaseClient,
+  threadId: string,
+  role: AxisEvent["role"],
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await sb.from("axis_thread_events").insert({
+    thread_id: threadId,
+    role,
+    content: payload,
+  });
 
-  const message = body.message?.trim();
-  const hasAttachment = !!body.attachmentUrl;
-  const isAttachmentOnly = hasAttachment && !message;
-  if (!message && !hasAttachment) return Response.json({ error: "Empty message" }, { status: 400 });
+  if (error) throw new Error(`Could not write Axis event: ${error.message}`);
+}
 
-  const sb = createSupabaseFromRequest(req);
-
-  // Auth (nullable — guests allowed)
-  const {
-    data: { user },
-    error: authError,
-  } = await sb.auth.getUser();
-  if (authError) console.error("[axis/run] getUser error:", authError.message);
-  const userId = user?.id ?? null;
-
-  // Resolve thread
-  let threadId = body.threadId ?? null;
+async function loadThreadState(
+  sb: SupabaseClient,
+  requestedThreadId: string | null | undefined,
+  userId: string | null,
+): Promise<ThreadState> {
+  let threadId = requestedThreadId ?? null;
   let thread: AxisThread | null = null;
 
   if (threadId) {
@@ -639,7 +664,6 @@ async function handleRun(req: Request): Promise<Response> {
       .select("*")
       .single();
     if (error || !data) {
-      // Log the actual Supabase error so it appears in Vercel runtime logs
       console.error(
         "[axis/run] thread insert FAILED",
         "message:", error?.message,
@@ -647,16 +671,12 @@ async function handleRun(req: Request): Promise<Response> {
         "details:", error?.details,
         "hint:", error?.hint,
       );
-      return Response.json(
-        { error: "Could not create thread", supabase: error?.message ?? "no data" },
-        { status: 500 },
-      );
+      throw new Error(error?.message ?? "Could not create thread");
     }
     thread = data as AxisThread;
     threadId = thread.id;
   }
 
-  // Load beliefs + events + open experiments in parallel
   const [{ data: beliefRows }, { data: eventRows }, { data: experimentRows }] =
     await Promise.all([
       sb
@@ -668,7 +688,7 @@ async function handleRun(req: Request): Promise<Response> {
         .from("axis_thread_events")
         .select("*")
         .eq("thread_id", threadId)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(30),
       sb
         .from("axis_thread_experiments")
@@ -678,125 +698,21 @@ async function handleRun(req: Request): Promise<Response> {
         .limit(10),
     ]);
 
-  const beliefs = (beliefRows ?? []) as AxisBelief[];
-  const recentEvents = (eventRows ?? []) as AxisEvent[];
+  const recentEvents = ((eventRows ?? []) as AxisEvent[]).reverse();
   const experiments = (experimentRows ?? []) as AxisExperiment[];
-  const openExperiment = experiments.find((e) => e.status === "open") ?? null;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey && !isAttachmentOnly) return Response.json({ error: "No API key" }, { status: 503 });
 
-  // Canonical understanding lives on the thread row — never reconstructed from events.
-  const priorUnderstanding: AxisUnderstanding = thread.current_understanding ?? emptyUnderstanding();
+  return {
+    threadId: threadId!,
+    thread,
+    beliefs: (beliefRows ?? []) as AxisBelief[],
+    recentEvents,
+    experiments,
+    openExperiment: experiments.find((e) => e.status === "open") ?? null,
+  };
+}
 
-  // Append user event before generating output so restoration can replay the turn.
-  await sb.from("axis_thread_events").insert({
-    thread_id: threadId,
-    role: "user",
-    content: { message, fileName: body.fileName ?? null },
-  });
-
-  // Eyes do not generate output. Eyes update understanding.
-  let observation: AxisObservation | null = null;
-  let mergedSeed: AxisUnderstanding | null = null;
-  let comparison = null;
-  if (hasAttachment) {
-    observation = await observeEvidence({
-      apiKey,
-      evidenceUrl: body.attachmentUrl!,
-      evidenceType: body.attachmentType ?? "",
-      message: message ?? "",
-      prior: priorUnderstanding,
-    });
-    mergedSeed = updateUnderstandingFromObservation(priorUnderstanding, observation).understanding;
-    comparison = compareEvidenceToUnderstanding(mergedSeed, observation);
-  }
-
-  if (isAttachmentOnly) {
-    const cards: AxisCard[] = [
-      {
-        type: "evidence_received",
-        content: "Upload stored.",
-        secondary: body.fileName ?? "Evidence file saved to this thread.",
-      },
-    ];
-
-    if (body.attachmentUrl && !body.evidenceId) {
-      const src = (body.attachmentType ?? "").startsWith("video/") ? "video" : "photo";
-      await sb.from("axis_thread_evidence").insert({
-        thread_id: threadId,
-        observation: body.fileName ?? "Attachment",
-        source: src,
-        confidence: 1.0,
-        url: body.attachmentUrl,
-        file_path: body.attachmentPath ?? null,
-        file_name: body.fileName ?? null,
-      });
-    }
-
-    const operatingSystem = runAxisOperatingSystem({
-      understanding: mergedSeed ?? priorUnderstanding,
-      observation,
-      learnFromSources: false,
-    });
-
-    await sb
-      .from("axis_threads")
-      .update({
-        current_understanding: operatingSystem.understanding,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", threadId);
-
-    await sb.from("axis_thread_events").insert({
-      thread_id: threadId,
-      role: "assistant",
-      content: {
-        cards,
-        evidenceId: body.evidenceId ?? null,
-        observation,
-        comparison,
-        understanding: mergedSeed ?? priorUnderstanding,
-        operatingSystem,
-      },
-    });
-
-    const { data: sidebarData } = await sb
-      .from("axis_threads")
-      .select("id, title, focus, current_bottleneck, updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(30);
-
-    return Response.json({
-      threadId,
-      understanding: operatingSystem.understanding,
-      cards,
-      comparison: operatingSystem.comparison,
-      operatingSystem,
-      sidebarThreads: sidebarData ?? [],
-    });
-  }
-
-  // Build memory context
-  const memCtx = buildMemoryContext(thread, beliefs, experiments, recentEvents);
-
-  const userContent = [
-    memCtx ? `--- THREAD CONTINUITY ---\n${memCtx}\n--- END CONTINUITY ---` : null,
-    message ? `Message: "${message}"` : null,
-    body.attachmentUrl
-      ? `Attachment: ${body.attachmentType ?? "file"} at ${body.attachmentUrl}`
-      : null,
-    observation
-      ? `--- OBSERVATION ---\nSummary: ${observation.summary || "none"}\nRelevant signals: ${observation.relevantSignals.join(", ") || "none"}\nIgnored noise: ${observation.ignoredNoise.join(", ") || "none"}\n--- END OBSERVATION ---`
-      : null,
-    mergedSeed
-      ? `--- MERGED BELIEF STATE (ground truth from observation — build coaching around this) ---\nConcept: ${mergedSeed.concept || "unset"}\nBelief: ${mergedSeed.belief || "unset"}\nConfidence: ${mergedSeed.confidence}\n--- END MERGED BELIEF STATE ---`
-      : null,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-  // Call Anthropic
-  let understanding: AxisUnderstanding = mergedSeed ?? emptyUnderstanding();
+async function buildUnderstanding(input: BuildUnderstandingInput): Promise<BuildUnderstandingResult> {
+  let understanding: AxisUnderstanding = emptyUnderstanding();
   let stateUpdate: StateUpdate | undefined;
 
   try {
@@ -804,14 +720,14 @@ async function handleRun(req: Request): Promise<Response> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey!,
+        "x-api-key": input.apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
         system: SYSTEM_UNDERSTANDING,
-        messages: [{ role: "user", content: userContent }],
+        messages: [{ role: "user", content: input.userContent }],
       }),
     });
 
@@ -830,34 +746,156 @@ async function handleRun(req: Request): Promise<Response> {
     console.error("[axis/run] fetch error", (err as Error).message);
   }
 
-  understanding = normalizeUnderstanding(understanding, mergedSeed ?? priorUnderstanding, threadId!);
-  stateUpdate = stateUpdateFromUnderstanding(stateUpdate, understanding);
+  return {
+    understanding: normalizeUnderstanding(
+      understanding,
+      input.priorUnderstanding,
+      input.threadId,
+    ),
+    stateUpdate,
+  };
+}
 
-  const cards = understandingToCards(understanding, stateUpdate);
+function buildAxisResponse(
+  understanding: AxisUnderstanding,
+  observation: AxisObservation | null,
+  comparison: ReturnType<typeof compareEvidenceToUnderstanding> | null,
+  operatingSystem: ReturnType<typeof runAxisOperatingSystem>,
+): AxisRunResponse {
+  return {
+    understanding,
+    cards: understandingToCards(understanding, undefined),
+    comparison,
+    operatingSystem,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// POST handler
+// ---------------------------------------------------------------------------
+
+export async function POST(req: Request) {
+  try {
+    return await handleRunCanonical(req);
+  } catch (err) {
+    // Unhandled exception — log full stack so it appears in Vercel runtime logs
+    console.error("[axis/run] UNHANDLED EXCEPTION", (err as Error).message, (err as Error).stack);
+    return Response.json({ error: "Internal error", detail: (err as Error).message }, { status: 500 });
+  }
+}
+
+async function handleRunCanonical(req: Request): Promise<Response> {
+  let body: RunRequest;
+  try {
+    body = (await req.json()) as RunRequest;
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const message = body.message?.trim();
+  const hasAttachment = !!body.attachmentUrl;
+  const isAttachmentOnly = hasAttachment && !message;
+  if (!message && !hasAttachment) return Response.json({ error: "Empty message" }, { status: 400 });
+
+  const sb = createSupabaseFromRequest(req);
+  const {
+    data: { user },
+    error: authError,
+  } = await sb.auth.getUser();
+  if (authError) console.error("[axis/run] getUser error:", authError.message);
+
+  let state: ThreadState;
+  try {
+    state = await loadThreadState(sb, body.threadId, user?.id ?? null);
+  } catch (error) {
+    return Response.json(
+      { error: "Could not create thread", supabase: (error as Error).message },
+      { status: 500 },
+    );
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey && !isAttachmentOnly) return Response.json({ error: "No API key" }, { status: 503 });
+
+  const priorUnderstanding = state.thread.current_understanding ?? emptyUnderstanding();
+  await writeAxisEvent(sb, state.threadId, "user", { message, fileName: body.fileName ?? null });
+
+  let observation: AxisObservation | null = null;
+  let comparison: ReturnType<typeof compareEvidenceToUnderstanding> | null = null;
+  let understanding = priorUnderstanding;
+  let stateUpdate: StateUpdate | undefined;
+
+  if (hasAttachment) {
+    observation = await observeEvidence({
+      apiKey,
+      evidenceUrl: body.attachmentUrl!,
+      evidenceType: body.attachmentType ?? "",
+      message: message ?? "",
+      prior: priorUnderstanding,
+    });
+    understanding = updateUnderstandingFromObservation(priorUnderstanding, observation).understanding;
+    comparison = compareEvidenceToUnderstanding(understanding, observation);
+  }
+
+  if (!isAttachmentOnly) {
+    const memCtx = buildMemoryContext(
+      state.thread,
+      state.beliefs,
+      state.experiments,
+      state.recentEvents,
+    );
+    const userContent = [
+      memCtx ? `--- THREAD CONTINUITY ---\n${memCtx}\n--- END CONTINUITY ---` : null,
+      message ? `Message: "${message}"` : null,
+      body.attachmentUrl
+        ? `Attachment: ${body.attachmentType ?? "file"} at ${body.attachmentUrl}`
+        : null,
+      observation
+        ? `--- OBSERVATION ---\nSummary: ${observation.summary || "none"}\nRelevant signals: ${observation.relevantSignals.join(", ") || "none"}\nIgnored noise: ${observation.ignoredNoise.join(", ") || "none"}\n--- END OBSERVATION ---`
+        : null,
+      hasAttachment
+        ? `--- CANONICAL BELIEF STATE ---\nConcept: ${understanding.concept || "unset"}\nBelief: ${understanding.belief || "unset"}\nConfidence: ${understanding.confidence}\n--- END CANONICAL BELIEF STATE ---`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const built = await buildUnderstanding({
+      apiKey: apiKey!,
+      priorUnderstanding: understanding,
+      threadId: state.threadId,
+      userContent,
+    });
+    understanding = built.understanding;
+    stateUpdate = stateUpdateFromUnderstanding(built.stateUpdate, understanding);
+  }
+
   const operatingSystem = runAxisOperatingSystem({
     understanding,
     observation,
     learnFromSources: false,
   });
-  understanding = operatingSystem.understanding;
+  understanding = normalizeUnderstanding(operatingSystem.understanding, priorUnderstanding, state.threadId);
   comparison = operatingSystem.comparison;
 
-  // Persist state + assistant event before returning so restored threads match
-  // the response the user saw, even after an immediate refresh or navigation.
-  await applyStateUpdate(
-    sb,
-    threadId!,
-    thread!,
-    beliefs,
-    openExperiment,
-    stateUpdate,
-    understanding.experiment || undefined,
-    understanding,
-  );
+  await persistCanonicalUnderstanding(sb, state.threadId, understanding);
+
+  if (!isAttachmentOnly) {
+    await applyStateUpdate(
+      sb,
+      state.threadId,
+      state.thread,
+      state.beliefs,
+      state.openExperiment,
+      stateUpdate,
+      understanding.experiment || undefined,
+    );
+  }
+
   if (body.attachmentUrl && !body.evidenceId) {
     const src = (body.attachmentType ?? "").startsWith("video/") ? "video" : "photo";
     await sb.from("axis_thread_evidence").insert({
-      thread_id: threadId,
+      thread_id: state.threadId,
       observation: body.fileName ?? "Attachment",
       source: src,
       confidence: 1.0,
@@ -866,13 +904,27 @@ async function handleRun(req: Request): Promise<Response> {
       file_name: body.fileName ?? null,
     });
   }
-  await sb.from("axis_thread_events").insert({
-    thread_id: threadId,
-    role: "assistant",
-    content: { cards, understanding, observation, comparison, operatingSystem },
+
+  const response = buildAxisResponse(understanding, observation, comparison, operatingSystem);
+  response.cards = isAttachmentOnly
+    ? [
+        {
+          type: "evidence_received",
+          content: "Upload stored.",
+          secondary: body.fileName ?? "Evidence file saved to this thread.",
+        },
+      ]
+    : understandingToCards(understanding, stateUpdate);
+
+  await writeAxisEvent(sb, state.threadId, "assistant", {
+    cards: response.cards,
+    understanding: response.understanding,
+    observation,
+    comparison: response.comparison,
+    operatingSystem,
+    evidenceId: body.evidenceId ?? null,
   });
 
-  // Sidebar threads
   const { data: sidebarData } = await sb
     .from("axis_threads")
     .select("id, title, focus, current_bottleneck, updated_at")
@@ -880,10 +932,10 @@ async function handleRun(req: Request): Promise<Response> {
     .limit(30);
 
   return Response.json({
-    threadId,
-    understanding,
-    cards,
-    comparison,
+    threadId: state.threadId,
+    understanding: response.understanding,
+    cards: response.cards,
+    comparison: response.comparison,
     operatingSystem,
     sidebarThreads: sidebarData ?? [],
   });
