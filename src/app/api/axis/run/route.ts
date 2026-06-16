@@ -11,7 +11,9 @@ import {
   type AxisUnderstanding,
 } from "../../../../lib/axis-server";
 import {
+  hasObservationSignal,
   observeEvidence,
+  observeTextReport,
   updateUnderstandingFromObservation,
 } from "../../../../lib/axis-observation-engine";
 import { compareEvidenceToUnderstanding } from "../../../../lib/axis-evidence-comparison";
@@ -824,6 +826,8 @@ async function handleRunCanonical(req: Request): Promise<Response> {
   let comparison: ReturnType<typeof compareEvidenceToUnderstanding> | null = null;
   let understanding = priorUnderstanding;
   let stateUpdate: StateUpdate | undefined;
+  // True when the turn is handled entirely by the observation path — no coaching generated.
+  let isObservationTurn = isAttachmentOnly;
 
   if (hasAttachment) {
     observation = await observeEvidence({
@@ -838,36 +842,50 @@ async function handleRunCanonical(req: Request): Promise<Response> {
   }
 
   if (!isAttachmentOnly) {
-    const memCtx = buildMemoryContext(
-      state.thread,
-      state.beliefs,
-      state.experiments,
-      state.recentEvents,
-    );
-    const userContent = [
-      memCtx ? `--- THREAD CONTINUITY ---\n${memCtx}\n--- END CONTINUITY ---` : null,
-      message ? `Message: "${message}"` : null,
-      body.attachmentUrl
-        ? `Attachment: ${body.attachmentType ?? "file"} at ${body.attachmentUrl}`
-        : null,
-      observation
-        ? `--- OBSERVATION ---\nSummary: ${observation.summary || "none"}\nRelevant signals: ${observation.relevantSignals.join(", ") || "none"}\nIgnored noise: ${observation.ignoredNoise.join(", ") || "none"}\n--- END OBSERVATION ---`
-        : null,
-      hasAttachment
-        ? `--- CANONICAL BELIEF STATE ---\nConcept: ${understanding.concept || "unset"}\nBelief: ${understanding.belief || "unset"}\nConfidence: ${understanding.confidence}\n--- END CANONICAL BELIEF STATE ---`
-        : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    // For text-only input, try to extract a structured observation first.
+    // If the message contains observable physical facts, update understanding
+    // from observation and skip buildUnderstanding (no coaching generated).
+    if (!hasAttachment && message && apiKey) {
+      const textObs = await observeTextReport({ apiKey, message, prior: priorUnderstanding });
+      if (hasObservationSignal(textObs)) {
+        observation = textObs;
+        understanding = updateUnderstandingFromObservation(priorUnderstanding, textObs).understanding;
+        isObservationTurn = true;
+      }
+    }
 
-    const built = await buildUnderstanding({
-      apiKey: apiKey!,
-      priorUnderstanding: understanding,
-      threadId: state.threadId,
-      userContent,
-    });
-    understanding = built.understanding;
-    stateUpdate = stateUpdateFromUnderstanding(built.stateUpdate, understanding);
+    if (!isObservationTurn) {
+      const memCtx = buildMemoryContext(
+        state.thread,
+        state.beliefs,
+        state.experiments,
+        state.recentEvents,
+      );
+      const userContent = [
+        memCtx ? `--- THREAD CONTINUITY ---\n${memCtx}\n--- END CONTINUITY ---` : null,
+        message ? `Message: "${message}"` : null,
+        body.attachmentUrl
+          ? `Attachment: ${body.attachmentType ?? "file"} at ${body.attachmentUrl}`
+          : null,
+        observation
+          ? `--- OBSERVATION ---\nSummary: ${observation.summary || "none"}\nRelevant signals: ${observation.relevantSignals.join(", ") || "none"}\nIgnored noise: ${observation.ignoredNoise.join(", ") || "none"}\n--- END OBSERVATION ---`
+          : null,
+        hasAttachment
+          ? `--- CANONICAL BELIEF STATE ---\nConcept: ${understanding.concept || "unset"}\nBelief: ${understanding.belief || "unset"}\nConfidence: ${understanding.confidence}\n--- END CANONICAL BELIEF STATE ---`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const built = await buildUnderstanding({
+        apiKey: apiKey!,
+        priorUnderstanding: understanding,
+        threadId: state.threadId,
+        userContent,
+      });
+      understanding = built.understanding;
+      stateUpdate = stateUpdateFromUnderstanding(built.stateUpdate, understanding);
+    }
   }
 
   const operatingSystem = runAxisOperatingSystem({
@@ -880,7 +898,7 @@ async function handleRunCanonical(req: Request): Promise<Response> {
 
   await persistCanonicalUnderstanding(sb, state.threadId, understanding);
 
-  if (!isAttachmentOnly) {
+  if (!isObservationTurn) {
     await applyStateUpdate(
       sb,
       state.threadId,
@@ -906,12 +924,16 @@ async function handleRunCanonical(req: Request): Promise<Response> {
   }
 
   const response = buildAxisResponse(understanding, observation, comparison, operatingSystem);
-  response.cards = isAttachmentOnly
+  response.cards = isObservationTurn
     ? [
         {
           type: "evidence_received",
-          content: "Upload stored.",
-          secondary: body.fileName ?? "Evidence file saved to this thread.",
+          content: isAttachmentOnly
+            ? (body.fileName ?? "Evidence file saved to this thread.")
+            : (observation?.summary ?? "Observation recorded."),
+          secondary: isAttachmentOnly
+            ? (body.fileName ?? undefined)
+            : undefined,
         },
       ]
     : understandingToCards(understanding, stateUpdate);

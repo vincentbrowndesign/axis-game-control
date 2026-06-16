@@ -179,7 +179,7 @@ export function updateUnderstandingFromObservations(
   };
 }
 
-function hasObservationSignal(observation: AxisObservation): boolean {
+export function hasObservationSignal(observation: AxisObservation): boolean {
   return Boolean(
     observation.summary ||
       observation.relevantSignals.length ||
@@ -299,5 +299,83 @@ export async function observeEvidence(input: ObserveEvidenceInput): Promise<Axis
   } catch (err) {
     console.error("[axis/observation] observe fetch error", (err as Error).message);
     return { source: "image", summary: "", relevantSignals: [], ignoredNoise: [], updates: {} };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Text observation — extract AxisObservation from a manual report.
+// Observation only: no coaching, no experiments, no interpretation.
+// If the text contains no observable physical facts, returns an empty observation.
+// ---------------------------------------------------------------------------
+
+const SYSTEM_OBSERVE_TEXT = `You are Axis's observation layer for text reports.
+
+Your only job is to extract physical facts that were directly observed — objects, spatial relationships, and motion states. Do not interpret, advise, generate experiments, or create coaching cues.
+
+If the text is a question, a goal statement, a request for help, or contains no observable physical facts, return an empty object: {}
+
+JSON only. No markdown. No explanation.
+
+Schema:
+{"summary":"one sentence stating what was physically observed","relevantSignals":["movement primitives that apply"],"ignoredNoise":[],"updates":{"belief":"new or sharpened belief statement if observation clearly changes it","confidenceDelta":0.0,"currentPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]}}}
+
+Rules:
+- Only set fields you have direct evidence for from the text.
+- confidenceDelta: positive (0 to 0.2) if observation confirms prior belief, negative (-0.2 to 0) if it contradicts.
+- If the text has no observable movement facts, return {}.`;
+
+export interface ObserveTextReportInput {
+  apiKey?: string;
+  message: string;
+  prior: AxisUnderstanding;
+}
+
+export async function observeTextReport(input: ObserveTextReportInput): Promise<AxisObservation> {
+  const empty: AxisObservation = {
+    source: "document",
+    summary: "",
+    relevantSignals: [],
+    ignoredNoise: [],
+    updates: {},
+  };
+
+  if (!input.apiKey || !input.message.trim()) return empty;
+
+  const priorContext = input.prior.belief
+    ? `Current belief: "${input.prior.belief}" (confidence: ${input.prior.confidence}).`
+    : "No prior belief established yet.";
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": input.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 400,
+        system: SYSTEM_OBSERVE_TEXT,
+        messages: [
+          {
+            role: "user",
+            content: `${priorContext}\n\nReport: "${input.message}"`,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[axis/observation] text observe error", res.status);
+      return empty;
+    }
+
+    const raw = (await res.json()) as { content?: Array<{ type: string; text: string }> };
+    const text = raw.content?.find((c) => c.type === "text")?.text ?? "{}";
+    return parseAxisObservation(text, "document");
+  } catch (err) {
+    console.error("[axis/observation] text observe fetch error", (err as Error).message);
+    return empty;
   }
 }
