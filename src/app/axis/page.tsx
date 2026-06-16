@@ -153,21 +153,20 @@ function momentTitleFrom(input: string, file: File | null): string {
   return "A moment from today";
 }
 
-function isLookBackCommand(value: string): boolean {
+function memoryQueryFromCommand(value: string): string | null {
   const text = value.trim().toLowerCase();
-  return (
-    text === "/history" ||
-    text === "/last" ||
-    text === "/show" ||
-    text === "/today" ||
-    text === "/clip" ||
-    text === "/compare" ||
-    text.includes("show last") ||
-    text.includes("look back") ||
-    text.includes("what changed") ||
-    text.includes("show evidence") ||
-    text.includes("find the clip")
-  );
+  if (!text) return null;
+
+  if (["/history", "/last", "/show", "/today"].includes(text)) return "";
+  if (text === "/clip" || text.includes("find the clip")) return "clip";
+  if (text === "/compare") return "compare";
+  if (text.includes("show last") || text.includes("look back")) return "";
+  if (text.includes("what changed") || text.includes("show evidence")) return "";
+
+  const againMatch = text.match(/^(.+?)\s+again$/);
+  if (againMatch?.[1]) return againMatch[1].trim();
+
+  return null;
 }
 
 export default function AxisPage() {
@@ -182,6 +181,7 @@ export default function AxisPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [composerFocused, setComposerFocused] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memoryQuery, setMemoryQuery] = useState("");
   const [momentPreview, setMomentPreview] = useState<string | null>(null);
 
   const threadRef = useRef<HTMLDivElement>(null);
@@ -192,6 +192,16 @@ export default function AxisPage() {
   const isActive = conversations.length > 0 || phase !== "idle";
   const memorySentence = rememberFrom(sidebarThreads, conversations);
   const momentTitle = momentTitleFrom(input, pendingFile);
+  const visibleMemories = sidebarThreads
+    .filter((thread) => {
+      if (!memoryQuery) return true;
+      const haystack = [thread.title, thread.focus, thread.current_bottleneck]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(memoryQuery.toLowerCase());
+    })
+    .slice(0, 5);
 
   useEffect(() => {
     async function init() {
@@ -301,8 +311,10 @@ export default function AxisPage() {
     if (!msg && !hasFile) return;
     if (phase === "loading") return;
 
-    if (msg && !hasFile && isLookBackCommand(msg)) {
+    const memoryQueryRequest = msg && !hasFile ? memoryQueryFromCommand(msg) : null;
+    if (memoryQueryRequest !== null) {
       setMemoryOpen(true);
+      setMemoryQuery(memoryQueryRequest);
       setInput("");
       return;
     }
@@ -443,6 +455,7 @@ export default function AxisPage() {
           type="button"
           onClick={() => {
             setMemoryOpen(false);
+            setMemoryQuery("");
             inputRef.current?.focus();
           }}
           aria-label="Return to the page"
@@ -489,12 +502,13 @@ export default function AxisPage() {
 
           {memoryOpen && (
             <aside className="memory-drawer" aria-label="Memory">
-              {(sidebarThreads.length ? sidebarThreads : []).slice(0, 5).map((thread) => (
+              {visibleMemories.map((thread) => (
                 <button
                   key={thread.id}
                   type="button"
                   onClick={() => {
                     setMemoryOpen(false);
+                    setMemoryQuery("");
                     setInput(`Show me ${thread.title || thread.focus || "this"}`);
                     inputRef.current?.focus();
                   }}
@@ -502,7 +516,7 @@ export default function AxisPage() {
                   {thread.title || thread.focus || "An earlier page"}
                 </button>
               ))}
-              {sidebarThreads.length === 0 && <p>Nothing has gathered yet.</p>}
+              {visibleMemories.length === 0 && <p>Nothing has gathered yet.</p>}
             </aside>
           )}
 
