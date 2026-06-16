@@ -3,9 +3,9 @@
 import { Mic, Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DevSidebar } from "../../components/axis/dev-sidebar";
-import { UnderstandingDemonstrationSvg } from "../../components/axis/understanding-demonstration-svg";
 import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
-import type { AxisCard, AxisPattern, AxisPrimitive, SidebarThread } from "../../lib/axis-server";
+import { demonstrationFromUnderstanding, type AxisDemonstration } from "../../lib/axis-demonstration";
+import type { AxisCard, AxisUnderstanding, SidebarThread } from "../../lib/axis-server";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,23 +22,97 @@ type AuthPhase = "loading" | "guest" | "signed_in";
 type Phase = "idle" | "loading" | "results";
 
 // ---------------------------------------------------------------------------
-// Demonstration — abstract NOW / TARGET primitive renderer.
+// Demonstration — the visible representation of current understanding.
+// Reads currentUnderstanding directly. No animation, no SVG, no history
+// required: it must render correctly even with zero events.
 // ---------------------------------------------------------------------------
 
-function DemonstrationBlock({ data }: { data: Record<string, unknown> }) {
-  const currentPattern = data.currentPattern as AxisPattern | undefined;
-  const targetPattern = data.targetPattern as AxisPattern | undefined;
-  const primitives = Array.isArray(data.primitives) ? (data.primitives as AxisPrimitive[]) : [];
+function DemonstrationPanel({ demonstration }: { demonstration: AxisDemonstration }) {
+  if (!demonstration.belief) return null;
 
   return (
-    <UnderstandingDemonstrationSvg
-      understanding={{
-        concept: typeof data.concept === "string" ? data.concept : "",
-        primitives,
-        currentPattern: currentPattern ?? { label: "", objects: [], relationships: [], motion: [] },
-        targetPattern: targetPattern ?? { label: "", objects: [], relationships: [], motion: [] },
-      }}
-    />
+    <div className="demo-panel">
+      <p className="demo-belief">{demonstration.belief}</p>
+      <div className="demo-rows">
+        <div className="demo-row">
+          <span className="demo-label">Confidence</span>
+          <span className="demo-value">{Math.round(demonstration.confidence * 100)}%</span>
+        </div>
+        {demonstration.currentPattern && (
+          <div className="demo-row">
+            <span className="demo-label">Current Pattern</span>
+            <span className="demo-value">{demonstration.currentPattern}</span>
+          </div>
+        )}
+        {demonstration.targetPattern && (
+          <div className="demo-row">
+            <span className="demo-label">Target Pattern</span>
+            <span className="demo-value demo-value--target">{demonstration.targetPattern}</span>
+          </div>
+        )}
+        {demonstration.nextExperiment && (
+          <div className="demo-row">
+            <span className="demo-label">Next Experiment</span>
+            <span className="demo-value">{demonstration.nextExperiment}</span>
+          </div>
+        )}
+        {demonstration.optionalEvidence && (
+          <div className="demo-row">
+            <span className="demo-label">Optional Evidence</span>
+            <span className="demo-value">{demonstration.optionalEvidence}</span>
+          </div>
+        )}
+      </div>
+      {demonstration.optionalEvidence && <p className="demo-note">Development continues regardless.</p>}
+
+      <style jsx>{`
+        .demo-panel {
+          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
+          flex-shrink: 0;
+          padding: 18px 20px 16px;
+        }
+        .demo-belief {
+          color: rgba(26, 26, 24, 0.92);
+          font-size: 19px;
+          font-weight: 580;
+          line-height: 1.4;
+          margin: 0 0 12px;
+        }
+        .demo-rows {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .demo-row {
+          align-items: baseline;
+          display: flex;
+          gap: 8px;
+        }
+        .demo-label {
+          color: rgba(26, 26, 24, 0.34);
+          flex-shrink: 0;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          width: 108px;
+        }
+        .demo-value {
+          color: rgba(26, 26, 24, 0.78);
+          font-size: 13px;
+          line-height: 1.45;
+        }
+        .demo-value--target {
+          color: rgba(120, 170, 60, 0.95);
+        }
+        .demo-note {
+          color: rgba(26, 26, 24, 0.32);
+          font-size: 11px;
+          font-style: italic;
+          margin: 10px 0 0;
+        }
+      `}</style>
+    </div>
   );
 }
 
@@ -52,11 +126,7 @@ function EntryFlow({ cards }: { cards: AxisCard[] }) {
       {cards.map((card, i) => {
         const style = { animationDelay: `${i * 70}ms` };
         if (card.type === "see_it") {
-          return card.data ? (
-            <div key={i} className="flow-item" style={style}>
-              <DemonstrationBlock data={card.data} />
-            </div>
-          ) : null;
+          return null;
         }
         if (card.type === "try_this") {
           return (
@@ -150,6 +220,7 @@ export default function AxisPage() {
   const [input, setInput] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentUnderstanding, setCurrentUnderstanding] = useState<AxisUnderstanding | null>(null);
   const [sidebarThreads, setSidebarThreads] = useState<SidebarThread[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING" | "PROCESSING">("OFF");
@@ -161,7 +232,11 @@ export default function AxisPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<SpeechRecognition | null>(null);
 
-  const isActive = conversations.length > 0 || phase === "loading";
+  const isActive = conversations.length > 0 || phase !== "idle";
+  const demonstration = useMemo(
+    () => (currentUnderstanding ? demonstrationFromUnderstanding(currentUnderstanding) : null),
+    [currentUnderstanding],
+  );
   const visibleSidebarThreads = useMemo(() => {
     const pinned = new Set(pinnedThreadIds);
     return [...sidebarThreads].sort((a, b) => {
@@ -275,12 +350,14 @@ export default function AxisPage() {
           if (res.ok) {
             const data = (await res.json()) as {
               conversations: Conversation[];
+              currentUnderstanding: AxisUnderstanding | null;
               sidebarThreads: SidebarThread[];
             };
-            if (data.conversations?.length > 0) {
+            if (data.conversations?.length > 0 || data.currentUnderstanding?.belief) {
               console.log("[MOBILE_TRACE] thread restore success,", data.conversations.length, "conversations");
               setThreadId(savedId);
-              setConversations(data.conversations);
+              setConversations(data.conversations ?? []);
+              setCurrentUnderstanding(data.currentUnderstanding ?? null);
               setPhase("results");
               setSidebarThreads(data.sidebarThreads ?? []);
             } else {
@@ -400,6 +477,7 @@ export default function AxisPage() {
       const data = (await res.json()) as {
         threadId: string;
         cards: AxisCard[];
+        understanding: AxisUnderstanding;
         sidebarThreads: SidebarThread[];
       };
 
@@ -413,6 +491,7 @@ export default function AxisPage() {
       setThreadId(data.threadId);
       localStorage.setItem("axis_thread_id", data.threadId);
       setConversations((prev) => [...prev, conv]);
+      setCurrentUnderstanding(data.understanding ?? null);
       setSidebarThreads(data.sidebarThreads ?? []);
       setPhase("results");
     } catch (err) {
@@ -424,6 +503,7 @@ export default function AxisPage() {
   function startNewThread() {
     setThreadId(null);
     setConversations([]);
+    setCurrentUnderstanding(null);
     setPhase("idle");
     setInput("");
     clearAttachment();
@@ -471,11 +551,13 @@ export default function AxisPage() {
       if (!res.ok) return;
       const data = (await res.json()) as {
         conversations: Conversation[];
+        currentUnderstanding: AxisUnderstanding | null;
         sidebarThreads: SidebarThread[];
       };
       setThreadId(id);
       setConversations(data.conversations ?? []);
-      setPhase(data.conversations?.length ? "results" : "idle");
+      setCurrentUnderstanding(data.currentUnderstanding ?? null);
+      setPhase(data.conversations?.length || data.currentUnderstanding?.belief ? "results" : "idle");
       setSidebarThreads(data.sidebarThreads ?? []);
       localStorage.setItem("axis_thread_id", id);
     } catch {
@@ -695,6 +777,8 @@ export default function AxisPage() {
               + New
             </button>
           </header>
+
+          {demonstration && <DemonstrationPanel demonstration={demonstration} />}
 
           <div className="thread" ref={threadRef}>
             {conversations.map((conv) => (
