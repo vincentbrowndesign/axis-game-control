@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import type { AxisMovementPrimitive } from "./axis-movement-language";
 
 export type AxisCapability =
   | "UNDERSTAND"
@@ -7,21 +8,7 @@ export type AxisCapability =
   | "COMPARE"
   | "LIVE_INTERVENTION";
 
-export type AxisPrimitive =
-  | "position"
-  | "direction"
-  | "distance"
-  | "timing"
-  | "angle"
-  | "balance"
-  | "force"
-  | "acceleration"
-  | "deceleration"
-  | "orientation"
-  | "advantage"
-  | "ball_path"
-  | "center_of_mass"
-  | "plant_foot";
+export type AxisPrimitive = AxisMovementPrimitive;
 
 export interface AxisPattern {
   label: string;

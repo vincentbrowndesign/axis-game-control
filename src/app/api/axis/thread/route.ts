@@ -16,23 +16,58 @@ interface RestoredConversation {
 
 function pairEvents(events: AxisEvent[]): RestoredConversation[] {
   const conversations: RestoredConversation[] = [];
-  for (let i = 0; i < events.length; i++) {
-    const evt = events[i];
-    if (evt.role !== "user") continue;
-    const msg = (evt.content as { message?: string }).message;
-    if (!msg) continue;
-    const next = events[i + 1];
-    if (next?.role === "assistant") {
-      const cards = (next.content as { cards?: AxisCard[] }).cards ?? [];
+  let pendingUser: AxisEvent | null = null;
+
+  for (const evt of events) {
+    if (evt.role === "user") {
+      if (pendingUser) {
+        const content = pendingUser.content as { message?: string; fileName?: string };
+        const msg = content.message || (content.fileName ? `[${content.fileName}]` : "");
+        if (msg) {
+          conversations.push({
+            id: pendingUser.id,
+            userMessage: msg,
+            cards: [],
+            timestamp: pendingUser.created_at,
+          });
+        }
+      }
+      pendingUser = evt;
+      continue;
+    }
+
+    if (evt.role !== "assistant" || !pendingUser) continue;
+
+    const userContent = pendingUser.content as { message?: string; fileName?: string };
+    const msg = userContent.message || (userContent.fileName ? `[${userContent.fileName}]` : "");
+    if (!msg) {
+      pendingUser = null;
+      continue;
+    }
+
+    const cards = (evt.content as { cards?: AxisCard[] }).cards ?? [];
+    conversations.push({
+      id: pendingUser.id,
+      userMessage: msg,
+      cards,
+      timestamp: pendingUser.created_at,
+    });
+    pendingUser = null;
+  }
+
+  if (pendingUser) {
+    const content = pendingUser.content as { message?: string; fileName?: string };
+    const msg = content.message || (content.fileName ? `[${content.fileName}]` : "");
+    if (msg) {
       conversations.push({
-        id: evt.id,
+        id: pendingUser.id,
         userMessage: msg,
-        cards,
-        timestamp: evt.created_at,
+        cards: [],
+        timestamp: pendingUser.created_at,
       });
-      i++; // skip assistant event
     }
   }
+
   return conversations;
 }
 
@@ -67,4 +102,43 @@ export async function GET(req: Request) {
     conversations,
     sidebarThreads: (sidebarData ?? []) as SidebarThread[],
   });
+}
+
+export async function PATCH(req: Request) {
+  const body = (await req.json().catch(() => null)) as {
+    id?: string;
+    title?: string;
+  } | null;
+  const threadId = body?.id;
+  const title = body?.title?.trim();
+
+  if (!threadId) return Response.json({ error: "Missing id" }, { status: 400 });
+  if (!title) return Response.json({ error: "Missing title" }, { status: 400 });
+
+  const sb = createSupabaseFromRequest(req);
+  const { data, error } = await sb
+    .from("axis_threads")
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq("id", threadId)
+    .select("id, title, focus, current_bottleneck, updated_at")
+    .single();
+
+  if (error || !data) {
+    return Response.json({ error: error?.message ?? "Rename failed" }, { status: 500 });
+  }
+
+  return Response.json({ thread: data as SidebarThread });
+}
+
+export async function DELETE(req: Request) {
+  const url = new URL(req.url);
+  const threadId = url.searchParams.get("id");
+  if (!threadId) return Response.json({ error: "Missing id" }, { status: 400 });
+
+  const sb = createSupabaseFromRequest(req);
+  const { error } = await sb.from("axis_threads").delete().eq("id", threadId);
+
+  if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  return Response.json({ ok: true });
 }

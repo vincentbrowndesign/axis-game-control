@@ -1,10 +1,11 @@
 "use client";
 
 import { Mic, Paperclip } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DevSidebar } from "../../components/axis/dev-sidebar";
+import { UnderstandingDemonstrationSvg } from "../../components/axis/understanding-demonstration-svg";
 import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
-import type { AxisCard, SidebarThread } from "../../lib/axis-server";
+import type { AxisCard, AxisPattern, AxisPrimitive, SidebarThread } from "../../lib/axis-server";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,99 +21,24 @@ interface Conversation {
 type AuthPhase = "loading" | "guest" | "signed_in";
 type Phase = "idle" | "loading" | "results";
 
-interface Pattern {
-  label?: string;
-  objects?: string[];
-  relationships?: string[];
-  motion?: string[];
-}
-
 // ---------------------------------------------------------------------------
-// Demonstration — the hero. What is happening, what it should become.
+// Demonstration — abstract NOW / TARGET primitive renderer.
 // ---------------------------------------------------------------------------
 
 function DemonstrationBlock({ data }: { data: Record<string, unknown> }) {
-  const current = data.currentPattern as Pattern | undefined;
-  const target = data.targetPattern as Pattern | undefined;
-  if (!current?.label && !target?.label) return null;
+  const currentPattern = data.currentPattern as AxisPattern | undefined;
+  const targetPattern = data.targetPattern as AxisPattern | undefined;
+  const primitives = Array.isArray(data.primitives) ? (data.primitives as AxisPrimitive[]) : [];
 
   return (
-    <div className="demo">
-      <div className="demo-states">
-        {current?.label && (
-          <div className="demo-state demo-state--now">
-            <p className="demo-tag">Now</p>
-            <p className="demo-name">{current.label}</p>
-            {(current.motion?.length ?? 0) > 0 && (
-              <p className="demo-motion">{current.motion!.join(" → ")}</p>
-            )}
-          </div>
-        )}
-        {current?.label && target?.label && <span className="demo-arrow">→</span>}
-        {target?.label && (
-          <div className="demo-state demo-state--target">
-            <p className="demo-tag">Target</p>
-            <p className="demo-name">{target.label}</p>
-            {(target.motion?.length ?? 0) > 0 && (
-              <p className="demo-motion">{target.motion!.join(" → ")}</p>
-            )}
-          </div>
-        )}
-      </div>
-      <style jsx>{`
-        .demo {
-          background: rgba(140, 190, 40, 0.05);
-          border: 1px solid rgba(140, 190, 40, 0.14);
-          border-radius: 16px;
-          margin: 22px 0;
-          padding: 30px 24px;
-        }
-        .demo-states {
-          align-items: center;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 20px;
-          justify-content: center;
-        }
-        .demo-state {
-          flex: 1;
-          min-width: 140px;
-          text-align: center;
-        }
-        .demo-tag {
-          color: rgba(26, 26, 24, 0.35);
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.12em;
-          margin: 0 0 8px;
-          text-transform: uppercase;
-        }
-        .demo-state--now .demo-tag {
-          color: rgba(200, 90, 40, 0.55);
-        }
-        .demo-state--target .demo-tag {
-          color: rgba(120, 170, 60, 0.75);
-        }
-        .demo-name {
-          color: rgba(26, 26, 24, 0.92);
-          font-size: 20px;
-          font-weight: 640;
-          line-height: 1.3;
-          margin: 0 0 6px;
-        }
-        .demo-motion {
-          color: rgba(26, 26, 24, 0.45);
-          font-size: 13px;
-          font-style: italic;
-          margin: 0;
-        }
-        .demo-arrow {
-          color: rgba(26, 26, 24, 0.22);
-          flex-shrink: 0;
-          font-size: 22px;
-        }
-      `}</style>
-    </div>
+    <UnderstandingDemonstrationSvg
+      understanding={{
+        concept: typeof data.concept === "string" ? data.concept : "",
+        primitives,
+        currentPattern: currentPattern ?? { label: "", objects: [], relationships: [], motion: [] },
+        targetPattern: targetPattern ?? { label: "", objects: [], relationships: [], motion: [] },
+      }}
+    />
   );
 }
 
@@ -228,6 +154,7 @@ export default function AxisPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING" | "PROCESSING">("OFF");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pinnedThreadIds, setPinnedThreadIds] = useState<string[]>([]);
 
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -235,10 +162,27 @@ export default function AxisPage() {
   const voiceRef = useRef<SpeechRecognition | null>(null);
 
   const isActive = conversations.length > 0 || phase === "loading";
+  const visibleSidebarThreads = useMemo(() => {
+    const pinned = new Set(pinnedThreadIds);
+    return [...sidebarThreads].sort((a, b) => {
+      const pinDelta = Number(pinned.has(b.id)) - Number(pinned.has(a.id));
+      if (pinDelta !== 0) return pinDelta;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+  }, [pinnedThreadIds, sidebarThreads]);
 
   // Mount/unmount trace — unexpected unmount during a session = remount bug
   useEffect(() => {
     console.log("[MOBILE_TRACE] AxisPage mounted");
+    const storedPins = localStorage.getItem("axis_pinned_thread_ids");
+    if (storedPins) {
+      try {
+        const ids = JSON.parse(storedPins);
+        if (Array.isArray(ids)) setPinnedThreadIds(ids.filter((id) => typeof id === "string"));
+      } catch {
+        localStorage.removeItem("axis_pinned_thread_ids");
+      }
+    }
     return () => { console.log("[MOBILE_TRACE] AxisPage unmounted"); };
   }, []);
 
@@ -396,6 +340,7 @@ export default function AxisPage() {
     let attachmentUrl: string | null = null;
     let attachmentMime: string | null = null;
     let attachmentPath: string | null = null;
+    let evidenceId: string | null = null;
     let displayFileName = originalFileName;
 
     if (fileToUpload) {
@@ -410,10 +355,12 @@ export default function AxisPage() {
             attachmentPath: string;
             mimeType: string;
             fileName: string;
+            evidenceId?: string | null;
           };
           attachmentUrl = up.attachmentUrl;
           attachmentMime = up.mimeType;
           attachmentPath = up.attachmentPath;
+          evidenceId = up.evidenceId ?? null;
           displayFileName = up.fileName;
         } else {
           console.error("[axis] upload failed", upRes.status);
@@ -439,6 +386,7 @@ export default function AxisPage() {
           attachmentUrl,
           attachmentType: attachmentMime,
           attachmentPath,
+          evidenceId,
           fileName: displayFileName,
         }),
       });
@@ -480,6 +428,40 @@ export default function AxisPage() {
     setInput("");
     clearAttachment();
     localStorage.removeItem("axis_thread_id");
+  }
+
+  function persistPinnedThreads(nextIds: string[]) {
+    setPinnedThreadIds(nextIds);
+    localStorage.setItem("axis_pinned_thread_ids", JSON.stringify(nextIds));
+  }
+
+  function togglePinThread(id: string) {
+    const nextIds = pinnedThreadIds.includes(id)
+      ? pinnedThreadIds.filter((threadId) => threadId !== id)
+      : [id, ...pinnedThreadIds];
+    persistPinnedThreads(nextIds);
+  }
+
+  async function renameThread(id: string, title: string) {
+    const res = await fetch("/api/axis/thread", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, title }),
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { thread?: SidebarThread };
+    if (!data.thread) return;
+    setSidebarThreads((prev) =>
+      prev.map((thread) => (thread.id === id ? { ...thread, ...data.thread } : thread)),
+    );
+  }
+
+  async function deleteThread(id: string) {
+    const res = await fetch(`/api/axis/thread?id=${id}`, { method: "DELETE" });
+    if (!res.ok) return;
+    setSidebarThreads((prev) => prev.filter((thread) => thread.id !== id));
+    persistPinnedThreads(pinnedThreadIds.filter((threadId) => threadId !== id));
+    if (threadId === id) startNewThread();
   }
 
   async function loadThread(id: string) {
@@ -593,12 +575,16 @@ export default function AxisPage() {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         activeThreadId={threadId}
-        threads={sidebarThreads}
+        threads={visibleSidebarThreads}
+        pinnedThreadIds={pinnedThreadIds}
         authLabel={authLabel}
         authType={authType}
         isGuest={authPhase !== "signed_in"}
         onSelectThread={loadThread}
         onNewThread={startNewThread}
+        onRenameThread={renameThread}
+        onDeleteThread={deleteThread}
+        onTogglePinThread={togglePinThread}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
       />

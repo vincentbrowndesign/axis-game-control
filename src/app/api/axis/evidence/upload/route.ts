@@ -42,10 +42,35 @@ export async function POST(req: Request) {
     data: { publicUrl },
   } = sb.storage.from("axis-evidence").getPublicUrl(data.path);
 
+  let evidenceId: string | null = null;
+  if (typeof threadId === "string" && threadId) {
+    const source = file.type.startsWith("video/") ? "video" : "photo";
+    const { data: evidenceRow, error: evidenceError } = await sb
+      .from("axis_thread_evidence")
+      .insert({
+        thread_id: threadId,
+        observation: file.name || "Upload",
+        source,
+        confidence: 1.0,
+        url: publicUrl,
+        file_path: data.path,
+        file_name: file.name,
+      })
+      .select("id")
+      .single();
+
+    if (evidenceError) {
+      console.error("[axis/evidence/upload] evidence insert", evidenceError.message);
+      return Response.json({ error: evidenceError.message }, { status: 500 });
+    }
+    evidenceId = evidenceRow?.id ?? null;
+  }
+
   return Response.json({
     attachmentUrl: publicUrl,
     attachmentPath: data.path,
     mimeType: file.type,
     fileName: file.name,
+    evidenceId,
   });
 }
