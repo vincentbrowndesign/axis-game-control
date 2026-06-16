@@ -541,14 +541,13 @@ export default function AxisPage() {
 
         <section className={`page${isActive ? " page--written" : ""}`}>
           <div className="page-body" ref={threadRef}>
-            {!isActive && memorySentence && renderNotebookLine({ id: "opening-memory", text: memorySentence, tone: "memory" })}
             {!isActive && (
               <button
                 className="page-question"
                 type="button"
                 onClick={() => inputRef.current?.focus()}
               >
-                What happened today?
+                What are you working on?
               </button>
             )}
 
@@ -735,8 +734,8 @@ export default function AxisPage() {
           color: rgba(25, 24, 21, 0.9);
           cursor: text;
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          font-size: clamp(28px, 5vw, 48px);
-          font-weight: 440;
+          font-size: clamp(36px, 4.4vw, 52px);
+          font-weight: 600;
           letter-spacing: 0;
           line-height: 1.18;
           margin: 0 0 22px;
@@ -1002,7 +1001,7 @@ export default function AxisPage() {
           }
 
           .page-question {
-            font-size: 32px;
+            font-size: 36px;
             text-align: left;
           }
 
