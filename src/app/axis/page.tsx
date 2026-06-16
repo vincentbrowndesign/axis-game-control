@@ -27,6 +27,10 @@ const CARD_LABELS: Record<string, string> = {
   evidence_request: "SHARE",
   breakthrough: "BREAKTHROUGH",
   next_action: "NEXT",
+  demonstration: "SEE IT",
+  evidence_received: "RECEIVED",
+  compare: "GAP",
+  live_intervention: "SAY THIS",
 };
 
 // ---------------------------------------------------------------------------
@@ -59,6 +63,22 @@ function CardView({ card }: { card: AxisCard }) {
           background: rgba(140, 190, 40, 0.09);
           border: 1px solid rgba(140, 190, 40, 0.18);
         }
+        .axis-card--demonstration {
+          background: rgba(60, 80, 140, 0.08);
+          border: 1px solid rgba(60, 80, 140, 0.16);
+        }
+        .axis-card--evidence_received {
+          background: rgba(250, 250, 249, 0.055);
+          border: 1px solid rgba(250, 250, 249, 0.1);
+        }
+        .axis-card--compare {
+          background: rgba(200, 80, 40, 0.07);
+          border: 1px solid rgba(200, 80, 40, 0.14);
+        }
+        .axis-card--live_intervention {
+          background: rgba(140, 190, 40, 0.13);
+          border: 2px solid rgba(140, 190, 40, 0.3);
+        }
         .card-label {
           display: block;
           font-size: 10px;
@@ -68,11 +88,19 @@ function CardView({ card }: { card: AxisCard }) {
           text-transform: uppercase;
           margin-bottom: 10px;
         }
-        .axis-card--question .card-label {
+        .axis-card--question .card-label,
+        .axis-card--evidence_received .card-label {
           color: rgba(250, 250, 249, 0.3);
         }
-        .axis-card--breakthrough .card-label {
+        .axis-card--breakthrough .card-label,
+        .axis-card--live_intervention .card-label {
           color: rgba(140, 190, 40, 0.7);
+        }
+        .axis-card--demonstration .card-label {
+          color: rgba(60, 80, 140, 0.55);
+        }
+        .axis-card--compare .card-label {
+          color: rgba(200, 80, 40, 0.6);
         }
         .card-body {
           font-size: 16px;
@@ -82,7 +110,9 @@ function CardView({ card }: { card: AxisCard }) {
           font-weight: 460;
         }
         .axis-card--question .card-body,
-        .axis-card--breakthrough .card-body {
+        .axis-card--breakthrough .card-body,
+        .axis-card--evidence_received .card-body,
+        .axis-card--live_intervention .card-body {
           color: rgba(250, 250, 249, 0.88);
         }
         .card-secondary {

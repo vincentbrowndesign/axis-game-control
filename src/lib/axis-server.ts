@@ -1,5 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 
+export type AxisCapability =
+  | "UNDERSTAND"
+  | "DEMONSTRATE"
+  | "EVIDENCE"
+  | "COMPARE"
+  | "LIVE_INTERVENTION";
+
 export interface AxisThread {
   id: string;
   user_id: string | null;
@@ -38,10 +45,15 @@ export interface AxisCard {
     | "experiment"
     | "evidence_request"
     | "breakthrough"
-    | "next_action";
+    | "next_action"
+    | "demonstration"
+    | "evidence_received"
+    | "compare"
+    | "live_intervention";
   content: string;
   secondary?: string;
   cue?: string;
+  data?: Record<string, unknown>;
 }
 
 export interface SidebarThread {
