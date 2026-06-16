@@ -12,6 +12,12 @@ interface Conversation {
   timestamp: string;
 }
 
+interface NotebookLine {
+  id: string;
+  text: string;
+  tone?: "memory" | "writing";
+}
+
 type AuthPhase = "loading" | "guest" | "signed_in";
 type Phase = "idle" | "loading" | "results";
 
@@ -73,59 +79,6 @@ function sentencesFromCards(cards: AxisCard[]): string[] {
   return selected.slice(0, 3);
 }
 
-function AxisReply({
-  cards,
-  onSentence,
-}: {
-  cards: AxisCard[];
-  onSentence: (sentence: string) => void;
-}) {
-  const sentences = sentencesFromCards(cards);
-
-  if (sentences.length === 0) return null;
-
-  return (
-    <div className="axis-reply">
-      {sentences.map((sentence, index) => (
-        <button
-          key={`${sentence}-${index}`}
-          className="sentence"
-          onClick={() => onSentence(sentence)}
-          type="button"
-        >
-          {sentence}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PinnedSummary({
-  understanding,
-  onSentence,
-}: {
-  understanding: AxisUnderstanding | null;
-  onSentence: (sentence: string) => void;
-}) {
-  const lines = summaryFromUnderstanding(understanding);
-  if (lines.length === 0) return null;
-
-  return (
-    <section className="pinned-summary" aria-label="Current direction">
-      {lines.map((line, index) => (
-        <button
-          key={`${line}-${index}`}
-          className="summary-line"
-          onClick={() => onSentence(line)}
-          type="button"
-        >
-          {line}
-        </button>
-      ))}
-    </section>
-  );
-}
-
 function rememberFrom(threads: SidebarThread[], conversations: Conversation[]): string {
   if (conversations.length > 0) return "";
 
@@ -169,6 +122,40 @@ function memoryQueryFromCommand(value: string): string | null {
   return null;
 }
 
+function buildNotebookLines({
+  conversations,
+  currentUnderstanding,
+  memoryLines,
+  memorySentence,
+}: {
+  conversations: Conversation[];
+  currentUnderstanding: AxisUnderstanding | null;
+  memoryLines: NotebookLine[];
+  memorySentence: string;
+}): NotebookLine[] {
+  const lines: NotebookLine[] = [];
+
+  if (memorySentence) {
+    lines.push({ id: "memory", text: memorySentence, tone: "memory" });
+  }
+
+  summaryFromUnderstanding(currentUnderstanding).forEach((text, index) => {
+    lines.push({ id: `current-${index}`, text });
+  });
+
+  for (const conv of conversations) {
+    if (conv.userMessage) {
+      lines.push({ id: `${conv.id}-user`, text: conv.userMessage, tone: "writing" });
+    }
+
+    sentencesFromCards(conv.cards).forEach((text, index) => {
+      lines.push({ id: `${conv.id}-axis-${index}`, text });
+    });
+  }
+
+  return [...memoryLines, ...lines];
+}
+
 export default function AxisPage() {
   const [authPhase, setAuthPhase] = useState<AuthPhase>("loading");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -180,8 +167,10 @@ export default function AxisPage() {
   const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING">("OFF");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [composerFocused, setComposerFocused] = useState(false);
-  const [memoryOpen, setMemoryOpen] = useState(false);
-  const [memoryQuery, setMemoryQuery] = useState("");
+  const [eraseMode, setEraseMode] = useState(false);
+  const [erasedLines, setErasedLines] = useState<Set<string>>(() => new Set());
+  const [insertedLines, setInsertedLines] = useState<Record<string, NotebookLine[]>>({});
+  const [memoryLines, setMemoryLines] = useState<NotebookLine[]>([]);
   const [momentPreview, setMomentPreview] = useState<string | null>(null);
 
   const threadRef = useRef<HTMLDivElement>(null);
@@ -192,16 +181,12 @@ export default function AxisPage() {
   const isActive = conversations.length > 0 || phase !== "idle";
   const memorySentence = rememberFrom(sidebarThreads, conversations);
   const momentTitle = momentTitleFrom(input, pendingFile);
-  const visibleMemories = sidebarThreads
-    .filter((thread) => {
-      if (!memoryQuery) return true;
-      const haystack = [thread.title, thread.focus, thread.current_bottleneck]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(memoryQuery.toLowerCase());
-    })
-    .slice(0, 5);
+  const notebookLines = buildNotebookLines({
+    conversations,
+    currentUnderstanding,
+    memoryLines,
+    memorySentence,
+  });
 
   useEffect(() => {
     async function init() {
@@ -313,8 +298,28 @@ export default function AxisPage() {
 
     const memoryQueryRequest = msg && !hasFile ? memoryQueryFromCommand(msg) : null;
     if (memoryQueryRequest !== null) {
-      setMemoryOpen(true);
-      setMemoryQuery(memoryQueryRequest);
+      const matches = sidebarThreads
+        .filter((thread) => {
+          if (!memoryQueryRequest) return true;
+          const haystack = [thread.title, thread.focus, thread.current_bottleneck]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(memoryQueryRequest.toLowerCase());
+        })
+        .slice(0, 5);
+
+      setMemoryLines(
+        matches.map((thread) => ({
+          id: `memory-${thread.id}`,
+          text: `You were thinking about ${(
+            thread.title ||
+            thread.focus ||
+            "this"
+          ).toLowerCase()}.`,
+          tone: "memory",
+        })),
+      );
       setInput("");
       return;
     }
@@ -406,6 +411,57 @@ export default function AxisPage() {
     }
   }
 
+  async function askAboutLine(line: NotebookLine) {
+    if (eraseMode) {
+      setErasedLines((prev) => new Set(prev).add(line.id));
+      return;
+    }
+
+    if (phase === "loading") return;
+    setPhase("loading");
+
+    try {
+      const res = await fetch("/api/axis/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Tell me more about "${line.text}"`,
+          threadId,
+        }),
+      });
+
+      if (!res.ok) {
+        setPhase("results");
+        return;
+      }
+
+      const data = (await res.json()) as {
+        threadId: string;
+        cards: AxisCard[];
+        understanding: AxisUnderstanding;
+        sidebarThreads: SidebarThread[];
+      };
+
+      const nextLines = sentencesFromCards(data.cards).map((text, index) => ({
+        id: `${line.id}-note-${crypto.randomUUID()}-${index}`,
+        text,
+      }));
+
+      setThreadId(data.threadId);
+      localStorage.setItem("axis_thread_id", data.threadId);
+      setCurrentUnderstanding(data.understanding ?? null);
+      setSidebarThreads(data.sidebarThreads ?? []);
+      setInsertedLines((prev) => ({
+        ...prev,
+        [line.id]: [...(prev[line.id] ?? []), ...nextLines],
+      }));
+      setPhase("results");
+    } catch (err) {
+      console.error("[axis] line note error", (err as Error).message);
+      setPhase("results");
+    }
+  }
+
   function toggleVoice() {
     if (voicePhase === "LISTENING") {
       voiceRef.current?.stop();
@@ -447,6 +503,27 @@ export default function AxisPage() {
     return <div className="blank" />;
   }
 
+  function renderNotebookLine(line: NotebookLine) {
+    const isErased = erasedLines.has(line.id);
+
+    return (
+      <div key={line.id} className={`notebook-line-wrap${isErased ? " is-erased" : ""}`}>
+        <button
+          className={`notebook-line${line.tone === "memory" ? " notebook-line--memory" : ""}${
+            line.tone === "writing" ? " notebook-line--writing" : ""
+          }${eraseMode ? " notebook-line--erase" : ""}`}
+          onClick={() => void askAboutLine(line)}
+          type="button"
+        >
+          {line.text}
+        </button>
+        {(insertedLines[line.id] ?? [])
+          .filter((inserted) => !erasedLines.has(inserted.id))
+          .map((inserted) => renderNotebookLine(inserted))}
+      </div>
+    );
+  }
+
   return (
     <>
       <main className="axis-shell">
@@ -454,8 +531,7 @@ export default function AxisPage() {
           className="axis-mark"
           type="button"
           onClick={() => {
-            setMemoryOpen(false);
-            setMemoryQuery("");
+            setEraseMode(false);
             inputRef.current?.focus();
           }}
           aria-label="Return to the page"
@@ -464,61 +540,28 @@ export default function AxisPage() {
         </button>
 
         <section className={`page${isActive ? " page--written" : ""}`}>
-          {!isActive && <div className="quiet-memory">{memorySentence}</div>}
-          {!isActive && <h1 className="page-question">What happened today?</h1>}
+          <div className="page-body" ref={threadRef}>
+            {!isActive && memorySentence && renderNotebookLine({ id: "opening-memory", text: memorySentence, tone: "memory" })}
+            {!isActive && (
+              <button
+                className="page-question"
+                type="button"
+                onClick={() => inputRef.current?.focus()}
+              >
+                What happened today?
+              </button>
+            )}
 
-          {isActive && (
-            <div className="page-body" ref={threadRef}>
-              {memorySentence && <p className="margin-memory">{memorySentence}</p>}
-              <PinnedSummary
-                understanding={currentUnderstanding}
-                onSentence={(sentence) => {
-                  setInput(`Tell me more about "${sentence}"`);
-                  inputRef.current?.focus();
-                }}
-              />
-              {conversations.map((conv) => (
-                <section key={conv.id} className="page-entry">
-                  {conv.userMessage && <p className="page-writing">{conv.userMessage}</p>}
-                  <AxisReply
-                    cards={conv.cards}
-                    onSentence={(sentence) => {
-                      setInput(`Tell me more about "${sentence}"`);
-                      inputRef.current?.focus();
-                    }}
-                  />
-                </section>
-              ))}
+            {isActive && notebookLines.map((line) => renderNotebookLine(line))}
 
-              {phase === "loading" && (
-                <div className="thinking" aria-label="Thinking">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              )}
+            {phase === "loading" && (
+              <div className="thinking" aria-label="Thinking">
+                <span />
+                <span />
+                <span />
+              </div>
+            )}
             </div>
-          )}
-
-          {memoryOpen && (
-            <aside className="memory-drawer" aria-label="Memory">
-              {visibleMemories.map((thread) => (
-                <button
-                  key={thread.id}
-                  type="button"
-                  onClick={() => {
-                    setMemoryOpen(false);
-                    setMemoryQuery("");
-                    setInput(`Show me ${thread.title || thread.focus || "this"}`);
-                    inputRef.current?.focus();
-                  }}
-                >
-                  {thread.title || thread.focus || "An earlier page"}
-                </button>
-              ))}
-              {visibleMemories.length === 0 && <p>Nothing has gathered yet.</p>}
-            </aside>
-          )}
 
           <div className="composer-wrap">
             {pendingFile && (
@@ -587,11 +630,20 @@ export default function AxisPage() {
                 <Camera size={17} />
               </button>
               <button
+                className={`icon-button${eraseMode ? " icon-button--active" : ""}`}
+                type="button"
+                onClick={() => setEraseMode((current) => !current)}
+                aria-label="Eraser"
+              >
+                eraser
+              </button>
+              <button
                 className="send-button"
                 type="submit"
                 disabled={(!input.trim() && !pendingFile) || phase === "loading"}
+                aria-label="Send"
               >
-                Send
+                enter
               </button>
             </form>
           </div>
@@ -620,7 +672,7 @@ export default function AxisPage() {
         body {
           background: #fbfaf7;
           color: rgba(25, 24, 21, 0.92);
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
           -webkit-font-smoothing: antialiased;
           margin: 0;
           min-height: 100%;
@@ -636,7 +688,10 @@ export default function AxisPage() {
         }
 
         .axis-shell {
-          background: #fbfaf7;
+          background:
+            radial-gradient(circle at 24px 28px, rgba(25, 24, 21, 0.025) 0 1px, transparent 1.4px),
+            #fbfaf7;
+          background-size: 34px 34px, auto;
           display: block;
           min-height: 100svh;
         }
@@ -664,9 +719,9 @@ export default function AxisPage() {
           display: flex;
           flex-direction: column;
           margin: 0 auto;
-          max-width: 760px;
+          max-width: 820px;
           min-height: 100svh;
-          padding: 12vh clamp(22px, 5vw, 52px) 30px;
+          padding: 10vh clamp(22px, 6vw, 64px) 30px;
           position: relative;
         }
 
@@ -674,116 +729,89 @@ export default function AxisPage() {
           padding-top: 8vh;
         }
 
-        .quiet-memory,
-        .margin-memory {
-          color: rgba(25, 24, 21, 0.42);
-          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          font-size: clamp(17px, 2vw, 21px);
-          font-style: italic;
-          letter-spacing: 0;
-          line-height: 1.55;
-          margin: 0 0 18px;
-        }
-
         .page-question {
+          background: transparent;
+          border: 0;
           color: rgba(25, 24, 21, 0.9);
+          cursor: text;
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
           font-size: clamp(28px, 5vw, 48px);
-          font-weight: 560;
+          font-weight: 440;
           letter-spacing: 0;
-          line-height: 1.08;
-          margin: 0;
+          line-height: 1.18;
+          margin: 0 0 22px;
+          padding: 0;
           text-align: left;
         }
 
         .page-body {
-          display: flex;
           flex: 1;
-          flex-direction: column;
-          gap: 42px;
           margin: 0 auto;
-          max-width: 690px;
+          max-width: 760px;
           overflow-y: auto;
-          padding: 18px 0 144px;
+          padding: 18px 0 150px;
           width: 100%;
         }
 
-        .page-entry {
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
+        .notebook-line-wrap {
+          max-height: 280px;
+          margin: 0 0 22px;
+          opacity: 1;
+          transform: translateY(0);
+          transition: opacity 0.22s ease, margin 0.22s ease, max-height 0.22s ease, transform 0.22s ease;
         }
 
-        .pinned-summary {
-          border-bottom: 1px solid rgba(25, 24, 21, 0.1);
-          display: flex;
-          flex-direction: column;
-          gap: 9px;
-          margin: 0 0 14px;
-          padding: 0 0 18px;
+        .notebook-line-wrap .notebook-line-wrap {
+          margin: 18px 0 0 clamp(16px, 4vw, 38px);
         }
 
-        .summary-line {
+        .notebook-line-wrap.is-erased {
+          margin: 0;
+          max-height: 0;
+          opacity: 0;
+          overflow: hidden;
+          pointer-events: none;
+          transform: translateY(-4px);
+        }
+
+        .notebook-line {
           background: transparent;
           border: 0;
-          color: rgba(25, 24, 21, 0.88);
+          color: rgba(24, 23, 20, 0.92);
           cursor: text;
           font: inherit;
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          font-size: clamp(17px, 2vw, 22px);
-          line-height: 1.38;
+          font-size: clamp(19px, 2.35vw, 27px);
+          font-style: italic;
+          line-height: 1.56;
           margin: 0;
-          padding: 0;
+          padding: 0 0 4px;
           text-align: left;
+          text-decoration-color: rgba(72, 70, 64, 0.46);
+          text-decoration-line: underline;
+          text-decoration-skip-ink: none;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 5px;
         }
 
-        .summary-line:first-child {
-          color: rgba(25, 24, 21, 0.94);
-          font-size: clamp(20px, 2.4vw, 27px);
+        .notebook-line--writing {
+          color: rgba(24, 23, 20, 0.98);
+          font-size: clamp(23px, 3vw, 34px);
+          font-style: normal;
+          text-decoration-color: rgba(72, 70, 64, 0.28);
         }
 
-        .summary-line:hover {
-          color: rgba(25, 24, 21, 0.66);
+        .notebook-line--memory {
+          color: rgba(24, 23, 20, 0.46);
         }
 
-        .page-writing {
-          color: rgba(25, 24, 21, 0.9);
-          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          font-size: clamp(20px, 2.3vw, 27px);
-          line-height: 1.52;
-          margin: 0;
-          max-width: 100%;
-          white-space: pre-wrap;
+        .notebook-line:hover {
+          color: rgba(24, 23, 20, 0.66);
         }
 
-        .axis-reply {
-          color: rgba(25, 24, 21, 0.9);
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          max-width: 660px;
-        }
-
-        .axis-reply p {
-          margin: 0;
-        }
-
-        .sentence {
-          background: transparent;
-          border: 0;
-          color: inherit;
-          cursor: text;
-          font: inherit;
-          font-size: clamp(18px, 2.1vw, 24px);
-          font-weight: 440;
-          letter-spacing: 0;
-          line-height: 1.42;
-          margin: 0;
-          padding: 0;
-          text-align: left;
-        }
-
-        .sentence:hover {
-          color: rgba(25, 24, 21, 0.66);
+        .notebook-line--erase:hover {
+          color: rgba(106, 31, 24, 0.58);
+          text-decoration-color: rgba(106, 31, 24, 0.34);
         }
 
         .thinking {
@@ -834,15 +862,14 @@ export default function AxisPage() {
 
         .composer {
           align-items: flex-end;
-          background: rgba(251, 250, 247, 0.9);
+          background: rgba(251, 250, 247, 0.86);
           border: 0;
-          border-bottom: 1px solid rgba(25, 24, 21, 0.18);
           border-radius: 0;
           display: flex;
           gap: 8px;
           margin: 0 auto;
           max-width: 760px;
-          padding: 10px;
+          padding: 6px 0 0;
           backdrop-filter: blur(18px);
         }
 
@@ -854,6 +881,10 @@ export default function AxisPage() {
 
         .composer-input {
           background: transparent;
+          background-image: linear-gradient(rgba(72, 70, 64, 0.32), rgba(72, 70, 64, 0.32));
+          background-position: 0 calc(100% - 4px);
+          background-repeat: no-repeat;
+          background-size: 100% 1px;
           border: 0;
           color: rgba(25, 24, 21, 0.92);
           flex: 1;
@@ -864,7 +895,7 @@ export default function AxisPage() {
           min-height: 42px;
           min-width: 0;
           outline: 0;
-          padding: 8px 8px 7px;
+          padding: 8px 8px 5px 0;
           resize: none;
         }
 
@@ -873,7 +904,7 @@ export default function AxisPage() {
           align-items: center;
           background: transparent;
           border: 0;
-          border-radius: 12px;
+          border-radius: 0;
           color: rgba(25, 24, 21, 0.44);
           cursor: pointer;
           display: flex;
@@ -893,11 +924,35 @@ export default function AxisPage() {
           transition: color 0.14s ease, opacity 0.14s ease;
         }
 
+        .icon-button--active {
+          color: rgba(25, 24, 21, 0.82);
+          opacity: 1;
+        }
+
+        [aria-label="Eraser"],
         .send-button {
           color: rgba(25, 24, 21, 0.62);
-          font-size: 13px;
+          font-size: 11px;
           letter-spacing: 0;
           width: auto;
+        }
+
+        [aria-label="Eraser"] {
+          font-size: 0;
+        }
+
+        [aria-label="Eraser"]::before {
+          content: "eraser";
+          font-size: 11px;
+        }
+
+        .send-button {
+          font-size: 0;
+        }
+
+        .send-button::before {
+          content: "enter";
+          font-size: 11px;
         }
 
         .send-button:disabled {
@@ -919,7 +974,7 @@ export default function AxisPage() {
         .moment-pill img,
         .moment-pill video {
           background: rgba(25, 24, 21, 0.06);
-          border-radius: 4px;
+          border-radius: 0;
           height: 38px;
           object-fit: cover;
           width: 48px;
@@ -932,43 +987,6 @@ export default function AxisPage() {
           cursor: pointer;
           font: inherit;
           padding: 0;
-        }
-
-        .memory-drawer {
-          background: rgba(251, 250, 247, 0.96);
-          border-left: 1px solid rgba(25, 24, 21, 0.12);
-          bottom: 96px;
-          color: rgba(25, 24, 21, 0.62);
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
-          padding: 20px 0 20px 24px;
-          position: fixed;
-          right: clamp(18px, 5vw, 52px);
-          width: min(280px, calc(100vw - 36px));
-          z-index: 3;
-        }
-
-        .memory-drawer button,
-        .memory-drawer p {
-          background: transparent;
-          border: 0;
-          color: inherit;
-          font: inherit;
-          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          font-size: 16px;
-          line-height: 1.45;
-          margin: 0;
-          padding: 0;
-          text-align: left;
-        }
-
-        .memory-drawer button {
-          cursor: pointer;
-        }
-
-        .memory-drawer button:hover {
-          color: rgba(25, 24, 21, 0.88);
         }
 
         @media (max-width: 760px) {
@@ -993,10 +1011,6 @@ export default function AxisPage() {
             padding: 0 0 140px;
           }
 
-          .axis-reply p {
-            font-size: 20px;
-          }
-
           .composer-wrap {
             bottom: max(14px, env(safe-area-inset-bottom));
             left: 12px;
@@ -1004,7 +1018,7 @@ export default function AxisPage() {
           }
 
           .composer {
-            border-radius: 16px;
+            border-radius: 0;
             gap: 4px;
             padding: 8px;
           }
@@ -1018,13 +1032,6 @@ export default function AxisPage() {
           .send-button {
             height: 40px;
             min-width: 38px;
-          }
-
-          .memory-drawer {
-            bottom: 86px;
-            left: 18px;
-            right: 18px;
-            width: auto;
           }
 
         }
