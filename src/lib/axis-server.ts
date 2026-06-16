@@ -45,6 +45,20 @@ export interface AxisUnderstanding {
   evidenceRequest: string;
 }
 
+export interface AxisObservation {
+  source: "image" | "video" | "live_camera" | "voice" | "document";
+  summary: string;
+  relevantSignals: string[];
+  ignoredNoise: string[];
+  updates: {
+    concept?: string;
+    belief?: string;
+    confidenceDelta?: number;
+    currentPattern?: Partial<AxisPattern>;
+    targetPattern?: Partial<AxisPattern>;
+  };
+}
+
 export interface AxisThread {
   id: string;
   user_id: string | null;

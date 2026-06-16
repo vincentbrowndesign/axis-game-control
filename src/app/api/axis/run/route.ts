@@ -5,6 +5,7 @@ import {
   type AxisBelief,
   type AxisCard,
   type AxisEvent,
+  type AxisObservation,
   type AxisPattern,
   type AxisPrimitive,
   type AxisThread,
@@ -117,6 +118,29 @@ Input: "Hudson said ball path."
 
 Input: "Hailey takes too long deciding."
 {"concept":"decision timing","focus":"pre-catch scan and decision","belief":"Hailey is recognizing the advantage late — she scans after the catch instead of before.","confidence":0.79,"primitives":["timing","advantage","orientation","position"],"currentPattern":{"label":"wait after catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey receives ball before scanning","defender reads hesitation"],"motion":["catch","pause","scan","decide"]},"targetPattern":{"label":"scan before catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey scans before ball arrives","decision made at catch"],"motion":["scan","catch_and_go"]},"coachingCue":"Know where you're going before it arrives.","experiment":"On every catch: scan, decide, act in one second.","evidenceRequest":"Upload one possession where she catches and pauses.","stateUpdate":{"goal":"improve Hailey's decision speed","focus":"pre-catch scan and decision","currentBottleneck":"scanning after catch instead of before","nextAction":"Practice pre-catch scan on every possession.","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"late-scan-timing","statement":"Hailey scans after the catch instead of before, causing decision delay.","confidence":0.79}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["Hailey takes too long deciding"],"experimentResult":null,"newBreakthroughs":[]}}`;
+
+// ---------------------------------------------------------------------------
+// System prompt — observation only updates understanding, never generates cards
+// ---------------------------------------------------------------------------
+
+const SYSTEM_OBSERVE = `You are Axis's eyes. Eyes do not generate output. Eyes update understanding.
+
+Look only for movement-relevant signal: position, direction, distance, timing, angle, balance, force, acceleration, deceleration, orientation, advantage, ball_path, center_of_mass, plant_foot.
+
+Ignore everything else: gym background, jerseys, audience, walls, colors, branding, lighting, camera shake, decorative detail. Do not mention these.
+
+You will be given the current belief and its confidence. Compare what you see against that belief. Your job is to report whether this image confirms, contradicts, or sharpens it — not to describe the scene.
+
+JSON only. No markdown. No explanation outside the schema.
+
+Schema:
+{"summary":"one sentence, what this image shows that matters","relevantSignals":["..."],"ignoredNoise":["..."],"updates":{"concept":"...","belief":"...","confidenceDelta":0.15,"currentPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]},"targetPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]}}}
+
+Rules:
+- confidenceDelta is between -0.3 and 0.3. Positive when the image confirms the belief. Negative when it contradicts it.
+- Omit any field in "updates" you have no visual evidence for. Do not invent values.
+- Only set "belief" if the image changes or sharpens the wording of the belief. Otherwise omit it.
+- currentPattern/targetPattern are partial — include only the keys you have direct evidence for.`;
 
 // ---------------------------------------------------------------------------
 // Memory context builder
@@ -261,6 +285,23 @@ function parseStateUpdate(val: unknown): StateUpdate | undefined {
 
 const EMPTY_PATTERN: AxisPattern = { label: "", objects: [], relationships: [], motion: [] };
 
+function emptyUnderstanding(): AxisUnderstanding {
+  return {
+    id: crypto.randomUUID(),
+    threadId: "",
+    concept: "",
+    focus: "",
+    belief: "",
+    confidence: 0,
+    primitives: [],
+    currentPattern: EMPTY_PATTERN,
+    targetPattern: EMPTY_PATTERN,
+    coachingCue: "",
+    experiment: "",
+    evidenceRequest: "",
+  };
+}
+
 function parseUnderstanding(
   raw: string,
 ): { understanding: AxisUnderstanding; stateUpdate?: StateUpdate } {
@@ -301,22 +342,152 @@ function parseUnderstanding(
 
     return { understanding, stateUpdate: parseStateUpdate(p.stateUpdate) };
   } catch {
+    return { understanding: emptyUnderstanding() };
+  }
+}
+
+function parseObservation(raw: string, source: AxisObservation["source"]): AxisObservation {
+  const empty: AxisObservation = { source, summary: "", relevantSignals: [], ignoredNoise: [], updates: {} };
+
+  try {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
+    const p = JSON.parse(slice) as Record<string, unknown>;
+
+    const strArr = (v: unknown): string[] =>
+      Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === "string") : [];
+
+    const parsePartialPattern = (v: unknown): Partial<AxisPattern> | undefined => {
+      if (!v || typeof v !== "object") return undefined;
+      const d = v as Record<string, unknown>;
+      const patch: Partial<AxisPattern> = {};
+      if (typeof d.label === "string" && d.label.trim()) patch.label = d.label.trim();
+      const objects = strArr(d.objects);
+      if (objects.length) patch.objects = objects;
+      const relationships = strArr(d.relationships);
+      if (relationships.length) patch.relationships = relationships;
+      const motion = strArr(d.motion);
+      if (motion.length) patch.motion = motion;
+      return Object.keys(patch).length > 0 ? patch : undefined;
+    };
+
+    const u = (p.updates && typeof p.updates === "object" ? p.updates : {}) as Record<string, unknown>;
+
     return {
-      understanding: {
-        id: crypto.randomUUID(),
-        threadId: "",
-        concept: "",
-        focus: "",
-        belief: "",
-        confidence: 0,
-        primitives: [],
-        currentPattern: EMPTY_PATTERN,
-        targetPattern: EMPTY_PATTERN,
-        coachingCue: "",
-        experiment: "",
-        evidenceRequest: "",
+      source,
+      summary: typeof p.summary === "string" ? p.summary.trim() : "",
+      relevantSignals: strArr(p.relevantSignals),
+      ignoredNoise: strArr(p.ignoredNoise),
+      updates: {
+        concept: typeof u.concept === "string" && u.concept.trim() ? u.concept.trim() : undefined,
+        belief: typeof u.belief === "string" && u.belief.trim() ? u.belief.trim() : undefined,
+        confidenceDelta:
+          typeof u.confidenceDelta === "number"
+            ? Math.min(0.3, Math.max(-0.3, u.confidenceDelta))
+            : undefined,
+        currentPattern: parsePartialPattern(u.currentPattern),
+        targetPattern: parsePartialPattern(u.targetPattern),
       },
     };
+  } catch {
+    return empty;
+  }
+}
+
+function mergeObservationIntoUnderstanding(
+  prior: AxisUnderstanding,
+  observation: AxisObservation,
+): AxisUnderstanding {
+  const { updates } = observation;
+
+  const mergePattern = (base: AxisPattern, patch?: Partial<AxisPattern>): AxisPattern =>
+    patch
+      ? {
+          label: patch.label ?? base.label,
+          objects: patch.objects ?? base.objects,
+          relationships: patch.relationships ?? base.relationships,
+          motion: patch.motion ?? base.motion,
+        }
+      : base;
+
+  return {
+    ...prior,
+    concept: updates.concept ?? prior.concept,
+    belief: updates.belief ?? prior.belief,
+    confidence: Math.min(1, Math.max(0, prior.confidence + (updates.confidenceDelta ?? 0))),
+    currentPattern: mergePattern(prior.currentPattern, updates.currentPattern),
+    targetPattern: mergePattern(prior.targetPattern, updates.targetPattern),
+  };
+}
+
+async function observeAttachment(
+  apiKey: string,
+  attachmentUrl: string,
+  attachmentType: string,
+  message: string,
+  prior: AxisUnderstanding,
+): Promise<AxisObservation> {
+  const isImage = attachmentType.startsWith("image/");
+
+  if (!isImage) {
+    return {
+      source: attachmentType.startsWith("video/") ? "video" : "document",
+      summary:
+        "Attachment received. Frame-level visual analysis isn't available yet, so Axis is logging this as evidence without extracting motion detail.",
+      relevantSignals: [],
+      ignoredNoise: [],
+      updates: {},
+    };
+  }
+
+  const priorContext = prior.belief
+    ? `Current belief: "${prior.belief}" (confidence: ${prior.confidence}).`
+    : "No prior belief established yet.";
+
+  const userText = [
+    priorContext,
+    message ? `Player/coach message: "${message}"` : null,
+    "Look at the image and report only what updates the belief above.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 600,
+        system: SYSTEM_OBSERVE,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "url", url: attachmentUrl } },
+              { type: "text", text: userText },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[axis/run] observe error", res.status);
+      return { source: "image", summary: "", relevantSignals: [], ignoredNoise: [], updates: {} };
+    }
+
+    const raw = (await res.json()) as { content?: Array<{ type: string; text: string }> };
+    const text = raw.content?.find((c) => c.type === "text")?.text ?? "{}";
+    return parseObservation(text, "image");
+  } catch (err) {
+    console.error("[axis/run] observe fetch error", (err as Error).message);
+    return { source: "image", summary: "", relevantSignals: [], ignoredNoise: [], updates: {} };
   }
 }
 
@@ -585,12 +756,38 @@ async function handleRun(req: Request): Promise<Response> {
   const experiments = (experimentRows ?? []) as AxisExperiment[];
   const openExperiment = experiments.find((e) => e.status === "open") ?? null;
 
+  // Load prior Understanding from the most recent assistant event (no extra table)
+  const priorUnderstanding: AxisUnderstanding = (() => {
+    for (let i = recentEvents.length - 1; i >= 0; i--) {
+      const evt = recentEvents[i];
+      if (evt.role === "assistant") {
+        const u = (evt.content as { understanding?: AxisUnderstanding }).understanding;
+        if (u) return u;
+      }
+    }
+    return emptyUnderstanding();
+  })();
+
   // Append user event
   void sb.from("axis_thread_events").insert({
     thread_id: threadId,
     role: "user",
     content: { message },
   });
+
+  // Eyes do not generate output. Eyes update understanding.
+  let observation: AxisObservation | null = null;
+  let mergedSeed: AxisUnderstanding | null = null;
+  if (hasAttachment) {
+    observation = await observeAttachment(
+      apiKey,
+      body.attachmentUrl!,
+      body.attachmentType ?? "",
+      message ?? "",
+      priorUnderstanding,
+    );
+    mergedSeed = mergeObservationIntoUnderstanding(priorUnderstanding, observation);
+  }
 
   // Build memory context
   const memCtx = buildMemoryContext(thread, beliefs, experiments, recentEvents);
@@ -601,25 +798,18 @@ async function handleRun(req: Request): Promise<Response> {
     body.attachmentUrl
       ? `Attachment: ${body.attachmentType ?? "file"} at ${body.attachmentUrl}`
       : null,
+    observation
+      ? `--- OBSERVATION ---\nSummary: ${observation.summary || "none"}\nRelevant signals: ${observation.relevantSignals.join(", ") || "none"}\nIgnored noise: ${observation.ignoredNoise.join(", ") || "none"}\n--- END OBSERVATION ---`
+      : null,
+    mergedSeed
+      ? `--- MERGED BELIEF STATE (ground truth from observation — build coaching around this) ---\nConcept: ${mergedSeed.concept || "unset"}\nBelief: ${mergedSeed.belief || "unset"}\nConfidence: ${mergedSeed.confidence}\n--- END MERGED BELIEF STATE ---`
+      : null,
   ]
     .filter(Boolean)
     .join("\n\n");
 
   // Call Anthropic
-  let understanding: AxisUnderstanding = {
-    id: crypto.randomUUID(),
-    threadId: "",
-    concept: "",
-    focus: "",
-    belief: "",
-    confidence: 0,
-    primitives: [],
-    currentPattern: EMPTY_PATTERN,
-    targetPattern: EMPTY_PATTERN,
-    coachingCue: "",
-    experiment: "",
-    evidenceRequest: "",
-  };
+  let understanding: AxisUnderstanding = mergedSeed ?? emptyUnderstanding();
   let stateUpdate: StateUpdate | undefined;
 
   try {
@@ -683,7 +873,7 @@ async function handleRun(req: Request): Promise<Response> {
     await sb.from("axis_thread_events").insert({
       thread_id: threadId,
       role: "assistant",
-      content: { cards, understanding },
+      content: { cards, understanding, observation },
     });
   })();
 
