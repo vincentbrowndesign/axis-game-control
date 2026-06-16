@@ -20,207 +20,192 @@ interface Conversation {
 type AuthPhase = "loading" | "guest" | "signed_in";
 type Phase = "idle" | "loading" | "results";
 
-const CARD_LABELS: Record<string, string> = {
-  insight: "INSIGHT",
-  question: "TELL ME",
-  experiment: "TRY THIS",
-  evidence_request: "SHARE",
-  breakthrough: "BREAKTHROUGH",
-  next_action: "NEXT",
-  demonstration: "SEE IT",
-  evidence_received: "RECEIVED",
-  compare: "GAP",
-  live_intervention: "SAY THIS",
-  belief: "BELIEF",
-  see_it: "SEE IT",
-  try_this: "TRY THIS",
-  show_me: "SHOW ME",
-};
+interface Pattern {
+  label?: string;
+  objects?: string[];
+  relationships?: string[];
+  motion?: string[];
+}
 
 // ---------------------------------------------------------------------------
-// Card component
+// Demonstration — the hero. What is happening, what it should become.
 // ---------------------------------------------------------------------------
 
-function SeeItRenderer({ data }: { data: Record<string, unknown> }) {
-  const current = data.currentPattern as { label?: string; objects?: string[]; relationships?: string[]; motion?: string[] } | undefined;
-  const target = data.targetPattern as { label?: string; objects?: string[]; relationships?: string[]; motion?: string[] } | undefined;
-  const primitives = data.primitives as string[] | undefined;
+function DemonstrationBlock({ data }: { data: Record<string, unknown> }) {
+  const current = data.currentPattern as Pattern | undefined;
+  const target = data.targetPattern as Pattern | undefined;
+  if (!current?.label && !target?.label) return null;
+
   return (
-    <div className="see-it">
-      {primitives && primitives.length > 0 && (
-        <div className="see-it-primitives">
-          {primitives.map((p) => (
-            <span key={p} className="primitive-tag">{p}</span>
-          ))}
-        </div>
-      )}
-      <div className="see-it-patterns">
-        {current && (
-          <div className="pattern pattern--current">
-            <span className="pattern-label">NOW</span>
-            {current.label && <p className="pattern-name">{current.label}</p>}
-            {(current.objects ?? []).length > 0 && (
-              <p className="pattern-objects">{(current.objects ?? []).join(" · ")}</p>
-            )}
-            {(current.motion ?? []).length > 0 && (
-              <p className="pattern-motion">{(current.motion ?? []).join(" → ")}</p>
+    <div className="demo">
+      <div className="demo-states">
+        {current?.label && (
+          <div className="demo-state demo-state--now">
+            <p className="demo-tag">Now</p>
+            <p className="demo-name">{current.label}</p>
+            {(current.motion?.length ?? 0) > 0 && (
+              <p className="demo-motion">{current.motion!.join(" → ")}</p>
             )}
           </div>
         )}
-        {target && (
-          <div className="pattern pattern--target">
-            <span className="pattern-label">TARGET</span>
-            {target.label && <p className="pattern-name">{target.label}</p>}
-            {(target.objects ?? []).length > 0 && (
-              <p className="pattern-objects">{(target.objects ?? []).join(" · ")}</p>
-            )}
-            {(target.motion ?? []).length > 0 && (
-              <p className="pattern-motion">{(target.motion ?? []).join(" → ")}</p>
+        {current?.label && target?.label && <span className="demo-arrow">→</span>}
+        {target?.label && (
+          <div className="demo-state demo-state--target">
+            <p className="demo-tag">Target</p>
+            <p className="demo-name">{target.label}</p>
+            {(target.motion?.length ?? 0) > 0 && (
+              <p className="demo-motion">{target.motion!.join(" → ")}</p>
             )}
           </div>
         )}
       </div>
       <style jsx>{`
-        .see-it { margin-top: 14px; }
-        .see-it-primitives { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-        .primitive-tag {
-          font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+        .demo {
+          background: rgba(140, 190, 40, 0.05);
+          border: 1px solid rgba(140, 190, 40, 0.14);
+          border-radius: 16px;
+          margin: 22px 0;
+          padding: 30px 24px;
+        }
+        .demo-states {
+          align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 20px;
+          justify-content: center;
+        }
+        .demo-state {
+          flex: 1;
+          min-width: 140px;
+          text-align: center;
+        }
+        .demo-tag {
+          color: rgba(26, 26, 24, 0.35);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          margin: 0 0 8px;
           text-transform: uppercase;
-          background: rgba(26,26,24,0.07); color: rgba(26,26,24,0.5);
-          border-radius: 4px; padding: 3px 7px;
         }
-        .see-it-patterns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .pattern { border-radius: 8px; padding: 12px 14px; }
-        .pattern--current { background: rgba(200,80,40,0.07); border: 1px solid rgba(200,80,40,0.14); }
-        .pattern--target { background: rgba(60,140,60,0.07); border: 1px solid rgba(60,140,60,0.14); }
-        .pattern-label {
-          display: block; font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
-          text-transform: uppercase; color: rgba(26,26,24,0.35); margin-bottom: 6px;
+        .demo-state--now .demo-tag {
+          color: rgba(200, 90, 40, 0.55);
         }
-        .pattern-name { font-size: 13px; font-weight: 600; color: rgba(26,26,24,0.88); margin: 0 0 4px; }
-        .pattern-objects { font-size: 11px; color: rgba(26,26,24,0.45); margin: 0 0 4px; }
-        .pattern-motion { font-size: 11px; font-style: italic; color: rgba(26,26,24,0.55); margin: 0; }
+        .demo-state--target .demo-tag {
+          color: rgba(120, 170, 60, 0.75);
+        }
+        .demo-name {
+          color: rgba(26, 26, 24, 0.92);
+          font-size: 20px;
+          font-weight: 640;
+          line-height: 1.3;
+          margin: 0 0 6px;
+        }
+        .demo-motion {
+          color: rgba(26, 26, 24, 0.45);
+          font-size: 13px;
+          font-style: italic;
+          margin: 0;
+        }
+        .demo-arrow {
+          color: rgba(26, 26, 24, 0.22);
+          flex-shrink: 0;
+          font-size: 22px;
+        }
       `}</style>
     </div>
   );
 }
 
-function CardView({ card }: { card: AxisCard }) {
-  const isSeeIt = card.type === "see_it";
+// ---------------------------------------------------------------------------
+// Flow — understanding, then demonstration, then action. No cards. No labels.
+// ---------------------------------------------------------------------------
+
+function EntryFlow({ cards }: { cards: AxisCard[] }) {
   return (
-    <div className={`axis-card axis-card--${card.type}`}>
-      <span className="card-label">{CARD_LABELS[card.type] ?? card.type.toUpperCase()}</span>
-      <p className="card-body">{card.content}</p>
-      {!isSeeIt && card.secondary && <p className="card-secondary">{card.secondary}</p>}
-      {isSeeIt && card.data && <SeeItRenderer data={card.data} />}
-      {card.cue && <p className="card-cue">{card.cue}</p>}
-      <style jsx>{`
-        .axis-card {
-          background: #fff;
-          border-radius: 12px;
-          padding: 20px 22px 22px;
-          animation: cardReveal 0.22s ease-out;
+    <div className="flow">
+      {cards.map((card, i) => {
+        const style = { animationDelay: `${i * 70}ms` };
+        if (card.type === "see_it") {
+          return card.data ? (
+            <div key={i} className="flow-item" style={style}>
+              <DemonstrationBlock data={card.data} />
+            </div>
+          ) : null;
         }
-        @keyframes cardReveal {
-          from { opacity: 0; transform: translateY(6px); }
+        if (card.type === "try_this") {
+          return (
+            <div key={i} className="flow-item flow-action" style={style}>
+              <p className="flow-action-text">{card.content}</p>
+              {card.cue && <p className="flow-cue">{card.cue}</p>}
+            </div>
+          );
+        }
+        if (card.type === "show_me") {
+          return (
+            <p key={i} className="flow-item flow-show" style={style}>
+              {card.content}
+            </p>
+          );
+        }
+        if (card.type === "breakthrough") {
+          return (
+            <p key={i} className="flow-item flow-breakthrough" style={style}>
+              {card.content}
+            </p>
+          );
+        }
+        return (
+          <p key={i} className="flow-item flow-belief" style={style}>
+            {card.content}
+          </p>
+        );
+      })}
+      <style jsx>{`
+        .flow {
+          display: flex;
+          flex-direction: column;
+        }
+        .flow-item {
+          animation: flowIn 0.32s ease-out backwards;
+        }
+        @keyframes flowIn {
+          from { opacity: 0; transform: translateY(5px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        .axis-card--question {
-          background: rgba(250, 250, 249, 0.055);
-          border: 1px solid rgba(250, 250, 249, 0.1);
-        }
-        .axis-card--breakthrough {
-          background: rgba(140, 190, 40, 0.09);
-          border: 1px solid rgba(140, 190, 40, 0.18);
-        }
-        .axis-card--demonstration {
-          background: rgba(60, 80, 140, 0.08);
-          border: 1px solid rgba(60, 80, 140, 0.16);
-        }
-        .axis-card--evidence_received {
-          background: rgba(250, 250, 249, 0.055);
-          border: 1px solid rgba(250, 250, 249, 0.1);
-        }
-        .axis-card--compare {
-          background: rgba(200, 80, 40, 0.07);
-          border: 1px solid rgba(200, 80, 40, 0.14);
-        }
-        .axis-card--live_intervention {
-          background: rgba(140, 190, 40, 0.13);
-          border: 2px solid rgba(140, 190, 40, 0.3);
-        }
-        .axis-card--belief {
-          background: #fff;
-          border: 1px solid rgba(26, 26, 24, 0.1);
-        }
-        .axis-card--see_it {
-          background: #fff;
-          border: 1px solid rgba(26, 26, 24, 0.08);
-        }
-        .axis-card--try_this {
-          background: rgba(26, 26, 24, 0.96);
-          border: none;
-        }
-        .axis-card--show_me {
-          background: rgba(250, 250, 249, 0.055);
-          border: 1px solid rgba(250, 250, 249, 0.12);
-        }
-        .card-label {
-          display: block;
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.14em;
-          color: rgba(26, 26, 24, 0.3);
-          text-transform: uppercase;
-          margin-bottom: 10px;
-        }
-        .axis-card--question .card-label,
-        .axis-card--evidence_received .card-label,
-        .axis-card--show_me .card-label {
-          color: rgba(250, 250, 249, 0.3);
-        }
-        .axis-card--breakthrough .card-label,
-        .axis-card--live_intervention .card-label {
-          color: rgba(140, 190, 40, 0.7);
-        }
-        .axis-card--demonstration .card-label {
-          color: rgba(60, 80, 140, 0.55);
-        }
-        .axis-card--compare .card-label {
-          color: rgba(200, 80, 40, 0.6);
-        }
-        .axis-card--try_this .card-label {
-          color: rgba(140, 190, 40, 0.7);
-        }
-        .card-body {
-          font-size: 16px;
-          line-height: 1.55;
-          color: rgba(26, 26, 24, 0.92);
+        .flow-belief {
+          color: rgba(26, 26, 24, 0.86);
+          font-size: 17px;
+          line-height: 1.5;
           margin: 0;
-          font-weight: 460;
         }
-        .axis-card--question .card-body,
-        .axis-card--breakthrough .card-body,
-        .axis-card--evidence_received .card-body,
-        .axis-card--live_intervention .card-body,
-        .axis-card--try_this .card-body,
-        .axis-card--show_me .card-body {
-          color: rgba(250, 250, 249, 0.88);
+        .flow-action {
+          margin-top: 6px;
         }
-        .card-secondary {
+        .flow-action-text {
+          color: rgba(26, 26, 24, 0.88);
+          font-size: 15px;
+          font-weight: 560;
+          line-height: 1.5;
+          margin: 0;
+        }
+        .flow-cue {
+          color: rgba(26, 26, 24, 0.42);
           font-size: 13px;
-          color: rgba(26, 26, 24, 0.48);
-          line-height: 1.55;
-          margin: 10px 0 0;
+          font-style: italic;
+          margin: 4px 0 0;
         }
-        .card-cue {
-          font-size: 13px;
-          color: rgba(26, 26, 24, 0.72);
+        .flow-show {
+          color: rgba(26, 26, 24, 0.45);
+          font-size: 14px;
           line-height: 1.5;
           margin: 10px 0 0;
-          padding-top: 10px;
-          border-top: 1px solid rgba(26, 26, 24, 0.08);
-          font-style: italic;
+        }
+        .flow-breakthrough {
+          color: rgba(120, 170, 60, 0.85);
+          font-size: 15px;
+          font-weight: 600;
+          line-height: 1.5;
+          margin: 10px 0 0;
         }
       `}</style>
     </div>
@@ -239,7 +224,6 @@ export default function AxisPage() {
   const [input, setInput] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [revealIndex, setRevealIndex] = useState(0);
   const [sidebarThreads, setSidebarThreads] = useState<SidebarThread[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING" | "PROCESSING">("OFF");
@@ -353,7 +337,6 @@ export default function AxisPage() {
               console.log("[MOBILE_TRACE] thread restore success,", data.conversations.length, "conversations");
               setThreadId(savedId);
               setConversations(data.conversations);
-              setRevealIndex(9999);
               setPhase("results");
               setSidebarThreads(data.sidebarThreads ?? []);
             } else {
@@ -386,7 +369,7 @@ export default function AxisPage() {
     if (threadRef.current) {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
     }
-  }, [conversations, revealIndex, phase]);
+  }, [conversations, phase]);
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -482,7 +465,6 @@ export default function AxisPage() {
       setThreadId(data.threadId);
       localStorage.setItem("axis_thread_id", data.threadId);
       setConversations((prev) => [...prev, conv]);
-      setRevealIndex(1);
       setSidebarThreads(data.sidebarThreads ?? []);
       setPhase("results");
     } catch (err) {
@@ -491,16 +473,11 @@ export default function AxisPage() {
     }
   }
 
-  function advance() {
-    setRevealIndex((r) => r + 1);
-  }
-
   function startNewThread() {
     setThreadId(null);
     setConversations([]);
     setPhase("idle");
     setInput("");
-    setRevealIndex(0);
     clearAttachment();
     localStorage.removeItem("axis_thread_id");
   }
@@ -516,7 +493,6 @@ export default function AxisPage() {
       };
       setThreadId(id);
       setConversations(data.conversations ?? []);
-      setRevealIndex(9999);
       setPhase(data.conversations?.length ? "results" : "idle");
       setSidebarThreads(data.sidebarThreads ?? []);
       localStorage.setItem("axis_thread_id", id);
@@ -590,13 +566,13 @@ export default function AxisPage() {
         <style jsx>{`
           .init-screen {
             align-items: center;
-            background: #0e0e0c;
+            background: #ffffff;
             display: flex;
             height: 100vh;
             justify-content: center;
           }
           .init-mark {
-            color: rgba(250, 250, 249, 0.14);
+            color: rgba(26, 26, 24, 0.16);
             font-size: 11px;
             font-weight: 750;
             letter-spacing: 0.26em;
@@ -610,8 +586,6 @@ export default function AxisPage() {
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
-
-  const lastConvIdx = conversations.length - 1;
 
   return (
     <>
@@ -716,14 +690,16 @@ export default function AxisPage() {
         // ── THREAD SCREEN ─────────────────────────────────────────────────────
         <div className="thread-shell">
           <header className="hd">
-            <button
-              className="sidebar-toggle"
-              onClick={() => setIsSidebarOpen(true)}
-              type="button"
-              aria-label="Open threads"
-            >
-              ☰
-            </button>
+            {sidebarThreads.length > 0 && (
+              <button
+                className="sidebar-toggle"
+                onClick={() => setIsSidebarOpen(true)}
+                type="button"
+                aria-label="Open threads"
+              >
+                ☰
+              </button>
+            )}
             <span className="wordmark">AXIS</span>
             <button
               className="new-thread-btn"
@@ -735,26 +711,12 @@ export default function AxisPage() {
           </header>
 
           <div className="thread" ref={threadRef}>
-            {conversations.map((conv, convIdx) => {
-              const isLast = convIdx === lastConvIdx;
-              const visibleCount = isLast ? revealIndex : conv.cards.length;
-              const visibleCards = conv.cards.slice(0, visibleCount);
-              const hasMore = isLast && revealIndex < conv.cards.length && phase !== "loading";
-
-              return (
-                <div key={conv.id} className="entry">
-                  <p className="user-msg">{conv.userMessage}</p>
-                  {visibleCards.map((card, ci) => (
-                    <CardView key={ci} card={card} />
-                  ))}
-                  {hasMore && (
-                    <button className="advance-btn" onClick={advance} type="button">
-                      →
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+            {conversations.map((conv) => (
+              <div key={conv.id} className="entry">
+                <p className="user-msg">{conv.userMessage}</p>
+                <EntryFlow cards={conv.cards} />
+              </div>
+            ))}
 
             {phase === "loading" && (
               <div className="entry">
@@ -859,8 +821,8 @@ export default function AxisPage() {
         }
         html,
         body {
-          background: #0e0e0c;
-          color: rgba(250, 250, 249, 0.88);
+          background: #ffffff;
+          color: rgba(26, 26, 24, 0.9);
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
           -webkit-font-smoothing: antialiased;
           max-width: 100%;
@@ -890,7 +852,7 @@ export default function AxisPage() {
         }
 
         .home-mark {
-          color: rgba(250, 250, 249, 0.22);
+          color: rgba(26, 26, 24, 0.3);
           font-size: 10px;
           font-weight: 750;
           letter-spacing: 0.28em;
@@ -899,7 +861,7 @@ export default function AxisPage() {
         }
 
         .home-q {
-          color: rgba(250, 250, 249, 0.88);
+          color: rgba(26, 26, 24, 0.9);
           font-size: clamp(24px, 7vw, 34px);
           font-weight: 640;
           line-height: 1.15;
@@ -920,10 +882,10 @@ export default function AxisPage() {
         }
 
         .home-input {
-          background: rgba(250, 250, 249, 0.05);
-          border: 1px solid rgba(250, 250, 249, 0.09);
+          background: rgba(26, 26, 24, 0.025);
+          border: 1px solid rgba(26, 26, 24, 0.12);
           border-radius: 12px;
-          color: rgba(250, 250, 249, 0.88);
+          color: rgba(26, 26, 24, 0.9);
           font: inherit;
           font-size: 16px;
           line-height: 1.5;
@@ -938,11 +900,11 @@ export default function AxisPage() {
         }
 
         .home-input::placeholder {
-          color: rgba(250, 250, 249, 0.24);
+          color: rgba(26, 26, 24, 0.32);
         }
 
         .home-input:focus {
-          border-color: rgba(250, 250, 249, 0.18);
+          border-color: rgba(120, 170, 60, 0.5);
         }
 
         .home-controls {
@@ -955,10 +917,10 @@ export default function AxisPage() {
         }
 
         .send-btn {
-          background: rgba(250, 250, 249, 0.9);
+          background: rgba(26, 26, 24, 0.92);
           border: none;
           border-radius: 8px;
-          color: #0e0e0c;
+          color: #ffffff;
           cursor: pointer;
           flex-shrink: 0;
           font: inherit;
@@ -973,17 +935,17 @@ export default function AxisPage() {
         }
 
         .send-btn:disabled {
-          opacity: 0.32;
+          opacity: 0.28;
           cursor: default;
         }
 
         /* ── Controls ────────────────────────── */
         .ctrl-btn {
           align-items: center;
-          background: rgba(250, 250, 249, 0.06);
-          border: 1px solid rgba(250, 250, 249, 0.08);
+          background: rgba(26, 26, 24, 0.04);
+          border: 1px solid rgba(26, 26, 24, 0.1);
           border-radius: 8px;
-          color: rgba(250, 250, 249, 0.44);
+          color: rgba(26, 26, 24, 0.5);
           cursor: pointer;
           display: flex;
           height: 44px;
@@ -994,8 +956,8 @@ export default function AxisPage() {
         }
 
         .ctrl-btn:hover {
-          background: rgba(250, 250, 249, 0.1);
-          color: rgba(250, 250, 249, 0.72);
+          background: rgba(26, 26, 24, 0.07);
+          color: rgba(26, 26, 24, 0.8);
         }
 
         .ctrl-btn--bottom {
@@ -1023,7 +985,7 @@ export default function AxisPage() {
           align-items: center;
           background: none;
           border: none;
-          color: rgba(250, 250, 249, 0.38);
+          color: rgba(26, 26, 24, 0.4);
           cursor: pointer;
           display: flex;
           font-size: 16px;
@@ -1035,7 +997,7 @@ export default function AxisPage() {
         }
 
         .sidebar-toggle:hover {
-          color: rgba(250, 250, 249, 0.72);
+          color: rgba(26, 26, 24, 0.8);
         }
 
         /* ── Thread shell ────────────────────── */
@@ -1047,7 +1009,7 @@ export default function AxisPage() {
 
         .hd {
           align-items: center;
-          border-bottom: 1px solid rgba(250, 250, 249, 0.06);
+          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
           display: flex;
           flex-shrink: 0;
           gap: 12px;
@@ -1055,7 +1017,7 @@ export default function AxisPage() {
         }
 
         .wordmark {
-          color: rgba(250, 250, 249, 0.22);
+          color: rgba(26, 26, 24, 0.28);
           flex: 1;
           font-size: 10px;
           font-weight: 750;
@@ -1067,7 +1029,7 @@ export default function AxisPage() {
         .new-thread-btn {
           background: none;
           border: none;
-          color: rgba(140, 190, 40, 0.7);
+          color: rgba(120, 170, 60, 0.85);
           cursor: pointer;
           font: inherit;
           font-size: 12px;
@@ -1078,7 +1040,7 @@ export default function AxisPage() {
         }
 
         .new-thread-btn:hover {
-          color: rgba(140, 190, 40, 1);
+          color: rgba(120, 170, 60, 1);
         }
 
         /* ── Thread body ─────────────────────── */
@@ -1086,7 +1048,7 @@ export default function AxisPage() {
           display: flex;
           flex: 1;
           flex-direction: column;
-          gap: 28px;
+          gap: 36px;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
           padding: 24px 20px calc(140px + env(safe-area-inset-bottom));
@@ -1097,34 +1059,17 @@ export default function AxisPage() {
           display: flex;
           flex-direction: column;
           gap: 10px;
+          max-width: 640px;
+          margin: 0 auto;
+          width: 100%;
         }
 
         .user-msg {
-          color: rgba(250, 250, 249, 0.4);
+          color: rgba(26, 26, 24, 0.42);
           font-size: 14px;
           letter-spacing: 0.01em;
           line-height: 1.5;
           padding: 0 2px;
-        }
-
-        .advance-btn {
-          align-self: flex-start;
-          background: none;
-          border: 1px solid rgba(250, 250, 249, 0.12);
-          border-radius: 8px;
-          color: rgba(250, 250, 249, 0.4);
-          cursor: pointer;
-          font: inherit;
-          font-size: 16px;
-          height: 44px;
-          min-width: 44px;
-          padding: 0 16px;
-          transition: border-color 0.12s, color 0.12s;
-        }
-
-        .advance-btn:hover {
-          border-color: rgba(250, 250, 249, 0.24);
-          color: rgba(250, 250, 249, 0.72);
         }
 
         /* ── Loading ─────────────────────────── */
@@ -1137,7 +1082,7 @@ export default function AxisPage() {
 
         .dot {
           animation: pulse 1.1s ease-in-out infinite;
-          background: rgba(250, 250, 249, 0.24);
+          background: rgba(26, 26, 24, 0.28);
           border-radius: 50%;
           height: 5px;
           width: 5px;
@@ -1164,9 +1109,9 @@ export default function AxisPage() {
 
         /* ── Bottom bar ──────────────────────── */
         .bottom-bar {
-          background: rgba(14, 14, 12, 0.94);
+          background: rgba(255, 255, 255, 0.94);
           backdrop-filter: blur(8px);
-          border-top: 1px solid rgba(250, 250, 249, 0.06);
+          border-top: 1px solid rgba(26, 26, 24, 0.07);
           bottom: 0;
           left: 0;
           max-width: 100vw;
@@ -1185,10 +1130,10 @@ export default function AxisPage() {
         }
 
         .bottom-input {
-          background: rgba(250, 250, 249, 0.06);
-          border: 1px solid rgba(250, 250, 249, 0.09);
+          background: rgba(26, 26, 24, 0.03);
+          border: 1px solid rgba(26, 26, 24, 0.1);
           border-radius: 10px;
-          color: rgba(250, 250, 249, 0.88);
+          color: rgba(26, 26, 24, 0.9);
           flex: 1;
           font: inherit;
           font-size: 16px;
@@ -1202,18 +1147,18 @@ export default function AxisPage() {
         }
 
         .bottom-input::placeholder {
-          color: rgba(250, 250, 249, 0.22);
+          color: rgba(26, 26, 24, 0.3);
         }
 
         .bottom-input:focus {
-          border-color: rgba(250, 250, 249, 0.16);
+          border-color: rgba(120, 170, 60, 0.5);
         }
 
         .bottom-send {
-          background: rgba(250, 250, 249, 0.9);
+          background: rgba(26, 26, 24, 0.92);
           border: none;
           border-radius: 8px;
-          color: #0e0e0c;
+          color: #ffffff;
           cursor: pointer;
           flex-shrink: 0;
           font: inherit;
@@ -1226,14 +1171,14 @@ export default function AxisPage() {
 
         .bottom-send:disabled {
           cursor: default;
-          opacity: 0.28;
+          opacity: 0.25;
         }
 
         /* ── Attachment badge ────────────────── */
         .attachment-badge {
           align-items: center;
-          background: rgba(140, 190, 40, 0.1);
-          border: 1px solid rgba(140, 190, 40, 0.2);
+          background: rgba(120, 170, 60, 0.08);
+          border: 1px solid rgba(120, 170, 60, 0.22);
           border-radius: 8px;
           display: flex;
           gap: 8px;
@@ -1247,7 +1192,7 @@ export default function AxisPage() {
         }
 
         .attachment-name {
-          color: rgba(250, 250, 249, 0.7);
+          color: rgba(26, 26, 24, 0.7);
           font-size: 12px;
           letter-spacing: 0.02em;
           overflow: hidden;
@@ -1258,7 +1203,7 @@ export default function AxisPage() {
         .attachment-remove {
           background: none;
           border: none;
-          color: rgba(250, 250, 249, 0.4);
+          color: rgba(26, 26, 24, 0.4);
           cursor: pointer;
           flex-shrink: 0;
           font-size: 16px;

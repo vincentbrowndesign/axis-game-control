@@ -124,7 +124,6 @@ export function DevSidebar({
         </div>
 
         <div className="account-control">
-          <span className="account-kicker">Account</span>
           <strong className="account-id">{authLabel}</strong>
           <span className="account-type">{authType}</span>
           {isGuest && (
@@ -152,9 +151,10 @@ export function DevSidebar({
         }
 
         .sidebar {
-          background: #111110;
+          background: #ffffff;
+          border-right: 1px solid rgba(26, 26, 24, 0.08);
           bottom: 0;
-          color: #fafaf9;
+          color: #1a1a18;
           display: flex;
           flex-direction: column;
           left: 0;
@@ -168,7 +168,7 @@ export function DevSidebar({
 
         .sidebar-hd {
           align-items: center;
-          border-bottom: 1px solid rgba(250, 250, 249, 0.07);
+          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
           display: flex;
           flex-shrink: 0;
           justify-content: space-between;
@@ -176,7 +176,7 @@ export function DevSidebar({
         }
 
         .sidebar-wordmark {
-          color: rgba(250, 250, 249, 0.28);
+          color: rgba(26, 26, 24, 0.3);
           font-size: 11px;
           font-weight: 750;
           letter-spacing: 0.18em;
@@ -187,7 +187,7 @@ export function DevSidebar({
           align-items: center;
           background: none;
           border: none;
-          color: rgba(250, 250, 249, 0.38);
+          color: rgba(26, 26, 24, 0.4);
           cursor: pointer;
           display: flex;
           font-size: 20px;
@@ -200,14 +200,14 @@ export function DevSidebar({
         }
 
         .sidebar-close:hover {
-          color: rgba(250, 250, 249, 0.72);
+          color: rgba(26, 26, 24, 0.75);
         }
 
         .new-thread-btn {
           background: none;
           border: none;
-          border-bottom: 1px solid rgba(250, 250, 249, 0.07);
-          color: rgba(140, 190, 40, 0.8);
+          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
+          color: rgba(120, 170, 60, 0.95);
           cursor: pointer;
           font: inherit;
           font-size: 12px;
@@ -221,7 +221,7 @@ export function DevSidebar({
         }
 
         .new-thread-btn:hover {
-          color: rgba(140, 190, 40, 1);
+          color: rgba(120, 170, 60, 1);
         }
 
         .sidebar-body {
@@ -237,7 +237,7 @@ export function DevSidebar({
         }
 
         .empty-state {
-          color: rgba(250, 250, 249, 0.24);
+          color: rgba(26, 26, 24, 0.3);
           font-size: 12px;
           padding: 24px 18px;
         }
@@ -245,7 +245,7 @@ export function DevSidebar({
         .thread-item {
           background: none;
           border: none;
-          border-bottom: 1px solid rgba(250, 250, 249, 0.05);
+          border-bottom: 1px solid rgba(26, 26, 24, 0.05);
           color: inherit;
           cursor: pointer;
           display: flex;
@@ -259,12 +259,12 @@ export function DevSidebar({
         }
 
         .thread-item:hover {
-          background: rgba(250, 250, 249, 0.04);
+          background: rgba(26, 26, 24, 0.035);
         }
 
         .thread-item--active {
-          background: rgba(140, 190, 40, 0.07);
-          border-left: 2px solid rgba(140, 190, 40, 0.6);
+          background: rgba(120, 170, 60, 0.08);
+          border-left: 2px solid rgba(120, 170, 60, 0.7);
           padding-left: 16px;
         }
 
@@ -277,7 +277,7 @@ export function DevSidebar({
         }
 
         .thread-title {
-          color: rgba(250, 250, 249, 0.88);
+          color: rgba(26, 26, 24, 0.9);
           font-size: 13px;
           font-weight: 520;
           line-height: 1.4;
@@ -287,14 +287,14 @@ export function DevSidebar({
         }
 
         .thread-time {
-          color: rgba(250, 250, 249, 0.26);
+          color: rgba(26, 26, 24, 0.32);
           flex-shrink: 0;
           font-size: 10px;
           letter-spacing: 0.02em;
         }
 
         .thread-subtitle {
-          color: rgba(250, 250, 249, 0.38);
+          color: rgba(26, 26, 24, 0.42);
           font-size: 11px;
           line-height: 1.45;
           overflow: hidden;
@@ -303,7 +303,7 @@ export function DevSidebar({
         }
 
         .account-control {
-          border-top: 1px solid rgba(250, 250, 249, 0.07);
+          border-top: 1px solid rgba(26, 26, 24, 0.07);
           display: flex;
           flex-direction: column;
           flex-shrink: 0;
@@ -311,16 +311,8 @@ export function DevSidebar({
           padding: 14px 18px 18px;
         }
 
-        .account-kicker {
-          color: rgba(250, 250, 249, 0.26);
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-        }
-
         .account-id {
-          color: rgba(250, 250, 249, 0.82);
+          color: rgba(26, 26, 24, 0.75);
           font-size: 13px;
           font-weight: 600;
           line-height: 1.35;
@@ -328,7 +320,7 @@ export function DevSidebar({
         }
 
         .account-type {
-          color: rgba(250, 250, 249, 0.32);
+          color: rgba(26, 26, 24, 0.36);
           font-size: 11px;
           letter-spacing: 0.04em;
           text-transform: uppercase;
@@ -348,21 +340,21 @@ export function DevSidebar({
         }
 
         .account-link {
-          color: rgba(140, 190, 40, 0.78);
+          color: rgba(120, 170, 60, 0.9);
         }
 
         .account-link:hover {
-          color: rgba(140, 190, 40, 1);
+          color: rgba(120, 170, 60, 1);
         }
 
         .sign-out-btn {
-          color: rgba(250, 250, 249, 0.4);
+          color: rgba(26, 26, 24, 0.42);
           text-decoration: underline;
           text-underline-offset: 3px;
         }
 
         .sign-out-btn:hover {
-          color: rgba(250, 250, 249, 0.7);
+          color: rgba(26, 26, 24, 0.75);
         }
       `}</style>
     </>
