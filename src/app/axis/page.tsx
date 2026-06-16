@@ -20,7 +20,15 @@ function sentenceFromCard(card: AxisCard): string | null {
   return text.trim() || null;
 }
 
-function AxisReply({ cards }: { cards: AxisCard[] }) {
+const SLASH_COMMANDS = ["/history", "/show", "/today", "/last", "/clip", "/compare"];
+
+function AxisReply({
+  cards,
+  onSentence,
+}: {
+  cards: AxisCard[];
+  onSentence: (sentence: string) => void;
+}) {
   const sentences = cards.flatMap((card) => {
     const sentence = sentenceFromCard(card);
     return sentence ? [sentence] : [];
@@ -31,7 +39,14 @@ function AxisReply({ cards }: { cards: AxisCard[] }) {
   return (
     <div className="axis-reply">
       {sentences.map((sentence, index) => (
-        <p key={`${sentence}-${index}`}>{sentence}</p>
+        <button
+          key={`${sentence}-${index}`}
+          className="sentence"
+          onClick={() => onSentence(sentence)}
+          type="button"
+        >
+          {sentence}
+        </button>
       ))}
     </div>
   );
@@ -52,6 +67,35 @@ function rememberFrom(threads: SidebarThread[], conversations: Conversation[]): 
   return `You were thinking about ${subject.toLowerCase()} last time.`;
 }
 
+function momentTitleFrom(input: string, file: File | null): string {
+  if (!file) return "";
+  const text = input.toLowerCase();
+  if (text.includes("jumpshot") || text.includes("jump shot")) return "Jumpshot - front release";
+  if (text.includes("hudson")) return "Hudson - today";
+  if (text.includes("landing")) return "Landing after contact";
+  if (text.includes("clip")) return "A clip from today";
+  if (file.type.startsWith("video/")) return "A moment from today";
+  if (file.type.startsWith("image/")) return "A still from today";
+  return "A moment from today";
+}
+
+function isLookBackCommand(value: string): boolean {
+  const text = value.trim().toLowerCase();
+  return (
+    text === "/history" ||
+    text === "/last" ||
+    text === "/show" ||
+    text === "/today" ||
+    text === "/clip" ||
+    text === "/compare" ||
+    text.includes("show last") ||
+    text.includes("look back") ||
+    text.includes("what changed") ||
+    text.includes("show evidence") ||
+    text.includes("find the clip")
+  );
+}
+
 export default function AxisPage() {
   const [authPhase, setAuthPhase] = useState<AuthPhase>("loading");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -62,13 +106,21 @@ export default function AxisPage() {
   const [sidebarThreads, setSidebarThreads] = useState<SidebarThread[]>([]);
   const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING">("OFF");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [momentPreview, setMomentPreview] = useState<string | null>(null);
 
   const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<SpeechRecognition | null>(null);
 
   const isActive = conversations.length > 0 || phase !== "idle";
   const memorySentence = rememberFrom(sidebarThreads, conversations);
+  const momentTitle = momentTitleFrom(input, pendingFile);
+  const slashHints = input.startsWith("/")
+    ? SLASH_COMMANDS.filter((command) => command.startsWith(input.toLowerCase())).slice(0, 4)
+    : [];
 
   useEffect(() => {
     async function init() {
@@ -121,6 +173,51 @@ export default function AxisPage() {
     }
   }, [conversations, phase]);
 
+  useEffect(() => {
+    if (!pendingFile) {
+      setMomentPreview(null);
+      return;
+    }
+
+    if (!pendingFile.type.startsWith("image/") && !pendingFile.type.startsWith("video/")) {
+      setMomentPreview(null);
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(pendingFile);
+    setMomentPreview(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [pendingFile]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "k") {
+        event.preventDefault();
+        setInput((current) => current || "/");
+        inputRef.current?.focus();
+      }
+      if (key === "u") {
+        event.preventDefault();
+        fileRef.current?.click();
+      }
+      if (key === "m") {
+        event.preventDefault();
+        toggleVoice();
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void run(input);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [input, pendingFile, phase]);
+
   function clearAttachment() {
     setPendingFile(null);
     if (fileRef.current) fileRef.current.value = "";
@@ -132,6 +229,12 @@ export default function AxisPage() {
     const hasFile = fileToUpload !== null;
     if (!msg && !hasFile) return;
     if (phase === "loading") return;
+
+    if (msg && !hasFile && isLookBackCommand(msg)) {
+      setMemoryOpen(true);
+      setInput("");
+      return;
+    }
 
     const originalFileName = fileToUpload?.name ?? null;
     setPhase("loading");
@@ -264,6 +367,18 @@ export default function AxisPage() {
   return (
     <>
       <main className="axis-shell">
+        <button
+          className="axis-mark"
+          type="button"
+          onClick={() => {
+            setMemoryOpen(false);
+            inputRef.current?.focus();
+          }}
+          aria-label="Return to the page"
+        >
+          Axis
+        </button>
+
         <section className={`page${isActive ? " page--written" : ""}`}>
           {!isActive && <div className="quiet-memory">{memorySentence}</div>}
           {!isActive && <h1 className="page-question">What happened today?</h1>}
@@ -274,7 +389,13 @@ export default function AxisPage() {
               {conversations.map((conv) => (
                 <section key={conv.id} className="page-entry">
                   {conv.userMessage && <p className="page-writing">{conv.userMessage}</p>}
-                  <AxisReply cards={conv.cards} />
+                  <AxisReply
+                    cards={conv.cards}
+                    onSentence={(sentence) => {
+                      setInput(`Tell me more about "${sentence}"`);
+                      inputRef.current?.focus();
+                    }}
+                  />
                 </section>
               ))}
 
@@ -288,27 +409,73 @@ export default function AxisPage() {
             </div>
           )}
 
+          {memoryOpen && (
+            <aside className="memory-drawer" aria-label="Memory">
+              {(sidebarThreads.length ? sidebarThreads : []).slice(0, 5).map((thread) => (
+                <button
+                  key={thread.id}
+                  type="button"
+                  onClick={() => {
+                    setMemoryOpen(false);
+                    setInput(`Show me ${thread.title || thread.focus || "this"}`);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  {thread.title || thread.focus || "An earlier page"}
+                </button>
+              ))}
+              {sidebarThreads.length === 0 && <p>Nothing has gathered yet.</p>}
+            </aside>
+          )}
+
           <div className="composer-wrap">
             {pendingFile && (
               <div className="moment-pill">
-                <span>A moment from today</span>
+                {momentPreview && (
+                  pendingFile.type.startsWith("video/") ? (
+                    <video src={momentPreview} muted playsInline />
+                  ) : (
+                    <img src={momentPreview} alt="" />
+                  )
+                )}
+                <span>{momentTitle}</span>
                 <button type="button" onClick={clearAttachment} aria-label="Remove upload">
                   x
                 </button>
               </div>
             )}
 
+            {slashHints.length > 0 && (
+              <div className="slash-hints" aria-label="Page commands">
+                {slashHints.map((command) => (
+                  <button
+                    key={command}
+                    type="button"
+                    onClick={() => {
+                      setInput(command);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {command}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <form
-              className="composer"
+              className={`composer${composerFocused ? " composer--awake" : ""}`}
               onSubmit={(event) => {
                 event.preventDefault();
                 void run(input);
               }}
             >
               <textarea
+                ref={inputRef}
                 className="composer-input"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
+                onBlur={() => setComposerFocused(false)}
+                onFocus={() => setComposerFocused(true)}
                 placeholder=""
                 rows={1}
                 inputMode="text"
@@ -343,14 +510,6 @@ export default function AxisPage() {
                 aria-label="Camera"
               >
                 <Camera size={17} />
-              </button>
-              <button
-                className="send-button"
-                type="submit"
-                disabled={(!input.trim() && !pendingFile) || phase === "loading"}
-                aria-label="Send"
-              >
-                &#8594;
               </button>
             </form>
           </div>
@@ -398,6 +557,25 @@ export default function AxisPage() {
           background: #fbfaf7;
           display: block;
           min-height: 100svh;
+        }
+
+        .axis-mark {
+          background: transparent;
+          border: 0;
+          color: rgba(25, 24, 21, 0.24);
+          cursor: pointer;
+          font: inherit;
+          font-size: 12px;
+          left: 18px;
+          letter-spacing: 0.02em;
+          padding: 0;
+          position: fixed;
+          top: 16px;
+          z-index: 4;
+        }
+
+        .axis-mark:hover {
+          color: rgba(25, 24, 21, 0.56);
         }
 
         .page {
@@ -472,11 +650,26 @@ export default function AxisPage() {
         }
 
         .axis-reply p {
+          margin: 0;
+        }
+
+        .sentence {
+          background: transparent;
+          border: 0;
+          color: inherit;
+          cursor: text;
+          font: inherit;
           font-size: clamp(18px, 2.1vw, 24px);
           font-weight: 440;
           letter-spacing: 0;
           line-height: 1.42;
           margin: 0;
+          padding: 0;
+          text-align: left;
+        }
+
+        .sentence:hover {
+          color: rgba(25, 24, 21, 0.66);
         }
 
         .thinking {
@@ -539,6 +732,12 @@ export default function AxisPage() {
           backdrop-filter: blur(18px);
         }
 
+        .composer:hover .icon-button,
+        .composer--awake .icon-button {
+          color: rgba(25, 24, 21, 0.5);
+          opacity: 1;
+        }
+
         .composer-input {
           background: transparent;
           border: 0;
@@ -555,8 +754,7 @@ export default function AxisPage() {
           resize: none;
         }
 
-        .icon-button,
-        .send-button {
+        .icon-button {
           align-items: center;
           background: transparent;
           border: 0;
@@ -575,15 +773,9 @@ export default function AxisPage() {
           color: rgba(25, 24, 21, 0.84);
         }
 
-        .send-button {
-          background: rgba(25, 24, 21, 0.9);
-          color: #fbfaf7;
-          font-size: 20px;
-        }
-
-        .send-button:disabled {
-          cursor: default;
-          opacity: 0.18;
+        .icon-button {
+          opacity: 0.22;
+          transition: color 0.14s ease, opacity 0.14s ease;
         }
 
         .moment-pill {
@@ -597,6 +789,15 @@ export default function AxisPage() {
           max-width: 760px;
         }
 
+        .moment-pill img,
+        .moment-pill video {
+          background: rgba(25, 24, 21, 0.06);
+          border-radius: 4px;
+          height: 38px;
+          object-fit: cover;
+          width: 48px;
+        }
+
         .moment-pill button {
           background: transparent;
           border: 0;
@@ -604,6 +805,67 @@ export default function AxisPage() {
           cursor: pointer;
           font: inherit;
           padding: 0;
+        }
+
+        .slash-hints {
+          color: rgba(25, 24, 21, 0.42);
+          display: flex;
+          flex-wrap: wrap;
+          gap: 14px;
+          justify-content: center;
+          margin: 0 auto 10px;
+          max-width: 760px;
+        }
+
+        .slash-hints button {
+          background: transparent;
+          border: 0;
+          color: inherit;
+          cursor: pointer;
+          font: inherit;
+          font-size: 13px;
+          padding: 0;
+        }
+
+        .slash-hints button:hover {
+          color: rgba(25, 24, 21, 0.72);
+        }
+
+        .memory-drawer {
+          background: rgba(251, 250, 247, 0.96);
+          border-left: 1px solid rgba(25, 24, 21, 0.12);
+          bottom: 96px;
+          color: rgba(25, 24, 21, 0.62);
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          padding: 20px 0 20px 24px;
+          position: fixed;
+          right: clamp(18px, 5vw, 52px);
+          width: min(280px, calc(100vw - 36px));
+          z-index: 3;
+        }
+
+        .memory-drawer button,
+        .memory-drawer p {
+          background: transparent;
+          border: 0;
+          color: inherit;
+          font: inherit;
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+          font-size: 16px;
+          line-height: 1.45;
+          margin: 0;
+          padding: 0;
+          text-align: left;
+        }
+
+        .memory-drawer button {
+          cursor: pointer;
+        }
+
+        .memory-drawer button:hover {
+          color: rgba(25, 24, 21, 0.88);
         }
 
         @media (max-width: 760px) {
@@ -649,10 +911,16 @@ export default function AxisPage() {
             min-height: 42px;
           }
 
-          .icon-button,
-          .send-button {
+          .icon-button {
             height: 40px;
             width: 38px;
+          }
+
+          .memory-drawer {
+            bottom: 86px;
+            left: 18px;
+            right: 18px;
+            width: auto;
           }
 
         }
