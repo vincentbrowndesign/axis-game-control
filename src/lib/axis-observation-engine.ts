@@ -15,13 +15,14 @@ You will be given the current belief and its confidence. Compare what you see ag
 JSON only. No markdown. No explanation outside the schema.
 
 Schema:
-{"summary":"one sentence, what this evidence shows that matters","relevantSignals":["..."],"ignoredNoise":["..."],"updates":{"concept":"...","belief":"...","confidenceDelta":0.15,"currentPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]},"targetPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]}}}
+{"object":"center_of_mass","relationship":"ahead_of_landing_base","motion":"moving_forward","confidence":0.81,"summary":"one sentence, what was observed","relevantSignals":["..."],"ignoredNoise":["..."],"updates":{"concept":"...","belief":"...","confidenceDelta":0.15,"currentPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]}}}
 
 Rules:
 - confidenceDelta is between -0.3 and 0.3. Positive when the evidence confirms the belief. Negative when it contradicts it.
 - Omit any field in "updates" you have no evidence for. Do not invent values.
+- Do not create targetPattern from evidence. TargetPattern belongs to understanding, not observation.
 - Only set "belief" if the evidence changes or sharpens the wording of the belief. Otherwise omit it.
-- currentPattern/targetPattern are partial - include only the keys you have direct evidence for.`;
+- currentPattern is partial - include only the keys you have direct evidence for.`;
 
 export interface ObserveEvidenceInput {
   apiKey?: string;
@@ -86,9 +87,21 @@ export function parseAxisObservation(
     const updates = (
       p.updates && typeof p.updates === "object" ? p.updates : {}
     ) as Record<string, unknown>;
+    const object = typeof p.object === "string" && p.object.trim() ? p.object.trim() : undefined;
+    const relationship =
+      typeof p.relationship === "string" && p.relationship.trim()
+        ? p.relationship.trim()
+        : undefined;
+    const motion = typeof p.motion === "string" && p.motion.trim() ? p.motion.trim() : undefined;
+    const confidence =
+      typeof p.confidence === "number" ? Math.min(1, Math.max(0, p.confidence)) : undefined;
 
     return {
       source,
+      object,
+      relationship,
+      motion,
+      confidence,
       summary: typeof p.summary === "string" ? p.summary.trim() : "",
       relevantSignals: filterAxisMovementPrimitives(strArr(p.relevantSignals)),
       ignoredNoise: strArr(p.ignoredNoise),
@@ -106,7 +119,6 @@ export function parseAxisObservation(
             ? Math.min(0.3, Math.max(-0.3, updates.confidenceDelta))
             : undefined,
         currentPattern: parsePartialPattern(updates.currentPattern),
-        targetPattern: parsePartialPattern(updates.targetPattern),
       },
     };
   } catch {
@@ -119,6 +131,10 @@ export function mergeObservationIntoUnderstanding(
   observation: AxisObservation,
 ): AxisUnderstanding {
   const { updates } = observation;
+  const observedCurrentPattern = mergeObservationPatternPatch(
+    updates.currentPattern,
+    observation,
+  );
 
   const mergePattern = (base: AxisPattern, patch?: Partial<AxisPattern>): AxisPattern =>
     patch
@@ -135,8 +151,8 @@ export function mergeObservationIntoUnderstanding(
     concept: updates.concept ?? prior.concept,
     belief: updates.belief ?? prior.belief,
     confidence: Math.min(1, Math.max(0, prior.confidence + (updates.confidenceDelta ?? 0))),
-    currentPattern: mergePattern(prior.currentPattern, updates.currentPattern),
-    targetPattern: mergePattern(prior.targetPattern, updates.targetPattern),
+    currentPattern: mergePattern(prior.currentPattern, observedCurrentPattern),
+    targetPattern: prior.targetPattern,
   };
 }
 
@@ -182,6 +198,10 @@ export function updateUnderstandingFromObservations(
 export function hasObservationSignal(observation: AxisObservation): boolean {
   return Boolean(
     observation.summary ||
+      observation.object ||
+      observation.relationship ||
+      observation.motion ||
+      typeof observation.confidence === "number" ||
       observation.relevantSignals.length ||
       observation.updates.concept ||
       observation.updates.belief ||
@@ -197,6 +217,10 @@ function confidenceDeltaFromObservation(
 ): number {
   if (typeof observation.updates.confidenceDelta === "number") {
     return clampConfidenceDelta(observation.updates.confidenceDelta, -0.3, 0.3);
+  }
+
+  if (typeof observation.confidence === "number" && hasObservationSignal(observation)) {
+    return clampConfidenceDelta((observation.confidence - prior.confidence) * 0.5, -0.3, 0.3);
   }
 
   const priorBelief = normalizeText(prior.belief);
@@ -225,6 +249,24 @@ function contradictsPattern(base: AxisPattern, patch?: Partial<AxisPattern>): bo
   const baseMotion = new Set(base.motion.map(normalizeText));
   const patchMotion = (patch.motion ?? []).map(normalizeText);
   return patchMotion.some((motion) => baseMotion.size > 0 && !baseMotion.has(motion));
+}
+
+function mergeObservationPatternPatch(
+  base: Partial<AxisPattern> | undefined,
+  observation: AxisObservation,
+): Partial<AxisPattern> | undefined {
+  const objects = observation.object ? [observation.object] : [];
+  const relationships = observation.relationship ? [observation.relationship] : [];
+  const motion = observation.motion ? [observation.motion] : [];
+
+  if (!objects.length && !relationships.length && !motion.length) return base;
+
+  return {
+    ...base,
+    objects: base?.objects?.length ? base.objects : objects,
+    relationships: base?.relationships?.length ? base.relationships : relationships,
+    motion: base?.motion?.length ? base.motion : motion,
+  };
 }
 
 function normalizeText(value: string | undefined): string {
@@ -317,7 +359,7 @@ If the text is a question, a goal statement, a request for help, or contains no 
 JSON only. No markdown. No explanation.
 
 Schema:
-{"summary":"one sentence stating what was physically observed","relevantSignals":["movement primitives that apply"],"ignoredNoise":[],"updates":{"belief":"new or sharpened belief statement if observation clearly changes it","confidenceDelta":0.0,"currentPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]}}}
+{"object":"center_of_mass","relationship":"ahead_of_landing_base","motion":"moving_forward","confidence":0.81,"summary":"one sentence stating what was physically observed","relevantSignals":["movement primitives that apply"],"ignoredNoise":[],"updates":{"belief":"new or sharpened belief statement if observation clearly changes it","confidenceDelta":0.0,"currentPattern":{"label":"...","objects":["..."],"relationships":["..."],"motion":["..."]}}}
 
 Rules:
 - Only set fields you have direct evidence for from the text.

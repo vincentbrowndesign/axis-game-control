@@ -34,6 +34,10 @@ export interface AxisUnderstanding {
 
 export interface AxisObservation {
   source: "image" | "video" | "live_camera" | "voice" | "document";
+  object?: string;
+  relationship?: string;
+  motion?: string;
+  confidence?: number;
   summary: string;
   relevantSignals: string[];
   ignoredNoise: string[];

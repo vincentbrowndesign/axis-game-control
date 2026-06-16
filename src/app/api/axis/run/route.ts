@@ -16,7 +16,6 @@ import {
   observeTextReport,
   updateUnderstandingFromObservation,
 } from "../../../../lib/axis-observation-engine";
-import { compareEvidenceToUnderstanding } from "../../../../lib/axis-evidence-comparison";
 import {
   AXIS_MOVEMENT_PRIMITIVE_JSON_TEXT,
   filterAxisMovementPrimitives,
@@ -87,8 +86,8 @@ interface BuildUnderstandingResult {
 interface AxisRunResponse {
   understanding: AxisUnderstanding;
   cards: AxisCard[];
-  comparison: ReturnType<typeof compareEvidenceToUnderstanding> | null;
-  operatingSystem: ReturnType<typeof runAxisOperatingSystem>;
+  comparison: ReturnType<typeof runAxisOperatingSystem>["comparison"] | null;
+  operatingSystem: ReturnType<typeof runAxisOperatingSystem> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -761,8 +760,8 @@ async function buildUnderstanding(input: BuildUnderstandingInput): Promise<Build
 function buildAxisResponse(
   understanding: AxisUnderstanding,
   observation: AxisObservation | null,
-  comparison: ReturnType<typeof compareEvidenceToUnderstanding> | null,
-  operatingSystem: ReturnType<typeof runAxisOperatingSystem>,
+  comparison: ReturnType<typeof runAxisOperatingSystem>["comparison"] | null,
+  operatingSystem: ReturnType<typeof runAxisOperatingSystem> | null,
 ): AxisRunResponse {
   return {
     understanding,
@@ -823,11 +822,11 @@ async function handleRunCanonical(req: Request): Promise<Response> {
   await writeAxisEvent(sb, state.threadId, "user", { message, fileName: body.fileName ?? null });
 
   let observation: AxisObservation | null = null;
-  let comparison: ReturnType<typeof compareEvidenceToUnderstanding> | null = null;
+  let comparison: ReturnType<typeof runAxisOperatingSystem>["comparison"] | null = null;
   let understanding = priorUnderstanding;
   let stateUpdate: StateUpdate | undefined;
-  // True when the turn is handled entirely by the observation path — no coaching generated.
-  let isObservationTurn = isAttachmentOnly;
+  // True when the turn is handled entirely by the observation path.
+  let isObservationTurn = hasAttachment;
 
   if (hasAttachment) {
     observation = await observeEvidence({
@@ -838,7 +837,6 @@ async function handleRunCanonical(req: Request): Promise<Response> {
       prior: priorUnderstanding,
     });
     understanding = updateUnderstandingFromObservation(priorUnderstanding, observation).understanding;
-    comparison = compareEvidenceToUnderstanding(understanding, observation);
   }
 
   if (!isAttachmentOnly) {
@@ -888,13 +886,19 @@ async function handleRunCanonical(req: Request): Promise<Response> {
     }
   }
 
-  const operatingSystem = runAxisOperatingSystem({
-    understanding,
-    observation,
-    learnFromSources: false,
-  });
-  understanding = normalizeUnderstanding(operatingSystem.understanding, priorUnderstanding, state.threadId);
-  comparison = operatingSystem.comparison;
+  const operatingSystem = isObservationTurn
+    ? null
+    : runAxisOperatingSystem({
+        understanding,
+        observation,
+        learnFromSources: false,
+      });
+  understanding = normalizeUnderstanding(
+    operatingSystem?.understanding ?? understanding,
+    priorUnderstanding,
+    state.threadId,
+  );
+  comparison = isObservationTurn ? null : (operatingSystem?.comparison ?? null);
 
   await persistCanonicalUnderstanding(sb, state.threadId, understanding);
 
@@ -928,9 +932,7 @@ async function handleRunCanonical(req: Request): Promise<Response> {
     ? [
         {
           type: "evidence_received",
-          content: isAttachmentOnly
-            ? (body.fileName ?? "Evidence file saved to this thread.")
-            : (observation?.summary ?? "Observation recorded."),
+          content: observation?.summary || body.fileName || "Observation recorded.",
           secondary: isAttachmentOnly
             ? (body.fileName ?? undefined)
             : undefined,
@@ -943,7 +945,7 @@ async function handleRunCanonical(req: Request): Promise<Response> {
     understanding: response.understanding,
     observation,
     comparison: response.comparison,
-    operatingSystem,
+    operatingSystem: response.operatingSystem,
     evidenceId: body.evidenceId ?? null,
   });
 
@@ -958,7 +960,7 @@ async function handleRunCanonical(req: Request): Promise<Response> {
     understanding: response.understanding,
     cards: response.cards,
     comparison: response.comparison,
-    operatingSystem,
+    operatingSystem: response.operatingSystem,
     sidebarThreads: sidebarData ?? [],
   });
 }
