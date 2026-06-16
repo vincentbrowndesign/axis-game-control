@@ -4,6 +4,7 @@ import {
   createSupabaseFromRequest,
   type AxisCard,
   type AxisEvent,
+  type AxisThread,
   type SidebarThread,
 } from "../../../../lib/axis-server";
 
@@ -100,6 +101,7 @@ export async function GET(req: Request) {
   return Response.json({
     thread,
     conversations,
+    currentUnderstanding: (thread as AxisThread).current_understanding ?? null,
     sidebarThreads: (sidebarData ?? []) as SidebarThread[],
   });
 }

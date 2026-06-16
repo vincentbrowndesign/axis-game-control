@@ -55,6 +55,7 @@ export interface AxisThread {
   current_bottleneck: string | null;
   open_questions: string[];
   next_action: string | null;
+  current_understanding: AxisUnderstanding | null;
   created_at: string;
   updated_at: string;
 }

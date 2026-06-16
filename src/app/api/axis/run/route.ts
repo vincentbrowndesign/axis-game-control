@@ -483,11 +483,12 @@ async function applyStateUpdate(
   openExperiment: AxisExperiment | null,
   update: StateUpdate | undefined,
   experimentCandidate: string | undefined,
+  understanding: AxisUnderstanding,
 ): Promise<void> {
   const now = new Date().toISOString();
 
   // --- Thread scalar fields ---
-  const threadPatch: Record<string, unknown> = { updated_at: now };
+  const threadPatch: Record<string, unknown> = { updated_at: now, current_understanding: understanding };
   if (update?.goal && !thread.goal) threadPatch.goal = update.goal;
   if (update?.focus) threadPatch.focus = update.focus;
   if (update?.currentBottleneck) threadPatch.current_bottleneck = update.currentBottleneck;
@@ -684,17 +685,8 @@ async function handleRun(req: Request): Promise<Response> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey && !isAttachmentOnly) return Response.json({ error: "No API key" }, { status: 503 });
 
-  // Load prior Understanding from the most recent assistant event (no extra table)
-  const priorUnderstanding: AxisUnderstanding = (() => {
-    for (let i = recentEvents.length - 1; i >= 0; i--) {
-      const evt = recentEvents[i];
-      if (evt.role === "assistant") {
-        const u = (evt.content as { understanding?: AxisUnderstanding }).understanding;
-        if (u) return u;
-      }
-    }
-    return emptyUnderstanding();
-  })();
+  // Canonical understanding lives on the thread row — never reconstructed from events.
+  const priorUnderstanding: AxisUnderstanding = thread.current_understanding ?? emptyUnderstanding();
 
   // Append user event before generating output so restoration can replay the turn.
   await sb.from("axis_thread_events").insert({
@@ -746,6 +738,14 @@ async function handleRun(req: Request): Promise<Response> {
       observation,
       learnFromSources: false,
     });
+
+    await sb
+      .from("axis_threads")
+      .update({
+        current_understanding: operatingSystem.understanding,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", threadId);
 
     await sb.from("axis_thread_events").insert({
       thread_id: threadId,
@@ -852,6 +852,7 @@ async function handleRun(req: Request): Promise<Response> {
     openExperiment,
     stateUpdate,
     understanding.experiment || undefined,
+    understanding,
   );
   if (body.attachmentUrl && !body.evidenceId) {
     const src = (body.attachmentType ?? "").startsWith("video/") ? "video" : "photo";
