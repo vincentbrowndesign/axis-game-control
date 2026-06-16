@@ -15,12 +15,63 @@ interface Conversation {
 type AuthPhase = "loading" | "guest" | "signed_in";
 type Phase = "idle" | "loading" | "results";
 
-function sentenceFromCard(card: AxisCard): string | null {
-  const text = [card.content, card.secondary].filter(Boolean).join(" ");
-  return text.trim() || null;
+const INTERNAL_TEXT_PATTERNS = [
+  /confidence/i,
+  /current\s*pattern/i,
+  /target\s*pattern/i,
+  /optional\s*evidence/i,
+  /next\s*experiment/i,
+  /no information exists/i,
+  /unable to determine/i,
+  /unknown pattern/i,
+  /diagnostic/i,
+  /\bnow\s*\/\s*target\b/i,
+];
+
+function cleanVisibleSentence(value: string | null | undefined): string | null {
+  const text = value?.replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (INTERNAL_TEXT_PATTERNS.some((pattern) => pattern.test(text))) return null;
+  return text;
 }
 
-const SLASH_COMMANDS = ["/history", "/show", "/today", "/last", "/clip", "/compare"];
+function titleCase(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function summaryFromUnderstanding(understanding: AxisUnderstanding | null): string[] {
+  if (!understanding) return [];
+
+  const directBelief = cleanVisibleSentence(understanding.belief);
+  const fallbackSubject =
+    cleanVisibleSentence(understanding.focus) ?? cleanVisibleSentence(understanding.concept);
+  const belief = directBelief ?? (fallbackSubject ? titleCase(fallbackSubject) : null);
+  const nextStep = cleanVisibleSentence(understanding.experiment);
+  const evidence = cleanVisibleSentence(understanding.evidenceRequest);
+
+  return [belief, nextStep, evidence].filter(
+    (line): line is string => Boolean(line),
+  ).slice(0, 3);
+}
+
+function sentencesFromCards(cards: AxisCard[]): string[] {
+  const selected = cards.flatMap((card) => {
+    if (card.type === "belief") return cleanVisibleSentence(card.content) ?? [];
+    if (card.type === "try_this" || card.type === "experiment" || card.type === "next_action") {
+      return cleanVisibleSentence(card.content) ?? [];
+    }
+    if (card.type === "show_me" || card.type === "evidence_request") {
+      return cleanVisibleSentence(card.content) ?? [];
+    }
+    if (card.type === "evidence_received") return cleanVisibleSentence(card.content) ?? [];
+    return [];
+  });
+
+  return selected.slice(0, 3);
+}
 
 function AxisReply({
   cards,
@@ -29,10 +80,7 @@ function AxisReply({
   cards: AxisCard[];
   onSentence: (sentence: string) => void;
 }) {
-  const sentences = cards.flatMap((card) => {
-    const sentence = sentenceFromCard(card);
-    return sentence ? [sentence] : [];
-  });
+  const sentences = sentencesFromCards(cards);
 
   if (sentences.length === 0) return null;
 
@@ -49,6 +97,32 @@ function AxisReply({
         </button>
       ))}
     </div>
+  );
+}
+
+function PinnedSummary({
+  understanding,
+  onSentence,
+}: {
+  understanding: AxisUnderstanding | null;
+  onSentence: (sentence: string) => void;
+}) {
+  const lines = summaryFromUnderstanding(understanding);
+  if (lines.length === 0) return null;
+
+  return (
+    <section className="pinned-summary" aria-label="Current direction">
+      {lines.map((line, index) => (
+        <button
+          key={`${line}-${index}`}
+          className="summary-line"
+          onClick={() => onSentence(line)}
+          type="button"
+        >
+          {line}
+        </button>
+      ))}
+    </section>
   );
 }
 
@@ -102,7 +176,7 @@ export default function AxisPage() {
   const [input, setInput] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [, setCurrentUnderstanding] = useState<AxisUnderstanding | null>(null);
+  const [currentUnderstanding, setCurrentUnderstanding] = useState<AxisUnderstanding | null>(null);
   const [sidebarThreads, setSidebarThreads] = useState<SidebarThread[]>([]);
   const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING">("OFF");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -118,9 +192,6 @@ export default function AxisPage() {
   const isActive = conversations.length > 0 || phase !== "idle";
   const memorySentence = rememberFrom(sidebarThreads, conversations);
   const momentTitle = momentTitleFrom(input, pendingFile);
-  const slashHints = input.startsWith("/")
-    ? SLASH_COMMANDS.filter((command) => command.startsWith(input.toLowerCase())).slice(0, 4)
-    : [];
 
   useEffect(() => {
     async function init() {
@@ -386,6 +457,13 @@ export default function AxisPage() {
           {isActive && (
             <div className="page-body" ref={threadRef}>
               {memorySentence && <p className="margin-memory">{memorySentence}</p>}
+              <PinnedSummary
+                understanding={currentUnderstanding}
+                onSentence={(sentence) => {
+                  setInput(`Tell me more about "${sentence}"`);
+                  inputRef.current?.focus();
+                }}
+              />
               {conversations.map((conv) => (
                 <section key={conv.id} className="page-entry">
                   {conv.userMessage && <p className="page-writing">{conv.userMessage}</p>}
@@ -445,23 +523,6 @@ export default function AxisPage() {
               </div>
             )}
 
-            {slashHints.length > 0 && (
-              <div className="slash-hints" aria-label="Page commands">
-                {slashHints.map((command) => (
-                  <button
-                    key={command}
-                    type="button"
-                    onClick={() => {
-                      setInput(command);
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    {command}
-                  </button>
-                ))}
-              </div>
-            )}
-
             <form
               className={`composer${composerFocused ? " composer--awake" : ""}`}
               onSubmit={(event) => {
@@ -510,6 +571,13 @@ export default function AxisPage() {
                 aria-label="Camera"
               >
                 <Camera size={17} />
+              </button>
+              <button
+                className="send-button"
+                type="submit"
+                disabled={(!input.trim() && !pendingFile) || phase === "loading"}
+              >
+                Send
               </button>
             </form>
           </div>
@@ -628,7 +696,39 @@ export default function AxisPage() {
         .page-entry {
           display: flex;
           flex-direction: column;
-          gap: 18px;
+          gap: 14px;
+        }
+
+        .pinned-summary {
+          border-bottom: 1px solid rgba(25, 24, 21, 0.1);
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+          margin: 0 0 14px;
+          padding: 0 0 18px;
+        }
+
+        .summary-line {
+          background: transparent;
+          border: 0;
+          color: rgba(25, 24, 21, 0.88);
+          cursor: text;
+          font: inherit;
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+          font-size: clamp(17px, 2vw, 22px);
+          line-height: 1.38;
+          margin: 0;
+          padding: 0;
+          text-align: left;
+        }
+
+        .summary-line:first-child {
+          color: rgba(25, 24, 21, 0.94);
+          font-size: clamp(20px, 2.4vw, 27px);
+        }
+
+        .summary-line:hover {
+          color: rgba(25, 24, 21, 0.66);
         }
 
         .page-writing {
@@ -754,7 +854,8 @@ export default function AxisPage() {
           resize: none;
         }
 
-        .icon-button {
+        .icon-button,
+        .send-button {
           align-items: center;
           background: transparent;
           border: 0;
@@ -776,6 +877,18 @@ export default function AxisPage() {
         .icon-button {
           opacity: 0.22;
           transition: color 0.14s ease, opacity 0.14s ease;
+        }
+
+        .send-button {
+          color: rgba(25, 24, 21, 0.62);
+          font-size: 13px;
+          letter-spacing: 0;
+          width: auto;
+        }
+
+        .send-button:disabled {
+          cursor: default;
+          opacity: 0.25;
         }
 
         .moment-pill {
@@ -805,30 +918,6 @@ export default function AxisPage() {
           cursor: pointer;
           font: inherit;
           padding: 0;
-        }
-
-        .slash-hints {
-          color: rgba(25, 24, 21, 0.42);
-          display: flex;
-          flex-wrap: wrap;
-          gap: 14px;
-          justify-content: center;
-          margin: 0 auto 10px;
-          max-width: 760px;
-        }
-
-        .slash-hints button {
-          background: transparent;
-          border: 0;
-          color: inherit;
-          cursor: pointer;
-          font: inherit;
-          font-size: 13px;
-          padding: 0;
-        }
-
-        .slash-hints button:hover {
-          color: rgba(25, 24, 21, 0.72);
         }
 
         .memory-drawer {
@@ -911,9 +1000,10 @@ export default function AxisPage() {
             min-height: 42px;
           }
 
-          .icon-button {
+          .icon-button,
+          .send-button {
             height: 40px;
-            width: 38px;
+            min-width: 38px;
           }
 
           .memory-drawer {
