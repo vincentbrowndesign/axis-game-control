@@ -1,15 +1,9 @@
 "use client";
 
-import { Mic, Paperclip } from "lucide-react";
+import { Camera, Mic, Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DevSidebar } from "../../components/axis/dev-sidebar";
 import { getSupabaseBrowserClient } from "../../lib/supabase-browser";
-import { demonstrationFromUnderstanding, type AxisDemonstration } from "../../lib/axis-demonstration";
 import type { AxisCard, AxisUnderstanding, SidebarThread } from "../../lib/axis-server";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 interface Conversation {
   id: string;
@@ -21,306 +15,104 @@ interface Conversation {
 type AuthPhase = "loading" | "guest" | "signed_in";
 type Phase = "idle" | "loading" | "results";
 
-// ---------------------------------------------------------------------------
-// Demonstration — the visible representation of current understanding.
-// Reads currentUnderstanding directly. No animation, no SVG, no history
-// required: it must render correctly even with zero events.
-// ---------------------------------------------------------------------------
+const STARTING_TIMELINES = [
+  "Hailey",
+  "Hudson",
+  "Bridge",
+  "My Jumpshot",
+  "Axis",
+  "VBZ",
+  "Business",
+  "Health",
+];
 
-function DemonstrationPanel({ demonstration }: { demonstration: AxisDemonstration }) {
-  if (!demonstration.belief) return null;
+function sentenceFromCard(card: AxisCard): string | null {
+  const text = [card.content, card.secondary].filter(Boolean).join(" ");
+  return text.trim() || null;
+}
+
+function AxisReply({ cards }: { cards: AxisCard[] }) {
+  const sentences = cards.flatMap((card) => {
+    const sentence = sentenceFromCard(card);
+    return sentence ? [sentence] : [];
+  });
+
+  if (sentences.length === 0) return null;
 
   return (
-    <div className="demo-panel">
-      <p className="demo-belief">{demonstration.belief}</p>
-      <div className="demo-rows">
-        <div className="demo-row">
-          <span className="demo-label">Confidence</span>
-          <span className="demo-value">{Math.round(demonstration.confidence * 100)}%</span>
-        </div>
-        {demonstration.currentPattern && (
-          <div className="demo-row">
-            <span className="demo-label">Current Pattern</span>
-            <span className="demo-value">{demonstration.currentPattern}</span>
-          </div>
-        )}
-        {demonstration.targetPattern && (
-          <div className="demo-row">
-            <span className="demo-label">Target Pattern</span>
-            <span className="demo-value demo-value--target">{demonstration.targetPattern}</span>
-          </div>
-        )}
-        {demonstration.nextExperiment && (
-          <div className="demo-row">
-            <span className="demo-label">Next Experiment</span>
-            <span className="demo-value">{demonstration.nextExperiment}</span>
-          </div>
-        )}
-        {demonstration.optionalEvidence && (
-          <div className="demo-row">
-            <span className="demo-label">Optional Evidence</span>
-            <span className="demo-value">{demonstration.optionalEvidence}</span>
-          </div>
-        )}
-      </div>
-      {demonstration.optionalEvidence && <p className="demo-note">Development continues regardless.</p>}
-
-      <style jsx>{`
-        .demo-panel {
-          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
-          flex-shrink: 0;
-          padding: 18px 20px 16px;
-        }
-        .demo-belief {
-          color: rgba(26, 26, 24, 0.92);
-          font-size: 19px;
-          font-weight: 580;
-          line-height: 1.4;
-          margin: 0 0 12px;
-        }
-        .demo-rows {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-        .demo-row {
-          align-items: baseline;
-          display: flex;
-          gap: 8px;
-        }
-        .demo-label {
-          color: rgba(26, 26, 24, 0.34);
-          flex-shrink: 0;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          width: 108px;
-        }
-        .demo-value {
-          color: rgba(26, 26, 24, 0.78);
-          font-size: 13px;
-          line-height: 1.45;
-        }
-        .demo-value--target {
-          color: rgba(120, 170, 60, 0.95);
-        }
-        .demo-note {
-          color: rgba(26, 26, 24, 0.32);
-          font-size: 11px;
-          font-style: italic;
-          margin: 10px 0 0;
-        }
-      `}</style>
+    <div className="axis-reply">
+      {sentences.map((sentence, index) => (
+        <p key={`${sentence}-${index}`}>{sentence}</p>
+      ))}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Flow — understanding, then demonstration, then action. No cards. No labels.
-// ---------------------------------------------------------------------------
+function TimelineRail({
+  activeThreadId,
+  threads,
+  onSelectThread,
+}: {
+  activeThreadId: string | null;
+  threads: SidebarThread[];
+  onSelectThread: (id: string) => void;
+}) {
+  const names = threads.length
+    ? threads.map((thread) => ({
+        id: thread.id,
+        name: thread.title || thread.focus || "Untitled",
+        live: true,
+      }))
+    : STARTING_TIMELINES.map((name) => ({ id: name, name, live: false }));
 
-function EntryFlow({ cards }: { cards: AxisCard[] }) {
   return (
-    <div className="flow">
-      {cards.map((card, i) => {
-        const style = { animationDelay: `${i * 70}ms` };
-        if (card.type === "see_it") {
-          return null;
-        }
-        if (card.type === "try_this") {
-          return (
-            <div key={i} className="flow-item flow-action" style={style}>
-              <p className="flow-action-text">{card.content}</p>
-              {card.cue && <p className="flow-cue">{card.cue}</p>}
-            </div>
-          );
-        }
-        if (card.type === "show_me") {
-          return (
-            <p key={i} className="flow-item flow-show" style={style}>
-              {card.content}
-            </p>
-          );
-        }
-        if (card.type === "breakthrough") {
-          return (
-            <p key={i} className="flow-item flow-breakthrough" style={style}>
-              {card.content}
-            </p>
-          );
-        }
+    <nav className="timeline-rail" aria-label="Memory">
+      {names.map((item) => {
+        const active = item.live && item.id === activeThreadId;
         return (
-          <p key={i} className="flow-item flow-belief" style={style}>
-            {card.content}
-          </p>
+          <button
+            key={item.id}
+            className={`timeline-name${active ? " timeline-name--active" : ""}`}
+            disabled={!item.live}
+            onClick={() => item.live && onSelectThread(item.id)}
+            type="button"
+          >
+            {item.name}
+          </button>
         );
       })}
-      <style jsx>{`
-        .flow {
-          display: flex;
-          flex-direction: column;
-        }
-        .flow-item {
-          animation: flowIn 0.32s ease-out backwards;
-        }
-        @keyframes flowIn {
-          from { opacity: 0; transform: translateY(5px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .flow-belief {
-          color: rgba(26, 26, 24, 0.86);
-          font-size: 17px;
-          line-height: 1.5;
-          margin: 0;
-        }
-        .flow-action {
-          margin-top: 6px;
-        }
-        .flow-action-text {
-          color: rgba(26, 26, 24, 0.88);
-          font-size: 15px;
-          font-weight: 560;
-          line-height: 1.5;
-          margin: 0;
-        }
-        .flow-cue {
-          color: rgba(26, 26, 24, 0.42);
-          font-size: 13px;
-          font-style: italic;
-          margin: 4px 0 0;
-        }
-        .flow-show {
-          color: rgba(26, 26, 24, 0.45);
-          font-size: 14px;
-          line-height: 1.5;
-          margin: 10px 0 0;
-        }
-        .flow-breakthrough {
-          color: rgba(120, 170, 60, 0.85);
-          font-size: 15px;
-          font-weight: 600;
-          line-height: 1.5;
-          margin: 10px 0 0;
-        }
-      `}</style>
-    </div>
+    </nav>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 
 export default function AxisPage() {
   const [authPhase, setAuthPhase] = useState<AuthPhase>("loading");
-  const [authLabel, setAuthLabel] = useState("Guest");
-  const [authType, setAuthType] = useState("Guest");
   const [phase, setPhase] = useState<Phase>("idle");
   const [input, setInput] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [currentUnderstanding, setCurrentUnderstanding] = useState<AxisUnderstanding | null>(null);
+  const [, setCurrentUnderstanding] = useState<AxisUnderstanding | null>(null);
   const [sidebarThreads, setSidebarThreads] = useState<SidebarThread[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING" | "PROCESSING">("OFF");
+  const [voicePhase, setVoicePhase] = useState<"OFF" | "LISTENING">("OFF");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [pinnedThreadIds, setPinnedThreadIds] = useState<string[]>([]);
 
   const threadRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<SpeechRecognition | null>(null);
 
   const isActive = conversations.length > 0 || phase !== "idle";
-  const demonstration = useMemo(
-    () => (currentUnderstanding ? demonstrationFromUnderstanding(currentUnderstanding) : null),
-    [currentUnderstanding],
+  const sortedTimelines = useMemo(
+    () =>
+      [...sidebarThreads].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+      ),
+    [sidebarThreads],
   );
-  const visibleSidebarThreads = useMemo(() => {
-    const pinned = new Set(pinnedThreadIds);
-    return [...sidebarThreads].sort((a, b) => {
-      const pinDelta = Number(pinned.has(b.id)) - Number(pinned.has(a.id));
-      if (pinDelta !== 0) return pinDelta;
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-    });
-  }, [pinnedThreadIds, sidebarThreads]);
 
-  // Mount/unmount trace — unexpected unmount during a session = remount bug
-  useEffect(() => {
-    console.log("[MOBILE_TRACE] AxisPage mounted");
-    const storedPins = localStorage.getItem("axis_pinned_thread_ids");
-    if (storedPins) {
-      try {
-        const ids = JSON.parse(storedPins);
-        if (Array.isArray(ids)) setPinnedThreadIds(ids.filter((id) => typeof id === "string"));
-      } catch {
-        localStorage.removeItem("axis_pinned_thread_ids");
-      }
-    }
-    return () => { console.log("[MOBILE_TRACE] AxisPage unmounted"); };
-  }, []);
-
-  // Deep trace: intercept history, popstate, storage, resize
-  // Catches: Supabase URL mutations, cross-tab auth changes, browser back/fwd, keyboard resize
-  useEffect(() => {
-    // Intercept history mutations (Supabase detectSessionInUrl can call replaceState)
-    const origPush = history.pushState.bind(history);
-    const origReplace = history.replaceState.bind(history);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    history.pushState = function (...args: [any, any, any]) {
-      console.log("[MOBILE_TRACE] history.pushState →", args[2]);
-      return origPush(...args);
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    history.replaceState = function (...args: [any, any, any]) {
-      console.log("[MOBILE_TRACE] history.replaceState →", args[2]);
-      return origReplace(...args);
-    };
-
-    const onPop = () =>
-      console.log("[MOBILE_TRACE] popstate, href:", window.location.href);
-    const onStorage = (e: StorageEvent) =>
-      console.log("[MOBILE_TRACE] storage event, key:", e.key, "new:", String(e.newValue).slice(0, 60));
-    const onResize = () =>
-      console.log("[MOBILE_TRACE] window resize, innerHeight:", window.innerHeight, "innerWidth:", window.innerWidth);
-    const onVisibility = () =>
-      console.log("[MOBILE_TRACE] visibilitychange →", document.visibilityState);
-
-    window.addEventListener("popstate", onPop);
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("resize", onResize);
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      history.pushState = origPush;
-      history.replaceState = origReplace;
-      window.removeEventListener("popstate", onPop);
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("resize", onResize);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
-
-  // State transition trace — fires whenever isActive, authPhase, or phase change
-  useEffect(() => {
-    console.log(
-      "[MOBILE_TRACE] state transition → authPhase:", authPhase,
-      "| phase:", phase,
-      "| isActive:", isActive,
-      "| conversations:", conversations.length,
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authPhase, phase, isActive, conversations.length]);
-
-  // Auth + thread restore on mount
   useEffect(() => {
     async function init() {
-      console.log("[MOBILE_TRACE] init start, href:", window.location.href);
-
       const sb = getSupabaseBrowserClient();
       if (!sb) {
-        console.log("[MOBILE_TRACE] no supabase client → guest (no thread restore)");
         setAuthPhase("guest");
         return;
       }
@@ -328,25 +120,11 @@ export default function AxisPage() {
       const {
         data: { user },
       } = await sb.auth.getUser();
-      console.log("[MOBILE_TRACE] auth resolved, user:", user ? user.id.slice(0, 8) : "null");
 
-      // Collect auth state but DO NOT set authPhase yet.
-      // authPhase controls the loading screen — we keep it as "loading" until
-      // thread restore also completes, so the home screen never flashes while
-      // a thread fetch is in-flight (race condition that caused the iOS snap).
-      const nextPhase: AuthPhase = user ? "signed_in" : "guest";
-      const nextLabel = user ? (user.email ?? user.id.slice(0, 8)) : "Guest";
-      const nextType = user ? "Google" : "Guest";
-
-      // Thread restore — must finish before we exit the loading screen
       const savedId = localStorage.getItem("axis_thread_id");
-      console.log("[MOBILE_TRACE] savedId:", savedId ?? "none");
-
       if (savedId) {
         try {
-          console.log("[MOBILE_TRACE] thread restore fetch start");
           const res = await fetch(`/api/axis/thread?id=${savedId}`);
-          console.log("[MOBILE_TRACE] thread restore response:", res.status);
           if (res.ok) {
             const data = (await res.json()) as {
               conversations: Conversation[];
@@ -354,47 +132,33 @@ export default function AxisPage() {
               sidebarThreads: SidebarThread[];
             };
             if (data.conversations?.length > 0 || data.currentUnderstanding?.belief) {
-              console.log("[MOBILE_TRACE] thread restore success,", data.conversations.length, "conversations");
               setThreadId(savedId);
               setConversations(data.conversations ?? []);
               setCurrentUnderstanding(data.currentUnderstanding ?? null);
               setPhase("results");
               setSidebarThreads(data.sidebarThreads ?? []);
             } else {
-              console.log("[MOBILE_TRACE] thread restore: empty thread, clearing key");
               localStorage.removeItem("axis_thread_id");
             }
           } else {
-            console.log("[MOBILE_TRACE] thread restore: non-ok response, clearing key");
             localStorage.removeItem("axis_thread_id");
           }
-        } catch (err) {
-          console.log("[MOBILE_TRACE] thread restore error:", (err as Error).message);
+        } catch {
           localStorage.removeItem("axis_thread_id");
         }
       }
 
-      // Set auth state last. This exits the loading screen.
-      // All thread state is settled before this point.
-      console.log("[MOBILE_TRACE] setting authPhase →", nextPhase);
-      setAuthLabel(nextLabel);
-      setAuthType(nextType);
-      setAuthPhase(nextPhase);
+      setAuthPhase(user ? "signed_in" : "guest");
     }
+
     void init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-scroll on new content
   useEffect(() => {
     if (threadRef.current) {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
     }
   }, [conversations, phase]);
-
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
 
   function clearAttachment() {
     setPendingFile(null);
@@ -403,7 +167,7 @@ export default function AxisPage() {
 
   async function run(message: string) {
     const msg = message.trim();
-    const fileToUpload = pendingFile; // capture before clearAttachment
+    const fileToUpload = pendingFile;
     const hasFile = fileToUpload !== null;
     if (!msg && !hasFile) return;
     if (phase === "loading") return;
@@ -413,7 +177,6 @@ export default function AxisPage() {
     setInput("");
     clearAttachment();
 
-    // Upload attachment first if present
     let attachmentUrl: string | null = null;
     let attachmentMime: string | null = null;
     let attachmentPath: string | null = null;
@@ -439,14 +202,11 @@ export default function AxisPage() {
           attachmentPath = up.attachmentPath;
           evidenceId = up.evidenceId ?? null;
           displayFileName = up.fileName;
-        } else {
-          console.error("[axis] upload failed", upRes.status);
         }
       } catch (err) {
         console.error("[axis] upload error", (err as Error).message);
       }
 
-      // File-only message with failed upload — abort
       if (!attachmentUrl && !msg) {
         setPhase("results");
         return;
@@ -469,7 +229,6 @@ export default function AxisPage() {
       });
 
       if (!res.ok) {
-        console.error("[axis] run failed", res.status);
         setPhase("results");
         return;
       }
@@ -483,7 +242,7 @@ export default function AxisPage() {
 
       const conv: Conversation = {
         id: crypto.randomUUID(),
-        userMessage: msg || (displayFileName ? `[${displayFileName}]` : ""),
+        userMessage: msg || (displayFileName ? displayFileName : ""),
         cards: data.cards,
         timestamp: new Date().toISOString(),
       };
@@ -500,7 +259,7 @@ export default function AxisPage() {
     }
   }
 
-  function startNewThread() {
+  function startNewTimeline() {
     setThreadId(null);
     setConversations([]);
     setCurrentUnderstanding(null);
@@ -510,42 +269,7 @@ export default function AxisPage() {
     localStorage.removeItem("axis_thread_id");
   }
 
-  function persistPinnedThreads(nextIds: string[]) {
-    setPinnedThreadIds(nextIds);
-    localStorage.setItem("axis_pinned_thread_ids", JSON.stringify(nextIds));
-  }
-
-  function togglePinThread(id: string) {
-    const nextIds = pinnedThreadIds.includes(id)
-      ? pinnedThreadIds.filter((threadId) => threadId !== id)
-      : [id, ...pinnedThreadIds];
-    persistPinnedThreads(nextIds);
-  }
-
-  async function renameThread(id: string, title: string) {
-    const res = await fetch("/api/axis/thread", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, title }),
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { thread?: SidebarThread };
-    if (!data.thread) return;
-    setSidebarThreads((prev) =>
-      prev.map((thread) => (thread.id === id ? { ...thread, ...data.thread } : thread)),
-    );
-  }
-
-  async function deleteThread(id: string) {
-    const res = await fetch(`/api/axis/thread?id=${id}`, { method: "DELETE" });
-    if (!res.ok) return;
-    setSidebarThreads((prev) => prev.filter((thread) => thread.id !== id));
-    persistPinnedThreads(pinnedThreadIds.filter((threadId) => threadId !== id));
-    if (threadId === id) startNewThread();
-  }
-
   async function loadThread(id: string) {
-    setIsSidebarOpen(false);
     try {
       const res = await fetch(`/api/axis/thread?id=${id}`);
       if (!res.ok) return;
@@ -561,28 +285,9 @@ export default function AxisPage() {
       setSidebarThreads(data.sidebarThreads ?? []);
       localStorage.setItem("axis_thread_id", id);
     } catch {
-      // ignore
+      // Keep the current conversation in place.
     }
   }
-
-  async function handleSignIn() {
-    const sb = getSupabaseBrowserClient();
-    if (!sb) return;
-    await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/axis` } });
-  }
-
-  async function handleSignOut() {
-    const sb = getSupabaseBrowserClient();
-    if (!sb) return;
-    await sb.auth.signOut();
-    setAuthLabel("Guest");
-    setAuthType("Guest");
-    setAuthPhase("guest");
-  }
-
-  // ---------------------------------------------------------------------------
-  // Voice
-  // ---------------------------------------------------------------------------
 
   function toggleVoice() {
     if (voicePhase === "LISTENING") {
@@ -598,19 +303,21 @@ export default function AxisPage() {
 
     if (!SpeechRecognition) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sr = new SpeechRecognition() as any;
+    const sr = new SpeechRecognition() as SpeechRecognition & {
+      onstart: (() => void) | null;
+      onresult: ((event: SpeechRecognitionEvent) => void) | null;
+      onerror: (() => void) | null;
+      onend: (() => void) | null;
+    };
     sr.continuous = false;
     sr.interimResults = false;
     sr.lang = "en-US";
 
     sr.onstart = () => setVoicePhase("LISTENING");
-    sr.onresult = (e: SpeechRecognitionEvent) => {
-      const text = e.results[0]?.[0]?.transcript ?? "";
+    sr.onresult = (event: SpeechRecognitionEvent) => {
+      const text = event.results[0]?.[0]?.transcript ?? "";
       setVoicePhase("OFF");
-      if (text.trim()) {
-        void run(text.trim());
-      }
+      if (text.trim()) void run(text.trim());
     };
     sr.onerror = () => setVoicePhase("OFF");
     sr.onend = () => setVoicePhase("OFF");
@@ -619,264 +326,127 @@ export default function AxisPage() {
     sr.start();
   }
 
-  // ---------------------------------------------------------------------------
-  // Loading screen
-  // ---------------------------------------------------------------------------
-
   if (authPhase === "loading") {
-    return (
-      <div className="init-screen">
-        <span className="init-mark">AXIS</span>
-        <style jsx>{`
-          .init-screen {
-            align-items: center;
-            background: #ffffff;
-            display: flex;
-            height: 100vh;
-            justify-content: center;
-          }
-          .init-mark {
-            color: rgba(26, 26, 24, 0.16);
-            font-size: 11px;
-            font-weight: 750;
-            letter-spacing: 0.26em;
-            text-transform: uppercase;
-          }
-        `}</style>
-      </div>
-    );
+    return <div className="blank" />;
   }
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
 
   return (
     <>
-      <DevSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        activeThreadId={threadId}
-        threads={visibleSidebarThreads}
-        pinnedThreadIds={pinnedThreadIds}
-        authLabel={authLabel}
-        authType={authType}
-        isGuest={authPhase !== "signed_in"}
-        onSelectThread={loadThread}
-        onNewThread={startNewThread}
-        onRenameThread={renameThread}
-        onDeleteThread={deleteThread}
-        onTogglePinThread={togglePinThread}
-        onSignIn={handleSignIn}
-        onSignOut={handleSignOut}
-      />
+      <main className="axis-shell">
+        <TimelineRail
+          activeThreadId={threadId}
+          threads={sortedTimelines}
+          onSelectThread={loadThread}
+        />
 
-      {!isActive ? (
-        // ── HOME SCREEN ──────────────────────────────────────────────────────
-        <div className="home">
-          {sidebarThreads.length > 0 && (
-            <button
-              className="sidebar-toggle sidebar-toggle--home"
-              onClick={() => setIsSidebarOpen(true)}
-              type="button"
-              aria-label="Open threads"
-            >
-              ☰
-            </button>
-          )}
-          <p className="home-mark">AXIS</p>
-          <h1 className="home-q">What are you working on?</h1>
-          <form
-            className="home-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(input);
-            }}
-          >
-            <textarea
-              ref={inputRef}
-              className="home-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe what you're trying to develop…"
-              rows={3}
-              inputMode="text"
-              onFocus={() => console.log("[MOBILE_TRACE] home-input focus, phase:", phase, "authPhase:", authPhase, "isActive:", isActive)}
-              onBlur={() => console.log("[MOBILE_TRACE] home-input blur")}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void run(input);
-                }
-              }}
-            />
-            {pendingFile && (
-              <div className="attachment-badge">
-                <span className="attachment-name">{pendingFile.name}</span>
-                <button
-                  type="button"
-                  className="attachment-remove"
-                  onClick={clearAttachment}
-                  aria-label="Remove attachment"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            <div className="home-controls">
-              <button
-                type="button"
-                className="ctrl-btn"
-                onClick={() => fileRef.current?.click()}
-                aria-label="Attach file"
-              >
-                <Paperclip size={15} />
-              </button>
-              <button
-                type="button"
-                className="ctrl-btn"
-                onClick={toggleVoice}
-                aria-label="Voice input"
-              >
-                {voicePhase === "LISTENING" ? (
-                  <span className="voice-dot" />
-                ) : (
-                  <Mic size={15} />
-                )}
-              </button>
-              <button
-                type="submit"
-                className="send-btn"
-                disabled={!input.trim() && !pendingFile}
-              >
-                Go
-              </button>
+        <section className={`conversation${isActive ? " conversation--active" : ""}`}>
+          {!isActive && (
+            <div className="first-prompt">
+              <h1>What are you working on?</h1>
             </div>
-          </form>
-        </div>
-      ) : (
-        // ── THREAD SCREEN ─────────────────────────────────────────────────────
-        <div className="thread-shell">
-          <header className="hd">
-            {sidebarThreads.length > 0 && (
-              <button
-                className="sidebar-toggle"
-                onClick={() => setIsSidebarOpen(true)}
-                type="button"
-                aria-label="Open threads"
-              >
-                ☰
-              </button>
-            )}
-            <span className="wordmark">AXIS</span>
-            <button
-              className="new-thread-btn"
-              onClick={startNewThread}
-              type="button"
-            >
-              + New
-            </button>
-          </header>
+          )}
 
-          {demonstration && <DemonstrationPanel demonstration={demonstration} />}
+          {isActive && (
+            <div className="conversation-scroll" ref={threadRef}>
+              {conversations.map((conv) => (
+                <article key={conv.id} className="turn">
+                  {conv.userMessage && <p className="user-line">{conv.userMessage}</p>}
+                  <AxisReply cards={conv.cards} />
+                </article>
+              ))}
 
-          <div className="thread" ref={threadRef}>
-            {conversations.map((conv) => (
-              <div key={conv.id} className="entry">
-                <p className="user-msg">{conv.userMessage}</p>
-                <EntryFlow cards={conv.cards} />
-              </div>
-            ))}
-
-            {phase === "loading" && (
-              <div className="entry">
-                <div className="loading-row">
-                  <span className="dot" />
-                  <span className="dot" />
-                  <span className="dot" />
+              {phase === "loading" && (
+                <div className="thinking" aria-label="Thinking">
+                  <span />
+                  <span />
+                  <span />
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
-          <div className="bottom-bar">
+          <div className="composer-wrap">
             {pendingFile && (
-              <div className="attachment-badge attachment-badge--thread">
-                <span className="attachment-name">{pendingFile.name}</span>
-                <button
-                  type="button"
-                  className="attachment-remove"
-                  onClick={clearAttachment}
-                  aria-label="Remove attachment"
-                >
-                  ×
+              <div className="moment-pill">
+                <span>{pendingFile.name}</span>
+                <button type="button" onClick={clearAttachment} aria-label="Remove upload">
+                  x
                 </button>
               </div>
             )}
+
             <form
-              className="bottom-form"
-              onSubmit={(e) => {
-                e.preventDefault();
+              className="composer"
+              onSubmit={(event) => {
+                event.preventDefault();
                 void run(input);
               }}
             >
-              <button
-                type="button"
-                className="ctrl-btn ctrl-btn--bottom"
-                onClick={() => fileRef.current?.click()}
-                aria-label="Attach file"
-              >
-                <Paperclip size={15} />
-              </button>
-              <button
-                type="button"
-                className="ctrl-btn ctrl-btn--bottom"
-                onClick={toggleVoice}
-                aria-label="Voice input"
-              >
-                {voicePhase === "LISTENING" ? (
-                  <span className="voice-dot" />
-                ) : (
-                  <Mic size={15} />
-                )}
-              </button>
               <textarea
-                className="bottom-input"
+                className="composer-input"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Keep going…"
+                onChange={(event) => setInput(event.target.value)}
+                placeholder=""
                 rows={1}
                 inputMode="text"
-                onFocus={() => console.log("[MOBILE_TRACE] bottom-input focus, phase:", phase)}
-                onBlur={() => console.log("[MOBILE_TRACE] bottom-input blur")}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
+                autoFocus
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
                     void run(input);
                   }
                 }}
               />
               <button
+                className="icon-button"
+                type="button"
+                onClick={toggleVoice}
+                aria-label="Voice"
+              >
+                {voicePhase === "LISTENING" ? <span className="voice-dot" /> : <Mic size={17} />}
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                aria-label="Upload"
+              >
+                <Paperclip size={17} />
+              </button>
+              <button
+                className="icon-button camera-button"
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                aria-label="Camera"
+              >
+                <Camera size={17} />
+              </button>
+              <button
+                className="send-button"
                 type="submit"
-                className="bottom-send"
                 disabled={(!input.trim() && !pendingFile) || phase === "loading"}
                 aria-label="Send"
               >
-                →
+                &#8594;
               </button>
             </form>
           </div>
-        </div>
-      )}
 
-      {/* Hidden file input — triggered by Paperclip buttons */}
+          {isActive && (
+            <button className="quiet-new" type="button" onClick={startNewTimeline}>
+              New page
+            </button>
+          )}
+        </section>
+      </main>
+
       <input
         ref={fileRef}
         type="file"
         accept="image/*,video/*"
         style={{ display: "none" }}
-        onChange={(e) => {
-          const file = e.target.files?.[0] ?? null;
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
           setPendingFile(file);
         }}
       />
@@ -886,401 +456,348 @@ export default function AxisPage() {
         *::before,
         *::after {
           box-sizing: border-box;
-          margin: 0;
-          padding: 0;
         }
+
         html,
         body {
-          background: #ffffff;
-          color: rgba(26, 26, 24, 0.9);
+          background: #fbfaf7;
+          color: rgba(25, 24, 21, 0.92);
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
           -webkit-font-smoothing: antialiased;
-          max-width: 100%;
+          margin: 0;
+          min-height: 100%;
           overflow-x: hidden;
           width: 100%;
         }
       `}</style>
+
       <style jsx>{`
-        /* ── Home ────────────────────────────── */
-        .home {
-          align-items: center;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          max-width: 100vw;
+        .blank {
+          background: #fbfaf7;
           min-height: 100svh;
-          overflow-x: hidden;
-          padding: 48px 20px 64px;
-          position: relative;
-          width: 100%;
         }
 
-        .sidebar-toggle--home {
-          left: 20px;
-          position: absolute;
-          top: 20px;
+        .axis-shell {
+          background:
+            linear-gradient(90deg, rgba(25, 24, 21, 0.035), transparent 260px),
+            #fbfaf7;
+          display: grid;
+          grid-template-columns: 220px minmax(0, 1fr);
+          min-height: 100svh;
         }
 
-        .home-mark {
-          color: rgba(26, 26, 24, 0.3);
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.28em;
-          margin-bottom: 40px;
-          text-transform: uppercase;
-        }
-
-        .home-q {
-          color: rgba(26, 26, 24, 0.9);
-          font-size: clamp(24px, 7vw, 34px);
-          font-weight: 640;
-          line-height: 1.15;
-          margin-bottom: 28px;
-          max-width: 100%;
-          overflow-wrap: break-word;
-          text-align: center;
-          width: 100%;
-        }
-
-        .home-form {
+        .timeline-rail {
           display: flex;
           flex-direction: column;
-          gap: 12px;
-          max-width: 520px;
-          min-width: 0;
-          width: 100%;
+          gap: 17px;
+          padding: 34px 26px;
         }
 
-        .home-input {
-          background: rgba(26, 26, 24, 0.025);
-          border: 1px solid rgba(26, 26, 24, 0.12);
-          border-radius: 12px;
-          color: rgba(26, 26, 24, 0.9);
-          font: inherit;
-          font-size: 16px;
-          line-height: 1.5;
-          max-width: 100%;
-          min-height: 88px;
-          min-width: 0;
-          outline: none;
-          padding: 16px 18px;
-          resize: none;
-          transition: border-color 0.12s;
-          width: 100%;
-        }
-
-        .home-input::placeholder {
-          color: rgba(26, 26, 24, 0.32);
-        }
-
-        .home-input:focus {
-          border-color: rgba(120, 170, 60, 0.5);
-        }
-
-        .home-controls {
-          align-items: center;
-          display: flex;
-          gap: 8px;
-          justify-content: flex-end;
-          max-width: 100%;
-          width: 100%;
-        }
-
-        .send-btn {
-          background: rgba(26, 26, 24, 0.92);
-          border: none;
-          border-radius: 8px;
-          color: #ffffff;
+        .timeline-name {
+          background: transparent;
+          border: 0;
+          color: rgba(25, 24, 21, 0.48);
           cursor: pointer;
-          flex-shrink: 0;
           font: inherit;
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: 0.04em;
-          max-width: 96px;
-          min-height: 44px;
-          min-width: 64px;
-          padding: 9px 22px;
-          transition: opacity 0.1s;
+          font-size: 15px;
+          line-height: 1.2;
+          padding: 0;
+          text-align: left;
+          transition: color 0.14s ease;
         }
 
-        .send-btn:disabled {
-          opacity: 0.28;
+        .timeline-name:hover,
+        .timeline-name--active {
+          color: rgba(25, 24, 21, 0.92);
+        }
+
+        .timeline-name:disabled {
+          color: rgba(25, 24, 21, 0.28);
           cursor: default;
         }
 
-        /* ── Controls ────────────────────────── */
-        .ctrl-btn {
-          align-items: center;
-          background: rgba(26, 26, 24, 0.04);
-          border: 1px solid rgba(26, 26, 24, 0.1);
-          border-radius: 8px;
-          color: rgba(26, 26, 24, 0.5);
-          cursor: pointer;
-          display: flex;
-          height: 44px;
-          justify-content: center;
-          min-width: 44px;
-          transition: background 0.1s, color 0.1s;
-          width: 44px;
-        }
-
-        .ctrl-btn:hover {
-          background: rgba(26, 26, 24, 0.07);
-          color: rgba(26, 26, 24, 0.8);
-        }
-
-        .ctrl-btn--bottom {
-          flex-shrink: 0;
-          height: 44px;
-          width: 44px;
-        }
-
-        .voice-dot {
-          background: #e34040;
-          border-radius: 50%;
-          display: block;
-          height: 8px;
-          width: 8px;
-          animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-
-        /* ── Sidebar toggle ──────────────────── */
-        .sidebar-toggle {
-          align-items: center;
-          background: none;
-          border: none;
-          color: rgba(26, 26, 24, 0.4);
-          cursor: pointer;
-          display: flex;
-          font-size: 16px;
-          height: 36px;
-          justify-content: center;
-          padding: 0;
-          width: 36px;
-          transition: color 0.12s;
-        }
-
-        .sidebar-toggle:hover {
-          color: rgba(26, 26, 24, 0.8);
-        }
-
-        /* ── Thread shell ────────────────────── */
-        .thread-shell {
+        .conversation {
           display: flex;
           flex-direction: column;
-          height: 100svh;
+          min-height: 100svh;
+          padding: 40px clamp(22px, 5vw, 72px) 30px;
+          position: relative;
         }
 
-        .hd {
+        .conversation--active {
+          padding-top: 42px;
+        }
+
+        .first-prompt {
           align-items: center;
-          border-bottom: 1px solid rgba(26, 26, 24, 0.07);
           display: flex;
-          flex-shrink: 0;
-          gap: 12px;
-          padding: 12px 16px;
+          flex: 1;
+          justify-content: center;
+          padding-bottom: 84px;
         }
 
-        .wordmark {
-          color: rgba(26, 26, 24, 0.28);
-          flex: 1;
-          font-size: 10px;
-          font-weight: 750;
-          letter-spacing: 0.26em;
+        .first-prompt h1 {
+          color: rgba(25, 24, 21, 0.9);
+          font-size: clamp(28px, 5vw, 48px);
+          font-weight: 560;
+          letter-spacing: 0;
+          line-height: 1.08;
+          margin: 0;
           text-align: center;
-          text-transform: uppercase;
         }
 
-        .new-thread-btn {
-          background: none;
-          border: none;
-          color: rgba(120, 170, 60, 0.85);
-          cursor: pointer;
-          font: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          padding: 0;
-          transition: color 0.12s;
-        }
-
-        .new-thread-btn:hover {
-          color: rgba(120, 170, 60, 1);
-        }
-
-        /* ── Thread body ─────────────────────── */
-        .thread {
+        .conversation-scroll {
           display: flex;
           flex: 1;
           flex-direction: column;
-          gap: 36px;
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-          padding: 24px 20px calc(140px + env(safe-area-inset-bottom));
-          scroll-behavior: smooth;
-        }
-
-        .entry {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          max-width: 640px;
+          gap: 42px;
           margin: 0 auto;
+          max-width: 690px;
+          overflow-y: auto;
+          padding: 18px 0 144px;
           width: 100%;
         }
 
-        .user-msg {
-          color: rgba(26, 26, 24, 0.42);
-          font-size: 14px;
-          letter-spacing: 0.01em;
-          line-height: 1.5;
-          padding: 0 2px;
+        .turn {
+          display: flex;
+          flex-direction: column;
+          gap: 13px;
         }
 
-        /* ── Loading ─────────────────────────── */
-        .loading-row {
+        .user-line {
+          align-self: flex-end;
+          color: rgba(25, 24, 21, 0.46);
+          font-size: 15px;
+          line-height: 1.55;
+          margin: 0;
+          max-width: 82%;
+          white-space: pre-wrap;
+        }
+
+        .axis-reply {
+          color: rgba(25, 24, 21, 0.9);
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          max-width: 620px;
+        }
+
+        .axis-reply p {
+          font-size: clamp(18px, 2.1vw, 24px);
+          font-weight: 440;
+          letter-spacing: 0;
+          line-height: 1.42;
+          margin: 0;
+        }
+
+        .thinking {
           align-items: center;
           display: flex;
-          gap: 5px;
-          padding: 4px 2px;
+          gap: 6px;
+          margin: 0 auto;
+          max-width: 690px;
+          width: 100%;
         }
 
-        .dot {
+        .thinking span,
+        .voice-dot {
           animation: pulse 1.1s ease-in-out infinite;
-          background: rgba(26, 26, 24, 0.28);
-          border-radius: 50%;
+          background: rgba(25, 24, 21, 0.35);
+          border-radius: 999px;
+          display: block;
           height: 5px;
           width: 5px;
         }
 
-        .dot:nth-child(2) {
-          animation-delay: 0.18s;
+        .thinking span:nth-child(2) {
+          animation-delay: 0.16s;
         }
 
-        .dot:nth-child(3) {
-          animation-delay: 0.36s;
+        .thinking span:nth-child(3) {
+          animation-delay: 0.32s;
         }
 
         @keyframes pulse {
-          0%, 80%, 100% {
-            opacity: 0.28;
-            transform: scale(0.8);
+          0%,
+          80%,
+          100% {
+            opacity: 0.3;
           }
           40% {
             opacity: 1;
-            transform: scale(1);
           }
         }
 
-        /* ── Bottom bar ──────────────────────── */
-        .bottom-bar {
-          background: rgba(255, 255, 255, 0.94);
-          backdrop-filter: blur(8px);
-          border-top: 1px solid rgba(26, 26, 24, 0.07);
-          bottom: 0;
-          left: 0;
-          max-width: 100vw;
-          padding: 10px max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+        .composer-wrap {
+          bottom: 24px;
+          left: calc(220px + clamp(22px, 5vw, 72px));
           position: fixed;
-          right: 0;
-          width: 100%;
+          right: clamp(22px, 5vw, 72px);
+          z-index: 2;
         }
 
-        .bottom-form {
+        .composer {
           align-items: flex-end;
+          background: rgba(251, 250, 247, 0.9);
+          border: 1px solid rgba(25, 24, 21, 0.1);
+          border-radius: 18px;
           display: flex;
           gap: 8px;
           margin: 0 auto;
-          max-width: 720px;
+          max-width: 760px;
+          padding: 10px;
+          backdrop-filter: blur(18px);
         }
 
-        .bottom-input {
-          background: rgba(26, 26, 24, 0.03);
-          border: 1px solid rgba(26, 26, 24, 0.1);
-          border-radius: 10px;
-          color: rgba(26, 26, 24, 0.9);
+        .composer-input {
+          background: transparent;
+          border: 0;
+          color: rgba(25, 24, 21, 0.92);
           flex: 1;
           font: inherit;
-          font-size: 16px;
-          line-height: 1.5;
-          min-height: 44px;
+          font-size: 17px;
+          line-height: 1.45;
+          min-height: 42px;
           min-width: 0;
-          outline: none;
-          padding: 10px 14px;
+          outline: 0;
+          padding: 8px 8px 7px;
           resize: none;
-          transition: border-color 0.12s;
         }
 
-        .bottom-input::placeholder {
-          color: rgba(26, 26, 24, 0.3);
-        }
-
-        .bottom-input:focus {
-          border-color: rgba(120, 170, 60, 0.5);
-        }
-
-        .bottom-send {
-          background: rgba(26, 26, 24, 0.92);
-          border: none;
-          border-radius: 8px;
-          color: #ffffff;
-          cursor: pointer;
-          flex-shrink: 0;
-          font: inherit;
-          font-size: 18px;
-          font-weight: 600;
-          height: 44px;
-          padding: 0 16px;
-          transition: opacity 0.1s;
-        }
-
-        .bottom-send:disabled {
-          cursor: default;
-          opacity: 0.25;
-        }
-
-        /* ── Attachment badge ────────────────── */
-        .attachment-badge {
+        .icon-button,
+        .send-button {
           align-items: center;
-          background: rgba(120, 170, 60, 0.08);
-          border: 1px solid rgba(120, 170, 60, 0.22);
-          border-radius: 8px;
-          display: flex;
-          gap: 8px;
-          justify-content: space-between;
-          margin: 0 0 6px;
-          padding: 8px 12px;
-        }
-
-        .attachment-badge--thread {
-          margin: 0 14px 8px;
-        }
-
-        .attachment-name {
-          color: rgba(26, 26, 24, 0.7);
-          font-size: 12px;
-          letter-spacing: 0.02em;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .attachment-remove {
-          background: none;
-          border: none;
-          color: rgba(26, 26, 24, 0.4);
+          background: transparent;
+          border: 0;
+          border-radius: 12px;
+          color: rgba(25, 24, 21, 0.44);
           cursor: pointer;
+          display: flex;
           flex-shrink: 0;
-          font-size: 16px;
-          height: 24px;
-          line-height: 1;
+          height: 42px;
+          justify-content: center;
           padding: 0;
-          width: 24px;
+          width: 42px;
+        }
+
+        .icon-button:hover {
+          color: rgba(25, 24, 21, 0.84);
+        }
+
+        .send-button {
+          background: rgba(25, 24, 21, 0.9);
+          color: #fbfaf7;
+          font-size: 20px;
+        }
+
+        .send-button:disabled {
+          cursor: default;
+          opacity: 0.18;
+        }
+
+        .moment-pill {
+          align-items: center;
+          color: rgba(25, 24, 21, 0.54);
+          display: flex;
+          font-size: 13px;
+          gap: 10px;
+          justify-content: center;
+          margin: 0 auto 8px;
+          max-width: 760px;
+        }
+
+        .moment-pill button {
+          background: transparent;
+          border: 0;
+          color: rgba(25, 24, 21, 0.38);
+          cursor: pointer;
+          font: inherit;
+          padding: 0;
+        }
+
+        .quiet-new {
+          background: transparent;
+          border: 0;
+          color: rgba(25, 24, 21, 0.28);
+          cursor: pointer;
+          font: inherit;
+          font-size: 13px;
+          position: fixed;
+          right: 24px;
+          top: 22px;
+        }
+
+        .quiet-new:hover {
+          color: rgba(25, 24, 21, 0.62);
+        }
+
+        @media (max-width: 760px) {
+          .axis-shell {
+            background: #fbfaf7;
+            display: block;
+          }
+
+          .timeline-rail {
+            display: none;
+          }
+
+          .conversation,
+          .conversation--active {
+            min-height: 100svh;
+            padding: 24px 18px 26px;
+          }
+
+          .first-prompt {
+            align-items: flex-start;
+            justify-content: flex-start;
+            padding-bottom: 110px;
+            padding-top: 22vh;
+          }
+
+          .first-prompt h1 {
+            font-size: 32px;
+            text-align: left;
+          }
+
+          .conversation-scroll {
+            gap: 34px;
+            padding: 12px 0 140px;
+          }
+
+          .user-line {
+            max-width: 92%;
+          }
+
+          .axis-reply p {
+            font-size: 20px;
+          }
+
+          .composer-wrap {
+            bottom: max(14px, env(safe-area-inset-bottom));
+            left: 12px;
+            right: 12px;
+          }
+
+          .composer {
+            border-radius: 16px;
+            gap: 4px;
+            padding: 8px;
+          }
+
+          .composer-input {
+            font-size: 16px;
+            min-height: 42px;
+          }
+
+          .icon-button,
+          .send-button {
+            height: 40px;
+            width: 38px;
+          }
+
+          .quiet-new {
+            display: none;
+          }
         }
       `}</style>
     </>
