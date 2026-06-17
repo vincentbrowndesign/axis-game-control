@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import WhiteboardView from "./whiteboard-view";
 
 interface Annotation {
   label: string;
@@ -20,6 +21,7 @@ export default function AxisPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"conversation" | "whiteboard">("conversation");
 
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -86,9 +88,36 @@ export default function AxisPage() {
         <header className="site-header">
           <span className="site-mark">Axis</span>
           <span className="site-sub">Develop the work through conversation.</span>
+          <nav className="view-nav" aria-label="View">
+            <button
+              type="button"
+              className={`view-btn${view === "conversation" ? " view-btn--on" : ""}`}
+              onClick={() => setView("conversation")}
+            >
+              Conversation
+            </button>
+            <button
+              type="button"
+              className={`view-btn${view === "whiteboard" ? " view-btn--on" : ""}`}
+              onClick={() => setView("whiteboard")}
+            >
+              Whiteboard
+            </button>
+          </nav>
         </header>
 
-        <div className={`thread${isInitial ? " thread--initial" : ""}`} ref={threadRef}>
+        {view === "whiteboard" && (
+          <WhiteboardView
+            history={messages
+              .slice(1)
+              .map(({ role, content }) => ({ role, content }))}
+          />
+        )}
+
+        <div
+          className={`thread${isInitial ? " thread--initial" : ""}${view === "whiteboard" ? " thread--hidden" : ""}`}
+          ref={threadRef}
+        >
           <div className="thread-inner">
             {messages.map((msg, i) => (
               <div key={i} className={`msg msg--${msg.role}`}>
@@ -200,6 +229,37 @@ export default function AxisPage() {
           color: rgba(25, 24, 21, 0.18);
           font-size: 11px;
           letter-spacing: 0.01em;
+        }
+
+        .view-nav {
+          display: flex;
+          gap: 1px;
+          margin-left: auto;
+        }
+
+        .view-btn {
+          background: transparent;
+          border: 0;
+          border-radius: 3px;
+          color: rgba(25, 24, 21, 0.28);
+          cursor: pointer;
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+          font-size: 11px;
+          letter-spacing: 0.04em;
+          padding: 2px 7px;
+          transition: color 0.1s ease;
+        }
+
+        .view-btn--on {
+          color: rgba(25, 24, 21, 0.75);
+        }
+
+        .view-btn:not(.view-btn--on):hover {
+          color: rgba(25, 24, 21, 0.5);
+        }
+
+        .thread--hidden {
+          display: none;
         }
 
         .thread {
