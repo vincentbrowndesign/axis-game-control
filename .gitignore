@@ -43,3 +43,11 @@ next-env.d.ts
 # clerk configuration (can include secrets)
 /.clerk/
 .codegraph/
+
+# generated local runtime artifacts (do not commit)
+/.runtime-audit/
+/.trigger/
+.trigger-dev.err.log
+.trigger-dev.out.log
+.tmp-*
+axis-*.png

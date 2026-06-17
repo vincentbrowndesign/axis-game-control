@@ -1,10 +1,10 @@
-# AXIS AGENT RULES
+# AGENTS.md
 
 ---
 
 ## CURRENT PRODUCT DIRECTION — 2026-06-17
 
-> **Read this section first. It supersedes the legacy product framing below.**
+> **Read this first. It supersedes everything below.**
 
 **Active MVP:** Axis Conversation at `/axis`.
 
@@ -25,295 +25,88 @@ The conversation itself is the product. Axis helps the work develop.
 **Do not** re-introduce missions, dashboards, cards, check-in, or leaderboards into the active `/axis` page.
 **Do not** treat the archived `.legacy.md` files as current product direction.
 
-The engineering rules in this file (Required Task Structure, Stability Rules, Next.js notes) still apply.
-The **product loop and surface hierarchy below are legacy context** — they describe a prior Axis direction.
+---
+
+## Axis Conversation Behavior
+
+Axis should:
+
+* notice what is forming
+* name what is developing
+* protect the important point
+* make the work more useful, understandable, or real
+* ask the smallest next question only when it moves the work forward
+* keep narrowing ambiguity without interrogating
+* give the user language they can use
+
+Axis should not:
+
+* frame the user as stuck
+* ask generic AI questions
+* sound like a consultant or coach cliché machine
+* say "this sounds like a clarity problem"
+* say "this feels like a product identity issue"
+* ask "what are your goals?"
+* ask "what challenges are you facing?"
+* ask "can you provide more context?"
 
 ---
 
-## LEGACY PRODUCT CONTEXT (prior direction — not the active MVP)
+## Active MVP Boundaries
 
-> The content below describes Axis as a sports continuity / check-in / leaderboard product.
-> This framing is preserved for historical context and infrastructure reference.
-> It does not describe the current active Axis Conversation MVP.
+Current MVP is text-only. No other capabilities are active on `/axis`.
 
-Before making product changes, read:
+Do not add to the active `/axis` page:
 
-* `docs/AXIS_CONVERSATION_MVP.md` ← current source of truth
-* `docs/REPO_CLEANUP.md` ← what changed and what to not touch
-
-Legacy reference docs (archived):
-
-* `archive/AXIS_CONSTITUTION.legacy.md`
-* `archive/context/core-loop.legacy.md`
-
-Axis is a personal athletic continuity system.
-
-The active product loop is:
-
-show up
-→ check in
-→ participate
-→ history grows
-→ leaderboard updates
-→ return tomorrow
-
-The stabilized product direction is:
-
-identity
-→ presence
-→ participation
-→ progression
-→ history
-→ leaderboard
-→ ritual continuity
-
-## Core Product Truth
-
-Axis is not a dashboard, analytics platform, replay-first product, tactical coaching tool, startup SaaS surface, or AI sports assistant.
-
-Axis is:
-
-* a personal sports continuity system
-* an athletic operating system
-* a ritual participation layer
-* a persistent sports history machine
-* a communal athletic memory system
-* a save-file style continuity environment
-
-Presence is primary.
-
-Participation is proof.
-
-History is emotional infrastructure.
-
-Replay, upload, clips, voice, storage, and intelligence exist underneath the continuity loop.
-
-## Codex Responsibilities
-
-Codex must:
-
-* Preserve working auth, Supabase, check-in, upload, storage, replay, voice, and utility infrastructure.
-* Make small scoped changes.
-* Keep the frontend calm, structural, ritual-first, lightweight, and continuity-driven.
-* Prioritize identity continuity, Check In, Check Out, Axis History, streaks, last session, leaderboard tension, replay memory, and return behavior.
-* Keep intelligence invisible, ambient, and assistive.
-* Preserve the Axis electronics identity:
-
-  * layered blacks
-  * restrained white
-  * muted lime signal accent
-  * oversized ritual typography
-  * tiny archival metadata
-  * save-file atmosphere
-* Use structural UI instead of floating overlay UI.
-* Evolve the interface gradually without restarting the visual language.
-* Preserve emotional continuity between versions.
-* Treat replay and uploads as historical memory attached to participation, not as tactical software.
-
-## Surface Hierarchy
-
-Every Axis screen should follow:
-
-### Top
-
-Identity + presence signal.
-
-Examples:
-
-* athlete identity
-* organization
-* streak
-* participation status
-* last check-in
-* continuity signal
-
-### Center
-
-Dominant ritual layer.
-
-Examples:
-
-* Check In
-* active session
-* participation state
-* upload ritual
-* replay memory
-* progression state
-
-### Bottom
-
-History + continuity records.
-
-Examples:
-
-* Axis History
-* leaderboard
-* recent sessions
-* replay archive
-* streak history
-* progression trail
-
-## Replay + Upload Rules
-
-Replay and upload infrastructure are allowed and should be preserved.
-
-Their role is:
-
-* preserve participation
-* attach memory to effort
-* archive continuity
-* support progression visibility
-* reinforce return behavior
-
-Replay must not become:
-
-* tactical software
-* scouting software
-* analysis-first UX
-* dashboard software
-* clip-editing suite
-* breakdown-first interaction
-* commentary product
-* broadcast surface
-
-Replay exists as:
-
-* continuity memory
-* participation archive
-* historical athletic proof
-* replayable session history
-
-## Intelligence Rules
-
-Intelligence must remain:
-
-* invisible
-* ambient
-* assistive
-* structural
-* calm
-* embedded
-
-Do not visually announce:
-
-* AI systems
-* optimization engines
-* ontology
-* telemetry
-* hidden infrastructure
-* machine language
-* speculative intelligence systems
-
-Intelligence should feel inevitable, not performative.
-
-## Design Rules
-
-Axis should feel:
-
-* calm
-* ritualistic
-* athletic
-* electronic
-* alive
-* persistent
-* communal
-* operational
-* low-friction
-* earned
-
-Reference emotional hardware:
-
-* Apple Fitness
-* Nike Run Club
-* arena systems
-* sports tunnel graphics
-* gym scoreboards
-* PS2 OS
-* original Xbox dashboard
-* Dreamcast VMU
-* MiniDisc interfaces
-* TiVo
-* DVR systems
-* Panasonic sports electronics
-* arcade terminals
-* old ESPN overlays
-* CRT diagnostics
-
-## UI Rules
-
-Use:
-
-* structural layouts
-* integrated surfaces
-* large emotional typography
-* tiny archival metadata
-* restrained lime accents
-* black athletic hardware atmosphere
-
-Avoid:
-
-* floating widget stacks
-* startup dashboards
-* giant explanation blocks
-* overlay-heavy UI
-* loud gradients
-* giant cards
-* cyberpunk styling
-* analytics-first layouts
-* productivity-app feeling
-* tactical software language
-* dead luxury minimalism
-
-## Product Language Rules
-
-Use:
-
-* check in
-* participation
-* session
-* history
-* continuity
-* streak
-* return
-* replay memory
-* progression
-* archive
-* effort
-* presence
-
-Avoid:
-
-* analytics
-* optimization
-* AI insights
-* scouting
-* basketball IQ
-* machine intelligence
-* tactical breakdown
-* platform language
-* startup framing
-* ontology-heavy wording
-
-## Do Not Add
-
-Do not add:
-
+* Mission Control or mission language
 * dashboards
-* scouting analytics
-* basketball IQ scores
-* tactical software UI
-* assistant chat surfaces
-* commentary systems
-* replay-first home screens
-* clip-editing suites
-* timeline editing tools
-* coaching claims
-* speculative AI systems
-* startup/productivity framing
-* giant widget stacks
-* random floating cards
-* tactical overlays
-* analysis-first interaction
+* objective or constraint panels
+* progress panels
+* evidence cards
+* check-in or check-out flows
+* leaderboard surface
+* streaks
+* uploads
+* voice
+* camera
+* sketches
+* analytics
+* game tracking
+* training tracker language
+* role modes (coach mode, player mode, etc.)
+* sidebar threads
+* long-term database memory
+* video overlay framing
+
+These may exist as legacy or future infrastructure in `src/lib/` and `src/app/api/axis/`. They are not active in the current MVP.
+
+---
+
+## Legacy / Future Boundaries
+
+Preserved infrastructure — do not remove without explicit direction:
+
+* `src/app/api/axis/run` — prior AxisUnderstanding conversation system (Supabase-backed)
+* `src/app/api/axis/sketch` — SVG generation
+* `src/app/api/axis/evidence/`, `ball/`, `video-job/`, etc. — CV/video pipeline
+* `src/lib/` — all lib files (axis-operating-system, axis-cv-overlay, axis-ball-processing, etc.)
+* `supabase/migrations/` — all DB migrations
+* `archive/` — all archived docs
+
+Do not wire preserved legacy infrastructure back into `/axis` without a documented migration decision.
+
+---
+
+## Engineering Rules
+
+* Inspect before deleting.
+* Prefer small, scoped changes.
+* Do not rewrite unrelated code.
+* Do not touch secrets or environment files.
+* Do not commit generated runtime files (`.runtime-audit/`, `.trigger/`, `.trigger-dev.*.log`, `.tmp-*`, `axis-*.png`).
+* Run available checks before reporting completion.
+
+---
 
 ## Required Task Structure
 
@@ -324,44 +117,48 @@ Every task must identify:
 3. What was intentionally not touched.
 4. Verification run.
 
-## Stability Rules
+---
 
-Do not rebuild backend systems unless explicitly requested.
+## Checks
 
-Do not restart the product identity.
+Use only scripts that exist in `package.json`:
 
-Do not restart the visual language.
+* `npx tsc --noEmit` — TypeScript check
+* `npm run build` — Next.js build
+* `npm run lint` — ESLint (note: pre-existing warnings are broad; focus on changed files only)
 
-Do not replace working continuity infrastructure.
+---
 
-Refine and stabilize incrementally.
+## Final Report Format
 
-Future media, replay, computer vision, and intelligence layers must sit on top of:
+Always report:
 
-identity
-→ presence
-→ participation
-→ progression
-→ history
-→ leaderboard
-→ return behavior
+* files changed
+* files deleted or archived
+* active route and API
+* checks passed or failed
+* commit hash
+* remaining risks
 
-The ritual loop is primary.
+---
 
-Everything else is secondary.
+## Next.js Notes
 
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes. APIs, conventions, and file structure may differ from training data.
+This version has breaking changes from training data. APIs, conventions, and file structure may differ.
 
 Before modifying Next.js behavior:
 
-* read the relevant guides inside:
-  `node_modules/next/dist/docs/`
+* read the relevant guides inside `node_modules/next/dist/docs/`
 * check for deprecations
 * preserve existing routing and infrastructure
 * avoid unnecessary architectural rewrites
 
-<!-- END:nextjs-agent-rules -->
+---
+
+## Legacy Agent Instructions
+
+The old AGENTS.md contained product framing for prior Axis directions (check-in loop, leaderboard, surface hierarchy, mission/overlay product). That content has been archived at:
+
+`archive/AGENTS.legacy.md`
+
+It is historical context only.

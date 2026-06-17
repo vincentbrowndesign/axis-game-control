@@ -1,5 +1,68 @@
 # Repo Cleanup
 
+## AGENTS.md Trim — 2026-06-17 (Pass 4)
+
+### Why this pass was needed
+
+After Pass 2 added a `CURRENT PRODUCT DIRECTION` section to the top of `AGENTS.md`, the file still contained ~280 lines of old product framing below it: check-in loop, leaderboard, surface hierarchy (top/center/bottom), mission language, old design rules, and language tables from the prior athletic continuity product. A coding agent reading the full file could absorb that framing and reintroduce old product patterns into the active MVP.
+
+### What was removed from `AGENTS.md`
+
+Old product framing that described Axis as a check-in / leaderboard / sports continuity system:
+
+* Product loop: `show up → check in → participate → history grows → leaderboard → return tomorrow`
+* Stabilized product direction hierarchy
+* Core Product Truth (old athletic continuity definition)
+* Codex Responsibilities (streaks, check-in, overlay, electronics identity)
+* Surface Hierarchy (top/center/bottom with athletic identity, Check In, Axis History, leaderboard)
+* Replay + Upload Rules (participation memory, continuity archive framing)
+* Intelligence Rules (invisible/ambient intelligence framing for the old product)
+* Design Rules (emotional hardware references for old product feel)
+* UI Rules (structural layouts, lime accents, black athletic hardware)
+* Product Language Rules (use/avoid tables for old product vocabulary)
+* "Do Not Add" list (referred to old product shape, not current conversation MVP)
+* Old Stability Rules (built around the check-in/progression/leaderboard loop)
+
+### What was kept in `AGENTS.md`
+
+* Current Product Direction table (active route, API, source of truth)
+* Axis Conversation Behavior (what Axis should and should not do in conversation)
+* Active MVP Boundaries (full list of what must not be added to `/axis`)
+* Legacy / Future Boundaries (what is preserved and must not be deleted)
+* Engineering Rules (inspect before deleting, small scoped changes, no secrets, no runtime artifacts)
+* Required Task Structure (goal / files changed / not touched / verification)
+* Checks (tsc, build, lint notes)
+* Final Report Format
+* Next.js Notes
+
+### Archive created
+
+`archive/AGENTS.legacy.md` — full prior AGENTS.md content preserved for historical reference.
+
+### Local artifact `.gitignore` additions
+
+These generated files were untracked and not in `.gitignore`. Added:
+
+* `.runtime-audit/`
+* `.trigger/`
+* `.trigger-dev.err.log`
+* `.trigger-dev.out.log`
+* `.tmp-*`
+* `axis-*.png`
+
+### Why this prevents future drift
+
+A coding agent that reads `AGENTS.md` now gets:
+1. Current Product Direction (table, active files, what not to do)
+2. Conversation behavior rules
+3. What must not be added to `/axis`
+4. What to preserve in the rest of the repo
+5. Engineering safety rules
+
+It no longer gets: check-in loop, leaderboard framing, surface hierarchy, athletic continuity philosophy, or old design/language rules.
+
+---
+
 ## Context Cleanup — 2026-06-17 (Pass 3)
 
 ### Why this pass was needed
