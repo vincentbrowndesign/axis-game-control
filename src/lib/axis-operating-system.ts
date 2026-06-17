@@ -3,6 +3,8 @@ import { compareEvidenceToUnderstanding } from "./axis-evidence-comparison";
 import type { AxisEvidenceComparison } from "./axis-evidence-comparison";
 import { environmentLayoutFromUnderstanding } from "./axis-environment-layout";
 import type { AxisEnvironmentLayout } from "./axis-environment-layout";
+import { directionFromDemonstration } from "./axis-direction-engine";
+import type { AxisDirectionOutput } from "./axis-direction-engine";
 import { renderCoachingIntervention } from "./axis-live-coach-renderer";
 import type { AxisCoachingIntervention } from "./axis-live-coach-renderer";
 import { motionBlueprintFromUnderstanding } from "./axis-motion-blueprint";
@@ -45,6 +47,7 @@ export interface AxisOperatingSystemOutput {
     showMeAgain: string;
   };
   demonstration: MotionBlueprint;
+  direction: AxisDirectionOutput;
   practice: AxisPracticeOutput;
   environment: AxisEnvironmentLayout;
   evidence: {
@@ -81,6 +84,11 @@ export function runAxisOperatingSystem(
     evidenceRequest: understanding.evidenceRequest || "Show the rep again.",
     design: practiceDesign,
   };
+  const direction = directionFromDemonstration({
+    understanding,
+    demonstration,
+    practice: practiceDesign,
+  });
   const comparison = compareEvidenceToUnderstanding(understanding, observations[0]);
 
   return {
@@ -96,6 +104,7 @@ export function runAxisOperatingSystem(
       showMeAgain: practice.evidenceRequest,
     },
     demonstration,
+    direction,
     practice,
     environment: environmentLayoutFromUnderstanding(understanding),
     evidence: {
