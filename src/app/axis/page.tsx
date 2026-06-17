@@ -2,9 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
+interface Annotation {
+  label: string;
+  note: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
+  annotation?: Annotation;
 }
 
 const INITIAL: Message = { role: "assistant", content: "What are we working on?" };
@@ -58,8 +64,11 @@ export default function AxisPage() {
         return;
       }
 
-      const data = (await res.json()) as { reply: string };
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+      const data = (await res.json()) as { reply: string; annotation?: Annotation };
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.reply, annotation: data.annotation },
+      ]);
     } catch {
       setMessages((prev) => prev.slice(0, -1));
       setError("Something went wrong. Try again.");
@@ -81,6 +90,11 @@ export default function AxisPage() {
             {messages.map((msg, i) => (
               <div key={i} className={`msg msg--${msg.role}`}>
                 {msg.content}
+                {msg.annotation && (
+                  <p className="msg-annotation">
+                    {msg.annotation.label} · {msg.annotation.note}
+                  </p>
+                )}
               </div>
             ))}
 
@@ -220,6 +234,13 @@ export default function AxisPage() {
           font-size: 15px;
           font-style: normal;
           margin: -8px 0 0;
+        }
+
+        .msg-annotation {
+          color: rgba(25, 24, 21, 0.28);
+          font-size: 11px;
+          letter-spacing: 0.04em;
+          margin: 10px 0 0;
         }
 
         .msg-error {

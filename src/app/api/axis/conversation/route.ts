@@ -33,6 +33,29 @@ Do not sound like a therapist, consultant, or generic coach.
 In basketball or live coaching context: be concrete and immediate. Name the real mechanical or tactical thing. Be brief.
 In personal or relationship context: be grounded and human. Not clinical.
 
+Annotation pass (internal — do not describe this to the user):
+Before forming your response, silently read the message for:
+- The leverage sentence — the part that carries the most weight
+- The object of thought — what is actually being named
+- Any constraint, decision, open thought, or tension present
+- Whether a pattern is repeating across this conversation
+
+Use this reading to sharpen your response. Do not explain your annotation process.
+
+When a mark is significant enough to surface — a real decision being locked, a tension that needs protecting, a pattern confirmed across multiple messages — append one annotation mark after your response on its own line:
+
+[Label: brief note]
+
+Allowed labels: Rule · Constraint · Decision · Open · Pattern · Tension · Evidence · Repeat · Shift · Watch
+
+Annotation rules:
+- Default: no mark. Most responses need nothing.
+- Only mark when it reduces confusion or locks something important.
+- Maximum one mark per response.
+- Strong marks (Rule, Constraint, Decision, Pattern) require clear evidence — not inference.
+- Do not mark simple confirmations like "ok", "yes", "cool" unless they clearly lock a real decision.
+- Open means protect an unfinished thought, not force resolution.
+
 Good examples:
 - "The hesitation is the work."
 - "She has the shot. Now she needs the green light."
@@ -45,6 +68,11 @@ Good examples:
 - "That's already real."
 
 Sound like someone who has been in the room before.`;
+
+const ANNOTATION_LABELS = new Set([
+  "Rule", "Constraint", "Decision", "Open", "Pattern",
+  "Tension", "Evidence", "Repeat", "Shift", "Watch",
+]);
 
 interface HistoryMessage {
   role: "user" | "assistant";
@@ -107,11 +135,23 @@ export async function POST(req: Request) {
     const data = (await res.json()) as {
       content?: Array<{ type: string; text: string }>;
     };
-    const reply = data.content?.find((c) => c.type === "text")?.text?.trim() ?? "";
+    const rawReply = data.content?.find((c) => c.type === "text")?.text?.trim() ?? "";
 
-    if (!reply) return Response.json({ error: "Empty response" }, { status: 500 });
+    if (!rawReply) return Response.json({ error: "Empty response" }, { status: 500 });
 
-    return Response.json({ reply });
+    // Strip annotation mark from tail if present. Format: [Label: note] on its own line.
+    const lines = rawReply.split("\n");
+    const lastLine = lines[lines.length - 1].trim();
+    const markMatch = lastLine.match(/^\[([A-Za-z]+):\s*([^\]]+)\]$/);
+    let annotation: { label: string; note: string } | undefined;
+    let reply = rawReply;
+
+    if (markMatch && ANNOTATION_LABELS.has(markMatch[1])) {
+      annotation = { label: markMatch[1], note: markMatch[2].trim() };
+      reply = lines.slice(0, -1).join("\n").trim();
+    }
+
+    return Response.json({ reply, ...(annotation ? { annotation } : {}) });
   } catch (err) {
     console.error("[axis/conversation] error", (err as Error).message);
     return Response.json({ error: "Conversation failed" }, { status: 500 });
