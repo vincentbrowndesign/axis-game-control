@@ -53,7 +53,7 @@ Annotation rules:
 - Only mark when it reduces confusion or locks something important.
 - Maximum one mark per response.
 - Strong marks (Rule, Constraint, Decision, Pattern) require clear evidence — not inference.
-- Do not mark simple confirmations like "ok", "yes", "cool" unless they clearly lock a real decision.
+- Decision: a short reply is only Decision when it directly answers a prior Axis question that explicitly asked the user to choose between options, name a person, or select an action. "Aiden" after "Who's taking the last shot?" is Decision. "ok", "yes", "cool", "got it" after any statement are never Decision.
 - Open means protect an unfinished thought, not force resolution.
 
 Good examples:

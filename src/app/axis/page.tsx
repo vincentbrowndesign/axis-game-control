@@ -65,9 +65,12 @@ export default function AxisPage() {
       }
 
       const data = (await res.json()) as { reply: string; annotation?: Annotation };
+      // Annotation belongs to the user message being read, not the Axis reply.
+      // Replace the optimistic user message with the annotated version, then add the reply.
       setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.reply, annotation: data.annotation },
+        ...prev.slice(0, -1),
+        { role: "user", content: text, ...(data.annotation ? { annotation: data.annotation } : {}) },
+        { role: "assistant", content: data.reply },
       ]);
     } catch {
       setMessages((prev) => prev.slice(0, -1));
