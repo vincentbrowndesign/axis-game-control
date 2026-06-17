@@ -1,5 +1,52 @@
 # Repo Cleanup
 
+## Context Cleanup — 2026-06-17 (Pass 3)
+
+### Why this pass was needed
+
+After the MVP rebuild and agent instruction alignment (Passes 1–2), stale `context/*.md` files remained in place alongside their archived copies in `archive/context/`. An agent scanning `context/` could still pick up old product framing (check-in loop, leaderboard, video overlay, reconstruction plans) and treat it as current direction.
+
+### Files deleted from `context/` (already had archive copies)
+
+These six files had already been copied to `archive/context/*.legacy.md` in Pass 1. The originals were removed:
+
+- `context/core-loop.md` → `archive/context/core-loop.legacy.md`
+- `context/current-seam.md` → `archive/context/current-seam.legacy.md`
+- `context/interaction-philosophy.md` → `archive/context/interaction-philosophy.legacy.md`
+- `context/progress-tracker.md` → `archive/context/progress-tracker.legacy.md`
+- `context/project-overview.md` → `archive/context/project-overview.legacy.md`
+- `context/ui-direction.md` → `archive/context/ui-direction.legacy.md`
+
+### Files moved to `archive/context/` (newly archived this pass)
+
+These eight files had no archive copy yet. They were copied to `archive/context/` and removed from `context/`:
+
+| File | Reason |
+|---|---|
+| `context/AXIS_BUILD_ORDER.md` | Reconstruction build order for video/overlay product (2026-06-07) |
+| `context/AXIS_CLEANUP_GUIDE.md` | Destructive deletion guide for old product — HIGH RISK if treated as current |
+| `context/AXIS_RECONSTRUCTION_ARCHITECTURE.md` | Video overlay/reconstruction architecture |
+| `context/AXIS_RECONSTRUCTION_EXECUTIVE_SUMMARY.md` | Reconstruction executive summary |
+| `context/AXIS_RECONSTRUCTION_INDEX.md` | Reconstruction architecture index |
+| `context/architecture.md` | Describes check-in/leaderboard/Clerk/Supabase stack as current |
+| `context/runtime-boundaries.md` | "Axis active runtime is continuity-only" — stale product framing |
+| `context/supabase-schema-audit.md` | Schema audit against old check-in product filter (2026-05-25) |
+
+### `context/` directory state after this pass
+
+`context/` now contains only `README.md` — a redirect note pointing to `docs/AXIS_CONVERSATION_MVP.md` and `docs/REPO_CLEANUP.md`.
+
+Any agent that opens `context/` now sees the redirect immediately rather than stale product docs.
+
+### What future agents should read first
+
+1. `CLAUDE.md` — current MVP truth, then preserved agent rules
+2. `docs/AXIS_CONVERSATION_MVP.md` — MVP scope, acceptance tests, anti-patterns
+3. `docs/REPO_CLEANUP.md` — this file
+4. `archive/context/` — historical context only, not current direction
+
+---
+
 ## Alignment Pass — 2026-06-17 (Pass 2)
 
 ### Agent instruction files aligned
