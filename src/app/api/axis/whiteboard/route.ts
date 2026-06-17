@@ -14,6 +14,12 @@ Axis principle:
 - Whiteboard is the organized draft.
 - The user contributes. Axis organizes.
 
+Critical rule:
+- The Whiteboard is not a separate workspace.
+- The Whiteboard is not an empty canvas.
+- The Whiteboard is not waiting for content.
+- The moment information exists, begin organizing it into sections.
+
 The whiteboard is not a canvas, mind map, graph, sticky-note wall, diagramming tool, dashboard, or evidence database.
 Use the language coaches, teachers, investigators, and builders use on a real dry erase board:
 titles, sections, dividers, bullet points, checkmarks, arrows, underlines, boxes, circles, highlights, short annotations, and grouped ideas.
@@ -33,6 +39,7 @@ Use only these section labels when they fit:
 - QUESTION
 - OBSERVATION
 - PATTERN
+- UNDERSTANDING
 - EVIDENCE
 - INTERVENTION
 - OUTCOME
@@ -40,6 +47,7 @@ Use only these section labels when they fit:
 - CAPABILITY
 - BEHAVIOR
 - ENVIRONMENT
+- ACTION ITEMS
 
 You may use a specific topic as a section label when it is more useful than a generic type, for example HAILEY, SHOOTING, FLOATERS, PRACTICE, OFFER, CUSTOMER, PRODUCT.
 Evidence belongs inside the section it supports when possible. Do not create a separate evidence graph or database view.
@@ -54,6 +62,7 @@ STEP 3 - Return ONLY this JSON. No markdown fences. No commentary. No extra text
     { "label": "OBSERVATION", "items": ["..."] },
     { "label": "PATTERN", "items": ["..."] },
     { "label": "QUESTION", "items": ["..."] },
+    { "label": "UNDERSTANDING", "items": ["..."] },
     { "label": "INTERVENTION", "items": ["..."] }
   ],
   "connections": [
@@ -70,6 +79,7 @@ STEP 3 - Return ONLY this JSON. No markdown fences. No commentary. No extra text
 
 Rules:
 - Always include at least one section with at least one item.
+- If the conversation is early, make a small useful board from what exists instead of returning not_enough.
 - Omit sections from the sections array if they have no content.
 - 1-5 items per section. Short human phrases. Use the user's own language when possible.
 - Do not use markdown in item text. No bold, no asterisks, no bullet characters.
@@ -103,7 +113,7 @@ export async function POST(req: Request) {
       m.content.trim().length > 0,
   );
 
-  if (history.length < 2) {
+  if (history.length < 1) {
     return Response.json({ error: "not_enough" }, { status: 400 });
   }
 
