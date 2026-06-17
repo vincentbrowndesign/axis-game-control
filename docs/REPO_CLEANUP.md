@@ -1,4 +1,43 @@
-# Repo Cleanup — 2026-06-17
+# Repo Cleanup
+
+## Alignment Pass — 2026-06-17 (Pass 2)
+
+### Agent instruction files aligned
+
+The following files were directing coding agents toward the old product direction (video overlay, check-in, leaderboard). They have been updated to clearly surface the current Axis Conversation MVP before any legacy content.
+
+| File | Change |
+|---|---|
+| `CLAUDE.md` | Rebuilt. Current truth added before `@AGENTS.md` and `@AXIS_ENGINEERING_CONSTITUTION.md` includes. Agents now see the current MVP first. |
+| `AGENTS.md` | `CURRENT PRODUCT DIRECTION` section added at top. Legacy product framing marked as historical context. Engineering rules preserved. |
+| `AXIS_ENGINEERING_CONSTITUTION.md` | Warning header added. Purpose section marked as legacy/video infrastructure. Rules 4, 5, 9, 10 marked with infrastructure scope. Rules 1–3, 6–8, 11 preserved as timeless engineering principles. |
+| `src/app/api/axis/run/route.ts` | File-level comment added marking it as legacy and pointing to `/api/axis/conversation`. |
+| `README.md` | "Current Axis Source of Truth" section added. |
+
+### `AXIS_ENGINEERING_CONSTITUTION.md` — kept, not archived
+
+Decision: keep in place. The file contains strong engineering principles (Rules 1–3, 6–8, 11) that apply to the current MVP. Only the product-specific sections needed updating. The file now clearly labels what is legacy vs. timeless.
+
+### `/api/axis/run` — preserved as legacy infrastructure
+
+Status: **preserved, not used by MVP page**.
+
+The route (`src/app/api/axis/run/route.ts`) contains the prior AxisUnderstanding system backed by Supabase. It is:
+- Not wired into `src/app/axis/page.tsx`
+- Not referenced from `src/app/api/axis/conversation/route.ts`
+- Preserved in case future migrations want to reference it
+- Marked with a file-level legacy comment
+
+### What future agents should not touch without explicit direction
+
+- Do not add dashboard, mission, card, sidebar, or leaderboard UI to `src/app/axis/page.tsx`
+- Do not wire `/api/axis/run` back into the active page without a migration decision
+- Do not re-introduce voice, camera, upload, or CV features into the active MVP
+- Do not treat `archive/*.legacy.md` files as current product direction
+
+---
+
+## First Cleanup Pass — 2026-06-17 (Pass 1)
 
 ## What changed
 

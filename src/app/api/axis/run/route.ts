@@ -1,3 +1,6 @@
+// Legacy/experimental Axis API (AxisUnderstanding system, Supabase-backed thread memory).
+// The active Axis Conversation MVP uses /api/axis/conversation instead.
+// Do not wire this route into /axis unless intentionally migrating.
 export const runtime = "nodejs";
 
 import {

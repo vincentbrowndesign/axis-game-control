@@ -1,10 +1,50 @@
 # AXIS AGENT RULES
 
+---
+
+## CURRENT PRODUCT DIRECTION — 2026-06-17
+
+> **Read this section first. It supersedes the legacy product framing below.**
+
+**Active MVP:** Axis Conversation at `/axis`.
+
+The conversation itself is the product. Axis helps the work develop.
+
+| Item | Value |
+|---|---|
+| Active page | `src/app/axis/page.tsx` |
+| Active API | `src/app/api/axis/conversation/route.ts` |
+| Legacy mission page | `src/app/axis/mission/page.tsx` — redirects to `/axis` |
+| Legacy conversation API | `src/app/api/axis/run` — preserved, not used by MVP |
+| Product truth | The conversation is the product |
+| Source of truth | `docs/AXIS_CONVERSATION_MVP.md` |
+| Repo cleanup record | `docs/REPO_CLEANUP.md` |
+| Archived product docs | `archive/*.legacy.md` — historical context only |
+
+**Do not** wire `/api/axis/run` into `/axis` unless intentionally migrating.
+**Do not** re-introduce missions, dashboards, cards, check-in, or leaderboards into the active `/axis` page.
+**Do not** treat the archived `.legacy.md` files as current product direction.
+
+The engineering rules in this file (Required Task Structure, Stability Rules, Next.js notes) still apply.
+The **product loop and surface hierarchy below are legacy context** — they describe a prior Axis direction.
+
+---
+
+## LEGACY PRODUCT CONTEXT (prior direction — not the active MVP)
+
+> The content below describes Axis as a sports continuity / check-in / leaderboard product.
+> This framing is preserved for historical context and infrastructure reference.
+> It does not describe the current active Axis Conversation MVP.
+
 Before making product changes, read:
 
-* `/AXIS_CONSTITUTION.md`
-* `/AXIS_ENGINEERING_CONSTITUTION.md`
-* `/context/core-loop.md`
+* `docs/AXIS_CONVERSATION_MVP.md` ← current source of truth
+* `docs/REPO_CLEANUP.md` ← what changed and what to not touch
+
+Legacy reference docs (archived):
+
+* `archive/AXIS_CONSTITUTION.legacy.md`
+* `archive/context/core-loop.legacy.md`
 
 Axis is a personal athletic continuity system.
 

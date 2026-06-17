@@ -1,10 +1,27 @@
 # AXIS_ENGINEERING_CONSTITUTION.md
 
-## Purpose
+---
 
-Axis exists to create replay overlays from sports video.
+> **LEGACY / FUTURE INFRASTRUCTURE CONTEXT**
+>
+> This document describes Axis as a video overlay / replay / CV product.
+> That framing applies to preserved infrastructure in `src/lib/` and `src/app/api/axis/` (non-conversation routes).
+>
+> **The current active MVP is Axis Conversation at `/axis`.**
+> Do not use this document to redirect the active `/axis` page into a dashboard, video system, mission tracker, or overlay product.
+>
+> Engineering rules 1–3, 6–8, and 11 are timeless and apply to the current MVP.
+> The Purpose section and rules 4, 5, 9, 10 describe the video/overlay infrastructure layer.
+>
+> Current source of truth: `docs/AXIS_CONVERSATION_MVP.md`
 
-Every engineering decision must optimize for:
+---
+
+## Purpose (Legacy — Video/Overlay Infrastructure)
+
+Axis overlay infrastructure exists to create replay overlays from sports video.
+
+The video pipeline optimizes for:
 
 ```text
 Video
@@ -18,7 +35,10 @@ Overlay
 Export
 ```
 
-If a change does not improve this flow, it should be questioned.
+This pipeline lives in `src/lib/` and `src/app/api/axis/` (non-conversation routes).
+It is preserved infrastructure. It is not the active MVP surface.
+
+If a change to the video/overlay layer does not improve this flow, it should be questioned.
 
 ---
 
@@ -81,7 +101,7 @@ Abstract third.
 
 ---
 
-# Rule 4 - Product First
+# Rule 4 - Product First (Timeless)
 
 Every feature begins with:
 
@@ -91,19 +111,8 @@ Not:
 
 "What database table do we need?"
 
-Examples:
-
-GOOD
-
-Player Ring
-Ball Trail
-Replay Export
-
-BAD
-
-Schema First
-Infrastructure First
-Analytics First
+For the **Axis Conversation MVP**, "what the user sees" is a clean conversation page.
+For the **video/overlay infrastructure**, examples are: Player Ring, Ball Trail, Replay Export.
 
 ---
 
@@ -111,7 +120,19 @@ Analytics First
 
 Any engineer should be able to draw Axis from memory.
 
-Current MVP:
+**Current Conversation MVP architecture:**
+
+```text
+User types
+->
+POST /api/axis/conversation
+->
+Claude (Axis system prompt)
+->
+Reply displayed in thread
+```
+
+**Legacy video/overlay infrastructure architecture:**
 
 ```text
 Select Video
@@ -188,51 +209,22 @@ The goal is ownership, not generation.
 
 What can be deleted?
 
-If a system can be removed without hurting:
+**For Axis Conversation MVP:** if a change does not improve the conversation experience, it should be questioned.
 
-```text
-Video
-->
-Detection
-->
-Tracking
-->
-Overlay
-->
-Export
-```
-
-it should be considered for removal.
+**For video/overlay infrastructure:** if a system can be removed without hurting the Video → Detection → Tracking → Overlay → Export flow, it should be considered for removal.
 
 ---
 
-# Rule 10 - Overlay Quality Over Feature Count
+# Rule 10 - Quality Over Feature Count (Video/Overlay Infrastructure)
 
-Axis wins through presentation.
+> This rule applies to the video/overlay infrastructure layer, not the active Axis Conversation MVP.
 
-Priority order:
+When working on video overlay infrastructure, priority order is:
 
-1. Identity
-
-   * Player Ring
-   * Player Label
-
-2. Motion
-
-   * Ball Trail
-   * Pass Trail
-
-3. Replay Polish
-
-   * Slow Motion
-   * Freeze Frame
-   * Zoom
-
-4. Understanding
-
-   * Pressure
-   * Advantage
-   * Spacing
+1. Identity — Player Ring, Player Label
+2. Motion — Ball Trail, Pass Trail
+3. Replay Polish — Slow Motion, Freeze Frame, Zoom
+4. Understanding — Pressure, Advantage, Spacing
 
 Do not build interpretation layers before identity and motion feel premium.
 
@@ -254,10 +246,10 @@ Code is the last step, not the first.
 
 # Success Metric
 
-The first viewer reaction should be:
+**Axis Conversation MVP:**
+The first user reaction should be: "That actually moved the work forward."
+Not: "Interesting AI assistant."
 
-"That is my kid. That looks good."
-
-Not:
-
-"Interesting analytics."
+**Video/Overlay infrastructure:**
+The first viewer reaction should be: "That is my kid. That looks good."
+Not: "Interesting analytics."

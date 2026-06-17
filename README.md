@@ -41,10 +41,16 @@ Open `http://localhost:3000`.
 
 These capabilities exist in the codebase as infrastructure. They are not active in the current MVP page.
 
-## Documentation
+## Current Axis Source of Truth
 
-- `docs/AXIS_CONVERSATION_MVP.md` — MVP scope, product truth, acceptance tests
-- `docs/REPO_CLEANUP.md` — what changed, what was archived, what remains
+| Source | Purpose |
+|---|---|
+| `docs/AXIS_CONVERSATION_MVP.md` | MVP scope, product truth, acceptance tests, anti-patterns |
+| `docs/REPO_CLEANUP.md` | What changed, what was archived, what to not touch |
+| `src/app/axis/page.tsx` | Active page |
+| `src/app/api/axis/conversation/route.ts` | Active conversation API |
+
+Archived docs in `archive/*.legacy.md` are **historical context only** — they describe prior product directions (check-in loop, leaderboard, video overlay). They are not current truth.
 
 ## Legacy and infrastructure
 
