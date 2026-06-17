@@ -82,6 +82,36 @@ These may exist as legacy or future infrastructure in `src/lib/` and `src/app/ap
 
 ---
 
+## Axis Whiteboard Boundary
+
+Whiteboard is a thread comprehension view. It organizes the current Axis conversation thread into a readable board.
+
+Whiteboard is **not** a separate product, blank canvas, diagramming tool, hierarchy view, evidence engine, memory layer, or dashboard.
+
+Whiteboard **is** a page-based layout of sections generated entirely from the conversation history. Internal primitives drive the API reasoning but are never exposed to the user.
+
+Internal primitives (API only — never shown to the user):
+Points · Relationships · Groups · Time · Evidence · States · Changes
+
+User-facing sections (what the board shows):
+Main Idea · What We Noticed · What It Means · Evidence / Signals · Next Move
+
+Files:
+- `src/app/api/axis/whiteboard/route.ts` — Whiteboard API
+- `src/app/axis/whiteboard-view.tsx` — Whiteboard component
+- `src/app/axis/page.tsx` — View toggle (Conversation | Whiteboard)
+
+Blank/early state message: "Keep the conversation going. Whiteboard organizes the thread once there is something to understand."
+
+Do not:
+- Add manual editing or drag-and-drop to the whiteboard
+- Expose primitive labels to the user
+- Make whiteboard a separate page or route
+- Persist whiteboard state in the database
+- Add a canvas, floating cards, or SVG arrow layout
+
+---
+
 ## Legacy / Future Boundaries
 
 Preserved infrastructure — do not remove without explicit direction:

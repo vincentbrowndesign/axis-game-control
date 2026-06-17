@@ -1,33 +1,62 @@
+// Whiteboard is a thread comprehension view. It uses internal primitives to organize
+// the current Axis conversation thread into a readable board. It is not a separate
+// product, manual diagramming surface, hierarchy product, evidence engine,
+// memory layer, or dashboard.
+
 export const runtime = "nodejs";
 
-const WHITEBOARD_SYSTEM = `You are Axis organizing a conversation into a visual understanding map.
+const WHITEBOARD_SYSTEM = `You are Axis organizing a conversation thread into a readable comprehension board.
 
-Extract 3–7 key nodes from the conversation and the edges (logical relationships) between them.
+STEP 1 — Reason silently with internal primitives. Do not output these labels:
+- Points: the main things being discussed (people, skills, ideas, objects)
+- Relationships: how things connect (affects, causes, supports, hurts, depends on)
+- Groups: things that belong together (shooting, finishing, business, family)
+- Time: when things happened (today, last week, in the game, at practice)
+- Evidence: what supports the understanding (stats, quotes, observations, results)
+- States: current conditions (confident, hesitant, inconsistent, improving)
+- Changes: movement between states (hesitation → hunting, passive → aggressive)
 
-Return ONLY valid JSON. No commentary, no markdown fences, no extra text.
+STEP 2 — Organize your understanding into these user-facing sections:
+- Main Idea: the core subject of the thread
+- What We Noticed: observations and signals from the conversation
+- What It Means: interpretations, understanding, the real issue
+- Evidence / Signals: specific facts, stats, data, or direct quotes
+- Next Move: what should happen next
+
+STEP 3 — Return ONLY this JSON. No markdown fences. No commentary. No extra text.
 
 {
   "title": "lowercase 2–4 word title capturing the core subject",
-  "nodes": [
-    {
-      "id": "n1",
-      "number": 1,
-      "type": "question|answer|understanding|next_move|observation",
-      "content": "Readable standalone statement or question. Under 120 characters."
-    }
+  "summary": "one sentence describing what this conversation is about",
+  "sections": [
+    { "label": "Main Idea", "items": ["..."] },
+    { "label": "What We Noticed", "items": ["..."] },
+    { "label": "What It Means", "items": ["..."] },
+    { "label": "Evidence / Signals", "items": ["..."] },
+    { "label": "Next Move", "items": ["..."] }
   ],
-  "edges": [
-    { "from": "n1", "to": "n2" }
-  ]
+  "connections": [
+    { "from": "short label", "to": "short label", "label": "causes / leads to / supports / changes" }
+  ],
+  "primitives": {
+    "points": [],
+    "groups": [],
+    "evidence": [],
+    "states": [],
+    "changes": []
+  }
 }
 
 Rules:
-- 3–7 nodes only. Represent organized understanding, not raw conversation turns.
-- Exclude filler exchanges ("ok", "yes", "cool", "got it").
-- Questions lead to answers. Answers deepen into understanding. Understanding points to next moves.
-- Number nodes 1 through N in logical reading order.
-- Edges follow logical flow of thinking.
-- Title: 2–4 words, lowercase, the core subject of the conversation.`;
+- Always include Main Idea with at least one item.
+- Omit sections from the sections array if they have no content.
+- 2–5 items per section. Short human phrases. Use the user's own language when possible.
+- Do not use markdown in item text. No bold, no asterisks, no bullet characters.
+- Do not use primitive labels (Point:, State:, Evidence:, etc.) in user-facing section items.
+- Ignore filler exchanges ("ok", "yes", "cool", "got it").
+- Compress repeated ideas.
+- Connections are optional. Only include when the relationship is clear and useful. Max 3.
+- Primitives are for internal reasoning only. Fill them in so the structure is there for future use.`;
 
 interface ConvMessage {
   role: "user" | "assistant";
@@ -54,7 +83,7 @@ export async function POST(req: Request) {
 
   if (history.length < 2) {
     return Response.json(
-      { error: "Not enough conversation to map yet." },
+      { error: "not_enough" },
       { status: 400 },
     );
   }
@@ -73,12 +102,12 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1200,
+        max_tokens: 2000,
         system: WHITEBOARD_SYSTEM,
         messages: [
           {
             role: "user",
-            content: `Map this conversation into a whiteboard understanding map:\n\n${transcript}`,
+            content: `Organize this conversation thread into a whiteboard comprehension view:\n\n${transcript}`,
           },
         ],
       }),
@@ -86,7 +115,7 @@ export async function POST(req: Request) {
 
     if (!res.ok) {
       console.error("[axis/whiteboard] Anthropic error", res.status);
-      return Response.json({ error: "Map generation failed" }, { status: 500 });
+      return Response.json({ error: "Board generation failed" }, { status: 500 });
     }
 
     const data = (await res.json()) as {
@@ -96,13 +125,13 @@ export async function POST(req: Request) {
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return Response.json({ error: "Could not parse whiteboard map" }, { status: 500 });
+      return Response.json({ error: "Could not parse board" }, { status: 500 });
     }
 
-    const whiteboard = JSON.parse(jsonMatch[0]);
-    return Response.json(whiteboard);
+    const board = JSON.parse(jsonMatch[0]);
+    return Response.json(board);
   } catch (err) {
     console.error("[axis/whiteboard] error", (err as Error).message);
-    return Response.json({ error: "Map generation failed" }, { status: 500 });
+    return Response.json({ error: "Board generation failed" }, { status: 500 });
   }
 }

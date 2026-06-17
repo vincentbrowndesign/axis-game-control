@@ -1,5 +1,50 @@
 # Repo Cleanup
 
+## Whiteboard Correction Pass — 2026-06-17 (Final Pass)
+
+### Why this pass was needed
+
+The initial Axis Whiteboard Layer implementation treated the whiteboard as a separate product — a blank canvas with floating card nodes, SVG bezier arrows, push-pin accents, and an absolute-position layout algorithm. This felt disconnected from the conversation thread and violated the principle that the conversation is the product.
+
+### What changed
+
+**`src/app/api/axis/whiteboard/route.ts`** — Complete rewrite.
+
+Old: returned `{title, nodes[], edges[]}` — a node-edge graph for canvas layout.
+
+New: returns `{title, summary, sections[], connections[], primitives{}}` — a comprehension-page structure.
+
+The new system prompt instructs the API to:
+1. Reason silently with internal primitives (Points, Relationships, Groups, Time, Evidence, States, Changes)
+2. Output user-facing sections: Main Idea · What We Noticed · What It Means · Evidence / Signals · Next Move
+3. Never expose primitive labels to the user
+
+The primitives organize the board. They are not the board.
+
+**`src/app/axis/whiteboard-view.tsx`** — Complete rewrite.
+
+Old: canvas-based layout with absolute-positioned cards, SVG bezier arrows, push-pin accents, numbered circles, layout algorithm, dot-grid full background.
+
+New: page-based section layout. Title + summary at top. Sections as clean white cards with small uppercase labels. Items in Kalam font. Mobile-first single column, 2-column grid at 580px+. Main Idea and Next Move span full width. Connections shown as plain text below sections if present.
+
+Blank/early state: "Keep the conversation going. Whiteboard organizes the thread once there is something to understand."
+
+**`AGENTS.md`** — Added `## Axis Whiteboard Boundary` section defining what whiteboard is and is not, internal primitives, user-facing sections, and what agents must not add.
+
+### What was not touched
+
+- `src/app/axis/page.tsx` — view toggle and WhiteboardView mount unchanged
+- `src/app/api/axis/conversation/route.ts` — conversation API unchanged
+- All legacy/preserved infrastructure
+
+### Design rule confirmed
+
+> Primitives organize the board. They are not the board.
+
+The API uses internal primitives to reason. The user sees human-readable sections. The distinction must never collapse.
+
+---
+
 ## AGENTS.md Trim — 2026-06-17 (Pass 4)
 
 ### Why this pass was needed
