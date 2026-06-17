@@ -1,36 +1,54 @@
 # Axis
 
-Axis is a personal sports history system.
+Axis is a conversation product. The conversation itself is the product.
 
-Current loop:
+**Current MVP:** Axis Conversation — a single page where Axis helps the work develop through conversation.
 
-show up -> check in -> history grows -> leaderboard updates -> return tomorrow
+## What Axis is today
 
-Current direction:
+A clean conversation interface. The user brings rough work. Axis helps it develop.
 
-identity -> presence -> history -> ritual continuity
+Axis is not a dashboard, notebook, coach bot, tracker, analytics tool, or training system.
 
-The active product surface is the Check In ritual, Axis History, and the first effort-continuity leaderboard. Future media infrastructure must inherit from this loop.
+Active route: `/` → `/axis`
 
-## Active Context
-
-Read these before product work:
-
-- `AXIS_CONSTITUTION.md`
-- `context/core-loop.md`
-- `context/current-seam.md`
-- `context/project-overview.md`
-- `context/architecture.md`
-- `context/ui-direction.md`
-- `context/interaction-philosophy.md`
-- `context/progress-tracker.md`
-
-Older replay-first, topology, AI media, and experimental architecture documents live in `archive/`.
-
-## Development
+## How to run
 
 ```bash
 npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+## Where the active MVP lives
+
+- Page: `src/app/axis/page.tsx`
+- API: `src/app/api/axis/conversation/route.ts`
+
+## What is intentionally out of scope today
+
+- Voice
+- Camera
+- Upload
+- Dashboard
+- Sidebars
+- Cards
+- Analytics
+- Missions
+- Game tracking
+- Computer vision
+- Long-term memory
+
+These capabilities exist in the codebase as infrastructure. They are not active in the current MVP page.
+
+## Documentation
+
+- `docs/AXIS_CONVERSATION_MVP.md` — MVP scope, product truth, acceptance tests
+- `docs/REPO_CLEANUP.md` — what changed, what was archived, what remains
+
+## Legacy and infrastructure
+
+Video, CV, replay, overlay, and tracking infrastructure lives in:
+- `src/app/api/axis/` (all non-conversation API routes)
+- `src/lib/` (axis-operating-system, axis-cv-overlay, etc.)
+- `archive/` — archived product docs from prior directions
