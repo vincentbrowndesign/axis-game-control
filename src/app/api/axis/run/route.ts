@@ -81,6 +81,8 @@ interface BuildUnderstandingInput {
 interface BuildUnderstandingResult {
   understanding: AxisUnderstanding;
   stateUpdate?: StateUpdate;
+  reply?: string;
+  sketchDescription?: string;
 }
 
 interface AxisRunResponse {
@@ -150,13 +152,30 @@ Schema:
 
 ---
 
+ADDITIONAL FIELDS (add to the same JSON object, after stateUpdate):
+
+reply: One honest sentence. Your direct working reaction. Not a label. Not a framework term.
+Examples:
+- "That sounds like the decision is happening too late."
+- "What are you actually seeing when this happens in a game?"
+- "The pattern makes sense — the hesitation is the tell."
+- "That's a real problem. Let's figure out exactly when the dribble pick-up is happening."
+- "Before we go further — what changed recently?"
+
+sketch: null by default. Include only when a diagram would genuinely clarify something right now. Court positions, movement arrows, spacing, decision trees.
+Format when including: {"shouldDraw":true,"description":"precise description — name players by initial, show positions, arrows, what matters","type":"court_diagram|arrow_flow|spacing_diagram|decision_tree|timeline"}
+
+Add reply and sketch at the end of your JSON. If no sketch is needed, set sketch to null.
+
+---
+
 Few-shot examples:
 
 Input: "Hudson said ball path."
-{"concept":"ball path","focus":"repeatable ball path","belief":"Hudson's ball path is drifting instead of staying connected to his target line.","confidence":0.74,"primitives":["ball_path","direction","distance"],"currentPattern":{"label":"drifting path","objects":["ball","target_line"],"relationships":["ball moves away from target line"],"motion":["curve_out","late_correct"]},"targetPattern":{"label":"clean path","objects":["ball","target_line"],"relationships":["ball stays near target line"],"motion":["straight","repeat"]},"coachingCue":"Keep the ball inside your frame.","experiment":"10 reps. Track whether the ball stays inside the foot line.","evidenceRequest":"Show me one rep from the front.","stateUpdate":{"goal":"improve Hudson's shooting","focus":"repeatable ball path","currentBottleneck":"ball path drifts away from target line","nextAction":"Run 10 reps tracking ball path inside foot line.","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"ball-path-drift","statement":"Hudson's ball path drifts away from the target line instead of staying connected.","confidence":0.74}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["Hudson reported ball path issue"],"experimentResult":null,"newBreakthroughs":[]}}
+{"concept":"ball path","focus":"repeatable ball path","belief":"Hudson's ball path is drifting instead of staying connected to his target line.","confidence":0.74,"primitives":["ball_path","direction","distance"],"currentPattern":{"label":"drifting path","objects":["ball","target_line"],"relationships":["ball moves away from target line"],"motion":["curve_out","late_correct"]},"targetPattern":{"label":"clean path","objects":["ball","target_line"],"relationships":["ball stays near target line"],"motion":["straight","repeat"]},"coachingCue":"Keep the ball inside your frame.","experiment":"10 reps. Track whether the ball stays inside the foot line.","evidenceRequest":"Show me one rep from the front.","stateUpdate":{"goal":"improve Hudson's shooting","focus":"repeatable ball path","currentBottleneck":"ball path drifts away from target line","nextAction":"Run 10 reps tracking ball path inside foot line.","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"ball-path-drift","statement":"Hudson's ball path drifts away from the target line instead of staying connected.","confidence":0.74}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["Hudson reported ball path issue"],"experimentResult":null,"newBreakthroughs":[]},"reply":"Ball path drift is one of the most common blocks — let's pin down exactly where it's leaving the frame.","sketch":null}
 
-Input: "Hailey takes too long deciding."
-{"concept":"decision timing","focus":"pre-catch scan and decision","belief":"Hailey is recognizing the advantage late — she scans after the catch instead of before.","confidence":0.79,"primitives":["timing","advantage","orientation","position"],"currentPattern":{"label":"wait after catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey receives ball before scanning","defender reads hesitation"],"motion":["catch","pause","scan","decide"]},"targetPattern":{"label":"scan before catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey scans before ball arrives","decision made at catch"],"motion":["scan","catch_and_go"]},"coachingCue":"Know where you're going before it arrives.","experiment":"On every catch: scan, decide, act in one second.","evidenceRequest":"Upload one possession where she catches and pauses.","stateUpdate":{"goal":"improve Hailey's decision speed","focus":"pre-catch scan and decision","currentBottleneck":"scanning after catch instead of before","nextAction":"Practice pre-catch scan on every possession.","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"late-scan-timing","statement":"Hailey scans after the catch instead of before, causing decision delay.","confidence":0.79}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["Hailey takes too long deciding"],"experimentResult":null,"newBreakthroughs":[]}}`;
+Input: "Hailey catches on the wing and picks up her dribble early."
+{"concept":"decision timing","focus":"pre-catch scan and decision","belief":"Hailey is recognizing the advantage late — she scans after the catch instead of before.","confidence":0.79,"primitives":["timing","advantage","orientation","position"],"currentPattern":{"label":"wait after catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey receives ball before scanning","defender reads hesitation"],"motion":["catch","pause","scan","decide"]},"targetPattern":{"label":"scan before catch","objects":["Hailey","ball","defender","open_teammate"],"relationships":["Hailey scans before ball arrives","decision made at catch"],"motion":["scan","catch_and_go"]},"coachingCue":"Know where you're going before it arrives.","experiment":"On every catch: scan, decide, act in one second.","evidenceRequest":"Upload one possession where she catches and pauses.","stateUpdate":{"goal":"improve Hailey's decision speed","focus":"pre-catch scan and decision","currentBottleneck":"scanning after catch instead of before","nextAction":"Practice pre-catch scan on every possession.","newOpenQuestions":[],"resolvedQuestions":[],"newHypotheses":[{"id":"late-scan-timing","statement":"Hailey scans after the catch instead of before, causing decision delay.","confidence":0.79}],"confirmedHypothesisIds":[],"rejectedHypothesisIds":[],"newEvidence":["Hailey catches on wing and picks up dribble early"],"experimentResult":null,"newBreakthroughs":[]},"reply":"That sounds like the decision is happening too late — she's picking up the dribble before she knows where she's going.","sketch":{"shouldDraw":true,"description":"Half-court. H (Hailey) on left wing with ball, picking up dribble early. D1 (defender) shading her. D2 (help) in paint. Open player (O) in right corner. Arrow showing H should keep dribble and attack corner gap instead of picking up.","type":"court_diagram"}}`;
 
 // ---------------------------------------------------------------------------
 // Memory context builder
@@ -409,7 +428,7 @@ function stateUpdateFromUnderstanding(
 
 function parseUnderstanding(
   raw: string,
-): { understanding: AxisUnderstanding; stateUpdate?: StateUpdate } {
+): { understanding: AxisUnderstanding; stateUpdate?: StateUpdate; reply?: string; sketchDescription?: string } {
   try {
     const start = raw.indexOf("{");
     const end = raw.lastIndexOf("}");
@@ -442,14 +461,37 @@ function parseUnderstanding(
       evidenceRequest: typeof p.evidenceRequest === "string" ? p.evidenceRequest.trim() : "",
     };
 
-    return { understanding, stateUpdate: parseStateUpdate(p.stateUpdate) };
+    const reply =
+      typeof p.reply === "string" && p.reply.trim() ? p.reply.trim() : undefined;
+
+    const sketchData =
+      p.sketch && typeof p.sketch === "object"
+        ? (p.sketch as Record<string, unknown>)
+        : null;
+    const sketchDescription =
+      sketchData?.shouldDraw === true &&
+      typeof sketchData.description === "string" &&
+      sketchData.description.trim()
+        ? sketchData.description.trim()
+        : undefined;
+
+    return { understanding, stateUpdate: parseStateUpdate(p.stateUpdate), reply, sketchDescription };
   } catch {
     return { understanding: emptyUnderstanding() };
   }
 }
 
-function understandingToCards(u: AxisUnderstanding, stateUpdate: StateUpdate | undefined): AxisCard[] {
+function understandingToCards(
+  u: AxisUnderstanding,
+  stateUpdate: StateUpdate | undefined,
+  reply?: string,
+  sketchDescription?: string,
+): AxisCard[] {
   const cards: AxisCard[] = [];
+
+  if (reply) {
+    cards.push({ type: "reply", content: reply });
+  }
 
   if (u.belief) {
     cards.push({
@@ -491,8 +533,12 @@ function understandingToCards(u: AxisUnderstanding, stateUpdate: StateUpdate | u
     cards.push({ type: "breakthrough", content: b });
   }
 
+  if (sketchDescription) {
+    cards.push({ type: "sketch", content: "", data: { description: sketchDescription } });
+  }
+
   if (cards.length === 0) {
-    cards.push({ type: "question", content: "Tell me more about what you're working on." });
+    cards.push({ type: "question", content: "Tell me more about what we're working on." });
   }
 
   return cards;
@@ -740,6 +786,12 @@ async function buildUnderstanding(input: BuildUnderstandingInput): Promise<Build
       const result = parseUnderstanding(text);
       understanding = result.understanding;
       stateUpdate = result.stateUpdate;
+      return {
+        understanding: normalizeUnderstanding(understanding, input.priorUnderstanding, input.threadId),
+        stateUpdate,
+        reply: result.reply,
+        sketchDescription: result.sketchDescription,
+      };
     } else {
       console.error("[axis/run] Anthropic error", anthropicRes.status);
     }
@@ -825,6 +877,8 @@ async function handleRunCanonical(req: Request): Promise<Response> {
   let comparison: ReturnType<typeof runAxisOperatingSystem>["comparison"] | null = null;
   let understanding = priorUnderstanding;
   let stateUpdate: StateUpdate | undefined;
+  let builtReply: string | undefined;
+  let builtSketchDescription: string | undefined;
   // True when the turn is handled entirely by the observation path.
   let isObservationTurn = hasAttachment;
 
@@ -883,6 +937,8 @@ async function handleRunCanonical(req: Request): Promise<Response> {
       });
       understanding = built.understanding;
       stateUpdate = stateUpdateFromUnderstanding(built.stateUpdate, understanding);
+      builtReply = built.reply;
+      builtSketchDescription = built.sketchDescription;
     }
   }
 
@@ -938,7 +994,7 @@ async function handleRunCanonical(req: Request): Promise<Response> {
             : undefined,
         },
       ]
-    : understandingToCards(understanding, stateUpdate);
+    : understandingToCards(understanding, stateUpdate, builtReply, builtSketchDescription);
 
   await writeAxisEvent(sb, state.threadId, "assistant", {
     cards: response.cards,

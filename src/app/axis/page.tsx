@@ -15,7 +15,8 @@ interface Conversation {
 interface NotebookLine {
   id: string;
   text: string;
-  tone?: "memory" | "writing";
+  tone?: "memory" | "writing" | "sketch";
+  sketchDescription?: string;
 }
 
 type AuthPhase = "loading" | "guest" | "signed_in";
@@ -65,6 +66,7 @@ function summaryFromUnderstanding(understanding: AxisUnderstanding | null): stri
 
 function sentencesFromCards(cards: AxisCard[]): string[] {
   const selected = cards.flatMap((card) => {
+    if (card.type === "reply") return cleanVisibleSentence(card.content) ?? [];
     if (card.type === "belief") return cleanVisibleSentence(card.content) ?? [];
     if (card.type === "try_this" || card.type === "experiment" || card.type === "next_action") {
       return cleanVisibleSentence(card.content) ?? [];
@@ -76,7 +78,16 @@ function sentencesFromCards(cards: AxisCard[]): string[] {
     return [];
   });
 
-  return selected.slice(0, 3);
+  return selected.slice(0, 4);
+}
+
+function sketchCardsFrom(cards: AxisCard[]): Array<{ description: string }> {
+  return cards.flatMap((card) => {
+    if (card.type === "sketch" && typeof card.data?.description === "string" && card.data.description.trim()) {
+      return [{ description: card.data.description as string }];
+    }
+    return [];
+  });
 }
 
 function rememberFrom(threads: SidebarThread[], conversations: Conversation[]): string {
@@ -151,6 +162,15 @@ function buildNotebookLines({
     sentencesFromCards(conv.cards).forEach((text, index) => {
       lines.push({ id: `${conv.id}-axis-${index}`, text });
     });
+
+    sketchCardsFrom(conv.cards).forEach((sketch, index) => {
+      lines.push({
+        id: `${conv.id}-sketch-${index}`,
+        text: sketch.description,
+        tone: "sketch",
+        sketchDescription: sketch.description,
+      });
+    });
   }
 
   return [...memoryLines, ...lines];
@@ -173,10 +193,13 @@ export default function AxisPage() {
   const [memoryLines, setMemoryLines] = useState<NotebookLine[]>([]);
   const [momentPreview, setMomentPreview] = useState<string | null>(null);
 
+  const [loadedSketches, setLoadedSketches] = useState<Record<string, string>>({});
+
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<SpeechRecognition | null>(null);
+  const fetchedSketchIds = useRef<Set<string>>(new Set());
 
   const isActive = conversations.length > 0 || phase !== "idle";
   const memorySentence = rememberFrom(sidebarThreads, conversations);
@@ -238,6 +261,31 @@ export default function AxisPage() {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
     }
   }, [conversations, phase]);
+
+  useEffect(() => {
+    const pending = notebookLines.filter(
+      (l) =>
+        l.tone === "sketch" &&
+        l.sketchDescription &&
+        !fetchedSketchIds.current.has(l.id),
+    );
+    for (const line of pending) {
+      fetchedSketchIds.current.add(line.id);
+      const lineId = line.id;
+      fetch("/api/axis/sketch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: line.sketchDescription, threadId }),
+      })
+        .then((r) => r.json())
+        .then((data: { svg?: string }) => {
+          if (data.svg) {
+            setLoadedSketches((prev) => ({ ...prev, [lineId]: data.svg! }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [notebookLines, threadId]);
 
   useEffect(() => {
     if (!pendingFile) {
@@ -506,6 +554,26 @@ export default function AxisPage() {
   function renderNotebookLine(line: NotebookLine) {
     const isErased = erasedLines.has(line.id);
 
+    if (line.tone === "sketch") {
+      const svg = loadedSketches[line.id];
+      return (
+        <div key={line.id} className={`notebook-line-wrap notebook-line-wrap--sketch${isErased ? " is-erased" : ""}`}>
+          {svg ? (
+            <div
+              className="notebook-sketch"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          ) : (
+            <div className="thinking" aria-label="Drawing">
+              <span />
+              <span />
+              <span />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div key={line.id} className={`notebook-line-wrap${isErased ? " is-erased" : ""}`}>
         <button
@@ -547,7 +615,7 @@ export default function AxisPage() {
                 type="button"
                 onClick={() => inputRef.current?.focus()}
               >
-                What are you working on?
+                What are we working on?
               </button>
             )}
 
@@ -957,6 +1025,22 @@ export default function AxisPage() {
         .send-button:disabled {
           cursor: default;
           opacity: 0.25;
+        }
+
+        .notebook-line-wrap--sketch {
+          margin: 0 0 32px;
+        }
+
+        .notebook-sketch {
+          display: block;
+          max-width: 440px;
+          opacity: 0.86;
+        }
+
+        .notebook-sketch svg {
+          display: block;
+          height: auto;
+          max-width: 100%;
         }
 
         .moment-pill {

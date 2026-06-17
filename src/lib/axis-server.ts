@@ -97,7 +97,9 @@ export interface AxisCard {
     | "belief"
     | "see_it"
     | "try_this"
-    | "show_me";
+    | "show_me"
+    | "reply"
+    | "sketch";
   content: string;
   secondary?: string;
   cue?: string;
