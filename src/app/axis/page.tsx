@@ -17,14 +17,20 @@ export default function AxisPage() {
 
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const isInitial = messages.length === 1 && !loading;
 
   useEffect(() => {
-    if (threadRef.current) {
-      threadRef.current.scrollTop = threadRef.current.scrollHeight;
-    }
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    const ta = inputRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  }, [input]);
 
   async function send() {
     const text = input.trim();
@@ -91,6 +97,7 @@ export default function AxisPage() {
             )}
 
             {error && <p className="msg-error">{error}</p>}
+            <div ref={bottomRef} />
           </div>
         </div>
 
@@ -201,13 +208,11 @@ export default function AxisPage() {
         }
 
         .msg--assistant {
-          color: rgba(25, 24, 21, 0.9);
-          font-style: italic;
+          color: rgba(25, 24, 21, 0.82);
         }
 
         .msg--user {
           color: rgba(25, 24, 21, 0.98);
-          font-style: normal;
         }
 
         .helper {
@@ -287,9 +292,11 @@ export default function AxisPage() {
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
           font-size: 18px;
           line-height: 1.5;
-          min-height: 36px;
+          max-height: 160px;
+          min-height: 28px;
           min-width: 0;
           outline: 0;
+          overflow-y: auto;
           padding: 0;
           resize: none;
         }
