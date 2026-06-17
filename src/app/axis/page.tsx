@@ -84,7 +84,7 @@ export default function AxisPage() {
 
   return (
     <>
-      <main className="shell">
+      <main className={`shell${view === "whiteboard" ? " shell--whiteboard" : ""}`}>
         <header className="site-header">
           <span className="site-mark">Axis</span>
           <span className="site-sub">Develop the work through conversation.</span>
@@ -131,7 +131,7 @@ export default function AxisPage() {
             ))}
 
             {isInitial && (
-              <p className="helper">Bring the rough version. I'll help it develop.</p>
+              <p className="helper">Bring the rough version. I&apos;ll help it develop.</p>
             )}
 
             {loading && (
@@ -208,6 +208,12 @@ export default function AxisPage() {
           margin: 0 auto;
           max-width: 800px;
           padding: 0 clamp(20px, 5vw, 60px);
+          transition: max-width 0.18s ease, padding 0.18s ease;
+        }
+
+        .shell--whiteboard {
+          max-width: 1280px;
+          padding: 0 clamp(10px, 2.5vw, 34px);
         }
 
         .site-header {
