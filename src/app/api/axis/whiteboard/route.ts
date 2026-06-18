@@ -50,7 +50,7 @@ Use only these section labels when they fit:
 - ACTION ITEMS
 
 You may use a specific topic as a section label when it is more useful than a generic type, for example HAILEY, SHOOTING, FLOATERS, PRACTICE, OFFER, CUSTOMER, PRODUCT.
-Evidence belongs inside the section it supports when possible. Do not create a separate evidence graph or database view.
+Evidence belongs inside the section it supports. Do not create a separate evidence graph, relationship graph, connection view, or database view.
 
 STEP 3 - Return ONLY this JSON. No markdown fences. No commentary. No extra text.
 
@@ -64,9 +64,6 @@ STEP 3 - Return ONLY this JSON. No markdown fences. No commentary. No extra text
     { "label": "QUESTION", "items": ["..."] },
     { "label": "UNDERSTANDING", "items": ["..."] },
     { "label": "INTERVENTION", "items": ["..."] }
-  ],
-  "connections": [
-    { "from": "short label", "to": "short label", "label": "causes / leads to / supports / changes" }
   ],
   "primitives": {
     "points": [],
@@ -85,9 +82,10 @@ Rules:
 - Do not use markdown in item text. No bold, no asterisks, no bullet characters.
 - Do not include leading symbols like ->, ?, checkmarks, or emoji. The interface will add whiteboard marks.
 - Do not use primitive labels (Point:, State:, Evidence:, etc.) in user-facing section items.
+- Put evidence items inside the relevant section, for example "Game Clip", "7 Attempts", or "Coach Observation".
 - Ignore filler exchanges ("ok", "yes", "cool", "got it").
 - Compress repeated ideas.
-- Connections are optional for internal continuity. The interface may render relationships as simple arrows or annotations only when useful. Max 3.
+- Do not create separate user-facing connections. If a relationship matters, express it as a PATTERN, UNDERSTANDING, or INTERVENTION section item.
 - Primitives are for internal reasoning only. Fill them in so the structure is there for future use.`;
 
 interface ConvMessage {

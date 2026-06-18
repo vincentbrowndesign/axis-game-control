@@ -15,17 +15,10 @@ interface WBSection {
   items: string[];
 }
 
-interface WBConnection {
-  from: string;
-  to: string;
-  label: string;
-}
-
 interface WBData {
   title: string;
   summary?: string;
   sections: WBSection[];
-  connections?: WBConnection[];
 }
 
 interface Props {
@@ -119,7 +112,6 @@ export default function WhiteboardView({ history }: Props) {
 
   const showEmpty = !hasThreadContent || (!loading && !error && !data);
   const sections = (data?.sections ?? []).filter((s) => s.items?.length > 0);
-  const notes = (data?.connections ?? []).filter((c) => c.from && c.to && c.label);
 
   return (
     <>
@@ -175,20 +167,6 @@ export default function WhiteboardView({ history }: Props) {
               })}
             </div>
 
-            {notes.length > 0 && (
-              <section className="wb-margin-notes" aria-label="Margin notes">
-                <h3 className="wb-margin-title">MARGIN NOTES</h3>
-                {notes.map((note, index) => (
-                  <p key={index} className="wb-note">
-                    {note.from}
-                    <span aria-hidden="true"> {"->"} </span>
-                    {note.label}
-                    <span aria-hidden="true"> {"->"} </span>
-                    {note.to}
-                  </p>
-                ))}
-              </section>
-            )}
           </section>
         )}
       </div>
@@ -205,7 +183,7 @@ export default function WhiteboardView({ history }: Props) {
           background-size: auto, 24px 24px;
           flex: 1 0 auto;
           min-height: calc(100svh - 48px);
-          padding: 24px clamp(18px, 4vw, 64px) 180px;
+          padding: 24px clamp(18px, 4vw, 72px) 180px;
         }
 
         .wb-state {
@@ -263,8 +241,7 @@ export default function WhiteboardView({ history }: Props) {
         }
 
         .wb-board {
-          margin: 0 auto;
-          max-width: 1160px;
+          width: 100%;
         }
 
         .wb-heading {
@@ -303,7 +280,7 @@ export default function WhiteboardView({ history }: Props) {
           font-size: 19px;
           line-height: 1.35;
           margin: 14px 0 0;
-          max-width: 760px;
+          max-width: 880px;
         }
 
         .wb-sections {
@@ -313,12 +290,7 @@ export default function WhiteboardView({ history }: Props) {
         }
 
         .wb-section {
-          max-width: 900px;
           position: relative;
-        }
-
-        .wb-section:nth-child(even) {
-          margin-left: min(9vw, 96px);
         }
 
         .wb-section::before {
@@ -344,7 +316,7 @@ export default function WhiteboardView({ history }: Props) {
           position: absolute;
           top: 22px;
           transform: rotate(-1.4deg);
-          width: min(100%, 560px);
+          width: min(100%, 640px);
         }
 
         .wb-section--pattern .wb-item span:last-child,
@@ -404,44 +376,9 @@ export default function WhiteboardView({ history }: Props) {
           text-align: center;
         }
 
-        .wb-margin-notes {
-          border-top: 2px solid rgba(25, 24, 21, 0.2);
-          margin-top: 42px;
-          max-width: 760px;
-          padding-top: 16px;
-          transform: rotate(-0.5deg);
-        }
-
-        .wb-margin-title {
-          color: rgba(25, 24, 21, 0.42);
-          font-family: "Kalam", "Comic Sans MS", cursive;
-          font-size: 16px;
-          font-weight: 700;
-          margin: 0 0 8px;
-        }
-
-        .wb-note {
-          color: rgba(25, 24, 21, 0.48);
-          font-family: "Kalam", "Comic Sans MS", cursive;
-          font-size: 16px;
-          line-height: 1.3;
-          margin: 0 0 8px;
-        }
-
-        .wb-note span {
-          color: rgba(218, 82, 54, 0.62);
-          font-weight: 700;
-        }
-
         @media (max-width: 760px) {
           .wb {
             padding: 22px 14px 180px;
-          }
-
-          .wb-section,
-          .wb-section:nth-child(even) {
-            margin-left: 0;
-            max-width: none;
           }
 
           .wb-title {

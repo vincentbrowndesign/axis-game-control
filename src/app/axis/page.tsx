@@ -213,7 +213,7 @@ export default function AxisPage() {
 
         .shell--whiteboard {
           height: auto;
-          max-width: 1280px;
+          max-width: none;
           min-height: 100svh;
           padding: 0 clamp(10px, 2.5vw, 34px);
         }
