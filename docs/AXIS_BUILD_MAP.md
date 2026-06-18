@@ -35,18 +35,19 @@ Refine Current:
 Do Not Build Yet:
 
 1. Whiteboard Renderer
-2. Evidence Layer
-3. Witness Layer
-4. Mission Layer
-5. Challenge System
-6. Memory Layer
-7. Voice Layer
-8. Camera Layer
-9. Upload / Media Layer
-10. CV / Replay / Overlay
-11. Annotation Layer
-12. Sketch Layer
-13. Export Layer
+2. Board Object Layer
+3. Evidence Layer
+4. Witness Layer
+5. Mission Layer
+6. Challenge System
+7. Memory Layer
+8. Voice Layer
+9. Camera Layer
+10. Upload / Media Layer
+11. CV / Replay / Overlay
+12. Annotation Layer
+13. Sketch Layer
+14. Export Layer
 
 ## Decision Labels
 
@@ -84,6 +85,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | `/api/axis/conversation` | API | Conversation | Active | Structured response generation | Refine Current | Should return reply + threadBoard cleanly. |
 | Thread Board sanitization | Infrastructure | Thread Board | Needed | Render-safe output validation | Refine Current | Board cannot show raw markdown, debug text, or weird glitches. |
 | Whiteboard Renderer | Future renderer | Understanding | Prototype demoted | Detective board, coaching whiteboard, strategy board | Future Layer | Useful later, but not the product and not a mode now. |
+| Axis Whiteboard Renderer / Board Object Layer | Future capsule | Whiteboard/Future | Defined only | Spatial board object renderer | Define Capsule | Make useful understanding object-ready before making objects permanent. Not Build Now. |
 | Whiteboard View | UI surface | Future | Preserved prototype | Whiteboard summary | Hold | Should not be active until Thread Board proves value. |
 | Cards | Visual form | UI | Risky | Modular response objects | Hold | Cards are renderers, not the product. |
 | Evidence Layer | Capability | Evidence | Defined but inactive | Legal case files, clinical proof, sports film | Research Proof | Needs proof rules before build. |
