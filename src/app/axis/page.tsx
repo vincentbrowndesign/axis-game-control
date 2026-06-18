@@ -202,14 +202,14 @@ export default function AxisPage() {
           height: 100dvh;
           overflow: hidden;
           position: relative;
-          width: 100vw;
+          width: 100%;
         }
 
         .room {
           display: grid;
           flex: 1;
           gap: clamp(32px, 5vw, 84px);
-          grid-template-columns: minmax(300px, 0.68fr) minmax(520px, 1.32fr);
+          grid-template-columns: minmax(280px, 0.68fr) minmax(0, 1.32fr);
           min-height: 0;
           overflow: hidden;
           padding: 20px clamp(18px, 4vw, 64px) 112px;
@@ -355,6 +355,7 @@ export default function AxisPage() {
           overflow-y: auto;
           padding: clamp(18px, 2.5vw, 38px) 0 32px;
           scrollbar-width: none;
+          width: 100%;
         }
 
         .board-stage::-webkit-scrollbar {
@@ -395,6 +396,7 @@ export default function AxisPage() {
           padding: 0 clamp(16px, 3vw, 36px) max(14px, env(safe-area-inset-bottom));
           position: fixed;
           right: 0;
+          width: 100%;
           z-index: 3;
         }
 
@@ -519,6 +521,52 @@ export default function AxisPage() {
           .send-btn {
             height: 30px;
             padding-inline: 11px;
+          }
+        }
+
+        @media (min-width: 761px) and (max-width: 1180px) {
+          .room {
+            gap: clamp(20px, 3vw, 36px);
+            grid-template-columns: minmax(240px, 0.5fr) minmax(0, 1.5fr);
+            padding-inline: clamp(14px, 2.6vw, 32px);
+          }
+
+          .board-stage {
+            padding-top: clamp(14px, 2vw, 24px);
+          }
+
+          .msg {
+            font-size: clamp(16px, 1.8vw, 19px);
+            line-height: 1.42;
+          }
+        }
+
+        @media (min-width: 761px) and (max-width: 980px) {
+          .room {
+            display: block;
+            padding-bottom: max(138px, calc(env(safe-area-inset-bottom) + 116px));
+            padding-inline: 16px;
+          }
+
+          .conversation-panel {
+            height: 100%;
+          }
+
+          .inline-board {
+            display: block;
+          }
+
+          .board-stage {
+            display: none;
+          }
+
+          .thread {
+            padding-bottom: 118px;
+            scroll-padding-bottom: 172px;
+          }
+
+          .thread-inner {
+            gap: 12px;
           }
         }
       `}</style>

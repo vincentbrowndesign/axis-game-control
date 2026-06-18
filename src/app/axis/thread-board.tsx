@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
 export type ThreadBoardSectionType =
   | "observation"
@@ -74,6 +74,16 @@ function clampDelta(delta: number, min: number, max: number) {
   return Math.min(Math.max(delta, min), max);
 }
 
+function supportsSectionMovement(containerWidth: number) {
+  if (typeof window === "undefined") return false;
+
+  const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+  const landscape = window.matchMedia("(orientation: landscape)").matches;
+  const wideTouchSurface = coarsePointer && landscape && window.innerWidth >= 900;
+
+  return containerWidth >= 680 && (!coarsePointer || wideTouchSurface);
+}
+
 export default function ThreadBoard({ board }: Props) {
   const sections = useMemo(
     () =>
@@ -110,6 +120,7 @@ export default function ThreadBoard({ board }: Props) {
     values: {},
   });
   const [activeObjectId, setActiveObjectId] = useState<string | null>(null);
+  const [canMoveSections, setCanMoveSections] = useState(false);
   const sectionsRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     id: string;
@@ -141,6 +152,76 @@ export default function ThreadBoard({ board }: Props) {
     [boardKey, runtimeState, sections],
   );
 
+  useEffect(() => {
+    const container = sectionsRef.current;
+    if (!container) return;
+    const measuredContainer = container;
+
+    function clampCurrentLayout() {
+      const nextCanMove = supportsSectionMovement(measuredContainer.clientWidth);
+      setCanMoveSections(nextCanMove);
+
+      setRuntimeState((currentRuntime) => {
+        if (currentRuntime.boardKey !== boardKey) {
+          return { boardKey, values: {} };
+        }
+
+        const containerRect = measuredContainer.getBoundingClientRect();
+        let changed = false;
+        const nextValues = { ...currentRuntime.values };
+
+        Object.entries(currentRuntime.values).forEach(([id, runtime]) => {
+          const sectionElement = measuredContainer.querySelector<HTMLElement>(
+            `[data-section-object-id="${id}"]`,
+          );
+          if (!sectionElement) return;
+
+          const rect = sectionElement.getBoundingClientRect();
+          const nudgedX =
+            rect.left < containerRect.left
+              ? containerRect.left - rect.left
+              : rect.right > containerRect.right
+                ? containerRect.right - rect.right
+                : 0;
+          const nudgedY =
+            rect.top < containerRect.top
+              ? containerRect.top - rect.top
+              : rect.bottom > containerRect.bottom
+                ? containerRect.bottom - rect.bottom
+                : 0;
+
+          if (nudgedX || nudgedY) {
+            changed = true;
+            nextValues[id] = {
+              position: {
+                x: runtime.position.x + nudgedX,
+                y: runtime.position.y + nudgedY,
+              },
+              updatedAt: Date.now(),
+            };
+          }
+        });
+
+        return changed ? { boardKey, values: nextValues } : currentRuntime;
+      });
+    }
+
+    const frame = window.requestAnimationFrame(clampCurrentLayout);
+    const observer = new ResizeObserver(() => {
+      window.requestAnimationFrame(clampCurrentLayout);
+    });
+    observer.observe(container);
+    window.addEventListener("orientationchange", clampCurrentLayout);
+    window.addEventListener("resize", clampCurrentLayout);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("orientationchange", clampCurrentLayout);
+      window.removeEventListener("resize", clampCurrentLayout);
+    };
+  }, [boardKey]);
+
   if (!board || typeof board.title !== "string") return null;
 
   if (!board.title.trim() && !board.summary?.trim() && sections.length === 0) {
@@ -148,7 +229,7 @@ export default function ThreadBoard({ board }: Props) {
   }
 
   function handlePointerDown(event: PointerEvent<HTMLButtonElement>, object: BoardSectionObject) {
-    if (event.button !== 0 || window.innerWidth <= 760) return;
+    if (event.button !== 0 || !canMoveSections) return;
 
     const sectionElement = event.currentTarget.closest(".thread-board-section");
     const containerElement = sectionsRef.current;
@@ -168,7 +249,7 @@ export default function ThreadBoard({ board }: Props) {
 
   function handlePointerMove(event: PointerEvent<HTMLButtonElement>) {
     const drag = dragRef.current;
-    if (!drag) return;
+    if (!drag || !canMoveSections) return;
 
     const rawDeltaX = event.clientX - drag.startX;
     const rawDeltaY = event.clientY - drag.startY;
@@ -231,15 +312,18 @@ export default function ThreadBoard({ board }: Props) {
                 key={`${object.id}-${index}`}
                 className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken}${activeObjectId === object.id ? " thread-board-section--active" : ""}`}
                 style={{
-                  transform: `translate3d(${object.position.x}px, ${object.position.y}px, 0)`,
+                  transform: canMoveSections
+                    ? `translate3d(${object.position.x}px, ${object.position.y}px, 0)`
+                    : "none",
                 }}
                 data-section-type={typeToken}
                 data-section-label={labelToken}
+                data-section-object-id={object.id}
               >
                 <h4 className="thread-board-label">
                   <button
                     aria-label={`Move ${object.label}`}
-                    className="thread-board-handle"
+                    className={`thread-board-handle${canMoveSections ? "" : " thread-board-handle--static"}`}
                     type="button"
                     onPointerDown={(event) => handlePointerDown(event, object)}
                     onPointerMove={handlePointerMove}
@@ -268,6 +352,8 @@ export default function ThreadBoard({ board }: Props) {
           margin: 0;
           max-width: 980px;
           min-height: min(640px, calc(100dvh - 180px));
+          min-width: 0;
+          overflow-x: clip;
           padding: 0;
           width: 100%;
         }
@@ -276,6 +362,7 @@ export default function ThreadBoard({ board }: Props) {
           align-self: start;
           border-top: 2px solid rgba(25, 24, 21, 0.78);
           max-width: 34rem;
+          min-width: 0;
           padding-top: clamp(14px, 2vw, 24px);
         }
 
@@ -285,6 +372,8 @@ export default function ThreadBoard({ board }: Props) {
           font-weight: 600;
           line-height: 0.98;
           margin: 0 0 14px;
+          max-width: 100%;
+          overflow-wrap: anywhere;
         }
 
         .thread-board-summary {
@@ -293,6 +382,7 @@ export default function ThreadBoard({ board }: Props) {
           line-height: 1.42;
           margin: 0;
           max-width: 38ch;
+          overflow-wrap: anywhere;
         }
 
         .thread-board-sections {
@@ -312,6 +402,7 @@ export default function ThreadBoard({ board }: Props) {
           border-radius: 2px;
           box-shadow: 0 1px 0 rgba(25, 24, 21, 0.06);
           min-width: min(240px, 100%);
+          overflow-wrap: anywhere;
           padding: clamp(12px, 1.35vw, 18px);
           position: relative;
           transition: box-shadow 0.12s ease;
@@ -396,6 +487,11 @@ export default function ThreadBoard({ board }: Props) {
           cursor: grabbing;
         }
 
+        .thread-board-handle--static {
+          cursor: default;
+          touch-action: auto;
+        }
+
         .thread-board-items {
           color: rgba(25, 24, 21, 0.78);
           font-size: clamp(15px, 1.25vw, 18px);
@@ -412,6 +508,7 @@ export default function ThreadBoard({ board }: Props) {
           .thread-board {
             grid-template-columns: 1fr;
             min-height: 0;
+            max-width: 100%;
           }
 
           .thread-board-anchor {
@@ -419,7 +516,24 @@ export default function ThreadBoard({ board }: Props) {
           }
 
           .thread-board-sections {
+            grid-template-columns: 1fr;
             max-width: 100%;
+            overflow: visible;
+            padding: 0;
+          }
+
+          .thread-board-section {
+            min-width: 0;
+            transform: none !important;
+            will-change: auto;
+          }
+
+          .thread-board-section,
+          .thread-board-section:nth-child(2n),
+          .thread-board-section:nth-child(3n) {
+            grid-column: auto;
+            margin-top: 0;
+            max-width: none;
           }
         }
 
