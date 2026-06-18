@@ -1,3 +1,7 @@
+"use client";
+
+import { useMemo, useRef, useState, type PointerEvent } from "react";
+
 export type ThreadBoardSectionType =
   | "observation"
   | "pattern"
@@ -23,6 +27,25 @@ interface Props {
   board?: ThreadBoardData | null;
 }
 
+interface BoardSectionObject {
+  id: string;
+  sectionType: ThreadBoardSectionType;
+  label: string;
+  items: string[];
+  position: {
+    x: number;
+    y: number;
+  };
+  size?: {
+    width?: number;
+    height?: number;
+  };
+  isPinned?: boolean;
+  isCollapsed?: boolean;
+  createdFromThreadMessageId?: string;
+  updatedAt: number;
+}
+
 function sectionToken(value: string) {
   return value
     .trim()
@@ -32,29 +55,101 @@ function sectionToken(value: string) {
     .replace(/^_+|_+$/g, "");
 }
 
-export default function ThreadBoard({ board }: Props) {
-  if (!board || typeof board.title !== "string") return null;
+function sectionObjectId(section: Pick<ThreadBoardSection, "type" | "label">) {
+  return `${sectionToken(section.type)}-${sectionToken(section.label)}`;
+}
 
-  const sections = Array.isArray(board.sections)
-    ? board.sections
-        .map((section) => ({
-          ...section,
-          items: Array.isArray(section.items)
-            ? section.items
-                .filter((item) => typeof item === "string" && item.trim())
-                .slice(0, 4)
-            : [],
-        }))
-        .filter(
-          (section) =>
-            typeof section.label === "string" &&
-            section.label.trim() &&
-            section.items.length > 0,
-        )
-    : [];
+export default function ThreadBoard({ board }: Props) {
+  const sections = useMemo(
+    () =>
+      Array.isArray(board?.sections)
+        ? board.sections
+            .map((section) => ({
+              ...section,
+              items: Array.isArray(section.items)
+                ? section.items
+                    .filter((item) => typeof item === "string" && item.trim())
+                    .slice(0, 4)
+                : [],
+            }))
+            .filter(
+              (section) =>
+                typeof section.label === "string" &&
+                section.label.trim() &&
+                section.items.length > 0,
+            )
+        : [],
+    [board],
+  );
+  const [runtimeById, setRuntimeById] = useState<
+    Record<string, Pick<BoardSectionObject, "position" | "updatedAt">>
+  >({});
+  const dragRef = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+    origin: BoardSectionObject["position"];
+  } | null>(null);
+
+  const objects = useMemo<BoardSectionObject[]>(
+    () =>
+      sections.map((section) => {
+        const id = sectionObjectId(section);
+        const runtime = runtimeById[id];
+
+        return {
+          id,
+          sectionType: section.type,
+          label: section.label,
+          items: section.items,
+          position: runtime?.position ?? { x: 0, y: 0 },
+          updatedAt: runtime?.updatedAt ?? 0,
+        };
+      }),
+    [runtimeById, sections],
+  );
+
+  if (!board || typeof board.title !== "string") return null;
 
   if (!board.title.trim() && !board.summary?.trim() && sections.length === 0) {
     return null;
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLButtonElement>, object: BoardSectionObject) {
+    if (event.button !== 0 || window.innerWidth <= 760) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      id: object.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin: object.position,
+    };
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+
+    const nextPosition = {
+      x: drag.origin.x + event.clientX - drag.startX,
+      y: drag.origin.y + event.clientY - drag.startY,
+    };
+
+    setRuntimeById((currentRuntime) => ({
+      ...currentRuntime,
+      [drag.id]: {
+        position: nextPosition,
+        updatedAt: Date.now(),
+      },
+    }));
+  }
+
+  function handlePointerEnd(event: PointerEvent<HTMLButtonElement>) {
+    if (dragRef.current) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current = null;
   }
 
   return (
@@ -68,20 +163,35 @@ export default function ThreadBoard({ board }: Props) {
 
       {sections.length > 0 && (
         <div className="thread-board-sections">
-          {sections.map((section, index) => {
-            const labelToken = sectionToken(section.label);
-            const typeToken = sectionToken(section.type);
+          {objects.map((object, index) => {
+            const labelToken = sectionToken(object.label);
+            const typeToken = sectionToken(object.sectionType);
 
             return (
               <section
-                key={`${section.type}-${section.label}-${index}`}
+                key={`${object.id}-${index}`}
                 className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken}`}
+                style={{
+                  transform: `translate3d(${object.position.x}px, ${object.position.y}px, 0)`,
+                }}
                 data-section-type={typeToken}
                 data-section-label={labelToken}
               >
-                <h4 className="thread-board-label">{section.label}</h4>
+                <h4 className="thread-board-label">
+                  <button
+                    aria-label={`Move ${object.label}`}
+                    className="thread-board-handle"
+                    type="button"
+                    onPointerDown={(event) => handlePointerDown(event, object)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerEnd}
+                    onPointerCancel={handlePointerEnd}
+                  >
+                    {object.label}
+                  </button>
+                </h4>
                 <ul className="thread-board-items">
-                  {section.items.map((item, itemIndex) => (
+                  {object.items.map((item, itemIndex) => (
                     <li key={itemIndex}>{item}</li>
                   ))}
                 </ul>
@@ -142,6 +252,8 @@ export default function ThreadBoard({ board }: Props) {
           min-width: 0;
           padding: clamp(12px, 1.35vw, 18px);
           position: relative;
+          transition: box-shadow 0.12s ease;
+          will-change: transform;
         }
 
         .thread-board-section::before {
@@ -190,13 +302,30 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-label {
+          margin: 0 0 10px;
+          padding-top: 10px;
+        }
+
+        .thread-board-handle {
+          background: transparent;
+          border: 0;
           color: rgba(25, 24, 21, 0.5);
+          cursor: grab;
+          display: block;
+          font-family: inherit;
           font-size: 12px;
           font-weight: 600;
           letter-spacing: 0.05em;
-          margin: 0 0 10px;
-          padding-top: 10px;
+          margin: 0;
+          padding: 0;
+          text-align: left;
           text-transform: uppercase;
+          touch-action: none;
+          width: 100%;
+        }
+
+        .thread-board-handle:active {
+          cursor: grabbing;
         }
 
         .thread-board-items {
@@ -260,13 +389,20 @@ export default function ThreadBoard({ board }: Props) {
           }
 
           .thread-board-label {
-            font-size: 9.5px;
             margin-bottom: 3px;
             padding-top: 6px;
           }
 
+          .thread-board-handle {
+            cursor: default;
+            font-size: 9.5px;
+            touch-action: auto;
+          }
+
           .thread-board-section {
             padding: 7px 8px;
+            transform: none !important;
+            will-change: auto;
           }
 
           .thread-board-section::before {

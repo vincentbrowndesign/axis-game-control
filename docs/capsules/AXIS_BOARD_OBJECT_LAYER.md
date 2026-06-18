@@ -1,8 +1,8 @@
 # Axis Board Object Layer
 
-Status: Future
-Build Decision: Define Capsule
-Active Build: No
+Status: Future capsule with one active local prototype slice
+Build Decision: Build Now only for BoardSectionObject Local Prototype
+Active Build: BoardSectionObject Local Prototype only
 
 Locked sentence:
 
@@ -12,7 +12,7 @@ Axis should make every useful piece of understanding object-ready before it make
 
 The Axis Board Object Layer defines a future boundary for the Axis Whiteboard Renderer and spatial board objects.
 
-This is not an implementation request. This capsule exists so future work can talk about board objects without accidentally building a manual whiteboard app inside the current MVP.
+The full capsule is still not an implementation request. The only active slice is the local-only BoardSectionObject prototype.
 
 ## Current MVP Boundary
 
@@ -43,6 +43,36 @@ When a board exists, `threadBoard` still uses the existing `ThreadBoardData` sha
 
 The current product should keep making Thread Board sections compact, readable, and object-ready without creating stored objects.
 
+## Active Slice: BoardSectionObject Local Prototype
+
+Build Decision:
+
+Build Now, limited to local-only BoardSectionObject prototype.
+
+This is the only Build Now part of the Axis Whiteboard Renderer / Board Object Layer capsule.
+
+The prototype may:
+
+- convert generated Thread Board sections into local BoardSectionObject render units
+- allow generated section objects to move locally
+- keep all object state in React state only
+- reset layout on refresh
+- preserve positions by section label if simple and safe
+
+The prototype must not:
+
+- change the `reply + threadBoard` API contract
+- add `board_items`
+- create `AxisBoardItem`
+- persist layout
+- create memory
+- create evidence
+- upload files
+- add camera, voice, CV, replay, 3D, or media
+- add card or note creation
+- add drawing tools
+- allow manual content editing
+
 ## What Object-Ready Means Now
 
 Object-ready means each useful piece of understanding can stand on its own visually and semantically.
@@ -56,7 +86,7 @@ Current Thread Board sections may have:
 - readable spacing
 - enough structure to become objects later
 
-Object-ready does not mean persisted objects, movable objects, manual editing, or a new schema.
+Object-ready does not mean persisted objects, manual editing, or a new API schema.
 
 ## Future Object Candidates
 
@@ -82,7 +112,7 @@ Do not build these from this capsule yet:
 
 - `AxisBoardItem`
 - `board_items` API
-- draggable cards
+- draggable cards beyond generated local BoardSectionObject sections
 - absolute-position canvas
 - x/y coordinates
 - pan or zoom

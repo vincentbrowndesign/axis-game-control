@@ -22,6 +22,7 @@ Build Now:
 1. Axis Conversation Layer
 2. Axis Understanding Primitives
 3. Axis Thread Board
+4. Board Object Layer: Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet.
 
 Refine Current:
 
@@ -35,7 +36,7 @@ Refine Current:
 Do Not Build Yet:
 
 1. Whiteboard Renderer
-2. Board Object Layer
+2. Board Object Layer beyond BoardSectionObject local-only prototype
 3. Evidence Layer
 4. Witness Layer
 5. Mission Layer
@@ -85,7 +86,8 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | `/api/axis/conversation` | API | Conversation | Active | Structured response generation | Refine Current | Should return reply + threadBoard cleanly. |
 | Thread Board sanitization | Infrastructure | Thread Board | Needed | Render-safe output validation | Refine Current | Board cannot show raw markdown, debug text, or weird glitches. |
 | Whiteboard Renderer | Future renderer | Understanding | Prototype demoted | Detective board, coaching whiteboard, strategy board | Future Layer | Useful later, but not the product and not a mode now. |
-| Axis Whiteboard Renderer / Board Object Layer | Future capsule | Whiteboard/Future | Defined only | Spatial board object renderer | Define Capsule | Make useful understanding object-ready before making objects permanent. Not Build Now. |
+| Axis Whiteboard Renderer / Board Object Layer | Future capsule | Whiteboard/Future | Narrow local prototype active | Spatial board object renderer | Define Capsule | Board Object Layer is Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet. |
+| BoardSectionObject Local Prototype | Local renderer slice | Thread Board | Active prototype | Movable generated section blocks | Build Now | Lets users arrange generated sections locally without changing API, saving memory, creating evidence, or adding manual object creation. |
 | Whiteboard View | UI surface | Future | Preserved prototype | Whiteboard summary | Hold | Should not be active until Thread Board proves value. |
 | Cards | Visual form | UI | Risky | Modular response objects | Hold | Cards are renderers, not the product. |
 | Evidence Layer | Capability | Evidence | Defined but inactive | Legal case files, clinical proof, sports film | Research Proof | Needs proof rules before build. |

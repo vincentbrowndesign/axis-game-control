@@ -18,13 +18,14 @@ This index controls which capability capsules are active, which are future, and 
 | `/axis` page | Active MVP surface | Refine Current | Must become gym-readable and one-flow. |
 | `/api/axis/conversation` | Active API | Refine Current | Returns reply + threadBoard. |
 | Thread Board rendering | Active renderer | Refine Current | Must be compact, sanitized, readable, and non-dashboard. |
+| BoardSectionObject Local Prototype | Active local prototype | Build Now | Converts generated Thread Board sections into movable local render units only. No API change, persistence, memory, evidence, upload, or manual creation. |
 
 ## Future / Hold Capsules
 
 | Capsule | Status | Build Decision | Notes |
 |---|---|---|---|
 | Axis Whiteboard Renderer | Future | Future Layer | Renderer only. Not the product. Not active MVP. |
-| Axis Whiteboard Renderer / Board Object Layer | Future | Define Capsule | Defined in `docs/capsules/AXIS_BOARD_OBJECT_LAYER.md`. Future spatial board objects only. Do not build draggable objects, AxisBoardItem, uploads, voice, camera, memory, or CV. |
+| Axis Whiteboard Renderer / Board Object Layer | Future | Define Capsule | Defined in `docs/capsules/AXIS_BOARD_OBJECT_LAYER.md`. Mostly future. Only BoardSectionObject Local Prototype is Build Now; draggable cards beyond generated sections, AxisBoardItem, uploads, voice, camera, memory, evidence, persistence, and CV remain locked out. |
 | Axis Evidence Layer | Future | Research Proof | Needs proof rules before build. |
 | Axis Witness Layer | Future | Research Proof | Needs source/confidence boundaries. |
 | Axis Mission Layer | Future | Hold | Depends on clean understanding and evidence boundaries. |
