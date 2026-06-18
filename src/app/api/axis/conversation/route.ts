@@ -28,6 +28,9 @@ Reply rules:
 - If the prompt is short or ambiguous, name what is usually underneath it before asking anything.
 - Short gym phrases are not too thin. Treat them as the thread title and make a useful first split.
 - For one-word prompts like "jumpshot", "the shot", or "footwork", do not ask what the user means. Give the first useful read.
+- If the user is talking about Axis itself, protect the current MVP: text conversation, understanding primitives, inline Thread Board, gym-readable use.
+- For Axis product inputs, do not give startup advice, device advice, fundraising advice, positioning advice, or future-layer advice.
+- Do not merge adjacent facts into invented evidence. If the user says "Hailey had 12 points" and then mentions floaters, do not claim the 12 points came from floaters unless the user says that.
 - Ask at most one sharp question, and only when it moves the work forward.
 - Keep the reply short. Two or three sentences is usually enough.
 - No markdown.
@@ -51,6 +54,7 @@ Thread board rules:
 - No raw arrows.
 - No primitive labels like Point, State, Group, Direction.
 - No broad generic items.
+- No future-layer items for Axis MVP threads.
 
 Never say:
 - "This sounds like a clarity problem"
@@ -61,6 +65,8 @@ Never say:
 - "What's developing underneath this"
 - "What about [topic] do you want to work on?"
 - "What aspect of [topic] do you want to focus on?"
+- "Does it need a different form?"
+- "What is your target market?"
 
 Internal behavior pattern:
 - Catch: identify the rough topic.
@@ -70,6 +76,8 @@ Internal behavior pattern:
 - Never show these words to the user.
 
 Good reply examples:
+- "Making Axis real means proving the active loop first: rough gym language in, useful understanding out, Thread Board making the work easier to read. The boundary is not more features; it is whether the current conversation can hold up mid-session."
+- "Adding too much is the pressure point. The work is to protect the smallest real loop: type the rough thought, get shape back, scan the Thread Board, and keep moving."
 - "Footwork is the entry point. The useful split is whether the player is losing organization before the catch, before the attack, or before the finish. Keep the thread on the moment where the feet decide the next action."
 - "The shot is too broad as a drill label, but it is useful as a thread title. The first split is whether the miss is coming from setup, timing, or decision pressure."
 - "The hesitation is the work. She has the shot; now she needs permission to use it before the defense gets comfortable."
@@ -143,11 +151,54 @@ function isGenericClarification(reply: string) {
   ].some((pattern) => pattern.test(clean));
 }
 
+function isAxisMvpInput(message: string) {
+  const clean = message.toLowerCase();
+  return clean.includes("axis") ||
+    clean.includes("adding too much") ||
+    clean.includes("work in the gym") ||
+    clean.includes("gym first") ||
+    clean.includes("make it real") ||
+    clean.includes("make this real");
+}
+
+function hasFutureLayerLeakage(reply: string) {
+  return /\b(camera|voice|upload|mission|challenge|dashboard|memory|cv|replay|export|whiteboard mode|device|hardware|fundraising|market|startup|positioning|different form)\b/i.test(reply);
+}
+
+function hasUnsupportedHaileyFloaterClaim(text: string) {
+  return /hailey[^.]*12 points[^.]*floater|12 points[^.]*floater/i.test(text);
+}
+
+function boardHasFutureLayerLeakage(board: ThreadBoard) {
+  const text = [
+    board.title,
+    board.summary,
+    ...board.sections.flatMap((section) => [
+      section.type,
+      section.label,
+      ...section.items,
+    ]),
+  ].join(" ");
+
+  return hasFutureLayerLeakage(text);
+}
+
+function boardHasUnsupportedClaim(board: ThreadBoard) {
+  const text = [
+    board.title,
+    board.summary,
+    ...board.sections.flatMap((section) => section.items),
+  ].join(" ");
+
+  return hasUnsupportedHaileyFloaterClaim(text);
+}
+
 function isValidReply(reply: string) {
   return Boolean(reply) &&
     !hasRawArrow(reply) &&
     !hasMarkdown(reply) &&
-    !isGenericClarification(reply);
+    !isGenericClarification(reply) &&
+    !hasUnsupportedHaileyFloaterClaim(reply);
 }
 
 function validateThreadBoard(value: unknown): ThreadBoard | null {
@@ -201,6 +252,102 @@ function titleCase(value: string) {
 
 function createFallbackResponse(message: string): { reply: string; threadBoard: ThreadBoard } {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+
+  if (isAxisMvpInput(message)) {
+    if (normalized.includes("adding too much")) {
+      return {
+        reply: "Adding too much is the pressure point. The work is to protect the smallest real loop: type the rough thought, get shape back, scan the Thread Board, and keep moving. Anything outside that loop is not allowed to drive the MVP yet.",
+        threadBoard: {
+          title: "Axis MVP Scope",
+          summary: "The thread is about keeping Axis real by protecting the smallest gym-usable conversation loop.",
+          sections: [
+            {
+              type: "observation",
+              label: "Observation",
+              items: ["Too many additions are pulling on the product"],
+            },
+            {
+              type: "pattern",
+              label: "Pattern",
+              items: ["Extra layers appear before the core loop is proven"],
+            },
+            {
+              type: "relationship",
+              label: "Relationship",
+              items: ["More capability makes the MVP harder to validate"],
+            },
+            {
+              type: "outcome",
+              label: "Outcome / Next Move",
+              items: ["Protect rough input, clean response, and inline Thread Board"],
+            },
+          ],
+        },
+      };
+    }
+
+    if (normalized.includes("gym")) {
+      return {
+        reply: "Gym-first is the right constraint. Axis has to work while someone is moving fast: rough language in, useful shape back, and a Thread Board that can be scanned in seconds. The next test is whether the current conversation flow holds up without adding another layer.",
+        threadBoard: {
+          title: "Gym-First Axis",
+          summary: "The thread is about proving the current Axis loop in the gym before building anything else.",
+          sections: [
+            {
+              type: "observation",
+              label: "Observation",
+              items: ["Axis has to work in the gym first"],
+            },
+            {
+              type: "pattern",
+              label: "Pattern",
+              items: ["The MVP fails if it needs extra screens or tools"],
+            },
+            {
+              type: "relationship",
+              label: "Relationship",
+              items: ["Gym readability controls what the product is allowed to become"],
+            },
+            {
+              type: "outcome",
+              label: "Outcome / Next Move",
+              items: ["Validate rough input, response, and Thread Board in one flow"],
+            },
+          ],
+        },
+      };
+    }
+
+    return {
+      reply: "Making Axis real means proving the active loop first: rough gym language in, useful understanding out, and the Thread Board making the work easier to read. The boundary is not more features; it is whether the current conversation can hold up mid-session.",
+      threadBoard: {
+        title: "Making Axis Real",
+        summary: "The thread is about proving the active MVP loop before any future layer gets to matter.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: ["Axis needs to become real through use"],
+          },
+          {
+            type: "hypothesis",
+            label: "Hypothesis",
+            items: ["The first proof is the conversation loop, not another feature"],
+          },
+          {
+            type: "relationship",
+            label: "Relationship",
+            items: ["A readable Thread Board makes rough input useful faster"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Validate the active MVP with live gym threads"],
+          },
+        ],
+      },
+    };
+  }
 
   if (normalized.includes("footwork")) {
     return {
@@ -413,11 +560,17 @@ export async function POST(req: Request) {
       };
       const reply = cleanString(parsed.reply);
 
-      if (!isValidReply(reply)) {
+      if (!isValidReply(reply) || (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))) {
         return Response.json(createFallbackResponse(message));
       }
 
-      const threadBoard = validateThreadBoard(parsed.threadBoard);
+      const validThreadBoard = validateThreadBoard(parsed.threadBoard);
+      const threadBoard =
+        validThreadBoard &&
+        !boardHasUnsupportedClaim(validThreadBoard) &&
+        !(isAxisMvpInput(message) && boardHasFutureLayerLeakage(validThreadBoard))
+          ? validThreadBoard
+          : null;
       const fallback = threadBoard ? null : createFallbackResponse(message);
 
       return Response.json({
@@ -425,7 +578,7 @@ export async function POST(req: Request) {
         threadBoard: threadBoard ?? fallback?.threadBoard ?? null,
       });
     } catch {
-      if (isValidReply(text)) {
+      if (isValidReply(text) && !(isAxisMvpInput(message) && hasFutureLayerLeakage(text))) {
         return Response.json({
           reply: text,
           threadBoard: createFallbackResponse(message).threadBoard,
