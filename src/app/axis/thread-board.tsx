@@ -49,7 +49,7 @@ export default function ThreadBoard({ board }: Props) {
   }
 
   return (
-    <section className="thread-board" aria-label="Thread board">
+    <section className="thread-board" aria-label="Thread Board">
       {board.title.trim() && <h3 className="thread-board-title">{board.title}</h3>}
       {typeof board.summary === "string" && board.summary.trim() && (
         <p className="thread-board-summary">{board.summary}</p>
@@ -75,33 +75,37 @@ export default function ThreadBoard({ board }: Props) {
 
       <style jsx>{`
         .thread-board {
-          max-width: 720px;
+          border-bottom: 1px solid rgba(25, 24, 21, 0.08);
+          border-top: 1px solid rgba(25, 24, 21, 0.12);
+          margin: 2px 0 6px;
+          max-width: 760px;
+          padding: 14px 0 12px;
         }
 
         .thread-board-title {
-          color: rgba(25, 24, 21, 0.72);
-          font-size: 18px;
+          color: rgba(25, 24, 21, 0.82);
+          font-size: 17px;
           font-weight: 600;
-          line-height: 1.35;
-          margin: 0 0 4px;
+          line-height: 1.3;
+          margin: 0 0 5px;
         }
 
         .thread-board-summary {
-          color: rgba(25, 24, 21, 0.5);
-          font-size: 14px;
-          line-height: 1.45;
-          margin: 0 0 12px;
+          color: rgba(25, 24, 21, 0.56);
+          font-size: 13px;
+          line-height: 1.4;
+          margin: 0 0 10px;
+          max-width: 62ch;
         }
 
         .thread-board-sections {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
+          display: grid;
+          gap: 10px 18px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .thread-board-section {
-          border-left: 1px solid rgba(25, 24, 21, 0.1);
-          padding-left: 12px;
+          min-width: 0;
         }
 
         .thread-board-label {
@@ -114,15 +118,26 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-items {
-          color: rgba(25, 24, 21, 0.7);
+          color: rgba(25, 24, 21, 0.76);
           font-size: 14px;
           line-height: 1.45;
           margin: 0;
-          padding-left: 18px;
+          padding-left: 17px;
         }
 
         .thread-board-items li + li {
           margin-top: 4px;
+        }
+
+        @media (max-width: 640px) {
+          .thread-board {
+            padding-bottom: 10px;
+            padding-top: 12px;
+          }
+
+          .thread-board-sections {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </section>

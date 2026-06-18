@@ -21,7 +21,10 @@ export default function AxisPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const isInitial = messages.length === 1 && !loading;
-  const latestAssistant = messages.findLast((message) => message.role === "assistant");
+  const latestAssistantIndex = messages.reduce(
+    (latest, message, index) => (message.role === "assistant" ? index : latest),
+    -1,
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -87,8 +90,8 @@ export default function AxisPage() {
   return (
     <>
       <main className="shell">
-        <section className="workspace" aria-label="Axis workspace">
-          <aside className="transcript" aria-label="Conversation transcript">
+        <section className="conversation" aria-label="Axis conversation">
+          <div className="conversation-inner">
             <header className="site-header">
               <span className="site-mark">Axis</span>
               <span className="site-sub">Develop the work through conversation.</span>
@@ -97,8 +100,12 @@ export default function AxisPage() {
             <div className={`thread${isInitial ? " thread--initial" : ""}`}>
               <div className="thread-inner">
                 {messages.map((msg, i) => (
-                  <div key={i} className={`msg msg--${msg.role}`}>
-                    {msg.content}
+                  <div key={i} className="turn">
+                    <div className={`msg msg--${msg.role}`}>{msg.content}</div>
+
+                    {i === latestAssistantIndex && msg.threadBoard && (
+                      <ThreadBoard board={msg.threadBoard} />
+                    )}
                   </div>
                 ))}
 
@@ -118,17 +125,7 @@ export default function AxisPage() {
                 <div ref={bottomRef} />
               </div>
             </div>
-          </aside>
-
-          <section className="thread-board-pane" aria-label="Thread Board">
-            <div className="board-content">
-              {latestAssistant?.threadBoard ? (
-                <ThreadBoard board={latestAssistant.threadBoard} />
-              ) : (
-                <p className="board-empty">Organized understanding appears here.</p>
-              )}
-            </div>
-          </section>
+          </div>
         </section>
 
         <div className="composer-wrap">
@@ -187,28 +184,31 @@ export default function AxisPage() {
       <style jsx>{`
         .shell {
           background: #fbfaf7;
+          display: flex;
+          flex-direction: column;
           height: 100dvh;
           overflow: hidden;
           position: relative;
           width: 100vw;
         }
 
-        .workspace {
-          display: flex;
-          height: 100%;
+        .conversation {
+          flex: 1;
           min-height: 0;
-          padding-bottom: 78px;
+          overflow: hidden;
+          padding: 18px clamp(16px, 4vw, 48px) 112px;
           width: 100%;
         }
 
-        .transcript {
-          background: rgba(251, 250, 247, 0.96);
+        .conversation-inner {
           display: flex;
-          flex: 0 0 clamp(280px, 28vw, 390px);
           flex-direction: column;
+          height: 100%;
+          margin: 0 auto;
+          max-width: 820px;
           min-height: 0;
           min-width: 0;
-          padding: 18px 20px 0;
+          width: 100%;
         }
 
         .site-header {
@@ -242,7 +242,12 @@ export default function AxisPage() {
           min-height: 0;
           overflow-x: hidden;
           overflow-y: auto;
-          padding: 10px 0 24px;
+          padding: 10px 0 28px;
+          scrollbar-width: none;
+        }
+
+        .thread::-webkit-scrollbar {
+          display: none;
         }
 
         .thread--initial {
@@ -252,12 +257,19 @@ export default function AxisPage() {
         .thread-inner {
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: 18px;
+          min-width: 0;
+        }
+
+        .turn {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
           min-width: 0;
         }
 
         .msg {
-          font-size: 18px;
+          font-size: 20px;
           line-height: 1.5;
           overflow-wrap: anywhere;
         }
@@ -317,32 +329,6 @@ export default function AxisPage() {
           40% {
             opacity: 1;
           }
-        }
-
-        .thread-board-pane {
-          background:
-            linear-gradient(rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.78)),
-            radial-gradient(circle, rgba(25, 24, 21, 0.055) 1px, transparent 1px);
-          background-color: #fffefb;
-          background-size: auto, 24px 24px;
-          flex: 1;
-          min-height: 0;
-          min-width: 0;
-          overflow: hidden;
-          position: relative;
-        }
-
-        .board-content {
-          height: 100%;
-          overflow: hidden;
-          padding: 32px clamp(24px, 5vw, 72px) 28px;
-          width: 100%;
-        }
-
-        .board-empty {
-          color: rgba(25, 24, 21, 0.24);
-          font-size: 16px;
-          margin: 0;
         }
 
         .composer-wrap {
@@ -412,25 +398,17 @@ export default function AxisPage() {
         }
 
         @media (max-width: 760px) {
-          .workspace {
-            flex-direction: column;
-          }
-
-          .transcript {
-            flex: 0 0 42dvh;
+          .conversation {
             padding-inline: 16px;
+            padding-top: 14px;
           }
 
-          .thread-board-pane {
-            flex: 1;
-          }
-
-          .board-content {
-            padding: 24px 18px;
+          .site-sub {
+            display: none;
           }
 
           .msg {
-            font-size: 16px;
+            font-size: 18px;
           }
 
           .composer-input {
