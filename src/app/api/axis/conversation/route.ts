@@ -15,7 +15,7 @@ Response shape:
     "sections": [
       {
         "type": "observation | pattern | relationship | question | hypothesis | intervention | outcome",
-        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move | TIMEOUT CALL | PLAYER RULE | WATCH NEXT | ADJUSTMENT TRIGGER | KNOWN | ASSUMED | GAMEPLAN | NEED NEXT | RELATIONSHIP",
+        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move | TIMEOUT CALL | PLAYER RULE | WATCH NEXT | ADJUSTMENT TRIGGER | OUT OF BOUNDS RULE | SLOB DEFAULT | BLOB DEFAULT | PRACTICE INSTALL | CORE RULE | READ | TRIGGER | INSTALL | CURRENT READ | PRESSURE POINT | NEXT REP | KNOWN | ASSUMED | GAMEPLAN | NEED NEXT | RELATIONSHIP",
         "items": ["string"]
       }
     ]
@@ -32,6 +32,7 @@ Reply rules:
 - If the user asks for an in-game play, give one concrete tactical adjustment and make the board about that adjustment.
 - If the user is in live pressure, give the call before asking for context.
 - If a live-pressure thread continues with a short update like "Rebounding", "too many chances", or "Ball watching", treat it as sideline context and return a compact call sheet.
+- If the user lacks SLOB, BLOB, or ATO plays, give a simple out-of-bounds principle immediately. Do not ask for a roster, opponent, or playbook first.
 - If the user asks for a gameplan before roster details arrive, give a provisional plan and clearly separate known facts from assumptions.
 - If the user later gives player roles, update the plan around those roles without pretending the full roster is known.
 - If the user asks how to make a site better, make the first split concrete: readability, input speed, board usefulness, mobile friction.
@@ -60,6 +61,9 @@ Thread board rules:
 - Sections must use one of these types: observation, pattern, relationship, question, hypothesis, intervention, outcome.
 - Labels must be one of: Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome / Next Move.
 - In live-pressure game contexts only, labels may also be: TIMEOUT CALL, PLAYER RULE, WATCH NEXT, ADJUSTMENT TRIGGER.
+- In out-of-bounds, SLOB, BLOB, and ATO contexts only, prefer labels: OUT OF BOUNDS RULE, SLOB DEFAULT, BLOB DEFAULT, WATCH NEXT, PRACTICE INSTALL.
+- In offensive system contexts only, labels may also be: CORE RULE, READ, TRIGGER, INSTALL, WATCH NEXT.
+- In player development contexts only, labels may also be: CURRENT READ, PRESSURE POINT, PLAYER RULE, NEXT REP, WATCH NEXT.
 - In thin-context gameplan contexts only, labels may also be: KNOWN, ASSUMED, GAMEPLAN, NEED NEXT, RELATIONSHIP.
 - Items must be short human phrases.
 - No markdown.
@@ -98,6 +102,7 @@ Good reply examples:
 - "Practice needs a simple room before it needs a system: what happened, what matters, and what the next session should make visible."
 - "At a game, do not search for a perfect play. If they have one scorer carrying the offense, the fast adjustment is box-and-one principles: your best defender takes the scorer, the other four shrink the floor and force weaker decisions."
 - "Call the timeout around second chances, not the whole defense. Every player names their man as the shot goes up, hits body first, finds ball second, and the guards crack back on long rebounds. If they get two more offensive boards, assign box-out matchups directly."
+- "No set plays means build from principles. Use one simple out-of-bounds rule: the screener creates the action, the inbounder or nearest cutter reads the first open gap, and everyone else spaces and fills. For both SLOB and BLOB, the goal is one clean advantage before the defense resets."
 - "The site gets better through the surface, not a big redesign. Start with readability, input speed, board usefulness, and mobile friction."
 - "That is a ceiling read, not a fact yet. The useful work is naming what practice evidence would make the contender claim real."
 - "Footwork is the entry point. The useful split is whether the player is losing organization before the catch, before the attack, or before the finish. Keep the thread on the moment where the feet decide the next action."
@@ -131,6 +136,17 @@ const SECTION_LABELS = new Set([
   "PLAYER RULE",
   "WATCH NEXT",
   "ADJUSTMENT TRIGGER",
+  "OUT OF BOUNDS RULE",
+  "SLOB DEFAULT",
+  "BLOB DEFAULT",
+  "PRACTICE INSTALL",
+  "CORE RULE",
+  "READ",
+  "TRIGGER",
+  "INSTALL",
+  "CURRENT READ",
+  "PRESSURE POINT",
+  "NEXT REP",
   "KNOWN",
   "ASSUMED",
   "GAMEPLAN",
@@ -202,6 +218,14 @@ function isAxisMvpInput(message: string) {
 function isGamePlayInput(message: string) {
   const clean = message.toLowerCase();
   return clean.includes("at a game") && clean.includes("play");
+}
+
+function isOutOfBoundsInput(message: string, context = "") {
+  const clean = liveContext(message, context);
+  const hasOutOfBoundsTerm = /\b(slob|s l o b|sideline out|sideline out of bounds|blob|b l o b|baseline out|baseline out of bounds|out[- ]of[- ]bounds|atos?|after timeout|after-timeout)\b/i.test(clean);
+  const lacksPlays = /\b(no|none|don't have|dont have|do not have|need|without|lack|lacking)\b/i.test(clean);
+
+  return hasOutOfBoundsTerm && (lacksPlays || /\bplay(s)?\b/i.test(clean));
 }
 
 function liveContext(message: string, context = "") {
@@ -364,7 +388,7 @@ function validateThreadBoard(value: unknown): ThreadBoard | null {
       return { type, label, items };
     })
     .filter((section): section is ThreadBoardSection => section !== null)
-    .slice(0, 4);
+    .slice(0, 5);
 
   if (sections.length === 0) return null;
 
@@ -383,6 +407,64 @@ function createFallbackResponse(message: string, context = ""): { reply: string;
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
   const hasSpurs = hasSpursContext(message, context);
   const hasSeattleOwls = hasSeattleOwlsContext(message, context);
+
+  if (isOutOfBoundsInput(message, context)) {
+    return {
+      reply: "No set plays means build from principles. Use one simple out-of-bounds rule: the screener creates the action, the inbounder or nearest cutter reads the first open gap, and everyone else spaces and fills. For both SLOB and BLOB, the goal is one clean advantage before the defense resets.",
+      threadBoard: {
+        title: "No SLOB or BLOB Plays",
+        summary: "Build simple out-of-bounds actions from movement principles instead of scripted plays. One screener creates the action, the inbounder reads the first open gap, and everyone else spaces and fills.",
+        sections: [
+          {
+            type: "intervention",
+            label: "OUT OF BOUNDS RULE",
+            items: [
+              "Screener creates the first action",
+              "Inbounder reads the first open gap",
+              "Everyone else spaces, cuts, or fills",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "SLOB DEFAULT",
+            items: [
+              "Best handler inbounds",
+              "Two cutters cross",
+              "Screener dives to rim",
+              "Inbounder steps in for kickback",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "BLOB DEFAULT",
+            items: [
+              "Screen the ball side",
+              "Weakside cutter back-cuts",
+              "Inbounder looks rim first, then reversal",
+            ],
+          },
+          {
+            type: "question",
+            label: "WATCH NEXT",
+            items: [
+              "Are they switching",
+              "Are they denying the inbounder",
+              "Is the rim open or the kickback open",
+            ],
+          },
+          {
+            type: "outcome",
+            label: "PRACTICE INSTALL",
+            items: [
+              "Teach one rule before adding plays",
+              "Rep SLOB and BLOB from the same screen-and-read principle",
+              "Add a named call only after the rule works",
+            ],
+          },
+        ],
+      },
+    };
+  }
 
   if (isGameplanRoleUpdate(message, context)) {
     return {
@@ -1251,6 +1333,7 @@ export async function POST(req: Request) {
       const reply = cleanString(parsed.reply);
 
       if (
+        isOutOfBoundsInput(message, contextText) ||
         isGameplanRoleUpdate(message, contextText) ||
         isThinGameplanInput(message, contextText) ||
         isLivePressureInput(message) ||
@@ -1284,6 +1367,7 @@ export async function POST(req: Request) {
     } catch {
       if (
         !isGamePlayInput(message) &&
+        !isOutOfBoundsInput(message, contextText) &&
         !isSiteBetterInput(message) &&
         !isMichiganPracticeInput(message) &&
         !isPrivateRunInput(message) &&
