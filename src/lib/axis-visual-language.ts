@@ -77,3 +77,82 @@ export function getAxisStatusStyle(
 ): AxisStatusStyle {
   return AXIS_STATUS_STYLES[status];
 }
+
+function normalizeSectionLabel(label: string) {
+  return label
+    .trim()
+    .toUpperCase()
+    .replace(/&/g, "AND")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function resolveAxisSectionStatus(label: string): AxisCardStatus {
+  const normalized = normalizeSectionLabel(label);
+
+  if (
+    [
+      "OBSERVATION",
+      "PATTERN",
+      "RELATIONSHIP",
+      "QUESTION",
+      "HYPOTHESIS",
+      "INTERVENTION",
+      "KNOWN",
+    ].includes(normalized)
+  ) {
+    return "neutral";
+  }
+
+  if (
+    [
+      "GAMEPLAN",
+      "TIMEOUT CALL",
+      "PLAYER RULE",
+      "INSTALL",
+      "CORE RULE",
+      "NEXT MOVE",
+      "OUTCOME NEXT MOVE",
+      "ACTION",
+      "PLAY",
+    ].includes(normalized)
+  ) {
+    return "use";
+  }
+
+  if (
+    [
+      "ASSUMED",
+      "READ",
+      "WATCH NEXT",
+      "NEED NEXT",
+      "CHOICE",
+      "DECISION",
+    ].includes(normalized)
+  ) {
+    return "decide";
+  }
+
+  if (
+    [
+      "ADJUSTMENT TRIGGER",
+      "FIX",
+      "CORRECTION",
+      "BREAKING",
+      "PROBLEM",
+    ].includes(normalized)
+  ) {
+    return "fix";
+  }
+
+  if (["PROOF", "EVIDENCE", "SIGNALS"].includes(normalized)) {
+    return "proof";
+  }
+
+  if (["PARKED", "HOLD", "LATER", "NOT NOW"].includes(normalized)) {
+    return "parked";
+  }
+
+  return "neutral";
+}

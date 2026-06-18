@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   getAxisStatusStyle,
+  resolveAxisSectionStatus,
   type AxisCardStatus,
 } from "../../lib/axis-visual-language";
 
@@ -66,7 +67,10 @@ interface BoardSectionRuntime {
 interface BoardRuntimeState {
   boardKey: string;
   values: Record<string, BoardSectionRuntime>;
+  order: string[];
 }
+
+type BoardInteractionMode = "none" | "reorder" | "spatial";
 
 function sectionToken(value: string) {
   return value
@@ -86,14 +90,19 @@ function clampDelta(delta: number, min: number, max: number) {
   return Math.min(Math.max(delta, min), max);
 }
 
-function supportsSectionMovement(containerWidth: number) {
-  if (typeof window === "undefined") return false;
+function getBoardInteractionMode(containerWidth: number): BoardInteractionMode {
+  if (typeof window === "undefined") return "none";
+
+  if (window.innerWidth < 640) return "none";
+  if (window.innerWidth < 900) return "reorder";
 
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   const landscape = window.matchMedia("(orientation: landscape)").matches;
   const wideTouchSurface = coarsePointer && landscape && window.innerWidth >= 900;
 
-  return containerWidth >= 680 && (!coarsePointer || wideTouchSurface);
+  return containerWidth >= 680 && (!coarsePointer || wideTouchSurface)
+    ? "spatial"
+    : "reorder";
 }
 
 export default function ThreadBoard({ board }: Props) {
@@ -130,12 +139,14 @@ export default function ThreadBoard({ board }: Props) {
   const [runtimeState, setRuntimeState] = useState<BoardRuntimeState>({
     boardKey: "",
     values: {},
+    order: [],
   });
   const [activeObjectId, setActiveObjectId] = useState<string | null>(null);
-  const [canMoveSections, setCanMoveSections] = useState(false);
+  const [interactionMode, setInteractionMode] = useState<BoardInteractionMode>("none");
   const sectionsRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     id: string;
+    mode: BoardInteractionMode;
     startX: number;
     startY: number;
     origin: BoardSectionObject["position"];
@@ -146,24 +157,54 @@ export default function ThreadBoard({ board }: Props) {
   const objects = useMemo<BoardSectionObject[]>(
     () => {
       const runtimeById = runtimeState.boardKey === boardKey ? runtimeState.values : {};
+      const order =
+        runtimeState.boardKey === boardKey && runtimeState.order.length > 0
+          ? runtimeState.order
+          : [];
+      const orderIndex = new Map(order.map((id, index) => [id, index]));
 
-      return sections.map((section) => {
-        const id = sectionObjectId(section);
-        const runtime = runtimeById[id];
+      const generatedObjects = sections
+        .map((section, index) => {
+          const id = sectionObjectId(section);
+          const runtime = runtimeById[id];
 
-        return {
-          id,
-          sectionType: section.type,
-          label: section.label,
-          items: section.items,
-          position: runtime?.position ?? { x: 0, y: 0 },
-          status: "neutral",
-          updatedAt: runtime?.updatedAt ?? 0,
-        };
-      });
+          return {
+            id,
+            sectionType: section.type,
+            label: section.label,
+            items: section.items,
+            position: runtime?.position ?? { x: 0, y: 0 },
+            status: resolveAxisSectionStatus(section.label),
+            updatedAt: runtime?.updatedAt ?? 0,
+            generatedIndex: index,
+          };
+        })
+        .sort((a, b) => {
+          const aOrder = orderIndex.get(a.id);
+          const bOrder = orderIndex.get(b.id);
+
+          if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+          if (aOrder !== undefined) return -1;
+          if (bOrder !== undefined) return 1;
+          return a.generatedIndex - b.generatedIndex;
+        });
+
+      return generatedObjects.map((object) => ({
+        id: object.id,
+        sectionType: object.sectionType,
+        label: object.label,
+        items: object.items,
+        position: object.position,
+        status: object.status,
+        updatedAt: object.updatedAt,
+      }));
     },
     [boardKey, runtimeState, sections],
   );
+
+  const hasLocalArrangement =
+    runtimeState.boardKey === boardKey &&
+    (runtimeState.order.length > 0 || Object.keys(runtimeState.values).length > 0);
 
   useEffect(() => {
     const container = sectionsRef.current;
@@ -171,13 +212,15 @@ export default function ThreadBoard({ board }: Props) {
     const measuredContainer = container;
 
     function clampCurrentLayout() {
-      const nextCanMove = supportsSectionMovement(measuredContainer.clientWidth);
-      setCanMoveSections(nextCanMove);
+      const nextInteractionMode = getBoardInteractionMode(measuredContainer.clientWidth);
+      setInteractionMode(nextInteractionMode);
 
       setRuntimeState((currentRuntime) => {
         if (currentRuntime.boardKey !== boardKey) {
-          return { boardKey, values: {} };
+          return { boardKey, values: {}, order: [] };
         }
+
+        if (nextInteractionMode !== "spatial") return currentRuntime;
 
         const containerRect = measuredContainer.getBoundingClientRect();
         let changed = false;
@@ -215,7 +258,7 @@ export default function ThreadBoard({ board }: Props) {
           }
         });
 
-        return changed ? { boardKey, values: nextValues } : currentRuntime;
+        return changed ? { ...currentRuntime, values: nextValues } : currentRuntime;
       });
     }
 
@@ -241,8 +284,14 @@ export default function ThreadBoard({ board }: Props) {
     return null;
   }
 
+  function resetArrangement() {
+    setRuntimeState({ boardKey, values: {}, order: [] });
+    dragRef.current = null;
+    setActiveObjectId(null);
+  }
+
   function handlePointerDown(event: PointerEvent<HTMLButtonElement>, object: BoardSectionObject) {
-    if (event.button !== 0 || !canMoveSections) return;
+    if (event.button !== 0 || interactionMode === "none") return;
 
     const sectionElement = event.currentTarget.closest(".thread-board-section");
     const containerElement = sectionsRef.current;
@@ -252,6 +301,7 @@ export default function ThreadBoard({ board }: Props) {
     setActiveObjectId(object.id);
     dragRef.current = {
       id: object.id,
+      mode: interactionMode,
       startX: event.clientX,
       startY: event.clientY,
       origin: object.position,
@@ -262,7 +312,56 @@ export default function ThreadBoard({ board }: Props) {
 
   function handlePointerMove(event: PointerEvent<HTMLButtonElement>) {
     const drag = dragRef.current;
-    if (!drag || !canMoveSections) return;
+    if (!drag) return;
+
+    if (drag.mode === "reorder") {
+      const containerElement = sectionsRef.current;
+      if (!containerElement) return;
+
+      const sectionElements = Array.from(
+        containerElement.querySelectorAll<HTMLElement>("[data-section-object-id]"),
+      );
+      const hasActiveElement = sectionElements.some(
+        (sectionElement) => sectionElement.dataset.sectionObjectId === drag.id,
+      );
+      if (!hasActiveElement) return;
+
+      const sortedSections = sectionElements
+        .filter((sectionElement) => sectionElement.dataset.sectionObjectId !== drag.id)
+        .map((sectionElement) => ({
+          id: sectionElement.dataset.sectionObjectId ?? "",
+          midpoint:
+            sectionElement.getBoundingClientRect().top +
+            sectionElement.getBoundingClientRect().height / 2,
+        }))
+        .filter((section) => section.id)
+        .sort((a, b) => a.midpoint - b.midpoint);
+      const pointerY = event.clientY;
+      let targetIndex = sortedSections.findIndex(
+        (section) => pointerY < section.midpoint,
+      );
+      if (targetIndex === -1) targetIndex = sortedSections.length;
+
+      setRuntimeState((currentRuntime) => {
+        const currentOrder =
+          currentRuntime.boardKey === boardKey && currentRuntime.order.length > 0
+            ? currentRuntime.order
+            : objects.map((object) => object.id);
+        const nextOrder = currentOrder.filter((id) => id !== drag.id);
+        nextOrder.splice(targetIndex, 0, drag.id);
+
+        if (nextOrder.join("|") === currentOrder.join("|")) return currentRuntime;
+
+        return {
+          boardKey,
+          values: currentRuntime.boardKey === boardKey ? currentRuntime.values : {},
+          order: nextOrder,
+        };
+      });
+      return;
+    }
+
+    if (drag.mode !== "spatial") return;
 
     const rawDeltaX = event.clientX - drag.startX;
     const rawDeltaY = event.clientY - drag.startY;
@@ -286,6 +385,7 @@ export default function ThreadBoard({ board }: Props) {
 
       return {
         boardKey,
+        order: currentRuntime.boardKey === boardKey ? currentRuntime.order : [],
         values: {
           ...currentValues,
           [drag.id]: {
@@ -299,18 +399,33 @@ export default function ThreadBoard({ board }: Props) {
 
   function handlePointerEnd(event: PointerEvent<HTMLButtonElement>) {
     if (dragRef.current) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
     }
     dragRef.current = null;
     setActiveObjectId(null);
   }
 
   return (
-    <section className="thread-board" aria-label="Thread Board">
+    <section
+      className="thread-board"
+      aria-label="Thread Board"
+      data-interaction-mode={interactionMode}
+    >
       <div className="thread-board-anchor">
         {board.title.trim() && <h3 className="thread-board-title">{board.title}</h3>}
         {typeof board.summary === "string" && board.summary.trim() && (
           <p className="thread-board-summary">{board.summary}</p>
+        )}
+        {hasLocalArrangement && (
+          <button
+            className="thread-board-reset"
+            type="button"
+            onClick={resetArrangement}
+          >
+            Reset arrangement
+          </button>
         )}
       </div>
 
@@ -326,7 +441,7 @@ export default function ThreadBoard({ board }: Props) {
                 key={`${object.id}-${index}`}
                 className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken}${activeObjectId === object.id ? " thread-board-section--active" : ""}`}
                 style={{
-                  transform: canMoveSections
+                  transform: interactionMode === "spatial"
                     ? `translate3d(${object.position.x}px, ${object.position.y}px, 0)`
                     : "none",
                   "--axis-section-accent": statusStyle.accent,
@@ -343,7 +458,7 @@ export default function ThreadBoard({ board }: Props) {
                 <h4 className="thread-board-label">
                   <button
                     aria-label={`Move ${object.label}`}
-                    className={`thread-board-handle${canMoveSections ? "" : " thread-board-handle--static"}`}
+                    className={`thread-board-handle${interactionMode === "none" ? " thread-board-handle--static" : ""}`}
                     type="button"
                     onPointerDown={(event) => handlePointerDown(event, object)}
                     onPointerMove={handlePointerMove}
@@ -405,6 +520,23 @@ export default function ThreadBoard({ board }: Props) {
           overflow-wrap: anywhere;
         }
 
+        .thread-board-reset {
+          background: transparent;
+          border: 0;
+          border-bottom: 1px solid color-mix(in srgb, var(--axis-line) 30%, transparent);
+          color: color-mix(in srgb, var(--axis-ink) 54%, transparent);
+          cursor: pointer;
+          display: inline-block;
+          font-family: inherit;
+          font-size: 12px;
+          margin: 18px 0 0;
+          padding: 0 0 2px;
+        }
+
+        .thread-board-reset:hover {
+          color: color-mix(in srgb, var(--axis-ink) 78%, transparent);
+        }
+
         .thread-board-sections {
           display: grid;
           gap: clamp(16px, 2vw, 28px);
@@ -439,11 +571,23 @@ export default function ThreadBoard({ board }: Props) {
         .thread-board-section::before {
           background: color-mix(in srgb, var(--axis-section-accent) 72%, transparent);
           content: "";
-          height: 1px;
+          height: 3px;
           left: clamp(12px, 1.35vw, 18px);
           position: absolute;
           right: clamp(12px, 1.35vw, 18px);
           top: 9px;
+        }
+
+        .thread-board-section::after {
+          background: var(--axis-section-accent);
+          border-radius: 999px;
+          content: "";
+          height: 6px;
+          opacity: 0.72;
+          position: absolute;
+          right: clamp(12px, 1.35vw, 18px);
+          top: 19px;
+          width: 6px;
         }
 
         .thread-board-section:nth-child(2n) {
@@ -509,6 +653,24 @@ export default function ThreadBoard({ board }: Props) {
           margin-top: 8px;
         }
 
+        .thread-board[data-interaction-mode="reorder"] .thread-board-sections {
+          grid-template-columns: 1fr;
+          max-width: 100%;
+          overflow: visible;
+          padding: 0;
+        }
+
+        .thread-board[data-interaction-mode="reorder"] .thread-board-section,
+        .thread-board[data-interaction-mode="reorder"] .thread-board-section:nth-child(2n),
+        .thread-board[data-interaction-mode="reorder"] .thread-board-section:nth-child(3n) {
+          grid-column: auto;
+          margin-top: 0;
+          max-width: none;
+          min-width: 0;
+          transform: none !important;
+          will-change: auto;
+        }
+
         @media (max-width: 980px) {
           .thread-board {
             grid-template-columns: 1fr;
@@ -529,7 +691,6 @@ export default function ThreadBoard({ board }: Props) {
 
           .thread-board-section {
             min-width: 0;
-            transform: none !important;
             will-change: auto;
           }
 
@@ -599,7 +760,15 @@ export default function ThreadBoard({ board }: Props) {
           .thread-board-section::before {
             left: 8px;
             right: 8px;
+            height: 2px;
             top: 6px;
+          }
+
+          .thread-board-section::after {
+            height: 5px;
+            right: 8px;
+            top: 13px;
+            width: 5px;
           }
 
           .thread-board-items li + li {

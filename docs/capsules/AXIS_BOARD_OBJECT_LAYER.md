@@ -55,6 +55,8 @@ The prototype may:
 
 - convert generated Thread Board sections into local BoardSectionObject render units
 - allow generated section objects to move locally
+- allow compact tablet section reordering locally
+- allow a local "Reset arrangement" action after movement
 - keep all object state in React state only
 - reset layout on refresh
 - preserve positions by section label if simple and safe
@@ -72,6 +74,24 @@ The prototype must not:
 - add card or note creation
 - add drawing tools
 - allow manual content editing
+
+## Responsive Arrangement Boundary
+
+BoardSectionObject Local Prototype uses three local interaction behaviors:
+
+- Phone under 640px: stacked, movement disabled, normal scrolling preserved.
+- Tablet portrait or compact tablet from 640px through 899px: generated sections can be vertically reordered from the section header. The layout remains one readable column and does not become a freeform canvas.
+- Tablet landscape and desktop at 900px and wider: generated sections may move spatially when the measured board container can support it. Movement is clamped to the board bounds.
+
+The section header is the drag handle. The section body and page remain scrollable.
+
+Reset arrangement:
+
+- appears only after local movement or reordering
+- resets local positions and order only
+- does not clear content
+- does not persist
+- is not a toolbar, mode, or manual board editing feature
 
 ## What Object-Ready Means Now
 

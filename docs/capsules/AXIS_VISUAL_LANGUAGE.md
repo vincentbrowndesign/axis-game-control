@@ -55,6 +55,33 @@ Question is not automatically decide.
 Intervention is not automatically use.
 Known is not automatically proof.
 
+## Status Resolution
+
+Axis may resolve a local visual status from explicit operational section labels.
+
+This remains client-side presentation logic. It does not add `status` to `ThreadBoardData`, does not change the conversation API, and does not create evidence, confidence, priority, memory, or task tracking.
+
+Operational labels may resolve this way:
+
+- use: GAMEPLAN, TIMEOUT CALL, PLAYER RULE, INSTALL, CORE RULE, NEXT MOVE, ACTION, PLAY
+- decide: ASSUMED, READ, WATCH NEXT, NEED NEXT, CHOICE, DECISION
+- fix: ADJUSTMENT TRIGGER, FIX, CORRECTION, BREAKING, PROBLEM
+- proof: PROOF, EVIDENCE, SIGNALS
+- parked: PARKED, HOLD, LATER, NOT NOW
+- neutral: everything else
+
+Pure understanding labels stay neutral:
+
+- OBSERVATION
+- PATTERN
+- RELATIONSHIP
+- QUESTION
+- HYPOTHESIS
+- INTERVENTION
+- KNOWN
+
+KNOWN and OBSERVATION must not become proof automatically.
+
 ## Status Meanings
 
 neutral:
