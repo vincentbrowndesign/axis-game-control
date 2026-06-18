@@ -135,8 +135,7 @@ export default function AxisPage() {
               <ThreadBoard board={latestAssistant.threadBoard} />
             ) : (
               <div className="room-empty">
-                <p className="room-empty-title">What are we working on?</p>
-                <p className="room-empty-copy">Bring the rough version. I&apos;ll help it develop.</p>
+                <p className="room-empty-title">Board is ready.</p>
               </div>
             )}
           </section>
@@ -209,11 +208,11 @@ export default function AxisPage() {
         .room {
           display: grid;
           flex: 1;
-          gap: clamp(28px, 5vw, 72px);
-          grid-template-columns: minmax(320px, 0.78fr) minmax(460px, 1.22fr);
+          gap: clamp(32px, 5vw, 84px);
+          grid-template-columns: minmax(300px, 0.68fr) minmax(520px, 1.32fr);
           min-height: 0;
           overflow: hidden;
-          padding: 20px clamp(18px, 4vw, 56px) 112px;
+          padding: 20px clamp(18px, 4vw, 64px) 112px;
           width: 100%;
         }
 
@@ -342,16 +341,23 @@ export default function AxisPage() {
         .board-stage {
           align-self: stretch;
           background:
-            linear-gradient(rgba(251, 250, 247, 0.9), rgba(251, 250, 247, 0.9)),
-            linear-gradient(rgba(25, 24, 21, 0.04) 1px, transparent 1px);
-          background-size: auto, 34px 34px;
+            linear-gradient(rgba(251, 250, 247, 0.88), rgba(251, 250, 247, 0.88)),
+            linear-gradient(rgba(25, 24, 21, 0.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(25, 24, 21, 0.025) 1px, transparent 1px);
+          background-size: auto, 38px 38px, 38px 38px;
           display: flex;
           flex-direction: column;
           justify-content: flex-start;
           min-height: 0;
           min-width: 0;
-          overflow: hidden;
-          padding: clamp(10px, 2vw, 28px) 0 0;
+          overflow-x: hidden;
+          overflow-y: auto;
+          padding: clamp(18px, 2.5vw, 38px) 0 32px;
+          scrollbar-width: none;
+        }
+
+        .board-stage::-webkit-scrollbar {
+          display: none;
         }
 
         .room-empty {
@@ -359,19 +365,13 @@ export default function AxisPage() {
           color: rgba(25, 24, 21, 0.34);
           margin-top: clamp(28px, 10vh, 96px);
           max-width: 620px;
-          padding-top: 14px;
+          padding-top: 18px;
         }
 
         .room-empty-title {
           color: rgba(25, 24, 21, 0.52);
           font-size: clamp(28px, 4vw, 56px);
           line-height: 1.02;
-          margin: 0 0 12px;
-        }
-
-        .room-empty-copy {
-          font-size: 16px;
-          line-height: 1.45;
           margin: 0;
         }
 
