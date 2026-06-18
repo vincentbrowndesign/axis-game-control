@@ -1,6 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+} from "react";
+import {
+  getAxisStatusStyle,
+  type AxisCardStatus,
+} from "../../lib/axis-visual-language";
 
 export type ThreadBoardSectionType =
   | "observation"
@@ -40,6 +51,7 @@ interface BoardSectionObject {
     width?: number;
     height?: number;
   };
+  status?: AxisCardStatus;
   isPinned?: boolean;
   isCollapsed?: boolean;
   createdFromThreadMessageId?: string;
@@ -145,6 +157,7 @@ export default function ThreadBoard({ board }: Props) {
           label: section.label,
           items: section.items,
           position: runtime?.position ?? { x: 0, y: 0 },
+          status: "neutral",
           updatedAt: runtime?.updatedAt ?? 0,
         };
       });
@@ -306,6 +319,7 @@ export default function ThreadBoard({ board }: Props) {
           {objects.map((object, index) => {
             const labelToken = sectionToken(object.label);
             const typeToken = sectionToken(object.sectionType);
+            const statusStyle = getAxisStatusStyle(object.status);
 
             return (
               <section
@@ -315,7 +329,13 @@ export default function ThreadBoard({ board }: Props) {
                   transform: canMoveSections
                     ? `translate3d(${object.position.x}px, ${object.position.y}px, 0)`
                     : "none",
-                }}
+                  "--axis-section-accent": statusStyle.accent,
+                  "--axis-section-paper": statusStyle.background,
+                  "--axis-section-border": statusStyle.border,
+                  "--axis-section-text": statusStyle.text,
+                  "--axis-section-muted": statusStyle.mutedText,
+                } as CSSProperties}
+                data-axis-status={object.status}
                 data-section-type={typeToken}
                 data-section-label={labelToken}
                 data-section-object-id={object.id}
@@ -360,14 +380,14 @@ export default function ThreadBoard({ board }: Props) {
 
         .thread-board-anchor {
           align-self: start;
-          border-top: 2px solid rgba(25, 24, 21, 0.78);
+          border-top: 2px solid color-mix(in srgb, var(--axis-line) 78%, transparent);
           max-width: 34rem;
           min-width: 0;
           padding-top: clamp(14px, 2vw, 24px);
         }
 
         .thread-board-title {
-          color: rgba(25, 24, 21, 0.86);
+          color: color-mix(in srgb, var(--axis-ink) 86%, transparent);
           font-size: clamp(34px, 5.2vw, 72px);
           font-weight: 600;
           line-height: 0.98;
@@ -377,7 +397,7 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-summary {
-          color: rgba(25, 24, 21, 0.62);
+          color: color-mix(in srgb, var(--axis-ink) 62%, transparent);
           font-size: clamp(17px, 1.55vw, 22px);
           line-height: 1.42;
           margin: 0;
@@ -397,10 +417,11 @@ export default function ThreadBoard({ board }: Props) {
 
         .thread-board-section {
           align-self: start;
-          background: rgba(255, 254, 251, 0.82);
-          border: 1px solid rgba(25, 24, 21, 0.16);
+          background: color-mix(in srgb, var(--axis-section-paper) 82%, transparent);
+          border: 1px solid color-mix(in srgb, var(--axis-section-border) 72%, transparent);
           border-radius: 2px;
-          box-shadow: 0 1px 0 rgba(25, 24, 21, 0.06);
+          box-shadow: 0 1px 0 color-mix(in srgb, var(--axis-line) 6%, transparent);
+          color: var(--axis-section-text);
           min-width: min(240px, 100%);
           overflow-wrap: anywhere;
           padding: clamp(12px, 1.35vw, 18px);
@@ -411,12 +432,12 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-section--active {
-          box-shadow: 0 8px 22px rgba(25, 24, 21, 0.12);
+          box-shadow: 0 8px 22px color-mix(in srgb, var(--axis-line) 12%, transparent);
           z-index: 10;
         }
 
         .thread-board-section::before {
-          background: rgba(25, 24, 21, 0.54);
+          background: color-mix(in srgb, var(--axis-section-accent) 72%, transparent);
           content: "";
           height: 1px;
           left: clamp(12px, 1.35vw, 18px);
@@ -434,22 +455,6 @@ export default function ThreadBoard({ board }: Props) {
           max-width: 82%;
         }
 
-        .thread-board-section--outcome,
-        .thread-board-section--intervention,
-        .thread-board-section--gameplan,
-        .thread-board-section--known,
-        .thread-board-section--timeout_call,
-        .thread-board-section--player_rule,
-        .thread-board-section--adjustment_trigger {
-          border-color: rgba(25, 24, 21, 0.28);
-        }
-
-        .thread-board-section--question,
-        .thread-board-section--need_next,
-        .thread-board-section--watch_next {
-          background: rgba(255, 254, 251, 0.78);
-        }
-
         .thread-board-section--hypothesis,
         .thread-board-section--pattern,
         .thread-board-section--assumed {
@@ -457,7 +462,7 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-section--relationship {
-          background: rgba(251, 250, 247, 0.72);
+          background: color-mix(in srgb, var(--axis-section-paper) 72%, transparent);
         }
 
         .thread-board-label {
@@ -468,7 +473,7 @@ export default function ThreadBoard({ board }: Props) {
         .thread-board-handle {
           background: transparent;
           border: 0;
-          color: rgba(25, 24, 21, 0.5);
+          color: color-mix(in srgb, var(--axis-section-muted) 76%, transparent);
           cursor: grab;
           display: block;
           font-family: inherit;
@@ -493,7 +498,7 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-items {
-          color: rgba(25, 24, 21, 0.78);
+          color: color-mix(in srgb, var(--axis-section-text) 78%, transparent);
           font-size: clamp(15px, 1.25vw, 18px);
           line-height: 1.38;
           margin: 0;

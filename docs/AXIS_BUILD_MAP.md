@@ -23,6 +23,7 @@ Build Now:
 2. Axis Understanding Primitives
 3. Axis Thread Board
 4. Board Object Layer: Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet.
+5. Axis Visual Language
 
 Refine Current:
 
@@ -82,6 +83,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Outcome / Next Move | Understanding primitive | Development | Active | After-action next step | Build Now | Axis must move the work forward. |
 | Thread Board | Surface | Understanding | Prototype | Progress note, coaching board, sketchnote | Refine Current | It makes the thread easier to understand, but must stay inline and compact. |
 | Thread Board sections | Rendering pattern | Thread Board | Prototype | Lesson board sections, clinical note sections | Refine Current | Sections help the user scan the thread without switching modes. |
+| Axis Visual Language | Foundation | Thread Board | Active foundation | Shared design tokens, practical status accents | Build Now | Provides one palette and local status styling source for the current Thread Board without adding a mode, API field, persistence, evidence, or memory. |
 | `/axis` layout | UI surface | Conversation | Active | Conversation feed + organized summary | Refine Current | Must be gym-readable and one-flow. |
 | `/api/axis/conversation` | API | Conversation | Active | Structured response generation | Refine Current | Should return reply + threadBoard cleanly. |
 | Thread Board sanitization | Infrastructure | Thread Board | Needed | Render-safe output validation | Refine Current | Board cannot show raw markdown, debug text, or weird glitches. |
@@ -239,6 +241,7 @@ Codex may touch these for current MVP refinement:
 src/app/axis/page.tsx
 src/app/axis/thread-board.tsx
 src/app/api/axis/conversation/route.ts
+src/lib/axis-visual-language.ts
 AGENTS.md
 docs/REPO_CLEANUP.md
 docs/AXIS_BUILD_MAP.md

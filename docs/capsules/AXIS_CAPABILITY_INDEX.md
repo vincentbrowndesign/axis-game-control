@@ -10,6 +10,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Conversation Layer | Active | Build Now | Text-first surface. Organizes rough input before asking. |
 | Axis Understanding Primitives | Active | Build Now | Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome. |
 | Axis Thread Board | Active | Refine Current | Inline comprehension view of the current thread. Not a separate screen. |
+| Axis Visual Language | Active foundation | Build Now | Shared palette and visual status styles for the current Thread Board and BoardSectionObject renderer. No new mode, API, persistence, evidence, memory, or manual creation. |
 
 ## Refine Current
 
@@ -52,12 +53,14 @@ Allowed active build:
 - Axis Conversation Layer
 - Axis Understanding Primitives
 - Axis Thread Board
+- Axis Visual Language
 
 Allowed current files:
 
 - `src/app/axis/page.tsx`
 - `src/app/axis/thread-board.tsx`
 - `src/app/api/axis/conversation/route.ts`
+- `src/lib/axis-visual-language.ts`
 - `AGENTS.md`
 - `docs/REPO_CLEANUP.md`
 - `docs/AXIS_BUILD_MAP.md`

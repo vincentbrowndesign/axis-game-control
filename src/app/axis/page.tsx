@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AXIS_ROOM_COLORS } from "../../lib/axis-visual-language";
 import ThreadBoard, { type ThreadBoardData } from "./thread-board";
 
 interface Message {
@@ -184,19 +185,27 @@ export default function AxisPage() {
 
         html,
         body {
-          background: #fbfaf7;
-          color: rgba(25, 24, 21, 0.92);
+          background: var(--axis-room);
+          color: color-mix(in srgb, var(--axis-ink) 92%, transparent);
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
           height: 100%;
           margin: 0;
           overflow: hidden;
           -webkit-font-smoothing: antialiased;
         }
+
+        :root {
+          --axis-room: ${AXIS_ROOM_COLORS.room};
+          --axis-paper: ${AXIS_ROOM_COLORS.paper};
+          --axis-ink: ${AXIS_ROOM_COLORS.ink};
+          --axis-line: ${AXIS_ROOM_COLORS.line};
+          --axis-grid: ${AXIS_ROOM_COLORS.grid};
+        }
       `}</style>
 
       <style jsx>{`
         .shell {
-          background: #fbfaf7;
+          background: var(--axis-room);
           display: flex;
           flex-direction: column;
           height: 100dvh;
@@ -235,7 +244,7 @@ export default function AxisPage() {
         }
 
         .site-mark {
-          color: rgba(25, 24, 21, 0.26);
+          color: color-mix(in srgb, var(--axis-ink) 26%, transparent);
           flex-shrink: 0;
           font-size: 12px;
           letter-spacing: 0.05em;
@@ -243,7 +252,7 @@ export default function AxisPage() {
         }
 
         .site-sub {
-          color: rgba(25, 24, 21, 0.2);
+          color: color-mix(in srgb, var(--axis-ink) 20%, transparent);
           font-size: 11px;
           letter-spacing: 0.01em;
           overflow: hidden;
@@ -290,15 +299,15 @@ export default function AxisPage() {
         }
 
         .msg--assistant {
-          color: rgba(25, 24, 21, 0.76);
+          color: color-mix(in srgb, var(--axis-ink) 76%, transparent);
         }
 
         .msg--user {
-          color: rgba(25, 24, 21, 0.96);
+          color: color-mix(in srgb, var(--axis-ink) 96%, transparent);
         }
 
         .helper {
-          color: rgba(25, 24, 21, 0.32);
+          color: color-mix(in srgb, var(--axis-ink) 32%, transparent);
           font-size: 14px;
           font-style: normal;
           margin: -8px 0 0;
@@ -320,7 +329,7 @@ export default function AxisPage() {
 
         .thinking span {
           animation: pulse 1.1s ease-in-out infinite;
-          background: rgba(25, 24, 21, 0.28);
+          background: color-mix(in srgb, var(--axis-ink) 28%, transparent);
           border-radius: 999px;
           display: block;
           height: 4px;
@@ -342,9 +351,9 @@ export default function AxisPage() {
         .board-stage {
           align-self: stretch;
           background:
-            linear-gradient(rgba(251, 250, 247, 0.88), rgba(251, 250, 247, 0.88)),
-            linear-gradient(rgba(25, 24, 21, 0.035) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(25, 24, 21, 0.025) 1px, transparent 1px);
+            linear-gradient(color-mix(in srgb, var(--axis-room) 88%, transparent), color-mix(in srgb, var(--axis-room) 88%, transparent)),
+            linear-gradient(color-mix(in srgb, var(--axis-grid) 54%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--axis-grid) 38%, transparent) 1px, transparent 1px);
           background-size: auto, 38px 38px, 38px 38px;
           display: flex;
           flex-direction: column;
@@ -363,15 +372,15 @@ export default function AxisPage() {
         }
 
         .room-empty {
-          border-top: 1px solid rgba(25, 24, 21, 0.14);
-          color: rgba(25, 24, 21, 0.34);
+          border-top: 1px solid color-mix(in srgb, var(--axis-line) 14%, transparent);
+          color: color-mix(in srgb, var(--axis-ink) 34%, transparent);
           margin-top: clamp(28px, 10vh, 96px);
           max-width: 620px;
           padding-top: 18px;
         }
 
         .room-empty-title {
-          color: rgba(25, 24, 21, 0.52);
+          color: color-mix(in srgb, var(--axis-ink) 52%, transparent);
           font-size: clamp(28px, 4vw, 56px);
           line-height: 1.02;
           margin: 0;
@@ -389,7 +398,7 @@ export default function AxisPage() {
         }
 
         .composer-wrap {
-          background: rgba(251, 250, 247, 0.94);
+          background: color-mix(in srgb, var(--axis-room) 94%, transparent);
           backdrop-filter: blur(14px);
           bottom: 0;
           left: 0;
@@ -402,7 +411,7 @@ export default function AxisPage() {
 
         .composer {
           align-items: flex-end;
-          border-top: 1px solid rgba(25, 24, 21, 0.1);
+          border-top: 1px solid color-mix(in srgb, var(--axis-line) 10%, transparent);
           display: flex;
           gap: 12px;
           margin: 0 auto;
@@ -413,7 +422,7 @@ export default function AxisPage() {
         .composer-input {
           background: transparent;
           border: 0;
-          color: rgba(25, 24, 21, 0.92);
+          color: color-mix(in srgb, var(--axis-ink) 92%, transparent);
           flex: 1;
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
           font-size: 18px;
@@ -428,14 +437,14 @@ export default function AxisPage() {
         }
 
         .composer-input::placeholder {
-          color: rgba(25, 24, 21, 0.26);
+          color: color-mix(in srgb, var(--axis-ink) 26%, transparent);
         }
 
         .send-btn {
-          background: rgba(25, 24, 21, 0.88);
+          background: color-mix(in srgb, var(--axis-ink) 88%, transparent);
           border: 0;
           border-radius: 3px;
-          color: #fbfaf7;
+          color: var(--axis-room);
           cursor: pointer;
           flex-shrink: 0;
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
