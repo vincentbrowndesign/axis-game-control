@@ -42,7 +42,7 @@ export default function ThreadBoard({ board }: Props) {
           items: Array.isArray(section.items)
             ? section.items
                 .filter((item) => typeof item === "string" && item.trim())
-                .slice(0, 3)
+                .slice(0, 4)
             : [],
         }))
         .filter(
@@ -165,6 +165,8 @@ export default function ThreadBoard({ board }: Props) {
 
         .thread-board-section--outcome,
         .thread-board-section--intervention,
+        .thread-board-section--gameplan,
+        .thread-board-section--known,
         .thread-board-section--timeout_call,
         .thread-board-section--player_rule,
         .thread-board-section--adjustment_trigger {
@@ -172,13 +174,19 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-section--question,
+        .thread-board-section--need_next,
         .thread-board-section--watch_next {
           background: rgba(255, 254, 251, 0.78);
         }
 
         .thread-board-section--hypothesis,
-        .thread-board-section--pattern {
+        .thread-board-section--pattern,
+        .thread-board-section--assumed {
           border-style: dashed;
+        }
+
+        .thread-board-section--relationship {
+          background: rgba(251, 250, 247, 0.72);
         }
 
         .thread-board-label {

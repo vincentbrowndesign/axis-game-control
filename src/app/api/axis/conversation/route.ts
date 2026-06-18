@@ -15,7 +15,7 @@ Response shape:
     "sections": [
       {
         "type": "observation | pattern | relationship | question | hypothesis | intervention | outcome",
-        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move | TIMEOUT CALL | PLAYER RULE | WATCH NEXT | ADJUSTMENT TRIGGER",
+        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move | TIMEOUT CALL | PLAYER RULE | WATCH NEXT | ADJUSTMENT TRIGGER | KNOWN | ASSUMED | GAMEPLAN | NEED NEXT | RELATIONSHIP",
         "items": ["string"]
       }
     ]
@@ -32,6 +32,8 @@ Reply rules:
 - If the user asks for an in-game play, give one concrete tactical adjustment and make the board about that adjustment.
 - If the user is in live pressure, give the call before asking for context.
 - If a live-pressure thread continues with a short update like "Rebounding", "too many chances", or "Ball watching", treat it as sideline context and return a compact call sheet.
+- If the user asks for a gameplan before roster details arrive, give a provisional plan and clearly separate known facts from assumptions.
+- If the user later gives player roles, update the plan around those roles without pretending the full roster is known.
 - If the user asks how to make a site better, make the first split concrete: readability, input speed, board usefulness, mobile friction.
 - If the user is watching, thinking, saying something "looks like", "maybe", or "notional", treat it as a possible read, not a fact.
 - If the user is talking about Axis itself, protect the current MVP: text conversation, understanding primitives, inline Thread Board, gym-readable use.
@@ -58,6 +60,7 @@ Thread board rules:
 - Sections must use one of these types: observation, pattern, relationship, question, hypothesis, intervention, outcome.
 - Labels must be one of: Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome / Next Move.
 - In live-pressure game contexts only, labels may also be: TIMEOUT CALL, PLAYER RULE, WATCH NEXT, ADJUSTMENT TRIGGER.
+- In thin-context gameplan contexts only, labels may also be: KNOWN, ASSUMED, GAMEPLAN, NEED NEXT, RELATIONSHIP.
 - Items must be short human phrases.
 - No markdown.
 - No raw arrows.
@@ -102,6 +105,7 @@ Good reply examples:
 - "The hesitation is the work. She has the shot; now she needs permission to use it before the defense gets comfortable."
 - "Hailey being passive against older competition is a pressure read, not a final judgment. The useful split is whether she is avoiding contact, rushing decisions, or waiting for permission before she attacks."
 - "A private run with NBA players and Alijah Arenas is a live talent-read thread, not proof by itself. Track what survives against size, speed, and better decisions before naming the claim."
+- "Temporary default until the roster lands: push pace, space the floor, and keep San Antonio from controlling the paint. Once you drop the roster, the plan should lock around your best creator, scorer, and big."
 - "The idea is not too small. The language around it is still too soft, so the next move is to name what it actually changes."
 - "The drills are working. The transfer is not, which means the practice needs more game-pressure decisions, not more reps."`;
 
@@ -127,6 +131,11 @@ const SECTION_LABELS = new Set([
   "PLAYER RULE",
   "WATCH NEXT",
   "ADJUSTMENT TRIGGER",
+  "KNOWN",
+  "ASSUMED",
+  "GAMEPLAN",
+  "NEED NEXT",
+  "RELATIONSHIP",
 ]);
 
 interface HistoryMessage {
@@ -254,6 +263,28 @@ function isPrivateRunInput(message: string) {
   return clean.includes("private run") || (clean.includes("nba players") && clean.includes("alijah"));
 }
 
+function isThinGameplanInput(message: string, context = "") {
+  const clean = liveContext(message, context);
+  const current = message.toLowerCase();
+  return /roster (is )?(coming|missing|not in|later)|give (me )?a gameplan|playing 2k|2k26|my gm|mygm|franchise|season/i.test(clean) &&
+    /(gameplan|roster|spurs|2k|2k26|my gm|mygm|franchise|season|seattle owls|expansion team)/i.test(current);
+}
+
+function isGameplanRoleUpdate(message: string, context = "") {
+  const clean = liveContext(message, context);
+  const current = message.toLowerCase();
+  return /(scorer|ballhandler|ball handler|creator|big|shooter|starter|starting five|dybansa|jakucionis)/i.test(current) &&
+    /(gameplan|spurs|seattle owls|roster|my gm|mygm|2k26|expansion team)/i.test(clean);
+}
+
+function hasSpursContext(message: string, context = "") {
+  return liveContext(message, context).includes("spurs");
+}
+
+function hasSeattleOwlsContext(message: string, context = "") {
+  return liveContext(message, context).includes("seattle owls");
+}
+
 function hasFutureLayerLeakage(reply: string) {
   return /\b(camera|voice|upload|mission|challenge|dashboard|memory|cv|replay|export|whiteboard mode|device|hardware|fundraising|market|startup|positioning|different form|first person who pays|who pays|customers?|business actually does)\b/i.test(reply);
 }
@@ -348,8 +379,111 @@ function titleCase(value: string) {
     .join(" ");
 }
 
-function createFallbackResponse(message: string): { reply: string; threadBoard: ThreadBoard } {
+function createFallbackResponse(message: string, context = ""): { reply: string; threadBoard: ThreadBoard } {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  const hasSpurs = hasSpursContext(message, context);
+  const hasSeattleOwls = hasSeattleOwlsContext(message, context);
+
+  if (isGameplanRoleUpdate(message, context)) {
+    return {
+      reply: "Now the plan has its first real anchors. Build the offense around Jakucionis creating pace and Dybansa finishing advantages once the defense rotates, but keep it provisional until the big, shooter, and defensive weak spot are named.",
+      threadBoard: {
+        title: hasSeattleOwls && hasSpurs ? "Seattle Owls vs Spurs Gameplan" : "Provisional Gameplan",
+        summary: "Build the offense around Jakucionis creating pace and Dybansa finishing advantages once the defense rotates.",
+        sections: [
+          {
+            type: "observation",
+            label: "KNOWN",
+            items: [
+              "Jakucionis is the ballhandler and pace-setter",
+              "Dybansa is the main scorer",
+              hasSpurs ? "Spurs are the opponent" : "Opponent context is still incomplete",
+            ],
+          },
+          {
+            type: "relationship",
+            label: "RELATIONSHIP",
+            items: [
+              "Jakucionis pushing pace can force early rotations",
+              "Dybansa becomes more dangerous once the defense is moving",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "GAMEPLAN",
+            items: [
+              "Let Jakucionis initiate early",
+              "Use Dybansa as the first scoring pressure point",
+              "Punish switches by hunting mismatches",
+            ],
+          },
+          {
+            type: "question",
+            label: "NEED NEXT",
+            items: [
+              "Best shooter",
+              "Best big",
+              "Defensive weakness",
+            ],
+          },
+        ],
+      },
+    };
+  }
+
+  if (isThinGameplanInput(message, context)) {
+    return {
+      reply: hasSpurs
+        ? "Temporary default until the roster lands: push pace, attack bigs in space, and avoid letting San Antonio control the paint. With the roster missing, the safest plan is pace, spacing, and early offense before matchup hunting. Give me your starting five or your best creator, best scorer, and best big."
+        : "Temporary default until the roster lands: build the Seattle Owls around pace, spacing, and simple paint protection. Once you drop the roster, the plan should lock around your best creator, best scorer, and big.",
+      threadBoard: {
+        title: hasSpurs
+          ? "Seattle Owls vs Spurs Provisional Gameplan"
+          : "Seattle Owls Provisional Gameplan",
+        summary: hasSpurs
+          ? "Roster is not in yet, so this is a temporary plan: push pace, attack bigs in space, and avoid letting San Antonio control the paint."
+          : "Roster is not in yet, so this is a temporary Seattle Owls plan built around pace, spacing, and paint control.",
+        sections: [
+          {
+            type: "observation",
+            label: "KNOWN",
+            items: [
+              hasSeattleOwls ? "Seattle Owls expansion team" : "Expansion team context",
+              hasSpurs ? "Opponent is the Spurs" : "Opponent is not locked yet",
+              "Roster is coming later",
+            ],
+          },
+          {
+            type: "hypothesis",
+            label: "ASSUMED",
+            items: [
+              "Plan needs to work before full personnel is known",
+              "Safest default is pace, spacing, and paint control",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "GAMEPLAN",
+            items: [
+              "Push before the defense gets set",
+              hasSpurs ? "Attack bigs in space" : "Create early advantages before set defense",
+              "Use pull-ups and early offense before matchup hunting",
+            ],
+          },
+          {
+            type: "question",
+            label: "NEED NEXT",
+            items: [
+              "Starting five",
+              "Best creator",
+              "Best scorer",
+              "Best big or rim protector",
+            ],
+          },
+        ],
+      },
+    };
+  }
 
   if (isBallWatchingInput(message)) {
     return {
@@ -1078,6 +1212,8 @@ export async function POST(req: Request) {
     safeMessages.push({ role: "user", content: message });
   }
 
+  const contextText = safeMessages.map((m) => m.content).join(" ");
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -1115,6 +1251,8 @@ export async function POST(req: Request) {
       const reply = cleanString(parsed.reply);
 
       if (
+        isGameplanRoleUpdate(message, contextText) ||
+        isThinGameplanInput(message, contextText) ||
         isLivePressureInput(message) ||
         isGamePlayInput(message) ||
         isSiteBetterInput(message) ||
@@ -1127,7 +1265,7 @@ export async function POST(req: Request) {
         !isValidReply(reply) ||
         (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))
       ) {
-        return Response.json(createFallbackResponse(message));
+        return Response.json(createFallbackResponse(message, contextText));
       }
 
       const validThreadBoard = validateThreadBoard(parsed.threadBoard);
@@ -1137,7 +1275,7 @@ export async function POST(req: Request) {
         !(isAxisMvpInput(message) && boardHasFutureLayerLeakage(validThreadBoard))
           ? validThreadBoard
           : null;
-      const fallback = threadBoard ? null : createFallbackResponse(message);
+      const fallback = threadBoard ? null : createFallbackResponse(message, contextText);
 
       return Response.json({
         reply,
@@ -1151,6 +1289,8 @@ export async function POST(req: Request) {
         !isPrivateRunInput(message) &&
         !isSunoInput(message) &&
         !isHaileyPassiveInput(message) &&
+        !isGameplanRoleUpdate(message, contextText) &&
+        !isThinGameplanInput(message, contextText) &&
         !isLivePressureInput(message) &&
         isValidReply(text) &&
         !(isSpeculativeInput(message) && hasSpeculationAsFact(text)) &&
@@ -1158,11 +1298,11 @@ export async function POST(req: Request) {
       ) {
         return Response.json({
           reply: text,
-          threadBoard: createFallbackResponse(message).threadBoard,
+          threadBoard: createFallbackResponse(message, contextText).threadBoard,
         });
       }
 
-      return Response.json(createFallbackResponse(message));
+      return Response.json(createFallbackResponse(message, contextText));
     }
   } catch (err) {
     console.error("[axis/conversation] error", (err as Error).message);
