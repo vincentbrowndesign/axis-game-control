@@ -76,36 +76,39 @@ export default function ThreadBoard({ board }: Props) {
       <style jsx>{`
         .thread-board {
           border-bottom: 1px solid rgba(25, 24, 21, 0.08);
-          border-top: 1px solid rgba(25, 24, 21, 0.12);
-          margin: 2px 0 6px;
-          max-width: 760px;
-          padding: 14px 0 12px;
+          border-top: 1px solid rgba(25, 24, 21, 0.16);
+          margin: 0;
+          max-width: 820px;
+          padding: 18px 0 14px;
+          width: 100%;
         }
 
         .thread-board-title {
-          color: rgba(25, 24, 21, 0.82);
-          font-size: 17px;
+          color: rgba(25, 24, 21, 0.86);
+          font-size: clamp(22px, 3vw, 40px);
           font-weight: 600;
-          line-height: 1.3;
-          margin: 0 0 5px;
+          line-height: 1.08;
+          margin: 0 0 8px;
         }
 
         .thread-board-summary {
-          color: rgba(25, 24, 21, 0.56);
-          font-size: 13px;
-          line-height: 1.4;
-          margin: 0 0 10px;
+          color: rgba(25, 24, 21, 0.58);
+          font-size: clamp(15px, 1.4vw, 18px);
+          line-height: 1.42;
+          margin: 0 0 18px;
           max-width: 62ch;
         }
 
         .thread-board-sections {
           display: grid;
-          gap: 10px 18px;
+          gap: 16px 28px;
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .thread-board-section {
+          border-top: 1px solid rgba(25, 24, 21, 0.1);
           min-width: 0;
+          padding-top: 8px;
         }
 
         .thread-board-label {
@@ -119,7 +122,7 @@ export default function ThreadBoard({ board }: Props) {
 
         .thread-board-items {
           color: rgba(25, 24, 21, 0.76);
-          font-size: 14px;
+          font-size: 15px;
           line-height: 1.45;
           margin: 0;
           padding-left: 17px;
@@ -135,8 +138,18 @@ export default function ThreadBoard({ board }: Props) {
             padding-top: 12px;
           }
 
+          .thread-board-title {
+            font-size: 22px;
+          }
+
+          .thread-board-summary,
+          .thread-board-items {
+            font-size: 14px;
+          }
+
           .thread-board-sections {
             grid-template-columns: 1fr;
+            gap: 12px;
           }
         }
       `}</style>

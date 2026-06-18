@@ -25,6 +25,7 @@ export default function AxisPage() {
     (latest, message, index) => (message.role === "assistant" ? index : latest),
     -1,
   );
+  const latestAssistant = messages[latestAssistantIndex];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -90,8 +91,8 @@ export default function AxisPage() {
   return (
     <>
       <main className="shell">
-        <section className="conversation" aria-label="Axis conversation">
-          <div className="conversation-inner">
+        <section className="room" aria-label="Axis thinking room">
+          <div className="conversation-panel">
             <header className="site-header">
               <span className="site-mark">Axis</span>
               <span className="site-sub">Develop the work through conversation.</span>
@@ -104,7 +105,9 @@ export default function AxisPage() {
                     <div className={`msg msg--${msg.role}`}>{msg.content}</div>
 
                     {i === latestAssistantIndex && msg.threadBoard && (
-                      <ThreadBoard board={msg.threadBoard} />
+                      <div className="inline-board">
+                        <ThreadBoard board={msg.threadBoard} />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -126,6 +129,17 @@ export default function AxisPage() {
               </div>
             </div>
           </div>
+
+          <section className="board-stage" aria-label="Thread Board">
+            {latestAssistant?.threadBoard ? (
+              <ThreadBoard board={latestAssistant.threadBoard} />
+            ) : (
+              <div className="room-empty">
+                <p className="room-empty-title">What are we working on?</p>
+                <p className="room-empty-copy">Bring the rough version. I&apos;ll help it develop.</p>
+              </div>
+            )}
+          </section>
         </section>
 
         <div className="composer-wrap">
@@ -192,20 +206,21 @@ export default function AxisPage() {
           width: 100vw;
         }
 
-        .conversation {
+        .room {
+          display: grid;
           flex: 1;
+          gap: clamp(28px, 5vw, 72px);
+          grid-template-columns: minmax(320px, 0.78fr) minmax(460px, 1.22fr);
           min-height: 0;
           overflow: hidden;
-          padding: 18px clamp(16px, 4vw, 48px) 112px;
+          padding: 20px clamp(18px, 4vw, 56px) 112px;
           width: 100%;
         }
 
-        .conversation-inner {
+        .conversation-panel {
           display: flex;
           flex-direction: column;
           height: 100%;
-          margin: 0 auto;
-          max-width: 820px;
           min-height: 0;
           min-width: 0;
           width: 100%;
@@ -251,7 +266,7 @@ export default function AxisPage() {
         }
 
         .thread--initial {
-          padding-top: 12vh;
+          padding-top: 10vh;
         }
 
         .thread-inner {
@@ -269,7 +284,7 @@ export default function AxisPage() {
         }
 
         .msg {
-          font-size: 20px;
+          font-size: clamp(18px, 1.55vw, 22px);
           line-height: 1.5;
           overflow-wrap: anywhere;
         }
@@ -318,6 +333,46 @@ export default function AxisPage() {
 
         .thinking span:nth-child(3) {
           animation-delay: 0.36s;
+        }
+
+        .inline-board {
+          display: none;
+        }
+
+        .board-stage {
+          align-self: stretch;
+          background:
+            linear-gradient(rgba(251, 250, 247, 0.9), rgba(251, 250, 247, 0.9)),
+            linear-gradient(rgba(25, 24, 21, 0.04) 1px, transparent 1px);
+          background-size: auto, 34px 34px;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          min-height: 0;
+          min-width: 0;
+          overflow: hidden;
+          padding: clamp(10px, 2vw, 28px) 0 0;
+        }
+
+        .room-empty {
+          border-top: 1px solid rgba(25, 24, 21, 0.14);
+          color: rgba(25, 24, 21, 0.34);
+          margin-top: clamp(28px, 10vh, 96px);
+          max-width: 620px;
+          padding-top: 14px;
+        }
+
+        .room-empty-title {
+          color: rgba(25, 24, 21, 0.52);
+          font-size: clamp(28px, 4vw, 56px);
+          line-height: 1.02;
+          margin: 0 0 12px;
+        }
+
+        .room-empty-copy {
+          font-size: 16px;
+          line-height: 1.45;
+          margin: 0;
         }
 
         @keyframes pulse {
@@ -398,12 +453,25 @@ export default function AxisPage() {
         }
 
         @media (max-width: 760px) {
-          .conversation {
+          .room {
+            display: block;
             padding-inline: 16px;
             padding-top: 14px;
           }
 
+          .conversation-panel {
+            height: 100%;
+          }
+
           .site-sub {
+            display: none;
+          }
+
+          .inline-board {
+            display: block;
+          }
+
+          .board-stage {
             display: none;
           }
 

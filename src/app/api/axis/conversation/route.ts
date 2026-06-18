@@ -28,6 +28,7 @@ Reply rules:
 - If the prompt is short or ambiguous, name what is usually underneath it before asking anything.
 - Short gym phrases are not too thin. Treat them as the thread title and make a useful first split.
 - For one-word prompts like "jumpshot", "the shot", or "footwork", do not ask what the user means. Give the first useful read.
+- Rough creative, practice, content, or business inputs are also enough to organize. Name the working surface and the first useful split.
 - If the user is talking about Axis itself, protect the current MVP: text conversation, understanding primitives, inline Thread Board, gym-readable use.
 - For Axis product inputs, do not give startup advice, device advice, fundraising advice, positioning advice, or future-layer advice.
 - Do not merge adjacent facts into invented evidence. If the user says "Hailey had 12 points" and then mentions floaters, do not claim the 12 points came from floaters unless the user says that.
@@ -67,6 +68,8 @@ Never say:
 - "What aspect of [topic] do you want to focus on?"
 - "Does it need a different form?"
 - "What is your target market?"
+- "Who will pay for it?"
+- "Tell me the team, level, and goal."
 
 Internal behavior pattern:
 - Catch: identify the rough topic.
@@ -78,6 +81,8 @@ Internal behavior pattern:
 Good reply examples:
 - "Making Axis real means proving the active loop first: rough gym language in, useful understanding out, Thread Board making the work easier to read. The boundary is not more features; it is whether the current conversation can hold up mid-session."
 - "Adding too much is the pressure point. The work is to protect the smallest real loop: type the rough thought, get shape back, scan the Thread Board, and keep moving."
+- "Suno is the creation surface. The useful split is whether the work is about song direction, prompt language, or choosing what is worth keeping."
+- "Practice needs a simple room before it needs a system: what happened, what matters, and what the next session should make visible."
 - "Footwork is the entry point. The useful split is whether the player is losing organization before the catch, before the attack, or before the finish. Keep the thread on the moment where the feet decide the next action."
 - "The shot is too broad as a drill label, but it is useful as a thread title. The first split is whether the miss is coming from setup, timing, or decision pressure."
 - "The hesitation is the work. She has the shot; now she needs permission to use it before the defense gets comfortable."
@@ -148,6 +153,8 @@ function isGenericClarification(reply: string) {
     /could you clarify/,
     /can you clarify/,
     /tell me more about/,
+    /tell me the team/,
+    /tell me the player/,
   ].some((pattern) => pattern.test(clean));
 }
 
@@ -157,12 +164,18 @@ function isAxisMvpInput(message: string) {
     clean.includes("adding too much") ||
     clean.includes("work in the gym") ||
     clean.includes("gym first") ||
+    clean.includes("business real") ||
+    clean.includes("make this business real") ||
     clean.includes("make it real") ||
     clean.includes("make this real");
 }
 
+function isBusinessRealInput(message: string) {
+  return message.toLowerCase().includes("business real");
+}
+
 function hasFutureLayerLeakage(reply: string) {
-  return /\b(camera|voice|upload|mission|challenge|dashboard|memory|cv|replay|export|whiteboard mode|device|hardware|fundraising|market|startup|positioning|different form)\b/i.test(reply);
+  return /\b(camera|voice|upload|mission|challenge|dashboard|memory|cv|replay|export|whiteboard mode|device|hardware|fundraising|market|startup|positioning|different form|first person who pays|who pays|customers?|business actually does)\b/i.test(reply);
 }
 
 function hasUnsupportedHaileyFloaterClaim(text: string) {
@@ -253,7 +266,120 @@ function titleCase(value: string) {
 function createFallbackResponse(message: string): { reply: string; threadBoard: ThreadBoard } {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
 
+  if (normalized.includes("suno")) {
+    return {
+      reply: "Suno is the creation surface. The useful split is whether the work is about song direction, prompt language, or choosing what is worth keeping. Keep the thread on the decision that makes the next generation better.",
+      threadBoard: {
+        title: "Suno Work",
+        summary: "The thread is about turning a rough creation session into clearer direction.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: ["Suno is the current work surface"],
+          },
+          {
+            type: "question",
+            label: "Question",
+            items: ["Is the problem direction, prompt language, or selection"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Name what should improve in the next generation"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (normalized.includes("organize practice")) {
+    return {
+      reply: "Practice needs a simple room before it needs a system. The useful split is what happened, what pattern matters, and what the next session should make visible. Start by naming the one thing practice has to clarify.",
+      threadBoard: {
+        title: "Organize Practice",
+        summary: "The thread is about making practice easier to understand and act on.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: ["Practice needs organization"],
+          },
+          {
+            type: "pattern",
+            label: "Pattern",
+            items: ["The work needs a clearer focus before more structure"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Name what the next session should make visible"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (normalized.includes("better content")) {
+    return {
+      reply: "Better content is too broad until it has a job. The first split is whether the content needs a clearer point, a stronger example, or a better reason to exist. Start with the piece that should make someone understand faster.",
+      threadBoard: {
+        title: "Better Content",
+        summary: "The thread is about making content clearer and more useful, not simply adding more of it.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: ["The content needs to get better"],
+          },
+          {
+            type: "relationship",
+            label: "Relationship",
+            items: ["Clearer point, stronger example, and purpose change the work differently"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Choose what should help someone understand faster"],
+          },
+        ],
+      },
+    };
+  }
+
   if (isAxisMvpInput(message)) {
+    if (normalized.includes("business real")) {
+      return {
+        reply: "Making this business real starts with the smallest proof loop. The work is not adding more shape around it; it is showing that one rough input can become useful understanding fast enough for someone to trust it. Keep the thread on the first loop that proves value.",
+        threadBoard: {
+          title: "Make The Business Real",
+          summary: "The thread is about proving the smallest useful loop before adding more structure.",
+          sections: [
+            {
+              type: "observation",
+              label: "Observation",
+              items: ["The business needs to become real through use"],
+            },
+            {
+              type: "pattern",
+              label: "Pattern",
+              items: ["Adding more can hide whether the core loop works"],
+            },
+            {
+              type: "relationship",
+              label: "Relationship",
+              items: ["A trusted loop matters before a bigger system"],
+            },
+            {
+              type: "outcome",
+              label: "Outcome / Next Move",
+              items: ["Prove the first loop that creates value"],
+            },
+          ],
+        },
+      };
+    }
+
     if (normalized.includes("adding too much")) {
       return {
         reply: "Adding too much is the pressure point. The work is to protect the smallest real loop: type the rough thought, get shape back, scan the Thread Board, and keep moving. Anything outside that loop is not allowed to drive the MVP yet.",
@@ -560,7 +686,11 @@ export async function POST(req: Request) {
       };
       const reply = cleanString(parsed.reply);
 
-      if (!isValidReply(reply) || (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))) {
+      if (
+        isBusinessRealInput(message) ||
+        !isValidReply(reply) ||
+        (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))
+      ) {
         return Response.json(createFallbackResponse(message));
       }
 
