@@ -10,6 +10,7 @@ interface Message {
 }
 
 const INITIAL: Message = { role: "assistant", content: "What are we working on?" };
+const tools = ["draw", "text", "box", "arrow/line", "clear"];
 
 export default function AxisPage() {
   const [messages, setMessages] = useState<Message[]>([INITIAL]);
@@ -17,15 +18,11 @@ export default function AxisPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const isInitial = messages.length === 1 && !loading;
-  const latestAssistantIndex = messages.reduce(
-    (latest, message, index) => (message.role === "assistant" ? index : latest),
-    -1,
-  );
+  const latestAssistant = messages.findLast((message) => message.role === "assistant");
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -91,38 +88,57 @@ export default function AxisPage() {
   return (
     <>
       <main className="shell">
-        <header className="site-header">
-          <span className="site-mark">Axis</span>
-          <span className="site-sub">Develop the work through conversation.</span>
-        </header>
+        <section className="workspace" aria-label="Axis workspace">
+          <aside className="transcript" aria-label="Conversation transcript">
+            <header className="site-header">
+              <span className="site-mark">Axis</span>
+              <span className="site-sub">Develop the work through conversation.</span>
+            </header>
 
-        <div className={`thread${isInitial ? " thread--initial" : ""}`} ref={threadRef}>
-          <div className="thread-inner">
-            {messages.map((msg, i) => (
-              <div key={i} className={`msg msg--${msg.role}`}>
-                {msg.content}
-                {msg.role === "assistant" && i === latestAssistantIndex && (
-                  <ThreadBoard board={msg.threadBoard} />
+            <div className={`thread${isInitial ? " thread--initial" : ""}`}>
+              <div className="thread-inner">
+                {messages.map((msg, i) => (
+                  <div key={i} className={`msg msg--${msg.role}`}>
+                    {msg.content}
+                  </div>
+                ))}
+
+                {isInitial && (
+                  <p className="helper">Bring the rough version. I&apos;ll help it develop.</p>
                 )}
+
+                {loading && (
+                  <div className="thinking" aria-label="Thinking">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                )}
+
+                {error && <p className="msg-error">{error}</p>}
+                <div ref={bottomRef} />
               </div>
-            ))}
+            </div>
+          </aside>
 
-            {isInitial && (
-              <p className="helper">Bring the rough version. I&apos;ll help it develop.</p>
-            )}
+          <section className="whiteboard" aria-label="Whiteboard workspace">
+            <div className="tool-row" aria-label="Whiteboard tools">
+              {tools.map((tool) => (
+                <button key={tool} type="button" className="tool-btn">
+                  {tool}
+                </button>
+              ))}
+            </div>
 
-            {loading && (
-              <div className="thinking" aria-label="Thinking">
-                <span />
-                <span />
-                <span />
-              </div>
-            )}
-
-            {error && <p className="msg-error">{error}</p>}
-            <div ref={bottomRef} />
-          </div>
-        </div>
+            <div className="board-content">
+              {latestAssistant?.threadBoard ? (
+                <ThreadBoard board={latestAssistant.threadBoard} />
+              ) : (
+                <p className="board-empty">The board will organize the thread here.</p>
+              )}
+            </div>
+          </section>
+        </section>
 
         <div className="composer-wrap">
           <form
@@ -155,7 +171,6 @@ export default function AxisPage() {
               Send
             </button>
           </form>
-          <p className="support-line">Axis helps the work develop one layer at a time.</p>
         </div>
       </main>
 
@@ -165,82 +180,108 @@ export default function AxisPage() {
         *::after {
           box-sizing: border-box;
         }
+
         html,
         body {
           background: #fbfaf7;
           color: rgba(25, 24, 21, 0.92);
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          -webkit-font-smoothing: antialiased;
+          height: 100%;
           margin: 0;
-          min-height: 100%;
-          overflow-x: hidden;
+          overflow: hidden;
+          -webkit-font-smoothing: antialiased;
         }
       `}</style>
 
       <style jsx>{`
         .shell {
+          background: #fbfaf7;
+          height: 100dvh;
+          overflow: hidden;
+          position: relative;
+          width: 100vw;
+        }
+
+        .workspace {
           display: flex;
+          height: 100%;
+          min-height: 0;
+          padding-bottom: 78px;
+          width: 100%;
+        }
+
+        .transcript {
+          background: rgba(251, 250, 247, 0.96);
+          display: flex;
+          flex: 0 0 clamp(280px, 28vw, 390px);
           flex-direction: column;
-          height: 100svh;
-          margin: 0 auto;
-          max-width: 800px;
-          padding: 0 clamp(20px, 5vw, 60px);
+          min-height: 0;
+          min-width: 0;
+          padding: 18px 20px 0;
         }
 
         .site-header {
           align-items: baseline;
           display: flex;
           flex-shrink: 0;
-          gap: 16px;
-          padding: 18px 0 0;
+          gap: 12px;
+          min-width: 0;
+          padding-bottom: 16px;
         }
 
         .site-mark {
-          color: rgba(25, 24, 21, 0.22);
+          color: rgba(25, 24, 21, 0.26);
+          flex-shrink: 0;
           font-size: 12px;
           letter-spacing: 0.05em;
           user-select: none;
         }
 
         .site-sub {
-          color: rgba(25, 24, 21, 0.18);
+          color: rgba(25, 24, 21, 0.2);
           font-size: 11px;
           letter-spacing: 0.01em;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .thread {
           flex: 1;
+          min-height: 0;
+          overflow-x: hidden;
           overflow-y: auto;
-          padding: 32px 0 180px;
+          padding: 10px 0 24px;
         }
 
         .thread--initial {
-          padding-top: 14vh;
+          padding-top: 12vh;
         }
 
         .thread-inner {
           display: flex;
           flex-direction: column;
-          gap: 26px;
-          max-width: 660px;
+          gap: 20px;
+          min-width: 0;
         }
 
         .msg {
-          font-size: clamp(19px, 2.3vw, 26px);
-          line-height: 1.56;
+          font-size: 18px;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
         }
 
         .msg--assistant {
-          color: rgba(25, 24, 21, 0.82);
+          color: rgba(25, 24, 21, 0.76);
         }
 
         .msg--user {
-          color: rgba(25, 24, 21, 0.98);
+          color: rgba(25, 24, 21, 0.96);
         }
 
         .helper {
           color: rgba(25, 24, 21, 0.32);
-          font-size: 15px;
+          font-size: 14px;
           font-style: normal;
           margin: -8px 0 0;
         }
@@ -287,14 +328,63 @@ export default function AxisPage() {
           }
         }
 
+        .whiteboard {
+          background:
+            linear-gradient(rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.78)),
+            radial-gradient(circle, rgba(25, 24, 21, 0.055) 1px, transparent 1px);
+          background-color: #fffefb;
+          background-size: auto, 24px 24px;
+          flex: 1;
+          min-height: 0;
+          min-width: 0;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .tool-row {
+          display: flex;
+          gap: 6px;
+          left: 18px;
+          position: absolute;
+          top: 16px;
+          z-index: 1;
+        }
+
+        .tool-btn {
+          background: rgba(255, 255, 255, 0.78);
+          border: 1px solid rgba(25, 24, 21, 0.1);
+          border-radius: 4px;
+          color: rgba(25, 24, 21, 0.52);
+          cursor: default;
+          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+          font-size: 12px;
+          height: 30px;
+          padding: 0 10px;
+          text-transform: lowercase;
+        }
+
+        .board-content {
+          height: 100%;
+          overflow: hidden;
+          padding: 62px clamp(24px, 5vw, 72px) 28px;
+          width: 100%;
+        }
+
+        .board-empty {
+          color: rgba(25, 24, 21, 0.24);
+          font-size: 16px;
+          margin: 0;
+        }
+
         .composer-wrap {
           background: rgba(251, 250, 247, 0.94);
           backdrop-filter: blur(14px);
           bottom: 0;
           left: 0;
-          padding: 0 clamp(20px, 5vw, 60px) max(18px, env(safe-area-inset-bottom));
+          padding: 0 clamp(16px, 3vw, 36px) max(14px, env(safe-area-inset-bottom));
           position: fixed;
           right: 0;
+          z-index: 3;
         }
 
         .composer {
@@ -303,8 +393,8 @@ export default function AxisPage() {
           display: flex;
           gap: 12px;
           margin: 0 auto;
-          max-width: 800px;
-          padding: 14px 0 10px;
+          max-width: 1160px;
+          padding: 14px 0 8px;
         }
 
         .composer-input {
@@ -315,7 +405,7 @@ export default function AxisPage() {
           font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
           font-size: 18px;
           line-height: 1.5;
-          max-height: 160px;
+          max-height: 120px;
           min-height: 28px;
           min-width: 0;
           outline: 0;
@@ -352,23 +442,33 @@ export default function AxisPage() {
           opacity: 0.72;
         }
 
-        .support-line {
-          color: rgba(25, 24, 21, 0.2);
-          font-size: 11px;
-          letter-spacing: 0.01em;
-          margin: 0 auto;
-          max-width: 800px;
-          padding: 0 0 6px;
-          text-align: center;
-        }
+        @media (max-width: 760px) {
+          .workspace {
+            flex-direction: column;
+          }
 
-        @media (max-width: 600px) {
-          .thread--initial {
-            padding-top: 12vh;
+          .transcript {
+            flex: 0 0 42dvh;
+            padding-inline: 16px;
           }
+
+          .whiteboard {
+            flex: 1;
+          }
+
+          .board-content {
+            padding: 58px 18px 24px;
+          }
+
+          .tool-row {
+            flex-wrap: wrap;
+            right: 16px;
+          }
+
           .msg {
-            font-size: 18px;
+            font-size: 16px;
           }
+
           .composer-input {
             font-size: 16px;
           }

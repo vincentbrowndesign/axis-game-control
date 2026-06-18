@@ -75,14 +75,12 @@ export default function ThreadBoard({ board }: Props) {
 
       <style jsx>{`
         .thread-board {
-          border-top: 1px solid rgba(25, 24, 21, 0.12);
-          margin-top: 14px;
-          padding-top: 14px;
+          max-width: 720px;
         }
 
         .thread-board-title {
           color: rgba(25, 24, 21, 0.72);
-          font-size: 15px;
+          font-size: 18px;
           font-weight: 600;
           line-height: 1.35;
           margin: 0 0 4px;
@@ -90,7 +88,7 @@ export default function ThreadBoard({ board }: Props) {
 
         .thread-board-summary {
           color: rgba(25, 24, 21, 0.5);
-          font-size: 13px;
+          font-size: 14px;
           line-height: 1.45;
           margin: 0 0 12px;
         }
@@ -102,7 +100,7 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-section {
-          border-left: 1px solid rgba(25, 24, 21, 0.12);
+          border-left: 1px solid rgba(25, 24, 21, 0.1);
           padding-left: 12px;
         }
 
