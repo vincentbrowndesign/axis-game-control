@@ -455,9 +455,9 @@ export default function AxisPage() {
         @media (max-width: 760px) {
           .room {
             display: block;
-            padding-bottom: 118px;
-            padding-inline: 16px;
-            padding-top: 12px;
+            padding-bottom: 138px;
+            padding-inline: 14px;
+            padding-top: 10px;
           }
 
           .conversation-panel {
@@ -477,8 +477,8 @@ export default function AxisPage() {
           }
 
           .msg {
-            font-size: 17px;
-            line-height: 1.44;
+            font-size: 16px;
+            line-height: 1.4;
           }
 
           .composer-input {
@@ -486,29 +486,29 @@ export default function AxisPage() {
           }
 
           .thread {
-            padding-bottom: 76px;
+            padding-bottom: 96px;
           }
 
           .thread--initial {
-            padding-top: 8vh;
+            padding-top: 7vh;
           }
 
           .thread-inner {
-            gap: 14px;
+            gap: 11px;
           }
 
           .turn {
-            gap: 10px;
+            gap: 8px;
           }
 
           .composer-wrap {
-            padding-inline: 14px;
-            padding-bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+            padding-inline: 12px;
+            padding-bottom: max(18px, calc(env(safe-area-inset-bottom) + 10px));
           }
 
           .composer {
-            gap: 10px;
-            padding: 11px 0 7px;
+            gap: 9px;
+            padding: 10px 0 6px;
           }
 
           .send-btn {

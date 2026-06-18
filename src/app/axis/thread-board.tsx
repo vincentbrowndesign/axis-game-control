@@ -182,47 +182,48 @@ export default function ThreadBoard({ board }: Props) {
 
         @media (max-width: 640px) {
           .thread-board {
-            gap: 12px;
-            padding-bottom: 4px;
-            padding-top: 8px;
+            gap: 9px;
+            padding-bottom: 0;
+            padding-top: 5px;
           }
 
           .thread-board-title {
-            font-size: 22px;
-            line-height: 1.05;
-            margin-bottom: 6px;
+            font-size: 20px;
+            line-height: 1.03;
+            margin-bottom: 4px;
           }
 
           .thread-board-summary {
-            font-size: 13px;
-            line-height: 1.35;
+            font-size: 12.5px;
+            line-height: 1.3;
           }
 
           .thread-board-items {
-            font-size: 14px;
-            line-height: 1.36;
+            font-size: 13.5px;
+            line-height: 1.3;
           }
 
           .thread-board-sections {
             grid-template-columns: 1fr;
-            gap: 9px;
+            gap: 7px;
           }
 
           .thread-board-anchor {
-            padding-top: 10px;
+            border-top-width: 1px;
+            padding-top: 7px;
           }
 
           .thread-board-label {
             font-size: 10px;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
           }
 
           .thread-board-section {
-            padding: 10px 11px;
+            padding: 8px 9px;
           }
 
           .thread-board-items li + li {
-            margin-top: 5px;
+            margin-top: 3px;
           }
 
           .thread-board-section,

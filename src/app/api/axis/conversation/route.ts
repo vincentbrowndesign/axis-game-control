@@ -15,7 +15,7 @@ Response shape:
     "sections": [
       {
         "type": "observation | pattern | relationship | question | hypothesis | intervention | outcome",
-        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move",
+        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move | TIMEOUT CALL | PLAYER RULE | WATCH NEXT | ADJUSTMENT TRIGGER",
         "items": ["string"]
       }
     ]
@@ -30,6 +30,8 @@ Reply rules:
 - For one-word prompts like "jumpshot", "the shot", or "footwork", do not ask what the user means. Give the first useful read.
 - Rough creative, practice, content, or business inputs are also enough to organize. Name the working surface and the first useful split.
 - If the user asks for an in-game play, give one concrete tactical adjustment and make the board about that adjustment.
+- If the user is in live pressure, give the call before asking for context.
+- If a live-pressure thread continues with a short update like "Rebounding", "too many chances", or "Ball watching", treat it as sideline context and return a compact call sheet.
 - If the user asks how to make a site better, make the first split concrete: readability, input speed, board usefulness, mobile friction.
 - If the user is watching, thinking, saying something "looks like", "maybe", or "notional", treat it as a possible read, not a fact.
 - If the user is talking about Axis itself, protect the current MVP: text conversation, understanding primitives, inline Thread Board, gym-readable use.
@@ -54,6 +56,7 @@ Thread board rules:
 - The board organizes the same thread as the reply. Conversation is source; board is organization.
 - Sections must use one of these types: observation, pattern, relationship, question, hypothesis, intervention, outcome.
 - Labels must be one of: Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome / Next Move.
+- In live-pressure game contexts only, labels may also be: TIMEOUT CALL, PLAYER RULE, WATCH NEXT, ADJUSTMENT TRIGGER.
 - Items must be short human phrases.
 - No markdown.
 - No raw arrows.
@@ -74,6 +77,8 @@ Never say:
 - "What is your target market?"
 - "Who will pay for it?"
 - "Tell me the team, level, and goal."
+- "What are you seeing?"
+- "Give me the first read."
 
 Internal behavior pattern:
 - Catch: identify the rough topic.
@@ -88,6 +93,7 @@ Good reply examples:
 - "Suno is the creation surface. The useful split is whether the work is about song direction, prompt language, or choosing what is worth keeping."
 - "Practice needs a simple room before it needs a system: what happened, what matters, and what the next session should make visible."
 - "At a game, do not search for a perfect play. If they have one scorer carrying the offense, the fast adjustment is box-and-one principles: your best defender takes the scorer, the other four shrink the floor and force weaker decisions."
+- "Call the timeout around second chances, not the whole defense. Every player names their man as the shot goes up, hits body first, finds ball second, and the guards crack back on long rebounds. If they get two more offensive boards, assign box-out matchups directly."
 - "The site gets better through the surface, not a big redesign. Start with readability, input speed, board usefulness, and mobile friction."
 - "That is a ceiling read, not a fact yet. The useful work is naming what practice evidence would make the contender claim real."
 - "Footwork is the entry point. The useful split is whether the player is losing organization before the catch, before the attack, or before the finish. Keep the thread on the moment where the feet decide the next action."
@@ -114,6 +120,10 @@ const SECTION_LABELS = new Set([
   "Hypothesis",
   "Intervention",
   "Outcome / Next Move",
+  "TIMEOUT CALL",
+  "PLAYER RULE",
+  "WATCH NEXT",
+  "ADJUSTMENT TRIGGER",
 ]);
 
 interface HistoryMessage {
@@ -180,6 +190,33 @@ function isAxisMvpInput(message: string) {
 function isGamePlayInput(message: string) {
   const clean = message.toLowerCase();
   return clean.includes("at a game") && clean.includes("play");
+}
+
+function liveContext(message: string, context = "") {
+  return `${context} ${message}`.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function isLivePressureInput(message: string, context = "") {
+  const clean = liveContext(message, context);
+  return /\b(game is starting|game starting|at a game|timeout|first timeout|give me a play|quick|right now|need a plan|rebounding|too many chances|second chances|offensive boards|ball watching)\b/i.test(clean);
+}
+
+function isFirstTimeoutInput(message: string, context = "") {
+  const clean = liveContext(message, context);
+  return /\b(game is starting|game starting|first timeout|timeout plan)\b/i.test(clean);
+}
+
+function isReboundingInput(message: string, context = "") {
+  const clean = liveContext(message, context);
+  return /\b(rebounding|too many chances|second chances|offensive boards|ball watching)\b/i.test(clean);
+}
+
+function isBallWatchingInput(message: string, context = "") {
+  return /\bball watching\b/i.test(liveContext(message, context));
+}
+
+function isSecondChanceInput(message: string, context = "") {
+  return /\b(too many chances|second chances|offensive boards)\b/i.test(liveContext(message, context));
 }
 
 function isSiteBetterInput(message: string) {
@@ -294,8 +331,181 @@ function titleCase(value: string) {
     .join(" ");
 }
 
-function createFallbackResponse(message: string): { reply: string; threadBoard: ThreadBoard } {
+function createFallbackResponse(message: string, context = ""): { reply: string; threadBoard: ThreadBoard } {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+
+  if (isBallWatchingInput(message, context)) {
+    return {
+      reply: "Call the timeout around second chances, not the whole defense. Every player names their man as the shot goes up, hits body first, finds ball second, and the guards crack back on long rebounds. If they get two more offensive boards, assign box-out matchups directly.",
+      threadBoard: {
+        title: "Offensive Rebounding: Ball Watching",
+        summary: "Opponents are getting extra chances because defenders are watching the shot instead of finding bodies. The timeout correction is body first, ball second.",
+        sections: [
+          {
+            type: "intervention",
+            label: "TIMEOUT CALL",
+            items: [
+              "Stop second chances before changing the defense",
+              "Every player names their man as the shot goes up",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "PLAYER RULE",
+            items: [
+              "Hit body first",
+              "Find ball second",
+              "Guards crack back on long rebounds",
+            ],
+          },
+          {
+            type: "question",
+            label: "WATCH NEXT",
+            items: [
+              "Do they still get inside position",
+              "Are long rebounds hurting the guards",
+              "Does one matchup need help",
+            ],
+          },
+          {
+            type: "outcome",
+            label: "ADJUSTMENT TRIGGER",
+            items: ["If they still get two offensive boards after the timeout, assign box-out matchups directly"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (isSecondChanceInput(message, context)) {
+    return {
+      reply: "Make the timeout about ending second chances. The call is body first, ball second: find someone on the shot, hit first contact, then pursue. If they still get two offensive boards after that, assign box-out matchups instead of asking everyone to rebound harder.",
+      threadBoard: {
+        title: "Offensive Rebounding: Second Chances",
+        summary: "The live problem is extra possessions. The correction is to stop watching the ball and make first contact before chasing the rebound.",
+        sections: [
+          {
+            type: "intervention",
+            label: "TIMEOUT CALL",
+            items: [
+              "End the extra possessions",
+              "Fix first contact before changing the defense",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "PLAYER RULE",
+            items: [
+              "Find a body on the shot",
+              "Hit first contact",
+              "Pursue after contact",
+            ],
+          },
+          {
+            type: "question",
+            label: "WATCH NEXT",
+            items: [
+              "Are they winning inside position",
+              "Are guards leaking out too early",
+              "Is one matchup losing contact",
+            ],
+          },
+          {
+            type: "outcome",
+            label: "ADJUSTMENT TRIGGER",
+            items: ["Assign box-out matchups if the next two misses become offensive boards"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (isReboundingInput(message, context)) {
+    return {
+      reply: "Keep the timeout simple: rebounding is contact before pursuit. Do not make it a hustle speech. Tell them to find a body on every shot, guards crack back on long rebounds, and the next two defensive possessions decide whether you assign matchups.",
+      threadBoard: {
+        title: "Timeout Plan: Rebounding",
+        summary: "The immediate call is to turn rebounding from a loose effort message into a clear contact rule.",
+        sections: [
+          {
+            type: "intervention",
+            label: "TIMEOUT CALL",
+            items: [
+              "Rebounding is contact before pursuit",
+              "No one watches the shot without finding a body",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "PLAYER RULE",
+            items: [
+              "Bigs own inside contact",
+              "Guards crack back",
+              "Pursue after the hit",
+            ],
+          },
+          {
+            type: "question",
+            label: "WATCH NEXT",
+            items: [
+              "Who is missing first contact",
+              "Are long rebounds beating the guards",
+              "Are they getting clean runs from the weak side",
+            ],
+          },
+          {
+            type: "outcome",
+            label: "ADJUSTMENT TRIGGER",
+            items: ["Assign direct box-out matchups if the rule does not hold immediately"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (isFirstTimeoutInput(message, context)) {
+    return {
+      reply: "Use the first timeout as a reset, not a lecture. Give them one call they can remember: settle the ball, win first contact, and get a clean shot in the next two possessions. Come back here with the first thing breaking and I will narrow the call.",
+      threadBoard: {
+        title: "First Timeout Call Sheet",
+        summary: "The first timeout needs one clean correction the team can use immediately when the game starts moving fast.",
+        sections: [
+          {
+            type: "intervention",
+            label: "TIMEOUT CALL",
+            items: [
+              "Reset the group",
+              "Name one correction",
+              "Win the next two possessions",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "PLAYER RULE",
+            items: [
+              "Settle the ball",
+              "Win first contact",
+              "Get one clean shot",
+            ],
+          },
+          {
+            type: "question",
+            label: "WATCH NEXT",
+            items: [
+              "Is the issue turnovers",
+              "Is the issue rebounding",
+              "Is the issue shot quality",
+            ],
+          },
+          {
+            type: "outcome",
+            label: "ADJUSTMENT TRIGGER",
+            items: ["Bring back the first thing breaking and narrow the next call"],
+          },
+        ],
+      },
+    };
+  }
 
   if (isGamePlayInput(message)) {
     return {
@@ -733,7 +943,7 @@ function createFallbackResponse(message: string): { reply: string; threadBoard: 
     reply: `${title || "This"} is enough to start the thread. The useful move is to name what is happening, what pattern might be forming, and what would change the next rep or decision.`,
     threadBoard: {
       title: title || "Current Thread",
-      summary: "The thread has a rough topic that needs its first useful structure.",
+      summary: "The rough input is enough to start organizing what happened, what matters, and what should change next.",
       sections: [
         {
           type: "observation",
@@ -743,12 +953,12 @@ function createFallbackResponse(message: string): { reply: string; threadBoard: 
         {
           type: "question",
           label: "Question",
-          items: ["What moment changes the next action most"],
+          items: ["Which moment is creating the cost"],
         },
         {
           type: "outcome",
           label: "Outcome / Next Move",
-          items: ["Name the first useful split"],
+          items: ["Separate what happened, what matters, and what changes next"],
         },
       ],
     },
@@ -783,6 +993,8 @@ export async function POST(req: Request) {
   if (safeMessages.length === 0) {
     safeMessages.push({ role: "user", content: message });
   }
+
+  const contextText = safeMessages.map((m) => m.content).join(" ");
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -821,6 +1033,7 @@ export async function POST(req: Request) {
       const reply = cleanString(parsed.reply);
 
       if (
+        isLivePressureInput(message, contextText) ||
         isGamePlayInput(message) ||
         isSiteBetterInput(message) ||
         isMichiganPracticeInput(message) ||
@@ -829,7 +1042,7 @@ export async function POST(req: Request) {
         !isValidReply(reply) ||
         (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))
       ) {
-        return Response.json(createFallbackResponse(message));
+        return Response.json(createFallbackResponse(message, contextText));
       }
 
       const validThreadBoard = validateThreadBoard(parsed.threadBoard);
@@ -839,7 +1052,7 @@ export async function POST(req: Request) {
         !(isAxisMvpInput(message) && boardHasFutureLayerLeakage(validThreadBoard))
           ? validThreadBoard
           : null;
-      const fallback = threadBoard ? null : createFallbackResponse(message);
+      const fallback = threadBoard ? null : createFallbackResponse(message, contextText);
 
       return Response.json({
         reply,
@@ -850,17 +1063,18 @@ export async function POST(req: Request) {
         !isGamePlayInput(message) &&
         !isSiteBetterInput(message) &&
         !isMichiganPracticeInput(message) &&
+        !isLivePressureInput(message, contextText) &&
         isValidReply(text) &&
         !(isSpeculativeInput(message) && hasSpeculationAsFact(text)) &&
         !(isAxisMvpInput(message) && hasFutureLayerLeakage(text))
       ) {
         return Response.json({
           reply: text,
-          threadBoard: createFallbackResponse(message).threadBoard,
+          threadBoard: createFallbackResponse(message, contextText).threadBoard,
         });
       }
 
-      return Response.json(createFallbackResponse(message));
+      return Response.json(createFallbackResponse(message, contextText));
     }
   } catch (err) {
     console.error("[axis/conversation] error", (err as Error).message);
