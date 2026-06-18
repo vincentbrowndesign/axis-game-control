@@ -27,6 +27,22 @@ The conversation itself is the product. Axis helps the work develop.
 
 ---
 
+## Current Build Gate
+
+Before coding Axis MVP work, read:
+
+* `docs/AXIS_BUILD_MAP.md`
+* `docs/capsules/AXIS_CAPABILITY_INDEX.md`
+
+Only build items marked:
+
+* Build Now
+* Refine Current
+
+Do not build Hold, Future Layer, Research Proof, or Do Not Build Yet items unless explicitly instructed.
+
+---
+
 ## Axis Conversation Behavior
 
 Axis should:

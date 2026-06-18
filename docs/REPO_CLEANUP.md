@@ -1,5 +1,20 @@
 # Repo Cleanup
 
+## Build Map + Capability Index
+
+### What changed
+
+* `docs/AXIS_BUILD_MAP.md` added as the Axis execution gate
+* `docs/capsules/AXIS_CAPABILITY_INDEX.md` added as the capsule gate
+* Active MVP locked to Conversation Layer, Understanding Primitives, and Thread Board
+* Future layers blocked from MVP execution
+
+### Why this prevents future drift
+
+Agents now have a build-control layer before coding. Build Now and Refine Current items may drive MVP work. Hold, Future Layer, Research Proof, and Do Not Build Yet items may be referenced, but must not drive `/axis` implementation unless explicitly instructed.
+
+---
+
 ## Whiteboard Correction Pass — 2026-06-17 (Final Pass)
 
 ### Why this pass was needed
