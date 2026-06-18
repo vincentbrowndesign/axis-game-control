@@ -46,6 +46,16 @@ interface BoardSectionObject {
   updatedAt: number;
 }
 
+interface BoardSectionRuntime {
+  position: BoardSectionObject["position"];
+  updatedAt: number;
+}
+
+interface BoardRuntimeState {
+  boardKey: string;
+  values: Record<string, BoardSectionRuntime>;
+}
+
 function sectionToken(value: string) {
   return value
     .trim()
@@ -57,6 +67,11 @@ function sectionToken(value: string) {
 
 function sectionObjectId(section: Pick<ThreadBoardSection, "type" | "label">) {
   return `${sectionToken(section.type)}-${sectionToken(section.label)}`;
+}
+
+function clampDelta(delta: number, min: number, max: number) {
+  if (min > max) return 0;
+  return Math.min(Math.max(delta, min), max);
 }
 
 export default function ThreadBoard({ board }: Props) {
@@ -81,19 +96,35 @@ export default function ThreadBoard({ board }: Props) {
         : [],
     [board],
   );
-  const [runtimeById, setRuntimeById] = useState<
-    Record<string, Pick<BoardSectionObject, "position" | "updatedAt">>
-  >({});
+  const boardKey = useMemo(
+    () =>
+      [
+        board?.title ?? "",
+        board?.summary ?? "",
+        ...sections.map((section) => `${section.type}:${section.label}`),
+      ].join("|"),
+    [board?.summary, board?.title, sections],
+  );
+  const [runtimeState, setRuntimeState] = useState<BoardRuntimeState>({
+    boardKey: "",
+    values: {},
+  });
+  const [activeObjectId, setActiveObjectId] = useState<string | null>(null);
+  const sectionsRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     id: string;
     startX: number;
     startY: number;
     origin: BoardSectionObject["position"];
+    startRect: DOMRect;
+    containerRect: DOMRect;
   } | null>(null);
 
   const objects = useMemo<BoardSectionObject[]>(
-    () =>
-      sections.map((section) => {
+    () => {
+      const runtimeById = runtimeState.boardKey === boardKey ? runtimeState.values : {};
+
+      return sections.map((section) => {
         const id = sectionObjectId(section);
         const runtime = runtimeById[id];
 
@@ -105,8 +136,9 @@ export default function ThreadBoard({ board }: Props) {
           position: runtime?.position ?? { x: 0, y: 0 },
           updatedAt: runtime?.updatedAt ?? 0,
         };
-      }),
-    [runtimeById, sections],
+      });
+    },
+    [boardKey, runtimeState, sections],
   );
 
   if (!board || typeof board.title !== "string") return null;
@@ -118,12 +150,19 @@ export default function ThreadBoard({ board }: Props) {
   function handlePointerDown(event: PointerEvent<HTMLButtonElement>, object: BoardSectionObject) {
     if (event.button !== 0 || window.innerWidth <= 760) return;
 
+    const sectionElement = event.currentTarget.closest(".thread-board-section");
+    const containerElement = sectionsRef.current;
+    if (!(sectionElement instanceof HTMLElement) || !containerElement) return;
+
     event.currentTarget.setPointerCapture(event.pointerId);
+    setActiveObjectId(object.id);
     dragRef.current = {
       id: object.id,
       startX: event.clientX,
       startY: event.clientY,
       origin: object.position,
+      startRect: sectionElement.getBoundingClientRect(),
+      containerRect: containerElement.getBoundingClientRect(),
     };
   }
 
@@ -131,18 +170,37 @@ export default function ThreadBoard({ board }: Props) {
     const drag = dragRef.current;
     if (!drag) return;
 
+    const rawDeltaX = event.clientX - drag.startX;
+    const rawDeltaY = event.clientY - drag.startY;
+    const deltaX = clampDelta(
+      rawDeltaX,
+      drag.containerRect.left - drag.startRect.left,
+      drag.containerRect.right - drag.startRect.right,
+    );
+    const deltaY = clampDelta(
+      rawDeltaY,
+      drag.containerRect.top - drag.startRect.top,
+      drag.containerRect.bottom - drag.startRect.bottom,
+    );
     const nextPosition = {
-      x: drag.origin.x + event.clientX - drag.startX,
-      y: drag.origin.y + event.clientY - drag.startY,
+      x: drag.origin.x + deltaX,
+      y: drag.origin.y + deltaY,
     };
 
-    setRuntimeById((currentRuntime) => ({
-      ...currentRuntime,
-      [drag.id]: {
-        position: nextPosition,
-        updatedAt: Date.now(),
-      },
-    }));
+    setRuntimeState((currentRuntime) => {
+      const currentValues = currentRuntime.boardKey === boardKey ? currentRuntime.values : {};
+
+      return {
+        boardKey,
+        values: {
+          ...currentValues,
+          [drag.id]: {
+            position: nextPosition,
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
   }
 
   function handlePointerEnd(event: PointerEvent<HTMLButtonElement>) {
@@ -150,6 +208,7 @@ export default function ThreadBoard({ board }: Props) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     dragRef.current = null;
+    setActiveObjectId(null);
   }
 
   return (
@@ -162,7 +221,7 @@ export default function ThreadBoard({ board }: Props) {
       </div>
 
       {sections.length > 0 && (
-        <div className="thread-board-sections">
+        <div className="thread-board-sections" ref={sectionsRef}>
           {objects.map((object, index) => {
             const labelToken = sectionToken(object.label);
             const typeToken = sectionToken(object.sectionType);
@@ -170,7 +229,7 @@ export default function ThreadBoard({ board }: Props) {
             return (
               <section
                 key={`${object.id}-${index}`}
-                className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken}`}
+                className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken}${activeObjectId === object.id ? " thread-board-section--active" : ""}`}
                 style={{
                   transform: `translate3d(${object.position.x}px, ${object.position.y}px, 0)`,
                 }}
@@ -241,6 +300,9 @@ export default function ThreadBoard({ board }: Props) {
           gap: clamp(16px, 2vw, 28px);
           grid-auto-rows: minmax(110px, auto);
           grid-template-columns: repeat(2, minmax(0, 1fr));
+          overflow: hidden;
+          padding: 2px;
+          position: relative;
         }
 
         .thread-board-section {
@@ -249,11 +311,17 @@ export default function ThreadBoard({ board }: Props) {
           border: 1px solid rgba(25, 24, 21, 0.16);
           border-radius: 2px;
           box-shadow: 0 1px 0 rgba(25, 24, 21, 0.06);
-          min-width: 0;
+          min-width: min(240px, 100%);
           padding: clamp(12px, 1.35vw, 18px);
           position: relative;
           transition: box-shadow 0.12s ease;
           will-change: transform;
+          z-index: 1;
+        }
+
+        .thread-board-section--active {
+          box-shadow: 0 8px 22px rgba(25, 24, 21, 0.12);
+          z-index: 10;
         }
 
         .thread-board-section::before {
@@ -381,6 +449,8 @@ export default function ThreadBoard({ board }: Props) {
           .thread-board-sections {
             grid-template-columns: 1fr;
             gap: 6px;
+            overflow: visible;
+            padding: 0;
           }
 
           .thread-board-anchor {
@@ -400,9 +470,11 @@ export default function ThreadBoard({ board }: Props) {
           }
 
           .thread-board-section {
+            min-width: 0;
             padding: 7px 8px;
             transform: none !important;
             will-change: auto;
+            z-index: 1;
           }
 
           .thread-board-section::before {
