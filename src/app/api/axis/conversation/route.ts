@@ -29,9 +29,13 @@ Reply rules:
 - Short gym phrases are not too thin. Treat them as the thread title and make a useful first split.
 - For one-word prompts like "jumpshot", "the shot", or "footwork", do not ask what the user means. Give the first useful read.
 - Rough creative, practice, content, or business inputs are also enough to organize. Name the working surface and the first useful split.
+- If the user asks for an in-game play, give one concrete tactical adjustment and make the board about that adjustment.
+- If the user asks how to make a site better, make the first split concrete: readability, input speed, board usefulness, mobile friction.
+- If the user is watching, thinking, saying something "looks like", "maybe", or "notional", treat it as a possible read, not a fact.
 - If the user is talking about Axis itself, protect the current MVP: text conversation, understanding primitives, inline Thread Board, gym-readable use.
 - For Axis product inputs, do not give startup advice, device advice, fundraising advice, positioning advice, or future-layer advice.
 - Do not merge adjacent facts into invented evidence. If the user says "Hailey had 12 points" and then mentions floaters, do not claim the 12 points came from floaters unless the user says that.
+- Do not upgrade speculation into fact. Practice observations, contender reads, or rough takes must stay framed as possible reads unless evidence is named.
 - Ask at most one sharp question, and only when it moves the work forward.
 - Keep the reply short. Two or three sentences is usually enough.
 - No markdown.
@@ -83,6 +87,9 @@ Good reply examples:
 - "Adding too much is the pressure point. The work is to protect the smallest real loop: type the rough thought, get shape back, scan the Thread Board, and keep moving."
 - "Suno is the creation surface. The useful split is whether the work is about song direction, prompt language, or choosing what is worth keeping."
 - "Practice needs a simple room before it needs a system: what happened, what matters, and what the next session should make visible."
+- "At a game, do not search for a perfect play. If they have one scorer carrying the offense, the fast adjustment is box-and-one principles: your best defender takes the scorer, the other four shrink the floor and force weaker decisions."
+- "The site gets better through the surface, not a big redesign. Start with readability, input speed, board usefulness, and mobile friction."
+- "That is a ceiling read, not a fact yet. The useful work is naming what practice evidence would make the contender claim real."
 - "Footwork is the entry point. The useful split is whether the player is losing organization before the catch, before the attack, or before the finish. Keep the thread on the moment where the feet decide the next action."
 - "The shot is too broad as a drill label, but it is useful as a thread title. The first split is whether the miss is coming from setup, timing, or decision pressure."
 - "The hesitation is the work. She has the shot; now she needs permission to use it before the defense gets comfortable."
@@ -170,8 +177,27 @@ function isAxisMvpInput(message: string) {
     clean.includes("make this real");
 }
 
+function isGamePlayInput(message: string) {
+  const clean = message.toLowerCase();
+  return clean.includes("at a game") && clean.includes("play");
+}
+
+function isSiteBetterInput(message: string) {
+  const clean = message.toLowerCase();
+  return clean.includes("site") && clean.includes("better");
+}
+
 function isBusinessRealInput(message: string) {
   return message.toLowerCase().includes("business real");
+}
+
+function isSpeculativeInput(message: string) {
+  return /\b(watching|thinking|looks like|notional|maybe)\b/i.test(message);
+}
+
+function isMichiganPracticeInput(message: string) {
+  const clean = message.toLowerCase();
+  return clean.includes("michigan") && (clean.includes("practice") || clean.includes("notional"));
 }
 
 function hasFutureLayerLeakage(reply: string) {
@@ -180,6 +206,10 @@ function hasFutureLayerLeakage(reply: string) {
 
 function hasUnsupportedHaileyFloaterClaim(text: string) {
   return /hailey[^.]*12 points[^.]*floater|12 points[^.]*floater/i.test(text);
+}
+
+function hasSpeculationAsFact(text: string) {
+  return /\b(is championship-level|are championship-level|championship-level|has cohesion|stay healthy|will win|is a contender|are contenders|notional champions are|practice quality is)\b/i.test(text);
 }
 
 function boardHasFutureLayerLeakage(board: ThreadBoard) {
@@ -203,7 +233,7 @@ function boardHasUnsupportedClaim(board: ThreadBoard) {
     ...board.sections.flatMap((section) => section.items),
   ].join(" ");
 
-  return hasUnsupportedHaileyFloaterClaim(text);
+  return hasUnsupportedHaileyFloaterClaim(text) || hasSpeculationAsFact(text);
 }
 
 function isValidReply(reply: string) {
@@ -211,7 +241,8 @@ function isValidReply(reply: string) {
     !hasRawArrow(reply) &&
     !hasMarkdown(reply) &&
     !isGenericClarification(reply) &&
-    !hasUnsupportedHaileyFloaterClaim(reply);
+    !hasUnsupportedHaileyFloaterClaim(reply) &&
+    !hasSpeculationAsFact(reply);
 }
 
 function validateThreadBoard(value: unknown): ThreadBoard | null {
@@ -265,6 +296,109 @@ function titleCase(value: string) {
 
 function createFallbackResponse(message: string): { reply: string; threadBoard: ThreadBoard } {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+
+  if (isGamePlayInput(message)) {
+    return {
+      reply: "At a game, do not hunt for a perfect play first. If they have one scorer driving the offense, the fast adjustment is box-and-one principles: put your best defender on that scorer, then pack the other four into help so weaker decision-makers have to beat you.",
+      threadBoard: {
+        title: "Box-and-One Adjustment",
+        summary: "The useful move is to isolate their main scorer with your best defender and make the rest of the team solve the game.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: [
+              "The user needs a quick game adjustment",
+              "There is one scorer worth isolating",
+            ],
+          },
+          {
+            type: "hypothesis",
+            label: "Hypothesis",
+            items: ["Taking away the best scorer forces weaker decision-makers to beat you"],
+          },
+          {
+            type: "question",
+            label: "Question",
+            items: ["Can the other players pass, shoot, or punish the packed zone"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Put your best defender on their scorer and pack the other four in zone principles"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (isSiteBetterInput(message)) {
+    return {
+      reply: "Make the site better by improving the surface people touch first. The first split is readability, input speed, board usefulness, and mobile friction. Start with the one that makes the work easier to understand in the first five seconds.",
+      threadBoard: {
+        title: "Site Surface Improvements",
+        summary: "The first useful pass is about making the site faster to read, faster to use, and clearer on mobile.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: ["The site needs to feel more useful quickly"],
+          },
+          {
+            type: "pattern",
+            label: "Pattern",
+            items: [
+              "Readability controls trust",
+              "Input speed controls whether people keep working",
+              "Mobile friction breaks live use",
+            ],
+          },
+          {
+            type: "relationship",
+            label: "Relationship",
+            items: ["Board usefulness decides whether the page feels like work or decoration"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Choose the surface issue that improves the first five seconds"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (isMichiganPracticeInput(message) || normalized.includes("notional champions")) {
+    return {
+      reply: "That is a ceiling read, not a fact yet. Watching Michigan practice can suggest a contender shape, but the useful work is naming what evidence would make the claim real: shot quality, defensive communication, health, and whether pressure exposes weak decision-makers.",
+      threadBoard: {
+        title: "Michigan Ceiling Read",
+        summary: "The thread is a possible contender read from practice, not proof that the team is championship-level.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: ["The user is forming a ceiling read from practice"],
+          },
+          {
+            type: "hypothesis",
+            label: "Hypothesis",
+            items: ["Practice may be showing contender signals, but the claim needs evidence"],
+          },
+          {
+            type: "question",
+            label: "Question",
+            items: ["What evidence would make the contender claim real"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Track shot quality, defensive communication, health, and pressure decisions"],
+          },
+        ],
+      },
+    };
+  }
 
   if (normalized.includes("suno")) {
     return {
@@ -687,7 +821,11 @@ export async function POST(req: Request) {
       const reply = cleanString(parsed.reply);
 
       if (
+        isGamePlayInput(message) ||
+        isSiteBetterInput(message) ||
+        isMichiganPracticeInput(message) ||
         isBusinessRealInput(message) ||
+        (isSpeculativeInput(message) && hasSpeculationAsFact(reply)) ||
         !isValidReply(reply) ||
         (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))
       ) {
@@ -708,7 +846,14 @@ export async function POST(req: Request) {
         threadBoard: threadBoard ?? fallback?.threadBoard ?? null,
       });
     } catch {
-      if (isValidReply(text) && !(isAxisMvpInput(message) && hasFutureLayerLeakage(text))) {
+      if (
+        !isGamePlayInput(message) &&
+        !isSiteBetterInput(message) &&
+        !isMichiganPracticeInput(message) &&
+        isValidReply(text) &&
+        !(isSpeculativeInput(message) && hasSpeculationAsFact(text)) &&
+        !(isAxisMvpInput(message) && hasFutureLayerLeakage(text))
+      ) {
         return Response.json({
           reply: text,
           threadBoard: createFallbackResponse(message).threadBoard,

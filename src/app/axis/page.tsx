@@ -256,7 +256,7 @@ export default function AxisPage() {
           min-height: 0;
           overflow-x: hidden;
           overflow-y: auto;
-          padding: 10px 0 28px;
+          padding: 10px 0 46px;
           scrollbar-width: none;
         }
 
@@ -455,8 +455,9 @@ export default function AxisPage() {
         @media (max-width: 760px) {
           .room {
             display: block;
+            padding-bottom: 118px;
             padding-inline: 16px;
-            padding-top: 14px;
+            padding-top: 12px;
           }
 
           .conversation-panel {
@@ -476,11 +477,43 @@ export default function AxisPage() {
           }
 
           .msg {
-            font-size: 18px;
+            font-size: 17px;
+            line-height: 1.44;
           }
 
           .composer-input {
             font-size: 16px;
+          }
+
+          .thread {
+            padding-bottom: 76px;
+          }
+
+          .thread--initial {
+            padding-top: 8vh;
+          }
+
+          .thread-inner {
+            gap: 14px;
+          }
+
+          .turn {
+            gap: 10px;
+          }
+
+          .composer-wrap {
+            padding-inline: 14px;
+            padding-bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+          }
+
+          .composer {
+            gap: 10px;
+            padding: 11px 0 7px;
+          }
+
+          .send-btn {
+            height: 32px;
+            padding-inline: 12px;
           }
         }
       `}</style>
