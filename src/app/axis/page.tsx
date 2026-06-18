@@ -456,9 +456,9 @@ export default function AxisPage() {
         @media (max-width: 760px) {
           .room {
             display: block;
-            padding-bottom: 138px;
-            padding-inline: 14px;
-            padding-top: 10px;
+            padding-bottom: max(152px, calc(env(safe-area-inset-bottom) + 132px));
+            padding-inline: 12px;
+            padding-top: 8px;
           }
 
           .conversation-panel {
@@ -478,43 +478,47 @@ export default function AxisPage() {
           }
 
           .msg {
-            font-size: 16px;
-            line-height: 1.4;
+            font-size: 15.5px;
+            line-height: 1.36;
           }
 
           .composer-input {
             font-size: 16px;
+            line-height: 1.36;
+            max-height: 92px;
+            min-height: 24px;
           }
 
           .thread {
-            padding-bottom: 96px;
+            padding-bottom: 122px;
+            scroll-padding-bottom: 182px;
           }
 
           .thread--initial {
-            padding-top: 7vh;
+            padding-top: 6vh;
           }
 
           .thread-inner {
-            gap: 11px;
+            gap: 9px;
           }
 
           .turn {
-            gap: 8px;
+            gap: 7px;
           }
 
           .composer-wrap {
-            padding-inline: 12px;
-            padding-bottom: max(18px, calc(env(safe-area-inset-bottom) + 10px));
+            padding-inline: 11px;
+            padding-bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
           }
 
           .composer {
-            gap: 9px;
-            padding: 10px 0 6px;
+            gap: 8px;
+            padding: 8px 0 6px;
           }
 
           .send-btn {
-            height: 32px;
-            padding-inline: 12px;
+            height: 30px;
+            padding-inline: 11px;
           }
         }
       `}</style>

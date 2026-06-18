@@ -24,6 +24,7 @@ This index controls which capability capsules are active, which are future, and 
 | Capsule | Status | Build Decision | Notes |
 |---|---|---|---|
 | Axis Whiteboard Renderer | Future | Future Layer | Renderer only. Not the product. Not active MVP. |
+| Axis Whiteboard Renderer / Board Object Layer | Future | Define Capsule | Define boundaries for future spatial board objects only. Do not build draggable objects, AxisBoardItem, uploads, voice, camera, memory, or CV. |
 | Axis Evidence Layer | Future | Research Proof | Needs proof rules before build. |
 | Axis Witness Layer | Future | Research Proof | Needs source/confidence boundaries. |
 | Axis Mission Layer | Future | Hold | Depends on clean understanding and evidence boundaries. |
