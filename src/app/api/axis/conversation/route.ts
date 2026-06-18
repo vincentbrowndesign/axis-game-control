@@ -15,7 +15,7 @@ Response shape:
     "sections": [
       {
         "type": "observation | pattern | relationship | question | hypothesis | intervention | outcome",
-        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move | TIMEOUT CALL | PLAYER RULE | WATCH NEXT | ADJUSTMENT TRIGGER | OUT OF BOUNDS RULE | SLOB DEFAULT | BLOB DEFAULT | PRACTICE INSTALL | CORE RULE | READ | TRIGGER | INSTALL | CURRENT READ | PRESSURE POINT | NEXT REP | KNOWN | ASSUMED | GAMEPLAN | NEED NEXT | RELATIONSHIP",
+        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move | TIMEOUT CALL | PLAYER RULE | WATCH NEXT | ADJUSTMENT TRIGGER | HUDDLE RULE | PLAYER CUE TEMPLATE | PLAYER CUES | OUT OF BOUNDS RULE | SLOB DEFAULT | BLOB DEFAULT | PRACTICE INSTALL | CORE RULE | READ | TRIGGER | INSTALL | CURRENT READ | PRESSURE POINT | NEXT REP | KNOWN | ASSUMED | GAMEPLAN | NEED NEXT | RELATIONSHIP",
         "items": ["string"]
       }
     ]
@@ -32,6 +32,8 @@ Reply rules:
 - If the user asks for an in-game play, give one concrete tactical adjustment and make the board about that adjustment.
 - If the user is in live pressure, give the call before asking for context.
 - If a live-pressure thread continues with a short update like "Rebounding", "too many chances", or "Ball watching", treat it as sideline context and return a compact call sheet.
+- If the user needs an end-of-period huddle or asks for one thing per player, give the player-by-player structure before asking for names.
+- If player names or player-specific reads already exist in the thread, reuse them immediately and give one concise cue per player.
 - If the user lacks SLOB, BLOB, or ATO plays, give a simple out-of-bounds principle immediately. Do not ask for a roster, opponent, or playbook first.
 - If the user asks for a gameplan before roster details arrive, give a provisional plan and clearly separate known facts from assumptions.
 - If the user later gives player roles, update the plan around those roles without pretending the full roster is known.
@@ -61,6 +63,7 @@ Thread board rules:
 - Sections must use one of these types: observation, pattern, relationship, question, hypothesis, intervention, outcome.
 - Labels must be one of: Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome / Next Move.
 - In live-pressure game contexts only, labels may also be: TIMEOUT CALL, PLAYER RULE, WATCH NEXT, ADJUSTMENT TRIGGER.
+- In live huddle contexts only, labels may also be: HUDDLE RULE, PLAYER CUE TEMPLATE, PLAYER CUES, NEED NEXT.
 - In out-of-bounds, SLOB, BLOB, and ATO contexts only, prefer labels: OUT OF BOUNDS RULE, SLOB DEFAULT, BLOB DEFAULT, WATCH NEXT, PRACTICE INSTALL.
 - In offensive system contexts only, labels may also be: CORE RULE, READ, TRIGGER, INSTALL, WATCH NEXT.
 - In player development contexts only, labels may also be: CURRENT READ, PRESSURE POINT, PLAYER RULE, NEXT REP, WATCH NEXT.
@@ -136,6 +139,9 @@ const SECTION_LABELS = new Set([
   "PLAYER RULE",
   "WATCH NEXT",
   "ADJUSTMENT TRIGGER",
+  "HUDDLE RULE",
+  "PLAYER CUE TEMPLATE",
+  "PLAYER CUES",
   "OUT OF BOUNDS RULE",
   "SLOB DEFAULT",
   "BLOB DEFAULT",
@@ -230,6 +236,99 @@ function isOutOfBoundsInput(message: string, context = "") {
 
 function liveContext(message: string, context = "") {
   return `${context} ${message}`.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function isLiveHuddleInput(message: string, context = "") {
+  const clean = liveContext(message, context);
+  const current = message.toLowerCase();
+  const hasHuddleContext = /\b(end of quarter|quarter ended|it's ended|its ended|halftime|timeout|quick huddle|tell the guys|talk to the team|huddle)\b/i.test(clean);
+  const asksPlayerByPlayer = /\b(one thing for each player|one thing each|player-by-player|player by player|each player|for each player)\b/i.test(clean);
+
+  return hasHuddleContext && (
+    asksPlayerByPlayer ||
+    /\b(tell the guys|talk to the team|quick huddle|huddle)\b/i.test(current)
+  );
+}
+
+const NON_PLAYER_NAME_TOKENS = new Set([
+  "Axis",
+  "End",
+  "No",
+  "Give",
+  "One",
+  "Thing",
+  "Each",
+  "Player",
+  "Quarter",
+  "Halftime",
+  "Timeout",
+  "Huddle",
+  "Thread",
+  "Board",
+  "Need",
+  "Next",
+  "Use",
+  "Keep",
+  "Drop",
+  "Name",
+  "Known",
+  "Assumed",
+  "Gameplan",
+  "Spurs",
+  "Seattle",
+  "Owls",
+]);
+
+function extractPlayerNames(context: string) {
+  const matches = context.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b|\b[A-Z]{2,}\b/g) ?? [];
+  const names: string[] = [];
+
+  matches.forEach((match) => {
+    const clean = match.trim();
+    if (!clean || NON_PLAYER_NAME_TOKENS.has(clean)) return;
+    if (clean.length <= 1) return;
+    if (!names.includes(clean)) names.push(clean);
+  });
+
+  return names.slice(0, 8);
+}
+
+function contextNearName(name: string, context: string) {
+  const lowerContext = context.toLowerCase();
+  const lowerName = name.toLowerCase();
+  const nameIndex = lowerContext.indexOf(lowerName);
+
+  if (nameIndex === -1) return "";
+
+  return lowerContext.slice(
+    nameIndex,
+    Math.min(lowerContext.length, nameIndex + lowerName.length + 80),
+  );
+}
+
+function playerCueFor(name: string, context: string) {
+  const clean = contextNearName(name, context);
+  if (!clean) {
+    return `${name} - keep one thing that worked; next quarter change one thing fast`;
+  }
+
+  if (/floater|floaters/.test(clean)) {
+    return `${name} - keep trusting the floater; next quarter hunt it early`;
+  }
+
+  if (/ballhandler|ball handler|point guard|creator|pace/.test(clean)) {
+    return `${name} - keep organizing pace; next quarter get us into action early`;
+  }
+
+  if (/scorer|score|shot|shoot/.test(clean)) {
+    return `${name} - keep applying scoring pressure; next quarter look for it sooner`;
+  }
+
+  if (/rebound|boards|box/.test(clean)) {
+    return `${name} - keep contact first; next quarter finish the possession`;
+  }
+
+  return `${name} - keep one thing that worked; next quarter change one thing fast`;
 }
 
 function isLivePressureInput(message: string) {
@@ -407,6 +506,81 @@ function createFallbackResponse(message: string, context = ""): { reply: string;
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
   const hasSpurs = hasSpursContext(message, context);
   const hasSeattleOwls = hasSeattleOwlsContext(message, context);
+
+  if (isLiveHuddleInput(message, context)) {
+    const playerNames = extractPlayerNames(context);
+
+    if (playerNames.length > 0) {
+      const cues = playerNames.map((name) => playerCueFor(name, context)).slice(0, 5);
+
+      return {
+        reply: `Use one sentence per player and keep each under ten seconds.\n${cues.join("\n")}`,
+        threadBoard: {
+          title: "One Thing for Each Player",
+          summary: "A fast player-by-player huddle: one truth from the quarter and one change for the next.",
+          sections: [
+            {
+              type: "intervention",
+              label: "HUDDLE RULE",
+              items: [
+                "One true thing from the quarter",
+                "One change for the next quarter",
+                "Ten seconds or less per player",
+              ],
+            },
+            {
+              type: "intervention",
+              label: "PLAYER CUES",
+              items: cues,
+            },
+            {
+              type: "question",
+              label: "NEED NEXT",
+              items: [
+                "Any missing player names",
+                "One word or current read for each",
+              ],
+            },
+          ],
+        },
+      };
+    }
+
+    return {
+      reply: "Use one sentence per player: Name - keep one thing; change one thing next quarter. Keep each under ten seconds. Drop the names and one word on each player and I will turn it around fast.",
+      threadBoard: {
+        title: "One Thing for Each Player",
+        summary: "A fast player-by-player huddle: one truth from the quarter and one change for the next.",
+        sections: [
+          {
+            type: "intervention",
+            label: "HUDDLE RULE",
+            items: [
+              "One true thing from the quarter",
+              "One change for the next quarter",
+              "Ten seconds or less per player",
+            ],
+          },
+          {
+            type: "intervention",
+            label: "PLAYER CUE TEMPLATE",
+            items: [
+              "Name - keep ___",
+              "Next quarter ___",
+            ],
+          },
+          {
+            type: "question",
+            label: "NEED NEXT",
+            items: [
+              "Player names",
+              "One word or current read for each",
+            ],
+          },
+        ],
+      },
+    };
+  }
 
   if (isOutOfBoundsInput(message, context)) {
     return {
@@ -1333,6 +1507,7 @@ export async function POST(req: Request) {
       const reply = cleanString(parsed.reply);
 
       if (
+        isLiveHuddleInput(message, contextText) ||
         isOutOfBoundsInput(message, contextText) ||
         isGameplanRoleUpdate(message, contextText) ||
         isThinGameplanInput(message, contextText) ||
@@ -1367,6 +1542,7 @@ export async function POST(req: Request) {
     } catch {
       if (
         !isGamePlayInput(message) &&
+        !isLiveHuddleInput(message, contextText) &&
         !isOutOfBoundsInput(message, contextText) &&
         !isSiteBetterInput(message) &&
         !isMichiganPracticeInput(message) &&
