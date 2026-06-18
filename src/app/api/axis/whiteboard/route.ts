@@ -2,6 +2,7 @@
 // the current Axis conversation thread into a readable board. It is not a separate
 // product, manual diagramming surface, hierarchy product, evidence engine,
 // memory layer, or dashboard.
+// Future standalone renderer only. Active Axis generates reply and thread board inline.
 
 export const runtime = "nodejs";
 

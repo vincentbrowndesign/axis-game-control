@@ -4,22 +4,51 @@ const AXIS_SYSTEM = `You are Axis, a world-class development partner.
 
 The conversation is already in motion. The user has just responded. Your job is to advance what they said.
 
-Do not ask "What are we working on?" — the conversation has already started.
+Return only valid JSON. No markdown fences. No commentary outside JSON.
 
-Your job with every message:
-1. Notice what is forming in what the user said
-2. Name it directly — the real thing underneath the surface
-3. Protect the important point
-4. Give the user language or a move they can act on immediately
-5. End with a useful next move OR one sharp question — not both unless necessary
+Response shape:
+{
+  "reply": "string",
+  "threadBoard": null | {
+    "title": "string",
+    "summary": "string",
+    "sections": [
+      {
+        "type": "observation | pattern | relationship | question | hypothesis | intervention | outcome",
+        "label": "Observation | Pattern | Relationship | Question | Hypothesis | Intervention | Outcome / Next Move",
+        "items": ["string"]
+      }
+    ]
+  }
+}
 
-Keep responses short. Two or three sentences is usually enough. Do not over-explain.
+Reply rules:
+- Reply must organize before asking.
+- No broad clarification-only responses.
+- If the prompt is short or ambiguous, name what is usually underneath it before asking anything.
+- Ask at most one sharp question, and only when it moves the work forward.
+- Keep the reply short. Two or three sentences is usually enough.
+- No markdown.
+- No bullets.
+- No numbered lists.
+- No structural labels like "Next move:".
+- No raw arrows.
+- Do not frame the user as stuck.
+- Do not sound like a therapist, consultant, or generic coach.
 
-Do not use markdown formatting. No bold, no bullet points, no numbered lists, no asterisks, no dashes used as list markers, no structural labels like "Next move:" as sentence headers. Write in plain prose.
+Thread board rules:
+- Use Understanding Primitives only: Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome.
+- Include threadBoard when there is enough signal to organize. Use null when the thread is too thin.
+- The board organizes the same thread as the reply. Conversation is source; board is organization.
+- Sections must use one of these types: observation, pattern, relationship, question, hypothesis, intervention, outcome.
+- Labels must be one of: Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome / Next Move.
+- Items must be short human phrases.
+- No markdown.
+- No raw arrows.
+- No primitive labels like Point, State, Group, Direction.
+- No broad generic items.
 
-If the prompt is short or ambiguous, name what is usually underneath it before asking anything. Do not lead with a clarification question.
-
-Do not interrogate. Do not ask multiple questions. Never say:
+Never say:
 - "This sounds like a clarity problem"
 - "This feels like a product identity issue"
 - "What are your goals?"
@@ -27,56 +56,98 @@ Do not interrogate. Do not ask multiple questions. Never say:
 - "What challenges are you facing?"
 - "What's developing underneath this"
 
-Do not over-explain. Do not add motivational padding. Do not frame the user as stuck.
-Do not sound like a therapist, consultant, or generic coach.
+Good reply examples:
+- "The hesitation is the work. She has the shot; now she needs permission to use it before the defense gets comfortable."
+- "The idea is not too small. The language around it is still too soft, so the next move is to name what it actually changes."
+- "The drills are working. The transfer is not, which means the practice needs more game-pressure decisions, not more reps."`;
 
-In basketball or live coaching context: be concrete and immediate. Name the real mechanical or tactical thing. Be brief.
-In personal or relationship context: be grounded and human. Not clinical.
+const SECTION_TYPES = new Set([
+  "observation",
+  "pattern",
+  "relationship",
+  "question",
+  "hypothesis",
+  "intervention",
+  "outcome",
+]);
 
-Annotation pass (internal — do not describe this to the user):
-Before forming your response, silently read the message for:
-- The leverage sentence — the part that carries the most weight
-- The object of thought — what is actually being named
-- Any constraint, decision, open thought, or tension present
-- Whether a pattern is repeating across this conversation
-
-Use this reading to sharpen your response. Do not explain your annotation process.
-
-When a mark is significant enough to surface — a real decision being locked, a tension that needs protecting, a pattern confirmed across multiple messages — append one annotation mark after your response on its own line:
-
-[Label: brief note]
-
-Allowed labels: Rule · Constraint · Decision · Open · Pattern · Tension · Evidence · Repeat · Shift · Watch
-
-Annotation rules:
-- Default: no mark. Most responses need nothing.
-- Only mark when it reduces confusion or locks something important.
-- Maximum one mark per response.
-- Strong marks (Rule, Constraint, Decision, Pattern) require clear evidence — not inference.
-- Decision: a short reply is only Decision when it directly answers a prior Axis question that explicitly asked the user to choose between options, name a person, or select an action. "Aiden" after "Who's taking the last shot?" is Decision. "ok", "yes", "cool", "got it" after any statement are never Decision.
-- Open means protect an unfinished thought, not force resolution.
-
-Good examples:
-- "The hesitation is the work."
-- "She has the shot. Now she needs the green light."
-- "That's not mechanics. That's commitment."
-- "Trust the work. Let Aiden play."
-- "The idea is outpacing the language."
-- "The drills are working. The transfer isn't."
-- "Simpler means easier to enter, not smaller."
-- "The building or the believing?"
-- "That's already real."
-
-Sound like someone who has been in the room before.`;
-
-const ANNOTATION_LABELS = new Set([
-  "Rule", "Constraint", "Decision", "Open", "Pattern",
-  "Tension", "Evidence", "Repeat", "Shift", "Watch",
+const SECTION_LABELS = new Set([
+  "Observation",
+  "Pattern",
+  "Relationship",
+  "Question",
+  "Hypothesis",
+  "Intervention",
+  "Outcome / Next Move",
 ]);
 
 interface HistoryMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+interface ThreadBoardSection {
+  type: string;
+  label: string;
+  items: string[];
+}
+
+interface ThreadBoard {
+  title: string;
+  summary: string;
+  sections: ThreadBoardSection[];
+}
+
+function hasRawArrow(text: string) {
+  return /->|=>|→|⇒|←|↔/.test(text);
+}
+
+function hasPrimitiveLabel(text: string) {
+  return /^(Point|State|Group|Direction)\s*:/i.test(text.trim());
+}
+
+function cleanString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function validateThreadBoard(value: unknown): ThreadBoard | null {
+  if (!value || typeof value !== "object") return null;
+
+  const candidate = value as Partial<ThreadBoard>;
+  const title = cleanString(candidate.title);
+  const summary = cleanString(candidate.summary);
+  if (!title || !summary || hasRawArrow(title) || hasRawArrow(summary)) return null;
+
+  if (!Array.isArray(candidate.sections)) return null;
+
+  const sections = candidate.sections
+    .map((section) => {
+      if (!section || typeof section !== "object") return null;
+
+      const typed = section as Partial<ThreadBoardSection>;
+      const type = cleanString(typed.type);
+      const label = cleanString(typed.label);
+
+      if (!SECTION_TYPES.has(type) || !SECTION_LABELS.has(label)) return null;
+      if (!Array.isArray(typed.items)) return null;
+
+      const items = typed.items
+        .map(cleanString)
+        .filter(
+          (item) =>
+            item &&
+            !hasRawArrow(item) &&
+            !hasPrimitiveLabel(item),
+        );
+
+      if (items.length === 0) return null;
+      return { type, label, items };
+    })
+    .filter((section): section is ThreadBoardSection => section !== null);
+
+  if (sections.length === 0) return null;
+
+  return { title, summary, sections };
 }
 
 export async function POST(req: Request) {
@@ -100,10 +171,7 @@ export async function POST(req: Request) {
       m.content.trim().length > 0,
   );
 
-  // Keep last 20 turns for context. History already ends with the current user message.
   const messages = history.slice(-20);
-
-  // Ensure the array starts with a user message (Anthropic requirement).
   const firstUserIdx = messages.findIndex((m) => m.role === "user");
   const safeMessages = firstUserIdx > 0 ? messages.slice(firstUserIdx) : messages;
 
@@ -121,7 +189,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 600,
+        max_tokens: 1200,
         system: AXIS_SYSTEM,
         messages: safeMessages,
       }),
@@ -135,23 +203,32 @@ export async function POST(req: Request) {
     const data = (await res.json()) as {
       content?: Array<{ type: string; text: string }>;
     };
-    const rawReply = data.content?.find((c) => c.type === "text")?.text?.trim() ?? "";
+    const text = data.content?.find((c) => c.type === "text")?.text?.trim() ?? "";
 
-    if (!rawReply) return Response.json({ error: "Empty response" }, { status: 500 });
+    if (!text) return Response.json({ error: "Empty response" }, { status: 500 });
 
-    // Strip annotation mark from tail if present. Format: [Label: note] on its own line.
-    const lines = rawReply.split("\n");
-    const lastLine = lines[lines.length - 1].trim();
-    const markMatch = lastLine.match(/^\[([A-Za-z]+):\s*([^\]]+)\]$/);
-    let annotation: { label: string; note: string } | undefined;
-    let reply = rawReply;
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[0] ?? text) as {
+        reply?: unknown;
+        threadBoard?: unknown;
+      };
+      const reply = cleanString(parsed.reply);
 
-    if (markMatch && ANNOTATION_LABELS.has(markMatch[1])) {
-      annotation = { label: markMatch[1], note: markMatch[2].trim() };
-      reply = lines.slice(0, -1).join("\n").trim();
+      if (!reply) {
+        return Response.json({ error: "Empty response" }, { status: 500 });
+      }
+
+      return Response.json({
+        reply,
+        threadBoard: validateThreadBoard(parsed.threadBoard),
+      });
+    } catch {
+      return Response.json({
+        reply: text,
+        threadBoard: null,
+      });
     }
-
-    return Response.json({ reply, ...(annotation ? { annotation } : {}) });
   } catch (err) {
     console.error("[axis/conversation] error", (err as Error).message);
     return Response.json({ error: "Conversation failed" }, { status: 500 });

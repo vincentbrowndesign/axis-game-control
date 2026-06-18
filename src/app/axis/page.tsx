@@ -1,17 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import WhiteboardView from "./whiteboard-view";
-
-interface Annotation {
-  label: string;
-  note: string;
-}
+import ThreadBoard, { type ThreadBoardData } from "./thread-board";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  annotation?: Annotation;
+  threadBoard?: ThreadBoardData | null;
 }
 
 const INITIAL: Message = { role: "assistant", content: "What are we working on?" };
@@ -21,13 +16,16 @@ export default function AxisPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"conversation" | "whiteboard">("conversation");
 
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const isInitial = messages.length === 1 && !loading;
+  const latestAssistantIndex = messages.reduce(
+    (latest, message, index) => (message.role === "assistant" ? index : latest),
+    -1,
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -45,7 +43,9 @@ export default function AxisPage() {
     if (!text || loading) return;
 
     const userMsg: Message = { role: "user", content: text };
-    const apiHistory = [...messages.slice(1), userMsg];
+    const apiHistory = [...messages.slice(1), userMsg].map(
+      ({ role, content }) => ({ role, content }),
+    );
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -66,13 +66,19 @@ export default function AxisPage() {
         return;
       }
 
-      const data = (await res.json()) as { reply: string; annotation?: Annotation };
-      // Annotation belongs to the user message being read, not the Axis reply.
-      // Replace the optimistic user message with the annotated version, then add the reply.
+      const data = (await res.json()) as {
+        reply: string;
+        threadBoard: ThreadBoardData | null;
+      };
+
       setMessages((prev) => [
         ...prev.slice(0, -1),
-        { role: "user", content: text, ...(data.annotation ? { annotation: data.annotation } : {}) },
-        { role: "assistant", content: data.reply },
+        { role: "user", content: text },
+        {
+          role: "assistant",
+          content: data.reply,
+          threadBoard: data.threadBoard,
+        },
       ]);
     } catch {
       setMessages((prev) => prev.slice(0, -1));
@@ -84,48 +90,19 @@ export default function AxisPage() {
 
   return (
     <>
-      <main className={`shell${view === "whiteboard" ? " shell--whiteboard" : ""}`}>
+      <main className="shell">
         <header className="site-header">
           <span className="site-mark">Axis</span>
           <span className="site-sub">Develop the work through conversation.</span>
-          <nav className="view-nav" aria-label="View">
-            <button
-              type="button"
-              className={`view-btn${view === "conversation" ? " view-btn--on" : ""}`}
-              onClick={() => setView("conversation")}
-            >
-              Conversation
-            </button>
-            <button
-              type="button"
-              className={`view-btn${view === "whiteboard" ? " view-btn--on" : ""}`}
-              onClick={() => setView("whiteboard")}
-            >
-              Whiteboard
-            </button>
-          </nav>
         </header>
 
-        {view === "whiteboard" && (
-          <WhiteboardView
-            history={messages
-              .slice(1)
-              .map(({ role, content }) => ({ role, content }))}
-          />
-        )}
-
-        <div
-          className={`thread${isInitial ? " thread--initial" : ""}${view === "whiteboard" ? " thread--hidden" : ""}`}
-          ref={threadRef}
-        >
+        <div className={`thread${isInitial ? " thread--initial" : ""}`} ref={threadRef}>
           <div className="thread-inner">
             {messages.map((msg, i) => (
               <div key={i} className={`msg msg--${msg.role}`}>
                 {msg.content}
-                {msg.annotation && (
-                  <p className="msg-annotation">
-                    {msg.annotation.label} · {msg.annotation.note}
-                  </p>
+                {msg.role === "assistant" && i === latestAssistantIndex && (
+                  <ThreadBoard board={msg.threadBoard} />
                 )}
               </div>
             ))}
@@ -166,7 +143,7 @@ export default function AxisPage() {
                   void send();
                 }
               }}
-              placeholder="Say the rough version…"
+              placeholder="Say the rough version..."
               rows={1}
               autoFocus
             />
@@ -208,22 +185,14 @@ export default function AxisPage() {
           margin: 0 auto;
           max-width: 800px;
           padding: 0 clamp(20px, 5vw, 60px);
-          transition: max-width 0.18s ease, padding 0.18s ease;
-        }
-
-        .shell--whiteboard {
-          height: auto;
-          max-width: none;
-          min-height: 100svh;
-          padding: 0 clamp(10px, 2.5vw, 34px);
         }
 
         .site-header {
           align-items: baseline;
           display: flex;
+          flex-shrink: 0;
           gap: 16px;
           padding: 18px 0 0;
-          flex-shrink: 0;
         }
 
         .site-mark {
@@ -237,37 +206,6 @@ export default function AxisPage() {
           color: rgba(25, 24, 21, 0.18);
           font-size: 11px;
           letter-spacing: 0.01em;
-        }
-
-        .view-nav {
-          display: flex;
-          gap: 1px;
-          margin-left: auto;
-        }
-
-        .view-btn {
-          background: transparent;
-          border: 0;
-          border-radius: 3px;
-          color: rgba(25, 24, 21, 0.28);
-          cursor: pointer;
-          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          font-size: 11px;
-          letter-spacing: 0.04em;
-          padding: 2px 7px;
-          transition: color 0.1s ease;
-        }
-
-        .view-btn--on {
-          color: rgba(25, 24, 21, 0.75);
-        }
-
-        .view-btn:not(.view-btn--on):hover {
-          color: rgba(25, 24, 21, 0.5);
-        }
-
-        .thread--hidden {
-          display: none;
         }
 
         .thread {
@@ -305,13 +243,6 @@ export default function AxisPage() {
           font-size: 15px;
           font-style: normal;
           margin: -8px 0 0;
-        }
-
-        .msg-annotation {
-          color: rgba(25, 24, 21, 0.28);
-          font-size: 11px;
-          letter-spacing: 0.04em;
-          margin: 10px 0 0;
         }
 
         .msg-error {

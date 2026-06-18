@@ -2,6 +2,7 @@
 
 // Whiteboard is a thread comprehension view. Axis organizes the current
 // conversation thread into sections on a readable board.
+// Future standalone renderer only. Active Axis generates reply and thread board inline.
 
 import { useEffect, useMemo, useState } from "react";
 
