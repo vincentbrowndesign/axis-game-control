@@ -10,7 +10,6 @@ interface Message {
 }
 
 const INITIAL: Message = { role: "assistant", content: "What are we working on?" };
-const tools = ["draw", "text", "box", "arrow/line", "clear"];
 
 export default function AxisPage() {
   const [messages, setMessages] = useState<Message[]>([INITIAL]);
@@ -121,20 +120,12 @@ export default function AxisPage() {
             </div>
           </aside>
 
-          <section className="whiteboard" aria-label="Whiteboard workspace">
-            <div className="tool-row" aria-label="Whiteboard tools">
-              {tools.map((tool) => (
-                <button key={tool} type="button" className="tool-btn">
-                  {tool}
-                </button>
-              ))}
-            </div>
-
+          <section className="thread-board-pane" aria-label="Thread Board">
             <div className="board-content">
               {latestAssistant?.threadBoard ? (
                 <ThreadBoard board={latestAssistant.threadBoard} />
               ) : (
-                <p className="board-empty">The board will organize the thread here.</p>
+                <p className="board-empty">Organized understanding appears here.</p>
               )}
             </div>
           </section>
@@ -328,7 +319,7 @@ export default function AxisPage() {
           }
         }
 
-        .whiteboard {
+        .thread-board-pane {
           background:
             linear-gradient(rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.78)),
             radial-gradient(circle, rgba(25, 24, 21, 0.055) 1px, transparent 1px);
@@ -341,32 +332,10 @@ export default function AxisPage() {
           position: relative;
         }
 
-        .tool-row {
-          display: flex;
-          gap: 6px;
-          left: 18px;
-          position: absolute;
-          top: 16px;
-          z-index: 1;
-        }
-
-        .tool-btn {
-          background: rgba(255, 255, 255, 0.78);
-          border: 1px solid rgba(25, 24, 21, 0.1);
-          border-radius: 4px;
-          color: rgba(25, 24, 21, 0.52);
-          cursor: default;
-          font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-          font-size: 12px;
-          height: 30px;
-          padding: 0 10px;
-          text-transform: lowercase;
-        }
-
         .board-content {
           height: 100%;
           overflow: hidden;
-          padding: 62px clamp(24px, 5vw, 72px) 28px;
+          padding: 32px clamp(24px, 5vw, 72px) 28px;
           width: 100%;
         }
 
@@ -452,17 +421,12 @@ export default function AxisPage() {
             padding-inline: 16px;
           }
 
-          .whiteboard {
+          .thread-board-pane {
             flex: 1;
           }
 
           .board-content {
-            padding: 58px 18px 24px;
-          }
-
-          .tool-row {
-            flex-wrap: wrap;
-            right: 16px;
+            padding: 24px 18px;
           }
 
           .msg {
