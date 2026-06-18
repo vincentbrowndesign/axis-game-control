@@ -257,6 +257,7 @@ export default function AxisPage() {
           overflow-x: hidden;
           overflow-y: auto;
           padding: 10px 0 46px;
+          scroll-padding-bottom: 140px;
           scrollbar-width: none;
         }
 

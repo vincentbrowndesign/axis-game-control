@@ -23,6 +23,15 @@ interface Props {
   board?: ThreadBoardData | null;
 }
 
+function sectionToken(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export default function ThreadBoard({ board }: Props) {
   if (!board || typeof board.title !== "string") return null;
 
@@ -59,19 +68,26 @@ export default function ThreadBoard({ board }: Props) {
 
       {sections.length > 0 && (
         <div className="thread-board-sections">
-          {sections.map((section, index) => (
-            <section
-              key={`${section.type}-${section.label}-${index}`}
-              className={`thread-board-section thread-board-section--${section.type}`}
-            >
-              <h4 className="thread-board-label">{section.label}</h4>
-              <ul className="thread-board-items">
-                {section.items.map((item, itemIndex) => (
-                  <li key={itemIndex}>{item}</li>
-                ))}
-              </ul>
-            </section>
-          ))}
+          {sections.map((section, index) => {
+            const labelToken = sectionToken(section.label);
+            const typeToken = sectionToken(section.type);
+
+            return (
+              <section
+                key={`${section.type}-${section.label}-${index}`}
+                className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken}`}
+                data-section-type={typeToken}
+                data-section-label={labelToken}
+              >
+                <h4 className="thread-board-label">{section.label}</h4>
+                <ul className="thread-board-items">
+                  {section.items.map((item, itemIndex) => (
+                    <li key={itemIndex}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -119,11 +135,23 @@ export default function ThreadBoard({ board }: Props) {
 
         .thread-board-section {
           align-self: start;
-          background: rgba(251, 250, 247, 0.64);
-          border: 1px solid rgba(25, 24, 21, 0.14);
+          background: rgba(255, 254, 251, 0.82);
+          border: 1px solid rgba(25, 24, 21, 0.16);
           border-radius: 2px;
+          box-shadow: 0 1px 0 rgba(25, 24, 21, 0.06);
           min-width: 0;
           padding: clamp(12px, 1.35vw, 18px);
+          position: relative;
+        }
+
+        .thread-board-section::before {
+          background: rgba(25, 24, 21, 0.54);
+          content: "";
+          height: 1px;
+          left: clamp(12px, 1.35vw, 18px);
+          position: absolute;
+          right: clamp(12px, 1.35vw, 18px);
+          top: 9px;
         }
 
         .thread-board-section:nth-child(2n) {
@@ -136,12 +164,21 @@ export default function ThreadBoard({ board }: Props) {
         }
 
         .thread-board-section--outcome,
-        .thread-board-section--intervention {
+        .thread-board-section--intervention,
+        .thread-board-section--timeout_call,
+        .thread-board-section--player_rule,
+        .thread-board-section--adjustment_trigger {
           border-color: rgba(25, 24, 21, 0.28);
         }
 
-        .thread-board-section--question {
+        .thread-board-section--question,
+        .thread-board-section--watch_next {
           background: rgba(255, 254, 251, 0.78);
+        }
+
+        .thread-board-section--hypothesis,
+        .thread-board-section--pattern {
+          border-style: dashed;
         }
 
         .thread-board-label {
@@ -150,6 +187,7 @@ export default function ThreadBoard({ board }: Props) {
           font-weight: 600;
           letter-spacing: 0.05em;
           margin: 0 0 10px;
+          padding-top: 10px;
           text-transform: uppercase;
         }
 
@@ -216,10 +254,17 @@ export default function ThreadBoard({ board }: Props) {
           .thread-board-label {
             font-size: 10px;
             margin-bottom: 4px;
+            padding-top: 7px;
           }
 
           .thread-board-section {
             padding: 8px 9px;
+          }
+
+          .thread-board-section::before {
+            left: 9px;
+            right: 9px;
+            top: 7px;
           }
 
           .thread-board-items li + li {

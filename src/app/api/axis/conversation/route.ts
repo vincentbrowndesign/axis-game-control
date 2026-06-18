@@ -54,6 +54,7 @@ Thread board rules:
 - The title should be the clearest thread name, not a generic label.
 - The summary should say what the thread is about in plain language.
 - The board organizes the same thread as the reply. Conversation is source; board is organization.
+- Each section should stand on its own as one compact piece of understanding.
 - Sections must use one of these types: observation, pattern, relationship, question, hypothesis, intervention, outcome.
 - Labels must be one of: Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome / Next Move.
 - In live-pressure game contexts only, labels may also be: TIMEOUT CALL, PLAYER RULE, WATCH NEXT, ADJUSTMENT TRIGGER.
@@ -99,6 +100,8 @@ Good reply examples:
 - "Footwork is the entry point. The useful split is whether the player is losing organization before the catch, before the attack, or before the finish. Keep the thread on the moment where the feet decide the next action."
 - "The shot is too broad as a drill label, but it is useful as a thread title. The first split is whether the miss is coming from setup, timing, or decision pressure."
 - "The hesitation is the work. She has the shot; now she needs permission to use it before the defense gets comfortable."
+- "Hailey being passive against older competition is a pressure read, not a final judgment. The useful split is whether she is avoiding contact, rushing decisions, or waiting for permission before she attacks."
+- "A private run with NBA players and Alijah Arenas is a live talent-read thread, not proof by itself. Track what survives against size, speed, and better decisions before naming the claim."
 - "The idea is not too small. The language around it is still too soft, so the next move is to name what it actually changes."
 - "The drills are working. The transfer is not, which means the practice needs more game-pressure decisions, not more reps."`;
 
@@ -196,27 +199,27 @@ function liveContext(message: string, context = "") {
   return `${context} ${message}`.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function isLivePressureInput(message: string, context = "") {
-  const clean = liveContext(message, context);
+function isLivePressureInput(message: string) {
+  const clean = liveContext(message);
   return /\b(game is starting|game starting|at a game|timeout|first timeout|give me a play|quick|right now|need a plan|rebounding|too many chances|second chances|offensive boards|ball watching)\b/i.test(clean);
 }
 
-function isFirstTimeoutInput(message: string, context = "") {
-  const clean = liveContext(message, context);
+function isFirstTimeoutInput(message: string) {
+  const clean = liveContext(message);
   return /\b(game is starting|game starting|first timeout|timeout plan)\b/i.test(clean);
 }
 
-function isReboundingInput(message: string, context = "") {
-  const clean = liveContext(message, context);
+function isReboundingInput(message: string) {
+  const clean = liveContext(message);
   return /\b(rebounding|too many chances|second chances|offensive boards|ball watching)\b/i.test(clean);
 }
 
-function isBallWatchingInput(message: string, context = "") {
-  return /\bball watching\b/i.test(liveContext(message, context));
+function isBallWatchingInput(message: string) {
+  return /\bball watching\b/i.test(liveContext(message));
 }
 
-function isSecondChanceInput(message: string, context = "") {
-  return /\b(too many chances|second chances|offensive boards)\b/i.test(liveContext(message, context));
+function isSecondChanceInput(message: string) {
+  return /\b(too many chances|second chances|offensive boards)\b/i.test(liveContext(message));
 }
 
 function isSiteBetterInput(message: string) {
@@ -235,6 +238,20 @@ function isSpeculativeInput(message: string) {
 function isMichiganPracticeInput(message: string) {
   const clean = message.toLowerCase();
   return clean.includes("michigan") && (clean.includes("practice") || clean.includes("notional"));
+}
+
+function isSunoInput(message: string) {
+  return message.toLowerCase().includes("suno");
+}
+
+function isHaileyPassiveInput(message: string) {
+  const clean = message.toLowerCase();
+  return clean.includes("hailey") && (clean.includes("passive") || clean.includes("older competition"));
+}
+
+function isPrivateRunInput(message: string) {
+  const clean = message.toLowerCase();
+  return clean.includes("private run") || (clean.includes("nba players") && clean.includes("alijah"));
 }
 
 function hasFutureLayerLeakage(reply: string) {
@@ -331,10 +348,10 @@ function titleCase(value: string) {
     .join(" ");
 }
 
-function createFallbackResponse(message: string, context = ""): { reply: string; threadBoard: ThreadBoard } {
+function createFallbackResponse(message: string): { reply: string; threadBoard: ThreadBoard } {
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
 
-  if (isBallWatchingInput(message, context)) {
+  if (isBallWatchingInput(message)) {
     return {
       reply: "Call the timeout around second chances, not the whole defense. Every player names their man as the shot goes up, hits body first, finds ball second, and the guards crack back on long rebounds. If they get two more offensive boards, assign box-out matchups directly.",
       threadBoard: {
@@ -377,7 +394,7 @@ function createFallbackResponse(message: string, context = ""): { reply: string;
     };
   }
 
-  if (isSecondChanceInput(message, context)) {
+  if (isSecondChanceInput(message)) {
     return {
       reply: "Make the timeout about ending second chances. The call is body first, ball second: find someone on the shot, hit first contact, then pursue. If they still get two offensive boards after that, assign box-out matchups instead of asking everyone to rebound harder.",
       threadBoard: {
@@ -420,7 +437,7 @@ function createFallbackResponse(message: string, context = ""): { reply: string;
     };
   }
 
-  if (isReboundingInput(message, context)) {
+  if (isReboundingInput(message)) {
     return {
       reply: "Keep the timeout simple: rebounding is contact before pursuit. Do not make it a hustle speech. Tell them to find a body on every shot, guards crack back on long rebounds, and the next two defensive possessions decide whether you assign matchups.",
       threadBoard: {
@@ -463,7 +480,7 @@ function createFallbackResponse(message: string, context = ""): { reply: string;
     };
   }
 
-  if (isFirstTimeoutInput(message, context)) {
+  if (isFirstTimeoutInput(message)) {
     return {
       reply: "Use the first timeout as a reset, not a lecture. Give them one call they can remember: settle the ball, win first contact, and get a clean shot in the next two possessions. Come back here with the first thing breaking and I will narrow the call.",
       threadBoard: {
@@ -610,7 +627,42 @@ function createFallbackResponse(message: string, context = ""): { reply: string;
     };
   }
 
-  if (normalized.includes("suno")) {
+  if (isPrivateRunInput(message)) {
+    return {
+      reply: "That is a live talent-read thread, not proof by itself. In a private run with NBA players and Alijah Arenas, the useful split is what survives against size, speed, and better decisions. Track the moment where the action still works when the window gets smaller.",
+      threadBoard: {
+        title: "Private Run Talent Read",
+        summary: "The thread is about forming a careful read from a private run without upgrading the setting into proof.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: [
+              "The user is watching a private run",
+              "NBA players and Alijah Arenas are part of the context",
+            ],
+          },
+          {
+            type: "hypothesis",
+            label: "Hypothesis",
+            items: ["The useful signal is what still works against better size, speed, and decisions"],
+          },
+          {
+            type: "question",
+            label: "Question",
+            items: ["Which action survives when the window gets smaller"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Track repeatable advantages before naming a bigger claim"],
+          },
+        ],
+      },
+    };
+  }
+
+  if (isSunoInput(message)) {
     return {
       reply: "Suno is the creation surface. The useful split is whether the work is about song direction, prompt language, or choosing what is worth keeping. Keep the thread on the decision that makes the next generation better.",
       threadBoard: {
@@ -879,6 +931,38 @@ function createFallbackResponse(message: string, context = ""): { reply: string;
     };
   }
 
+  if (isHaileyPassiveInput(message)) {
+    return {
+      reply: "Hailey being passive against older competition is a pressure read, not a final judgment. The useful split is whether she is avoiding contact, rushing decisions, or waiting for permission before she attacks. Keep the next note on the first moment she turns down an advantage.",
+      threadBoard: {
+        title: "Hailey: Passive Against Older Competition",
+        summary: "The thread is about how Hailey responds to older competition and where her aggression disappears.",
+        sections: [
+          {
+            type: "observation",
+            label: "Observation",
+            items: ["Hailey is passive against older competition"],
+          },
+          {
+            type: "hypothesis",
+            label: "Hypothesis",
+            items: ["The issue may be pressure, contact, or permission to attack"],
+          },
+          {
+            type: "question",
+            label: "Question",
+            items: ["Is she avoiding contact, rushing decisions, or passing up advantages"],
+          },
+          {
+            type: "outcome",
+            label: "Outcome / Next Move",
+            items: ["Watch the first moment she turns down an advantage"],
+          },
+        ],
+      },
+    };
+  }
+
   if (normalized.includes("hailey")) {
     return {
       reply: "Hailey is the thread now. Twelve points gives the performance marker, but the useful work is identifying which scoring action should become more intentional. Keep the thread on what she already has that she is not using enough.",
@@ -994,8 +1078,6 @@ export async function POST(req: Request) {
     safeMessages.push({ role: "user", content: message });
   }
 
-  const contextText = safeMessages.map((m) => m.content).join(" ");
-
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -1033,16 +1115,19 @@ export async function POST(req: Request) {
       const reply = cleanString(parsed.reply);
 
       if (
-        isLivePressureInput(message, contextText) ||
+        isLivePressureInput(message) ||
         isGamePlayInput(message) ||
         isSiteBetterInput(message) ||
         isMichiganPracticeInput(message) ||
+        isPrivateRunInput(message) ||
+        isSunoInput(message) ||
+        isHaileyPassiveInput(message) ||
         isBusinessRealInput(message) ||
         (isSpeculativeInput(message) && hasSpeculationAsFact(reply)) ||
         !isValidReply(reply) ||
         (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))
       ) {
-        return Response.json(createFallbackResponse(message, contextText));
+        return Response.json(createFallbackResponse(message));
       }
 
       const validThreadBoard = validateThreadBoard(parsed.threadBoard);
@@ -1052,7 +1137,7 @@ export async function POST(req: Request) {
         !(isAxisMvpInput(message) && boardHasFutureLayerLeakage(validThreadBoard))
           ? validThreadBoard
           : null;
-      const fallback = threadBoard ? null : createFallbackResponse(message, contextText);
+      const fallback = threadBoard ? null : createFallbackResponse(message);
 
       return Response.json({
         reply,
@@ -1063,18 +1148,21 @@ export async function POST(req: Request) {
         !isGamePlayInput(message) &&
         !isSiteBetterInput(message) &&
         !isMichiganPracticeInput(message) &&
-        !isLivePressureInput(message, contextText) &&
+        !isPrivateRunInput(message) &&
+        !isSunoInput(message) &&
+        !isHaileyPassiveInput(message) &&
+        !isLivePressureInput(message) &&
         isValidReply(text) &&
         !(isSpeculativeInput(message) && hasSpeculationAsFact(text)) &&
         !(isAxisMvpInput(message) && hasFutureLayerLeakage(text))
       ) {
         return Response.json({
           reply: text,
-          threadBoard: createFallbackResponse(message, contextText).threadBoard,
+          threadBoard: createFallbackResponse(message).threadBoard,
         });
       }
 
-      return Response.json(createFallbackResponse(message, contextText));
+      return Response.json(createFallbackResponse(message));
     }
   } catch (err) {
     console.error("[axis/conversation] error", (err as Error).message);
