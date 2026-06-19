@@ -43,6 +43,10 @@ Reply rules:
 - For Axis product inputs, do not give startup advice, device advice, fundraising advice, positioning advice, or future-layer advice.
 - Do not merge adjacent facts into invented evidence. If the user says "Hailey had 12 points" and then mentions floaters, do not claim the 12 points came from floaters unless the user says that.
 - Do not upgrade speculation into fact. Practice observations, contender reads, or rough takes must stay framed as possible reads unless evidence is named.
+- Protect active-thread entity integrity. Do not merge, rename, over-infer, or drift between people, teams, projects, or topics unless the user explicitly connects them.
+- If the user corrects a name or entity, the correction overrides earlier mentions inside this thread. Use the corrected name going forward and do not keep treating the old name as a separate person.
+- Short follow-ups attach only to the most recent compatible entity or topic. If that attachment is uncertain, say what is known and ask one sharp boundary question instead of guessing.
+- Do not transfer facts from one named person, team, project, or topic to another.
 - Ask at most one sharp question, and only when it moves the work forward.
 - Keep the reply short. Two or three sentences is usually enough.
 - No markdown.
@@ -177,6 +181,16 @@ interface ThreadBoard {
   sections: ThreadBoardSection[];
 }
 
+interface EntityCorrection {
+  from: string;
+  to: string;
+}
+
+interface EntityIntegrityContext {
+  activeNames: string[];
+  corrections: EntityCorrection[];
+}
+
 function hasRawArrow(text: string) {
   return /->|=>|→|⇒|←|↔/.test(text);
 }
@@ -252,9 +266,17 @@ function isLiveHuddleInput(message: string, context = "") {
 
 const NON_PLAYER_NAME_TOKENS = new Set([
   "Axis",
+  "Active",
+  "Adjustment",
+  "Again",
+  "And",
+  "Assumption",
+  "Board",
   "End",
+  "Every",
   "No",
   "Give",
+  "Game",
   "One",
   "Thing",
   "Each",
@@ -264,7 +286,6 @@ const NON_PLAYER_NAME_TOKENS = new Set([
   "Timeout",
   "Huddle",
   "Thread",
-  "Board",
   "Need",
   "Next",
   "Use",
@@ -277,20 +298,160 @@ const NON_PLAYER_NAME_TOKENS = new Set([
   "Spurs",
   "Seattle",
   "Owls",
+  "Observation",
+  "Pattern",
+  "Question",
+  "Hypothesis",
+  "Intervention",
+  "Outcome",
 ]);
 
-function extractPlayerNames(context: string) {
+function normalizeEntityToken(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function correctionKey(value: string) {
+  return normalizeEntityToken(value).toLowerCase();
+}
+
+function addCorrection(
+  corrections: EntityCorrection[],
+  from: string,
+  to: string,
+) {
+  const cleanFrom = normalizeEntityToken(from);
+  const cleanTo = normalizeEntityToken(to);
+  if (!cleanFrom || !cleanTo) return;
+  if (correctionKey(cleanFrom) === correctionKey(cleanTo)) return;
+
+  const existingIndex = corrections.findIndex(
+    (correction) => correctionKey(correction.from) === correctionKey(cleanFrom),
+  );
+  const nextCorrection = { from: cleanFrom, to: cleanTo };
+
+  if (existingIndex >= 0) {
+    corrections[existingIndex] = nextCorrection;
+    return;
+  }
+
+  corrections.push(nextCorrection);
+}
+
+function extractCorrectionsFromText(text: string) {
+  const corrections: EntityCorrection[] = [];
+  const patterns = [
+    /\b(?:correct|change|rename)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:to|as)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi,
+    /\b(?:it'?s|its|I mean|meant)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:not|instead of)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi,
+    /\bnot\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?),?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi,
+    /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:is|=)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+  ];
+
+  patterns.forEach((pattern, index) => {
+    for (const match of text.matchAll(pattern)) {
+      if (index === 1) {
+        addCorrection(corrections, match[2] ?? "", match[1] ?? "");
+      } else {
+        addCorrection(corrections, match[1] ?? "", match[2] ?? "");
+      }
+    }
+  });
+
+  return corrections;
+}
+
+function resolveEntityName(name: string, corrections: EntityCorrection[]) {
+  let resolved = normalizeEntityToken(name);
+
+  for (let i = 0; i < corrections.length; i += 1) {
+    const correction = corrections.find(
+      (candidate) => correctionKey(candidate.from) === correctionKey(resolved),
+    );
+    if (!correction) break;
+    resolved = correction.to;
+  }
+
+  return resolved;
+}
+
+function applyEntityCorrections(text: string, corrections: EntityCorrection[]) {
+  return corrections.reduce((current, correction) => {
+    const escaped = correction.from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return current.replace(new RegExp(`\\b${escaped}\\b`, "g"), correction.to);
+  }, text);
+}
+
+function extractPlayerNames(context: string, corrections: EntityCorrection[] = []) {
   const matches = context.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b|\b[A-Z]{2,}\b/g) ?? [];
   const names: string[] = [];
 
   matches.forEach((match) => {
-    const clean = match.trim();
+    const clean = resolveEntityName(match.trim(), corrections);
     if (!clean || NON_PLAYER_NAME_TOKENS.has(clean)) return;
     if (clean.length <= 1) return;
-    if (!names.includes(clean)) names.push(clean);
+    if (!names.some((name) => correctionKey(name) === correctionKey(clean))) {
+      names.push(clean);
+    }
   });
 
   return names.slice(0, 8);
+}
+
+function buildEntityIntegrityContext(messages: HistoryMessage[]): EntityIntegrityContext {
+  const userMessages = messages.filter((message) => message.role === "user");
+  const corrections: EntityCorrection[] = [];
+
+  userMessages.forEach((message) => {
+    extractCorrectionsFromText(message.content).forEach((correction) => {
+      addCorrection(corrections, correction.from, correction.to);
+    });
+  });
+
+  const correctedText = applyEntityCorrections(
+    userMessages.map((message) => message.content).join(" "),
+    corrections,
+  );
+  const activeNames = extractPlayerNames(correctedText, corrections);
+  return {
+    activeNames,
+    corrections,
+  };
+}
+
+function buildEntityIntegrityPrompt(context: EntityIntegrityContext) {
+  const lines = [
+    "Active-thread entity integrity:",
+    "Use only this current thread. Do not import cross-thread memory.",
+    "Treat named people, teams, projects, and topics as separate unless the user explicitly connects them.",
+    "Do not transfer facts, roles, stats, strengths, or problems from one entity to another.",
+    "If a follow-up could attach to more than one entity, state the boundary and ask one sharp question.",
+  ];
+
+  if (context.corrections.length > 0) {
+    lines.push(
+      `Corrections in this thread: ${context.corrections
+        .map((correction) => `${correction.from} is now ${correction.to}`)
+        .join("; ")}.`,
+      "Use corrected names going forward. Do not keep old names as separate active people.",
+    );
+  }
+
+  if (context.activeNames.length > 0) {
+    lines.push(`Active named entities: ${context.activeNames.join(", ")}.`);
+  }
+
+  return lines.join("\n");
+}
+
+function hasCorrectedEntityLeakage(
+  text: string,
+  corrections: EntityCorrection[],
+) {
+  return corrections.some((correction) => {
+    const escaped = correction.from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedTo = correction.to.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`\\b${escaped}\\b`, "i");
+    return pattern.test(text) && !new RegExp(`\\b${escaped}\\b\\s+(?:is now|was corrected to|means)\\s+\\b${escapedTo}\\b`, "i").test(text);
+  });
 }
 
 function contextNearName(name: string, context: string) {
@@ -434,23 +595,29 @@ function boardHasFutureLayerLeakage(board: ThreadBoard) {
   return hasFutureLayerLeakage(text);
 }
 
-function boardHasUnsupportedClaim(board: ThreadBoard) {
+function boardHasUnsupportedClaim(
+  board: ThreadBoard,
+  corrections: EntityCorrection[] = [],
+) {
   const text = [
     board.title,
     board.summary,
     ...board.sections.flatMap((section) => section.items),
   ].join(" ");
 
-  return hasUnsupportedHaileyFloaterClaim(text) || hasSpeculationAsFact(text);
+  return hasUnsupportedHaileyFloaterClaim(text) ||
+    hasSpeculationAsFact(text) ||
+    hasCorrectedEntityLeakage(text, corrections);
 }
 
-function isValidReply(reply: string) {
+function isValidReply(reply: string, corrections: EntityCorrection[] = []) {
   return Boolean(reply) &&
     !hasRawArrow(reply) &&
     !hasMarkdown(reply) &&
     !isGenericClarification(reply) &&
     !hasUnsupportedHaileyFloaterClaim(reply) &&
-    !hasSpeculationAsFact(reply);
+    !hasSpeculationAsFact(reply) &&
+    !hasCorrectedEntityLeakage(reply, corrections);
 }
 
 function validateThreadBoard(value: unknown): ThreadBoard | null {
@@ -502,7 +669,15 @@ function titleCase(value: string) {
     .join(" ");
 }
 
-function createFallbackResponse(message: string, context = ""): { reply: string; threadBoard: ThreadBoard } {
+function createFallbackResponse(
+  message: string,
+  context = "",
+  entityContext?: EntityIntegrityContext,
+): { reply: string; threadBoard: ThreadBoard } {
+  const corrections = entityContext?.corrections ?? [];
+  message = applyEntityCorrections(message, corrections);
+  context = applyEntityCorrections(context, corrections);
+
   const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
   const hasSpurs = hasSpursContext(message, context);
   const hasSeattleOwls = hasSeattleOwlsContext(message, context);
@@ -1468,7 +1643,13 @@ export async function POST(req: Request) {
     safeMessages.push({ role: "user", content: message });
   }
 
+  const entityContext = buildEntityIntegrityContext(safeMessages);
   const contextText = safeMessages.map((m) => m.content).join(" ");
+  const correctedContextText = applyEntityCorrections(
+    contextText,
+    entityContext.corrections,
+  );
+  const entityIntegrityPrompt = buildEntityIntegrityPrompt(entityContext);
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1481,7 +1662,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1200,
-        system: AXIS_SYSTEM,
+        system: `${AXIS_SYSTEM}\n\n${entityIntegrityPrompt}`,
         messages: safeMessages,
       }),
     });
@@ -1507,10 +1688,10 @@ export async function POST(req: Request) {
       const reply = cleanString(parsed.reply);
 
       if (
-        isLiveHuddleInput(message, contextText) ||
-        isOutOfBoundsInput(message, contextText) ||
-        isGameplanRoleUpdate(message, contextText) ||
-        isThinGameplanInput(message, contextText) ||
+        isLiveHuddleInput(message, correctedContextText) ||
+        isOutOfBoundsInput(message, correctedContextText) ||
+        isGameplanRoleUpdate(message, correctedContextText) ||
+        isThinGameplanInput(message, correctedContextText) ||
         isLivePressureInput(message) ||
         isGamePlayInput(message) ||
         isSiteBetterInput(message) ||
@@ -1520,20 +1701,22 @@ export async function POST(req: Request) {
         isHaileyPassiveInput(message) ||
         isBusinessRealInput(message) ||
         (isSpeculativeInput(message) && hasSpeculationAsFact(reply)) ||
-        !isValidReply(reply) ||
+        !isValidReply(reply, entityContext.corrections) ||
         (isAxisMvpInput(message) && hasFutureLayerLeakage(reply))
       ) {
-        return Response.json(createFallbackResponse(message, contextText));
+        return Response.json(createFallbackResponse(message, correctedContextText, entityContext));
       }
 
       const validThreadBoard = validateThreadBoard(parsed.threadBoard);
       const threadBoard =
         validThreadBoard &&
-        !boardHasUnsupportedClaim(validThreadBoard) &&
+        !boardHasUnsupportedClaim(validThreadBoard, entityContext.corrections) &&
         !(isAxisMvpInput(message) && boardHasFutureLayerLeakage(validThreadBoard))
           ? validThreadBoard
           : null;
-      const fallback = threadBoard ? null : createFallbackResponse(message, contextText);
+      const fallback = threadBoard
+        ? null
+        : createFallbackResponse(message, correctedContextText, entityContext);
 
       return Response.json({
         reply,
@@ -1542,27 +1725,27 @@ export async function POST(req: Request) {
     } catch {
       if (
         !isGamePlayInput(message) &&
-        !isLiveHuddleInput(message, contextText) &&
-        !isOutOfBoundsInput(message, contextText) &&
+        !isLiveHuddleInput(message, correctedContextText) &&
+        !isOutOfBoundsInput(message, correctedContextText) &&
         !isSiteBetterInput(message) &&
         !isMichiganPracticeInput(message) &&
         !isPrivateRunInput(message) &&
         !isSunoInput(message) &&
         !isHaileyPassiveInput(message) &&
-        !isGameplanRoleUpdate(message, contextText) &&
-        !isThinGameplanInput(message, contextText) &&
+        !isGameplanRoleUpdate(message, correctedContextText) &&
+        !isThinGameplanInput(message, correctedContextText) &&
         !isLivePressureInput(message) &&
-        isValidReply(text) &&
+        isValidReply(text, entityContext.corrections) &&
         !(isSpeculativeInput(message) && hasSpeculationAsFact(text)) &&
         !(isAxisMvpInput(message) && hasFutureLayerLeakage(text))
       ) {
         return Response.json({
           reply: text,
-          threadBoard: createFallbackResponse(message, contextText).threadBoard,
+          threadBoard: createFallbackResponse(message, correctedContextText, entityContext).threadBoard,
         });
       }
 
-      return Response.json(createFallbackResponse(message, contextText));
+      return Response.json(createFallbackResponse(message, correctedContextText, entityContext));
     }
   } catch (err) {
     console.error("[axis/conversation] error", (err as Error).message);
