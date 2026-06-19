@@ -85,7 +85,7 @@
   color: color-mix(in srgb, var(--lab-ink) 34%, transparent);
   font-size: clamp(16px, 1.8vw, 22px);
   line-height: 1.4;
-  margin: 0 0 40px;
+  margin: 0;
 }
 
 .emptyInputLine {
@@ -199,6 +199,14 @@
   display: flex;
   gap: 5px;
   margin-left: auto;
+}
+
+.stateToggleLabel {
+  color: color-mix(in srgb, var(--lab-ink) 18%, transparent);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  margin-right: 4px;
+  text-transform: uppercase;
 }
 
 .stateDot {
@@ -460,4 +468,149 @@
   .msKindLabel {
     width: auto;
   }
+}
+
+/* ─── Composer ────────────────────────────────────────────── */
+
+.composer {
+  border-top: 1px solid color-mix(in srgb, var(--lab-line) 8%, transparent);
+  flex-shrink: 0;
+  padding: 0 clamp(20px, 4vw, 52px);
+}
+
+.composerInner {
+  margin: 0 auto;
+  max-width: 640px;
+}
+
+.composerField {
+  align-items: flex-end;
+  display: flex;
+  gap: 12px;
+  padding: 14px 0 12px;
+}
+
+.composerInput {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--lab-line) 10%, transparent);
+  color: inherit;
+  flex: 1;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.45;
+  max-height: 120px;
+  min-width: 0;
+  outline: 0;
+  overflow-y: auto;
+  padding: 0 0 8px;
+  resize: none;
+  transition: border-color 0.15s ease;
+}
+
+.composerInput:focus {
+  border-bottom-color: color-mix(in srgb, var(--lab-line) 24%, transparent);
+}
+
+.composerInput::placeholder {
+  color: color-mix(in srgb, var(--lab-ink) 20%, transparent);
+}
+
+.composerSend {
+  background: transparent;
+  border: 0;
+  color: color-mix(in srgb, var(--lab-ink) 26%, transparent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  padding: 0 0 8px;
+  text-transform: uppercase;
+  transition: color 0.1s ease;
+}
+
+.composerSend:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.composerSend:not(:disabled):hover {
+  color: color-mix(in srgb, var(--lab-ink) 64%, transparent);
+}
+
+.composerSend:focus-visible {
+  border-radius: 2px;
+  outline: 1px solid color-mix(in srgb, var(--lab-line) 36%, transparent);
+  outline-offset: 3px;
+}
+
+.composerAffordances {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  padding: 0 0 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .composerAffordances {
+    animation: affordReveal 0.12s ease;
+  }
+}
+
+@keyframes affordReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.affordanceBtn {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: color-mix(in srgb, var(--lab-ink) 28%, transparent);
+  cursor: pointer;
+  display: flex;
+  padding: 3px;
+  transition: color 0.1s ease;
+}
+
+.affordanceBtn:hover {
+  color: color-mix(in srgb, var(--lab-ink) 58%, transparent);
+}
+
+.affordanceBtn:focus-visible {
+  border-radius: 2px;
+  outline: 1px solid color-mix(in srgb, var(--lab-line) 36%, transparent);
+  outline-offset: 2px;
+}
+
+.affordanceBtn:active {
+  color: color-mix(in srgb, var(--lab-ink) 74%, transparent);
+}
+
+.affordanceNote {
+  color: color-mix(in srgb, var(--lab-ink) 18%, transparent);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  margin-left: auto;
+}
+
+/* ─── Local preview messages ──────────────────────────────── */
+
+.localMessages {
+  margin-top: 48px;
+  max-width: 640px;
+}
+
+.localMessage {
+  color: color-mix(in srgb, var(--lab-ink) 80%, transparent);
+  font-size: clamp(18px, 2.4vw, 28px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.22;
+  margin: 0 0 20px;
+  overflow-wrap: break-word;
 }

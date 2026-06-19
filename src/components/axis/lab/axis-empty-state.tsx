@@ -6,7 +6,6 @@ export default function AxisEmptyState() {
       <div className={styles.emptyColumn}>
         <h1 className={styles.emptyPrompt}>What are we working on?</h1>
         <p className={styles.emptyHint}>Bring the rough version.</p>
-        <span className={styles.emptyInputLine} aria-hidden="true" />
       </div>
     </div>
   );

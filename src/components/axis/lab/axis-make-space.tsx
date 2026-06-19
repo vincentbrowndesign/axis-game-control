@@ -15,10 +15,11 @@ const KIND_ACCENT: Record<MakeSpaceItemKind, string> = {
 interface Props {
   threadTitle: string;
   items: readonly MakeSpaceItem[];
+  defaultExpandedId?: string;
 }
 
-export default function AxisMakeSpace({ threadTitle, items }: Props) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+export default function AxisMakeSpace({ threadTitle, items, defaultExpandedId }: Props) {
+  const [expandedId, setExpandedId] = useState<string | null>(defaultExpandedId ?? null);
   const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
 
