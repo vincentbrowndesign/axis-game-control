@@ -1,318 +1,125 @@
-.shell {
-  --axis-lab-room: #f7f3ea;
-  --axis-lab-paper: #fffdf7;
-  --axis-lab-ink: #151515;
-  --axis-lab-line: #2a2926;
-  --axis-lab-grid: #e6ddcf;
-  background:
-    linear-gradient(color-mix(in srgb, var(--axis-lab-room) 94%, transparent), color-mix(in srgb, var(--axis-lab-room) 94%, transparent)),
-    linear-gradient(color-mix(in srgb, var(--axis-lab-grid) 50%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--axis-lab-grid) 36%, transparent) 1px, transparent 1px);
-  background-size: auto, 36px 36px, 36px 36px;
-  color: color-mix(in srgb, var(--axis-lab-ink) 92%, transparent);
-  display: grid;
+/* Quiet surface — one centered field, no columns, no panels */
+
+.surface {
+  background: var(--lab-room);
+  color: color-mix(in srgb, var(--lab-ink) 92%, transparent);
+  display: flex;
+  flex-direction: column;
   font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100dvh;
   overflow: hidden;
   width: 100%;
 }
 
-.header,
-.composerRegion {
-  min-width: 0;
-  padding-inline: clamp(14px, 3vw, 34px);
-}
+/* Header */
 
 .header {
-  padding-top: 16px;
-}
-
-.room {
-  display: grid;
-  gap: clamp(18px, 2.6vw, 34px);
-  grid-template-columns: minmax(16rem, 0.8fr) minmax(28rem, 1.7fr) minmax(16rem, 0.8fr);
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  padding: 18px clamp(14px, 3vw, 34px) 24px;
-}
-
-.timelineRegion,
-.boardRegion,
-.inspectorRegion {
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  scrollbar-width: none;
-}
-
-.timelineRegion::-webkit-scrollbar,
-.boardRegion::-webkit-scrollbar,
-.inspectorRegion::-webkit-scrollbar {
-  display: none;
-}
-
-.threadHeader {
-  align-items: flex-start;
-  border-bottom: 1px solid color-mix(in srgb, var(--axis-lab-line) 12%, transparent);
+  align-items: baseline;
+  border-bottom: 1px solid color-mix(in srgb, var(--lab-line) 10%, transparent);
   display: flex;
-  gap: 18px;
-  justify-content: space-between;
-  min-width: 0;
-  padding-bottom: 14px;
-}
-
-.threadTitleBlock {
-  align-items: flex-start;
-  display: flex;
-  gap: 16px;
-  min-width: 0;
+  flex-shrink: 0;
+  gap: 10px;
+  padding: 16px clamp(20px, 4vw, 52px);
 }
 
 .wordmark {
-  color: color-mix(in srgb, var(--axis-lab-ink) 28%, transparent);
-  flex-shrink: 0;
+  color: color-mix(in srgb, var(--lab-ink) 26%, transparent);
   font-size: 12px;
-  letter-spacing: 0.08em;
-  margin-top: 5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.labLabel,
-.sectionEyebrow {
-  color: color-mix(in srgb, var(--axis-lab-ink) 34%, transparent);
+.labLabel {
+  color: color-mix(in srgb, var(--lab-ink) 28%, transparent);
   font-size: 11px;
-  letter-spacing: 0.05em;
-  margin: 0;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.threadHeader h1,
-.focusBlock h2,
-.timeline h2,
-.inspector h2 {
-  color: color-mix(in srgb, var(--axis-lab-ink) 92%, transparent);
+.stateLabel {
+  color: color-mix(in srgb, var(--lab-ink) 22%, transparent);
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* Field: scrollable centered work area */
+
+.field {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 52px clamp(20px, 4vw, 52px) 40px;
+  scrollbar-width: none;
+}
+
+.field::-webkit-scrollbar {
+  display: none;
+}
+
+/* Column */
+
+.column {
+  margin: 0 auto;
+  max-width: 660px;
+  min-width: 0;
+}
+
+/* Focus */
+
+.focusHead {
+  margin-bottom: 46px;
+}
+
+.focusTitle {
+  color: color-mix(in srgb, var(--lab-ink) 90%, transparent);
+  font-size: clamp(36px, 5.5vw, 68px);
   font-weight: 500;
-  letter-spacing: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
+  letter-spacing: -0.02em;
+  line-height: 1.0;
+  margin: 0 0 12px;
 }
 
-.threadHeader h1 {
-  font-size: clamp(24px, 3.2vw, 48px);
-  line-height: 1.02;
-  margin-top: 4px;
-}
-
-.threadHeader time {
-  color: color-mix(in srgb, var(--axis-lab-ink) 36%, transparent);
-  display: block;
-  font-size: 12px;
-  margin-top: 6px;
-}
-
-.headerControls {
-  align-items: flex-end;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.saveStatus {
-  color: color-mix(in srgb, var(--axis-lab-ink) 44%, transparent);
-  font-size: 12px;
-  padding-top: 3px;
-  white-space: nowrap;
-}
-
-.previewStateControl {
-  align-items: center;
-  color: color-mix(in srgb, var(--axis-lab-ink) 38%, transparent);
-  display: flex;
-  font-size: 11px;
-  gap: 7px;
-}
-
-.previewStateControl select {
-  background: var(--axis-lab-paper);
-  border: 1px solid color-mix(in srgb, var(--axis-lab-line) 14%, transparent);
-  color: color-mix(in srgb, var(--axis-lab-ink) 72%, transparent);
-  font: inherit;
-  padding: 5px 7px;
-}
-
-.resetButton,
-.composer button {
-  background: color-mix(in srgb, var(--axis-lab-ink) 88%, transparent);
-  border: 0;
-  border-radius: 3px;
-  color: var(--axis-lab-room);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  height: 32px;
-  padding: 0 12px;
-}
-
-.resetButton {
-  background: transparent;
-  border-bottom: 1px solid color-mix(in srgb, var(--axis-lab-line) 22%, transparent);
-  color: color-mix(in srgb, var(--axis-lab-ink) 48%, transparent);
-  height: auto;
-  padding: 0 0 2px;
-}
-
-.timeline,
-.inspector {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-}
-
-.timeline h2,
-.inspector h2 {
-  font-size: clamp(20px, 2vw, 30px);
-  line-height: 1.08;
-}
-
-.timelineList {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.timelineEntry {
-  border-top: 1px solid color-mix(in srgb, var(--axis-lab-line) 12%, transparent);
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 58px minmax(0, 1fr);
-  padding-top: 12px;
-}
-
-.timelineEntry time {
-  color: color-mix(in srgb, var(--axis-lab-ink) 36%, transparent);
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.timelineEntry span {
-  color: color-mix(in srgb, var(--axis-lab-ink) 56%, transparent);
-  display: block;
-  font-size: 12px;
-  margin-bottom: 5px;
-}
-
-.timelineEntry p,
-.focusBlock p,
-.inspectorEmpty,
-.inspectorNote,
-.cardNote,
-.composerNote {
-  color: color-mix(in srgb, var(--axis-lab-ink) 58%, transparent);
-  font-size: 14px;
+.focusSummary {
+  color: color-mix(in srgb, var(--lab-ink) 52%, transparent);
+  font-size: clamp(16px, 1.8vw, 22px);
   line-height: 1.42;
   margin: 0;
+  max-width: 44ch;
 }
 
-.boardCanvas {
+/* Sections */
+
+.sections {
   display: flex;
   flex-direction: column;
-  gap: clamp(18px, 3vw, 30px);
-  min-width: 0;
+  gap: 28px;
 }
 
-.focusBlock {
-  border-bottom: 1px solid color-mix(in srgb, var(--axis-lab-line) 12%, transparent);
-  max-width: 760px;
-  min-width: 0;
-  padding-bottom: 18px;
+.section {
+  --accent: var(--lab-line);
+  border-top: 1px solid color-mix(in srgb, var(--lab-line) 10%, transparent);
+  padding-top: 20px;
 }
 
-.focusBlock h2 {
-  font-size: clamp(38px, 6.2vw, 84px);
-  line-height: 0.95;
-  margin-top: 8px;
+.sectionLabel {
+  color: var(--accent);
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  margin: 0 0 12px;
+  opacity: 0.84;
+  text-transform: uppercase;
 }
 
-.focusBlock p {
-  color: color-mix(in srgb, var(--axis-lab-ink) 66%, transparent);
-  font-size: clamp(17px, 2vw, 24px);
-  line-height: 1.24;
-  margin-top: 12px;
-  max-width: 42ch;
+.sectionNote {
+  color: color-mix(in srgb, var(--lab-ink) 42%, transparent);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.4;
+  margin: 0 0 10px;
 }
 
-.cardGrid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
-}
-
-.boardCard {
-  --axis-card-accent: var(--axis-lab-line);
-  --axis-card-border: var(--axis-lab-grid);
-  background: color-mix(in srgb, var(--axis-lab-paper) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--axis-card-border) 76%, transparent);
-  border-radius: 8px;
-  box-shadow: 0 14px 40px color-mix(in srgb, var(--axis-lab-line) 5%, transparent);
-  color: inherit;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  font: inherit;
-  gap: 12px;
-  min-height: 190px;
-  min-width: 0;
-  padding: 14px;
-  position: relative;
-  text-align: left;
-}
-
-.boardCard:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--axis-card-accent) 80%, transparent);
-  outline-offset: 3px;
-}
-
-.boardCardSelected {
-  border-color: color-mix(in srgb, var(--axis-card-accent) 72%, var(--axis-lab-line));
-}
-
-.cardStripe {
-  background: var(--axis-card-accent);
-  border-radius: 999px;
-  height: 3px;
-  left: 14px;
-  position: absolute;
-  right: 14px;
-  top: 10px;
-}
-
-.cardHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding-top: 9px;
-}
-
-.cardHeader h3 {
-  color: color-mix(in srgb, var(--axis-lab-ink) 90%, transparent);
-  font-size: clamp(17px, 1.5vw, 22px);
-  font-weight: 650;
-  line-height: 1.08;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.boardCard ul,
-.inspectorItems {
+.sectionItems {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -321,253 +128,68 @@
   padding: 0;
 }
 
-.boardCard li,
-.inspectorItems li {
-  color: color-mix(in srgb, var(--axis-lab-ink) 70%, transparent);
-  font-size: 14px;
-  line-height: 1.32;
-  padding-left: 15px;
+.sectionItem {
+  color: color-mix(in srgb, var(--lab-ink) 74%, transparent);
+  font-size: clamp(15px, 1.6vw, 18px);
+  line-height: 1.42;
+  padding-left: 16px;
   position: relative;
 }
 
-.boardCard li::before,
-.inspectorItems li::before {
-  background: currentColor;
+.sectionItem::before {
+  background: var(--accent);
   border-radius: 999px;
   content: "";
   height: 4px;
   left: 0;
-  opacity: 0.45;
+  opacity: 0.48;
   position: absolute;
   top: 0.62em;
   width: 4px;
 }
 
-.statusPill {
-  --axis-card-accent: var(--axis-lab-line);
+/* Controls footer */
+
+.controls {
   align-items: center;
-  align-self: flex-start;
-  border: 1px solid color-mix(in srgb, var(--axis-card-accent) 42%, transparent);
-  border-radius: 999px;
-  color: color-mix(in srgb, var(--axis-lab-ink) 64%, transparent);
-  display: inline-flex;
-  font-size: 10px;
-  gap: 6px;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  padding: 5px 8px;
-}
-
-.statusPill span {
-  background: var(--axis-card-accent);
-  border-radius: 999px;
-  height: 6px;
-  width: 6px;
-}
-
-.inspector {
-  background: color-mix(in srgb, var(--axis-lab-paper) 86%, transparent);
-  border-left: 1px solid color-mix(in srgb, var(--axis-lab-line) 12%, transparent);
-  padding-left: 16px;
-}
-
-.inspectorMeta {
+  border-top: 1px solid color-mix(in srgb, var(--lab-line) 10%, transparent);
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 0;
+  flex-shrink: 0;
+  gap: 14px;
+  padding: 12px clamp(20px, 4vw, 52px) max(14px, env(safe-area-inset-bottom));
 }
 
-.inspectorMeta div {
-  border-top: 1px solid color-mix(in srgb, var(--axis-lab-line) 10%, transparent);
-  padding-top: 10px;
+.stateNote {
+  color: color-mix(in srgb, var(--lab-ink) 28%, transparent);
+  font-size: 12px;
 }
 
-.inspectorMeta dt {
-  color: color-mix(in srgb, var(--axis-lab-ink) 34%, transparent);
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.inspectorMeta dd {
-  color: color-mix(in srgb, var(--axis-lab-ink) 68%, transparent);
-  font-size: 13px;
-  line-height: 1.35;
-  margin: 3px 0 0;
-}
-
-.inspectorNote,
-.cardNote {
-  border-top: 1px solid color-mix(in srgb, var(--axis-lab-line) 10%, transparent);
-  padding-top: 10px;
-}
-
-.composerRegion {
-  background: color-mix(in srgb, var(--axis-lab-room) 94%, transparent);
-  backdrop-filter: blur(14px);
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
-}
-
-.composer {
-  align-items: flex-end;
-  border-top: 1px solid color-mix(in srgb, var(--axis-lab-line) 12%, transparent);
-  display: grid;
-  gap: 8px 12px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  margin: 0 auto;
-  max-width: 1180px;
-  min-width: 0;
-  padding-top: 12px;
-}
-
-.composerNote {
-  grid-column: 1 / -1;
-  font-size: 11px;
-}
-
-.composer textarea {
+.resetBtn {
   background: transparent;
   border: 0;
-  color: color-mix(in srgb, var(--axis-lab-ink) 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--lab-line) 20%, transparent);
+  color: color-mix(in srgb, var(--lab-ink) 38%, transparent);
+  cursor: pointer;
   font: inherit;
-  font-size: 18px;
-  line-height: 1.4;
-  max-height: 112px;
-  min-height: 30px;
-  min-width: 0;
-  outline: 0;
-  overflow-y: auto;
-  resize: none;
+  font-size: 11px;
+  padding: 0 0 1px;
+  transition: color 0.1s ease;
 }
 
-.composer textarea::placeholder {
-  color: color-mix(in srgb, var(--axis-lab-ink) 28%, transparent);
+.resetBtn:hover {
+  color: color-mix(in srgb, var(--lab-ink) 64%, transparent);
 }
 
-.composer button:disabled {
-  cursor: default;
-  opacity: 0.25;
-}
-
-@media (max-width: 1100px) {
-  .room {
-    grid-template-columns: minmax(15rem, 0.85fr) minmax(0, 1.45fr);
+@media (max-width: 520px) {
+  .focusTitle {
+    font-size: clamp(30px, 10vw, 48px);
   }
 
-  .inspectorRegion {
-    grid-column: 2;
-  }
-}
-
-@media (max-width: 760px) {
-  .shell {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh;
-    overflow: auto;
-  }
-
-  .header {
-    padding-top: max(14px, env(safe-area-inset-top));
-  }
-
-  .threadHeader {
-    flex-direction: column;
-  }
-
-  .threadTitleBlock {
-    gap: 10px;
-  }
-
-  .wordmark {
-    font-size: 10px;
-  }
-
-  .headerControls {
-    align-items: flex-start;
-    justify-content: flex-start;
-    width: 100%;
-  }
-
-  .room {
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-    overflow: visible;
-    padding-bottom: 18px;
-  }
-
-  .boardRegion {
-    order: 1;
-    overflow: visible;
-  }
-
-  .inspectorRegion {
-    order: 2;
-    overflow: visible;
-  }
-
-  .timelineRegion {
-    order: 3;
-    overflow: visible;
-  }
-
-  .focusBlock h2 {
-    font-size: clamp(42px, 16vw, 72px);
-  }
-
-  .cardGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .boardCard {
-    min-height: 0;
-  }
-
-  .inspector {
-    border-left: 0;
-    border-top: 1px solid color-mix(in srgb, var(--axis-lab-line) 12%, transparent);
-    padding-left: 0;
-    padding-top: 16px;
-  }
-
-  .composerRegion {
-    bottom: 0;
-    position: sticky;
-  }
-
-  .composer {
-    grid-template-columns: minmax(0, 1fr) auto;
-    padding-top: 10px;
-  }
-
-  .composer textarea {
+  .focusSummary {
     font-size: 16px;
-    max-height: 84px;
-  }
-}
-
-@media (max-width: 460px) {
-  .header,
-  .composerRegion {
-    padding-inline: 12px;
   }
 
-  .room {
-    padding-inline: 12px;
-  }
-
-  .previewStateControl {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .composer {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .composer button {
-    justify-self: end;
+  .sectionItem {
+    font-size: 15px;
   }
 }
