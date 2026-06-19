@@ -16,9 +16,10 @@ interface Props {
   threadTitle: string;
   items: readonly MakeSpaceItem[];
   defaultExpandedId?: string;
+  priorThought?: string;
 }
 
-export default function AxisMakeSpace({ threadTitle, items, defaultExpandedId }: Props) {
+export default function AxisMakeSpace({ threadTitle, items, defaultExpandedId, priorThought }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(defaultExpandedId ?? null);
   const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,6 +54,9 @@ export default function AxisMakeSpace({ threadTitle, items, defaultExpandedId }:
 
   return (
     <div className={styles.msColumn} ref={containerRef}>
+      {priorThought && (
+        <p className={styles.msPriorThought}>{priorThought}</p>
+      )}
       <p className={styles.msThreadRef}>{threadTitle}</p>
 
       <div className={styles.msItems}>

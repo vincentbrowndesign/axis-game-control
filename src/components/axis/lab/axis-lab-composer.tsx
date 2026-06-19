@@ -48,11 +48,12 @@ function AttachIcon() {
 
 interface Props {
   onSubmit: (text: string) => void;
+  defaultFocused?: boolean;
 }
 
-export default function AxisLabComposer({ onSubmit }: Props) {
+export default function AxisLabComposer({ onSubmit, defaultFocused }: Props) {
   const [input, setInput] = useState("");
-  const [focused, setFocused] = useState(false);
+  const [focused, setFocused] = useState(defaultFocused ?? false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const affordanceNoteId = "composer-preview-note";
@@ -105,6 +106,7 @@ export default function AxisLabComposer({ onSubmit }: Props) {
             placeholder="Say the rough version…"
             rows={1}
             aria-label="Compose a thought"
+            autoFocus={defaultFocused}
           />
           <button
             type="button"

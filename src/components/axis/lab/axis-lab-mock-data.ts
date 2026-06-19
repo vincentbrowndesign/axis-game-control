@@ -53,8 +53,8 @@ export const axisActiveThreadMock: {
     "The first problem is not the mistake. It is the speed of the next decision.",
   timestamp: "8:31 AM",
   annotations: [
-    { label: "PATTERN", note: "second mistake follows the first" },
-    { label: "PROOF NEEDED", note: "check possessions after turnovers" },
+    { label: "PATTERN", note: "Second mistake follows the first.", kind: "observation" as const },
+    { label: "PROOF NEEDED", note: "Check possessions immediately after turnovers.", kind: "proof" as const },
   ],
 };
 

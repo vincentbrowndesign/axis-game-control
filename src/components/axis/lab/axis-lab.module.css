@@ -230,6 +230,17 @@
   overflow-wrap: break-word;
 }
 
+.rpDot {
+  background: var(--mark-accent, var(--lab-line));
+  border-radius: 999px;
+  display: block;
+  flex-shrink: 0;
+  height: 5px;
+  margin-bottom: 7px;
+  opacity: 0.75;
+  width: 5px;
+}
+
 /* ─── Controls footer ─────────────────────────────────────── */
 
 .controls {
@@ -310,6 +321,16 @@
   margin: 0 auto;
   max-width: 640px;
   min-width: 0;
+}
+
+.msPriorThought {
+  color: color-mix(in srgb, var(--lab-ink) 28%, transparent);
+  font-size: clamp(14px, 1.8vw, 18px);
+  font-style: italic;
+  line-height: 1.35;
+  margin: 0 0 24px;
+  max-width: 50ch;
+  overflow-wrap: break-word;
 }
 
 .msThreadRef {

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { AXIS_ROOM_COLORS } from "../../../lib/axis-visual-language";
 import { axisActiveThreadMock, axisMakeSpaceMock } from "./axis-lab-mock-data";
 import AxisApertureShell from "./AxisApertureShell";
 import AxisActiveThought from "./axis-active-thought";
@@ -9,6 +11,14 @@ import AxisLabComposer from "./axis-lab-composer";
 import AxisLabPreviewControls, { type LabState } from "./axis-lab-preview-controls";
 import AxisMakeSpace from "./axis-make-space";
 import styles from "./axis-lab.module.css";
+import type { AxisApertureFocus, AxisLabAnnotationKind } from "./axis-lab-types";
+
+const ANNOTATION_ACCENT: Record<AxisLabAnnotationKind, string> = {
+  observation: AXIS_ROOM_COLORS.use,
+  proof: AXIS_ROOM_COLORS.proof,
+  question: AXIS_ROOM_COLORS.decide,
+  keeper: AXIS_ROOM_COLORS.use,
+};
 
 const STATE_LABEL: Record<LabState, string> = {
   empty: "Empty",
@@ -17,11 +27,26 @@ const STATE_LABEL: Record<LabState, string> = {
   expanded: "Expanded",
 };
 
+const FOCUS_TO_LAB_STATE: Record<AxisApertureFocus, LabState> = {
+  quiet: "active",
+  input_active: "active",
+  annotation_visible: "active",
+  make_space: "make-space",
+};
+
+function parseFocus(raw: string | null): AxisApertureFocus {
+  if (raw === "quiet") return "quiet";
+  if (raw === "input-active") return "input_active";
+  if (raw === "annotation") return "annotation_visible";
+  if (raw === "make-space") return "make_space";
+  return "annotation_visible";
+}
+
 function LabTopBar({ stateLabel }: { stateLabel: string }) {
   return (
     <header className={styles.header}>
       <span className={styles.wordmark}>Axis</span>
-      <span className={styles.labLabel}>Axis Lab</span>
+      <span className={styles.labLabel}>First Six Minutes</span>
       <span className={styles.stateLabel}>{stateLabel}</span>
     </header>
   );
@@ -37,29 +62,40 @@ function LabTimestamp({ timestamp }: { timestamp: string }) {
   );
 }
 
-function LabAnnotations({
+function LabAnnotationMarks({
   annotations,
 }: {
-  annotations: readonly { label: string; note: string }[];
+  annotations: readonly { label: string; note: string; kind?: AxisLabAnnotationKind }[];
 }) {
   return (
     <div className={styles.rpColumn}>
-      {annotations.slice(0, 2).map((a, i) => (
-        <div key={i} className={styles.rpAnnotation}>
-          <span className={styles.rpLabel}>{a.label}</span>
-          <span className={styles.rpNote}>{a.note}</span>
-        </div>
-      ))}
+      {annotations.slice(0, 2).map((a, i) => {
+        const accent = a.kind ? ANNOTATION_ACCENT[a.kind] : undefined;
+        return (
+          <div
+            key={i}
+            className={styles.rpAnnotation}
+            style={accent ? ({ "--mark-accent": accent } as CSSProperties) : undefined}
+          >
+            {accent && <span className={styles.rpDot} aria-hidden="true" />}
+            <span className={styles.rpLabel}>{a.label}</span>
+            <span className={styles.rpNote}>{a.note}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 export default function AxisLabPreview() {
-  const [labState, setLabState] = useState<LabState>("empty");
+  const searchParams = useSearchParams();
+  const apertureFocus = parseFocus(searchParams.get("focus"));
+
+  const [labState, setLabState] = useState<LabState>(FOCUS_TO_LAB_STATE[apertureFocus]);
   const [localThoughts, setLocalThoughts] = useState<string[]>([]);
 
   function handleReset() {
-    setLabState("empty");
+    setLabState(FOCUS_TO_LAB_STATE[apertureFocus]);
     setLocalThoughts([]);
   }
 
@@ -70,14 +106,19 @@ export default function AxisLabPreview() {
     }
   }
 
-  const showPorts = labState === "active" || labState === "expanded";
+  const showLeftPort = labState === "active";
+  const showRightPort = labState === "active" && apertureFocus === "annotation_visible";
+  const composerDefaultFocused = apertureFocus === "input_active";
 
   return (
     <AxisApertureShell
       topPort={<LabTopBar stateLabel={STATE_LABEL[labState]} />}
       bottomPort={
         <>
-          <AxisLabComposer onSubmit={handleComposerSubmit} />
+          <AxisLabComposer
+            onSubmit={handleComposerSubmit}
+            defaultFocused={composerDefaultFocused}
+          />
           <AxisLabPreviewControls
             labState={labState}
             onStateChange={setLabState}
@@ -86,13 +127,13 @@ export default function AxisLabPreview() {
         </>
       }
       leftPort={
-        showPorts ? (
+        showLeftPort ? (
           <LabTimestamp timestamp={axisActiveThreadMock.timestamp} />
         ) : null
       }
       rightPort={
-        showPorts ? (
-          <LabAnnotations annotations={axisActiveThreadMock.annotations} />
+        showRightPort ? (
+          <LabAnnotationMarks annotations={axisActiveThreadMock.annotations} />
         ) : null
       }
     >
@@ -107,17 +148,12 @@ export default function AxisLabPreview() {
               axisResponse={axisActiveThreadMock.axisResponse}
             />
           )}
-          {labState === "make-space" && (
+          {(labState === "make-space" || labState === "expanded") && (
             <AxisMakeSpace
               threadTitle={axisActiveThreadMock.threadTitle}
               items={axisMakeSpaceMock}
-            />
-          )}
-          {labState === "expanded" && (
-            <AxisMakeSpace
-              threadTitle={axisActiveThreadMock.threadTitle}
-              items={axisMakeSpaceMock}
-              defaultExpandedId="keeper"
+              priorThought={axisActiveThreadMock.userThought}
+              defaultExpandedId={labState === "expanded" ? "keeper" : undefined}
             />
           )}
           {localThoughts.length > 0 && (

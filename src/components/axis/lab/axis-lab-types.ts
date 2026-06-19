@@ -29,10 +29,19 @@ export type AxisLabFocus = {
   summary: string;
 };
 
+export type AxisLabAnnotationKind = "observation" | "proof" | "question" | "keeper";
+
 export type AxisLabAnnotation = {
   label: string;
   note: string;
+  kind?: AxisLabAnnotationKind;
 };
+
+export type AxisApertureFocus =
+  | "quiet"
+  | "input_active"
+  | "annotation_visible"
+  | "make_space";
 
 export type MakeSpaceItemKind = "keeper" | "question" | "proof" | "next_move";
 
