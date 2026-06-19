@@ -1,4 +1,4 @@
-import type { AxisLabBoardCardData, AxisLabFocus, AxisLabTimelineEntry, AxisLabAnnotation, MakeSpaceItem } from "./axis-lab-types";
+import type { AxisLabBoardCardData, AxisLabFocus, AxisLabTimelineEntry, AxisLabAnnotation, MakeSpaceItem, LensMockFrame, LensEvidenceCandidate } from "./axis-lab-types";
 
 export const axisLabThreadTitle = "Tournament Weekend Gameplan";
 export const axisLabSessionStartedAt = "2026-06-19T08:31:00-05:00";
@@ -158,5 +158,31 @@ export const axisLabBoardCards: AxisLabBoardCardData[] = [
       "Team plays best when the first action is simple",
       "Pressure increases after an early mistake",
     ],
+  },
+];
+
+export const axisMockFrames: readonly LensMockFrame[] = [
+  { id: "f1", time: "00:06" },
+  { id: "f2", time: "00:12" },
+  { id: "f3", time: "00:18", selected: true },
+  { id: "f4", time: "00:24" },
+  { id: "f5", time: "00:31" },
+  { id: "f6", time: "00:38" },
+];
+
+export const axisMockCandidates: readonly LensEvidenceCandidate[] = [
+  {
+    id: "c1",
+    kind: "source_candidate",
+    label: "SOURCE CANDIDATE",
+    body: "Turnover followed by rushed possession.",
+    source: "Mock clip · 00:18–00:24",
+    confidence: "Needs confirmation",
+  },
+  {
+    id: "c2",
+    kind: "open_question",
+    label: "OPEN QUESTION",
+    body: "Was the rush caused by pressure or poor spacing?",
   },
 ];

@@ -41,7 +41,26 @@ export type AxisApertureFocus =
   | "quiet"
   | "input_active"
   | "annotation_visible"
-  | "make_space";
+  | "make_space"
+  | "lens_preview"
+  | "source_expanded";
+
+export type LensMockFrame = {
+  id: string;
+  time: string;
+  selected?: boolean;
+};
+
+export type LensEvidenceCandidateKind = "source_candidate" | "open_question";
+
+export type LensEvidenceCandidate = {
+  id: string;
+  kind: LensEvidenceCandidateKind;
+  label: string;
+  body: string;
+  source?: string;
+  confidence?: string;
+};
 
 export type MakeSpaceItemKind = "keeper" | "question" | "proof" | "next_move";
 

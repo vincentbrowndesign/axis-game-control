@@ -18,6 +18,9 @@ const labVars = {
   "--lab-ink": AXIS_ROOM_COLORS.ink,
   "--lab-line": AXIS_ROOM_COLORS.line,
   "--lab-grid": AXIS_ROOM_COLORS.grid,
+  "--lab-use": AXIS_ROOM_COLORS.use,
+  "--lab-decide": AXIS_ROOM_COLORS.decide,
+  "--lab-proof": AXIS_ROOM_COLORS.proof,
 } as CSSProperties;
 
 export default function AxisApertureShell({
