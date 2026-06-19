@@ -24,6 +24,7 @@ Build Now:
 3. Axis Thread Board
 4. Board Object Layer: Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet.
 5. Axis Visual Language
+6. Axis Thread Persistence v0
 
 Refine Current:
 
@@ -38,18 +39,24 @@ Do Not Build Yet:
 
 1. Whiteboard Renderer
 2. Board Object Layer beyond BoardSectionObject local-only prototype
-3. Evidence Layer
-4. Witness Layer
-5. Mission Layer
-6. Challenge System
-7. Memory Layer
-8. Voice Layer
-9. Camera Layer
-10. Upload / Media Layer
-11. CV / Replay / Overlay
-12. Annotation Layer
-13. Sketch Layer
-14. Export Layer
+3. Player memory
+4. Development memory
+5. Automatic cross-thread recall
+6. Persistent BoardSectionObject arrangement
+7. Evidence persistence
+8. Axis Lens persistence
+9. Evidence Layer
+10. Witness Layer
+11. Mission Layer
+12. Challenge System
+13. Memory Layer
+14. Voice Layer
+15. Camera Layer
+16. Upload / Media Layer
+17. CV / Replay / Overlay
+18. Annotation Layer
+19. Sketch Layer
+20. Export Layer
 
 ## Decision Labels
 
@@ -84,6 +91,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Thread Board | Surface | Understanding | Prototype | Progress note, coaching board, sketchnote | Refine Current | It makes the thread easier to understand, but must stay inline and compact. |
 | Thread Board sections | Rendering pattern | Thread Board | Prototype | Lesson board sections, clinical note sections | Refine Current | Sections help the user scan the thread without switching modes. |
 | Axis Visual Language | Foundation | Thread Board | Active foundation | Shared design tokens, practical status accents | Build Now | Provides one palette and local status styling source for the current Thread Board without adding a mode, API field, persistence, evidence, or memory. |
+| Axis Thread Persistence v0 | Persistence | Conversation | Active narrow capability | Saved transcript and Thread Board snapshots | Build Now | Saves exact owner-scoped threads for reopening across devices without cross-thread memory, player model, evidence persistence, or board arrangement persistence. |
 | `/axis` layout | UI surface | Conversation | Active | Conversation feed + organized summary | Refine Current | Must be gym-readable and one-flow. |
 | `/api/axis/conversation` | API | Conversation | Active | Structured response generation | Refine Current | Should return reply + threadBoard cleanly. |
 | Thread Board sanitization | Infrastructure | Thread Board | Needed | Render-safe output validation | Refine Current | Board cannot show raw markdown, debug text, or weird glitches. |
@@ -240,8 +248,12 @@ Codex may touch these for current MVP refinement:
 ```text
 src/app/axis/page.tsx
 src/app/axis/thread-board.tsx
+src/app/axis/thread-picker.tsx
 src/app/api/axis/conversation/route.ts
+src/app/api/axis/threads/route.ts
+src/app/api/axis/threads/[threadId]/route.ts
 src/lib/axis-visual-language.ts
+src/lib/axis-thread-persistence.ts
 AGENTS.md
 docs/REPO_CLEANUP.md
 docs/AXIS_BUILD_MAP.md

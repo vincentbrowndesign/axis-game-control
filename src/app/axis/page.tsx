@@ -1,14 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { axisAuthenticatedFetch } from "../../lib/axis-client-auth";
 import { AXIS_ROOM_COLORS } from "../../lib/axis-visual-language";
 import ThreadBoard, { type ThreadBoardData } from "./thread-board";
+import ThreadPicker, { type AxisThreadListItem } from "./thread-picker";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   threadBoard?: ThreadBoardData | null;
 }
+
+type SaveState = "idle" | "saving" | "saved" | "not-saved";
+
+type PersistedThread = {
+  id: string;
+  messages: Array<{
+    content: string;
+    role: "user" | "assistant";
+    threadBoard: ThreadBoardData | null;
+  }>;
+};
 
 const INITIAL: Message = { role: "assistant", content: "What are we working on?" };
 
@@ -17,6 +30,9 @@ export default function AxisPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [threads, setThreads] = useState<AxisThreadListItem[]>([]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -33,6 +49,10 @@ export default function AxisPage() {
   }, [messages, loading]);
 
   useEffect(() => {
+    void loadThreads();
+  }, []);
+
+  useEffect(() => {
     const ta = inputRef.current;
     if (!ta) return;
     ta.style.height = "auto";
@@ -44,6 +64,9 @@ export default function AxisPage() {
     if (!text || loading) return;
 
     const userMsg: Message = { role: "user", content: text };
+    const priorPersistedCount = messages.slice(1).length;
+    const userOrdinal = priorPersistedCount + 1;
+    const assistantOrdinal = priorPersistedCount + 2;
     const apiHistory = [...messages.slice(1), userMsg].map(
       ({ role, content }) => ({ role, content }),
     );
@@ -54,6 +77,18 @@ export default function AxisPage() {
     setError(null);
 
     try {
+      const threadId = await ensureThreadForMessage(text, userOrdinal);
+      if (threadId) {
+        void saveThreadMessages(threadId, [
+          {
+            content: text,
+            ordinal: userOrdinal,
+            role: "user",
+            threadBoard: null,
+          },
+        ]);
+      }
+
       const res = await fetch("/api/axis/conversation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,12 +116,136 @@ export default function AxisPage() {
           threadBoard: data.threadBoard,
         },
       ]);
+
+      if (threadId) {
+        void saveThreadMessages(threadId, [
+          {
+            content: data.reply,
+            ordinal: assistantOrdinal,
+            role: "assistant",
+            threadBoard: data.threadBoard,
+          },
+        ]);
+      }
     } catch {
       setMessages((prev) => prev.slice(0, -1));
       setError("Something went wrong. Try again.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadThreads() {
+    try {
+      const res = await axisAuthenticatedFetch("/api/axis/threads");
+      if (!res.ok) return;
+      const data = (await res.json()) as { threads?: AxisThreadListItem[] };
+      setThreads(Array.isArray(data.threads) ? data.threads : []);
+    } catch {
+      // Thread access is additive; conversation remains usable without it.
+    }
+  }
+
+  async function ensureThreadForMessage(text: string, ordinal: number) {
+    if (activeThreadId) return activeThreadId;
+
+    setSaveState("saving");
+    try {
+      const res = await axisAuthenticatedFetch("/api/axis/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            {
+              content: text,
+              ordinal,
+              role: "user",
+              threadBoard: null,
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        setSaveState("not-saved");
+        return null;
+      }
+
+      const data = (await res.json()) as { thread?: PersistedThread };
+      const threadId = data.thread?.id ?? null;
+      if (!threadId) {
+        setSaveState("not-saved");
+        return null;
+      }
+
+      setActiveThreadId(threadId);
+      setSaveState("saved");
+      void loadThreads();
+      return threadId;
+    } catch {
+      setSaveState("not-saved");
+      return null;
+    }
+  }
+
+  async function saveThreadMessages(
+    threadId: string,
+    messagesToSave: Array<{
+      content: string;
+      ordinal: number;
+      role: "user" | "assistant";
+      threadBoard: ThreadBoardData | null;
+    }>,
+  ) {
+    setSaveState("saving");
+    try {
+      const res = await axisAuthenticatedFetch(`/api/axis/threads/${threadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: messagesToSave }),
+      });
+      setSaveState(res.ok ? "saved" : "not-saved");
+      if (res.ok) void loadThreads();
+    } catch {
+      setSaveState("not-saved");
+    }
+  }
+
+  async function openThread(threadId: string) {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axisAuthenticatedFetch(`/api/axis/threads/${threadId}`);
+      if (!res.ok) {
+        setError("Saved thread could not be opened.");
+        return;
+      }
+
+      const data = (await res.json()) as { thread?: PersistedThread };
+      const restored = data.thread?.messages ?? [];
+      setMessages([
+        INITIAL,
+        ...restored.map((message) => ({
+          role: message.role,
+          content: message.content,
+          threadBoard: message.threadBoard,
+        })),
+      ]);
+      setActiveThreadId(threadId);
+      setSaveState("saved");
+      void loadThreads();
+    } catch {
+      setError("Saved thread could not be opened.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function startNewThread() {
+    setMessages([INITIAL]);
+    setInput("");
+    setActiveThreadId(null);
+    setSaveState("idle");
+    setError(null);
   }
 
   return (
@@ -97,6 +256,13 @@ export default function AxisPage() {
             <header className="site-header">
               <span className="site-mark">Axis</span>
               <span className="site-sub">Develop the work through conversation.</span>
+              <ThreadPicker
+                activeThreadId={activeThreadId}
+                onNewThread={startNewThread}
+                onOpenThread={(threadId) => void openThread(threadId)}
+                saveState={saveState}
+                threads={threads}
+              />
             </header>
 
             <div className={`thread${isInitial ? " thread--initial" : ""}`}>
@@ -253,8 +419,10 @@ export default function AxisPage() {
 
         .site-sub {
           color: color-mix(in srgb, var(--axis-ink) 20%, transparent);
+          flex: 1;
           font-size: 11px;
           letter-spacing: 0.01em;
+          min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;

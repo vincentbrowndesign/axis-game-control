@@ -18,7 +18,8 @@ Axis does not ask which. It treats everything as developing work.
 - One page: `/axis`
 - One API: `POST /api/axis/conversation`
 - Text in, text out
-- Conversation history held in browser memory for the session
+- Conversation history can be saved as an exact owner-scoped thread
+- Saved Thread Board snapshots reopen with assistant messages
 - Axis opens every session: "What are we working on?"
 - User responds. Axis develops the work. Conversation continues.
 
@@ -32,7 +33,8 @@ Axis does not ask which. It treats everything as developing work.
 - Cards
 - Mode picker (coach mode, player mode, etc.)
 - Analytics
-- Long-term memory / database
+- Long-term memory / player memory
+- Cross-thread recall
 - Missions
 - Game tracking
 - CV / computer vision
@@ -146,5 +148,8 @@ Axis must never frame the user as stuck.
 |---|---|
 | `src/app/axis/page.tsx` | Active MVP page |
 | `src/app/api/axis/conversation/route.ts` | Conversation API (no DB required) |
+| `src/app/api/axis/threads/route.ts` | Saved thread list/create API |
+| `src/app/api/axis/threads/[threadId]/route.ts` | Saved thread read/message API |
+| `src/lib/axis-thread-persistence.ts` | Owner-scoped exact thread persistence |
 | `src/app/axis/mission/page.tsx` | Redirects to /axis |
 | `src/app/page.tsx` | Root — renders AxisPage |

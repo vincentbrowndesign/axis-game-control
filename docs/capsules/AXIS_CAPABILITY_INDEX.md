@@ -11,6 +11,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Understanding Primitives | Active | Build Now | Observation, Pattern, Relationship, Question, Hypothesis, Intervention, Outcome. |
 | Axis Thread Board | Active | Refine Current | Inline comprehension view of the current thread. Not a separate screen. |
 | Axis Visual Language | Active foundation | Build Now | Shared palette and visual status styles for the current Thread Board and BoardSectionObject renderer. No new mode, API, persistence, evidence, memory, or manual creation. |
+| Axis Thread Persistence v0 | Active narrow capability | Build Now | Owner-scoped saved conversation threads and Thread Board snapshots. No cross-thread memory, player model, evidence, or persistent board arrangement. |
 
 ## Refine Current
 
@@ -54,13 +55,18 @@ Allowed active build:
 - Axis Understanding Primitives
 - Axis Thread Board
 - Axis Visual Language
+- Axis Thread Persistence v0
 
 Allowed current files:
 
 - `src/app/axis/page.tsx`
 - `src/app/axis/thread-board.tsx`
 - `src/app/api/axis/conversation/route.ts`
+- `src/app/api/axis/threads/route.ts`
+- `src/app/api/axis/threads/[threadId]/route.ts`
+- `src/app/axis/thread-picker.tsx`
 - `src/lib/axis-visual-language.ts`
+- `src/lib/axis-thread-persistence.ts`
 - `AGENTS.md`
 - `docs/REPO_CLEANUP.md`
 - `docs/AXIS_BUILD_MAP.md`

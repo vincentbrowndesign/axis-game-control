@@ -14,6 +14,7 @@ The conversation itself is the product. Axis helps the work develop.
 |---|---|
 | Active page | `src/app/axis/page.tsx` |
 | Active API | `src/app/api/axis/conversation/route.ts` |
+| Saved thread API | `src/app/api/axis/threads` — exact owner-scoped thread persistence |
 | Legacy mission page | `src/app/axis/mission/page.tsx` — redirects to `/axis` |
 | Legacy conversation API | `src/app/api/axis/run` — preserved, not used by MVP |
 | Product truth | The conversation is the product |
@@ -71,6 +72,8 @@ Axis should not:
 ## Active MVP Boundaries
 
 Current MVP is text-only. No other capabilities are active on `/axis`.
+
+Axis may persist exact conversation threads and assistant Thread Board snapshots for the signed-in owner. This is not long-term player memory, cross-thread recall, evidence persistence, or persistent board arrangement.
 
 Do not add to the active `/axis` page:
 
