@@ -9,33 +9,64 @@ import ThreadPicker, { type AxisThreadListItem } from "./thread-picker";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  createdAt: string;
   threadBoard?: ThreadBoardData | null;
 }
 
-type SaveState = "idle" | "saving" | "saved" | "not-saved";
+export type AxisThreadSaveStatus =
+  | "not_saved"
+  | "saving"
+  | "saved"
+  | "unsaved_changes"
+  | "error";
 
 type PersistedThread = {
+  createdAt: string;
   id: string;
+  lastOpenedAt: string | null;
   messages: Array<{
+    createdAt: string;
     content: string;
     role: "user" | "assistant";
     threadBoard: ThreadBoardData | null;
   }>;
+  title: string;
+  updatedAt: string;
 };
 
-const INITIAL: Message = { role: "assistant", content: "What are we working on?" };
+type ActiveThreadMeta = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastOpenedAt: string | null;
+  lastSavedAt: string;
+};
+
+function createInitialMessage(): Message {
+  return {
+    role: "assistant",
+    content: "What are we working on?",
+    createdAt: new Date().toISOString(),
+  };
+}
 
 export default function AxisPage() {
-  const [messages, setMessages] = useState<Message[]>([INITIAL]);
+  const [messages, setMessages] = useState<Message[]>(() => [createInitialMessage()]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [activeThread, setActiveThread] = useState<ActiveThreadMeta | null>(null);
+  const [saveState, setSaveState] = useState<AxisThreadSaveStatus>("not_saved");
+  const [saveAuthRequired, setSaveAuthRequired] = useState(false);
   const [threads, setThreads] = useState<AxisThreadListItem[]>([]);
+  const [localRevision, setLocalRevision] = useState(0);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<Message[]>(messages);
+  const activeThreadRef = useRef<ActiveThreadMeta | null>(activeThread);
+  const localRevisionRef = useRef(localRevision);
 
   const isInitial = messages.length === 1 && !loading;
   const latestAssistantIndex = messages.reduce(
@@ -43,10 +74,26 @@ export default function AxisPage() {
     -1,
   );
   const latestAssistant = messages[latestAssistantIndex];
+  const threadStartedAt =
+    activeThread?.createdAt ??
+    messages.find((message) => message.role === "user")?.createdAt ??
+    messages[0]?.createdAt;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    activeThreadRef.current = activeThread;
+  }, [activeThread]);
+
+  useEffect(() => {
+    localRevisionRef.current = localRevision;
+  }, [localRevision]);
 
   useEffect(() => {
     void loadThreads();
@@ -63,32 +110,22 @@ export default function AxisPage() {
     const text = input.trim();
     if (!text || loading) return;
 
-    const userMsg: Message = { role: "user", content: text };
-    const priorPersistedCount = messages.slice(1).length;
-    const userOrdinal = priorPersistedCount + 1;
-    const assistantOrdinal = priorPersistedCount + 2;
+    const userMsg: Message = {
+      role: "user",
+      content: text,
+      createdAt: new Date().toISOString(),
+    };
+    const pendingMessages = [...messages, userMsg];
     const apiHistory = [...messages.slice(1), userMsg].map(
       ({ role, content }) => ({ role, content }),
     );
 
-    setMessages((prev) => [...prev, userMsg]);
+    commitMessages(pendingMessages);
     setInput("");
     setLoading(true);
     setError(null);
 
     try {
-      const threadId = await ensureThreadForMessage(text, userOrdinal);
-      if (threadId) {
-        void saveThreadMessages(threadId, [
-          {
-            content: text,
-            ordinal: userOrdinal,
-            role: "user",
-            threadBoard: null,
-          },
-        ]);
-      }
-
       const res = await fetch("/api/axis/conversation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,7 +133,7 @@ export default function AxisPage() {
       });
 
       if (!res.ok) {
-        setMessages((prev) => prev.slice(0, -1));
+        commitMessages(messages);
         setError("Something went wrong. Try again.");
         setLoading(false);
         return;
@@ -107,32 +144,33 @@ export default function AxisPage() {
         threadBoard: ThreadBoardData | null;
       };
 
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "user", content: text },
-        {
-          role: "assistant",
-          content: data.reply,
-          threadBoard: data.threadBoard,
-        },
-      ]);
-
-      if (threadId) {
-        void saveThreadMessages(threadId, [
-          {
-            content: data.reply,
-            ordinal: assistantOrdinal,
-            role: "assistant",
-            threadBoard: data.threadBoard,
-          },
-        ]);
-      }
+      const assistantMsg: Message = {
+        role: "assistant",
+        content: data.reply,
+        createdAt: new Date().toISOString(),
+        threadBoard: data.threadBoard,
+      };
+      const nextMessages = [...messages, userMsg, assistantMsg];
+      const nextRevision = commitMessages(nextMessages);
+      void saveCurrentThread(nextMessages, nextRevision);
     } catch {
-      setMessages((prev) => prev.slice(0, -1));
+      commitMessages(messages);
       setError("Something went wrong. Try again.");
     } finally {
       setLoading(false);
     }
+  }
+
+  function commitMessages(nextMessages: Message[]) {
+    messagesRef.current = nextMessages;
+    setMessages(nextMessages);
+
+    const nextRevision = localRevisionRef.current + 1;
+    localRevisionRef.current = nextRevision;
+    setLocalRevision(nextRevision);
+    setSaveAuthRequired(false);
+    setSaveState(activeThreadRef.current ? "unsaved_changes" : "not_saved");
+    return nextRevision;
   }
 
   async function loadThreads() {
@@ -146,67 +184,87 @@ export default function AxisPage() {
     }
   }
 
-  async function ensureThreadForMessage(text: string, ordinal: number) {
-    if (activeThreadId) return activeThreadId;
-
-    setSaveState("saving");
-    try {
-      const res = await axisAuthenticatedFetch("/api/axis/threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            {
-              content: text,
-              ordinal,
-              role: "user",
-              threadBoard: null,
-            },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        setSaveState("not-saved");
-        return null;
-      }
-
-      const data = (await res.json()) as { thread?: PersistedThread };
-      const threadId = data.thread?.id ?? null;
-      if (!threadId) {
-        setSaveState("not-saved");
-        return null;
-      }
-
-      setActiveThreadId(threadId);
-      setSaveState("saved");
-      void loadThreads();
-      return threadId;
-    } catch {
-      setSaveState("not-saved");
-      return null;
-    }
-  }
-
-  async function saveThreadMessages(
-    threadId: string,
-    messagesToSave: Array<{
-      content: string;
-      ordinal: number;
-      role: "user" | "assistant";
-      threadBoard: ThreadBoardData | null;
-    }>,
+  async function saveCurrentThread(
+    snapshot = messagesRef.current,
+    revision = localRevisionRef.current,
   ) {
+    if (saveState === "saving") return;
+    const persistedMessages = snapshot.slice(1);
+    if (persistedMessages.length === 0) {
+      setSaveState("not_saved");
+      return;
+    }
+
+    const messagesToSave = persistedMessages.map((message, index) => ({
+      content: message.content,
+      createdAt: message.createdAt,
+      ordinal: index + 1,
+      role: message.role,
+      threadBoard: message.threadBoard ?? null,
+    }));
+
+    const active = activeThreadRef.current;
     setSaveState("saving");
+    setSaveAuthRequired(false);
+
     try {
-      const res = await axisAuthenticatedFetch(`/api/axis/threads/${threadId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: messagesToSave }),
-      });
-      setSaveState(res.ok ? "saved" : "not-saved");
-      if (res.ok) void loadThreads();
+      const res = active
+        ? await axisAuthenticatedFetch(`/api/axis/threads/${active.id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: messagesToSave }),
+          })
+        : await axisAuthenticatedFetch("/api/axis/threads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: messagesToSave }),
+          });
+
+      if (!res.ok) {
+        if (res.status === 401) setSaveAuthRequired(true);
+        setSaveState("error");
+        return;
+      }
+
+      const data = (await res.json()) as {
+        saved?: boolean;
+        thread?: PersistedThread;
+        updatedAt?: string;
+      };
+      const savedAt = data.thread?.updatedAt ?? data.updatedAt ?? new Date().toISOString();
+      const nextActiveThread = data.thread
+        ? {
+            id: data.thread.id,
+            title: data.thread.title,
+            createdAt: data.thread.createdAt,
+            updatedAt: data.thread.updatedAt,
+            lastOpenedAt: data.thread.lastOpenedAt,
+            lastSavedAt: savedAt,
+          }
+        : active
+          ? {
+              ...active,
+              updatedAt: savedAt,
+              lastSavedAt: savedAt,
+            }
+          : null;
+
+      if (!nextActiveThread) {
+        setSaveState("error");
+        return;
+      }
+
+      activeThreadRef.current = nextActiveThread;
+      setActiveThread(nextActiveThread);
+
+      if (revision === localRevisionRef.current) {
+        setSaveState("saved");
+      } else {
+        setSaveState("unsaved_changes");
+      }
+      void loadThreads();
     } catch {
-      setSaveState("not-saved");
+      setSaveState("error");
     }
   }
 
@@ -222,15 +280,33 @@ export default function AxisPage() {
 
       const data = (await res.json()) as { thread?: PersistedThread };
       const restored = data.thread?.messages ?? [];
-      setMessages([
-        INITIAL,
+      const initial = createInitialMessage();
+      const restoredMessages = [
+        initial,
         ...restored.map((message) => ({
           role: message.role,
           content: message.content,
+          createdAt: message.createdAt,
           threadBoard: message.threadBoard,
         })),
-      ]);
-      setActiveThreadId(threadId);
+      ];
+      messagesRef.current = restoredMessages;
+      setMessages(restoredMessages);
+      if (data.thread) {
+        const nextActiveThread = {
+          id: data.thread.id,
+          title: data.thread.title,
+          createdAt: data.thread.createdAt,
+          updatedAt: data.thread.updatedAt,
+          lastOpenedAt: data.thread.lastOpenedAt,
+          lastSavedAt: data.thread.updatedAt,
+        };
+        activeThreadRef.current = nextActiveThread;
+        setActiveThread(nextActiveThread);
+      }
+      localRevisionRef.current = 0;
+      setLocalRevision(0);
+      setSaveAuthRequired(false);
       setSaveState("saved");
       void loadThreads();
     } catch {
@@ -241,10 +317,16 @@ export default function AxisPage() {
   }
 
   function startNewThread() {
-    setMessages([INITIAL]);
+    const initial = createInitialMessage();
+    messagesRef.current = [initial];
+    setMessages([initial]);
     setInput("");
-    setActiveThreadId(null);
-    setSaveState("idle");
+    activeThreadRef.current = null;
+    setActiveThread(null);
+    localRevisionRef.current = 0;
+    setLocalRevision(0);
+    setSaveAuthRequired(false);
+    setSaveState("not_saved");
     setError(null);
   }
 
@@ -257,9 +339,13 @@ export default function AxisPage() {
               <span className="site-mark">Axis</span>
               <span className="site-sub">Develop the work through conversation.</span>
               <ThreadPicker
-                activeThreadId={activeThreadId}
+                activeThreadId={activeThread?.id ?? null}
                 onNewThread={startNewThread}
                 onOpenThread={(threadId) => void openThread(threadId)}
+                onSave={() => void saveCurrentThread()}
+                saveAuthRequired={saveAuthRequired}
+                saveDisabled={loading || saveState === "saving"}
+                savedAt={activeThread?.lastSavedAt ?? null}
                 saveState={saveState}
                 threads={threads}
               />
@@ -267,17 +353,51 @@ export default function AxisPage() {
 
             <div className={`thread${isInitial ? " thread--initial" : ""}`}>
               <div className="thread-inner">
-                {messages.map((msg, i) => (
-                  <div key={i} className="turn">
-                    <div className={`msg msg--${msg.role}`}>{msg.content}</div>
+                {threadStartedAt && (
+                  <time
+                    className="thread-start"
+                    dateTime={threadStartedAt}
+                    title={formatFullDateTime(threadStartedAt)}
+                  >
+                    Started {formatShortTime(threadStartedAt)}
+                  </time>
+                )}
 
-                    {i === latestAssistantIndex && msg.threadBoard && (
-                      <div className="inline-board">
-                        <ThreadBoard board={msg.threadBoard} />
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {messages.map((msg, i) => {
+                  const previous = messages[i - 1];
+                  const showDateSeparator =
+                    previous &&
+                    !isSameCalendarDay(previous.createdAt, msg.createdAt);
+
+                  return (
+                    <div key={`${msg.role}-${msg.createdAt}-${i}`} className="turn">
+                      {showDateSeparator && (
+                        <time
+                          className="date-separator"
+                          dateTime={msg.createdAt}
+                          title={formatFullDateTime(msg.createdAt)}
+                        >
+                          {formatDateLabel(msg.createdAt)}
+                        </time>
+                      )}
+                      <div className={`msg msg--${msg.role}`}>{msg.content}</div>
+                      <time
+                        className="turn-time"
+                        dateTime={msg.createdAt}
+                        title={formatFullDateTime(msg.createdAt)}
+                        aria-label={`${msg.role === "assistant" ? "Axis reply" : "User message"} created ${formatFullDateTime(msg.createdAt)}`}
+                      >
+                        {formatShortTime(msg.createdAt)}
+                      </time>
+
+                      {i === latestAssistantIndex && msg.threadBoard && (
+                        <div className="inline-board">
+                          <ThreadBoard board={msg.threadBoard} generatedAt={msg.createdAt} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
 
                 {isInitial && (
                   <p className="helper">Bring the rough version. I&apos;ll help it develop.</p>
@@ -299,7 +419,10 @@ export default function AxisPage() {
 
           <section className="board-stage" aria-label="Thread Board">
             {latestAssistant?.threadBoard ? (
-              <ThreadBoard board={latestAssistant.threadBoard} />
+              <ThreadBoard
+                board={latestAssistant.threadBoard}
+                generatedAt={latestAssistant.createdAt}
+              />
             ) : (
               <div className="room-empty">
                 <p className="room-empty-title">Board is ready.</p>
@@ -456,7 +579,7 @@ export default function AxisPage() {
         .turn {
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 5px;
           min-width: 0;
         }
 
@@ -472,6 +595,29 @@ export default function AxisPage() {
 
         .msg--user {
           color: color-mix(in srgb, var(--axis-ink) 96%, transparent);
+        }
+
+        .thread-start,
+        .date-separator,
+        .turn-time {
+          color: color-mix(in srgb, var(--axis-ink) 28%, transparent);
+          display: block;
+          font-size: 10.5px;
+          line-height: 1.2;
+        }
+
+        .thread-start {
+          margin-bottom: 4px;
+        }
+
+        .date-separator {
+          border-top: 1px solid color-mix(in srgb, var(--axis-line) 8%, transparent);
+          margin: 6px 0 2px;
+          padding-top: 8px;
+        }
+
+        .turn-time {
+          margin-top: -2px;
         }
 
         .helper {
@@ -682,7 +828,7 @@ export default function AxisPage() {
           }
 
           .turn {
-            gap: 7px;
+            gap: 3px;
           }
 
           .composer-wrap {
@@ -749,4 +895,41 @@ export default function AxisPage() {
       `}</style>
     </>
   );
+}
+
+function formatShortTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatFullDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatDateLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function isSameCalendarDay(left: string, right: string) {
+  const leftDate = new Date(left);
+  const rightDate = new Date(right);
+  if (Number.isNaN(leftDate.getTime()) || Number.isNaN(rightDate.getTime())) {
+    return true;
+  }
+  return leftDate.toDateString() === rightDate.toDateString();
 }

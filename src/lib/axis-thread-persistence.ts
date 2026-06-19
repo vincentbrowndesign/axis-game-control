@@ -17,6 +17,7 @@ export type AxisPersistedThreadBoard = {
 };
 
 export type AxisThreadMessageInput = {
+  createdAt?: string;
   ordinal: number;
   role: AxisPersistedRole;
   content: string;
@@ -219,7 +220,7 @@ export async function saveAxisThreadMessages({
   messages: AxisThreadMessageInput[];
   ownerId: string;
   threadId: string;
-}): Promise<AxisThreadPersistenceResult<null>> {
+}): Promise<AxisThreadPersistenceResult<{ updatedAt: string }>> {
   const supabase = getAxisThreadClient();
   if (!supabase) return { error: "Supabase is not configured.", ok: false };
 
@@ -233,6 +234,7 @@ export async function saveAxisThreadMessages({
     )
     .map((message) => ({
       content: message.content,
+      created_at: message.createdAt ?? new Date().toISOString(),
       owner_id: ownerId,
       ordinal: message.ordinal,
       role: message.role,
@@ -240,7 +242,9 @@ export async function saveAxisThreadMessages({
       thread_id: threadId,
     }));
 
-  if (safeMessages.length === 0) return { ok: true, value: null };
+  if (safeMessages.length === 0) {
+    return { ok: true, value: { updatedAt: new Date().toISOString() } };
+  }
 
   const { data: thread, error: threadError } = await supabase
     .from("axis_threads")
@@ -261,8 +265,9 @@ export async function saveAxisThreadMessages({
 
   const latestOrdinal = Math.max(...safeMessages.map((message) => message.ordinal));
   const latestContent = safeMessages.find((message) => message.ordinal === latestOrdinal)?.content;
+  const savedAt = new Date().toISOString();
   const update: { title?: string; updated_at: string } = {
-    updated_at: new Date().toISOString(),
+    updated_at: savedAt,
   };
   if (latestOrdinal === 1 && latestContent) update.title = makeThreadTitle(latestContent);
 
@@ -274,7 +279,7 @@ export async function saveAxisThreadMessages({
 
   if (updateError) return { error: updateError.message, ok: false };
 
-  return { ok: true, value: null };
+  return { ok: true, value: { updatedAt: savedAt } };
 }
 
 export function makeThreadTitle(message: string) {

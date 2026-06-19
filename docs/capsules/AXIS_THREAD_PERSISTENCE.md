@@ -18,10 +18,13 @@ Axis saves:
 - message order
 - exact user messages
 - exact assistant replies
+- message timestamps
 - assistant Thread Board snapshots
 - created, updated, and last-opened timestamps
 
 Thread Board snapshots are saved with assistant messages. Old boards are not regenerated when a saved thread opens.
+
+The board snapshot time comes from the owning assistant message timestamp. ThreadBoardData does not own a separate timestamp field.
 
 ## What Is Not Saved
 
@@ -35,6 +38,7 @@ Axis Thread Persistence v0 does not save:
 - evidence
 - confidence
 - BoardSectionObject arrangement
+- `board_items`
 - local visual status
 - upload, camera, voice, CV, or replay state
 
@@ -70,6 +74,42 @@ The conversation API remains unchanged:
 ```
 
 Thread persistence routes save and restore transcript state around the conversation API. They do not change model response shape and do not introduce `board_items`.
+
+## Continuity UI
+
+Manual Save is part of the current `/axis` continuity UI.
+
+Save states are:
+
+- not_saved
+- saving
+- saved
+- unsaved_changes
+- error
+
+Meanings:
+
+- not_saved: no successful saved thread exists yet
+- saving: a save request is currently in flight
+- saved: every current persisted message revision has been saved successfully
+- unsaved_changes: the thread exists, but local persisted content has changed since the last successful save
+- error: the latest save attempt failed, local content remains intact, and the thread still has unsaved changes
+
+Manual Save and autosave use the same active-thread save path.
+
+The visible Saved time comes from the successful server save response. The preferred source is the thread `updated_at` value, because open/read behavior uses `last_opened_at`.
+
+## Timestamp Boundary
+
+Each saved user and assistant message has `created_at`.
+
+Rules:
+
+- local messages receive `createdAt` when they are committed to the transcript
+- persisted messages restore their original timestamps exactly
+- restored timestamps must not be replaced with the current time
+- assistant Thread Board snapshots use the owning assistant message timestamp as their generated time
+- BoardSectionObject arrangement may keep runtime-only movement timestamps, but those are not persisted and are not semantic board updates
 
 ## Failure Behavior
 

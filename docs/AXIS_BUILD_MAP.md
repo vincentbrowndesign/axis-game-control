@@ -35,6 +35,7 @@ Refine Current:
 4. Response quality
 5. Board sanitization
 6. Gym-readable layout
+7. Active-thread save continuity
 
 Do Not Build Yet:
 
@@ -103,6 +104,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Thread Board sections | Rendering pattern | Thread Board | Prototype | Lesson board sections, clinical note sections | Refine Current | Sections help the user scan the thread without switching modes. |
 | Axis Visual Language | Foundation | Thread Board | Active foundation | Shared design tokens, practical status accents | Build Now | Provides one palette and local status styling source for the current Thread Board without adding a mode, API field, persistence, evidence, or memory. |
 | Axis Thread Persistence v0 | Persistence | Conversation | Active narrow capability | Saved transcript and Thread Board snapshots | Build Now | Saves exact owner-scoped threads for reopening across devices without cross-thread memory, player model, evidence persistence, or board arrangement persistence. |
+| Active-thread save continuity | UI/persistence refinement | Thread Persistence | Active refinement | Visible saved state and transcript timestamps | Refine Current | Shows exact-thread save state, manual Save/Retry, message timestamps, and board snapshot time without adding memory, board_items, persistent board arrangement, or Data Asset runtime. |
 | Axis Data Asset Contract v0 | Foundation contract | Architecture | Active foundation - complete | Governed source-to-asset lifecycle vocabulary | Foundation complete | Locked by 93cfbfe technical vocabulary and 31a214f product/build boundaries. Do not add a third Data Asset implementation chunk. No runtime creation, persistence, verification, UI, or background processing. |
 | Active-thread entity integrity | Runtime trust behavior | Conversation | Next runtime build | Thread-local entity carryover | Build Now | Axis must not merge, rename, over-infer, or drift between people, projects, or topics unless the user explicitly connects them. |
 | `/axis` layout | UI surface | Conversation | Active | Conversation feed + organized summary | Refine Current | Must be gym-readable and one-flow. |

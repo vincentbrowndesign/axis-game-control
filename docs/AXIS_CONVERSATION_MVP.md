@@ -19,6 +19,7 @@ Axis does not ask which. It treats everything as developing work.
 - One API: `POST /api/axis/conversation`
 - Text in, text out
 - Conversation history can be saved as an exact owner-scoped thread
+- Active-thread continuity is visible in the existing `/axis` room
 - Saved Thread Board snapshots reopen with assistant messages
 - Axis opens every session: "What are we working on?"
 - User responds. Axis develops the work. Conversation continues.
@@ -139,6 +140,41 @@ Axis must never frame the user as stuck.
 | Support line | Axis helps the work develop one layer at a time. |
 | Loading state | Three pulsing dots |
 | Error state | Plain text: "Something went wrong. Try again." |
+
+### Active-thread continuity
+
+The `/axis` room may show one quiet continuity row:
+
+- Threads
+- current save state
+- Save or Retry save only when needed
+
+Save states:
+
+- Not saved
+- Saving...
+- Saved with a locale-formatted time
+- Unsaved changes
+- Save failed
+- Sign in to save when persistence returns 401
+
+Transcript timestamps are quiet and subordinate to the message content.
+
+- show a thread start time
+- show a small timestamp for each user message
+- show a small timestamp for each Axis reply
+- preserve restored message timestamps exactly
+
+Thread Board snapshot time comes from the assistant message that owns the board. The conversation API remains:
+
+```json
+{
+  "reply": "string",
+  "threadBoard": null
+}
+```
+
+No ThreadBoardData timestamp field, `board_items`, memory, player model, or Data Asset runtime is introduced by active-thread continuity.
 
 ---
 

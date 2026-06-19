@@ -2,18 +2,28 @@
 
 export type AxisThreadListItem = {
   id: string;
+  lastOpenedAt?: string | null;
   latestPreview: string;
   title: string;
   updatedAt: string;
 };
 
-type SaveState = "idle" | "saving" | "saved" | "not-saved";
+type AxisThreadSaveStatus =
+  | "not_saved"
+  | "saving"
+  | "saved"
+  | "unsaved_changes"
+  | "error";
 
 type Props = {
   activeThreadId: string | null;
   onNewThread: () => void;
   onOpenThread: (threadId: string) => void;
-  saveState: SaveState;
+  onSave: () => void;
+  saveAuthRequired: boolean;
+  saveDisabled: boolean;
+  savedAt: string | null;
+  saveState: AxisThreadSaveStatus;
   threads: AxisThreadListItem[];
 };
 
@@ -21,54 +31,91 @@ export default function ThreadPicker({
   activeThreadId,
   onNewThread,
   onOpenThread,
+  onSave,
+  saveAuthRequired,
+  saveDisabled,
+  savedAt,
   saveState,
   threads,
 }: Props) {
-  const label =
-    saveState === "saving"
-      ? "Saving..."
-      : saveState === "saved"
-        ? "Saved"
-        : saveState === "not-saved"
-          ? "Not saved"
-          : "";
+  const label = getSaveLabel(saveState, savedAt, saveAuthRequired);
+  const actionLabel = getSaveActionLabel(saveState, saveAuthRequired);
+  const canSave = Boolean(actionLabel) && !saveDisabled;
 
   return (
-    <details className="thread-picker">
-      <summary>
-        <span>Threads</span>
-        {label && <small>{label}</small>}
-      </summary>
+    <div className="thread-continuity">
+      <details className="thread-picker">
+        <summary>
+          <span>Threads</span>
+        </summary>
 
-      <div className="thread-popover">
-        <button className="thread-new" type="button" onClick={onNewThread}>
-          New thread
-        </button>
+        <div className="thread-popover">
+          <button className="thread-new" type="button" onClick={onNewThread}>
+            New thread
+          </button>
 
-        {threads.length > 0 ? (
-          <div className="thread-list">
-            {threads.map((thread) => (
-              <button
-                key={thread.id}
-                className={`thread-item${thread.id === activeThreadId ? " thread-item--active" : ""}`}
-                type="button"
-                onClick={() => onOpenThread(thread.id)}
-              >
-                <span>{thread.title}</span>
-                <small>{formatThreadTime(thread.updatedAt)}</small>
-                {thread.latestPreview && <em>{thread.latestPreview}</em>}
-              </button>
-            ))}
-          </div>
+          {threads.length > 0 ? (
+            <div className="thread-list">
+              {threads.map((thread) => (
+                <button
+                  key={thread.id}
+                  className={`thread-item${thread.id === activeThreadId ? " thread-item--active" : ""}`}
+                  type="button"
+                  onClick={() => onOpenThread(thread.id)}
+                >
+                  <span>{thread.title}</span>
+                  <time
+                    dateTime={thread.updatedAt}
+                    title={formatFullDateTime(thread.updatedAt)}
+                  >
+                    {formatThreadTime(thread.updatedAt)}
+                  </time>
+                  {thread.latestPreview && <em>{thread.latestPreview}</em>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="thread-empty">No saved threads yet.</p>
+          )}
+        </div>
+      </details>
+
+      <span className="save-status">
+        {saveState === "saved" && savedAt ? (
+          <time
+            dateTime={savedAt}
+            title={formatFullDateTime(savedAt)}
+            aria-label={formatFullDateTime(savedAt)}
+          >
+            {label}
+          </time>
         ) : (
-          <p className="thread-empty">No saved threads yet.</p>
+          label
         )}
-      </div>
+      </span>
+
+      {actionLabel && (
+        <button
+          className="save-action"
+          type="button"
+          disabled={!canSave}
+          onClick={onSave}
+        >
+          {actionLabel}
+        </button>
+      )}
 
       <style jsx>{`
-        .thread-picker {
+        .thread-continuity {
+          align-items: baseline;
           color: color-mix(in srgb, var(--axis-ink) 38%, transparent);
+          display: flex;
           flex-shrink: 0;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .thread-picker {
           font-size: 11px;
           position: relative;
           z-index: 4;
@@ -87,9 +134,27 @@ export default function ThreadPicker({
           display: none;
         }
 
-        .thread-picker small {
+        .save-status {
           color: color-mix(in srgb, var(--axis-ink) 28%, transparent);
           font-size: 10px;
+          white-space: nowrap;
+        }
+
+        .save-action {
+          background: transparent;
+          border: 0;
+          border-bottom: 1px solid color-mix(in srgb, var(--axis-line) 24%, transparent);
+          color: color-mix(in srgb, var(--axis-ink) 42%, transparent);
+          cursor: pointer;
+          font: inherit;
+          font-size: 10px;
+          padding: 0 0 1px;
+          white-space: nowrap;
+        }
+
+        .save-action:disabled {
+          cursor: default;
+          opacity: 0.34;
         }
 
         .thread-popover {
@@ -133,7 +198,7 @@ export default function ThreadPicker({
         }
 
         .thread-item span,
-        .thread-item small,
+        .thread-item time,
         .thread-item em {
           display: block;
         }
@@ -156,6 +221,13 @@ export default function ThreadPicker({
           white-space: nowrap;
         }
 
+        .thread-item time {
+          color: color-mix(in srgb, var(--axis-ink) 34%, transparent);
+          font-size: 10.5px;
+          line-height: 1.2;
+          margin-top: 2px;
+        }
+
         .thread-empty {
           color: color-mix(in srgb, var(--axis-ink) 38%, transparent);
           font-size: 12px;
@@ -163,6 +235,10 @@ export default function ThreadPicker({
         }
 
         @media (max-width: 760px) {
+          .thread-continuity {
+            gap: 7px;
+          }
+
           .thread-popover {
             left: auto;
             max-height: min(360px, 64dvh);
@@ -170,8 +246,34 @@ export default function ThreadPicker({
           }
         }
       `}</style>
-    </details>
+    </div>
   );
+}
+
+function getSaveLabel(
+  saveState: AxisThreadSaveStatus,
+  savedAt: string | null,
+  authRequired: boolean,
+) {
+  if (authRequired) return "Sign in to save";
+  if (saveState === "saving") return "Saving...";
+  if (saveState === "saved") {
+    return savedAt ? `Saved ${formatShortTime(savedAt)}` : "Saved";
+  }
+  if (saveState === "unsaved_changes") return "Unsaved changes";
+  if (saveState === "error") return "Save failed";
+  return "Not saved";
+}
+
+function getSaveActionLabel(
+  saveState: AxisThreadSaveStatus,
+  authRequired: boolean,
+) {
+  if (authRequired) return "";
+  if (saveState === "not_saved") return "Save";
+  if (saveState === "unsaved_changes") return "Save";
+  if (saveState === "error") return "Retry save";
+  return "";
 }
 
 function formatThreadTime(value: string) {
@@ -180,5 +282,23 @@ function formatThreadTime(value: string) {
   return date.toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
+  });
+}
+
+function formatShortTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatFullDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
   });
 }

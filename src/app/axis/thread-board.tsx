@@ -37,6 +37,7 @@ export interface ThreadBoardData {
 
 interface Props {
   board?: ThreadBoardData | null;
+  generatedAt?: string | null;
 }
 
 interface BoardSectionObject {
@@ -56,6 +57,7 @@ interface BoardSectionObject {
   isPinned?: boolean;
   isCollapsed?: boolean;
   createdFromThreadMessageId?: string;
+  createdAt?: string;
   updatedAt: number;
 }
 
@@ -105,7 +107,7 @@ function getBoardInteractionMode(containerWidth: number): BoardInteractionMode {
     : "reorder";
 }
 
-export default function ThreadBoard({ board }: Props) {
+export default function ThreadBoard({ board, generatedAt }: Props) {
   const sections = useMemo(
     () =>
       Array.isArray(board?.sections)
@@ -175,6 +177,7 @@ export default function ThreadBoard({ board }: Props) {
             items: section.items,
             position: runtime?.position ?? { x: 0, y: 0 },
             status: resolveAxisSectionStatus(section.label),
+            createdAt: generatedAt ?? undefined,
             updatedAt: runtime?.updatedAt ?? 0,
             generatedIndex: index,
           };
@@ -196,10 +199,11 @@ export default function ThreadBoard({ board }: Props) {
         items: object.items,
         position: object.position,
         status: object.status,
+        createdAt: object.createdAt,
         updatedAt: object.updatedAt,
       }));
     },
-    [boardKey, runtimeState, sections],
+    [boardKey, generatedAt, runtimeState, sections],
   );
 
   const hasLocalArrangement =
@@ -418,6 +422,15 @@ export default function ThreadBoard({ board }: Props) {
         {typeof board.summary === "string" && board.summary.trim() && (
           <p className="thread-board-summary">{board.summary}</p>
         )}
+        {generatedAt && (
+          <time
+            className="thread-board-time"
+            dateTime={generatedAt}
+            title={formatFullDateTime(generatedAt)}
+          >
+            Board updated {formatShortTime(generatedAt)}
+          </time>
+        )}
         {hasLocalArrangement && (
           <button
             className="thread-board-reset"
@@ -451,6 +464,7 @@ export default function ThreadBoard({ board }: Props) {
                   "--axis-section-muted": statusStyle.mutedText,
                 } as CSSProperties}
                 data-axis-status={object.status}
+                title={object.createdAt ? `Generated ${formatFullDateTime(object.createdAt)}` : undefined}
                 data-section-type={typeToken}
                 data-section-label={labelToken}
                 data-section-object-id={object.id}
@@ -531,6 +545,14 @@ export default function ThreadBoard({ board }: Props) {
           font-size: 12px;
           margin: 18px 0 0;
           padding: 0 0 2px;
+        }
+
+        .thread-board-time {
+          color: color-mix(in srgb, var(--axis-ink) 34%, transparent);
+          display: block;
+          font-size: 12px;
+          line-height: 1.2;
+          margin-top: 12px;
         }
 
         .thread-board-reset:hover {
@@ -786,4 +808,22 @@ export default function ThreadBoard({ board }: Props) {
       `}</style>
     </section>
   );
+}
+
+function formatShortTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatFullDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }

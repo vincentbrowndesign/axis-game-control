@@ -54,7 +54,7 @@ export async function POST(
     );
   }
 
-  return Response.json({ saved: true });
+  return Response.json({ saved: true, updatedAt: result.value.updatedAt });
 }
 
 function parseMessages(value: unknown): AxisThreadMessageInput[] {
@@ -67,12 +67,13 @@ function parseMessages(value: unknown): AxisThreadMessageInput[] {
       const ordinal = typeof record.ordinal === "number" ? record.ordinal : null;
       const role = record.role === "user" || record.role === "assistant" ? record.role : null;
       const content = typeof record.content === "string" ? record.content : null;
+      const createdAt = typeof record.createdAt === "string" ? record.createdAt : undefined;
       const threadBoard = record.threadBoard && typeof record.threadBoard === "object"
         ? record.threadBoard as AxisThreadMessageInput["threadBoard"]
         : null;
 
       if (!ordinal || !role || content === null) return null;
-      return { content, ordinal, role, threadBoard };
+      return { content, createdAt, ordinal, role, threadBoard };
     })
     .filter((message): message is AxisThreadMessageInput => message !== null);
 }
