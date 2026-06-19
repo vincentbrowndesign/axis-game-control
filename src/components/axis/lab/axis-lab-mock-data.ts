@@ -1,4 +1,4 @@
-import type { AxisLabBoardCardData, AxisLabFocus, AxisLabTimelineEntry } from "./axis-lab-types";
+import type { AxisLabBoardCardData, AxisLabFocus, AxisLabTimelineEntry, AxisLabAnnotation } from "./axis-lab-types";
 
 export const axisLabThreadTitle = "Tournament Weekend Gameplan";
 export const axisLabSessionStartedAt = "2026-06-19T08:31:00-05:00";
@@ -39,6 +39,24 @@ export const axisLabTimeline: AxisLabTimelineEntry[] = [
     timestamp: axisLabBoardUpdatedAt,
   },
 ];
+
+export const axisActiveThreadMock: {
+  threadTitle: string;
+  userThought: string;
+  axisResponse: string;
+  timestamp: string;
+  annotations: readonly AxisLabAnnotation[];
+} = {
+  threadTitle: "First Six Minutes",
+  userThought: "We keep rushing after the first mistake.",
+  axisResponse:
+    "The first problem is not the mistake. It is the speed of the next decision.",
+  timestamp: "8:31 AM",
+  annotations: [
+    { label: "PATTERN", note: "second mistake follows the first" },
+    { label: "PROOF NEEDED", note: "check possessions after turnovers" },
+  ],
+};
 
 export const axisLabBoardCards: AxisLabBoardCardData[] = [
   {

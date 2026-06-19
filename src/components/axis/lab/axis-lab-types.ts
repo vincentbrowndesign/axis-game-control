@@ -28,3 +28,8 @@ export type AxisLabFocus = {
   title: string;
   summary: string;
 };
+
+export type AxisLabAnnotation = {
+  label: string;
+  note: string;
+};
