@@ -25,7 +25,7 @@ Build Now:
 4. Board Object Layer: Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet.
 5. Axis Visual Language
 6. Axis Thread Persistence v0
-7. Axis Data Asset Contract v0 - TypeScript contract and documentation only
+7. Active-thread entity integrity
 
 Refine Current:
 
@@ -103,7 +103,8 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Thread Board sections | Rendering pattern | Thread Board | Prototype | Lesson board sections, clinical note sections | Refine Current | Sections help the user scan the thread without switching modes. |
 | Axis Visual Language | Foundation | Thread Board | Active foundation | Shared design tokens, practical status accents | Build Now | Provides one palette and local status styling source for the current Thread Board without adding a mode, API field, persistence, evidence, or memory. |
 | Axis Thread Persistence v0 | Persistence | Conversation | Active narrow capability | Saved transcript and Thread Board snapshots | Build Now | Saves exact owner-scoped threads for reopening across devices without cross-thread memory, player model, evidence persistence, or board arrangement persistence. |
-| Axis Data Asset Contract v0 | Foundation contract | Architecture | Active foundation contract | Governed source-to-asset lifecycle vocabulary | Build Now | Provides TypeScript types and documentation boundaries only for future Source Records, Structured Records, Datasets, Data Assets, and Output Products. No runtime creation, persistence, verification, UI, or background processing. |
+| Axis Data Asset Contract v0 | Foundation contract | Architecture | Active foundation - complete | Governed source-to-asset lifecycle vocabulary | Foundation complete | Locked by 93cfbfe technical vocabulary and 31a214f product/build boundaries. Do not add a third Data Asset implementation chunk. No runtime creation, persistence, verification, UI, or background processing. |
+| Active-thread entity integrity | Runtime trust behavior | Conversation | Next runtime build | Thread-local entity carryover | Build Now | Axis must not merge, rename, over-infer, or drift between people, projects, or topics unless the user explicitly connects them. |
 | `/axis` layout | UI surface | Conversation | Active | Conversation feed + organized summary | Refine Current | Must be gym-readable and one-flow. |
 | `/api/axis/conversation` | API | Conversation | Active | Structured response generation | Refine Current | Should return reply + threadBoard cleanly. |
 | Thread Board sanitization | Infrastructure | Thread Board | Needed | Render-safe output validation | Refine Current | Board cannot show raw markdown, debug text, or weird glitches. |
@@ -159,15 +160,32 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 
 ## Active Build Order
 
-### 1. Stabilize `/axis`
+### 1. Fix Active-Thread Entity Integrity
+
+Active capsule:
+Axis Conversation Layer + Axis Thread Board
+
+Decision:
+Build Now
+
+Scope boundary:
+Active-thread entity integrity only.
+
+Goal:
+Fix entity carryover inside the current thread so Axis does not merge, rename, over-infer, or drift between people/projects/topics unless the user explicitly connects them.
+
+Decision:
+Build Now
+
+### 2. Stabilize `/axis`
 
 Goal:
 Make the current page usable in a gym.
 
 Runtime priority stays above architecture work:
 
-- active-thread entity integrity
-- live persistence verification
+- Active-thread entity integrity
+- Live Supabase persistence verification
 - Thread Board quality
 
 Required:
@@ -182,7 +200,7 @@ Required:
 Decision:
 Refine Current
 
-### 2. Stabilize Conversation Response Quality
+### 3. Stabilize Conversation Response Quality
 
 Goal:
 Axis gives shape before asking.
@@ -199,7 +217,7 @@ Required:
 Decision:
 Build Now
 
-### 3. Stabilize Thread Board
+### 4. Stabilize Thread Board
 
 Goal:
 Thread Board makes the thread easier to understand at a glance.
@@ -216,7 +234,7 @@ Required:
 Decision:
 Refine Current
 
-### 4. Validate With Real Threads
+### 5. Validate With Real Threads
 
 Use real gym prompts:
 
@@ -331,7 +349,7 @@ Axis MVP passes when:
 
 Build state:
 
-Refine Current
+Build Now
 
 Active MVP:
 
@@ -339,6 +357,14 @@ Active MVP:
 - Axis Understanding Primitives
 - Axis Thread Board
 
+Foundation complete:
+
+- Axis Data Asset Contract v0
+
+Future / Define Capsule:
+
+- Operational Axis Data Asset Layer
+
 Next action:
 
-Fix `/axis` for gym readability and validate the active MVP with real use before building any future layer.
+Fix active-thread entity integrity inside the current thread.

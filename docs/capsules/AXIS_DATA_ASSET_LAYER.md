@@ -1,13 +1,31 @@
 # Axis Data Asset Layer
 
 Status:
-Future layer with one active foundation contract
+Future layer with one active foundation contract complete
 
 Build Decision:
-Build Now only for Axis Data Asset Contract v0
+Foundation complete for Axis Data Asset Contract v0
 
 Active Runtime:
 No
+
+## Completion Lock
+
+Axis Data Asset Contract v0 is complete.
+
+Checkpoints:
+
+- 93cfbfe = technical vocabulary
+- 31a214f = product and build boundaries
+
+Do not add a third Data Asset implementation chunk yet.
+
+Current status:
+
+- Axis Data Asset Contract v0: Active foundation - complete
+- Operational Axis Data Asset Layer: Future / Define Capsule
+- Runtime behavior: Unchanged
+- Next runtime build: Active-thread entity integrity
 
 ## Locked Sentence
 
@@ -73,6 +91,8 @@ A packaged reusable object created from governed records and datasets.
 - Output Product is not source of truth.
 - Visual proof status is not verified evidence.
 - BoardSectionObject arrangement is not a data asset.
+- Thread Persistence remains exact-thread storage only.
+- Thread Persistence must not become cross-thread player memory, inferred truth, or automatic data asset promotion.
 
 ## Contract-Only Behavior
 
@@ -155,8 +175,8 @@ Still future and cannot create verified truth.
 
 The Data Asset Contract does not replace the active runtime priorities:
 
-- active-thread entity integrity
-- live persistence verification
+- Active-thread entity integrity
+- Live Supabase persistence verification
 - Thread Board quality
 
 ## Do Not Build Yet

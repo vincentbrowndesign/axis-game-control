@@ -103,14 +103,24 @@ These may exist as legacy or future infrastructure in `src/lib/` and `src/app/ap
 
 ## Axis Data Asset Contract Boundary
 
-* The contract is active as a foundation only.
+* Axis Data Asset Contract v0 is active as a foundation and complete.
+* `93cfbfe` locked the technical vocabulary.
+* `31a214f` locked the product and build boundaries.
 * `src/lib/axis-data-assets.ts` defines future types.
 * No current runtime creates or persists these objects.
 * Thread Persistence remains exact-thread storage.
+* Thread Persistence must not become cross-thread player memory, inferred truth, or automatic data asset promotion.
 * Do not wire legacy player-model, evidence, mission, or AxisUnderstanding systems into the contract.
 * Do not promote suggested records to verified.
 * Do not build cross-thread player memory from this contract.
+* Do not add a third Data Asset implementation chunk yet.
 * Operational Data Asset Layer remains future.
+
+Current runtime priorities:
+
+1. Active-thread entity integrity
+2. Live Supabase persistence verification
+3. Thread Board quality
 
 ---
 
