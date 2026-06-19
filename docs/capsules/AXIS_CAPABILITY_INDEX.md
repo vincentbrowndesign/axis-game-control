@@ -12,6 +12,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Thread Board | Active | Refine Current | Inline comprehension view of the current thread. Not a separate screen. |
 | Axis Visual Language | Active foundation | Build Now | Shared palette and visual status styles for the current Thread Board and BoardSectionObject renderer. No new mode, API, persistence, evidence, memory, or manual creation. |
 | Axis Thread Persistence v0 | Active narrow capability | Build Now | Owner-scoped saved conversation threads and Thread Board snapshots. No cross-thread memory, player model, evidence, or persistent board arrangement. |
+| Axis Data Asset Contract v0 | Active foundation contract | Build Now | Shared types and lifecycle boundaries for future Source Records, Structured Records, Datasets, Data Assets, and Output Products. No runtime creation, persistence, cross-thread memory, verification, UI, or background processing. |
 
 ## Refine Current
 
@@ -28,11 +29,13 @@ This index controls which capability capsules are active, which are future, and 
 |---|---|---|---|
 | Axis Whiteboard Renderer | Future | Future Layer | Renderer only. Not the product. Not active MVP. |
 | Axis Whiteboard Renderer / Board Object Layer | Future | Define Capsule | Defined in `docs/capsules/AXIS_BOARD_OBJECT_LAYER.md`. Mostly future. Only BoardSectionObject Local Prototype is Build Now; draggable cards beyond generated sections, AxisBoardItem, uploads, voice, camera, memory, evidence, persistence, and CV remain locked out. |
+| Axis Data Asset Layer | Future | Define Capsule | Future operational layer for governed structured records, datasets, reusable assets, and derived outputs. No runtime implementation is active. |
 | Axis Evidence Layer | Future | Research Proof | Needs proof rules before build. |
 | Axis Witness Layer | Future | Research Proof | Needs source/confidence boundaries. |
 | Axis Mission Layer | Future | Hold | Depends on clean understanding and evidence boundaries. |
 | Axis Challenge System | Future | Hold | Strong concept, but not current MVP. |
 | Axis Memory Layer | Future | Do Not Build Yet | Requires consent/design and proof. |
+| Axis Lens | Future | Do Not Build Yet | Future sensing/ingestion layer. Cannot create verified truth or bypass Evidence/Witness boundaries. |
 | Axis Voice Layer | Future | Do Not Build Yet | Text must work first. |
 | Axis Camera Layer | Future | Do Not Build Yet | Evidence layer must be defined first. |
 | Axis Upload / Media Layer | Future | Do Not Build Yet | Upload-first workflow is out of MVP. |
@@ -56,6 +59,7 @@ Allowed active build:
 - Axis Thread Board
 - Axis Visual Language
 - Axis Thread Persistence v0
+- Axis Data Asset Contract v0
 
 Allowed current files:
 
@@ -67,6 +71,7 @@ Allowed current files:
 - `src/app/axis/thread-picker.tsx`
 - `src/lib/axis-visual-language.ts`
 - `src/lib/axis-thread-persistence.ts`
+- `src/lib/axis-data-assets.ts`
 - `AGENTS.md`
 - `docs/REPO_CLEANUP.md`
 - `docs/AXIS_BUILD_MAP.md`

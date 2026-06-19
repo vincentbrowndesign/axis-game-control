@@ -101,6 +101,19 @@ These may exist as legacy or future infrastructure in `src/lib/` and `src/app/ap
 
 ---
 
+## Axis Data Asset Contract Boundary
+
+* The contract is active as a foundation only.
+* `src/lib/axis-data-assets.ts` defines future types.
+* No current runtime creates or persists these objects.
+* Thread Persistence remains exact-thread storage.
+* Do not wire legacy player-model, evidence, mission, or AxisUnderstanding systems into the contract.
+* Do not promote suggested records to verified.
+* Do not build cross-thread player memory from this contract.
+* Operational Data Asset Layer remains future.
+
+---
+
 ## Axis Whiteboard Boundary
 
 Whiteboard is a thread comprehension view. It organizes the current Axis conversation thread into a readable board.

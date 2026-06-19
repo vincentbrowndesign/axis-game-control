@@ -25,6 +25,7 @@ Build Now:
 4. Board Object Layer: Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet.
 5. Axis Visual Language
 6. Axis Thread Persistence v0
+7. Axis Data Asset Contract v0 - TypeScript contract and documentation only
 
 Refine Current:
 
@@ -57,6 +58,16 @@ Do Not Build Yet:
 18. Annotation Layer
 19. Sketch Layer
 20. Export Layer
+21. operational Axis Data Asset Layer
+22. structured-record persistence
+23. dataset generation
+24. asset creation or promotion
+25. Keeper workflows
+26. verified assets
+27. asynchronous asset processing
+28. Data Product generation
+29. player/development memory
+30. marketplace/platform monetization
 
 ## Decision Labels
 
@@ -92,12 +103,14 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Thread Board sections | Rendering pattern | Thread Board | Prototype | Lesson board sections, clinical note sections | Refine Current | Sections help the user scan the thread without switching modes. |
 | Axis Visual Language | Foundation | Thread Board | Active foundation | Shared design tokens, practical status accents | Build Now | Provides one palette and local status styling source for the current Thread Board without adding a mode, API field, persistence, evidence, or memory. |
 | Axis Thread Persistence v0 | Persistence | Conversation | Active narrow capability | Saved transcript and Thread Board snapshots | Build Now | Saves exact owner-scoped threads for reopening across devices without cross-thread memory, player model, evidence persistence, or board arrangement persistence. |
+| Axis Data Asset Contract v0 | Foundation contract | Architecture | Active foundation contract | Governed source-to-asset lifecycle vocabulary | Build Now | Provides TypeScript types and documentation boundaries only for future Source Records, Structured Records, Datasets, Data Assets, and Output Products. No runtime creation, persistence, verification, UI, or background processing. |
 | `/axis` layout | UI surface | Conversation | Active | Conversation feed + organized summary | Refine Current | Must be gym-readable and one-flow. |
 | `/api/axis/conversation` | API | Conversation | Active | Structured response generation | Refine Current | Should return reply + threadBoard cleanly. |
 | Thread Board sanitization | Infrastructure | Thread Board | Needed | Render-safe output validation | Refine Current | Board cannot show raw markdown, debug text, or weird glitches. |
 | Whiteboard Renderer | Future renderer | Understanding | Prototype demoted | Detective board, coaching whiteboard, strategy board | Future Layer | Useful later, but not the product and not a mode now. |
 | Axis Whiteboard Renderer / Board Object Layer | Future capsule | Whiteboard/Future | Narrow local prototype active | Spatial board object renderer | Define Capsule | Board Object Layer is Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet. |
 | BoardSectionObject Local Prototype | Local renderer slice | Thread Board | Active prototype | Movable generated section blocks | Build Now | Lets users arrange generated sections locally without changing API, saving memory, creating evidence, or adding manual object creation. |
+| Axis Data Asset Layer | Future capsule | Architecture | Future | Structured data asset governance | Define Capsule | Future operational layer for governed source records, structured records, datasets, assets, and output products. Current active work is contract documentation only. |
 | Whiteboard View | UI surface | Future | Preserved prototype | Whiteboard summary | Hold | Should not be active until Thread Board proves value. |
 | Cards | Visual form | UI | Risky | Modular response objects | Hold | Cards are renderers, not the product. |
 | Evidence Layer | Capability | Evidence | Defined but inactive | Legal case files, clinical proof, sports film | Research Proof | Needs proof rules before build. |
@@ -150,6 +163,12 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 
 Goal:
 Make the current page usable in a gym.
+
+Runtime priority stays above architecture work:
+
+- active-thread entity integrity
+- live persistence verification
+- Thread Board quality
 
 Required:
 
@@ -254,6 +273,7 @@ src/app/api/axis/threads/route.ts
 src/app/api/axis/threads/[threadId]/route.ts
 src/lib/axis-visual-language.ts
 src/lib/axis-thread-persistence.ts
+src/lib/axis-data-assets.ts
 AGENTS.md
 docs/REPO_CLEANUP.md
 docs/AXIS_BUILD_MAP.md
