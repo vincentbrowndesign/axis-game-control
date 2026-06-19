@@ -46,6 +46,12 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Sketch Layer | Future | Hold | Do not build until visual need is proven. |
 | Axis Export Layer | Future | Do Not Build Yet | Export cannot become core workflow. |
 
+## Internal Development Surfaces
+
+| Surface | Status | Build Decision | Notes |
+|---|---|---|---|
+| Axis UI Lab | Internal preview | Build Now | Mock-only UI lab at `/axis/lab`. No runtime APIs, Supabase, persistence, auth, Data Asset operations, or active-product behavior. |
+
 ## Build Rule
 
 Nothing gets built unless it belongs to an active capsule or a Build Map item marked Build Now or Refine Current.
