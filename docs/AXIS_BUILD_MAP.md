@@ -46,7 +46,7 @@ Define Capsule:
 
 Internal Development Surfaces:
 
-1. Axis UI Lab v0 - mock-only isolated route. Does not modify or replace `/axis`.
+1. Axis UI Lab v1 — Mock-only quiet work-surface redesign. Does not modify or replace `/axis`.
 
 Do Not Build Yet:
 
@@ -130,7 +130,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | BoardSectionObject Local Prototype | Local renderer slice | Thread Board | Active prototype | Movable generated section blocks | Build Now | Lets users arrange generated sections locally without changing API, saving memory, creating evidence, or adding manual object creation. |
 | Axis Data Asset Layer | Future capsule | Architecture | Future | Structured data asset governance | Define Capsule | Future operational layer for governed source records, structured records, datasets, assets, and output products. Current active work is contract documentation only. |
 | Axis Asset Flywheel | Strategy capsule | Architecture/Field Test | Strategy | Asset flywheel field-test model | Define Capsule | Defines how future governed source material may lead to reusable outputs, distribution signals, and better next sessions. No operational Data Asset runtime, monetization tooling, subscriptions, sponsor tooling, or analytics dashboard is active. |
-| Axis UI Lab v0 | Internal development surface | Axis Visual Language / Thread Board UI | Internal preview | Mock UI validation room | Build Now | Mock-only isolated route at `/axis/lab`. Does not modify or replace `/axis`; no runtime APIs, Supabase, persistence, auth, or Data Asset operations. |
+| Axis UI Lab v1 | Internal development surface | Axis Visual Language / Thread Board UI | Internal preview | Mock-only quiet work-surface prototype at `/axis/lab` | Build Now | Mock-only quiet work-surface redesign. Does not modify or replace `/axis`. No API, Supabase, auth, persistence, media, Data Asset runtime, CV, or active-product behavior. |
 | Whiteboard View | UI surface | Future | Preserved prototype | Whiteboard summary | Hold | Should not be active until Thread Board proves value. |
 | Cards | Visual form | UI | Risky | Modular response objects | Hold | Cards are renderers, not the product. |
 | Evidence Layer | Capability | Evidence | Defined but inactive | Legal case files, clinical proof, sports film | Research Proof | Needs proof rules before build. |

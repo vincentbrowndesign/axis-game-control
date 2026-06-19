@@ -50,7 +50,7 @@ This index controls which capability capsules are active, which are future, and 
 
 | Surface | Status | Build Decision | Notes |
 |---|---|---|---|
-| Axis UI Lab | Internal preview | Build Now | Mock-only UI lab at `/axis/lab`. No runtime APIs, Supabase, persistence, auth, Data Asset operations, or active-product behavior. |
+| Axis UI Lab v1 | Internal preview | Build Now | Mock-only quiet work-surface prototype at `/axis/lab`. No API, Supabase, auth, persistence, media, Data Asset runtime, CV, or active-product behavior. Capsule: `docs/capsules/AXIS_UI_LAB.md`. |
 
 ## Build Rule
 
