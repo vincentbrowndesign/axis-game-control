@@ -30,6 +30,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Whiteboard Renderer | Future | Future Layer | Renderer only. Not the product. Not active MVP. |
 | Axis Whiteboard Renderer / Board Object Layer | Future | Define Capsule | Defined in `docs/capsules/AXIS_BOARD_OBJECT_LAYER.md`. Mostly future. Only BoardSectionObject Local Prototype is Build Now; draggable cards beyond generated sections, AxisBoardItem, uploads, voice, camera, memory, evidence, persistence, and CV remain locked out. |
 | Axis Data Asset Layer | Future | Define Capsule | Future operational layer for governed structured records, datasets, reusable assets, and derived outputs. No runtime implementation is active. |
+| Axis Asset Flywheel | Strategy | Define Capsule | Business and field-test model for how future governed source records may become reusable outputs, distribution signals, and better next sessions. No operational Data Asset runtime or monetization tooling is active. |
 | Axis Evidence Layer | Future | Research Proof | Needs proof rules before build. |
 | Axis Witness Layer | Future | Research Proof | Needs source/confidence boundaries. |
 | Axis Mission Layer | Future | Hold | Depends on clean understanding and evidence boundaries. |

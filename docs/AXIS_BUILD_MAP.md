@@ -37,6 +37,10 @@ Refine Current:
 6. Gym-readable layout
 7. Active-thread save continuity
 
+Define Capsule:
+
+1. Axis Asset Flywheel strategy
+
 Do Not Build Yet:
 
 1. Whiteboard Renderer
@@ -69,6 +73,9 @@ Do Not Build Yet:
 28. Data Product generation
 29. player/development memory
 30. marketplace/platform monetization
+31. subscriptions
+32. sponsor tooling
+33. raw child-data monetization
 
 ## Decision Labels
 
@@ -114,6 +121,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Axis Whiteboard Renderer / Board Object Layer | Future capsule | Whiteboard/Future | Narrow local prototype active | Spatial board object renderer | Define Capsule | Board Object Layer is Build Now only for BoardSectionObject local-only prototype. All other board object features remain Do Not Build Yet. |
 | BoardSectionObject Local Prototype | Local renderer slice | Thread Board | Active prototype | Movable generated section blocks | Build Now | Lets users arrange generated sections locally without changing API, saving memory, creating evidence, or adding manual object creation. |
 | Axis Data Asset Layer | Future capsule | Architecture | Future | Structured data asset governance | Define Capsule | Future operational layer for governed source records, structured records, datasets, assets, and output products. Current active work is contract documentation only. |
+| Axis Asset Flywheel | Strategy capsule | Architecture/Field Test | Strategy | Asset flywheel field-test model | Define Capsule | Defines how future governed source material may lead to reusable outputs, distribution signals, and better next sessions. No operational Data Asset runtime, monetization tooling, subscriptions, sponsor tooling, or analytics dashboard is active. |
 | Whiteboard View | UI surface | Future | Preserved prototype | Whiteboard summary | Hold | Should not be active until Thread Board proves value. |
 | Cards | Visual form | UI | Risky | Modular response objects | Hold | Cards are renderers, not the product. |
 | Evidence Layer | Capability | Evidence | Defined but inactive | Legal case files, clinical proof, sports film | Research Proof | Needs proof rules before build. |

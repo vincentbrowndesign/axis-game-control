@@ -171,6 +171,9 @@ Still future and required before verification.
 Axis Lens:
 Still future and cannot create verified truth.
 
+Axis Asset Flywheel:
+Strategy only. Defines a possible future business and field-test loop for governed source material, reusable outputs, distribution signals, and better next sessions. It does not activate operational Data Asset runtime, monetization tooling, reports, subscriptions, sponsor tooling, or background processing.
+
 ## Current Runtime Priorities
 
 The Data Asset Contract does not replace the active runtime priorities:
@@ -194,6 +197,8 @@ The Data Asset Contract does not replace the active runtime priorities:
 - automatic cross-thread recall
 - background processing
 - reports and exports
+- subscriptions
+- sponsor tooling
 - Data Product generation
 - marketplace/platform monetization
 - raw child-data monetization
