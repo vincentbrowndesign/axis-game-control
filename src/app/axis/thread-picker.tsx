@@ -24,6 +24,7 @@ type Props = {
   saveDisabled: boolean;
   savedAt: string | null;
   saveState: AxisThreadSaveStatus;
+  signedIn: boolean;
   threads: AxisThreadListItem[];
 };
 
@@ -36,6 +37,7 @@ export default function ThreadPicker({
   saveDisabled,
   savedAt,
   saveState,
+  signedIn,
   threads,
 }: Props) {
   const label = getSaveLabel(saveState, savedAt, saveAuthRequired);
@@ -54,7 +56,9 @@ export default function ThreadPicker({
             New thread
           </button>
 
-          {threads.length > 0 ? (
+          {!signedIn ? (
+            <p className="thread-empty">Sign in to see saved threads.</p>
+          ) : threads.length > 0 ? (
             <div className="thread-list">
               {threads.map((thread) => (
                 <button

@@ -62,6 +62,12 @@ Saved threads are owner-scoped.
 
 The same signed-in user can reopen a thread across devices. Other users must not be able to read or write it.
 
+Axis Auth v0 provides the visible sign-in, account creation, sign-out, session restoration, and account-switching control for this boundary.
+
+When the owner changes, the client must clear the saved thread list, active saved-thread id, loaded transcript, latest restored Thread Board, thread metadata, and save state before loading the next owner's saved threads.
+
+Signed-out users can continue local conversation, but saving requires an authenticated owner and should show "Sign in to save."
+
 ## API Boundary
 
 The conversation API remains unchanged:

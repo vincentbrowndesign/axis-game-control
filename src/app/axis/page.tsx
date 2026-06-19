@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { axisAuthenticatedFetch } from "../../lib/axis-client-auth";
 import { AXIS_ROOM_COLORS } from "../../lib/axis-visual-language";
+import AxisAuthControl, { useAxisAuth } from "./axis-auth-control";
 import ThreadBoard, { type ThreadBoardData } from "./thread-board";
 import ThreadPicker, { type AxisThreadListItem } from "./thread-picker";
 
@@ -52,6 +53,7 @@ function createInitialMessage(): Message {
 }
 
 export default function AxisPage() {
+  const auth = useAxisAuth();
   const [messages, setMessages] = useState<Message[]>(() => [createInitialMessage()]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,6 +69,7 @@ export default function AxisPage() {
   const messagesRef = useRef<Message[]>(messages);
   const activeThreadRef = useRef<ActiveThreadMeta | null>(activeThread);
   const localRevisionRef = useRef(localRevision);
+  const ownerIdRef = useRef<string | null | undefined>(undefined);
 
   const isInitial = messages.length === 1 && !loading;
   const latestAssistantIndex = messages.reduce(
@@ -96,8 +99,15 @@ export default function AxisPage() {
   }, [localRevision]);
 
   useEffect(() => {
-    void loadThreads();
-  }, []);
+    if (auth.status === "loading") return;
+
+    const nextOwnerId = auth.status === "signed_in" ? auth.userId : null;
+    if (ownerIdRef.current === nextOwnerId) return;
+
+    ownerIdRef.current = nextOwnerId;
+    resetOwnerScopedThreadState(nextOwnerId === null);
+    if (nextOwnerId) void loadThreads();
+  }, [auth.status, auth.userId]);
 
   useEffect(() => {
     const ta = inputRef.current;
@@ -168,14 +178,25 @@ export default function AxisPage() {
     const nextRevision = localRevisionRef.current + 1;
     localRevisionRef.current = nextRevision;
     setLocalRevision(nextRevision);
-    setSaveAuthRequired(false);
+    setSaveAuthRequired(auth.status !== "signed_in");
     setSaveState(activeThreadRef.current ? "unsaved_changes" : "not_saved");
     return nextRevision;
   }
 
   async function loadThreads() {
+    if (auth.status !== "signed_in") {
+      setThreads([]);
+      return;
+    }
+
     try {
       const res = await axisAuthenticatedFetch("/api/axis/threads");
+      if (res.status === 401) {
+        setThreads([]);
+        setSaveAuthRequired(true);
+        void auth.reload();
+        return;
+      }
       if (!res.ok) return;
       const data = (await res.json()) as { threads?: AxisThreadListItem[] };
       setThreads(Array.isArray(data.threads) ? data.threads : []);
@@ -192,6 +213,11 @@ export default function AxisPage() {
     const persistedMessages = snapshot.slice(1);
     if (persistedMessages.length === 0) {
       setSaveState("not_saved");
+      return;
+    }
+    if (auth.status !== "signed_in") {
+      setSaveAuthRequired(true);
+      setSaveState(activeThreadRef.current ? "unsaved_changes" : "not_saved");
       return;
     }
 
@@ -221,7 +247,10 @@ export default function AxisPage() {
           });
 
       if (!res.ok) {
-        if (res.status === 401) setSaveAuthRequired(true);
+        if (res.status === 401) {
+          setSaveAuthRequired(true);
+          void auth.reload();
+        }
         setSaveState("error");
         return;
       }
@@ -269,11 +298,22 @@ export default function AxisPage() {
   }
 
   async function openThread(threadId: string) {
+    if (auth.status !== "signed_in") {
+      setSaveAuthRequired(true);
+      setThreads([]);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const res = await axisAuthenticatedFetch(`/api/axis/threads/${threadId}`);
       if (!res.ok) {
+        if (res.status === 401) {
+          setSaveAuthRequired(true);
+          setThreads([]);
+          void auth.reload();
+        }
         setError("Saved thread could not be opened.");
         return;
       }
@@ -330,6 +370,21 @@ export default function AxisPage() {
     setError(null);
   }
 
+  function resetOwnerScopedThreadState(authRequired: boolean) {
+    const initial = createInitialMessage();
+    messagesRef.current = [initial];
+    setMessages([initial]);
+    setInput("");
+    activeThreadRef.current = null;
+    setActiveThread(null);
+    setThreads([]);
+    localRevisionRef.current = 0;
+    setLocalRevision(0);
+    setSaveAuthRequired(authRequired);
+    setSaveState("not_saved");
+    setError(null);
+  }
+
   return (
     <>
       <main className="shell">
@@ -347,8 +402,10 @@ export default function AxisPage() {
                 saveDisabled={loading || saveState === "saving"}
                 savedAt={activeThread?.lastSavedAt ?? null}
                 saveState={saveState}
+                signedIn={auth.status === "signed_in"}
                 threads={threads}
               />
+              <AxisAuthControl auth={auth} />
             </header>
 
             <div className={`thread${isInitial ? " thread--initial" : ""}`}>

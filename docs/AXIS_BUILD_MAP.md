@@ -26,6 +26,7 @@ Build Now:
 5. Axis Visual Language
 6. Axis Thread Persistence v0
 7. Active-thread entity integrity
+8. Axis Auth v0
 
 Refine Current:
 
@@ -36,6 +37,8 @@ Refine Current:
 5. Board sanitization
 6. Gym-readable layout
 7. Active-thread save continuity
+8. Authenticated account-switch isolation
+9. User A/User B persistence verification
 
 Define Capsule:
 
@@ -111,6 +114,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Thread Board sections | Rendering pattern | Thread Board | Prototype | Lesson board sections, clinical note sections | Refine Current | Sections help the user scan the thread without switching modes. |
 | Axis Visual Language | Foundation | Thread Board | Active foundation | Shared design tokens, practical status accents | Build Now | Provides one palette and local status styling source for the current Thread Board without adding a mode, API field, persistence, evidence, or memory. |
 | Axis Thread Persistence v0 | Persistence | Conversation | Active narrow capability | Saved transcript and Thread Board snapshots | Build Now | Saves exact owner-scoped threads for reopening across devices without cross-thread memory, player model, evidence persistence, or board arrangement persistence. |
+| Axis Auth v0 | Authentication | Thread Persistence | Active narrow capability | Owner-scoped account continuity | Build Now | Adds explicit sign-in, account creation, sign-out, session restoration, and account-switch isolation for exact saved threads without profiles, organizations, billing, memory, or roles. |
 | Active-thread save continuity | UI/persistence refinement | Thread Persistence | Active refinement | Visible saved state and transcript timestamps | Refine Current | Shows exact-thread save state, manual Save/Retry, message timestamps, and board snapshot time without adding memory, board_items, persistent board arrangement, or Data Asset runtime. |
 | Axis Data Asset Contract v0 | Foundation contract | Architecture | Active foundation - complete | Governed source-to-asset lifecycle vocabulary | Foundation complete | Locked by 93cfbfe technical vocabulary and 31a214f product/build boundaries. Do not add a third Data Asset implementation chunk. No runtime creation, persistence, verification, UI, or background processing. |
 | Active-thread entity integrity | Runtime trust behavior | Conversation | Next runtime build | Thread-local entity carryover | Build Now | Axis must not merge, rename, over-infer, or drift between people, projects, or topics unless the user explicitly connects them. |
@@ -296,11 +300,14 @@ Codex may touch these for current MVP refinement:
 src/app/axis/page.tsx
 src/app/axis/thread-board.tsx
 src/app/axis/thread-picker.tsx
+src/app/axis/axis-auth-control.tsx
 src/app/api/axis/conversation/route.ts
 src/app/api/axis/threads/route.ts
 src/app/api/axis/threads/[threadId]/route.ts
+src/app/auth/callback/route.ts
 src/lib/axis-visual-language.ts
 src/lib/axis-thread-persistence.ts
+src/lib/axis-client-auth.ts
 src/lib/axis-data-assets.ts
 AGENTS.md
 docs/REPO_CLEANUP.md
@@ -366,6 +373,8 @@ Active MVP:
 - Axis Conversation Layer
 - Axis Understanding Primitives
 - Axis Thread Board
+- Axis Thread Persistence v0
+- Axis Auth v0
 
 Foundation complete:
 
@@ -377,4 +386,4 @@ Future / Define Capsule:
 
 Next action:
 
-Fix active-thread entity integrity inside the current thread.
+Verify owner-scoped Thread Persistence with explicit sign-in, sign-out, and User A/User B account switching.

@@ -12,6 +12,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Thread Board | Active | Refine Current | Inline comprehension view of the current thread. Not a separate screen. |
 | Axis Visual Language | Active foundation | Build Now | Shared palette and visual status styles for the current Thread Board and BoardSectionObject renderer. No new mode, API, persistence, evidence, memory, or manual creation. |
 | Axis Thread Persistence v0 | Active narrow capability | Build Now | Owner-scoped saved conversation threads and Thread Board snapshots. No cross-thread memory, player model, evidence, or persistent board arrangement. |
+| Axis Auth v0 | Active narrow capability | Build Now | Explicit sign-in, account creation, sign-out, session restoration, and account-switch isolation for owner-scoped Thread Persistence. No profiles, organizations, billing, memory, or role system. |
 | Axis Data Asset Contract v0 | Active foundation - complete | Foundation complete | Shared types and lifecycle boundaries for future Source Records, Structured Records, Datasets, Data Assets, and Output Products. Locked by `93cfbfe` technical vocabulary and `31a214f` product/build boundaries. No third implementation chunk, runtime creation, persistence, cross-thread memory, verification, UI, or background processing. |
 
 ## Refine Current
@@ -60,6 +61,7 @@ Allowed active build:
 - Axis Thread Board
 - Axis Visual Language
 - Axis Thread Persistence v0
+- Axis Auth v0
 - Axis Data Asset Contract v0 is complete as an active foundation
 
 Allowed current files:
@@ -70,6 +72,7 @@ Allowed current files:
 - `src/app/api/axis/threads/route.ts`
 - `src/app/api/axis/threads/[threadId]/route.ts`
 - `src/app/axis/thread-picker.tsx`
+- `src/app/axis/axis-auth-control.tsx`
 - `src/lib/axis-visual-language.ts`
 - `src/lib/axis-thread-persistence.ts`
 - `src/lib/axis-data-assets.ts`

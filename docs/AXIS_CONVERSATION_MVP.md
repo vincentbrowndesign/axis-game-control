@@ -19,6 +19,7 @@ Axis does not ask which. It treats everything as developing work.
 - One API: `POST /api/axis/conversation`
 - Text in, text out
 - Conversation history can be saved as an exact owner-scoped thread
+- Users can sign in, create an account, restore a session, sign out, and switch accounts for owner-scoped thread continuity
 - Active-thread continuity is visible in the existing `/axis` room
 - Saved Thread Board snapshots reopen with assistant messages
 - Axis opens every session: "What are we working on?"
@@ -157,6 +158,14 @@ Save states:
 - Unsaved changes
 - Save failed
 - Sign in to save when persistence returns 401
+
+Auth state is visible only as a compact `/axis` header control.
+
+- signed out users can still use the conversation locally
+- saving requires an authenticated owner
+- account switching clears the saved thread list, active saved-thread id, loaded transcript, latest restored board, and save state before the new owner's threads load
+- no anonymous local thread is automatically adopted into an account
+- no profiles, organizations, roles, billing, cross-thread memory, player memory, or Data Asset runtime are introduced
 
 Transcript timestamps are quiet and subordinate to the message content.
 

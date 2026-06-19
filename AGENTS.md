@@ -15,6 +15,7 @@ The conversation itself is the product. Axis helps the work develop.
 | Active page | `src/app/axis/page.tsx` |
 | Active API | `src/app/api/axis/conversation/route.ts` |
 | Saved thread API | `src/app/api/axis/threads` — exact owner-scoped thread persistence |
+| Auth capsule | `docs/capsules/AXIS_AUTH.md` - explicit sign-in/sign-out for owner-scoped continuity |
 | Legacy mission page | `src/app/axis/mission/page.tsx` — redirects to `/axis` |
 | Legacy conversation API | `src/app/api/axis/run` — preserved, not used by MVP |
 | Product truth | The conversation is the product |
@@ -74,6 +75,13 @@ Axis should not:
 Current MVP is text-only. No other capabilities are active on `/axis`.
 
 Axis may persist exact conversation threads and assistant Thread Board snapshots for the signed-in owner. This is not long-term player memory, cross-thread recall, evidence persistence, or persistent board arrangement.
+
+Axis Auth v0 is active only to protect owner-scoped Thread Persistence:
+
+* allow sign-in, account creation, sign-out, session restoration, and account switching
+* clear saved thread list, active saved-thread id, loaded transcript, latest restored board, metadata, and save state when the owner changes
+* keep signed-out conversation local and show "Sign in to save"
+* do not add profiles, organizations, roles, billing, dashboard access, cross-thread memory, player memory, or Data Asset runtime operations
 
 Do not add to the active `/axis` page:
 
