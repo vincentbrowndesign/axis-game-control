@@ -1,4 +1,4 @@
-import type { AxisLabBoardCardData, AxisLabFocus, AxisLabTimelineEntry, AxisLabAnnotation } from "./axis-lab-types";
+import type { AxisLabBoardCardData, AxisLabFocus, AxisLabTimelineEntry, AxisLabAnnotation, MakeSpaceItem } from "./axis-lab-types";
 
 export const axisLabThreadTitle = "Tournament Weekend Gameplan";
 export const axisLabSessionStartedAt = "2026-06-19T08:31:00-05:00";
@@ -57,6 +57,41 @@ export const axisActiveThreadMock: {
     { label: "PROOF NEEDED", note: "check possessions after turnovers" },
   ],
 };
+
+export const axisMakeSpaceMock: readonly MakeSpaceItem[] = [
+  {
+    id: "keeper",
+    kind: "keeper",
+    label: "KEEPER",
+    text: "No second mistake from rushing.",
+    surfacedReason: "Said directly and confirmed across two exchanges.",
+    createdAt: "8:36 AM",
+  },
+  {
+    id: "question",
+    kind: "question",
+    label: "QUESTION",
+    text: "Is the rush caused by pressure or unclear spacing?",
+    surfacedReason: "Left open after the turnover pattern was named.",
+    createdAt: "8:36 AM",
+  },
+  {
+    id: "proof",
+    kind: "proof",
+    label: "PROOF NEEDED",
+    text: "Review the first two possessions after each turnover.",
+    surfacedReason: "Named as the place to look for the cause.",
+    createdAt: "8:36 AM",
+  },
+  {
+    id: "next-move",
+    kind: "next_move",
+    label: "NEXT MOVE",
+    text: "Give the team one rule for the first six minutes.",
+    surfacedReason: "The direction of the session, agreed on by the end.",
+    createdAt: "8:36 AM",
+  },
+];
 
 export const axisLabBoardCards: AxisLabBoardCardData[] = [
   {

@@ -33,3 +33,14 @@ export type AxisLabAnnotation = {
   label: string;
   note: string;
 };
+
+export type MakeSpaceItemKind = "keeper" | "question" | "proof" | "next_move";
+
+export type MakeSpaceItem = {
+  id: string;
+  kind: MakeSpaceItemKind;
+  label: string;
+  text: string;
+  surfacedReason: string;
+  createdAt: string;
+};

@@ -287,3 +287,177 @@
     font-size: 16px;
   }
 }
+
+/* ─── Make Space ──────────────────────────────────────────── */
+
+.msColumn {
+  margin: 0 auto;
+  max-width: 640px;
+  min-width: 0;
+}
+
+.msThreadRef {
+  color: color-mix(in srgb, var(--lab-ink) 22%, transparent);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  margin: 0 0 32px;
+  text-transform: uppercase;
+}
+
+.msItems {
+  border-top: 1px solid color-mix(in srgb, var(--lab-line) 9%, transparent);
+  display: flex;
+  flex-direction: column;
+}
+
+.msItem {
+  border-bottom: 1px solid color-mix(in srgb, var(--lab-line) 9%, transparent);
+  min-width: 0;
+}
+
+.msRow {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  padding: 13px 0;
+  text-align: left;
+  width: 100%;
+}
+
+.msRow:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--item-accent, var(--lab-line)) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.msDot {
+  background: var(--item-accent, var(--lab-line));
+  border-radius: 999px;
+  flex-shrink: 0;
+  height: 6px;
+  opacity: 0.7;
+  width: 6px;
+}
+
+.msKindLabel {
+  color: color-mix(in srgb, var(--lab-ink) 48%, transparent);
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  width: 96px;
+}
+
+.msPreview {
+  color: color-mix(in srgb, var(--lab-ink) 66%, transparent);
+  font-size: 15px;
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Expanded detail */
+
+.msDetail {
+  padding: 2px 0 18px 16px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .msDetail {
+    animation: msReveal 0.14s ease;
+  }
+}
+
+@keyframes msReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.msDetailHead {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.msDetailLabel {
+  color: var(--item-accent, var(--lab-line));
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  opacity: 0.84;
+  text-transform: uppercase;
+}
+
+.msCloseBtn {
+  background: transparent;
+  border: 0;
+  color: color-mix(in srgb, var(--lab-ink) 34%, transparent);
+  cursor: pointer;
+  font-size: 18px;
+  height: 24px;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.1s ease;
+  width: 24px;
+}
+
+.msCloseBtn:hover {
+  color: color-mix(in srgb, var(--lab-ink) 62%, transparent);
+}
+
+.msCloseBtn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--lab-line) 38%, transparent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.msDetailText {
+  color: color-mix(in srgb, var(--lab-ink) 88%, transparent);
+  font-size: clamp(17px, 2.2vw, 24px);
+  line-height: 1.4;
+  margin: 0 0 14px;
+  max-width: 50ch;
+  overflow-wrap: break-word;
+}
+
+.msDetailReason {
+  color: color-mix(in srgb, var(--lab-ink) 44%, transparent);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.4;
+  margin: 0 0 10px;
+  max-width: 50ch;
+  overflow-wrap: break-word;
+}
+
+.msDetailTime {
+  color: color-mix(in srgb, var(--lab-ink) 26%, transparent);
+  display: block;
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 400px) {
+  .msPreview {
+    display: none;
+  }
+
+  .msKindLabel {
+    width: auto;
+  }
+}

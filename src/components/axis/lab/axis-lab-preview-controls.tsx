@@ -1,8 +1,15 @@
 "use client";
 
+import { Fragment } from "react";
 import styles from "./axis-lab.module.css";
 
-export type LabState = "empty" | "active";
+export type LabState = "empty" | "active" | "make-space";
+
+const LAB_STATES: { id: LabState; label: string }[] = [
+  { id: "empty", label: "Empty" },
+  { id: "active", label: "Active" },
+  { id: "make-space", label: "Make Space" },
+];
 
 interface Props {
   labState: LabState;
@@ -19,21 +26,20 @@ export default function AxisLabPreviewControls({
     <div className={styles.controls}>
       <span className={styles.stateNote}>Local preview</span>
       <span className={styles.stateToggle} role="group" aria-label="Preview state">
-        <button
-          type="button"
-          className={`${styles.stateBtn}${labState === "empty" ? ` ${styles.stateBtnOn}` : ""}`}
-          onClick={() => onStateChange("empty")}
-        >
-          Empty
-        </button>
-        <span className={styles.stateDot} aria-hidden="true">·</span>
-        <button
-          type="button"
-          className={`${styles.stateBtn}${labState === "active" ? ` ${styles.stateBtnOn}` : ""}`}
-          onClick={() => onStateChange("active")}
-        >
-          Active
-        </button>
+        {LAB_STATES.map((s, i) => (
+          <Fragment key={s.id}>
+            {i > 0 && (
+              <span className={styles.stateDot} aria-hidden="true">·</span>
+            )}
+            <button
+              type="button"
+              className={`${styles.stateBtn}${labState === s.id ? ` ${styles.stateBtnOn}` : ""}`}
+              onClick={() => onStateChange(s.id)}
+            >
+              {s.label}
+            </button>
+          </Fragment>
+        ))}
       </span>
       <button type="button" className={styles.resetBtn} onClick={onReset}>
         Reset
