@@ -99,9 +99,31 @@
   text-transform: uppercase;
 }
 
+.previewStatus {
+  color: color-mix(in srgb, var(--lab-ink) 34%, transparent);
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  margin: -6px 0 18px;
+}
+
 .timeMark {
   margin-bottom: 8px;
   text-transform: none;
+}
+
+.contextObject {
+  border-top: 1px solid color-mix(in srgb, var(--lab-line) 12%, transparent);
+  padding-top: 18px;
+}
+
+.contextLabel {
+  color: color-mix(in srgb, var(--lab-ink) 44%, transparent);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  margin: 0 0 14px;
+  text-transform: uppercase;
 }
 
 .markLayer {
@@ -147,6 +169,10 @@
 
 .mark-action {
   --mark-accent: var(--lab-action);
+}
+
+.mark-source {
+  --mark-accent: var(--lab-context);
 }
 
 .markAccent {

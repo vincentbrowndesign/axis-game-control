@@ -9,18 +9,26 @@ export type AxisLabDetail = {
 };
 
 export type AxisLabMark = {
-  accent: "context" | "proof" | "action";
+  accent: "context" | "proof" | "action" | "source";
   detail?: AxisLabDetail;
   id: string;
   label: string;
   text: string;
 };
 
-export type AxisLabThread = {
+export type AxisContextObject = {
   axisSentence: string;
-  contextMark?: AxisLabMark;
+  id: string;
+  label: "Active Context";
+  savedPreviewStatus: "local_preview" | "saved_preview";
+  statement: string;
+  threadTitle: string;
+};
+
+export type AxisLabThread = {
+  context: AxisContextObject;
+  nextMoveMark?: AxisLabMark;
   proofMark?: AxisLabMark;
+  recentSourceMark?: AxisLabMark;
   sessionTime: string;
-  thought: string;
-  title: string;
 };

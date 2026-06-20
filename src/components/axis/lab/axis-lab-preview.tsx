@@ -25,7 +25,7 @@ export default function AxisLabPreview() {
 }
 
 function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewState }) {
-  const proofButtonRef = useRef<HTMLButtonElement | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
   const [localThoughts, setLocalThoughts] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(
@@ -34,7 +34,7 @@ function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewStat
 
   const closeDetail = useCallback(() => {
     setExpandedId(null);
-    requestAnimationFrame(() => proofButtonRef.current?.focus());
+    requestAnimationFrame(() => openerRef.current?.focus());
   }, []);
 
   useEffect(() => {
@@ -59,8 +59,13 @@ function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewStat
     };
   }, [closeDetail, expandedId]);
 
-  const proofMark = axisLabThread.proofMark;
-  const expandedDetail = expandedId && proofMark?.detail ? proofMark.detail : null;
+  const marks = [
+    axisLabThread.proofMark,
+    axisLabThread.nextMoveMark,
+    axisLabThread.recentSourceMark,
+  ].filter((mark): mark is AxisLabMark => Boolean(mark));
+  const expandedMark = marks.find((mark) => mark.id === expandedId) ?? null;
+  const expandedDetail = expandedMark?.detail ?? null;
 
   function handleComposerSubmit(text: string) {
     setLocalThoughts((current) => [...current, text]);
@@ -98,22 +103,28 @@ function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewStat
               {axisLabThread.sessionTime}
             </time>
 
-            <p className={styles.threadTitle}>{axisLabThread.title}</p>
-            <h1 id="axis-lab-work-title">{axisLabThread.thought}</h1>
-            <p className={styles.axisSentence}>{axisLabThread.axisSentence}</p>
+            <p className={styles.threadTitle}>{axisLabThread.context.threadTitle}</p>
+            <span className={styles.previewStatus}>
+              {axisLabThread.context.savedPreviewStatus === "saved_preview" ? "Saved preview" : "Local preview"}
+            </span>
+            <article className={styles.contextObject} aria-labelledby="axis-lab-work-title">
+              <p className={styles.contextLabel}>{axisLabThread.context.label}</p>
+              <h1 id="axis-lab-work-title">{axisLabThread.context.statement}</h1>
+              <p className={styles.axisSentence}>{axisLabThread.context.axisSentence}</p>
+            </article>
 
-            <div className={styles.markLayer} aria-label="Context and proof marks">
-              {axisLabThread.contextMark && <AxisLabMarkView mark={axisLabThread.contextMark} />}
-              {proofMark && (
+            <div className={styles.markLayer} aria-label="Context surface marks">
+              {marks.map((mark) => (
                 <AxisLabMarkView
-                  mark={proofMark}
-                  expanded={expandedId === proofMark.id}
+                  key={mark.id}
+                  mark={mark}
+                  expanded={expandedId === mark.id}
                   onExpand={(button) => {
-                    proofButtonRef.current = button;
-                    setExpandedId(proofMark.id);
+                    openerRef.current = button;
+                    setExpandedId(mark.id);
                   }}
                 />
-              )}
+              ))}
             </div>
 
             {expandedDetail && (
