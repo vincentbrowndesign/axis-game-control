@@ -83,6 +83,7 @@ export default function AxisPage() {
   const latestAssistant = messages[latestAssistantIndex];
   const latestBoard = latestAssistant?.threadBoard ?? null;
   const hasUserMessages = messages.some((message) => message.role === "user");
+  const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const threadStartedAt =
     activeThread?.createdAt ??
     messages.find((message) => message.role === "user")?.createdAt ??
@@ -405,12 +406,32 @@ export default function AxisPage() {
       <AxisContextDashboardShell
         activeContext={{
           contextSections: boardDerivatives.centerSections,
-          detail: latestBoard ? (
-            <details className="axis-full-board">
-              <summary>Full Thread Board</summary>
-              <ThreadBoard board={latestBoard} generatedAt={latestAssistant?.createdAt} />
-            </details>
-          ) : undefined,
+          detail: (
+            <>
+              {hasUserMessages && (
+                <section className="axis-active-exchange" aria-label="Latest exchange">
+                  {latestUserMessage && (
+                    <div>
+                      <span>Latest rough input</span>
+                      <p>{latestUserMessage.content}</p>
+                    </div>
+                  )}
+                  {latestAssistant?.content && (
+                    <div>
+                      <span>Axis reply</span>
+                      <p>{latestAssistant.content}</p>
+                    </div>
+                  )}
+                </section>
+              )}
+              {latestBoard && (
+                <details className="axis-full-board">
+                  <summary>Full Thread Board</summary>
+                  <ThreadBoard board={latestBoard} generatedAt={latestAssistant?.createdAt} />
+                </details>
+              )}
+            </>
+          ),
           label: latestBoard ? "Current Read" : "Conversation",
           mainText: hasUserMessages
             ? latestBoard?.title?.trim() || latestAssistant?.content || "Current thread"
@@ -437,6 +458,7 @@ export default function AxisPage() {
             }}
             onSubmit={() => void send()}
             onValueChange={setInput}
+            placeholder="Say the rough version…"
             value={input}
             controls={
               <button
@@ -618,23 +640,24 @@ export default function AxisPage() {
         body:has(.axis-room-active)
           main[aria-label="Axis live room"]
           #axis-context-active-title {
-          font-size: clamp(34px, 4.1vw, 58px);
-          line-height: 1.02;
-          max-width: 18ch;
+          font-size: clamp(26px, 2.8vw, 42px);
+          line-height: 1.04;
+          max-width: 22ch;
         }
 
         body:has(.axis-room-active)
           main[aria-label="Axis live room"]
           section[aria-labelledby="axis-context-active-title"] {
-          padding-top: clamp(18px, 2.4vh, 28px);
+          padding-top: clamp(14px, 1.8vh, 22px);
         }
 
         body:has(.axis-room-active)
           main[aria-label="Axis live room"]
           section[aria-labelledby="axis-context-active-title"]
           > p {
-          font-size: clamp(17px, 1.45vw, 22px);
-          line-height: 1.34;
+          font-size: clamp(16px, 1.2vw, 19px);
+          line-height: 1.3;
+          margin-top: 12px;
         }
 
         body:has(.axis-room-active)
@@ -643,6 +666,24 @@ export default function AxisPage() {
           section {
           background: rgba(255, 253, 247, 0.76);
           border-color: rgba(32, 29, 24, 0.16);
+        }
+
+        body:has(.axis-room-active)
+          main[aria-label="Axis live room"]
+          form[aria-label="Axis composer"] {
+          border-color: rgba(32, 29, 24, 0.42);
+          box-shadow: 0 16px 34px rgba(32, 29, 24, 0.17);
+        }
+
+        main[aria-label="Axis live room"] form[aria-label="Axis composer"]:focus-within {
+          border-color: #181510;
+          box-shadow:
+            0 0 0 3px rgba(32, 29, 24, 0.08),
+            0 18px 44px rgba(32, 29, 24, 0.18);
+        }
+
+        main[aria-label="Axis live room"] form[aria-label="Axis composer"] button[type="submit"]:not(:disabled):hover {
+          background: #342e25;
         }
 
         @media (max-width: 900px) {
@@ -663,8 +704,8 @@ export default function AxisPage() {
           body:has(.axis-room-active)
             main[aria-label="Axis live room"]
             #axis-context-active-title {
-            font-size: clamp(32px, 10vw, 52px);
-            max-width: 14ch;
+            font-size: clamp(28px, 8vw, 44px);
+            max-width: 16ch;
           }
 
           main[aria-label="Axis live room"] form[aria-label="Axis composer"] {
@@ -689,6 +730,37 @@ export default function AxisPage() {
           margin-top: 16px;
         }
 
+        .axis-active-exchange {
+          border-top: 1px solid rgba(32, 29, 24, 0.18);
+          display: grid;
+          gap: 10px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          margin-top: 18px;
+          padding-top: 14px;
+        }
+
+        .axis-active-exchange div {
+          min-width: 0;
+        }
+
+        .axis-active-exchange span {
+          color: rgba(32, 29, 24, 0.5);
+          display: block;
+          font-family: ui-sans-serif, system-ui, sans-serif;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .axis-active-exchange p {
+          color: rgba(24, 21, 16, 0.88);
+          font-size: clamp(15px, 1.15vw, 18px);
+          line-height: 1.32;
+          margin: 6px 0 0;
+          overflow-wrap: anywhere;
+        }
+
         .axis-full-board summary {
           color: color-mix(in srgb, var(--axis-ink) 48%, transparent);
           cursor: pointer;
@@ -710,6 +782,12 @@ export default function AxisPage() {
 
         .axis-live-error {
           color: rgba(110, 38, 28, 0.78);
+        }
+
+        @media (max-width: 700px) {
+          .axis-active-exchange {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </>
