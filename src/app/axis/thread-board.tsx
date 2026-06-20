@@ -542,8 +542,8 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
       <style jsx>{`
         .thread-board {
           display: grid;
-          gap: clamp(18px, 2.4vw, 34px);
-          grid-template-columns: minmax(240px, 0.78fr) minmax(300px, 1.22fr);
+          gap: clamp(16px, 2vw, 28px);
+          grid-template-columns: minmax(230px, 0.72fr) minmax(320px, 1.28fr);
           margin: 0;
           max-width: 1060px;
           min-height: min(560px, calc(100dvh - 180px));
@@ -555,28 +555,28 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
 
         .thread-board-anchor {
           align-self: start;
-          border-top: 4px solid color-mix(in srgb, var(--axis-line) 88%, transparent);
-          max-width: 34rem;
+          border-top: 3px solid color-mix(in srgb, var(--axis-line) 78%, transparent);
+          max-width: 32rem;
           min-width: 0;
-          padding-top: clamp(14px, 2vw, 24px);
+          padding-top: clamp(12px, 1.7vw, 20px);
         }
 
         .thread-board-title {
           color: color-mix(in srgb, var(--axis-ink) 96%, transparent);
-          font-size: clamp(40px, 5.6vw, 82px);
+          font-size: clamp(34px, 4.5vw, 64px);
           font-weight: 700;
-          line-height: 0.94;
-          margin: 0 0 16px;
+          line-height: 0.98;
+          margin: 0 0 12px;
           max-width: 100%;
           overflow-wrap: anywhere;
         }
 
         .thread-board-summary {
-          color: color-mix(in srgb, var(--axis-ink) 76%, transparent);
-          font-size: clamp(18px, 1.7vw, 24px);
-          line-height: 1.34;
+          color: color-mix(in srgb, var(--axis-ink) 82%, transparent);
+          font-size: clamp(17px, 1.45vw, 22px);
+          line-height: 1.33;
           margin: 0;
-          max-width: 38ch;
+          max-width: 42ch;
           overflow-wrap: anywhere;
         }
 
@@ -598,7 +598,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
           display: block;
           font-size: 12px;
           line-height: 1.2;
-          margin-top: 12px;
+          margin-top: 10px;
         }
 
         .thread-board-reset:hover {
@@ -607,8 +607,8 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
 
         .thread-board-sections {
           display: grid;
-          gap: clamp(12px, 1.4vw, 20px);
-          grid-auto-rows: minmax(92px, auto);
+          gap: clamp(9px, 1.1vw, 15px);
+          grid-auto-rows: minmax(82px, auto);
           grid-template-columns: repeat(2, minmax(0, 1fr));
           overflow: hidden;
           padding: 2px;
@@ -617,14 +617,15 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
 
         .thread-board-section {
           align-self: start;
-          background: color-mix(in srgb, var(--axis-section-paper) 82%, transparent);
-          border: 1px solid color-mix(in srgb, var(--axis-section-border) 86%, transparent);
-          border-radius: 6px;
-          box-shadow: 0 1px 0 color-mix(in srgb, var(--axis-line) 10%, transparent);
+          background: color-mix(in srgb, var(--axis-section-paper) 74%, transparent);
+          border: 1px solid color-mix(in srgb, var(--axis-section-border) 72%, transparent);
+          border-left: 2px solid color-mix(in srgb, var(--axis-section-accent) 34%, var(--axis-section-border));
+          border-radius: 5px;
+          box-shadow: none;
           color: var(--axis-section-text);
           min-width: min(240px, 100%);
           overflow-wrap: anywhere;
-          padding: clamp(13px, 1.3vw, 18px);
+          padding: clamp(11px, 1.05vw, 15px);
           position: relative;
           transition: box-shadow 0.12s ease;
           will-change: transform;
@@ -639,11 +640,11 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
         .thread-board-section::before {
           background: color-mix(in srgb, var(--axis-section-accent) 72%, transparent);
           content: "";
-          height: 3px;
+          height: 2px;
           left: clamp(12px, 1.35vw, 18px);
           position: absolute;
           right: clamp(12px, 1.35vw, 18px);
-          top: 9px;
+          top: 8px;
         }
 
         .thread-board-section::after {
@@ -651,10 +652,10 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
           border-radius: 999px;
           content: "";
           height: 6px;
-          opacity: 0.72;
+          opacity: 0.62;
           position: absolute;
           right: clamp(12px, 1.35vw, 18px);
-          top: 19px;
+          top: 16px;
           width: 6px;
         }
 
@@ -681,7 +682,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
         }
 
         .thread-board-section:nth-child(2n):not(.thread-board-section--priority-next) {
-          margin-top: clamp(18px, 4vw, 52px);
+          margin-top: clamp(10px, 2.2vw, 30px);
         }
 
         .thread-board-section:nth-child(3n):not(.thread-board-section--priority-next) {
@@ -700,8 +701,8 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
         }
 
         .thread-board-label {
-          margin: 0 0 10px;
-          padding-top: 10px;
+          margin: 0 0 8px;
+          padding-top: 8px;
         }
 
         .thread-board-handle {
@@ -711,9 +712,9 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
           cursor: grab;
           display: block;
           font-family: inherit;
-          font-size: 12.5px;
+          font-size: 12px;
           font-weight: 800;
-          letter-spacing: 0.07em;
+          letter-spacing: 0.06em;
           margin: 0;
           padding: 0;
           text-align: left;

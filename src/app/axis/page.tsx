@@ -529,7 +529,7 @@ export default function AxisPage() {
           border-radius: 0;
           box-shadow: none;
           min-height: 100dvh;
-          padding-bottom: max(108px, calc(env(safe-area-inset-bottom) + 96px));
+          padding-bottom: max(96px, calc(env(safe-area-inset-bottom) + 86px));
         }
 
         main[aria-label="Axis live room"] header {
@@ -563,7 +563,7 @@ export default function AxisPage() {
         }
 
         main[aria-label="Axis live room"] > div > section[aria-label="Context dashboard"] {
-          grid-template-columns: minmax(8.5rem, 0.4fr) minmax(32rem, 1.85fr) minmax(14rem, 0.75fr);
+          grid-template-columns: minmax(7.5rem, 0.32fr) minmax(34rem, 1.95fr) minmax(13rem, 0.66fr);
           min-height: 0;
         }
 
@@ -585,7 +585,7 @@ export default function AxisPage() {
         }
 
         main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] {
-          padding-top: clamp(24px, 4vh, 44px);
+          padding: clamp(22px, 3.2vh, 38px) clamp(28px, 4.2vw, 62px) 24px;
         }
 
         main[aria-label="Axis live room"] #axis-context-active-title {
@@ -596,9 +596,41 @@ export default function AxisPage() {
         }
 
         main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > p {
-          color: rgba(32, 29, 24, 0.72);
-          font-size: clamp(19px, 1.9vw, 27px);
-          max-width: 48ch;
+          color: rgba(32, 29, 24, 0.78);
+          font-size: clamp(18px, 1.55vw, 24px);
+          line-height: 1.32;
+          max-width: 50ch;
+        }
+
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > div {
+          margin-top: 14px;
+        }
+
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > div > section {
+          background: rgba(255, 253, 247, 0.52);
+          border-color: rgba(32, 29, 24, 0.13);
+          border-left: 2px solid rgba(126, 86, 45, 0.32);
+          border-radius: 8px;
+          min-height: 0;
+          padding: 12px 14px;
+        }
+
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > div > section h2 {
+          color: rgba(32, 29, 24, 0.54);
+          font-size: 10px;
+          letter-spacing: 0.1em;
+        }
+
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > div > section p,
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > div > section ul {
+          color: rgba(24, 21, 16, 0.82);
+          font-size: clamp(14px, 1.08vw, 16px);
+          line-height: 1.32;
+          margin-top: 7px;
+        }
+
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > div > section li + li {
+          margin-top: 4px;
         }
 
         main[aria-label="Axis live room"] form[aria-label="Axis composer"] {
@@ -722,32 +754,33 @@ export default function AxisPage() {
         body:has(.axis-room-active)
           main[aria-label="Axis live room"]
           #axis-context-active-title {
-          font-size: clamp(26px, 2.8vw, 42px);
-          line-height: 1.04;
-          max-width: 22ch;
+          font-size: clamp(32px, 3.3vw, 50px);
+          line-height: 1.02;
+          max-width: 20ch;
         }
 
         body:has(.axis-room-active)
           main[aria-label="Axis live room"]
           section[aria-labelledby="axis-context-active-title"] {
-          padding-top: clamp(14px, 1.8vh, 22px);
+          padding-top: clamp(16px, 2vh, 26px);
         }
 
         body:has(.axis-room-active)
           main[aria-label="Axis live room"]
           section[aria-labelledby="axis-context-active-title"]
           > p {
-          font-size: clamp(16px, 1.2vw, 19px);
-          line-height: 1.3;
-          margin-top: 12px;
+          color: rgba(24, 21, 16, 0.8);
+          font-size: clamp(16px, 1.28vw, 20px);
+          line-height: 1.32;
+          margin-top: 10px;
         }
 
         body:has(.axis-room-active)
           main[aria-label="Axis live room"]
           section[aria-labelledby="axis-context-active-title"]
           section {
-          background: rgba(255, 253, 247, 0.76);
-          border-color: rgba(32, 29, 24, 0.16);
+          background: rgba(255, 253, 247, 0.54);
+          border-color: rgba(32, 29, 24, 0.14);
         }
 
         body:has(.axis-room-active)
@@ -770,7 +803,7 @@ export default function AxisPage() {
 
         @media (max-width: 900px) {
           main[aria-label="Axis live room"] > div {
-            padding-bottom: max(116px, calc(env(safe-area-inset-bottom) + 104px));
+            padding-bottom: max(108px, calc(env(safe-area-inset-bottom) + 96px));
           }
 
           main[aria-label="Axis live room"] > div > section[aria-label="Context dashboard"] {
@@ -809,37 +842,45 @@ export default function AxisPage() {
         }
 
         .axis-full-board {
-          margin-top: 16px;
+          margin-top: 12px;
         }
 
         .axis-active-exchange {
-          border-top: 1px solid rgba(32, 29, 24, 0.18);
+          border-bottom: 1px solid rgba(32, 29, 24, 0.12);
+          border-top: 1px solid rgba(32, 29, 24, 0.16);
           display: grid;
-          gap: 10px;
+          gap: 0;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          margin-top: 18px;
-          padding-top: 14px;
+          margin-top: 14px;
+          padding: 10px 0;
         }
 
         .axis-active-exchange div {
           min-width: 0;
+          padding-right: 14px;
+        }
+
+        .axis-active-exchange div + div {
+          border-left: 1px solid rgba(32, 29, 24, 0.12);
+          padding-left: 14px;
+          padding-right: 0;
         }
 
         .axis-active-exchange span {
-          color: rgba(32, 29, 24, 0.5);
+          color: rgba(32, 29, 24, 0.56);
           display: block;
           font-family: ui-sans-serif, system-ui, sans-serif;
-          font-size: 10px;
+          font-size: 9.5px;
           font-weight: 700;
           letter-spacing: 0.08em;
           text-transform: uppercase;
         }
 
         .axis-active-exchange p {
-          color: rgba(24, 21, 16, 0.88);
-          font-size: clamp(15px, 1.15vw, 18px);
-          line-height: 1.32;
-          margin: 6px 0 0;
+          color: rgba(24, 21, 16, 0.84);
+          font-size: clamp(14px, 1.05vw, 16px);
+          line-height: 1.28;
+          margin: 5px 0 0;
           overflow-wrap: anywhere;
         }
 
@@ -904,7 +945,19 @@ export default function AxisPage() {
 
         @media (max-width: 700px) {
           .axis-active-exchange {
+            gap: 8px;
             grid-template-columns: 1fr;
+          }
+
+          .axis-active-exchange div {
+            padding-right: 0;
+          }
+
+          .axis-active-exchange div + div {
+            border-left: 0;
+            border-top: 1px solid rgba(32, 29, 24, 0.1);
+            padding-left: 0;
+            padding-top: 8px;
           }
         }
       `}</style>
