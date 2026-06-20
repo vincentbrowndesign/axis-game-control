@@ -446,18 +446,21 @@ export default function AxisAuthControl({ auth }: Props) {
 
           .axis-auth summary {
             align-items: center;
-            border: 1px solid color-mix(in srgb, var(--axis-line) 14%, transparent);
+            background: color-mix(in srgb, var(--axis-paper) 82%, white);
+            border: 1px solid color-mix(in srgb, var(--axis-line) 20%, transparent);
             border-radius: 999px;
             color: color-mix(in srgb, var(--axis-ink) 72%, transparent);
             display: inline-flex;
-            min-height: 32px;
-            padding: 0 10px;
+            font-size: 13px;
+            min-height: 42px;
+            padding: 0 14px;
           }
 
           .axis-auth-popover {
+            background: color-mix(in srgb, var(--axis-paper) 96%, white);
             border: 0;
             bottom: 0;
-            box-shadow: 0 -18px 48px color-mix(in srgb, var(--axis-line) 18%, transparent);
+            box-shadow: none;
             display: flex;
             flex-direction: column;
             height: 100dvh;
@@ -465,64 +468,78 @@ export default function AxisAuthControl({ auth }: Props) {
             margin: 0;
             max-height: none;
             min-width: 0;
+            overflow-x: hidden;
             overflow-y: auto;
             overscroll-behavior: contain;
             padding:
-              max(18px, env(safe-area-inset-top))
-              max(16px, env(safe-area-inset-right))
-              max(24px, env(safe-area-inset-bottom))
-              max(16px, env(safe-area-inset-left));
+              max(24px, calc(env(safe-area-inset-top) + 18px))
+              max(18px, calc(env(safe-area-inset-right) + 16px))
+              max(32px, calc(env(safe-area-inset-bottom) + 24px))
+              max(18px, calc(env(safe-area-inset-left) + 16px));
             position: fixed;
             right: auto;
             top: 0;
             width: 100vw;
-            z-index: 80;
+            z-index: 1000;
           }
 
           .axis-auth-sheet-header {
-            gap: 14px;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 22px;
+            padding-bottom: 16px;
           }
 
           .axis-auth-sheet-header h2 {
-            font-size: clamp(22px, 6vw, 30px);
-            max-width: 12ch;
+            font-size: clamp(28px, 8vw, 38px);
+            line-height: 1;
+            max-width: 11ch;
           }
 
           .axis-auth-sheet-header button {
+            border-bottom-color: color-mix(in srgb, var(--axis-line) 32%, transparent);
             flex-shrink: 0;
+            font-size: 12px;
+            line-height: 1.2;
             max-width: 13ch;
             text-align: right;
           }
 
           .axis-auth-form,
           .axis-auth-signed-in {
-            gap: 14px;
+            gap: 18px;
           }
 
           .axis-auth-form label {
-            font-size: 12px;
-            gap: 7px;
+            font-size: 13px;
+            gap: 9px;
           }
 
           .axis-auth-form input {
             border-radius: 10px;
             font-size: 16px;
-            min-height: 48px;
-            padding: 12px;
+            min-height: 54px;
+            padding: 14px;
           }
 
           .axis-auth-actions {
             align-items: stretch;
             flex-direction: column;
-            gap: 10px;
-            margin-top: 4px;
+            gap: 12px;
+            margin-top: 8px;
           }
 
           .axis-auth-actions button {
             border: 1px solid color-mix(in srgb, var(--axis-line) 18%, transparent);
             border-radius: 10px;
-            min-height: 46px;
-            padding: 0 12px;
+            font-size: 14px;
+            min-height: 52px;
+            padding: 0 14px;
+          }
+
+          .axis-auth-note,
+          .axis-auth-error {
+            font-size: 13px;
           }
         }
       `}</style>
