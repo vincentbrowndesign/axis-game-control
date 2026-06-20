@@ -63,6 +63,7 @@ function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewStat
     axisLabThread.proofMark,
     axisLabThread.nextMoveMark,
     axisLabThread.recentSourceMark,
+    axisLabThread.openLoopMark,
   ].filter((mark): mark is AxisLabMark => Boolean(mark));
   const expandedMark = marks.find((mark) => mark.id === expandedId) ?? null;
   const expandedDetail = expandedMark?.detail ?? null;
@@ -115,25 +116,26 @@ function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewStat
 
             <div className={styles.markLayer} aria-label="Context surface marks">
               {marks.map((mark) => (
-                <AxisLabMarkView
-                  key={mark.id}
-                  mark={mark}
-                  expanded={expandedId === mark.id}
-                  onExpand={(button) => {
-                    openerRef.current = button;
-                    setExpandedId(mark.id);
-                  }}
-                />
+                <div className={styles.markSlot} key={mark.id}>
+                  <AxisLabMarkView
+                    mark={mark}
+                    expanded={expandedId === mark.id}
+                    onExpand={(button) => {
+                      openerRef.current = button;
+                      setExpandedId(mark.id);
+                    }}
+                  />
+                  {expandedId === mark.id && expandedDetail && (
+                    <AxisLabDetailView
+                      detail={expandedDetail}
+                      mark={mark}
+                      onClose={closeDetail}
+                      surfaceRef={detailRef}
+                    />
+                  )}
+                </div>
               ))}
             </div>
-
-            {expandedDetail && (
-              <AxisLabDetailView
-                detail={expandedDetail}
-                onClose={closeDetail}
-                surfaceRef={detailRef}
-              />
-            )}
 
             {localThoughts.length > 0 && (
               <div className={styles.localThoughts} aria-label="Local preview additions">
@@ -191,21 +193,66 @@ function AxisLabMarkView({
 
 const AxisLabDetailView = ({
   detail,
+  mark,
   onClose,
   surfaceRef,
 }: {
   detail: AxisLabDetail;
+  mark: AxisLabMark;
   onClose: () => void;
   surfaceRef: RefObject<HTMLDivElement | null>;
 }) => (
-  <div className={styles.detailWrap}>
-    <div className={styles.detailSurface} role="dialog" aria-label={detail.title} ref={surfaceRef}>
+  <div className={`${styles.detailWrap} ${styles[`detail-${mark.accent}`]}`}>
+    <div
+      className={`${styles.detailSurface} ${styles[`detail-${mark.accent}`]}`}
+      role="dialog"
+      aria-label={detail.title}
+      ref={surfaceRef}
+    >
       <button className={styles.detailClose} type="button" onClick={onClose} aria-label="Close detail">
         Close
       </button>
       <p className={styles.detailKicker}>{detail.title}</p>
-      {detail.source && <p>{detail.source}</p>}
-      {detail.confidence && <p>{detail.confidence}</p>}
+      {detail.sourceDetail && (
+        <div className={styles.sourceStrip} aria-label="Mock source preview">
+          <div className={styles.sourceThumbnail} aria-hidden="true">
+            <span>{detail.sourceDetail.thumbnailLabel}</span>
+          </div>
+          <dl className={styles.sourceFacts}>
+            <div>
+              <dt>Source kind</dt>
+              <dd>{detail.sourceDetail.kind}</dd>
+            </div>
+            <div>
+              <dt>Range</dt>
+              <dd>{detail.sourceDetail.range}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{detail.sourceDetail.status}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+      {detail.source && (
+        <div className={styles.detailSource}>
+          <span>Source reference</span>
+          <p>{detail.source}</p>
+        </div>
+      )}
+      {detail.suggestion && (
+        <div className={styles.detailSuggestion}>
+          <span>{detail.suggestion.status}</span>
+          {detail.suggestion.confidence && <p>{detail.suggestion.confidence}</p>}
+        </div>
+      )}
+      {detail.openLoops && detail.openLoops.length > 0 && (
+        <ol className={styles.openLoopList}>
+          {detail.openLoops.map((loop) => (
+            <li key={loop}>{loop}</li>
+          ))}
+        </ol>
+      )}
       {detail.relatedNotes && detail.relatedNotes.length > 0 && (
         <ul>
           {detail.relatedNotes.map((note) => (

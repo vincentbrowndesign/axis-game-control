@@ -17,8 +17,11 @@ export const axisLabThread: AxisLabThread = {
     text: "Did the next possession speed up?",
     detail: {
       title: "Proof needed",
-      source: "Suggested interpretation · Needs confirmation",
-      confidence: "The source may support the context, but it has not been verified.",
+      source: "Possession after first turnover",
+      suggestion: {
+        status: "Suggested interpretation · Needs confirmation",
+        confidence: "Medium preview confidence. The pattern still needs a clean source check.",
+      },
       relatedNotes: [
         "Compare the possession after the first miss or turnover.",
         "Keep raw source separate from the interpretation.",
@@ -47,12 +50,36 @@ export const axisLabThread: AxisLabThread = {
     text: "Mock source · Preview only · No interpretation yet",
     detail: {
       title: "Recent reality",
-      source: "Mock source · Preview only · No interpretation yet",
-      confidence: "Raw source label only.",
+      sourceDetail: {
+        kind: "clip",
+        range: "Q1 · 5:42-5:55",
+        status: "Mock source · Preview only · No interpretation yet",
+        thumbnailLabel: "Mock clip thumbnail",
+      },
       relatedNotes: [
-        "This is not evidence.",
-        "This is not a verified claim.",
+        "Raw source is separate from the active context.",
+        "No interpretation has been attached yet.",
       ],
+      action: "Open only long enough to decide whether it supports the current read.",
+    },
+  },
+  openLoopMark: {
+    accent: "loop",
+    id: "open-loop",
+    label: "Open loop",
+    text: "First six still needs one huddle rule.",
+    detail: {
+      title: "Open loop",
+      openLoops: [
+        "Pick the one rule that survives noise.",
+        "Decide whether the first miss or first turnover is the better trigger.",
+        "Watch if the next possession slows down.",
+      ],
+      relatedNotes: [
+        "Only the top loop stays visible while collapsed.",
+        "This is a temporary preview list, not a permanent tracker.",
+      ],
+      action: "Close the loop by naming one rule before tip.",
     },
   },
 };

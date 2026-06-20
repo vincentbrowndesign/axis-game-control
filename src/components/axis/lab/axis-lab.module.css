@@ -133,6 +133,10 @@
   margin-top: 24px;
 }
 
+.markSlot {
+  position: relative;
+}
+
 .mark {
   --mark-accent: var(--lab-context);
   align-items: flex-start;
@@ -175,6 +179,10 @@
   --mark-accent: var(--lab-context);
 }
 
+.mark-loop {
+  --mark-accent: var(--lab-action);
+}
+
 .markAccent {
   background: var(--mark-accent);
   border-radius: 999px;
@@ -200,12 +208,14 @@
 
 .detailWrap {
   margin-top: 18px;
+  position: relative;
 }
 
 .detailSurface {
+  --detail-accent: var(--lab-proof);
   background: color-mix(in srgb, var(--lab-paper) 94%, transparent);
   border: 0;
-  border-left: 2px solid var(--lab-proof);
+  border-left: 2px solid var(--detail-accent);
   border-radius: 4px;
   box-shadow: 0 14px 34px color-mix(in srgb, var(--lab-line) 7%, transparent);
   color: color-mix(in srgb, var(--lab-ink) 72%, transparent);
@@ -213,6 +223,20 @@
   line-height: 1.45;
   padding: 15px 16px 14px;
   position: relative;
+}
+
+.detail-proof {
+  --detail-accent: var(--lab-proof);
+}
+
+.detail-action,
+.detail-loop {
+  --detail-accent: var(--lab-action);
+}
+
+.detail-context,
+.detail-source {
+  --detail-accent: var(--lab-context);
 }
 
 .detailKicker {
@@ -227,10 +251,91 @@
   margin: 0 0 10px;
 }
 
+.detailSource,
+.detailSuggestion {
+  border-top: 1px solid color-mix(in srgb, var(--lab-line) 9%, transparent);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.detailSource span,
+.detailSuggestion span {
+  color: color-mix(in srgb, var(--lab-ink) 42%, transparent);
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.detailSuggestion {
+  border-left: 1px solid color-mix(in srgb, var(--detail-accent) 38%, transparent);
+  padding-left: 10px;
+}
+
 .detailSurface ul {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+
+.sourceStrip {
+  border-bottom: 1px solid color-mix(in srgb, var(--lab-line) 9%, transparent);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 88px minmax(0, 1fr);
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+
+.sourceThumbnail {
+  align-items: center;
+  aspect-ratio: 4 / 3;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--lab-line) 8%, transparent), transparent 52%),
+    color-mix(in srgb, var(--lab-paper) 82%, var(--lab-room));
+  border: 1px solid color-mix(in srgb, var(--lab-line) 11%, transparent);
+  color: color-mix(in srgb, var(--lab-ink) 38%, transparent);
+  display: flex;
+  font-size: 10px;
+  justify-content: center;
+  line-height: 1.15;
+  padding: 8px;
+  text-align: center;
+}
+
+.sourceFacts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.sourceFacts div {
+  display: grid;
+  gap: 2px;
+}
+
+.sourceFacts dt {
+  color: color-mix(in srgb, var(--lab-ink) 38%, transparent);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.sourceFacts dd {
+  color: color-mix(in srgb, var(--lab-ink) 72%, transparent);
+  font-size: 12px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.openLoopList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   margin: 0 0 12px;
   padding-left: 18px;
 }
@@ -381,22 +486,19 @@
   }
 
   .detailWrap {
-    left: calc(100% + 20px);
-    margin-top: 0;
-    position: absolute;
-    top: 168px;
-    width: min(286px, calc((100vw - 700px) / 2));
+    margin-top: 12px;
+    width: min(286px, calc((100vw - 740px) / 2));
     z-index: 3;
   }
 
   .detailWrap::before {
-    background: color-mix(in srgb, var(--lab-proof) 42%, transparent);
+    background: color-mix(in srgb, var(--detail-accent) 42%, transparent);
     content: "";
     height: 1px;
-    left: -20px;
+    left: -18px;
     position: absolute;
     top: 16px;
-    width: 14px;
+    width: 12px;
   }
 }
 
@@ -419,6 +521,14 @@
 
   .mark {
     max-width: none;
+  }
+
+  .detailWrap {
+    margin: 12px 0 4px 29px;
+  }
+
+  .sourceStrip {
+    grid-template-columns: 76px minmax(0, 1fr);
   }
 
   .composer {
