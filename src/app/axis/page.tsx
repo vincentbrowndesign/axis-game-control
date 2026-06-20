@@ -498,7 +498,10 @@ export default function AxisPage() {
 
       {loading && (
         <div className="axis-live-status" aria-live="polite">
-          Axis is shaping the thread...
+          <span>Axis is shaping the thread...</span>
+          <i aria-hidden="true" />
+          <i aria-hidden="true" />
+          <i aria-hidden="true" />
         </div>
       )}
       {error && (
@@ -532,7 +535,7 @@ export default function AxisPage() {
         main[aria-label="Axis live room"] header {
           background: color-mix(in srgb, #f7f3ea 92%, white);
           border-bottom: 1px solid rgba(45, 39, 30, 0.14);
-          padding: 12px clamp(14px, 2vw, 24px);
+          padding: 10px clamp(12px, 1.8vw, 22px);
           position: sticky;
           top: 0;
           z-index: 8;
@@ -555,7 +558,8 @@ export default function AxisPage() {
         }
 
         main[aria-label="Axis live room"] header > div:last-child {
-          gap: 12px;
+          align-items: center;
+          gap: 10px;
         }
 
         main[aria-label="Axis live room"] > div > section[aria-label="Context dashboard"] {
@@ -770,18 +774,54 @@ export default function AxisPage() {
 
         .axis-live-status,
         .axis-live-error {
-          bottom: max(76px, calc(env(safe-area-inset-bottom) + 64px));
+          align-items: center;
+          background: rgba(255, 253, 247, 0.86);
+          border: 1px solid rgba(32, 29, 24, 0.12);
+          border-radius: 999px;
+          bottom: max(82px, calc(env(safe-area-inset-bottom) + 70px));
+          box-shadow: 0 8px 20px rgba(32, 29, 24, 0.08);
           color: color-mix(in srgb, var(--axis-ink) 48%, transparent);
+          display: inline-flex;
           font-size: 12px;
+          gap: 5px;
           left: 50%;
+          padding: 7px 11px;
           pointer-events: none;
           position: fixed;
           transform: translateX(-50%);
           z-index: 12;
         }
 
+        .axis-live-status i {
+          animation: axis-dot-pulse 1s ease-in-out infinite;
+          background: rgba(32, 29, 24, 0.42);
+          border-radius: 999px;
+          display: block;
+          height: 4px;
+          width: 4px;
+        }
+
+        .axis-live-status i:nth-of-type(2) {
+          animation-delay: 0.14s;
+        }
+
+        .axis-live-status i:nth-of-type(3) {
+          animation-delay: 0.28s;
+        }
+
         .axis-live-error {
           color: rgba(110, 38, 28, 0.78);
+        }
+
+        @keyframes axis-dot-pulse {
+          0%,
+          80%,
+          100% {
+            opacity: 0.24;
+          }
+          40% {
+            opacity: 1;
+          }
         }
 
         @media (max-width: 700px) {

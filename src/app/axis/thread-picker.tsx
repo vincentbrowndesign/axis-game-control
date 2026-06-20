@@ -45,7 +45,7 @@ export default function ThreadPicker({
   const canSave = Boolean(actionLabel) && !saveDisabled;
 
   return (
-    <div className="thread-continuity">
+    <div className={`thread-continuity thread-continuity--${saveState}`}>
       <details className="thread-picker">
         <summary>
           <span>Threads</span>
@@ -112,15 +112,15 @@ export default function ThreadPicker({
       <style jsx>{`
         .thread-continuity {
           align-items: baseline;
-          color: color-mix(in srgb, var(--axis-ink) 38%, transparent);
+          color: color-mix(in srgb, var(--axis-ink) 56%, transparent);
           display: flex;
           flex-shrink: 0;
-          gap: 8px;
+          gap: 7px;
           min-width: 0;
         }
 
         .thread-picker {
-          font-size: 11px;
+          font-size: 12px;
           position: relative;
           z-index: 4;
         }
@@ -131,6 +131,7 @@ export default function ThreadPicker({
           display: flex;
           gap: 8px;
           list-style: none;
+          padding: 2px 0;
           user-select: none;
         }
 
@@ -139,19 +140,29 @@ export default function ThreadPicker({
         }
 
         .save-status {
-          color: color-mix(in srgb, var(--axis-ink) 28%, transparent);
-          font-size: 10px;
+          color: color-mix(in srgb, var(--axis-ink) 48%, transparent);
+          font-family: ui-sans-serif, system-ui, sans-serif;
+          font-size: 11px;
+          line-height: 1.1;
           white-space: nowrap;
+        }
+
+        .thread-continuity--error .save-status,
+        .thread-continuity--unsaved_changes .save-status,
+        .thread-continuity--not_saved .save-status {
+          color: color-mix(in srgb, var(--axis-ink) 66%, transparent);
         }
 
         .save-action {
           background: transparent;
           border: 0;
-          border-bottom: 1px solid color-mix(in srgb, var(--axis-line) 24%, transparent);
-          color: color-mix(in srgb, var(--axis-ink) 42%, transparent);
+          border-bottom: 1px solid color-mix(in srgb, var(--axis-line) 34%, transparent);
+          color: color-mix(in srgb, var(--axis-ink) 62%, transparent);
           cursor: pointer;
           font: inherit;
-          font-size: 10px;
+          font-family: ui-sans-serif, system-ui, sans-serif;
+          font-size: 11px;
+          font-weight: 650;
           padding: 0 0 1px;
           white-space: nowrap;
         }

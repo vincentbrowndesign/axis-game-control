@@ -279,14 +279,16 @@ export default function AxisAuthControl({ auth }: Props) {
       <style jsx>{`
         .axis-auth {
           flex-shrink: 0;
-          font-size: 11px;
+          font-size: 12px;
           position: relative;
           z-index: 6;
         }
 
         .axis-auth summary {
-          color: color-mix(in srgb, var(--axis-ink) 38%, transparent);
+          color: color-mix(in srgb, var(--axis-ink) 56%, transparent);
           cursor: pointer;
+          font-family: ui-sans-serif, system-ui, sans-serif;
+          line-height: 1.1;
           list-style: none;
           max-width: 18ch;
           overflow: hidden;
