@@ -45,6 +45,7 @@ interface BoardSectionObject {
   sectionType: ThreadBoardSectionType;
   label: string;
   items: string[];
+  priority?: SectionPriority;
   position: {
     x: number;
     y: number;
@@ -73,6 +74,19 @@ interface BoardRuntimeState {
 }
 
 type BoardInteractionMode = "none" | "reorder" | "spatial";
+type SectionPriority = "primary" | "next" | "secondary" | "quiet";
+
+const PRIMARY_LABELS = new Set(["GAMEPLAN", "TIMEOUT CALL", "PLAYER RULE", "CORE RULE", "INSTALL", "PLAY"]);
+const NEXT_LABELS = new Set(["NEXT MOVE", "OUTCOME NEXT MOVE", "ACTION", "WATCH NEXT", "NEED NEXT"]);
+const QUIET_LABELS = new Set([
+  "OBSERVATION",
+  "QUESTION",
+  "HYPOTHESIS",
+  "ASSUMED",
+  "KNOWN",
+  "PATTERN",
+  "RELATIONSHIP",
+]);
 
 function sectionToken(value: string) {
   return value
@@ -85,6 +99,25 @@ function sectionToken(value: string) {
 
 function sectionObjectId(section: Pick<ThreadBoardSection, "type" | "label">) {
   return `${sectionToken(section.type)}-${sectionToken(section.label)}`;
+}
+
+function normalizeSectionLabel(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/&/g, "AND")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveSectionPriority(label: string, type: ThreadBoardSectionType): SectionPriority {
+  const normalized = normalizeSectionLabel(label);
+
+  if (NEXT_LABELS.has(normalized) || type === "outcome") return "next";
+  if (PRIMARY_LABELS.has(normalized) || type === "intervention") return "primary";
+  if (QUIET_LABELS.has(normalized) || type === "question" || type === "hypothesis") return "quiet";
+  return "secondary";
 }
 
 function clampDelta(delta: number, min: number, max: number) {
@@ -176,6 +209,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
             label: section.label,
             items: section.items,
             position: runtime?.position ?? { x: 0, y: 0 },
+            priority: resolveSectionPriority(section.label, section.type),
             status: resolveAxisSectionStatus(section.label),
             createdAt: generatedAt ?? undefined,
             updatedAt: runtime?.updatedAt ?? 0,
@@ -198,6 +232,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
         label: object.label,
         items: object.items,
         position: object.position,
+        priority: object.priority,
         status: object.status,
         createdAt: object.createdAt,
         updatedAt: object.updatedAt,
@@ -452,7 +487,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
             return (
               <section
                 key={`${object.id}-${index}`}
-                className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken}${activeObjectId === object.id ? " thread-board-section--active" : ""}`}
+                className={`thread-board-section thread-board-section--${typeToken} thread-board-section--${labelToken} thread-board-section--priority-${object.priority ?? "secondary"}${activeObjectId === object.id ? " thread-board-section--active" : ""}`}
                 style={{
                   transform: interactionMode === "spatial"
                     ? `translate3d(${object.position.x}px, ${object.position.y}px, 0)`
@@ -496,11 +531,11 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
       <style jsx>{`
         .thread-board {
           display: grid;
-          gap: clamp(22px, 3vw, 42px);
-          grid-template-columns: minmax(0, 0.92fr) minmax(260px, 1.08fr);
+          gap: clamp(18px, 2.4vw, 34px);
+          grid-template-columns: minmax(240px, 0.78fr) minmax(300px, 1.22fr);
           margin: 0;
-          max-width: 980px;
-          min-height: min(640px, calc(100dvh - 180px));
+          max-width: 1060px;
+          min-height: min(560px, calc(100dvh - 180px));
           min-width: 0;
           overflow-x: clip;
           padding: 0;
@@ -509,26 +544,26 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
 
         .thread-board-anchor {
           align-self: start;
-          border-top: 2px solid color-mix(in srgb, var(--axis-line) 78%, transparent);
+          border-top: 4px solid color-mix(in srgb, var(--axis-line) 88%, transparent);
           max-width: 34rem;
           min-width: 0;
           padding-top: clamp(14px, 2vw, 24px);
         }
 
         .thread-board-title {
-          color: color-mix(in srgb, var(--axis-ink) 86%, transparent);
-          font-size: clamp(34px, 5.2vw, 72px);
-          font-weight: 600;
-          line-height: 0.98;
-          margin: 0 0 14px;
+          color: color-mix(in srgb, var(--axis-ink) 96%, transparent);
+          font-size: clamp(40px, 5.6vw, 82px);
+          font-weight: 700;
+          line-height: 0.94;
+          margin: 0 0 16px;
           max-width: 100%;
           overflow-wrap: anywhere;
         }
 
         .thread-board-summary {
-          color: color-mix(in srgb, var(--axis-ink) 62%, transparent);
-          font-size: clamp(17px, 1.55vw, 22px);
-          line-height: 1.42;
+          color: color-mix(in srgb, var(--axis-ink) 76%, transparent);
+          font-size: clamp(18px, 1.7vw, 24px);
+          line-height: 1.34;
           margin: 0;
           max-width: 38ch;
           overflow-wrap: anywhere;
@@ -548,7 +583,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
         }
 
         .thread-board-time {
-          color: color-mix(in srgb, var(--axis-ink) 34%, transparent);
+          color: color-mix(in srgb, var(--axis-ink) 46%, transparent);
           display: block;
           font-size: 12px;
           line-height: 1.2;
@@ -561,8 +596,8 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
 
         .thread-board-sections {
           display: grid;
-          gap: clamp(16px, 2vw, 28px);
-          grid-auto-rows: minmax(110px, auto);
+          gap: clamp(12px, 1.4vw, 20px);
+          grid-auto-rows: minmax(92px, auto);
           grid-template-columns: repeat(2, minmax(0, 1fr));
           overflow: hidden;
           padding: 2px;
@@ -572,13 +607,13 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
         .thread-board-section {
           align-self: start;
           background: color-mix(in srgb, var(--axis-section-paper) 82%, transparent);
-          border: 1px solid color-mix(in srgb, var(--axis-section-border) 72%, transparent);
-          border-radius: 2px;
-          box-shadow: 0 1px 0 color-mix(in srgb, var(--axis-line) 6%, transparent);
+          border: 1px solid color-mix(in srgb, var(--axis-section-border) 86%, transparent);
+          border-radius: 6px;
+          box-shadow: 0 1px 0 color-mix(in srgb, var(--axis-line) 10%, transparent);
           color: var(--axis-section-text);
           min-width: min(240px, 100%);
           overflow-wrap: anywhere;
-          padding: clamp(12px, 1.35vw, 18px);
+          padding: clamp(13px, 1.3vw, 18px);
           position: relative;
           transition: box-shadow 0.12s ease;
           will-change: transform;
@@ -612,11 +647,33 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
           width: 6px;
         }
 
-        .thread-board-section:nth-child(2n) {
+        .thread-board-section--priority-next {
+          border-color: color-mix(in srgb, var(--axis-section-accent) 44%, var(--axis-line));
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--axis-section-accent) 16%, transparent),
+            0 8px 22px color-mix(in srgb, var(--axis-line) 10%, transparent);
+          grid-column: span 2;
+        }
+
+        .thread-board-section--priority-next::before {
+          height: 5px;
+        }
+
+        .thread-board-section--priority-primary {
+          border-color: color-mix(in srgb, var(--axis-section-accent) 28%, var(--axis-line));
+        }
+
+        .thread-board-section--priority-quiet {
+          background: color-mix(in srgb, var(--axis-section-paper) 62%, transparent);
+          border-style: dashed;
+          opacity: 0.88;
+        }
+
+        .thread-board-section:nth-child(2n):not(.thread-board-section--priority-next) {
           margin-top: clamp(18px, 4vw, 52px);
         }
 
-        .thread-board-section:nth-child(3n) {
+        .thread-board-section:nth-child(3n):not(.thread-board-section--priority-next) {
           grid-column: span 2;
           max-width: 82%;
         }
@@ -643,9 +700,9 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
           cursor: grab;
           display: block;
           font-family: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          letter-spacing: 0.05em;
+          font-size: 12.5px;
+          font-weight: 800;
+          letter-spacing: 0.07em;
           margin: 0;
           padding: 0;
           text-align: left;
@@ -664,15 +721,15 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
         }
 
         .thread-board-items {
-          color: color-mix(in srgb, var(--axis-section-text) 78%, transparent);
-          font-size: clamp(15px, 1.25vw, 18px);
-          line-height: 1.38;
+          color: color-mix(in srgb, var(--axis-section-text) 86%, transparent);
+          font-size: clamp(16px, 1.35vw, 19px);
+          line-height: 1.34;
           margin: 0;
           padding-left: 18px;
         }
 
         .thread-board-items li + li {
-          margin-top: 8px;
+          margin-top: 6px;
         }
 
         .thread-board[data-interaction-mode="reorder"] .thread-board-sections {
@@ -718,7 +775,8 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
 
           .thread-board-section,
           .thread-board-section:nth-child(2n),
-          .thread-board-section:nth-child(3n) {
+          .thread-board-section:nth-child(3n),
+          .thread-board-section--priority-next {
             grid-column: auto;
             margin-top: 0;
             max-width: none;
@@ -733,19 +791,19 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
           }
 
           .thread-board-title {
-            font-size: 18px;
+            font-size: 22px;
             line-height: 1.03;
-            margin-bottom: 3px;
+            margin-bottom: 5px;
           }
 
           .thread-board-summary {
-            font-size: 12px;
-            line-height: 1.26;
+            font-size: 13px;
+            line-height: 1.28;
           }
 
           .thread-board-items {
-            font-size: 12.5px;
-            line-height: 1.26;
+            font-size: 13.5px;
+            line-height: 1.28;
           }
 
           .thread-board-sections {
@@ -799,7 +857,8 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
 
           .thread-board-section,
           .thread-board-section:nth-child(2n),
-          .thread-board-section:nth-child(3n) {
+          .thread-board-section:nth-child(3n),
+          .thread-board-section--priority-next {
             grid-column: auto;
             margin-top: 0;
             max-width: none;
