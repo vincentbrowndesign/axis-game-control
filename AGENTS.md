@@ -16,6 +16,7 @@ The conversation itself is the product. Axis helps the work develop.
 | Active API | `src/app/api/axis/conversation/route.ts` |
 | Saved thread API | `src/app/api/axis/threads` — exact owner-scoped thread persistence |
 | Auth capsule | `docs/capsules/AXIS_AUTH.md` - explicit sign-in/sign-out for owner-scoped continuity |
+| Presentation shell | `src/components/axis/context-dashboard/` - reusable current-thread presentation components |
 | Legacy mission page | `src/app/axis/mission/page.tsx` — redirects to `/axis` |
 | Legacy conversation API | `src/app/api/axis/run` — preserved, not used by MVP |
 | Product truth | The conversation is the product |
@@ -24,7 +25,7 @@ The conversation itself is the product. Axis helps the work develop.
 | Archived product docs | `archive/*.legacy.md` — historical context only |
 
 **Do not** wire `/api/axis/run` into `/axis` unless intentionally migrating.
-**Do not** re-introduce missions, dashboards, cards, check-in, or leaderboards into the active `/axis` page.
+**Do not** re-introduce missions, analytics dashboards, metrics dashboards, check-in, or leaderboards into the active `/axis` page.
 **Do not** treat the archived `.legacy.md` files as current product direction.
 
 ---
@@ -76,6 +77,8 @@ Current MVP is text-only. No other capabilities are active on `/axis`.
 
 Axis may persist exact conversation threads and assistant Thread Board snapshots for the signed-in owner. This is not long-term player memory, cross-thread recall, evidence persistence, or persistent board arrangement.
 
+Axis may use the Axis Context Dashboard shell as a presentation layer for the current thread only. In this context, "dashboard" means active-thread context presentation: timeline, active context, organized sections, open loops, next action, and composer around the existing conversation. It does not mean analytics, monitoring, metrics, management console, Lens runtime, evidence runtime, media ingestion, memory, or Data Asset runtime.
+
 Axis Auth v0 is active only to protect owner-scoped Thread Persistence:
 
 * allow sign-in, account creation, sign-out, session restoration, and account switching
@@ -86,7 +89,7 @@ Axis Auth v0 is active only to protect owner-scoped Thread Persistence:
 Do not add to the active `/axis` page:
 
 * Mission Control or mission language
-* dashboards
+* analytics dashboards
 * objective or constraint panels
 * progress panels
 * evidence cards

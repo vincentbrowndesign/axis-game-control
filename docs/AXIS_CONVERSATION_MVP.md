@@ -21,6 +21,7 @@ Axis does not ask which. It treats everything as developing work.
 - Conversation history can be saved as an exact owner-scoped thread
 - Users can sign in, create an account, restore a session, sign out, and switch accounts for owner-scoped thread continuity
 - Active-thread continuity is visible in the existing `/axis` room
+- The current thread may be presented through a Context Dashboard shell: timeline, active context, organized sections, open loops, next action, and composer
 - Saved Thread Board snapshots reopen with assistant messages
 - Axis opens every session: "What are we working on?"
 - User responds. Axis develops the work. Conversation continues.
@@ -30,7 +31,9 @@ Axis does not ask which. It treats everything as developing work.
 - Voice
 - Camera
 - Upload / evidence
-- Dashboard
+- Analytics dashboards
+- Metrics dashboards
+- Unrelated dashboard chrome
 - Sidebars
 - Cards
 - Mode picker (coach mode, player mode, etc.)
@@ -71,7 +74,7 @@ This pattern is never shown in the UI. It shapes every response.
 
 ## System prompt summary
 
-Axis is not a dashboard, notebook, coach bot, tracker, analytics tool, training system, or generic assistant.
+Axis is not an analytics dashboard, metrics dashboard, notebook, coach bot, tracker, analytics tool, training system, or generic assistant.
 
 Axis does not interrogate. Does not ask generic AI questions. Does not sound like a consultant or a coach cliché machine.
 
@@ -184,6 +187,29 @@ Thread Board snapshot time comes from the assistant message that owns the board.
 ```
 
 No ThreadBoardData timestamp field, `board_items`, memory, player model, or Data Asset runtime is introduced by active-thread continuity.
+
+### Context Dashboard presentation
+
+Axis may use shared Context Dashboard shell components to present the active thread.
+
+This is presentation only:
+
+- active route remains `/axis`
+- active API remains `POST /api/axis/conversation`
+- conversation API contract remains `reply + threadBoard`
+- exact Thread Persistence remains the saved object
+- Thread Board snapshots remain owned by assistant messages
+
+The shell may organize current-thread material into:
+
+- timeline
+- active context
+- organized sections
+- proof-needed or open-loop language
+- next action
+- composer
+
+It must not introduce analytics dashboards, metrics dashboards, monitoring chrome, Lens runtime, evidence runtime, media ingestion, cross-thread memory, player memory, or Data Asset runtime.
 
 ---
 

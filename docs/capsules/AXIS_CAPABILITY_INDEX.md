@@ -13,6 +13,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Visual Language | Active foundation | Build Now | Shared palette and visual status styles for the current Thread Board and BoardSectionObject renderer. No new mode, API, persistence, evidence, memory, or manual creation. |
 | Axis Thread Persistence v0 | Active narrow capability | Build Now | Owner-scoped saved conversation threads and Thread Board snapshots. No cross-thread memory, player model, evidence, or persistent board arrangement. |
 | Axis Auth v0 | Active narrow capability | Build Now | Explicit sign-in, account creation, sign-out, session restoration, and account-switch isolation for owner-scoped Thread Persistence. No profiles, organizations, billing, memory, or role system. |
+| Axis Context Dashboard Shell | Active presentation | Build Now | Approved Lab shell promoted as a reusable presentation layer for existing conversation, Thread Board, auth, and exact-thread persistence. No Lens, evidence, media, memory, cross-thread, schema, or Data Asset runtime. |
 | Axis Data Asset Contract v0 | Active foundation - complete | Foundation complete | Shared types and lifecycle boundaries for future Source Records, Structured Records, Datasets, Data Assets, and Output Products. Locked by `93cfbfe` technical vocabulary and `31a214f` product/build boundaries. No third implementation chunk, runtime creation, persistence, cross-thread memory, verification, UI, or background processing. |
 
 ## Refine Current
@@ -21,7 +22,7 @@ This index controls which capability capsules are active, which are future, and 
 |---|---|---|---|
 | `/axis` page | Active MVP surface | Refine Current | Must become gym-readable and one-flow. |
 | `/api/axis/conversation` | Active API | Refine Current | Returns reply + threadBoard. |
-| Thread Board rendering | Active renderer | Refine Current | Must be compact, sanitized, readable, and non-dashboard. |
+| Thread Board rendering | Active renderer | Refine Current | Must be compact, sanitized, readable, and free of analytics/metrics dashboard sprawl. |
 | BoardSectionObject Local Prototype | Active local prototype | Build Now | Converts generated Thread Board sections into movable local render units only. No API change, persistence, memory, evidence, upload, or manual creation. |
 
 ## Future / Hold Capsules
@@ -51,6 +52,7 @@ This index controls which capability capsules are active, which are future, and 
 | Surface | Status | Build Decision | Notes |
 |---|---|---|---|
 | Axis UI Lab v1 | Internal preview | Refine Current | Mock-only aperture work-surface at `/axis/lab`. Aperture Shell pattern, focus states, Lens Bridge preview. No API, Supabase, auth, persistence, media, Data Asset runtime, CV, or active-product behavior. Capsule: `docs/capsules/AXIS_UI_LAB.md`. |
+| Axis Context Dashboard Shell Preview | Internal preview source | Refine Current | `/axis/lab` may import shared Context Dashboard shell components and feed them mock data. Lab Reality Marks and visual-source behavior remain lab-only. |
 | Axis Lens UI Bridge | Internal mock preview | Refine Current in `/axis/lab` only | Mock-only visual-source presentation inside the Aperture Shell. No CV runtime, no media permissions, no camera, no file selection, no clip analysis, no upload. Source candidates are not verified evidence. Promotion to a real Lens runtime requires a separate decision to advance the Axis Lens capsule (currently Do Not Build Yet). |
 
 ## Build Rule

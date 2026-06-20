@@ -8,9 +8,11 @@ Axis is a conversation product. The conversation itself is the product.
 
 A clean conversation interface. The user brings rough work. Axis helps it develop.
 
-Axis is not a dashboard, notebook, coach bot, tracker, analytics tool, or training system.
+Axis is not an analytics dashboard, metrics dashboard, notebook, coach bot, tracker, analytics tool, or training system.
 
-Axis Auth v0 supports signed-in, owner-scoped thread continuity. It is not profiles, organizations, billing, roles, memory, or a dashboard.
+Axis Auth v0 supports signed-in, owner-scoped thread continuity. It is not profiles, organizations, billing, roles, memory, or analytics dashboard access.
+
+Axis may use a Context Dashboard shell as current-thread presentation. That shell is not analytics, monitoring, metrics, Lens, evidence, media, memory, or Data Asset runtime.
 
 Active route: `/` → `/axis`
 
@@ -32,7 +34,8 @@ Open `http://localhost:3000`.
 - Voice
 - Camera
 - Upload
-- Dashboard
+- Analytics dashboards
+- Metrics dashboards
 - Sidebars
 - Cards
 - Analytics

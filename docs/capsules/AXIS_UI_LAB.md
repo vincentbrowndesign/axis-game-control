@@ -14,7 +14,34 @@ The dashboard:
 - is not yet the active `/axis` product
 - contains no live Lens, CV, evidence, upload, or Data Asset behavior
 - uses local mock data only
-- may be promoted only through a separate product decision
+- may promote presentation components only through an explicit product decision
+
+## Shell Promotion
+
+The approved Context Dashboard presentation shell has been promoted into shared components at:
+
+`src/components/axis/context-dashboard/`
+
+This promotion is presentation-only.
+
+The shared shell:
+
+- is prop-driven
+- contains no mock data
+- contains no API calls
+- contains no Supabase, auth, persistence, media, Lens, CV, evidence, memory, or Data Asset runtime
+- may be used by `/axis` only as current-thread presentation
+
+The lab may import the shared shell and feed it local mock data.
+
+Lab-only behavior remains lab-only:
+
+- Reality Marks
+- visual-source mock behavior
+- preview-only microphone, camera, upload, add moment, add action, and add source controls
+- local mock data
+
+Production code must not import from `src/components/axis/lab/`.
 
 ## Locked Boundary
 
@@ -23,6 +50,8 @@ Axis UI Lab is a design-validation surface. It is not a second Axis product mode
 The active product remains `/axis`.
 
 Deleting `/axis/lab` and all files under `src/components/axis/lab/` must not affect `/axis`.
+
+Deleting `/axis/lab` must not delete the promoted shared shell under `src/components/axis/context-dashboard/`.
 
 ## Product State Lock
 

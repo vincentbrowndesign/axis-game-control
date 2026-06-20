@@ -9,7 +9,7 @@ Axis should not build from excitement, screenshots, or isolated ideas. Axis buil
 
 Axis MVP is a text-first conversation that organizes rough input into usable understanding.
 
-The MVP is not a whiteboard, dashboard, video tool, notebook, camera product, voice assistant, memory system, mission tracker, or analytics surface.
+The MVP is not a whiteboard, analytics dashboard, metrics dashboard, video tool, notebook, camera product, voice assistant, memory system, mission tracker, or analytics surface.
 
 The MVP should prove one thing:
 
@@ -27,6 +27,7 @@ Build Now:
 6. Axis Thread Persistence v0
 7. Active-thread entity integrity
 8. Axis Auth v0
+9. Axis Context Dashboard Shell: Build Now as a presentation migration only. Current-thread presentation only; no schema, evidence, media, memory, cross-thread, or Data Asset runtime.
 
 Refine Current:
 
@@ -122,6 +123,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Axis Thread Persistence v0 | Persistence | Conversation | Active narrow capability | Saved transcript and Thread Board snapshots | Build Now | Saves exact owner-scoped threads for reopening across devices without cross-thread memory, player model, evidence persistence, or board arrangement persistence. |
 | Axis Auth v0 | Authentication | Thread Persistence | Active narrow capability | Owner-scoped account continuity | Build Now | Adds explicit sign-in, account creation, sign-out, session restoration, and account-switch isolation for exact saved threads without profiles, organizations, billing, memory, or roles. |
 | Active-thread save continuity | UI/persistence refinement | Thread Persistence | Active refinement | Visible saved state and transcript timestamps | Refine Current | Shows exact-thread save state, manual Save/Retry, message timestamps, and board snapshot time without adding memory, board_items, persistent board arrangement, or Data Asset runtime. |
+| Axis Context Dashboard Shell | Presentation shell | Conversation/Thread Board | Active presentation migration | Current-thread context dashboard | Build Now | Promotes the approved Lab shell into reusable production-safe components for existing conversation, Thread Board, auth, and exact-thread persistence. No schema, evidence, media, Lens, memory, cross-thread, or Data Asset runtime. |
 | Axis Data Asset Contract v0 | Foundation contract | Architecture | Active foundation - complete | Governed source-to-asset lifecycle vocabulary | Foundation complete | Locked by 93cfbfe technical vocabulary and 31a214f product/build boundaries. Do not add a third Data Asset implementation chunk. No runtime creation, persistence, verification, UI, or background processing. |
 | Active-thread entity integrity | Runtime trust behavior | Conversation | Next runtime build | Thread-local entity carryover | Build Now | Axis must not merge, rename, over-infer, or drift between people, projects, or topics unless the user explicitly connects them. |
 | `/axis` layout | UI surface | Conversation | Active | Conversation feed + organized summary | Refine Current | Must be gym-readable and one-flow. |
@@ -364,7 +366,7 @@ Axis MVP passes when:
 1. User can type rough input fast.
 2. Axis gives useful shape before asking.
 3. Axis does not make the user manage screens or tools.
-4. Thread Board organizes the current thread without feeling like a dashboard.
+4. Thread Board organizes the current thread without feeling like analytics or metrics dashboard sprawl.
 5. User can read the conversation and board in a gym.
 6. The board makes the thread easier to understand at a glance.
 7. No future layer is required for the MVP to be valuable.
