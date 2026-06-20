@@ -111,6 +111,16 @@ function normalizeSectionLabel(value: string) {
     .trim();
 }
 
+function getVisibleBoardLabel(label: string) {
+  const normalized = normalizeSectionLabel(label);
+
+  if (normalized === "OBSERVATION") return "What We Know";
+  if (normalized === "QUESTION" || normalized === "NEED NEXT" || normalized === "WATCH NEXT" || normalized === "DECISION") {
+    return "Need To Lock";
+  }
+  return label;
+}
+
 function resolveSectionPriority(label: string, type: ThreadBoardSectionType): SectionPriority {
   const normalized = normalizeSectionLabel(label);
 
@@ -463,7 +473,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
             dateTime={generatedAt}
             title={formatFullDateTime(generatedAt)}
           >
-            Board updated {formatShortTime(generatedAt)}
+            Board {formatShortTime(generatedAt)}
           </time>
         )}
         {hasLocalArrangement && (
@@ -483,6 +493,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
             const labelToken = sectionToken(object.label);
             const typeToken = sectionToken(object.sectionType);
             const statusStyle = getAxisStatusStyle(object.status);
+            const visibleLabel = getVisibleBoardLabel(object.label);
 
             return (
               <section
@@ -506,7 +517,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
               >
                 <h4 className="thread-board-label">
                   <button
-                    aria-label={`Move ${object.label}`}
+                    aria-label={`Move ${visibleLabel}`}
                     className={`thread-board-handle${interactionMode === "none" ? " thread-board-handle--static" : ""}`}
                     type="button"
                     onPointerDown={(event) => handlePointerDown(event, object)}
@@ -514,7 +525,7 @@ export default function ThreadBoard({ board, generatedAt }: Props) {
                     onPointerUp={handlePointerEnd}
                     onPointerCancel={handlePointerEnd}
                   >
-                    {object.label}
+                    {visibleLabel}
                   </button>
                 </h4>
                 <ul className="thread-board-items">

@@ -412,13 +412,13 @@ export default function AxisPage() {
                 <section className="axis-active-exchange" aria-label="Latest exchange">
                   {latestUserMessage && (
                     <div>
-                      <span>Latest rough input</span>
+                      <span>Latest Note</span>
                       <p>{latestUserMessage.content}</p>
                     </div>
                   )}
                   {latestAssistant?.content && (
                     <div>
-                      <span>Axis reply</span>
+                      <span>Axis</span>
                       <p>{latestAssistant.content}</p>
                     </div>
                   )}
@@ -426,7 +426,7 @@ export default function AxisPage() {
               )}
               {latestBoard && (
                 <details className="axis-full-board">
-                  <summary>Full Thread Board</summary>
+                  <summary>Show Full Board</summary>
                   <ThreadBoard board={latestBoard} generatedAt={latestAssistant?.createdAt} />
                 </details>
               )}
@@ -849,7 +849,6 @@ function sanitizeSections(board: ThreadBoardData | null): ThreadBoardSection[] {
 
 function deriveBoardPresentation(sections: ThreadBoardSection[]) {
   const centerSections: Array<{ id: string; items: string[]; title: string }> = [];
-  const openLoops: Array<{ id: string; text: string }> = [];
   const actions: Array<{ id: string; title: string }> = [];
   let proofNeeded: string | undefined;
   let nextMove: string | undefined;
@@ -859,8 +858,10 @@ function deriveBoardPresentation(sections: ThreadBoardSection[]) {
     const id = `${label}-${index}`;
 
     if (OPEN_LOOP_LABELS.has(label)) {
-      section.items.forEach((item, itemIndex) => {
-        openLoops.push({ id: `${id}-${itemIndex}`, text: item });
+      centerSections.push({
+        id,
+        items: section.items.slice(0, 3),
+        title: "Need To Lock",
       });
       return;
     }
@@ -880,7 +881,7 @@ function deriveBoardPresentation(sections: ThreadBoardSection[]) {
     centerSections.push({
       id,
       items: section.items.slice(0, 3),
-      title: section.label,
+      title: getVisibleSectionTitle(section.label),
     });
   });
 
@@ -888,7 +889,7 @@ function deriveBoardPresentation(sections: ThreadBoardSection[]) {
     actions,
     centerSections,
     nextMove,
-    openLoops,
+    openLoops: [],
     proofNeeded,
   };
 }
@@ -909,7 +910,7 @@ function createTimelineItems(messages: Message[], threadStartedAt?: string) {
       detail: message.content,
       id: `${message.role}-${message.createdAt}-${index}`,
       time: formatShortTime(message.createdAt),
-      title: message.role === "assistant" ? "Axis response" : "Rough thought",
+      title: message.role === "assistant" ? "Axis" : "You",
     });
 
     if (message.role === "assistant" && message.threadBoard) {
@@ -917,7 +918,7 @@ function createTimelineItems(messages: Message[], threadStartedAt?: string) {
         detail: message.threadBoard.title,
         id: `board-${message.createdAt}-${index}`,
         time: formatShortTime(message.createdAt),
-        title: "Board updated",
+        title: "Board",
       });
     }
   });
@@ -927,6 +928,14 @@ function createTimelineItems(messages: Message[], threadStartedAt?: string) {
 
 function normalizeLabel(value: string) {
   return value.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+function getVisibleSectionTitle(label: string) {
+  const normalized = normalizeLabel(label);
+
+  if (normalized === "OBSERVATION") return "What We Know";
+  if (OPEN_LOOP_LABELS.has(normalized)) return "Need To Lock";
+  return label;
 }
 
 function formatShortTime(value: string) {
