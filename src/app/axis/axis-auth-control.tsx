@@ -121,7 +121,7 @@ export function useAxisAuth(): AxisAuthController {
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizeEmail(email),
       password,
     });
     if (error) return "error";
@@ -141,7 +141,7 @@ export function useAxisAuth(): AxisAuthController {
     }
 
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizeEmail(email),
       password,
     });
     if (error) return "error";
@@ -175,12 +175,22 @@ export default function AxisAuthControl({ auth }: Props) {
   const [password, setPassword] = useState("");
   const [formState, setFormState] = useState<AuthFormState>("idle");
   const [formError, setFormError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   const accountLabel = auth.email ? shortenEmail(auth.email) : "Signed in";
   const submitting = formState === "submitting";
 
+  useEffect(() => {
+    if (auth.status === "signed_in") {
+      setOpen(false);
+      setPassword("");
+      setFormError(null);
+      setFormState("idle");
+    }
+  }, [auth.status]);
+
   async function submitAuth(action: "sign_in" | "sign_up") {
-    const cleanEmail = email.trim();
+    const cleanEmail = normalizeEmail(email);
     if (!cleanEmail || !password || submitting) return;
 
     setFormState("submitting");
@@ -191,7 +201,9 @@ export default function AxisAuthControl({ auth }: Props) {
     setPassword("");
     setFormState(nextState);
     if (nextState === "error") {
-      setFormError(action === "sign_in" ? "Sign in failed." : "Account could not be created.");
+      setFormError(action === "sign_in"
+        ? "Check your email and password, then try again."
+        : "We could not create that account. Check the email and password, then try again.");
     }
   }
 
@@ -202,12 +214,26 @@ export default function AxisAuthControl({ auth }: Props) {
   }
 
   return (
-    <details className="axis-auth">
+    <details
+      className="axis-auth"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary aria-label={auth.status === "signed_in" ? `Account ${auth.email ?? ""}` : "Sign in"}>
         {auth.status === "loading" ? "Checking..." : auth.status === "signed_in" ? accountLabel : "Sign in"}
       </summary>
 
       <div className="axis-auth-popover">
+        <div className="axis-auth-sheet-header">
+          <div>
+            <p>{auth.status === "signed_in" ? "Account" : "Save your Axis thread"}</p>
+            <h2>{auth.status === "signed_in" ? accountLabel : "Sign in or create account"}</h2>
+          </div>
+          <button type="button" onClick={() => setOpen(false)}>
+            {auth.status === "signed_in" ? "Close" : "Continue without saving"}
+          </button>
+        </div>
+
         {auth.status === "signed_in" ? (
           <div className="axis-auth-signed-in">
             <p className="axis-auth-email">{auth.email}</p>
@@ -226,11 +252,14 @@ export default function AxisAuthControl({ auth }: Props) {
             <label>
               <span>Email</span>
               <input
+                autoCapitalize="none"
                 autoComplete="email"
+                autoCorrect="off"
                 disabled={submitting}
                 inputMode="email"
                 onChange={(event) => setEmail(event.target.value)}
                 required
+                spellCheck={false}
                 type="email"
                 value={email}
               />
@@ -313,6 +342,37 @@ export default function AxisAuthControl({ auth }: Props) {
           top: 100%;
         }
 
+        .axis-auth-sheet-header {
+          align-items: flex-start;
+          border-bottom: 1px solid color-mix(in srgb, var(--axis-line) 12%, transparent);
+          display: flex;
+          gap: 18px;
+          justify-content: space-between;
+          margin-bottom: 14px;
+          padding-bottom: 12px;
+        }
+
+        .axis-auth-sheet-header p,
+        .axis-auth-sheet-header h2 {
+          margin: 0;
+        }
+
+        .axis-auth-sheet-header p {
+          color: color-mix(in srgb, var(--axis-ink) 42%, transparent);
+          font-family: ui-sans-serif, system-ui, sans-serif;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .axis-auth-sheet-header h2 {
+          color: color-mix(in srgb, var(--axis-ink) 86%, transparent);
+          font-size: 18px;
+          line-height: 1.1;
+          margin-top: 5px;
+        }
+
         .axis-auth-form,
         .axis-auth-signed-in {
           display: flex;
@@ -380,10 +440,79 @@ export default function AxisAuthControl({ auth }: Props) {
         }
 
         @media (max-width: 760px) {
+          .axis-auth {
+            position: static;
+          }
+
           .axis-auth-popover {
-            max-height: min(420px, 70dvh);
+            border: 0;
+            bottom: 0;
+            box-shadow: 0 -18px 48px color-mix(in srgb, var(--axis-line) 18%, transparent);
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            left: 0;
+            margin: 0;
+            max-height: none;
+            min-width: 0;
             overflow-y: auto;
-            right: 0;
+            overscroll-behavior: contain;
+            padding:
+              max(18px, env(safe-area-inset-top))
+              max(16px, env(safe-area-inset-right))
+              max(24px, env(safe-area-inset-bottom))
+              max(16px, env(safe-area-inset-left));
+            position: fixed;
+            right: auto;
+            top: 0;
+            width: 100vw;
+            z-index: 80;
+          }
+
+          .axis-auth-sheet-header {
+            gap: 14px;
+          }
+
+          .axis-auth-sheet-header h2 {
+            font-size: clamp(22px, 6vw, 30px);
+            max-width: 12ch;
+          }
+
+          .axis-auth-sheet-header button {
+            flex-shrink: 0;
+            max-width: 13ch;
+            text-align: right;
+          }
+
+          .axis-auth-form,
+          .axis-auth-signed-in {
+            gap: 14px;
+          }
+
+          .axis-auth-form label {
+            font-size: 12px;
+            gap: 7px;
+          }
+
+          .axis-auth-form input {
+            border-radius: 10px;
+            font-size: 16px;
+            min-height: 48px;
+            padding: 12px;
+          }
+
+          .axis-auth-actions {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 4px;
+          }
+
+          .axis-auth-actions button {
+            border: 1px solid color-mix(in srgb, var(--axis-line) 18%, transparent);
+            border-radius: 10px;
+            min-height: 46px;
+            padding: 0 12px;
           }
         }
       `}</style>
@@ -396,4 +525,8 @@ function shortenEmail(email: string) {
   if (!domain) return email;
   const shortName = name.length > 12 ? `${name.slice(0, 10)}...` : name;
   return `${shortName}@${domain}`;
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
 }
