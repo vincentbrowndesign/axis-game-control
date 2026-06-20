@@ -193,7 +193,7 @@ function RightRegion() {
         <ul className={styles.loopList}>
           {axisLabDashboard.openLoops.map((loop) => (
             <li key={loop}>
-              <span aria-hidden="true" />
+              <button type="button" aria-label={`Mark preview loop complete: ${loop}`} />
               <p>{loop}</p>
             </li>
           ))}
@@ -256,13 +256,13 @@ function DashboardComposer() {
       </label>
       <input id="axis-lab-dashboard-composer" placeholder="Say the rough version..." />
       <div className={styles.composerControls} aria-label="Preview-only controls">
-        <IconButton label="Microphone preview">
+        <IconButton label="Microphone preview only">
           <Mic size={16} aria-hidden="true" />
         </IconButton>
-        <IconButton label="Camera preview">
+        <IconButton label="Camera preview only">
           <Camera size={16} aria-hidden="true" />
         </IconButton>
-        <IconButton label="Upload preview">
+        <IconButton label="Upload preview only">
           <Upload size={16} aria-hidden="true" />
         </IconButton>
         <button className={styles.plusSend} type="button" aria-label="Add preview note">
