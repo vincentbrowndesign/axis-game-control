@@ -1,4 +1,3 @@
-import { Plus } from "lucide-react";
 import type React from "react";
 import type { AxisContextProofCandidate } from "./axis-context-dashboard-types";
 import styles from "./axis-context-dashboard.module.css";
@@ -43,7 +42,7 @@ export function AxisContextRail({
           <ul className={styles.loopList}>
             {openLoops.map((loop) => (
               <li key={loop.id}>
-                {loop.control ?? <button type="button" aria-label={`Mark loop complete: ${loop.text}`} />}
+                {loop.control ?? <span className={styles.loopMarker} aria-hidden="true" />}
                 <p>{loop.text}</p>
               </li>
             ))}
@@ -60,10 +59,6 @@ export function AxisContextRail({
               {action.due && <span>Due: {action.due}</span>}
             </article>
           ))}
-          <button className={styles.addAction} type="button">
-            <Plus size={14} aria-hidden="true" />
-            Add action
-          </button>
         </section>
       )}
     </aside>

@@ -39,6 +39,11 @@ export type AxisContextDashboardShellProps = {
     title: string;
   }[];
   activeContext?: {
+    contextSections?: readonly {
+      id: string;
+      items: readonly string[];
+      title: string;
+    }[];
     detail?: ReactNode;
     keeper?: string;
     label?: string;

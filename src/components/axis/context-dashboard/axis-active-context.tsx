@@ -4,6 +4,7 @@ import { AxisContextSection } from "./axis-context-section";
 import styles from "./axis-context-dashboard.module.css";
 
 export function AxisActiveContext({
+  contextSections = [],
   detail,
   keeper,
   label = "Active Context",
@@ -13,6 +14,11 @@ export function AxisActiveContext({
   support,
   tags = [],
 }: {
+  contextSections?: readonly {
+    id: string;
+    items: readonly string[];
+    title: string;
+  }[];
   detail?: React.ReactNode;
   keeper?: string;
   label?: string;
@@ -32,6 +38,20 @@ export function AxisActiveContext({
         <div className={styles.contextPair}>
           {proofNeeded && <AxisContextSection title="Proof Needed">{proofNeeded}</AxisContextSection>}
           {nextMove && <AxisContextSection title="Next Move">{nextMove}</AxisContextSection>}
+        </div>
+      )}
+
+      {contextSections.length > 0 && (
+        <div className={styles.contextSectionStack}>
+          {contextSections.map((section) => (
+            <AxisContextSection title={section.title} key={section.id}>
+              <ul className={styles.contextSectionList}>
+                {section.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </AxisContextSection>
+          ))}
         </div>
       )}
 

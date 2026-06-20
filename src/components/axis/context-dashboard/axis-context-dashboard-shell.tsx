@@ -45,6 +45,11 @@ export function AxisContextDashboardShell({
           "--lab-paper": AXIS_ROOM_COLORS.paper,
           "--lab-proof": AXIS_STATUS_STYLES.proof.accent,
           "--lab-room": AXIS_ROOM_COLORS.room,
+          "--axis-grid": AXIS_ROOM_COLORS.grid,
+          "--axis-ink": AXIS_ROOM_COLORS.ink,
+          "--axis-line": AXIS_ROOM_COLORS.line,
+          "--axis-paper": AXIS_ROOM_COLORS.paper,
+          "--axis-room": AXIS_ROOM_COLORS.room,
         } as CSSProperties
       }
       aria-label={ariaLabel}
