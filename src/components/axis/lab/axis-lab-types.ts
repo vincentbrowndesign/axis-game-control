@@ -1,49 +1,43 @@
 export type AxisLabPreviewState = "empty" | "active" | "expanded";
 
-export type AxisLabSourceDetail = {
-  kind: "clip" | "image" | "voice" | "note";
-  range: string;
-  status: "Mock source · Preview only · No interpretation yet";
-  thumbnailLabel: string;
-};
-
-export type AxisLabSuggestionDetail = {
-  confidence?: string;
-  status: "Suggested interpretation · Needs confirmation";
-};
-
-export type AxisLabDetail = {
-  action?: string;
-  openLoops?: readonly string[];
-  relatedNotes?: readonly string[];
-  sourceDetail?: AxisLabSourceDetail;
-  source?: string;
-  suggestion?: AxisLabSuggestionDetail;
+export type AxisLabTimelineEvent = {
+  detail?: string;
+  mediaLabel?: string;
+  meta?: string;
+  time: string;
   title: string;
 };
 
-export type AxisLabMark = {
-  accent: "context" | "proof" | "action" | "source" | "loop";
-  detail?: AxisLabDetail;
-  id: string;
-  label: string;
-  text: string;
+export type AxisLabProofCandidate = {
+  duration: string;
+  meta: string;
+  title: string;
 };
 
-export type AxisContextObject = {
-  axisSentence: string;
-  id: string;
-  label: "Active Context";
-  savedPreviewStatus: "local_preview" | "saved_preview";
-  statement: string;
+export type AxisLabRecentReality = {
+  duration?: string;
+  kind: "Clip" | "Image" | "Voice" | "Note" | "Source";
+  time?: string;
+  title: string;
+};
+
+export type AxisLabContextDashboard = {
+  actions: readonly {
+    due: string;
+    title: string;
+  }[];
+  activeContext: {
+    keeper: string;
+    mainText: string;
+    nextMove: string;
+    proofNeeded: string;
+    support: string;
+    tags: readonly string[];
+  };
+  openLoops: readonly string[];
+  proofCandidates: readonly AxisLabProofCandidate[];
+  recentReality: readonly AxisLabRecentReality[];
+  savedAt: string;
   threadTitle: string;
-};
-
-export type AxisLabThread = {
-  context: AxisContextObject;
-  nextMoveMark?: AxisLabMark;
-  openLoopMark?: AxisLabMark;
-  proofMark?: AxisLabMark;
-  recentSourceMark?: AxisLabMark;
-  sessionTime: string;
+  timeline: readonly AxisLabTimelineEvent[];
 };

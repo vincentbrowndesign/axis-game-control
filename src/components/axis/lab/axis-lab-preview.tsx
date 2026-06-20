@@ -1,12 +1,11 @@
 "use client";
 
-import type { CSSProperties, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { Bookmark, Camera, ChevronDown, Mic, Plus, Search, Star, Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { AXIS_ROOM_COLORS, AXIS_STATUS_STYLES } from "../../../lib/axis-visual-language";
-import AxisLabComposer from "./axis-lab-composer";
-import { axisLabThread } from "./axis-lab-mock-data";
-import type { AxisLabDetail, AxisLabMark, AxisLabPreviewState } from "./axis-lab-types";
+import { axisLabDashboard } from "./axis-lab-mock-data";
+import type { AxisLabPreviewState, AxisLabProofCandidate, AxisLabRecentReality } from "./axis-lab-types";
 import styles from "./axis-lab.module.css";
 
 const VALID_STATES: AxisLabPreviewState[] = ["empty", "active", "expanded"];
@@ -21,57 +20,6 @@ export default function AxisLabPreview() {
   const searchParams = useSearchParams();
   const previewState = parsePreviewState(searchParams.get("state"));
 
-  return <AxisLabPreviewBody key={previewState} previewState={previewState} />;
-}
-
-function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewState }) {
-  const openerRef = useRef<HTMLButtonElement | null>(null);
-  const detailRef = useRef<HTMLDivElement | null>(null);
-  const [localThoughts, setLocalThoughts] = useState<string[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(
-    previewState === "expanded" ? axisLabThread.proofMark?.id ?? null : null,
-  );
-
-  const closeDetail = useCallback(() => {
-    setExpandedId(null);
-    requestAnimationFrame(() => openerRef.current?.focus());
-  }, []);
-
-  useEffect(() => {
-    if (!expandedId) return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") closeDetail();
-    }
-
-    function onPointerDown(event: PointerEvent) {
-      if (!detailRef.current) return;
-      if (event.target instanceof Node && !detailRef.current.contains(event.target)) {
-        closeDetail();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [closeDetail, expandedId]);
-
-  const marks = [
-    axisLabThread.proofMark,
-    axisLabThread.nextMoveMark,
-    axisLabThread.recentSourceMark,
-    axisLabThread.openLoopMark,
-  ].filter((mark): mark is AxisLabMark => Boolean(mark));
-  const expandedMark = marks.find((mark) => mark.id === expandedId) ?? null;
-  const expandedDetail = expandedMark?.detail ?? null;
-
-  function handleComposerSubmit(text: string) {
-    setLocalThoughts((current) => [...current, text]);
-  }
-
   return (
     <main
       className={styles.labRoot}
@@ -85,182 +33,281 @@ function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewStat
         "--lab-proof": AXIS_STATUS_STYLES.proof.accent,
         "--lab-room": AXIS_ROOM_COLORS.room,
       } as CSSProperties}
-      aria-label="Axis Lab UI preview"
+      aria-label="Axis Lab Context Bank dashboard preview"
     >
-      <header className={styles.labHeader}>
-        <span className={styles.wordmark}>Axis</span>
-        <span className={styles.labLabel}>Axis Lab / UI Preview</span>
-      </header>
-
-      <section className={styles.workSurface} aria-labelledby="axis-lab-work-title">
-        {previewState === "empty" ? (
-          <div className={styles.emptyWork}>
-            <h1 id="axis-lab-work-title">What are we working on?</h1>
-            <p>Bring the rough version.</p>
-          </div>
-        ) : (
-          <div className={styles.currentWork}>
-            <time className={styles.timeMark} dateTime="2026-06-19T08:31:00-05:00">
-              {axisLabThread.sessionTime}
-            </time>
-
-            <p className={styles.threadTitle}>{axisLabThread.context.threadTitle}</p>
-            <span className={styles.previewStatus}>
-              {axisLabThread.context.savedPreviewStatus === "saved_preview" ? "Saved preview" : "Local preview"}
-            </span>
-            <article className={styles.contextObject} aria-labelledby="axis-lab-work-title">
-              <p className={styles.contextLabel}>{axisLabThread.context.label}</p>
-              <h1 id="axis-lab-work-title">{axisLabThread.context.statement}</h1>
-              <p className={styles.axisSentence}>{axisLabThread.context.axisSentence}</p>
-            </article>
-
-            <div className={styles.markLayer} aria-label="Context surface marks">
-              {marks.map((mark) => (
-                <div className={styles.markSlot} key={mark.id}>
-                  <AxisLabMarkView
-                    mark={mark}
-                    expanded={expandedId === mark.id}
-                    onExpand={(button) => {
-                      openerRef.current = button;
-                      setExpandedId(mark.id);
-                    }}
-                  />
-                  {expandedId === mark.id && expandedDetail && (
-                    <AxisLabDetailView
-                      detail={expandedDetail}
-                      mark={mark}
-                      onClose={closeDetail}
-                      surfaceRef={detailRef}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {localThoughts.length > 0 && (
-              <div className={styles.localThoughts} aria-label="Local preview additions">
-                <span className={styles.localThoughtsLabel}>Next rough thought</span>
-                {localThoughts.map((thought, index) => (
-                  <p key={`${thought}-${index}`}>{thought}</p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      <AxisLabComposer onSubmit={handleComposerSubmit} />
+      <div className={styles.appSurface}>
+        <DashboardHeader />
+        {previewState === "empty" ? <EmptyDashboard /> : <DashboardBody expanded={previewState === "expanded"} />}
+      </div>
     </main>
   );
 }
 
-function AxisLabMarkView({
-  expanded = false,
-  mark,
-  onExpand,
-}: {
-  expanded?: boolean;
-  mark: AxisLabMark;
-  onExpand?: (button: HTMLButtonElement) => void;
-}) {
-  const content = (
-    <>
-      <span className={styles.markAccent} aria-hidden="true" />
-      <span className={styles.markLabel}>{mark.label}</span>
-      <span className={styles.markText}>{mark.text}</span>
-    </>
-  );
-
-  if (!mark.detail || !onExpand) {
-    return (
-      <div className={`${styles.mark} ${styles[`mark-${mark.accent}`]}`}>
-        {content}
-      </div>
-    );
-  }
-
+function DashboardHeader() {
   return (
-    <button
-      className={`${styles.mark} ${styles.markButton} ${styles[`mark-${mark.accent}`]}`}
-      type="button"
-      aria-expanded={expanded}
-      onClick={(event) => onExpand(event.currentTarget)}
-    >
-      {content}
-    </button>
+    <header className={styles.labHeader}>
+      <div className={styles.headerLeft}>
+        <span className={styles.wordmark}>Axis</span>
+        <span className={styles.headerSeparator} aria-hidden="true" />
+        <button className={styles.threadSwitch} type="button" aria-label="Thread preview selector">
+          <span>{axisLabDashboard.threadTitle}</span>
+          <ChevronDown size={14} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className={styles.headerCenter} aria-label="Saved preview status">
+        <span className={styles.savedDot} aria-hidden="true" />
+        <span>Saved</span>
+        <span className={styles.statusDot} aria-hidden="true" />
+        <time dateTime="2026-06-20T20:42:00-05:00">{axisLabDashboard.savedAt}</time>
+      </div>
+
+      <div className={styles.headerRight}>
+        <IconButton label="Search preview">
+          <Search size={16} aria-hidden="true" />
+        </IconButton>
+        <IconButton label="Star preview">
+          <Star size={16} aria-hidden="true" />
+        </IconButton>
+        <span className={styles.avatar} aria-label="Preview user avatar">
+          V
+        </span>
+      </div>
+    </header>
   );
 }
 
-const AxisLabDetailView = ({
-  detail,
-  mark,
-  onClose,
-  surfaceRef,
-}: {
-  detail: AxisLabDetail;
-  mark: AxisLabMark;
-  onClose: () => void;
-  surfaceRef: RefObject<HTMLDivElement | null>;
-}) => (
-  <div className={`${styles.detailWrap} ${styles[`detail-${mark.accent}`]}`}>
-    <div
-      className={`${styles.detailSurface} ${styles[`detail-${mark.accent}`]}`}
-      role="dialog"
-      aria-label={detail.title}
-      ref={surfaceRef}
-    >
-      <button className={styles.detailClose} type="button" onClick={onClose} aria-label="Close detail">
-        Close
+function DashboardBody({ expanded }: { expanded: boolean }) {
+  return (
+    <>
+      <section className={styles.dashboardGrid} aria-label="Context Bank dashboard mock">
+        <TimelineRegion />
+        <ActiveContextRegion expanded={expanded} />
+        <RightRegion />
+      </section>
+      <DashboardComposer />
+      <RecentRealityShelf />
+    </>
+  );
+}
+
+function EmptyDashboard() {
+  return (
+    <section className={styles.emptyDashboard} aria-labelledby="axis-lab-empty-title">
+      <p className={styles.regionEyebrow}>Active context</p>
+      <h1 id="axis-lab-empty-title">Say the rough version.</h1>
+      <p>The Context Bank preview is ready, but this lab state stays mock-only.</p>
+    </section>
+  );
+}
+
+function TimelineRegion() {
+  return (
+    <aside className={styles.timelineRegion} aria-labelledby="axis-lab-timeline-title">
+      <h2 id="axis-lab-timeline-title">Thread Timeline</h2>
+      <ol className={styles.timelineList}>
+        {axisLabDashboard.timeline.map((event) => (
+          <li className={styles.timelineItem} key={`${event.time}-${event.title}`}>
+            <span className={styles.timelineDot} aria-hidden="true" />
+            <time>{event.time}</time>
+            <strong>{event.title}</strong>
+            {event.detail && <p>{event.detail}</p>}
+            {event.mediaLabel && (
+              <div className={event.meta ? styles.waveformPreview : styles.miniThumb}>
+                <span>{event.mediaLabel}</span>
+                {event.meta && <em>{event.meta}</em>}
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+      <button className={styles.addMoment} type="button">
+        <Plus size={18} aria-hidden="true" />
+        <span>Add moment</span>
       </button>
-      <p className={styles.detailKicker}>{detail.title}</p>
-      {detail.sourceDetail && (
-        <div className={styles.sourceStrip} aria-label="Mock source preview">
-          <div className={styles.sourceThumbnail} aria-hidden="true">
-            <span>{detail.sourceDetail.thumbnailLabel}</span>
-          </div>
-          <dl className={styles.sourceFacts}>
-            <div>
-              <dt>Source kind</dt>
-              <dd>{detail.sourceDetail.kind}</dd>
-            </div>
-            <div>
-              <dt>Range</dt>
-              <dd>{detail.sourceDetail.range}</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>{detail.sourceDetail.status}</dd>
-            </div>
-          </dl>
+    </aside>
+  );
+}
+
+function ActiveContextRegion({ expanded }: { expanded: boolean }) {
+  const context = axisLabDashboard.activeContext;
+
+  return (
+    <section className={styles.contextRegion} aria-labelledby="axis-lab-context-title">
+      <span className={styles.contextPill}>Active Context</span>
+      <h1 id="axis-lab-context-title">{context.mainText}</h1>
+      <p className={styles.contextSupport}>{context.support}</p>
+
+      <div className={styles.contextPair}>
+        <section className={styles.contextMiniBlock}>
+          <h2>Proof Needed</h2>
+          <p>{context.proofNeeded}</p>
+        </section>
+        <section className={styles.contextMiniBlock}>
+          <h2>Next Move</h2>
+          <p>{context.nextMove}</p>
+        </section>
+      </div>
+
+      <section className={styles.keeperBlock}>
+        <div>
+          <h2>Keeper</h2>
+          <p>{context.keeper}</p>
         </div>
+        <Bookmark size={18} aria-label="Keeper preview bookmark" />
+      </section>
+
+      {expanded && (
+        <section className={styles.expandedMock} aria-label="Expanded preview detail">
+          <h2>Selected mock detail</h2>
+          <p>Source-only items stay separate from suggested interpretation until the user accepts the read.</p>
+        </section>
       )}
-      {detail.source && (
-        <div className={styles.detailSource}>
-          <span>Source reference</span>
-          <p>{detail.source}</p>
-        </div>
-      )}
-      {detail.suggestion && (
-        <div className={styles.detailSuggestion}>
-          <span>{detail.suggestion.status}</span>
-          {detail.suggestion.confidence && <p>{detail.suggestion.confidence}</p>}
-        </div>
-      )}
-      {detail.openLoops && detail.openLoops.length > 0 && (
-        <ol className={styles.openLoopList}>
-          {detail.openLoops.map((loop) => (
-            <li key={loop}>{loop}</li>
+
+      <div className={styles.tagRow} aria-label="Topic chips">
+        {context.tags.map((tag) => (
+          <span key={tag}>{tag}</span>
+        ))}
+        <button type="button" aria-label="Add topic preview">
+          <Plus size={14} aria-hidden="true" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function RightRegion() {
+  return (
+    <aside className={styles.rightRegion} aria-label="Context intelligence preview">
+      <section className={styles.rightSection}>
+        <HeaderCount title="Proof Candidates" count={axisLabDashboard.proofCandidates.length} />
+        <div className={styles.proofList}>
+          {axisLabDashboard.proofCandidates.map((candidate) => (
+            <ProofCard candidate={candidate} key={candidate.title} />
           ))}
-        </ol>
-      )}
-      {detail.relatedNotes && detail.relatedNotes.length > 0 && (
-        <ul>
-          {detail.relatedNotes.map((note) => (
-            <li key={note}>{note}</li>
+        </div>
+      </section>
+
+      <section className={styles.rightSection}>
+        <HeaderCount title="Open Loops" count={axisLabDashboard.openLoops.length} />
+        <ul className={styles.loopList}>
+          {axisLabDashboard.openLoops.map((loop) => (
+            <li key={loop}>
+              <span aria-hidden="true" />
+              <p>{loop}</p>
+            </li>
           ))}
         </ul>
-      )}
-      {detail.action && <p className={styles.detailAction}>{detail.action}</p>}
+      </section>
+
+      <section className={styles.rightSection}>
+        <h2>Actions</h2>
+        {axisLabDashboard.actions.map((action) => (
+          <article className={styles.actionCard} key={action.title}>
+            <p>{action.title}</p>
+            <span>Due: {action.due}</span>
+          </article>
+        ))}
+        <button className={styles.addAction} type="button">
+          <Plus size={14} aria-hidden="true" />
+          Add action
+        </button>
+      </section>
+    </aside>
+  );
+}
+
+function HeaderCount({ count, title }: { count: number; title: string }) {
+  return (
+    <div className={styles.sectionHeader}>
+      <h2>{title}</h2>
+      <span>{count}</span>
     </div>
-  </div>
-);
+  );
+}
+
+function ProofCard({ candidate }: { candidate: AxisLabProofCandidate }) {
+  return (
+    <article className={styles.proofCard}>
+      <div className={styles.mockThumb}>
+        <span>{candidate.duration}</span>
+      </div>
+      <div>
+        <h3>{candidate.title}</h3>
+        <p>{candidate.meta}</p>
+        <span className={styles.unverified}>
+          <span aria-hidden="true" />
+          Unverified
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function DashboardComposer() {
+  return (
+    <form
+      className={styles.dashboardComposer}
+      aria-label="Preview composer"
+      onSubmit={(event) => event.preventDefault()}
+    >
+      <label className={styles.srOnly} htmlFor="axis-lab-dashboard-composer">
+        Say the rough version
+      </label>
+      <input id="axis-lab-dashboard-composer" placeholder="Say the rough version..." />
+      <div className={styles.composerControls} aria-label="Preview-only controls">
+        <IconButton label="Microphone preview">
+          <Mic size={16} aria-hidden="true" />
+        </IconButton>
+        <IconButton label="Camera preview">
+          <Camera size={16} aria-hidden="true" />
+        </IconButton>
+        <IconButton label="Upload preview">
+          <Upload size={16} aria-hidden="true" />
+        </IconButton>
+        <button className={styles.plusSend} type="button" aria-label="Add preview note">
+          <Plus size={20} aria-hidden="true" />
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function RecentRealityShelf() {
+  return (
+    <section className={styles.recentShelf} aria-labelledby="axis-lab-recent-title">
+      <div className={styles.recentHeader}>
+        <h2 id="axis-lab-recent-title">Recent Reality</h2>
+        <button type="button">View all</button>
+      </div>
+      <div className={styles.recentRow}>
+        {axisLabDashboard.recentReality.map((item) => (
+          <RecentRealityItem item={item} key={item.title} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecentRealityItem({ item }: { item: AxisLabRecentReality }) {
+  return (
+    <article className={styles.recentItem}>
+      <div className={styles.recentThumb}>
+        {item.duration ? <span>{item.duration}</span> : <Plus size={14} aria-hidden="true" />}
+      </div>
+      <h3>{item.title}</h3>
+      <p>
+        {item.kind}
+        {item.time ? ` - ${item.time}` : ""}
+      </p>
+    </article>
+  );
+}
+
+function IconButton({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <button className={styles.iconButton} type="button" aria-label={label}>
+      {children}
+    </button>
+  );
+}

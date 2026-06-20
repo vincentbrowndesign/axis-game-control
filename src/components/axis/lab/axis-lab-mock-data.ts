@@ -1,85 +1,99 @@
-import type { AxisLabThread } from "./axis-lab-types";
+import type { AxisLabContextDashboard } from "./axis-lab-types";
 
-export const axisLabThread: AxisLabThread = {
-  sessionTime: "8:31 AM",
-  context: {
-    id: "first-six-context",
-    label: "Active Context",
-    savedPreviewStatus: "local_preview",
-    statement: "First mistake cannot become the next rushed decision.",
-    threadTitle: "Tournament Weekend Gameplan",
-    axisSentence: "Keep the first six minutes simple: one mistake, then one calm next action.",
-  },
-  proofMark: {
-    accent: "proof",
-    id: "proof",
-    label: "Proof needed",
-    text: "Did the next possession speed up?",
-    detail: {
-      title: "Proof needed",
-      source: "Possession after first turnover",
-      suggestion: {
-        status: "Suggested interpretation · Needs confirmation",
-        confidence: "Medium preview confidence. The pattern still needs a clean source check.",
-      },
-      relatedNotes: [
-        "Compare the possession after the first miss or turnover.",
-        "Keep raw source separate from the interpretation.",
-      ],
-      action: "Review the next dead ball and name one rule.",
+export const axisLabDashboard: AxisLabContextDashboard = {
+  threadTitle: "First Six Minutes",
+  savedAt: "8:42 PM",
+  timeline: [
+    {
+      time: "8:31 AM",
+      title: "Open thread",
     },
-  },
-  nextMoveMark: {
-    accent: "action",
-    id: "next-move",
-    label: "Next move",
-    text: "Give one six-minute rule.",
-    detail: {
-      title: "Next move",
-      action: "Tell them: one mistake, next simple pass.",
-      relatedNotes: [
-        "Short enough for a huddle.",
-        "Keeps the team from carrying the mistake into the next action.",
-      ],
+    {
+      detail: "\"We keep rushing after the first mistake.\"",
+      time: "8:35 AM",
+      title: "Rough thought",
     },
-  },
-  recentSourceMark: {
-    accent: "source",
-    id: "recent-source",
-    label: "Recent reality",
-    text: "Mock source · Preview only · No interpretation yet",
-    detail: {
-      title: "Recent reality",
-      sourceDetail: {
-        kind: "clip",
-        range: "Q1 · 5:42-5:55",
-        status: "Mock source · Preview only · No interpretation yet",
-        thumbnailLabel: "Mock clip thumbnail",
-      },
-      relatedNotes: [
-        "Raw source is separate from the active context.",
-        "No interpretation has been attached yet.",
-      ],
-      action: "Open only long enough to decide whether it supports the current read.",
+    {
+      detail: "First six minutes matter most.",
+      time: "8:41 AM",
+      title: "Added note",
     },
-  },
-  openLoopMark: {
-    accent: "loop",
-    id: "open-loop",
-    label: "Open loop",
-    text: "First six still needs one huddle rule.",
-    detail: {
-      title: "Open loop",
-      openLoops: [
-        "Pick the one rule that survives noise.",
-        "Decide whether the first miss or first turnover is the better trigger.",
-        "Watch if the next possession slows down.",
-      ],
-      relatedNotes: [
-        "Only the top loop stays visible while collapsed.",
-        "This is a temporary preview list, not a permanent tracker.",
-      ],
-      action: "Close the loop by naming one rule before tip.",
+    {
+      mediaLabel: "Mock clip thumbnail",
+      time: "8:42 PM",
+      title: "Added source",
     },
+    {
+      detail: "Voice note",
+      mediaLabel: "Mock waveform",
+      meta: "0:18",
+      time: "TODAY 6:15 PM",
+      title: "Voice note",
+    },
+  ],
+  activeContext: {
+    mainText: "We keep rushing after the first mistake.",
+    support: "The first problem is not the mistake. It is the speed of the next decision.",
+    proofNeeded: "Check first two possessions after turnovers.",
+    nextMove: "Give the team one rule for the first six minutes.",
+    keeper: "No second mistake from rushing.",
+    tags: ["team", "turnovers", "decision_speed"],
   },
+  proofCandidates: [
+    {
+      duration: "0:12",
+      meta: "Clip - 6:14 PM",
+      title: "First possession after turnover",
+    },
+    {
+      duration: "0:09",
+      meta: "Clip - 6:15 PM",
+      title: "Second possession after turnover",
+    },
+  ],
+  openLoops: [
+    "Is the rush caused by pressure or spacing?",
+    "What rule slows the team without killing pace?",
+    "Who enforces the rule in the first six minutes?",
+  ],
+  actions: [
+    {
+      due: "Tomorrow",
+      title: "Write parent-facing message for tournament weekend.",
+    },
+  ],
+  recentReality: [
+    {
+      duration: "0:12",
+      kind: "Clip",
+      time: "6:14 PM",
+      title: "Turnover 1",
+    },
+    {
+      duration: "0:09",
+      kind: "Clip",
+      time: "6:15 PM",
+      title: "Turnover 2",
+    },
+    {
+      kind: "Image",
+      time: "5:48 PM",
+      title: "Zone talk",
+    },
+    {
+      duration: "0:18",
+      kind: "Voice",
+      time: "5:48 PM",
+      title: "Coach voice note",
+    },
+    {
+      kind: "Note",
+      time: "5:40 PM",
+      title: "Quick note",
+    },
+    {
+      kind: "Source",
+      title: "Add source",
+    },
+  ],
 };
