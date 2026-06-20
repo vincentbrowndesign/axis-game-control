@@ -67,6 +67,40 @@ The active lab preview is a Context Dashboard mock with:
 
 Desktop preserves the three-region reference layout. Tablet portrait and phone collapse into a single readable flow.
 
+## Axis Reality Marks v0
+
+Axis Reality Marks v0 exists only in `/axis/lab`.
+
+Reality Marks:
+
+- use local React state only
+- mark human-selected moments
+- are created from the preview composer `+` menu
+- appear in the local Thread Timeline
+- appear at the start of Recent Reality
+- may create local proof-candidate suggestions for proof-like labels
+- reset on refresh
+
+Every created Reality Mark is:
+
+- `sourceType: manual`
+- `verification: unverified`
+
+Reality Marks do not:
+
+- capture media
+- open camera, microphone, upload, or file-picker controls
+- perform CV
+- create evidence
+- create Witness verdicts
+- persist to storage
+- create Data Asset records
+- activate Axis Lens
+
+A `clip` Reality Mark is only a marker for a moment. It does not contain a clip, capture video, or prove anything.
+
+Reality Mark proof candidates require future confirmation. They are local UI suggestions only.
+
 ## Mock-Only Rule
 
 `/axis/lab` uses local static data only.
