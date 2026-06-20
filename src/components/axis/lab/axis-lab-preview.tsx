@@ -126,6 +126,7 @@ function AxisLabPreviewBody({ previewState }: { previewState: AxisLabPreviewStat
 
             {localThoughts.length > 0 && (
               <div className={styles.localThoughts} aria-label="Local preview additions">
+                <span className={styles.localThoughtsLabel}>Next rough thought</span>
                 {localThoughts.map((thought, index) => (
                   <p key={`${thought}-${index}`}>{thought}</p>
                 ))}
