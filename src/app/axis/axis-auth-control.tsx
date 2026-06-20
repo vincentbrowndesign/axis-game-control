@@ -14,13 +14,12 @@ export type AxisAuthState = {
   userId: string | null;
 };
 
-type AuthFormState = "idle" | "submitting" | "success" | "error" | "confirmation_required";
+type AuthFormState = "idle" | "submitting" | "error";
 
 type AxisAuthController = AxisAuthState & {
   reload: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<AuthFormState>;
+  signInWithGoogle: () => Promise<AuthFormState>;
   signOut: () => Promise<boolean>;
-  signUp: (email: string, password: string) => Promise<AuthFormState>;
 };
 
 type Props = {
@@ -109,7 +108,7 @@ export function useAxisAuth(): AxisAuthController {
     };
   }, [applySession]);
 
-  const signIn = useCallback(async (email: string, password: string): Promise<AuthFormState> => {
+  const signInWithGoogle = useCallback(async (): Promise<AuthFormState> => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
       setAuthState({
@@ -120,34 +119,17 @@ export function useAxisAuth(): AxisAuthController {
       return "error";
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: normalizeEmail(email),
-      password,
+    if (typeof window === "undefined") return "error";
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/axis`,
+      },
     });
     if (error) return "error";
-    applySession(data.session ?? null);
-    return "success";
-  }, [applySession]);
-
-  const signUp = useCallback(async (email: string, password: string): Promise<AuthFormState> => {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) {
-      setAuthState({
-        ...signedOutState,
-        errorMessage: "Auth is not configured.",
-        status: "error",
-      });
-      return "error";
-    }
-
-    const { data, error } = await supabase.auth.signUp({
-      email: normalizeEmail(email),
-      password,
-    });
-    if (error) return "error";
-    applySession(data.session ?? null);
-    return data.session ? "success" : "confirmation_required";
-  }, [applySession]);
+    return "submitting";
+  }, []);
 
   const signOut = useCallback(async () => {
     const supabase = getSupabaseBrowserClient();
@@ -162,17 +144,14 @@ export function useAxisAuth(): AxisAuthController {
     () => ({
       ...authState,
       reload,
-      signIn,
+      signInWithGoogle,
       signOut,
-      signUp,
     }),
-    [authState, reload, signIn, signOut, signUp],
+    [authState, reload, signInWithGoogle, signOut],
   );
 }
 
 export default function AxisAuthControl({ auth }: Props) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [formState, setFormState] = useState<AuthFormState>("idle");
   const [formError, setFormError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -183,27 +162,30 @@ export default function AxisAuthControl({ auth }: Props) {
   useEffect(() => {
     if (auth.status === "signed_in") {
       setOpen(false);
-      setPassword("");
       setFormError(null);
       setFormState("idle");
     }
   }, [auth.status]);
 
-  async function submitAuth(action: "sign_in" | "sign_up") {
-    const cleanEmail = normalizeEmail(email);
-    if (!cleanEmail || !password || submitting) return;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auth_error") === "google") {
+      setOpen(true);
+      setFormState("error");
+      setFormError("Google sign-in did not finish. Try again.");
+    }
+  }, []);
+
+  async function startGoogleSignIn() {
+    if (submitting) return;
 
     setFormState("submitting");
     setFormError(null);
-    const nextState = action === "sign_in"
-      ? await auth.signIn(cleanEmail, password)
-      : await auth.signUp(cleanEmail, password);
-    setPassword("");
+    const nextState = await auth.signInWithGoogle();
     setFormState(nextState);
     if (nextState === "error") {
-      setFormError(action === "sign_in"
-        ? "Check your email and password, then try again."
-        : "We could not create that account. Check the email and password, then try again.");
+      setFormError("Google sign-in did not finish. Try again.");
     }
   }
 
@@ -227,7 +209,7 @@ export default function AxisAuthControl({ auth }: Props) {
         <div className="axis-auth-sheet-header">
           <div>
             <p>{auth.status === "signed_in" ? "Account" : "Save your Axis thread"}</p>
-            <h2>{auth.status === "signed_in" ? accountLabel : "Sign in or create account"}</h2>
+            <h2>{auth.status === "signed_in" ? accountLabel : "Sign in with Google"}</h2>
           </div>
           <button type="button" onClick={() => setOpen(false)}>
             {auth.status === "signed_in" ? "Close" : "Continue without saving"}
@@ -242,66 +224,25 @@ export default function AxisAuthControl({ auth }: Props) {
             </button>
           </div>
         ) : (
-          <form
+          <div
             className="axis-auth-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitAuth("sign_in");
-            }}
           >
-            <label>
-              <span>Email</span>
-              <input
-                autoCapitalize="none"
-                autoComplete="email"
-                autoCorrect="off"
-                disabled={submitting}
-                inputMode="email"
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                spellCheck={false}
-                type="email"
-                value={email}
-              />
-            </label>
-
-            <label>
-              <span>Password</span>
-              <input
-                autoComplete="current-password"
-                disabled={submitting}
-                minLength={6}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                type="password"
-                value={password}
-              />
-            </label>
-
             {auth.status === "error" && auth.errorMessage && (
               <p className="axis-auth-note">{auth.errorMessage}</p>
-            )}
-            {formState === "confirmation_required" && (
-              <p className="axis-auth-note">Check your email to confirm the account.</p>
-            )}
-            {formState === "success" && (
-              <p className="axis-auth-note">Signed in.</p>
             )}
             {formError && <p className="axis-auth-error">{formError}</p>}
 
             <div className="axis-auth-actions">
-              <button type="submit" disabled={submitting}>
-                {submitting ? "Signing in..." : "Sign in"}
-              </button>
               <button
+                className="axis-auth-google"
                 type="button"
                 disabled={submitting}
-                onClick={() => void submitAuth("sign_up")}
+                onClick={() => void startGoogleSignIn()}
               >
-                Create account
+                {submitting ? "Opening Google..." : "Continue with Google"}
               </button>
             </div>
-          </form>
+          </div>
         )}
       </div>
 
@@ -380,30 +321,6 @@ export default function AxisAuthControl({ auth }: Props) {
           gap: 10px;
         }
 
-        .axis-auth-form label {
-          color: color-mix(in srgb, var(--axis-ink) 42%, transparent);
-          display: flex;
-          flex-direction: column;
-          font-size: 10.5px;
-          gap: 4px;
-        }
-
-        .axis-auth-form input {
-          background: color-mix(in srgb, var(--axis-room) 72%, white);
-          border: 1px solid color-mix(in srgb, var(--axis-line) 18%, transparent);
-          color: color-mix(in srgb, var(--axis-ink) 88%, transparent);
-          font: inherit;
-          font-size: 13px;
-          min-width: 0;
-          outline: 0;
-          padding: 8px;
-          width: 100%;
-        }
-
-        .axis-auth-form input:focus {
-          border-color: color-mix(in srgb, var(--axis-line) 42%, transparent);
-        }
-
         .axis-auth-actions {
           display: flex;
           gap: 8px;
@@ -418,6 +335,14 @@ export default function AxisAuthControl({ auth }: Props) {
           font: inherit;
           font-size: 11px;
           padding: 0 0 2px;
+        }
+
+        .axis-auth-google {
+          border: 1px solid color-mix(in srgb, var(--axis-line) 18%, transparent);
+          border-radius: 10px;
+          color: color-mix(in srgb, var(--axis-ink) 82%, transparent);
+          min-height: 42px;
+          padding: 0 12px;
         }
 
         .axis-auth button:disabled {
@@ -510,18 +435,6 @@ export default function AxisAuthControl({ auth }: Props) {
             gap: 18px;
           }
 
-          .axis-auth-form label {
-            font-size: 13px;
-            gap: 9px;
-          }
-
-          .axis-auth-form input {
-            border-radius: 10px;
-            font-size: 16px;
-            min-height: 54px;
-            padding: 14px;
-          }
-
           .axis-auth-actions {
             align-items: stretch;
             flex-direction: column;
@@ -535,6 +448,12 @@ export default function AxisAuthControl({ auth }: Props) {
             font-size: 14px;
             min-height: 52px;
             padding: 0 14px;
+          }
+
+          .axis-auth-google {
+            background: #181510;
+            color: color-mix(in srgb, var(--axis-paper) 96%, white);
+            font-weight: 700;
           }
 
           .axis-auth-note,
@@ -552,8 +471,4 @@ function shortenEmail(email: string) {
   if (!domain) return email;
   const shortName = name.length > 12 ? `${name.slice(0, 10)}...` : name;
   return `${shortName}@${domain}`;
-}
-
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
 }

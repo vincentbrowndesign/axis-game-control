@@ -14,7 +14,6 @@ Auth is not a profile system, organization system, billing system, memory layer,
 ## What Auth Enables
 
 - session restoration
-- account creation
 - sign in
 - sign out
 - account switching
@@ -40,9 +39,20 @@ Auth is not a profile system, organization system, billing system, memory layer,
 
 ## Current Auth Method
 
-Axis Auth v0 uses the existing Supabase browser client and email/password authentication on the `/axis` page.
+Axis Auth v0 uses the existing Supabase browser client and Google OAuth on the `/axis` page.
 
-The existing `/auth/callback` route remains available for configured email-link or OAuth flows elsewhere in the app, but Axis Auth v0 does not add OAuth, password reset, profiles, or a separate login page to the `/axis` room.
+The active `/axis` auth UI shows one primary signed-out action: "Continue with Google."
+
+Axis Auth v0 does not expose email/password fields, account-creation forms, password reset, profiles, or a separate login page inside the `/axis` room.
+
+The `/auth/callback` route exchanges the OAuth code for a Supabase session and redirects back to `/axis`. If Google sign-in fails or does not complete, `/axis` should show plain copy: "Google sign-in did not finish. Try again."
+
+Operational setup required outside the repo:
+
+- Google provider enabled in Supabase Auth
+- Google OAuth credentials configured in Supabase
+- `/auth/callback` included in Supabase redirect allow list
+- production and localhost callback URLs verified
 
 ## Thread Persistence Boundary
 
@@ -104,7 +114,7 @@ Axis Auth v0 passes when:
 
 1. A signed-out user can use the conversation locally.
 2. The save state clearly says "Sign in to save."
-3. The user can create an account or sign in from the compact `/axis` control.
+3. The user can sign in with Google from the compact `/axis` control.
 4. The signed-in account is visible in the header.
 5. Sign-out clears owner-scoped thread state and starts a fresh local thread.
 6. User A's saved threads do not appear for User B.

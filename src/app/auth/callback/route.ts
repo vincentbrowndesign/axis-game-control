@@ -9,9 +9,8 @@ function safeReturnPath(value: string | null) {
 }
 
 function authErrorRedirect(request: NextRequest) {
-  const url = new URL("/auth", request.url);
-  url.searchParams.set("next", "/axis");
-  url.searchParams.set("error", "callback");
+  const url = new URL("/axis", request.url);
+  url.searchParams.set("auth_error", "google");
   return NextResponse.redirect(url);
 }
 
