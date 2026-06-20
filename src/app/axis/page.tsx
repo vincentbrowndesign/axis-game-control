@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { axisAuthenticatedFetch } from "../../lib/axis-client-auth";
 import { AxisContextComposer } from "../../components/axis/context-dashboard/axis-context-composer";
 import { AxisContextDashboardShell } from "../../components/axis/context-dashboard/axis-context-dashboard-shell";
@@ -627,6 +627,84 @@ export default function AxisPage() {
           color: rgba(32, 29, 24, 0.48);
         }
 
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot) {
+          border-top-color: rgba(32, 29, 24, 0.1);
+        }
+
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot)
+          h2 {
+          font-size: 0;
+        }
+
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot)
+          h2::after {
+          color: rgba(32, 29, 24, 0.52);
+          content: "Need To Lock";
+          font-size: 10px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot)
+          h2
+          + span {
+          display: none;
+        }
+
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot)
+          ul {
+          gap: 7px;
+          margin-top: 9px;
+        }
+
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot)
+          li {
+          align-items: start;
+          border-bottom: 1px solid rgba(32, 29, 24, 0.12);
+          display: grid;
+          gap: 8px;
+          grid-template-columns: 9px minmax(0, 1fr);
+          padding-bottom: 8px;
+        }
+
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot)
+          li:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+
+        main[aria-label="Axis live room"]
+          aside[aria-label="Context intelligence"]
+          section:has(.axis-need-to-lock-dot)
+          p {
+          color: rgba(32, 29, 24, 0.76);
+          font-size: clamp(13px, 1.05vw, 15px);
+          line-height: 1.28;
+        }
+
+        .axis-need-to-lock-dot {
+          background: rgba(126, 86, 45, 0.72);
+          border-radius: 999px;
+          display: block;
+          height: 6px;
+          margin-top: 5px;
+          width: 6px;
+        }
+
         main[aria-label="Axis live room"] form[aria-label="Axis composer"] button[type="submit"] {
           background: #181510;
           border-radius: 10px;
@@ -849,6 +927,7 @@ function sanitizeSections(board: ThreadBoardData | null): ThreadBoardSection[] {
 
 function deriveBoardPresentation(sections: ThreadBoardSection[]) {
   const centerSections: Array<{ id: string; items: string[]; title: string }> = [];
+  const openLoops: Array<{ control?: ReactNode; id: string; text: string }> = [];
   const actions: Array<{ id: string; title: string }> = [];
   let proofNeeded: string | undefined;
   let nextMove: string | undefined;
@@ -858,10 +937,12 @@ function deriveBoardPresentation(sections: ThreadBoardSection[]) {
     const id = `${label}-${index}`;
 
     if (OPEN_LOOP_LABELS.has(label)) {
-      centerSections.push({
-        id,
-        items: section.items.slice(0, 3),
-        title: "Need To Lock",
+      section.items.slice(0, 2).forEach((item, itemIndex) => {
+        openLoops.push({
+          control: <span className="axis-need-to-lock-dot" aria-hidden="true" />,
+          id: `${id}-${itemIndex}`,
+          text: item,
+        });
       });
       return;
     }
@@ -889,7 +970,7 @@ function deriveBoardPresentation(sections: ThreadBoardSection[]) {
     actions,
     centerSections,
     nextMove,
-    openLoops: [],
+    openLoops,
     proofNeeded,
   };
 }
