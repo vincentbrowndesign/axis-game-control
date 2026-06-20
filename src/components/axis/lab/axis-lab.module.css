@@ -521,12 +521,13 @@
   gap: 3px;
 }
 
+/* 44px height meets minimum touch target. Width kept at 70px for visual proportion. */
 .lensFrame,
 .lensFrameSelected {
-  aspect-ratio: 16 / 9;
   border-radius: 3px;
   cursor: pointer;
   flex-shrink: 0;
+  height: 44px;
   padding: 0;
   width: 70px;
 }
@@ -539,6 +540,20 @@
 .lensFrameSelected {
   background: color-mix(in srgb, var(--lab-ink) 10%, transparent);
   border: 1.5px solid color-mix(in srgb, var(--lab-proof) 55%, transparent);
+  position: relative;
+}
+
+/* Non-color shape cue for selected frame — a centered dot inside the frame */
+.lensFrameSelected::after {
+  background: color-mix(in srgb, var(--lab-ink) 22%, transparent);
+  border-radius: 50%;
+  bottom: 5px;
+  content: "";
+  height: 4px;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+  width: 4px;
 }
 
 .lensFrame:focus-visible,
@@ -559,9 +574,31 @@
 /* ─── Evidence candidates (right port, lens states) ───────── */
 
 .ecCandidate {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 5px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ecCandidate {
+    transition: opacity 0.1s ease;
+  }
+}
+
+.ecCandidate:hover {
+  opacity: 0.8;
+}
+
+.ecCandidate:focus-visible {
+  border-radius: 3px;
+  outline: 1px solid color-mix(in srgb, var(--lab-line) 50%, transparent);
+  outline-offset: 4px;
 }
 
 .ecLabel {
@@ -620,7 +657,12 @@
   position: absolute;
   right: 10px;
   top: 8px;
-  transition: color 0.1s ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sourceCloseBtn {
+    transition: color 0.1s ease;
+  }
 }
 
 .sourceCloseBtn:hover {
@@ -657,6 +699,121 @@
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.03em;
+}
+
+/* ─── Expansion layer — candidate detail panel ────────────── */
+
+.expansionBackdrop {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--lab-room) 85%, transparent);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: clamp(24px, 6vh, 64px) 24px;
+  position: absolute;
+}
+
+.expansionPanel {
+  background: var(--lab-paper);
+  border: 1px solid color-mix(in srgb, var(--lab-line) 50%, transparent);
+  border-radius: 6px;
+  max-width: 360px;
+  padding: 28px 24px 24px;
+  position: relative;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .expansionPanel {
+    animation: panelReveal 0.12s ease;
+  }
+}
+
+@keyframes panelReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.expCloseBtn {
+  background: transparent;
+  border: 0;
+  color: color-mix(in srgb, var(--lab-ink) 36%, transparent);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 3px;
+  position: absolute;
+  right: 12px;
+  top: 10px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .expCloseBtn {
+    transition: color 0.1s ease;
+  }
+}
+
+.expCloseBtn:hover {
+  color: color-mix(in srgb, var(--lab-ink) 65%, transparent);
+}
+
+.expCloseBtn:focus-visible {
+  border-radius: 2px;
+  outline: 1px solid color-mix(in srgb, var(--lab-line) 38%, transparent);
+  outline-offset: 3px;
+}
+
+.expLabel {
+  color: color-mix(in srgb, var(--lab-ink) 32%, transparent);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.expBody {
+  color: color-mix(in srgb, var(--lab-ink) 82%, transparent);
+  font-size: clamp(16px, 2vw, 20px);
+  line-height: 1.4;
+  margin: 0 0 16px;
+  overflow-wrap: break-word;
+}
+
+.expMeta {
+  color: color-mix(in srgb, var(--lab-ink) 44%, transparent);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin: 0 0 4px;
+}
+
+.expConfidence {
+  color: color-mix(in srgb, var(--lab-ink) 30%, transparent);
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+/* ─── Phone inline meta — hidden above 640px ──────────────── */
+
+.compactMeta {
+  color: color-mix(in srgb, var(--lab-ink) 26%, transparent);
+  display: none;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  margin: 0 0 10px;
+}
+
+@media (max-width: 640px) {
+  .compactMeta {
+    display: block;
+  }
 }
 
 /* ─── Composer ────────────────────────────────────────────── */

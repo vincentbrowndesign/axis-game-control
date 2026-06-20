@@ -47,6 +47,8 @@ Define Capsule:
 Internal Development Surfaces:
 
 1. Axis UI Lab v1 — Mock-only quiet work-surface redesign. Does not modify or replace `/axis`.
+2. Axis Aperture Shell — Internal CSS Grid shell pattern used by the lab. Type: Internal UI lab pattern. Decision: Refine Current. Boundary: `/axis/lab` only. Not active in `/axis`.
+3. Axis Lens UI Bridge — Mock-only visual-source preview inside the Aperture Shell. Status: Internal mock preview. Decision: Refine Current in `/axis/lab` only. No Lens runtime or CV capability is activated. Do not move Axis Lens out of Do Not Build Yet based on this preview.
 
 Do Not Build Yet:
 

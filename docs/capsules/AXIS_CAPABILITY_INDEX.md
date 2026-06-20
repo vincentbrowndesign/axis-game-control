@@ -50,7 +50,8 @@ This index controls which capability capsules are active, which are future, and 
 
 | Surface | Status | Build Decision | Notes |
 |---|---|---|---|
-| Axis UI Lab v1 | Internal preview | Build Now | Mock-only quiet work-surface prototype at `/axis/lab`. No API, Supabase, auth, persistence, media, Data Asset runtime, CV, or active-product behavior. Capsule: `docs/capsules/AXIS_UI_LAB.md`. |
+| Axis UI Lab v1 | Internal preview | Refine Current | Mock-only aperture work-surface at `/axis/lab`. Aperture Shell pattern, focus states, Lens Bridge preview. No API, Supabase, auth, persistence, media, Data Asset runtime, CV, or active-product behavior. Capsule: `docs/capsules/AXIS_UI_LAB.md`. |
+| Axis Lens UI Bridge | Internal mock preview | Refine Current in `/axis/lab` only | Mock-only visual-source presentation inside the Aperture Shell. No CV runtime, no media permissions, no camera, no file selection, no clip analysis, no upload. Source candidates are not verified evidence. Promotion to a real Lens runtime requires a separate decision to advance the Axis Lens capsule (currently Do Not Build Yet). |
 
 ## Build Rule
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   axisActiveThreadMock,
@@ -18,11 +18,12 @@ import styles from "./axis-lab.module.css";
 import type {
   AxisApertureFocus,
   AxisLabAnnotationKind,
+  LensEvidenceCandidate,
   LensEvidenceCandidateKind,
   LensMockFrame,
 } from "./axis-lab-types";
 
-// CSS class maps keyed by kind — no inline styles needed
+// CSS class maps — no inline styles
 const ANNOTATION_CLASS: Record<AxisLabAnnotationKind, string> = {
   observation: styles.accentUse,
   proof: styles.accentProof,
@@ -132,24 +133,38 @@ function LabAnnotationMarks({
   );
 }
 
-function LabEvidenceCandidates() {
+function LabEvidenceCandidates({
+  expandedId,
+  onExpand,
+}: {
+  expandedId: string | null;
+  onExpand: (id: string, btn: HTMLButtonElement) => void;
+}) {
   return (
     <div className={styles.rpColumn}>
-      {axisMockCandidates.slice(0, 2).map((c) => (
-        <div
-          key={c.id}
-          className={`${styles.ecCandidate} ${CANDIDATE_CLASS[c.kind]}`}
-        >
-          <span className={styles.rpDot} aria-hidden="true" />
-          <span className={styles.ecLabel}>{c.label}</span>
-          <span className={styles.ecBody}>{c.body}</span>
-          {(c.source || c.confidence) && (
-            <span className={styles.ecMeta}>
-              {[c.source, c.confidence].filter(Boolean).join(" · ")}
-            </span>
-          )}
-        </div>
-      ))}
+      {axisMockCandidates.slice(0, 2).map((c) => {
+        const isExpanded = c.id === expandedId;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            id={`cand-btn-${c.id}`}
+            className={`${styles.ecCandidate} ${CANDIDATE_CLASS[c.kind]}`}
+            aria-expanded={isExpanded}
+            aria-controls={`cand-detail-${c.id}`}
+            onClick={(e) => onExpand(c.id, e.currentTarget)}
+          >
+            <span className={styles.rpDot} aria-hidden="true" />
+            <span className={styles.ecLabel}>{c.label}</span>
+            <span className={styles.ecBody}>{c.body}</span>
+            {(c.source || c.confidence) && (
+              <span className={styles.ecMeta}>
+                {[c.source, c.confidence].filter(Boolean).join(" · ")}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -181,7 +196,7 @@ function LabLensStrip({
 }: {
   frames: readonly LensMockFrame[];
   selectedId: string;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, btn: HTMLButtonElement) => void;
 }) {
   return (
     <div className={styles.lensStrip}>
@@ -194,7 +209,7 @@ function LabLensStrip({
                 type="button"
                 className={isSelected ? styles.lensFrameSelected : styles.lensFrame}
                 aria-label={`Frame at ${f.time}${isSelected ? " (selected)" : ""}`}
-                onClick={() => onSelect(f.id)}
+                onClick={(e) => onSelect(f.id, e.currentTarget)}
               />
               <p className={styles.lensFrameTime}>{f.time}</p>
             </div>
@@ -208,6 +223,14 @@ function LabLensStrip({
 // ─── Source expanded center ────────────────────────────────
 
 function LabSourceView({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   return (
     <div className={styles.sourceView}>
       <div className={styles.sourceMockClip}>
@@ -228,6 +251,56 @@ function LabSourceView({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Expansion layer — candidate detail ────────────────────
+
+function LabCandidateDetail({
+  candidate,
+  onClose,
+}: {
+  candidate: LensEvidenceCandidate;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div className={styles.expansionBackdrop}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`exp-title-${candidate.id}`}
+        id={`cand-detail-${candidate.id}`}
+        className={styles.expansionPanel}
+      >
+        <button
+          type="button"
+          className={styles.expCloseBtn}
+          onClick={onClose}
+          aria-label="Close candidate detail"
+          autoFocus
+        >
+          ×
+        </button>
+        <p id={`exp-title-${candidate.id}`} className={styles.expLabel}>
+          {candidate.label}
+        </p>
+        <p className={styles.expBody}>{candidate.body}</p>
+        {candidate.source && (
+          <p className={styles.expMeta}>{candidate.source}</p>
+        )}
+        {candidate.confidence && (
+          <p className={styles.expConfidence}>{candidate.confidence}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main preview ──────────────────────────────────────────
 
 export default function AxisLabPreview() {
@@ -238,17 +311,38 @@ export default function AxisLabPreview() {
   const [localThoughts, setLocalThoughts] = useState<string[]>([]);
   const [selectedFrameId, setSelectedFrameId] = useState(DEFAULT_SELECTED_FRAME_ID);
   const [expandedSource, setExpandedSource] = useState(apertureFocus === "source_expanded");
+  const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
+
+  const frameOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const candidateOpenerRef = useRef<HTMLButtonElement | null>(null);
 
   const isLensMode = apertureFocus === "lens_preview" || apertureFocus === "source_expanded";
   const isSourceOpen = isLensMode && expandedSource;
   const isPostClose = apertureFocus === "source_expanded" && !expandedSource;
   const showLensStrip = isLensMode && !isPostClose;
 
+  const handleSourceClose = useCallback(() => {
+    setExpandedSource(false);
+    requestAnimationFrame(() => frameOpenerRef.current?.focus());
+  }, []);
+
+  const handleCandidateClose = useCallback(() => {
+    const toFocus = candidateOpenerRef.current;
+    setExpandedCandidateId(null);
+    requestAnimationFrame(() => toFocus?.focus());
+  }, []);
+
   function handleReset() {
     setLabState(FOCUS_TO_LAB_STATE[apertureFocus]);
     setLocalThoughts([]);
     setSelectedFrameId(DEFAULT_SELECTED_FRAME_ID);
     setExpandedSource(apertureFocus === "source_expanded");
+    setExpandedCandidateId(null);
+  }
+
+  function handleLabStateChange(newState: LabState) {
+    setLabState(newState);
+    setExpandedCandidateId(null);
   }
 
   function handleComposerSubmit(text: string) {
@@ -256,9 +350,15 @@ export default function AxisLabPreview() {
     if (labState === "empty") setLabState("active");
   }
 
-  function handleFrameSelect(id: string) {
+  function handleFrameSelect(id: string, btn: HTMLButtonElement) {
+    frameOpenerRef.current = btn;
     setSelectedFrameId(id);
     setExpandedSource(true);
+  }
+
+  function handleCandidateExpand(id: string, btn: HTMLButtonElement) {
+    candidateOpenerRef.current = btn;
+    setExpandedCandidateId((prev) => (prev === id ? null : id));
   }
 
   const leftPort = (() => {
@@ -280,11 +380,22 @@ export default function AxisLabPreview() {
           }]}
         />
       );
-    if (isLensMode) return <LabEvidenceCandidates />;
+    if (isLensMode)
+      return (
+        <LabEvidenceCandidates
+          expandedId={expandedCandidateId}
+          onExpand={handleCandidateExpand}
+        />
+      );
     if (labState === "active" && apertureFocus === "annotation_visible")
       return <LabAnnotationMarks annotations={axisActiveThreadMock.annotations} />;
     return null;
   })();
+
+  const expandedCandidate =
+    isLensMode && !isSourceOpen && !isPostClose && expandedCandidateId !== null
+      ? (axisMockCandidates.find((c) => c.id === expandedCandidateId) ?? null)
+      : null;
 
   return (
     <AxisApertureShell
@@ -304,16 +415,24 @@ export default function AxisLabPreview() {
           />
           <AxisLabPreviewControls
             labState={labState}
-            onStateChange={setLabState}
+            onStateChange={handleLabStateChange}
             onReset={handleReset}
           />
         </>
       }
       leftPort={leftPort}
       rightPort={rightPort}
+      expansionLayer={
+        expandedCandidate ? (
+          <LabCandidateDetail
+            candidate={expandedCandidate}
+            onClose={handleCandidateClose}
+          />
+        ) : undefined
+      }
     >
       {isSourceOpen ? (
-        <LabSourceView onClose={() => setExpandedSource(false)} />
+        <LabSourceView onClose={handleSourceClose} />
       ) : labState === "empty" ? (
         <AxisEmptyState />
       ) : (
@@ -323,6 +442,7 @@ export default function AxisLabPreview() {
               threadTitle={axisActiveThreadMock.threadTitle}
               userThought={axisActiveThreadMock.userThought}
               axisResponse={axisActiveThreadMock.axisResponse}
+              compactMeta={axisActiveThreadMock.timestamp}
             />
           )}
           {(labState === "make-space" || labState === "expanded") && (
