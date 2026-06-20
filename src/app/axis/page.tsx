@@ -82,6 +82,7 @@ export default function AxisPage() {
   );
   const latestAssistant = messages[latestAssistantIndex];
   const latestBoard = latestAssistant?.threadBoard ?? null;
+  const hasUserMessages = messages.some((message) => message.role === "user");
   const threadStartedAt =
     activeThread?.createdAt ??
     messages.find((message) => message.role === "user")?.createdAt ??
@@ -410,11 +411,15 @@ export default function AxisPage() {
               <ThreadBoard board={latestBoard} generatedAt={latestAssistant?.createdAt} />
             </details>
           ) : undefined,
-          label: latestBoard ? "Active Context" : "Conversation",
-          mainText: latestBoard?.title?.trim() || latestAssistant?.content || "What are we working on?",
+          label: latestBoard ? "Current Read" : "Conversation",
+          mainText: hasUserMessages
+            ? latestBoard?.title?.trim() || latestAssistant?.content || "Current thread"
+            : "WHAT ARE WE WORKING ON?",
           nextMove: boardDerivatives.nextMove,
           proofNeeded: boardDerivatives.proofNeeded,
-          support: latestBoard?.summary?.trim() || "Bring the rough version. Axis will help it develop.",
+          support: hasUserMessages
+            ? latestBoard?.summary?.trim() || latestAssistant?.content || "Axis is shaping the first read."
+            : "Bring the rough version. Axis will help it develop.",
         }}
         actions={boardDerivatives.actions}
         ariaLabel="Axis live room"
@@ -467,6 +472,7 @@ export default function AxisPage() {
         openLoops={boardDerivatives.openLoops}
         timelineItems={timelineItems}
       />
+      {hasUserMessages && <span className="axis-room-active" aria-hidden="true" />}
 
       {loading && (
         <div className="axis-live-status" aria-live="polite">
@@ -485,9 +491,200 @@ export default function AxisPage() {
           margin: 0;
           min-height: 100%;
         }
+
+        main[aria-label="Axis live room"] {
+          background: #f4f0e6;
+          color: #201d18;
+          padding: 0;
+        }
+
+        main[aria-label="Axis live room"] > div {
+          background: #f7f3ea;
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
+          min-height: 100dvh;
+          padding-bottom: max(108px, calc(env(safe-area-inset-bottom) + 96px));
+        }
+
+        main[aria-label="Axis live room"] header {
+          background: color-mix(in srgb, #f7f3ea 92%, white);
+          border-bottom: 1px solid rgba(45, 39, 30, 0.14);
+          padding: 12px clamp(14px, 2vw, 24px);
+          position: sticky;
+          top: 0;
+          z-index: 8;
+        }
+
+        main[aria-label="Axis live room"] header > div:first-child {
+          gap: 10px;
+        }
+
+        main[aria-label="Axis live room"] header > div:first-child > span:first-child {
+          color: rgba(32, 29, 24, 0.72);
+          font-family: ui-sans-serif, system-ui, sans-serif;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+        }
+
+        main[aria-label="Axis live room"] header > div:nth-child(2) {
+          display: none;
+        }
+
+        main[aria-label="Axis live room"] header > div:last-child {
+          gap: 12px;
+        }
+
+        main[aria-label="Axis live room"] > div > section[aria-label="Context dashboard"] {
+          grid-template-columns: minmax(8.5rem, 0.4fr) minmax(32rem, 1.85fr) minmax(14rem, 0.75fr);
+          min-height: 0;
+        }
+
+        main[aria-label="Axis live room"] aside[aria-labelledby="axis-context-timeline-title"] {
+          opacity: 0.76;
+          padding-left: clamp(12px, 1.6vw, 18px);
+          padding-right: 12px;
+        }
+
+        main[aria-label="Axis live room"] aside[aria-labelledby="axis-context-timeline-title"] li {
+          padding-bottom: 14px;
+        }
+
+        main[aria-label="Axis live room"] aside[aria-labelledby="axis-context-timeline-title"] p {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+        }
+
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] {
+          padding-top: clamp(24px, 4vh, 44px);
+        }
+
+        main[aria-label="Axis live room"] #axis-context-active-title {
+          color: #181510;
+          font-size: clamp(52px, 7vw, 92px);
+          letter-spacing: 0;
+          max-width: 13ch;
+        }
+
+        main[aria-label="Axis live room"] section[aria-labelledby="axis-context-active-title"] > p {
+          color: rgba(32, 29, 24, 0.72);
+          font-size: clamp(19px, 1.9vw, 27px);
+          max-width: 48ch;
+        }
+
+        main[aria-label="Axis live room"] form[aria-label="Axis composer"] {
+          background: #fffdf7;
+          border: 2px solid rgba(32, 29, 24, 0.24);
+          border-radius: 14px;
+          bottom: max(12px, env(safe-area-inset-bottom));
+          box-shadow: 0 18px 44px rgba(32, 29, 24, 0.12);
+          margin: 12px auto 0;
+          max-width: min(980px, calc(100vw - 28px));
+          padding: 14px 14px 14px 18px;
+          position: fixed;
+          right: 50%;
+          transform: translateX(50%);
+          width: min(980px, calc(100vw - 28px));
+          z-index: 20;
+        }
+
+        main[aria-label="Axis live room"] form[aria-label="Axis composer"] textarea {
+          color: #181510;
+          font-size: 18px;
+          min-height: 30px;
+        }
+
+        main[aria-label="Axis live room"] form[aria-label="Axis composer"] textarea::placeholder {
+          color: rgba(32, 29, 24, 0.48);
+        }
+
+        main[aria-label="Axis live room"] form[aria-label="Axis composer"] button[type="submit"] {
+          background: #181510;
+          border-radius: 10px;
+          color: #fffdf7;
+          font-size: 13px;
+          font-weight: 700;
+          min-height: 42px;
+          min-width: 74px;
+        }
+
+        main[aria-label="Axis live room"] form[aria-label="Axis composer"] button[type="submit"]:disabled {
+          opacity: 0.32;
+        }
+
+        body:has(.axis-room-active)
+          main[aria-label="Axis live room"]
+          #axis-context-active-title {
+          font-size: clamp(34px, 4.1vw, 58px);
+          line-height: 1.02;
+          max-width: 18ch;
+        }
+
+        body:has(.axis-room-active)
+          main[aria-label="Axis live room"]
+          section[aria-labelledby="axis-context-active-title"] {
+          padding-top: clamp(18px, 2.4vh, 28px);
+        }
+
+        body:has(.axis-room-active)
+          main[aria-label="Axis live room"]
+          section[aria-labelledby="axis-context-active-title"]
+          > p {
+          font-size: clamp(17px, 1.45vw, 22px);
+          line-height: 1.34;
+        }
+
+        body:has(.axis-room-active)
+          main[aria-label="Axis live room"]
+          section[aria-labelledby="axis-context-active-title"]
+          section {
+          background: rgba(255, 253, 247, 0.76);
+          border-color: rgba(32, 29, 24, 0.16);
+        }
+
+        @media (max-width: 900px) {
+          main[aria-label="Axis live room"] > div {
+            padding-bottom: max(116px, calc(env(safe-area-inset-bottom) + 104px));
+          }
+
+          main[aria-label="Axis live room"] > div > section[aria-label="Context dashboard"] {
+            display: flex;
+            flex-direction: column;
+          }
+
+          main[aria-label="Axis live room"] aside[aria-labelledby="axis-context-timeline-title"] {
+            order: 3;
+          }
+
+          main[aria-label="Axis live room"] #axis-context-active-title,
+          body:has(.axis-room-active)
+            main[aria-label="Axis live room"]
+            #axis-context-active-title {
+            font-size: clamp(32px, 10vw, 52px);
+            max-width: 14ch;
+          }
+
+          main[aria-label="Axis live room"] form[aria-label="Axis composer"] {
+            border-radius: 12px;
+            max-width: calc(100vw - 18px);
+            padding: 11px;
+            width: calc(100vw - 18px);
+          }
+
+          main[aria-label="Axis live room"] form[aria-label="Axis composer"] textarea {
+            font-size: 16px;
+          }
+        }
       `}</style>
 
       <style jsx>{`
+        .axis-room-active {
+          display: none;
+        }
+
         .axis-full-board {
           margin-top: 16px;
         }
