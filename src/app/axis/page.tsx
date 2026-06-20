@@ -49,12 +49,14 @@ type ActiveThreadMeta = {
 const OPEN_LOOP_LABELS = new Set(["QUESTION", "NEED NEXT", "WATCH NEXT", "DECISION"]);
 const ACTION_LABELS = new Set(["ACTION", "NEXT MOVE", "INTERVENTION", "OUTCOME / NEXT MOVE"]);
 const PROOF_LABELS = new Set(["PROOF", "PROOF NEEDED", "EVIDENCE", "SIGNALS"]);
+const INITIAL_AXIS_MESSAGE_CREATED_AT = "2000-01-01T00:00:00.000Z";
+const INITIAL_AXIS_MESSAGE_CONTENT = "What are we working on?";
 
 function createInitialMessage(): Message {
   return {
     role: "assistant",
-    content: "What are we working on?",
-    createdAt: new Date().toISOString(),
+    content: INITIAL_AXIS_MESSAGE_CONTENT,
+    createdAt: INITIAL_AXIS_MESSAGE_CREATED_AT,
   };
 }
 
@@ -86,8 +88,7 @@ export default function AxisPage() {
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const threadStartedAt =
     activeThread?.createdAt ??
-    messages.find((message) => message.role === "user")?.createdAt ??
-    messages[0]?.createdAt;
+    messages.find((message) => message.role === "user")?.createdAt;
   const threadTitle = activeThread?.title ?? latestBoard?.title ?? "Current thread";
 
   const sanitizedSections = useMemo(() => sanitizeSections(latestBoard), [latestBoard]);
@@ -1061,6 +1062,8 @@ function createTimelineItems(messages: Message[], threadStartedAt?: string) {
   }
 
   messages.forEach((message, index) => {
+    if (isInitialAxisMessage(message)) return;
+
     items.push({
       detail: message.content,
       id: `${message.role}-${message.createdAt}-${index}`,
@@ -1079,6 +1082,15 @@ function createTimelineItems(messages: Message[], threadStartedAt?: string) {
   });
 
   return items;
+}
+
+function isInitialAxisMessage(message: Message) {
+  return (
+    message.role === "assistant" &&
+    message.content === INITIAL_AXIS_MESSAGE_CONTENT &&
+    message.createdAt === INITIAL_AXIS_MESSAGE_CREATED_AT &&
+    !message.threadBoard
+  );
 }
 
 function normalizeLabel(value: string) {
