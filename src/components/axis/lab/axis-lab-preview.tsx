@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Mic, Plus, Upload } from "lucide-react";
+import { Camera, Mic, Plus, Type, Upload, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { AxisContextComposer } from "../context-dashboard/axis-context-composer";
 import { AxisContextDashboardShell } from "../context-dashboard/axis-context-dashboard-shell";
@@ -20,16 +20,28 @@ import styles from "./axis-lab.module.css";
 
 const VALID_STATES: AxisLabPreviewState[] = ["empty", "active", "expanded"];
 const REALITY_MARK_LABELS: AxisRealityMarkLabel[] = [
+  "reality",
   "proof",
   "turnover",
   "rushing",
   "spacing",
   "score",
   "stop",
+  "foul",
   "teach",
   "question",
   "clip",
   "custom",
+];
+const GAME_MARK_LABELS: AxisRealityMarkLabel[] = [
+  "score",
+  "stop",
+  "turnover",
+  "rushing",
+  "spacing",
+  "foul",
+  "question",
+  "clip",
 ];
 const PROOF_CANDIDATE_LABELS = new Set<AxisRealityMarkLabel>([
   "proof",
@@ -90,6 +102,7 @@ function DashboardPreview({
 }) {
   const sessionStartedAtRef = useRef<number | null>(null);
   const [realityMarks, setRealityMarks] = useState<AxisRealityMark[]>([]);
+  const [mobileBoardOpen, setMobileBoardOpen] = useState(false);
 
   const markTimelineEvents = useMemo<AxisLabTimelineEvent[]>(
     () =>
@@ -116,7 +129,7 @@ function DashboardPreview({
     [realityMarks],
   );
 
-  const createRealityMark = useCallback((label: AxisRealityMarkLabel, note?: string) => {
+  const createRealityMark = useCallback((label: AxisRealityMarkLabel, note?: string, source: AxisRealityMark["source"] = "chip") => {
     const now = Date.now();
     if (sessionStartedAtRef.current === null) {
       sessionStartedAtRef.current = now;
@@ -129,12 +142,16 @@ function DashboardPreview({
         id: createMarkId(),
         label,
         note: note?.trim() || undefined,
+        source,
         sessionTime: elapsedSeconds,
         sourceType: "manual",
         verification: "unverified",
       },
       ...current,
     ]);
+  }, []);
+  const undoLastRealityMark = useCallback(() => {
+    setRealityMarks((current) => current.slice(1));
   }, []);
 
   const activeContext =
@@ -151,7 +168,9 @@ function DashboardPreview({
         };
 
   return (
-    <AxisContextDashboardShell
+    <>
+      <div className={styles.desktopLabPreview}>
+        <AxisContextDashboardShell
       activeContext={activeContext}
       ariaLabel="Axis Lab Context Bank dashboard preview"
       actions={axisLabDashboard.actions.map((action) => ({
@@ -188,7 +207,17 @@ function DashboardPreview({
         time: event.time,
         title: event.title,
       }))}
-    />
+        />
+      </div>
+      <MobileGameSurface
+        boardOpen={mobileBoardOpen}
+        marks={realityMarks}
+        onCloseBoard={() => setMobileBoardOpen(false)}
+        onCreateRealityMark={createRealityMark}
+        onOpenBoard={() => setMobileBoardOpen(true)}
+        onUndoLast={undoLastRealityMark}
+      />
+    </>
   );
 }
 
@@ -249,7 +278,7 @@ function EmptyDashboard() {
 function DashboardComposer({
   onCreateRealityMark,
 }: {
-  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string) => void;
+  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string, source?: AxisRealityMark["source"]) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
@@ -299,14 +328,14 @@ function DashboardComposer({
   }, [customOpen]);
 
   function createStandardMark(label: AxisRealityMarkLabel) {
-    onCreateRealityMark(label);
+    onCreateRealityMark(label, undefined, "chip");
     closeMenu();
   }
 
   function createCustomMark() {
     const note = customValue.trim();
     if (!note) return;
-    onCreateRealityMark("custom", note);
+    onCreateRealityMark("custom", note, "text");
     closeMenu();
   }
 
@@ -390,6 +419,130 @@ function DashboardComposer({
         </div>
       )}
     </AxisContextComposer>
+  );
+}
+
+function MobileGameSurface({
+  boardOpen,
+  marks,
+  onCloseBoard,
+  onCreateRealityMark,
+  onOpenBoard,
+  onUndoLast,
+}: {
+  boardOpen: boolean;
+  marks: AxisRealityMark[];
+  onCloseBoard: () => void;
+  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string, source?: AxisRealityMark["source"]) => void;
+  onOpenBoard: () => void;
+  onUndoLast: () => void;
+}) {
+  return (
+    <main className={styles.gameSurface} aria-label="Axis Lab mobile game surface">
+      <header className={styles.gameHeader}>
+        <span>AXIS</span>
+        <strong>{axisLabDashboard.threadTitle}</strong>
+        <em>Local</em>
+      </header>
+
+      <section className={styles.gameReadCard} aria-labelledby="axis-game-current-read">
+        <p className={styles.regionEyebrow}>Current read</p>
+        <h1 id="axis-game-current-read">First six minutes.</h1>
+        <ul>
+          <li><strong>Main:</strong> No second mistake.</li>
+          <li><strong>Pressure:</strong> Contact is not a stop sign.</li>
+          <li><strong>Cue:</strong> Slow the next decision.</li>
+        </ul>
+      </section>
+
+      <button
+        className={styles.markRealityButton}
+        type="button"
+        onClick={() => onCreateRealityMark("reality", undefined, "button")}
+      >
+        Mark Reality
+      </button>
+
+      <section className={styles.quickMarks} aria-label="Quick Reality Marks">
+        {GAME_MARK_LABELS.map((label) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => onCreateRealityMark(label, undefined, "chip")}
+          >
+            {getMarkTitle(label)}
+          </button>
+        ))}
+      </section>
+
+      <section className={styles.recentMarks} aria-labelledby="axis-game-recent-marks">
+        <div>
+          <h2 id="axis-game-recent-marks">Recent Marks</h2>
+          <button type="button" onClick={onUndoLast} disabled={marks.length === 0}>
+            Undo last mark
+          </button>
+        </div>
+        {marks.length === 0 ? (
+          <p>No marks yet.</p>
+        ) : (
+          <ol>
+            {marks.slice(0, 6).map((mark) => (
+              <li key={mark.id}>
+                <time dateTime={mark.createdAt}>
+                  {getSessionTimestamp(mark.sessionTime) || getClockTime(mark.createdAt)}
+                </time>
+                <strong>{getMarkTitle(mark.label)}</strong>
+                {mark.note && <span>{mark.note}</span>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      <button className={styles.reviewBoardButton} type="button" onClick={onOpenBoard}>
+        Review Board
+      </button>
+
+      {boardOpen && (
+        <section className={styles.reviewBoardOverlay} aria-label="Review Board">
+          <div>
+            <button type="button" onClick={onCloseBoard} aria-label="Close Review Board">
+              <X size={18} aria-hidden="true" />
+            </button>
+            <p className={styles.regionEyebrow}>Review Board</p>
+            <h2>{axisLabDashboard.activeContext.mainText}</h2>
+            <p>{axisLabDashboard.activeContext.support}</p>
+            <h3>Next Cue</h3>
+            <p>{axisLabDashboard.activeContext.nextMove}</p>
+            <h3>Need To Check</h3>
+            <ul>
+              {axisLabDashboard.openLoops.map((loop) => (
+                <li key={loop}>{loop}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      <nav className={styles.gameCaptureRail} aria-label="Preview capture controls">
+        <button type="button" disabled>
+          <Mic size={18} aria-hidden="true" />
+          <span>mic</span>
+        </button>
+        <button type="button" disabled>
+          <Camera size={18} aria-hidden="true" />
+          <span>camera</span>
+        </button>
+        <button type="button" disabled>
+          <Upload size={18} aria-hidden="true" />
+          <span>upload</span>
+        </button>
+        <button type="button" disabled>
+          <Type size={18} aria-hidden="true" />
+          <span>text</span>
+        </button>
+      </nav>
+    </main>
   );
 }
 

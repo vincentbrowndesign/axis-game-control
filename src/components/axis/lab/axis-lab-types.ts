@@ -1,12 +1,14 @@
 export type AxisLabPreviewState = "empty" | "active" | "expanded";
 
 export type AxisRealityMarkLabel =
+  | "reality"
   | "proof"
   | "turnover"
   | "rushing"
   | "spacing"
   | "score"
   | "stop"
+  | "foul"
   | "teach"
   | "question"
   | "clip"
@@ -16,6 +18,7 @@ export type AxisRealityMark = {
   id: string;
   label: AxisRealityMarkLabel;
   note?: string;
+  source: "button" | "chip" | "text";
   sourceType: "manual" | "camera" | "stream" | "upload";
   verification: "unverified";
   sessionTime?: number;
