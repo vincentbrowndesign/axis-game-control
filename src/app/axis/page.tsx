@@ -806,6 +806,27 @@ export default function AxisPage() {
             padding-bottom: max(108px, calc(env(safe-area-inset-bottom) + 96px));
           }
 
+          main[aria-label="Axis live room"] header {
+            align-items: center;
+            grid-template-columns: minmax(0, 1fr) auto;
+            padding: 9px 12px;
+          }
+
+          main[aria-label="Axis live room"] header > div:first-child {
+            min-width: 0;
+          }
+
+          main[aria-label="Axis live room"] header > div:first-child > span:nth-child(2),
+          main[aria-label="Axis live room"] header > div:first-child > button {
+            display: none;
+          }
+
+          main[aria-label="Axis live room"] header > div:last-child {
+            gap: 8px;
+            justify-content: flex-end;
+            min-width: 0;
+          }
+
           main[aria-label="Axis live room"] > div > section[aria-label="Context dashboard"] {
             display: flex;
             flex-direction: column;

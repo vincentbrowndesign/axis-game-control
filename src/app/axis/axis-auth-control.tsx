@@ -444,6 +444,16 @@ export default function AxisAuthControl({ auth }: Props) {
             position: static;
           }
 
+          .axis-auth summary {
+            align-items: center;
+            border: 1px solid color-mix(in srgb, var(--axis-line) 14%, transparent);
+            border-radius: 999px;
+            color: color-mix(in srgb, var(--axis-ink) 72%, transparent);
+            display: inline-flex;
+            min-height: 32px;
+            padding: 0 10px;
+          }
+
           .axis-auth-popover {
             border: 0;
             bottom: 0;

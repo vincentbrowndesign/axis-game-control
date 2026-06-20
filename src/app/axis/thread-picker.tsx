@@ -45,16 +45,20 @@ export default function ThreadPicker({
   const canSave = Boolean(actionLabel) && !saveDisabled;
 
   return (
-    <div className={`thread-continuity thread-continuity--${saveState}`}>
+    <div className={`thread-continuity thread-continuity--${saveState}${saveAuthRequired ? " thread-continuity--auth-required" : ""}`}>
       <details className="thread-picker">
         <summary>
-          <span>Threads</span>
+          <span className="thread-picker-label">Threads</span>
+          <span className="thread-picker-mobile-label">{saveAuthRequired ? "Local thread" : "Threads"}</span>
         </summary>
 
         <div className="thread-popover">
           <button className="thread-new" type="button" onClick={onNewThread}>
             New thread
           </button>
+          {saveAuthRequired && (
+            <p className="thread-save-helper">Axis works locally. Sign in only matters for saving.</p>
+          )}
 
           {!signedIn ? (
             <p className="thread-empty">Sign in to see saved threads.</p>
@@ -133,6 +137,10 @@ export default function ThreadPicker({
           list-style: none;
           padding: 2px 0;
           user-select: none;
+        }
+
+        .thread-picker-mobile-label {
+          display: none;
         }
 
         .thread-picker summary::-webkit-details-marker {
@@ -249,9 +257,49 @@ export default function ThreadPicker({
           margin: 8px;
         }
 
+        .thread-save-helper {
+          color: color-mix(in srgb, var(--axis-ink) 48%, transparent);
+          font-size: 12px;
+          line-height: 1.35;
+          margin: 8px;
+        }
+
         @media (max-width: 760px) {
           .thread-continuity {
-            gap: 7px;
+            align-items: center;
+            gap: 6px;
+          }
+
+          .thread-continuity--auth-required {
+            gap: 0;
+          }
+
+          .thread-picker-label {
+            display: none;
+          }
+
+          .thread-picker-mobile-label {
+            display: inline;
+          }
+
+          .thread-picker summary {
+            color: color-mix(in srgb, var(--axis-ink) 58%, transparent);
+            font-family: ui-sans-serif, system-ui, sans-serif;
+            font-size: 11px;
+            min-height: 32px;
+            padding: 0;
+          }
+
+          .save-status {
+            font-size: 10.5px;
+          }
+
+          .save-action {
+            font-size: 10.5px;
+          }
+
+          .thread-continuity--auth-required .save-status {
+            display: none;
           }
 
           .thread-popover {
