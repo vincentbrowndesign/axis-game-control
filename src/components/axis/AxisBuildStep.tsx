@@ -12,7 +12,7 @@ export function AxisBuildStep({
       <span>{isOrderItem ? item.id : String(item.id).toUpperCase()}</span>
       <div>
         <h3>{item.title}</h3>
-        {"items" in item && (
+        {"items" in item && item.items && (
           <ul>
             {item.items.map((entry) => (
               <li key={entry}>{entry}</li>

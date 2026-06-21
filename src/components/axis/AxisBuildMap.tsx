@@ -1,4 +1,4 @@
-import { axisBuildAgents, axisBuildOrder, axisBuildScreens } from "../../lib/axis/build-map";
+import { axisBuildAgents, axisBuildOrder, axisBuildScreens, axisObjectContracts } from "../../lib/axis/build-map";
 import { AxisAgentCard } from "./AxisAgentCard";
 import { AxisMockReference } from "./AxisMockReference";
 import { AxisProgressRail } from "./AxisProgressRail";
@@ -33,6 +33,28 @@ export function AxisBuildMap() {
       </section>
 
       <AxisMockReference screens={axisBuildScreens} />
+
+      <section className="axis-map-section" aria-labelledby="axis-object-contracts-title">
+        <div className="axis-map-section__heading">
+          <p>Section 4</p>
+          <h2 id="axis-object-contracts-title">Object Contracts</h2>
+        </div>
+        <div className="axis-object-contract-list">
+          {axisObjectContracts.map((contract) => (
+            <article className="axis-object-contract" key={contract.name}>
+              <div>
+                <p>Static contract</p>
+                <h3>{contract.name}</h3>
+                <strong>{contract.status}</strong>
+              </div>
+              <ContractColumn title="Owns" items={contract.owns} />
+              <ContractColumn title="Does not own" items={contract.doesNotOwn} />
+              <ContractColumn title="Future wiring" items={contract.futureWiring} />
+            </article>
+          ))}
+        </div>
+      </section>
+
       <AxisProgressRail items={axisBuildOrder} />
 
       <style>{`
@@ -254,6 +276,10 @@ export function AxisBuildMap() {
           text-transform: uppercase;
         }
 
+        .axis-agent-card__contract-group + .axis-agent-card__contract-group {
+          margin-top: 0.6rem;
+        }
+
         .axis-agent-card__contract ul {
           display: grid;
           gap: 0.35rem;
@@ -297,6 +323,56 @@ export function AxisBuildMap() {
           display: grid;
           gap: 0.75rem;
           grid-template-columns: repeat(7, minmax(0, 1fr));
+        }
+
+        .axis-object-contract-list {
+          display: grid;
+          gap: 0.75rem;
+        }
+
+        .axis-object-contract {
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+          border: 1px solid var(--axis-line);
+          border-radius: 0.9rem;
+          display: grid;
+          gap: 1rem;
+          grid-template-columns: minmax(14rem, 1.1fr) repeat(3, minmax(0, 1fr));
+          padding: 1rem;
+        }
+
+        .axis-object-contract p,
+        .axis-object-contract h4 {
+          color: var(--axis-purple);
+          font-size: 0.72rem;
+          font-weight: 850;
+          letter-spacing: 0.12em;
+          margin: 0 0 0.35rem;
+          text-transform: uppercase;
+        }
+
+        .axis-object-contract h3 {
+          font-size: 1.1rem;
+          margin: 0 0 0.45rem;
+        }
+
+        .axis-object-contract strong,
+        .axis-object-contract li {
+          color: var(--axis-muted);
+          font-size: 0.84rem;
+          line-height: 1.38;
+        }
+
+        .axis-object-contract ul {
+          display: grid;
+          gap: 0.3rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-object-contract li::before {
+          color: var(--axis-purple);
+          content: "- ";
         }
 
         .axis-progress-rail {
@@ -362,6 +438,7 @@ export function AxisBuildMap() {
 
           .axis-agent-grid,
           .axis-screen-grid,
+          .axis-object-contract,
           .axis-progress-rail {
             grid-template-columns: 1fr;
           }
@@ -381,5 +458,18 @@ export function AxisBuildMap() {
         }
       `}</style>
     </main>
+  );
+}
+
+function ContractColumn({ items, title }: { items: string[]; title: string }) {
+  return (
+    <div>
+      <h4>{title}</h4>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
