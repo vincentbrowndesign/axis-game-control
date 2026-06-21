@@ -51,6 +51,7 @@ Internal Development Surfaces:
 2. Axis Aperture Shell — Internal CSS Grid shell pattern used by the lab. Type: Internal UI lab pattern. Decision: Refine Current. Boundary: `/axis/lab` only. Not active in `/axis`.
 3. Axis Lens UI Bridge — Mock-only visual-source preview inside the Aperture Shell. Status: Internal mock preview. Decision: Refine Current in `/axis/lab` only. No Lens runtime or CV capability is activated. Do not move Axis Lens out of Do Not Build Yet based on this preview.
 4. Axis Game-Ready Reality Marks Lab Prototype — Local `/axis/lab` game-use experiment. Status: Build Now in lab only. Manual local session clock, Reality Marks, Recent Reality, proof-candidate suggestions, and deterministic Live Read only. Axis Lens remains Future / Research Proof. Evidence Layer remains Future / Research Proof. Data Asset runtime remains inactive. No camera, mic, upload, CV, persistence, evidence, or active `/axis` behavior.
+5. Axis Game Source Surface Lab Prototype — Local `/axis/lab` game-use experiment. Status: Build Now in lab only. Source Window, source link reference, mock camera placeholder, source/session clocks, and Reality Marks around the source. Axis Lens remains Future / Research Proof. Camera Layer, Upload / Media Layer, CV / Replay / Overlay, Evidence Layer, and Data Asset runtime remain inactive.
 
 Do Not Build Yet:
 

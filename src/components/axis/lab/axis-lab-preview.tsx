@@ -4,16 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Mic, Plus, Type, Upload, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { AxisContextComposer } from "../context-dashboard/axis-context-composer";
-import { AxisContextDashboardShell } from "../context-dashboard/axis-context-dashboard-shell";
 import { IconButton } from "../context-dashboard/axis-context-header";
 import type { AxisContextRecentItem } from "../context-dashboard/axis-context-dashboard-types";
 import { axisLabDashboard } from "./axis-lab-mock-data";
 import type {
   AxisGameSession,
+  AxisLabGameSource,
   AxisLabPreviewState,
   AxisLabProofCandidate,
   AxisLabRecentReality,
   AxisLabTimelineEvent,
+  AxisLabSourceType,
   AxisRealityMark,
   AxisRealityMarkLabel,
 } from "./axis-lab-types";
@@ -100,6 +101,24 @@ function createSessionId() {
   return `game-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function createSourceId() {
+  return `source-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createEmptyGameSource(): AxisLabGameSource {
+  return {
+    id: createSourceId(),
+    label: "No source",
+    status: "idle",
+    type: "none",
+  };
+}
+
+function getMarkSourceType(sourceType: AxisLabSourceType): AxisRealityMark["sourceType"] {
+  if (sourceType === "link" || sourceType === "mock_camera") return sourceType;
+  return "manual";
+}
+
 function countMarks(marks: AxisRealityMark[], label: AxisRealityMarkLabel) {
   return marks.filter((mark) => mark.label === label).length;
 }
@@ -169,14 +188,12 @@ export default function AxisLabPreview() {
   const searchParams = useSearchParams();
   const previewState = parsePreviewState(searchParams.get("state"));
 
-  return <DashboardPreview expanded={previewState === "expanded"} state={previewState} />;
+  return <DashboardPreview state={previewState} />;
 }
 
 function DashboardPreview({
-  expanded,
   state,
 }: {
-  expanded: boolean;
   state: AxisLabPreviewState;
 }) {
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
@@ -187,6 +204,8 @@ function DashboardPreview({
   const [toastNoteOpen, setToastNoteOpen] = useState(false);
   const [toastNote, setToastNote] = useState("");
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [gameSource, setGameSource] = useState<AxisLabGameSource>(() => createEmptyGameSource());
+  const [sourceMessage, setSourceMessage] = useState("");
   const [gameSession, setGameSession] = useState<AxisGameSession>(() => ({
     id: createSessionId(),
     saveStatus: "local",
@@ -221,8 +240,12 @@ function DashboardPreview({
     [realityMarks],
   );
   const recentReality = useMemo(
-    () => [...realityMarks.map(createMarkRecentReality), ...axisLabDashboard.recentReality],
-    [realityMarks],
+    () => [
+      ...realityMarks.map(createMarkRecentReality),
+      ...(gameSource.type === "none" ? [] : [createSourceRecentReality(gameSource)]),
+      ...axisLabDashboard.recentReality,
+    ],
+    [gameSource, realityMarks],
   );
   const liveRead = useMemo(
     () => createLiveRead(realityMarks, gameSession.status),
@@ -244,14 +267,14 @@ function DashboardPreview({
         gameSessionId: gameSession.id,
         id: markId,
         label,
-        linkedSourceId: undefined,
+        linkedSourceId: gameSource.type === "none" ? undefined : gameSource.id,
         note: note?.trim() || undefined,
         postRollSeconds: 10,
         preRollSeconds: 15,
         provenance: "manual",
         sessionTime: elapsedSeconds,
         sourceTime,
-        sourceType: "manual",
+        sourceType: getMarkSourceType(gameSource.type),
         verification: "unverified",
       },
       ...current,
@@ -259,7 +282,7 @@ function DashboardPreview({
     setLastMarkToastId(markId);
     setToastNoteOpen(false);
     setToastNote("");
-  }, [gameSession.id, gameSession.status, sessionStartedAtMs, sourceStartedAtMs]);
+  }, [gameSession.id, gameSession.status, gameSource.id, gameSource.type, sessionStartedAtMs, sourceStartedAtMs]);
   const undoLastRealityMark = useCallback(() => {
     setRealityMarks((current) => {
       const next = current.slice(1);
@@ -271,8 +294,16 @@ function DashboardPreview({
   }, []);
 
   const startSource = useCallback(() => {
-    const now = new Date().toISOString();
-    setSourceStartedAtMs(Date.now());
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    setSourceStartedAtMs(nowMs);
+    setGameSource((current) => ({
+      ...current,
+      label: current.type === "none" ? "Local source clock" : current.label,
+      startedAt: now,
+      status: "live",
+      type: current.type === "none" ? "manual" : current.type,
+    }));
     setGameSession((current) => ({
       ...current,
       sourceStartedAt: now,
@@ -304,6 +335,34 @@ function DashboardPreview({
       endedAt: new Date().toISOString(),
       status: "ended",
     }));
+    setGameSource((current) => current.status === "idle" ? current : { ...current, status: "ended" });
+  }, []);
+
+  const setLinkedSource = useCallback((url: string) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
+    setGameSource({
+      id: createSourceId(),
+      label: "Linked source",
+      status: "ready",
+      type: "link",
+      url: trimmedUrl,
+    });
+    setSourceMessage("Linked source only - no analysis.");
+  }, []);
+
+  const setMockCameraSource = useCallback(() => {
+    setGameSource({
+      id: createSourceId(),
+      label: "Mock camera",
+      status: "ready",
+      type: "mock_camera",
+    });
+    setSourceMessage("Mock camera preview - no camera connected.");
+  }, []);
+
+  const showStartSessionMessage = useCallback(() => {
+    setSourceMessage("Start session first.");
   }, []);
 
   const addToastNote = useCallback(() => {
@@ -324,77 +383,79 @@ function DashboardPreview({
     : Math.max(0, Math.floor((clockNow - sessionStartedAtMs) / 1000));
   const toastMark = realityMarks.find((mark) => mark.id === lastMarkToastId) ?? null;
 
-  const activeContext =
-    state === "empty"
-      ? undefined
-      : {
-          ...axisLabDashboard.activeContext,
-          nextMove: liveRead.next,
-          proofNeeded: liveRead.proofNeeded,
-          support: liveRead.pattern,
-          detail: expanded ? (
-            <section className={styles.expandedMock} aria-label="Expanded preview detail">
-              <h2>Selected mock detail</h2>
-              <p>Source-only items stay separate from suggested interpretation until the user accepts the read.</p>
-            </section>
-          ) : undefined,
-        };
+  const proofCandidateItems = proofCandidates.map((candidate, index) => ({
+    ...candidate,
+    id: candidate.id ?? `${candidate.title}-${index}`,
+  }));
+  const recentItems = recentReality.map(createRecentItem);
+  const timelineItems = [...axisLabDashboard.timeline, ...[...markTimelineEvents].reverse()].map((event, index) => ({
+    detail: event.detail,
+    id: event.mark?.id ?? `${event.time}-${event.title}-${index}`,
+    mediaKind: event.meta ? "voice" as const : "clip" as const,
+    mediaLabel: event.mediaLabel,
+    meta: event.meta,
+    time: event.time,
+    title: event.mark ? getMarkTitle(event.mark.label) : event.title,
+  }));
 
   return (
     <>
       <div className={styles.desktopLabPreview}>
-        <AxisContextDashboardShell
-      activeContext={activeContext}
-      ariaLabel="Axis Lab Context Bank dashboard preview"
-      actions={axisLabDashboard.actions.map((action) => ({
-        ...action,
-        id: action.title,
-      }))}
-      composer={<DashboardComposer onCreateRealityMark={createRealityMark} />}
-      emptyState={<EmptyDashboard />}
-      header={{
-        savedAt: axisLabDashboard.savedAt,
-        savedDateTime: "2026-06-20T20:42:00-05:00",
-        status: "Saved",
-        threadTitle: axisLabDashboard.threadTitle,
-      }}
-      openLoops={axisLabDashboard.openLoops.map((loop) => ({
-        id: loop,
-        text: loop,
-      }))}
-      proofCandidates={proofCandidates.map((candidate, index) => ({
-        ...candidate,
-        id: candidate.id ?? `${candidate.title}-${index}`,
-      }))}
-      recentItems={recentReality.map(createRecentItem)}
-      timelineItems={[...axisLabDashboard.timeline, ...[...markTimelineEvents].reverse()].map((event, index) => ({
-        detail: event.detail,
-        id: event.mark?.id ?? `${event.time}-${event.title}-${index}`,
-        mediaKind: event.meta ? "voice" : "clip",
-        mediaLabel: event.mediaLabel,
-        meta: event.meta,
-        time: event.time,
-        title: event.title,
-      }))}
-        />
+        {state === "empty" ? (
+          <main className={styles.labRoot} aria-label="Axis Lab game source surface empty preview">
+            <div className={styles.appSurface}>
+              <LabGameHeader />
+              <EmptyDashboard />
+            </div>
+          </main>
+        ) : (
+          <GameSourceLabShell
+            actions={axisLabDashboard.actions.map((action) => ({ ...action, id: action.title }))}
+            gameSession={gameSession}
+            gameSource={gameSource}
+            liveRead={liveRead}
+            marks={realityMarks}
+            onCreateRealityMark={createRealityMark}
+            onEndSession={endSession}
+            onLinkSource={setLinkedSource}
+            onMockCamera={setMockCameraSource}
+            onPauseSession={pauseSession}
+            onResumeSession={resumeSession}
+            onStartSession={startSession}
+            onStartSessionMessage={showStartSessionMessage}
+            onStartSource={startSource}
+            openLoops={axisLabDashboard.openLoops.map((loop) => ({ id: loop, text: loop }))}
+            proofCandidates={proofCandidateItems}
+            recentItems={recentItems}
+            sessionElapsed={sessionElapsed}
+            sourceElapsed={sourceElapsed}
+            sourceMessage={sourceMessage}
+            timelineItems={timelineItems}
+          />
+        )}
       </div>
       <MobileGameSurface
         boardOpen={mobileBoardOpen}
         gameSession={gameSession}
+        gameSource={gameSource}
         liveRead={liveRead}
         marks={realityMarks}
         onAddToastNote={addToastNote}
         onCloseBoard={() => setMobileBoardOpen(false)}
         onCreateRealityMark={createRealityMark}
         onEndSession={endSession}
+        onLinkSource={setLinkedSource}
+        onMockCamera={setMockCameraSource}
         onOpenBoard={() => setMobileBoardOpen(true)}
         onPauseSession={pauseSession}
         onResumeSession={resumeSession}
         onStartSession={startSession}
+        onStartSessionMessage={showStartSessionMessage}
         onStartSource={startSource}
         onUndoLast={undoLastRealityMark}
         sessionElapsed={sessionElapsed}
         sourceElapsed={sourceElapsed}
+        sourceMessage={sourceMessage}
         toastMark={toastMark}
         toastNote={toastNote}
         toastNoteOpen={toastNoteOpen}
@@ -402,6 +463,419 @@ function DashboardPreview({
         onToastNoteOpen={() => setToastNoteOpen(true)}
       />
     </>
+  );
+}
+
+function LabGameHeader() {
+  return (
+    <header className={styles.labHeader}>
+      <div className={styles.headerLeft}>
+        <span className={styles.wordmark}>Axis</span>
+        <span className={styles.headerSeparator} aria-hidden="true" />
+        <button className={styles.threadSwitch} type="button">
+          <span>{axisLabDashboard.threadTitle}</span>
+        </button>
+      </div>
+      <div className={styles.headerCenter}>
+        <span className={styles.savedDot} aria-hidden="true" />
+        <span>Local preview</span>
+      </div>
+      <div className={styles.headerRight}>
+        <span className={styles.realityMeta}>Lab only</span>
+      </div>
+    </header>
+  );
+}
+
+function GameSourceLabShell({
+  actions,
+  gameSession,
+  gameSource,
+  liveRead,
+  marks,
+  onCreateRealityMark,
+  onEndSession,
+  onLinkSource,
+  onMockCamera,
+  onPauseSession,
+  onResumeSession,
+  onStartSession,
+  onStartSessionMessage,
+  onStartSource,
+  openLoops,
+  proofCandidates,
+  recentItems,
+  sessionElapsed,
+  sourceElapsed,
+  sourceMessage,
+  timelineItems,
+}: {
+  actions: readonly { due?: string; id: string; title: string }[];
+  gameSession: AxisGameSession;
+  gameSource: AxisLabGameSource;
+  liveRead: AxisLiveRead;
+  marks: AxisRealityMark[];
+  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string) => void;
+  onEndSession: () => void;
+  onLinkSource: (url: string) => void;
+  onMockCamera: () => void;
+  onPauseSession: () => void;
+  onResumeSession: () => void;
+  onStartSession: () => void;
+  onStartSessionMessage: () => void;
+  onStartSource: () => void;
+  openLoops: readonly { id: string; text: string }[];
+  proofCandidates: readonly (AxisLabProofCandidate & { id: string })[];
+  recentItems: readonly AxisContextRecentItem[];
+  sessionElapsed?: number;
+  sourceElapsed?: number;
+  sourceMessage: string;
+  timelineItems: readonly {
+    detail?: string;
+    id: string;
+    mediaLabel?: string;
+    meta?: string;
+    time: string;
+    title: string;
+  }[];
+}) {
+  return (
+    <main className={styles.labRoot} aria-label="Axis Lab game source surface">
+      <div className={styles.appSurface}>
+        <LabGameHeader />
+        <section className={`${styles.dashboardGrid} ${styles.gameSourceGrid}`} aria-label="Game source surface">
+          <LabTimeline items={timelineItems} />
+          <section className={styles.contextRegion} aria-label="Game source">
+            <SourceWindow
+              gameSession={gameSession}
+              gameSource={gameSource}
+              marks={marks}
+              onEndSession={onEndSession}
+              onLinkSource={onLinkSource}
+              onMockCamera={onMockCamera}
+              onPauseSession={onPauseSession}
+              onResumeSession={onResumeSession}
+              onStartSession={onStartSession}
+              onStartSource={onStartSource}
+              sessionElapsed={sessionElapsed}
+              sourceElapsed={sourceElapsed}
+              sourceMessage={sourceMessage}
+            />
+          </section>
+          <LabGameRail
+            actions={actions}
+            liveRead={liveRead}
+            openLoops={openLoops}
+            proofCandidates={proofCandidates}
+          />
+        </section>
+        <DashboardComposer
+          canCreateMark={gameSession.status === "live"}
+          onCreateRealityMark={onCreateRealityMark}
+          onStartSessionMessage={onStartSessionMessage}
+        />
+        <LabRecentRealityShelf items={recentItems} />
+      </div>
+    </main>
+  );
+}
+
+function LabTimeline({
+  items,
+}: {
+  items: readonly {
+    detail?: string;
+    id: string;
+    mediaLabel?: string;
+    meta?: string;
+    time: string;
+    title: string;
+  }[];
+}) {
+  return (
+    <aside className={styles.timelineRegion} aria-label="Thread timeline">
+      <h2>Timeline</h2>
+      <ol className={styles.timelineList}>
+        {items.map((item) => (
+          <li className={styles.timelineItem} key={item.id}>
+            <span className={styles.timelineDot} aria-hidden="true" />
+            <time>{item.time}</time>
+            <strong>{item.title}</strong>
+            {item.detail && <p>{item.detail}</p>}
+            {item.meta && <p>{item.meta}</p>}
+          </li>
+        ))}
+      </ol>
+    </aside>
+  );
+}
+
+function SourceWindow({
+  gameSession,
+  gameSource,
+  marks,
+  onEndSession,
+  onLinkSource,
+  onMockCamera,
+  onPauseSession,
+  onResumeSession,
+  onStartSession,
+  onStartSource,
+  sessionElapsed,
+  sourceElapsed,
+  sourceMessage,
+}: {
+  gameSession: AxisGameSession;
+  gameSource: AxisLabGameSource;
+  marks: AxisRealityMark[];
+  onEndSession: () => void;
+  onLinkSource: (url: string) => void;
+  onMockCamera: () => void;
+  onPauseSession: () => void;
+  onResumeSession: () => void;
+  onStartSession: () => void;
+  onStartSource: () => void;
+  sessionElapsed?: number;
+  sourceElapsed?: number;
+  sourceMessage: string;
+}) {
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkValue, setLinkValue] = useState("");
+  const sourceStateLabel = getSourceStateLabel(gameSource, gameSession.status);
+
+  function submitLink() {
+    const trimmed = linkValue.trim();
+    if (!trimmed) return;
+    onLinkSource(trimmed);
+    setLinkOpen(false);
+    setLinkValue("");
+  }
+
+  return (
+    <section className={styles.sourceWindowBlock} aria-labelledby="axis-lab-source-title">
+      <div className={`${styles.sourceFrame} ${styles[`sourceFrame-${gameSource.type}`]}`}>
+        <div className={styles.sourceFrameTopline}>
+          <span>{sourceStateLabel}</span>
+          <span>Manual - Unverified - Local preview</span>
+        </div>
+        {gameSource.type === "none" ? (
+          <div className={styles.sourcePlaceholder}>
+            <h1 id="axis-lab-source-title">Add game source</h1>
+            <p>Paste a video link or start a local game clock.</p>
+          </div>
+        ) : gameSource.type === "link" ? (
+          <div className={styles.linkedSourceCard}>
+            <p className={styles.regionEyebrow}>Linked source only - no analysis.</p>
+            <h1 id="axis-lab-source-title">{gameSource.label}</h1>
+            {gameSource.url && (
+              <a href={gameSource.url} target="_blank" rel="noreferrer">
+                Open source
+              </a>
+            )}
+            <p>{gameSource.url}</p>
+          </div>
+        ) : gameSource.type === "mock_camera" ? (
+          <div className={styles.mockCameraFrame}>
+            <h1 id="axis-lab-source-title">Mock camera</h1>
+            <p>Mock camera preview - no camera connected.</p>
+          </div>
+        ) : (
+          <div className={styles.sourcePlaceholder}>
+            <h1 id="axis-lab-source-title">Local source clock</h1>
+            <p>Local source clock - no media connected.</p>
+          </div>
+        )}
+        <div className={styles.sourceClockRow}>
+          <span>Session {sessionElapsed === undefined ? "--:--" : getSessionTimestamp(sessionElapsed)}</span>
+          <span>Source {sourceElapsed === undefined ? "--:--" : getSessionTimestamp(sourceElapsed)}</span>
+          <span>{marks.length} mark{marks.length === 1 ? "" : "s"}</span>
+        </div>
+        <p className={styles.sourceCue}>Mark moments now. Review later.</p>
+      </div>
+
+      <div className={styles.sourceControls}>
+        <button type="button" onClick={() => setLinkOpen((current) => !current)}>
+          Paste link
+        </button>
+        <button type="button" onClick={onMockCamera}>
+          Mock camera
+        </button>
+        <button type="button" onClick={onStartSource} disabled={sourceElapsed !== undefined}>
+          Start source
+        </button>
+        {gameSession.status === "setup" && (
+          <button type="button" onClick={onStartSession}>Start session</button>
+        )}
+        {gameSession.status === "live" && (
+          <>
+            <button type="button" onClick={onPauseSession}>Pause</button>
+            <button type="button" onClick={onEndSession}>End</button>
+          </>
+        )}
+        {gameSession.status === "paused" && (
+          <>
+            <button type="button" onClick={onResumeSession}>Resume</button>
+            <button type="button" onClick={onEndSession}>End</button>
+          </>
+        )}
+      </div>
+
+      {linkOpen && (
+        <div className={styles.sourceLinkRow}>
+          <label className={styles.srOnly} htmlFor="axis-lab-source-link">Video source URL</label>
+          <input
+            id="axis-lab-source-link"
+            value={linkValue}
+            onChange={(event) => setLinkValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitLink();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setLinkOpen(false);
+                setLinkValue("");
+              }
+            }}
+            placeholder="Paste video link..."
+          />
+          <button type="button" onClick={submitLink} disabled={!linkValue.trim()}>
+            Link
+          </button>
+        </div>
+      )}
+      {sourceMessage && <p className={styles.sourceMessage}>{sourceMessage}</p>}
+      {gameSession.status === "ended" && (
+        <p className={styles.sourceMessage}>Final local mark count: {marks.length}</p>
+      )}
+    </section>
+  );
+}
+
+function getSourceStateLabel(gameSource: AxisLabGameSource, sessionStatus: AxisGameSession["status"]) {
+  if (sessionStatus === "ended" || gameSource.status === "ended") return "Source ended";
+  if (sessionStatus === "paused" || gameSource.status === "paused") return "Source paused";
+  if (sessionStatus === "live" || gameSource.status === "live") return "Source active";
+  if (gameSource.type === "link") return "Link source";
+  if (gameSource.type === "mock_camera") return "Mock camera source";
+  return "No source";
+}
+
+function LabGameRail({
+  actions,
+  liveRead,
+  openLoops,
+  proofCandidates,
+}: {
+  actions: readonly { due?: string; id: string; title: string }[];
+  liveRead: AxisLiveRead;
+  openLoops: readonly { id: string; text: string }[];
+  proofCandidates: readonly (AxisLabProofCandidate & { id: string })[];
+}) {
+  return (
+    <aside className={styles.rightRegion} aria-label="Live read and review">
+      <section className={styles.rightSection}>
+        <div className={styles.sectionHeader}>
+          <h2>Live Read</h2>
+        </div>
+        <dl className={styles.labLiveReadList}>
+          <div>
+            <dt>Pattern</dt>
+            <dd>{liveRead.pattern}</dd>
+          </div>
+          <div>
+            <dt>Proof Needed</dt>
+            <dd>{liveRead.proofNeeded}</dd>
+          </div>
+          <div>
+            <dt>Next</dt>
+            <dd>{liveRead.next}</dd>
+          </div>
+        </dl>
+      </section>
+      {proofCandidates.length > 0 && (
+        <section className={styles.rightSection}>
+          <div className={styles.sectionHeader}>
+            <h2>Proof Candidates</h2>
+            <span>{proofCandidates.length}</span>
+          </div>
+          <div className={styles.proofList}>
+            {proofCandidates.map((candidate) => (
+              <article className={styles.proofCard} key={candidate.id}>
+                <div className={styles.mockThumb}>
+                  <span>{candidate.duration}</span>
+                </div>
+                <div>
+                  <h3>{candidate.title}</h3>
+                  <p>{candidate.source}</p>
+                  <p>{candidate.meta}</p>
+                  <span className={styles.unverified}>
+                    <span aria-hidden="true" />
+                    {candidate.confidence ?? "Unverified"}
+                  </span>
+                  {candidate.boundary && <p className={styles.boundaryText}>{candidate.boundary}</p>}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      {openLoops.length > 0 && (
+        <section className={styles.rightSection}>
+          <div className={styles.sectionHeader}>
+            <h2>Open Loops</h2>
+            <span>{openLoops.length}</span>
+          </div>
+          <ul className={styles.loopList}>
+            {openLoops.map((loop) => (
+              <li key={loop.id}>
+                <span className={styles.statusDot} aria-hidden="true" />
+                <p>{loop.text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {actions.length > 0 && (
+        <section className={styles.rightSection}>
+          <h2>Actions</h2>
+          {actions.map((action) => (
+            <article className={styles.actionCard} key={action.id}>
+              <p>{action.title}</p>
+              {action.due && <span>Due: {action.due}</span>}
+            </article>
+          ))}
+        </section>
+      )}
+    </aside>
+  );
+}
+
+function LabRecentRealityShelf({ items }: { items: readonly AxisContextRecentItem[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <section className={styles.recentShelf} aria-labelledby="axis-lab-recent-title">
+      <div className={styles.recentHeader}>
+        <h2 id="axis-lab-recent-title">Recent Reality</h2>
+      </div>
+      <div className={styles.recentRow}>
+        {items.map((item) => (
+          <article className={styles.recentItem} key={item.id}>
+            {item.preview}
+            <h3>{item.title}</h3>
+            <p>
+              {item.kind}
+              {item.time ? ` - ${item.time}` : ""}
+            </p>
+            {item.meta?.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -425,6 +899,18 @@ function createMarkRecentReality(mark: AxisRealityMark): AxisLabRecentReality {
     mark,
     time: getClockTime(mark.createdAt),
     title: getMarkTitle(mark.label),
+  };
+}
+
+function createSourceRecentReality(source: AxisLabGameSource): AxisLabRecentReality {
+  return {
+    kind: "Source",
+    time: source.startedAt ? getClockTime(source.startedAt) : undefined,
+    title: source.type === "link"
+      ? "Linked source"
+      : source.type === "mock_camera"
+        ? "Mock camera source"
+        : "Local source clock",
   };
 }
 
@@ -516,9 +1002,13 @@ function EmptyDashboard() {
 }
 
 function DashboardComposer({
+  canCreateMark = true,
   onCreateRealityMark,
+  onStartSessionMessage,
 }: {
+  canCreateMark?: boolean;
   onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string) => void;
+  onStartSessionMessage?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
@@ -568,6 +1058,10 @@ function DashboardComposer({
   }, [customOpen]);
 
   function createStandardMark(label: AxisRealityMarkLabel) {
+    if (!canCreateMark) {
+      onStartSessionMessage?.();
+      return;
+    }
     onCreateRealityMark(label);
     closeMenu();
   }
@@ -575,6 +1069,10 @@ function DashboardComposer({
   function createCustomMark() {
     const note = customValue.trim();
     if (!note) return;
+    if (!canCreateMark) {
+      onStartSessionMessage?.();
+      return;
+    }
     onCreateRealityMark("custom", note);
     closeMenu();
   }
@@ -665,44 +1163,54 @@ function DashboardComposer({
 function MobileGameSurface({
   boardOpen,
   gameSession,
+  gameSource,
   liveRead,
   marks,
   onAddToastNote,
   onCloseBoard,
   onCreateRealityMark,
   onEndSession,
+  onLinkSource,
+  onMockCamera,
   onOpenBoard,
   onPauseSession,
   onResumeSession,
   onStartSession,
+  onStartSessionMessage,
   onStartSource,
   onToastNoteChange,
   onToastNoteOpen,
   onUndoLast,
   sessionElapsed,
   sourceElapsed,
+  sourceMessage,
   toastMark,
   toastNote,
   toastNoteOpen,
 }: {
   boardOpen: boolean;
   gameSession: AxisGameSession;
+  gameSource: AxisLabGameSource;
   liveRead: AxisLiveRead;
   marks: AxisRealityMark[];
   onAddToastNote: () => void;
   onCloseBoard: () => void;
   onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string) => void;
   onEndSession: () => void;
+  onLinkSource: (url: string) => void;
+  onMockCamera: () => void;
   onOpenBoard: () => void;
   onPauseSession: () => void;
   onResumeSession: () => void;
   onStartSession: () => void;
+  onStartSessionMessage: () => void;
   onStartSource: () => void;
   onToastNoteChange: (value: string) => void;
   onToastNoteOpen: () => void;
   onUndoLast: () => void;
   sessionElapsed?: number;
   sourceElapsed?: number;
+  sourceMessage: string;
   toastMark: AxisRealityMark | null;
   toastNote: string;
   toastNoteOpen: boolean;
@@ -723,6 +1231,10 @@ function MobileGameSurface({
   }
 
   function createMobileMark(label: AxisRealityMarkLabel) {
+    if (!canMark) {
+      onStartSessionMessage();
+      return;
+    }
     if (label === "custom") {
       setMobileCustomOpen(true);
       return;
@@ -733,6 +1245,10 @@ function MobileGameSurface({
   function createMobileCustomMark() {
     const note = mobileCustomValue.trim();
     if (!note) return;
+    if (!canMark) {
+      onStartSessionMessage();
+      return;
+    }
     onCreateRealityMark("custom", note);
     closeMobileCustom();
   }
@@ -745,55 +1261,33 @@ function MobileGameSurface({
         <em>{gameSession.saveStatus}</em>
       </header>
 
-      <section className={styles.gameSessionPanel} aria-label="Local game session controls">
-        <div>
-          <p>Local source clock - no media connected.</p>
-          <strong>{sourceElapsed === undefined ? "Source not started" : getSessionTimestamp(sourceElapsed)}</strong>
-        </div>
-        <div>
-          <p>Session {gameSession.status}</p>
-          <strong>{sessionElapsed === undefined ? "Not live" : getSessionTimestamp(sessionElapsed)}</strong>
-        </div>
-        <div className={styles.gameSessionActions}>
-          <button type="button" onClick={onStartSource} disabled={sourceElapsed !== undefined}>
-            Start source
-          </button>
-          {gameSession.status === "setup" && (
-            <button type="button" onClick={onStartSession}>Start session</button>
-          )}
-          {gameSession.status === "live" && (
-            <>
-              <button type="button" onClick={onPauseSession}>Pause</button>
-              <button type="button" onClick={onEndSession}>End</button>
-            </>
-          )}
-          {gameSession.status === "paused" && (
-            <>
-              <button type="button" onClick={onResumeSession}>Resume</button>
-              <button type="button" onClick={onEndSession}>End</button>
-            </>
-          )}
-        </div>
-        {gameSession.status === "ended" && (
-          <p className={styles.gameSessionFinal}>Final local mark count: {marks.length}</p>
-        )}
-      </section>
-
-      <section className={styles.gameReadCard} aria-labelledby="axis-game-current-read">
-        <p className={styles.regionEyebrow}>Current read</p>
-        <h1 id="axis-game-current-read">First six minutes.</h1>
-        <ul>
-          <li><strong>Main:</strong> No second mistake.</li>
-          <li><strong>Pressure:</strong> Contact is not a stop sign.</li>
-          <li><strong>Cue:</strong> Slow the next decision.</li>
-        </ul>
-      </section>
+      <SourceWindow
+        gameSession={gameSession}
+        gameSource={gameSource}
+        marks={marks}
+        onEndSession={onEndSession}
+        onLinkSource={onLinkSource}
+        onMockCamera={onMockCamera}
+        onPauseSession={onPauseSession}
+        onResumeSession={onResumeSession}
+        onStartSession={onStartSession}
+        onStartSource={onStartSource}
+        sessionElapsed={sessionElapsed}
+        sourceElapsed={sourceElapsed}
+        sourceMessage={sourceMessage}
+      />
 
       <button
         className={styles.markRealityButton}
         type="button"
-        onClick={() => onCreateRealityMark("proof")}
-        disabled={!canMark}
+        onClick={() => {
+          if (!canMark) {
+            onStartSessionMessage();
+            return;
+          }
+          onCreateRealityMark("proof");
+        }}
+        disabled={gameSession.status === "ended"}
       >
         Add Reality Mark
       </button>
@@ -804,7 +1298,7 @@ function MobileGameSurface({
             key={label}
             type="button"
             onClick={() => createMobileMark(label)}
-            disabled={!canMark}
+            disabled={gameSession.status === "ended"}
           >
             {getMarkTitle(label)}
           </button>

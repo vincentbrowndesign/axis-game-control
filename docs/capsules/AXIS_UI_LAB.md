@@ -7,14 +7,15 @@ Route: `/axis/lab`
 
 ## Current Purpose
 
-Axis UI Lab currently tests a mock-only Context Dashboard inspired by the approved reference.
+Axis UI Lab currently tests a mock-only Game Source Surface inspired by the approved reference language.
 
-The dashboard:
+The lab surface:
 
 - is not yet the active `/axis` product
 - contains no live Lens, CV, evidence, upload, or Data Asset behavior
 - uses local mock data only
 - may promote presentation components only through an explicit product decision
+- places the game/source in the center, context on the edges, and action at the bottom
 
 ## Shell Promotion
 
@@ -80,11 +81,17 @@ Do not create hidden intermediate product states.
 
 ## Current Mock Surface
 
-The active lab preview is a Context Dashboard mock with:
+The active lab preview is a Game Source Surface mock with:
 
 - top header
 - thread timeline
-- active context
+- center Source Window
+- source link reference
+- mock camera placeholder
+- local source clock
+- local session clock
+- Reality Mark action surface
+- Live Read
 - proof needed
 - next move
 - keeper
@@ -94,15 +101,23 @@ The active lab preview is a Context Dashboard mock with:
 - preview-only composer
 - Recent Reality shelf
 
-Desktop preserves the three-region reference layout. Tablet portrait and phone collapse into a single readable flow.
+Desktop preserves a three-region game surface with the Source Window dominant. Tablet portrait and phone collapse into a single readable flow.
 
-## Axis Game Reality Review Surface
+## Axis Game Source Surface and Reality Marks v0
 
-Axis Game Reality Review Surface exists only in `/axis/lab`.
+Axis Game Source Surface and Reality Marks v0 exist only in `/axis/lab`.
 
-It is a local game-use preview for manually timestamping moments and seeing how those moments might shape a review surface.
+It is a local game-use preview for holding a source reference, manually timestamping moments, and seeing how those moments might shape a review surface.
 
 During live-game use, the lab rule is mark, glance, and recover: no long typing, no media capture, and no verified claims.
+
+Source behavior:
+
+- source link is a local reference only, not ingestion
+- mock camera is a visual placeholder only, not camera access
+- local source clock is clock sync only, not media sync
+- linked sources must say no analysis
+- mock camera must say no camera connected
 
 Reality Marks:
 
@@ -115,6 +130,7 @@ Reality Marks:
 - may update the local Live Read preview
 - reset on refresh
 - are disabled unless the local game session is live
+- may point to a local source id when a local source reference exists
 
 Every created Reality Mark is:
 

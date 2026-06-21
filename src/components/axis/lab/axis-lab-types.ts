@@ -25,6 +25,21 @@ export type AxisGameSession = {
   saveStatus: AxisGameSessionSaveStatus;
 };
 
+export type AxisLabSourceType =
+  | "none"
+  | "link"
+  | "mock_camera"
+  | "manual";
+
+export type AxisLabGameSource = {
+  id: string;
+  type: AxisLabSourceType;
+  label: string;
+  url?: string;
+  startedAt?: string;
+  status: "idle" | "ready" | "live" | "paused" | "ended";
+};
+
 export type AxisRealityMarkLabel =
   | "proof"
   | "turnover"
@@ -47,7 +62,7 @@ export type AxisRealityMark = {
   preRollSeconds: number;
   provenance: "manual";
   sourceTime?: number;
-  sourceType: "manual" | "camera" | "stream" | "upload";
+  sourceType: "manual" | "link" | "mock_camera";
   sessionTime: number;
   createdAt: string;
   verification: "unverified";
