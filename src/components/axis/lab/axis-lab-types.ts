@@ -1,7 +1,31 @@
 export type AxisLabPreviewState = "empty" | "active" | "expanded";
 
+export type AxisGameSessionStatus =
+  | "setup"
+  | "live"
+  | "paused"
+  | "ended";
+
+export type AxisGameSessionSaveStatus =
+  | "local"
+  | "saving"
+  | "saved"
+  | "unsaved"
+  | "error";
+
+export type AxisGameSession = {
+  id: string;
+  title: string;
+  opponent?: string;
+  startedAt?: string;
+  endedAt?: string;
+  sourceType: "manual" | "camera" | "stream" | "upload";
+  sourceStartedAt?: string;
+  status: AxisGameSessionStatus;
+  saveStatus: AxisGameSessionSaveStatus;
+};
+
 export type AxisRealityMarkLabel =
-  | "reality"
   | "proof"
   | "turnover"
   | "rushing"
@@ -9,22 +33,24 @@ export type AxisRealityMarkLabel =
   | "score"
   | "stop"
   | "foul"
-  | "teach"
   | "question"
   | "clip"
   | "custom";
 
 export type AxisRealityMark = {
+  gameSessionId: string;
   id: string;
   label: AxisRealityMarkLabel;
+  linkedSourceId?: string;
   note?: string;
-  source: "button" | "chip" | "text";
+  postRollSeconds: number;
+  preRollSeconds: number;
+  provenance: "manual";
+  sourceTime?: number;
   sourceType: "manual" | "camera" | "stream" | "upload";
-  verification: "unverified";
-  sessionTime?: number;
-  preRollSeconds?: number;
-  postRollSeconds?: number;
+  sessionTime: number;
   createdAt: string;
+  verification: "unverified";
 };
 
 export type AxisLabTimelineEvent = {

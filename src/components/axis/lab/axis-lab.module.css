@@ -1244,6 +1244,123 @@
     text-align: center;
   }
 
+  .markRealityButton:disabled,
+  .quickMarks button:disabled {
+    cursor: default;
+    opacity: 0.42;
+  }
+
+  .gameSessionPanel {
+    background: color-mix(in srgb, var(--lab-paper) 84%, white);
+    border: 1px solid color-mix(in srgb, var(--lab-line) 12%, transparent);
+    border-radius: 13px;
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .gameSessionPanel > div:not(.gameSessionActions) {
+    align-items: baseline;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+  }
+
+  .gameSessionPanel p {
+    color: color-mix(in srgb, var(--lab-ink) 50%, transparent);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .gameSessionPanel strong {
+    color: color-mix(in srgb, var(--lab-ink) 78%, transparent);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .gameSessionActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .gameSessionActions button,
+  .markToast button,
+  .markToast input {
+    font: inherit;
+  }
+
+  .gameSessionActions button,
+  .markToast button {
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--lab-line) 14%, transparent);
+    border-radius: 999px;
+    color: color-mix(in srgb, var(--lab-ink) 68%, transparent);
+    cursor: pointer;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    min-height: 34px;
+    padding: 0 11px;
+  }
+
+  .gameSessionActions button:disabled,
+  .markToast button:disabled {
+    cursor: default;
+    opacity: 0.42;
+  }
+
+  .markToast {
+    background: color-mix(in srgb, var(--lab-paper) 92%, white);
+    border: 1px solid color-mix(in srgb, var(--lab-line) 16%, transparent);
+    border-left: 3px solid color-mix(in srgb, var(--lab-context) 62%, var(--lab-line));
+    border-radius: 13px;
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .markToast > div:first-child {
+    display: grid;
+    gap: 3px;
+  }
+
+  .markToast strong {
+    color: color-mix(in srgb, var(--lab-ink) 82%, transparent);
+    font-size: 15px;
+    line-height: 1.15;
+  }
+
+  .markToast span {
+    color: color-mix(in srgb, var(--lab-ink) 48%, transparent);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 11px;
+  }
+
+  .markToastActions,
+  .markToastNote {
+    display: flex;
+    gap: 8px;
+  }
+
+  .markToastNote {
+    align-items: center;
+  }
+
+  .markToastNote input {
+    background: color-mix(in srgb, var(--lab-paper) 82%, white);
+    border: 1px solid color-mix(in srgb, var(--lab-line) 14%, transparent);
+    border-radius: 999px;
+    color: color-mix(in srgb, var(--lab-ink) 82%, transparent);
+    flex: 1;
+    font-size: 14px;
+    min-height: 38px;
+    padding: 0 12px;
+  }
+
   .quickMarks {
     display: grid;
     gap: 8px;
@@ -1353,6 +1470,16 @@
     grid-column: 2;
     line-height: 1.2;
     overflow-wrap: break-word;
+  }
+
+  .recentMarks em {
+    color: color-mix(in srgb, var(--lab-ink) 40%, transparent);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 10px;
+    font-style: normal;
+    grid-column: 2;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .reviewBoardButton {

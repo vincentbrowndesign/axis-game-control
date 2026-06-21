@@ -9,6 +9,7 @@ import { IconButton } from "../context-dashboard/axis-context-header";
 import type { AxisContextRecentItem } from "../context-dashboard/axis-context-dashboard-types";
 import { axisLabDashboard } from "./axis-lab-mock-data";
 import type {
+  AxisGameSession,
   AxisLabPreviewState,
   AxisLabProofCandidate,
   AxisLabRecentReality,
@@ -20,7 +21,6 @@ import styles from "./axis-lab.module.css";
 
 const VALID_STATES: AxisLabPreviewState[] = ["empty", "active", "expanded"];
 const REALITY_MARK_LABELS: AxisRealityMarkLabel[] = [
-  "reality",
   "proof",
   "turnover",
   "rushing",
@@ -28,7 +28,6 @@ const REALITY_MARK_LABELS: AxisRealityMarkLabel[] = [
   "score",
   "stop",
   "foul",
-  "teach",
   "question",
   "clip",
   "custom",
@@ -49,6 +48,7 @@ const PROOF_CANDIDATE_LABELS = new Set<AxisRealityMarkLabel>([
   "rushing",
   "spacing",
   "stop",
+  "foul",
   "clip",
 ]);
 
@@ -86,6 +86,10 @@ function createMarkId() {
   return `mark-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function createSessionId() {
+  return `game-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function AxisLabPreview() {
   const searchParams = useSearchParams();
   const previewState = parsePreviewState(searchParams.get("state"));
@@ -100,16 +104,33 @@ function DashboardPreview({
   expanded: boolean;
   state: AxisLabPreviewState;
 }) {
-  const sessionStartedAtRef = useRef<number | null>(null);
+  const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
+  const [sourceStartedAtMs, setSourceStartedAtMs] = useState<number | null>(null);
   const [realityMarks, setRealityMarks] = useState<AxisRealityMark[]>([]);
   const [mobileBoardOpen, setMobileBoardOpen] = useState(false);
+  const [lastMarkToastId, setLastMarkToastId] = useState<string | null>(null);
+  const [toastNoteOpen, setToastNoteOpen] = useState(false);
+  const [toastNote, setToastNote] = useState("");
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [gameSession, setGameSession] = useState<AxisGameSession>(() => ({
+    id: createSessionId(),
+    saveStatus: "local",
+    sourceType: "manual",
+    status: "setup",
+    title: axisLabDashboard.threadTitle,
+  }));
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const markTimelineEvents = useMemo<AxisLabTimelineEvent[]>(
     () =>
       realityMarks.map((mark) => ({
         detail: getMarkTitle(mark.label),
         mark,
-        meta: "Manual · Unverified",
+        meta: "Manual - Unverified",
         time: getClockTime(mark.createdAt),
         title: "Reality mark",
       })),
@@ -129,30 +150,100 @@ function DashboardPreview({
     [realityMarks],
   );
 
-  const createRealityMark = useCallback((label: AxisRealityMarkLabel, note?: string, source: AxisRealityMark["source"] = "chip") => {
+  const createRealityMark = useCallback((label: AxisRealityMarkLabel, note?: string) => {
+    if (gameSession.status !== "live" || sessionStartedAtMs === null) return;
     const now = Date.now();
-    if (sessionStartedAtRef.current === null) {
-      sessionStartedAtRef.current = now;
-    }
     const createdAt = new Date().toISOString();
-    const elapsedSeconds = Math.max(0, Math.floor((now - sessionStartedAtRef.current) / 1000));
+    const elapsedSeconds = Math.max(0, Math.floor((now - sessionStartedAtMs) / 1000));
+    const sourceTime = sourceStartedAtMs === null
+      ? undefined
+      : Math.max(0, Math.floor((now - sourceStartedAtMs) / 1000));
+    const markId = createMarkId();
     setRealityMarks((current) => [
       {
         createdAt,
-        id: createMarkId(),
+        gameSessionId: gameSession.id,
+        id: markId,
         label,
+        linkedSourceId: undefined,
         note: note?.trim() || undefined,
-        source,
+        postRollSeconds: 10,
+        preRollSeconds: 15,
+        provenance: "manual",
         sessionTime: elapsedSeconds,
+        sourceTime,
         sourceType: "manual",
         verification: "unverified",
       },
       ...current,
     ]);
-  }, []);
+    setLastMarkToastId(markId);
+    setToastNoteOpen(false);
+    setToastNote("");
+  }, [gameSession.id, gameSession.status, sessionStartedAtMs, sourceStartedAtMs]);
   const undoLastRealityMark = useCallback(() => {
-    setRealityMarks((current) => current.slice(1));
+    setRealityMarks((current) => {
+      const next = current.slice(1);
+      setLastMarkToastId(next[0]?.id ?? null);
+      return next;
+    });
+    setToastNoteOpen(false);
+    setToastNote("");
   }, []);
+
+  const startSource = useCallback(() => {
+    const now = new Date().toISOString();
+    setSourceStartedAtMs(Date.now());
+    setGameSession((current) => ({
+      ...current,
+      sourceStartedAt: now,
+      sourceType: "manual",
+    }));
+  }, []);
+
+  const startSession = useCallback(() => {
+    const nowMs = Date.now();
+    setSessionStartedAtMs(nowMs);
+    setGameSession((current) => ({
+      ...current,
+      startedAt: new Date(nowMs).toISOString(),
+      status: "live",
+    }));
+  }, []);
+
+  const pauseSession = useCallback(() => {
+    setGameSession((current) => current.status === "live" ? { ...current, status: "paused" } : current);
+  }, []);
+
+  const resumeSession = useCallback(() => {
+    setGameSession((current) => current.status === "paused" ? { ...current, status: "live" } : current);
+  }, []);
+
+  const endSession = useCallback(() => {
+    setGameSession((current) => ({
+      ...current,
+      endedAt: new Date().toISOString(),
+      status: "ended",
+    }));
+  }, []);
+
+  const addToastNote = useCallback(() => {
+    const note = toastNote.trim();
+    if (!lastMarkToastId || !note) return;
+    setRealityMarks((current) => current.map((mark) => (
+      mark.id === lastMarkToastId ? { ...mark, note } : mark
+    )));
+    setToastNote("");
+    setToastNoteOpen(false);
+  }, [lastMarkToastId, toastNote]);
+
+  const sourceElapsed = sourceStartedAtMs === null
+    ? undefined
+    : Math.max(0, Math.floor((clockNow - sourceStartedAtMs) / 1000));
+  const sessionElapsed = sessionStartedAtMs === null
+    ? undefined
+    : Math.max(0, Math.floor((clockNow - sessionStartedAtMs) / 1000));
+  const toastMark = realityMarks.find((mark) => mark.id === lastMarkToastId) ?? null;
 
   const activeContext =
     state === "empty"
@@ -200,9 +291,7 @@ function DashboardPreview({
         mediaKind: event.meta ? "voice" : "clip",
         mediaLabel: event.mediaLabel,
         meta: event.mark
-          ? `Manual · Unverified${
-              typeof event.mark.sessionTime === "number" ? ` · ${getSessionTimestamp(event.mark.sessionTime)}` : ""
-            }`
+          ? `Manual - Unverified - ${getSessionTimestamp(event.mark.sessionTime)}`
           : event.meta,
         time: event.time,
         title: event.title,
@@ -211,11 +300,25 @@ function DashboardPreview({
       </div>
       <MobileGameSurface
         boardOpen={mobileBoardOpen}
+        gameSession={gameSession}
         marks={realityMarks}
+        onAddToastNote={addToastNote}
         onCloseBoard={() => setMobileBoardOpen(false)}
         onCreateRealityMark={createRealityMark}
+        onEndSession={endSession}
         onOpenBoard={() => setMobileBoardOpen(true)}
+        onPauseSession={pauseSession}
+        onResumeSession={resumeSession}
+        onStartSession={startSession}
+        onStartSource={startSource}
         onUndoLast={undoLastRealityMark}
+        sessionElapsed={sessionElapsed}
+        sourceElapsed={sourceElapsed}
+        toastMark={toastMark}
+        toastNote={toastNote}
+        toastNoteOpen={toastNoteOpen}
+        onToastNoteChange={setToastNote}
+        onToastNoteOpen={() => setToastNoteOpen(true)}
       />
     </>
   );
@@ -249,8 +352,8 @@ function createRecentItem(item: AxisLabRecentReality): AxisContextRecentItem {
   const markMeta = item.mark
     ? [
         item.mark.note,
-        `${markTimestamp ? `${markTimestamp} · ` : ""}${getClockTime(item.mark.createdAt)}`,
-        "Manual · Unverified",
+        `${markTimestamp ? `${markTimestamp} - ` : ""}${getClockTime(item.mark.createdAt)}`,
+        "Manual - Unverified",
       ].filter((line): line is string => Boolean(line))
     : undefined;
 
@@ -278,7 +381,7 @@ function EmptyDashboard() {
 function DashboardComposer({
   onCreateRealityMark,
 }: {
-  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string, source?: AxisRealityMark["source"]) => void;
+  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
@@ -328,14 +431,14 @@ function DashboardComposer({
   }, [customOpen]);
 
   function createStandardMark(label: AxisRealityMarkLabel) {
-    onCreateRealityMark(label, undefined, "chip");
+    onCreateRealityMark(label);
     closeMenu();
   }
 
   function createCustomMark() {
     const note = customValue.trim();
     if (!note) return;
-    onCreateRealityMark("custom", note, "text");
+    onCreateRealityMark("custom", note);
     closeMenu();
   }
 
@@ -424,26 +527,87 @@ function DashboardComposer({
 
 function MobileGameSurface({
   boardOpen,
+  gameSession,
   marks,
+  onAddToastNote,
   onCloseBoard,
   onCreateRealityMark,
+  onEndSession,
   onOpenBoard,
+  onPauseSession,
+  onResumeSession,
+  onStartSession,
+  onStartSource,
+  onToastNoteChange,
+  onToastNoteOpen,
   onUndoLast,
+  sessionElapsed,
+  sourceElapsed,
+  toastMark,
+  toastNote,
+  toastNoteOpen,
 }: {
   boardOpen: boolean;
+  gameSession: AxisGameSession;
   marks: AxisRealityMark[];
+  onAddToastNote: () => void;
   onCloseBoard: () => void;
-  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string, source?: AxisRealityMark["source"]) => void;
+  onCreateRealityMark: (label: AxisRealityMarkLabel, note?: string) => void;
+  onEndSession: () => void;
   onOpenBoard: () => void;
+  onPauseSession: () => void;
+  onResumeSession: () => void;
+  onStartSession: () => void;
+  onStartSource: () => void;
+  onToastNoteChange: (value: string) => void;
+  onToastNoteOpen: () => void;
   onUndoLast: () => void;
+  sessionElapsed?: number;
+  sourceElapsed?: number;
+  toastMark: AxisRealityMark | null;
+  toastNote: string;
+  toastNoteOpen: boolean;
 }) {
+  const canMark = gameSession.status === "live";
+
   return (
     <main className={styles.gameSurface} aria-label="Axis Lab mobile game surface">
       <header className={styles.gameHeader}>
         <span>AXIS</span>
         <strong>{axisLabDashboard.threadTitle}</strong>
-        <em>Local</em>
+        <em>{gameSession.saveStatus}</em>
       </header>
+
+      <section className={styles.gameSessionPanel} aria-label="Local game session controls">
+        <div>
+          <p>Local source clock - no media connected.</p>
+          <strong>{sourceElapsed === undefined ? "Source not started" : getSessionTimestamp(sourceElapsed)}</strong>
+        </div>
+        <div>
+          <p>Session {gameSession.status}</p>
+          <strong>{sessionElapsed === undefined ? "Not live" : getSessionTimestamp(sessionElapsed)}</strong>
+        </div>
+        <div className={styles.gameSessionActions}>
+          <button type="button" onClick={onStartSource} disabled={sourceElapsed !== undefined}>
+            Start source
+          </button>
+          {gameSession.status === "setup" && (
+            <button type="button" onClick={onStartSession}>Start session</button>
+          )}
+          {gameSession.status === "live" && (
+            <>
+              <button type="button" onClick={onPauseSession}>Pause</button>
+              <button type="button" onClick={onEndSession}>End</button>
+            </>
+          )}
+          {gameSession.status === "paused" && (
+            <>
+              <button type="button" onClick={onResumeSession}>Resume</button>
+              <button type="button" onClick={onEndSession}>End</button>
+            </>
+          )}
+        </div>
+      </section>
 
       <section className={styles.gameReadCard} aria-labelledby="axis-game-current-read">
         <p className={styles.regionEyebrow}>Current read</p>
@@ -458,9 +622,10 @@ function MobileGameSurface({
       <button
         className={styles.markRealityButton}
         type="button"
-        onClick={() => onCreateRealityMark("reality", undefined, "button")}
+        onClick={() => onCreateRealityMark("proof")}
+        disabled={!canMark}
       >
-        Mark Reality
+        Add Reality Mark
       </button>
 
       <section className={styles.quickMarks} aria-label="Quick Reality Marks">
@@ -468,12 +633,46 @@ function MobileGameSurface({
           <button
             key={label}
             type="button"
-            onClick={() => onCreateRealityMark(label, undefined, "chip")}
+            onClick={() => onCreateRealityMark(label)}
+            disabled={!canMark}
           >
             {getMarkTitle(label)}
           </button>
         ))}
       </section>
+
+      {toastMark && (
+        <section className={styles.markToast} aria-live="polite" aria-label="Latest Reality Mark">
+          <div>
+            <strong>{getMarkTitle(toastMark.label)} - {getSessionTimestamp(toastMark.sessionTime)}</strong>
+            <span>Manual - Unverified</span>
+          </div>
+          <div className={styles.markToastActions}>
+            <button type="button" onClick={onUndoLast}>Undo</button>
+            <button type="button" onClick={onToastNoteOpen}>Add note</button>
+          </div>
+          {toastNoteOpen && (
+            <div className={styles.markToastNote}>
+              <label className={styles.srOnly} htmlFor="axis-lab-toast-note">Reality Mark note</label>
+              <input
+                id="axis-lab-toast-note"
+                value={toastNote}
+                onChange={(event) => onToastNoteChange(event.target.value)}
+                placeholder="Short note..."
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onAddToastNote();
+                  }
+                }}
+              />
+              <button type="button" onClick={onAddToastNote} disabled={!toastNote.trim()}>
+                Save
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className={styles.recentMarks} aria-labelledby="axis-game-recent-marks">
         <div>
@@ -489,10 +688,11 @@ function MobileGameSurface({
             {marks.slice(0, 6).map((mark) => (
               <li key={mark.id}>
                 <time dateTime={mark.createdAt}>
-                  {getSessionTimestamp(mark.sessionTime) || getClockTime(mark.createdAt)}
+                  {getSessionTimestamp(mark.sessionTime)}
                 </time>
                 <strong>{getMarkTitle(mark.label)}</strong>
                 {mark.note && <span>{mark.note}</span>}
+                <em>Manual - Unverified</em>
               </li>
             ))}
           </ol>
