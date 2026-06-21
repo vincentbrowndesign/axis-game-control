@@ -154,6 +154,12 @@ export function AxisBuildMap() {
           padding: 0.9rem;
         }
 
+        .axis-agent-card:has(.axis-agent-card__contract) {
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--agent-color) 28%, transparent),
+            0 0 34px color-mix(in srgb, var(--agent-color) 14%, transparent);
+        }
+
         .axis-agent-card--purple {
           --agent-color: var(--axis-purple);
         }
@@ -208,7 +214,8 @@ export function AxisBuildMap() {
         .axis-agent-card p,
         .axis-agent-card dd,
         .axis-memory-bar p,
-        .axis-build-step li {
+        .axis-build-step li,
+        .axis-agent-card__contract li {
           color: var(--axis-muted);
           font-size: 0.82rem;
           line-height: 1.38;
@@ -231,6 +238,33 @@ export function AxisBuildMap() {
         .axis-agent-card dt {
           color: color-mix(in srgb, var(--agent-color) 76%, var(--axis-ink));
           margin-bottom: 0.2rem;
+        }
+
+        .axis-agent-card__contract {
+          border-top: 1px solid color-mix(in srgb, var(--agent-color) 26%, transparent);
+          margin-top: 0.8rem;
+          padding-top: 0.8rem;
+        }
+
+        .axis-agent-card__contract h4 {
+          color: color-mix(in srgb, var(--agent-color) 82%, var(--axis-ink));
+          font-size: 0.72rem;
+          letter-spacing: 0.1em;
+          margin: 0 0 0.5rem;
+          text-transform: uppercase;
+        }
+
+        .axis-agent-card__contract ul {
+          display: grid;
+          gap: 0.35rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-agent-card__contract strong {
+          color: var(--axis-ink);
+          font-weight: 750;
         }
 
         .axis-memory-bar {

@@ -5,9 +5,14 @@ export const axisBuildAgents: AxisAgent[] = [
     id: 1,
     name: "Axis Router Agent",
     purpose: "Understands the request and routes it to the right agent.",
-    status: "Static UI first.",
+    status: "Wired as static routing contract.",
     futureWiring: "/api/axis/run router.",
     accent: "purple",
+    routeContract: {
+      accepts: "One user command plus optional mode or source.",
+      decides: "The first Axis capability that should receive the request.",
+      returns: "A routing decision for the next agent. No backend call yet.",
+    },
   },
   {
     id: 2,

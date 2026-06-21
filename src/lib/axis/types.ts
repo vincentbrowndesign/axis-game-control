@@ -25,6 +25,11 @@ export type AxisAgent = {
   status: string;
   futureWiring: string;
   accent: "purple" | "gold" | "blue" | "green" | "orange" | "cyan";
+  routeContract?: {
+    accepts: string;
+    decides: string;
+    returns: string;
+  };
 };
 
 export type AxisBuildScreen = {
