@@ -17,3 +17,23 @@ export type AxisOutput = {
   summary?: string;
   sourceLabel?: string;
 };
+
+export type AxisAgent = {
+  id: number;
+  name: string;
+  purpose: string;
+  status: string;
+  futureWiring: string;
+  accent: "purple" | "gold" | "blue" | "green" | "orange" | "cyan";
+};
+
+export type AxisBuildScreen = {
+  id: string;
+  title: string;
+  items: string[];
+};
+
+export type AxisBuildOrderItem = {
+  id: number;
+  title: string;
+};
