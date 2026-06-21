@@ -17,6 +17,7 @@ The conversation itself is the product. Axis helps the work develop.
 | Saved thread API | `src/app/api/axis/threads` — exact owner-scoped thread persistence |
 | Auth capsule | `docs/capsules/AXIS_AUTH.md` - explicit sign-in/sign-out for owner-scoped continuity |
 | Presentation shell | `src/components/axis/context-dashboard/` - reusable current-thread presentation components |
+| CV foundation | `docs/capsules/AXIS_CV_FOUNDATION.md` - isolated visual reality processing; suggested observations only |
 | Legacy mission page | `src/app/axis/mission/page.tsx` — redirects to `/axis` |
 | Legacy conversation API | `src/app/api/axis/run` — preserved, not used by MVP |
 | Product truth | The conversation is the product |
@@ -43,6 +44,8 @@ Only build items marked:
 * Refine Current
 
 Do not build Hold, Future Layer, Research Proof, or Do Not Build Yet items unless explicitly instructed.
+
+Axis CV Foundation v0 is now allowed only as an active foundation. It does not change the active `/axis` conversation contract and does not unlock replay, overlay, evidence, witness, memory, dashboard, upload product workflow, or player model work.
 
 ---
 
@@ -132,6 +135,51 @@ Current runtime priorities:
 1. Active-thread entity integrity
 2. Live Supabase persistence verification
 3. Thread Board quality
+
+---
+
+## Axis CV Foundation v0 Boundary
+
+Axis CV Foundation v0 is active as an isolated foundation.
+
+CV may produce:
+
+* detections
+* tracks
+* event candidates
+* frame summaries
+* debug artifacts
+* debug JSON
+* debug MP4
+
+CV may not create:
+
+* verified evidence
+* witness verdicts
+* player memory
+* cross-thread recall
+* replay UI
+* overlay UI
+* dashboards
+* automatic game truth
+* automatic scouting reports
+* upload product workflows
+* active `/axis` conversation behavior changes
+
+The locked sentence is:
+
+Axis CV turns video into suggested observations, not truth.
+
+Preserve the active `/axis` conversation boundary and the response contract:
+
+```json
+{
+  "reply": "string",
+  "threadBoard": null
+}
+```
+
+or the same shape with a generated `threadBoard` object. Do not add CV output to the conversation API contract without an explicit migration decision.
 
 ---
 

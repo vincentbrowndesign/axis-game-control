@@ -28,6 +28,7 @@ Build Now:
 7. Active-thread entity integrity
 8. Axis Auth v0
 9. Axis Context Dashboard Shell: Build Now as a presentation migration only. Current-thread presentation only; no schema, evidence, media, memory, cross-thread, or Data Asset runtime.
+10. Axis CV Foundation v0: Build Now as isolated visual reality processing. Suggested observations only; no evidence, witness, replay product, overlay product, memory, dashboard, upload workflow, or player model.
 
 Refine Current:
 
@@ -51,7 +52,7 @@ Internal Development Surfaces:
 2. Axis Aperture Shell — Internal CSS Grid shell pattern used by the lab. Type: Internal UI lab pattern. Decision: Refine Current. Boundary: `/axis/lab` only. Not active in `/axis`.
 3. Axis Lens UI Bridge — Mock-only visual-source preview inside the Aperture Shell. Status: Internal mock preview. Decision: Refine Current in `/axis/lab` only. No Lens runtime or CV capability is activated. Do not move Axis Lens out of Do Not Build Yet based on this preview.
 4. Axis Game-Ready Reality Marks Lab Prototype — Local `/axis/lab` game-use experiment. Status: Build Now in lab only. Manual local session clock, Reality Marks, Recent Reality, proof-candidate suggestions, and deterministic Live Read only. Axis Lens remains Future / Research Proof. Evidence Layer remains Future / Research Proof. Data Asset runtime remains inactive. No camera, mic, upload, CV, persistence, evidence, or active `/axis` behavior.
-5. Axis Game Source Surface Lab Prototype — Local `/axis/lab` game-use experiment. Status: Build Now in lab only. Source Window, source link reference, mock camera placeholder, source/session clocks, and Reality Marks around the source. Axis Lens remains Future / Research Proof. Camera Layer, Upload / Media Layer, CV / Replay / Overlay, Evidence Layer, and Data Asset runtime remain inactive.
+5. Axis Game Source Surface Lab Prototype — Local `/axis/lab` game-use experiment. Status: Build Now in lab only. Source Window, source link reference, mock camera placeholder, source/session clocks, and Reality Marks around the source. Axis Lens remains Future / Research Proof. Camera Layer, Upload / Media Layer, Replay Product, Overlay Product, Evidence Layer, and Data Asset runtime remain inactive.
 
 Do Not Build Yet:
 
@@ -71,23 +72,24 @@ Do Not Build Yet:
 14. Voice Layer
 15. Camera Layer
 16. Upload / Media Layer
-17. CV / Replay / Overlay
-18. Annotation Layer
-19. Sketch Layer
-20. Export Layer
-21. operational Axis Data Asset Layer
-22. structured-record persistence
-23. dataset generation
-24. asset creation or promotion
-25. Keeper workflows
-26. verified assets
-27. asynchronous asset processing
-28. Data Product generation
-29. player/development memory
-30. marketplace/platform monetization
-31. subscriptions
-32. sponsor tooling
-33. raw child-data monetization
+17. Axis Replay Product
+18. Axis Overlay Product
+19. Annotation Layer
+20. Sketch Layer
+21. Export Layer
+22. operational Axis Data Asset Layer
+23. structured-record persistence
+24. dataset generation
+25. asset creation or promotion
+26. Keeper workflows
+27. verified assets
+28. asynchronous asset processing
+29. Data Product generation
+30. player/development memory
+31. marketplace/platform monetization
+32. subscriptions
+33. sponsor tooling
+34. raw child-data monetization
 
 ## Decision Labels
 
@@ -126,6 +128,7 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Axis Auth v0 | Authentication | Thread Persistence | Active narrow capability | Owner-scoped account continuity | Build Now | Adds Google-only sign-in, sign-out, session restoration, and account-switch isolation for exact saved threads without email/password UI, profiles, organizations, billing, memory, or roles. |
 | Active-thread save continuity | UI/persistence refinement | Thread Persistence | Active refinement | Visible saved state and transcript timestamps | Refine Current | Shows exact-thread save state, manual Save/Retry, message timestamps, and board snapshot time without adding memory, board_items, persistent board arrangement, or Data Asset runtime. |
 | Axis Context Dashboard Shell | Presentation shell | Conversation/Thread Board | Active presentation migration | Current-thread context dashboard | Build Now | Promotes the approved Lab shell into reusable production-safe components for existing conversation, Thread Board, auth, and exact-thread persistence. No schema, evidence, media, Lens, memory, cross-thread, or Data Asset runtime. |
+| Axis CV Foundation v0 | Active foundation | CV | Active foundation | Isolated visual reality processing | Build Now | Turns video into suggested detections, tracks, frame summaries, event candidates, and debug artifacts. It may not create verified evidence, player memory, replay UI, overlay UI, dashboards, automatic reports, or game truth. |
 | Axis Data Asset Contract v0 | Foundation contract | Architecture | Active foundation - complete | Governed source-to-asset lifecycle vocabulary | Foundation complete | Locked by 93cfbfe technical vocabulary and 31a214f product/build boundaries. Do not add a third Data Asset implementation chunk. No runtime creation, persistence, verification, UI, or background processing. |
 | Active-thread entity integrity | Runtime trust behavior | Conversation | Next runtime build | Thread-local entity carryover | Build Now | Axis must not merge, rename, over-infer, or drift between people, projects, or topics unless the user explicitly connects them. |
 | `/axis` layout | UI surface | Conversation | Active | Conversation feed + organized summary | Refine Current | Must be gym-readable and one-flow. |
@@ -146,9 +149,9 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Camera Witness | Input/evidence | Evidence | Future | Video review, film study | Do Not Build Yet | Camera cannot become the product. |
 | Voice Layer | Input | Conversation | Future | Dictation, coach note | Do Not Build Yet | Text conversation must work first. |
 | Upload / Media | Input | Evidence | Future | Evidence intake | Do Not Build Yet | Upload-first workflow breaks MVP focus. |
-| CV detections/tracks/events | Infrastructure | Evidence/CV | Existing legacy/future | Sports tracking pipeline | Do Not Build Yet | Raw model internals should not drive current MVP. |
-| Replay | Surface | Evidence/CV | Future | Film review reconstruction | Do Not Build Yet | Do not rebuild a video editor inside Axis. |
-| Overlay | Surface | Evidence/CV | Future | Telestration | Do Not Build Yet | Visual overlay is support, not core. |
+| CV detections/tracks/events | Infrastructure | CV | Active foundation | Sports tracking pipeline | Build Now | Allowed only as suggested observations and debug artifacts inside Axis CV Foundation v0. Not evidence, memory, replay, overlay, dashboard, or automatic game truth. |
+| Axis Replay Product | Surface | Evidence/CV | Future | Film review reconstruction | Do Not Build Yet | Do not rebuild a video editor inside Axis. |
+| Axis Overlay Product | Surface | Evidence/CV | Future | Telestration | Do Not Build Yet | Visual overlay is support, not core. |
 | Mission Layer | Capability | Development | Future | Training assignment, treatment plan | Hold | Depends on clean understanding and evidence boundaries. |
 | Challenge | Object | Development | Future | Constraint-led drill | Hold | Strong concept, but not current MVP. |
 | Constraint | Object | Development | Future | Constraint-led coaching rule | Hold | Useful later; should not reintroduce Mission Control. |
@@ -184,6 +187,16 @@ No vague statuses like "maybe," "interesting," "soon," or "later."
 | Signal Stack | Multimodal model | Future | Future | Multimodal sensing | Do Not Build Yet | Modalities are not active MVP. |
 
 ## Active Build Order
+
+Current MVP priorities remain:
+
+- Active-thread entity integrity
+- Live Supabase persistence verification
+- Thread Board quality
+
+Foundation build now allowed:
+
+- Build Axis CV Foundation v0 as isolated visual reality processing.
 
 ### 1. Fix Active-Thread Entity Integrity
 
@@ -294,7 +307,6 @@ Until the current MVP passes live gym use, do not build:
 - Voice
 - Camera
 - Upload
-- CV
 - Replay
 - Overlay
 - Annotation
@@ -386,6 +398,7 @@ Active MVP:
 - Axis Thread Board
 - Axis Thread Persistence v0
 - Axis Auth v0
+- Axis CV Foundation v0
 
 Foundation complete:
 

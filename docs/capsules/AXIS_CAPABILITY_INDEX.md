@@ -14,6 +14,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Thread Persistence v0 | Active narrow capability | Build Now | Owner-scoped saved conversation threads and Thread Board snapshots. No cross-thread memory, player model, evidence, or persistent board arrangement. |
 | Axis Auth v0 | Active narrow capability | Build Now | Google-only sign-in, sign-out, session restoration, and account-switch isolation for owner-scoped Thread Persistence. No email/password UI, profiles, organizations, billing, memory, or role system. |
 | Axis Context Dashboard Shell | Active presentation | Build Now | Approved Lab shell promoted as a reusable presentation layer for existing conversation, Thread Board, auth, and exact-thread persistence. No Lens, evidence, media, memory, cross-thread, schema, or Data Asset runtime. |
+| Axis CV Foundation v0 | Active foundation | Build Now | Local/server-safe CV processing that produces suggested observations only: detections, tracks, frame summaries, event candidates, debug JSON, and debug MP4. No verified evidence, player memory, replay product, overlay product, dashboard, automatic reports, or game truth. |
 | Axis Data Asset Contract v0 | Active foundation - complete | Foundation complete | Shared types and lifecycle boundaries for future Source Records, Structured Records, Datasets, Data Assets, and Output Products. Locked by `93cfbfe` technical vocabulary and `31a214f` product/build boundaries. No third implementation chunk, runtime creation, persistence, cross-thread memory, verification, UI, or background processing. |
 
 ## Refine Current
@@ -42,7 +43,8 @@ This index controls which capability capsules are active, which are future, and 
 | Axis Voice Layer | Future | Do Not Build Yet | Text must work first. |
 | Axis Camera Layer | Future | Do Not Build Yet | Evidence layer must be defined first. |
 | Axis Upload / Media Layer | Future | Do Not Build Yet | Upload-first workflow is out of MVP. |
-| Axis CV / Replay / Overlay | Future | Do Not Build Yet | Preserve infrastructure but do not build into MVP. |
+| Axis Replay Product | Future | Do Not Build Yet | Preserve infrastructure but do not build replay UI/product into MVP. |
+| Axis Overlay Product | Future | Do Not Build Yet | Preserve infrastructure but do not build overlay UI/product into MVP. |
 | Axis Annotation Layer | Future | Define Capsule | Useful later; separate from Thread Board. |
 | Axis Sketch Layer | Future | Hold | Do not build until visual need is proven. |
 | Axis Export Layer | Future | Do Not Build Yet | Export cannot become core workflow. |
@@ -74,6 +76,7 @@ Allowed active build:
 - Axis Thread Persistence v0
 - Axis Auth v0
 - Axis Data Asset Contract v0 is complete as an active foundation
+- Axis CV Foundation v0 is active as a foundation only
 
 Allowed current files:
 
