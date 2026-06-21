@@ -35,3 +35,23 @@ export type AxisNavigationItem = {
   id: string;
   label: string;
 };
+
+export type AxisRunStep = {
+  id: string;
+  label: string;
+  status: "ready" | "loading" | "processing" | "failed" | "empty";
+};
+
+export type AxisActivityItem = {
+  id: string;
+  label: string;
+  detail: string;
+  status: "ready" | "processing" | "failed";
+};
+
+export type AxisProjectStatus = {
+  activeProject: string;
+  memoryState: "ready" | "empty" | "processing";
+  queuedRuns: number;
+  storageState: "ready" | "processing" | "failed";
+};

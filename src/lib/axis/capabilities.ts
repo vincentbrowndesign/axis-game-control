@@ -2,15 +2,12 @@ import type { AxisCapability, AxisNavigationItem } from "./types";
 
 export const axisNavigationItems: AxisNavigationItem[] = [
   { id: "home", label: "Home" },
-  { id: "chat", label: "Chat" },
-  { id: "voice", label: "Voice" },
-  { id: "vision", label: "Vision" },
+  { id: "outputs", label: "Outputs" },
   { id: "files", label: "Files" },
-  { id: "video", label: "Video" },
-  { id: "images", label: "Images" },
   { id: "automations", label: "Automations" },
-  { id: "reports", label: "Reports" },
+  { id: "projects", label: "Projects" },
   { id: "memory", label: "Memory" },
+  { id: "settings", label: "Settings" },
 ];
 
 export const axisCapabilities: AxisCapability[] = [

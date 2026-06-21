@@ -1,4 +1,4 @@
-import type { AxisOutput } from "./types";
+import type { AxisActivityItem, AxisOutput, AxisProjectStatus, AxisRunStep } from "./types";
 
 export const axisSuggestedCommands = [
   "Summarize this file",
@@ -85,3 +85,38 @@ export const axisRecentOutputs: AxisOutput[] = [
     sourceLabel: "File",
   },
 ];
+
+export const axisRunSteps: AxisRunStep[] = [
+  { id: "empty", label: "Waiting for command", status: "empty" },
+  { id: "loading", label: "Reading input", status: "loading" },
+  { id: "processing", label: "Routing capability", status: "processing" },
+  { id: "ready", label: "Output ready", status: "ready" },
+];
+
+export const axisActivityItems: AxisActivityItem[] = [
+  {
+    id: "activity-1",
+    label: "Video output prepared",
+    detail: "Clip queue is processing into reviewable moments.",
+    status: "processing",
+  },
+  {
+    id: "activity-2",
+    label: "Report output ready",
+    detail: "Development report is available in Recent Outputs.",
+    status: "ready",
+  },
+  {
+    id: "activity-3",
+    label: "Automation needs input",
+    detail: "Weekly recap is waiting for one missing source.",
+    status: "failed",
+  },
+];
+
+export const axisProjectStatus: AxisProjectStatus = {
+  activeProject: "Current workspace",
+  memoryState: "ready",
+  queuedRuns: 2,
+  storageState: "ready",
+};

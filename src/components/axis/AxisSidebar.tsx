@@ -3,26 +3,20 @@ import {
   Boxes,
   FileText,
   Home,
-  ImageIcon,
-  Mic,
-  PlaySquare,
   ScrollText,
-  Sparkles,
-  Video,
+  Settings,
+  Workflow,
 } from "lucide-react";
 import type { AxisNavigationItem } from "../../lib/axis/types";
 
 const navIcons: Record<string, typeof Home> = {
-  automations: Sparkles,
-  chat: Bot,
+  automations: Workflow,
   files: FileText,
   home: Home,
-  images: ImageIcon,
   memory: Boxes,
-  reports: ScrollText,
-  video: PlaySquare,
-  vision: Video,
-  voice: Mic,
+  outputs: ScrollText,
+  projects: Bot,
+  settings: Settings,
 };
 
 export function AxisSidebar({ items }: { items: AxisNavigationItem[] }) {

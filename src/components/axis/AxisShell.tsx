@@ -1,4 +1,13 @@
-import type { AxisCapability, AxisNavigationItem, AxisOutput } from "../../lib/axis/types";
+import type {
+  AxisActivityItem,
+  AxisCapability,
+  AxisNavigationItem,
+  AxisOutput,
+  AxisProjectStatus,
+  AxisRunStep,
+} from "../../lib/axis/types";
+import { AxisActiveRunPanel } from "./AxisActiveRunPanel";
+import { AxisActivityRail } from "./AxisActivityRail";
 import { AxisCapabilityGrid } from "./AxisCapabilityGrid";
 import { AxisCommandComposer } from "./AxisCommandComposer";
 import { AxisRecentOutputs } from "./AxisRecentOutputs";
@@ -8,15 +17,21 @@ import { AxisSuggestionBar } from "./AxisSuggestionBar";
 import { AxisTopbar } from "./AxisTopbar";
 
 export function AxisShell({
+  activity,
   capabilities,
   navigation,
   outputs,
+  projectStatus,
+  runSteps,
   suggestions,
   uiV2Enabled,
 }: {
+  activity: AxisActivityItem[];
   capabilities: AxisCapability[];
   navigation: AxisNavigationItem[];
   outputs: AxisOutput[];
+  projectStatus: AxisProjectStatus;
+  runSteps: AxisRunStep[];
   suggestions: string[];
   uiV2Enabled: boolean;
 }) {
@@ -25,17 +40,23 @@ export function AxisShell({
       <AxisSidebar items={navigation} />
       <div className="axis-v2__workspace">
         <AxisTopbar />
-        <section className="axis-hero" aria-label="Axis command center">
-          <div>
-            <p>Universal Output Layer</p>
-            <h2>Ask once. Axis turns the result into an output.</h2>
+        <div className="axis-v2__body">
+          <div className="axis-v2__main">
+            <section className="axis-hero" aria-label="Axis command center">
+              <div>
+                <p>Unified AI Output Layer</p>
+                <h2>Run anything. Keep every result as an Axis Output.</h2>
+              </div>
+              <AxisStatusCard />
+            </section>
+            <AxisCommandComposer />
+            <AxisSuggestionBar suggestions={suggestions} />
+            <AxisActiveRunPanel steps={runSteps} />
+            <AxisCapabilityGrid capabilities={capabilities} />
+            <AxisRecentOutputs outputs={outputs} />
           </div>
-          <AxisStatusCard />
-        </section>
-        <AxisCommandComposer />
-        <AxisSuggestionBar suggestions={suggestions} />
-        <AxisCapabilityGrid capabilities={capabilities} />
-        <AxisRecentOutputs outputs={outputs} />
+          <AxisActivityRail activity={activity} projectStatus={projectStatus} />
+        </div>
       </div>
       <style>{`
         :root {
@@ -152,6 +173,19 @@ export function AxisShell({
           padding: clamp(1rem, 2.4vw, 2rem);
         }
 
+        .axis-v2__body {
+          align-items: start;
+          display: grid;
+          gap: clamp(1rem, 2vw, 1.35rem);
+          grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+          margin: 0 auto;
+          max-width: 104rem;
+        }
+
+        .axis-v2__main {
+          min-width: 0;
+        }
+
         .axis-topbar {
           align-items: center;
           display: flex;
@@ -209,15 +243,6 @@ export function AxisShell({
           font-weight: 700;
         }
 
-        .axis-hero,
-        .axis-command,
-        .axis-capabilities,
-        .axis-recent {
-          margin-left: auto;
-          margin-right: auto;
-          max-width: 88rem;
-        }
-
         .axis-hero {
           align-items: end;
           display: grid;
@@ -238,6 +263,72 @@ export function AxisShell({
           background: rgba(255, 255, 255, 0.045);
           border-radius: 1.2rem;
           padding: 1rem;
+        }
+
+        .axis-run-panel {
+          background: rgba(255, 255, 255, 0.045);
+          border: 1px solid var(--axis-line);
+          border-radius: 1.25rem;
+          margin-top: 1rem;
+          padding: 1rem;
+        }
+
+        .axis-section-heading--compact {
+          margin-bottom: 0.7rem;
+        }
+
+        .axis-run-panel__meter {
+          background: rgba(255, 255, 255, 0.07);
+          border-radius: 999px;
+          height: 0.45rem;
+          overflow: hidden;
+        }
+
+        .axis-run-panel__meter span {
+          background: linear-gradient(90deg, var(--axis-accent), rgba(119, 151, 255, 0.85));
+          border-radius: inherit;
+          display: block;
+          height: 100%;
+          width: 68%;
+        }
+
+        .axis-run-panel__steps {
+          display: grid;
+          gap: 0.55rem;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          list-style: none;
+          margin: 0.85rem 0 0;
+          padding: 0;
+        }
+
+        .axis-run-panel__step {
+          align-items: center;
+          background: rgba(255, 255, 255, 0.045);
+          border: 1px solid var(--axis-line);
+          border-radius: 0.85rem;
+          color: var(--axis-muted);
+          display: flex;
+          gap: 0.45rem;
+          min-height: 2.55rem;
+          min-width: 0;
+          padding: 0 0.7rem;
+        }
+
+        .axis-run-panel__step span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .axis-run-panel__step--processing,
+        .axis-run-panel__step--loading {
+          border-color: rgba(216, 255, 122, 0.28);
+          color: var(--axis-ink);
+        }
+
+        .axis-run-panel__step--failed {
+          border-color: rgba(255, 124, 111, 0.28);
+          color: var(--axis-danger);
         }
 
         .axis-status-card h2,
@@ -359,7 +450,7 @@ export function AxisShell({
           flex-wrap: wrap;
           gap: 0.6rem;
           margin: 1rem auto 1.45rem;
-          max-width: 88rem;
+          max-width: 100%;
         }
 
         .axis-capabilities,
@@ -475,6 +566,114 @@ export function AxisShell({
           justify-content: space-between;
         }
 
+        .axis-activity-rail {
+          display: grid;
+          gap: 0.85rem;
+          min-width: 0;
+          position: sticky;
+          top: 1rem;
+        }
+
+        .axis-rail-card {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid var(--axis-line);
+          border-radius: 1.15rem;
+          padding: 1rem;
+        }
+
+        .axis-rail-card__heading {
+          align-items: center;
+          color: var(--axis-faint);
+          display: flex;
+          gap: 0.5rem;
+          margin-bottom: 0.8rem;
+        }
+
+        .axis-rail-card__heading h2 {
+          font-size: 0.72rem;
+          letter-spacing: 0.12em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-rail-card > strong {
+          display: block;
+          font-size: 1rem;
+          margin-bottom: 0.85rem;
+        }
+
+        .axis-rail-card dl {
+          display: grid;
+          gap: 0.6rem;
+          margin: 0;
+        }
+
+        .axis-rail-card dl div {
+          align-items: center;
+          display: flex;
+          justify-content: space-between;
+        }
+
+        .axis-rail-card dt,
+        .axis-rail-card dd,
+        .axis-rail-card li,
+        .axis-activity-item p {
+          color: var(--axis-muted);
+          font-size: 0.82rem;
+          margin: 0;
+        }
+
+        .axis-rail-card dd {
+          color: var(--axis-ink);
+          font-weight: 750;
+        }
+
+        .axis-activity-list {
+          display: grid;
+          gap: 0.75rem;
+        }
+
+        .axis-activity-item {
+          display: grid;
+          gap: 0.65rem;
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .axis-activity-item > span {
+          background: var(--axis-accent);
+          border-radius: 999px;
+          height: 0.5rem;
+          margin-top: 0.28rem;
+          width: 0.5rem;
+        }
+
+        .axis-activity-item--processing > span {
+          background: rgba(119, 151, 255, 0.95);
+        }
+
+        .axis-activity-item--failed > span {
+          background: var(--axis-danger);
+        }
+
+        .axis-activity-item h3 {
+          font-size: 0.9rem;
+          margin: 0 0 0.22rem;
+        }
+
+        .axis-rail-card ul {
+          display: grid;
+          gap: 0.55rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-rail-card li {
+          align-items: center;
+          display: flex;
+          gap: 0.45rem;
+        }
+
         @media (max-width: 1180px) {
           .axis-v2 {
             grid-template-columns: 5.25rem minmax(0, 1fr);
@@ -501,6 +700,15 @@ export function AxisShell({
           .axis-capabilities__grid,
           .axis-recent__grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .axis-v2__body {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .axis-activity-rail {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            position: static;
           }
         }
 
@@ -538,7 +746,8 @@ export function AxisShell({
           .axis-topbar,
           .axis-hero,
           .axis-command__footer,
-          .axis-section-heading {
+          .axis-section-heading,
+          .axis-run-panel__steps {
             align-items: stretch;
             display: grid;
             grid-template-columns: 1fr;
@@ -576,7 +785,8 @@ export function AxisShell({
           }
 
           .axis-capabilities__grid,
-          .axis-recent__grid {
+          .axis-recent__grid,
+          .axis-activity-rail {
             grid-template-columns: 1fr;
           }
         }
