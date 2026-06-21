@@ -813,7 +813,8 @@
 
 .markPreview-turnover,
 .markPreview-rushing,
-.markPreview-stop {
+.markPreview-stop,
+.markPreview-foul {
   --mark-accent: color-mix(in srgb, var(--lab-proof) 55%, var(--lab-action));
 }
 
@@ -822,19 +823,18 @@
   --mark-accent: color-mix(in srgb, var(--lab-action) 70%, var(--lab-context));
 }
 
-.markPreview-teach,
 .markPreview-question,
 .markPreview-custom {
   --mark-accent: var(--lab-context);
 }
 
-.markPreview-clip .realityMarkPreview {
+.markPreview-clip {
   background: color-mix(in srgb, var(--lab-ink) 82%, var(--lab-room));
 }
 
-.markPreview-clip .realityMarkPreview strong,
-.markPreview-clip .realityMarkPreview em,
-.markPreview-clip .realityMarkPreview b {
+.markPreview-clip strong,
+.markPreview-clip em,
+.markPreview-clip b {
   color: color-mix(in srgb, var(--lab-paper) 90%, transparent);
 }
 
@@ -1359,6 +1359,54 @@
     font-size: 14px;
     min-height: 38px;
     padding: 0 12px;
+  }
+
+  .liveReadPanel {
+    background: color-mix(in srgb, var(--lab-paper) 82%, white);
+    border: 1px solid color-mix(in srgb, var(--lab-line) 12%, transparent);
+    border-radius: 13px;
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .liveReadPanel h2 {
+    color: color-mix(in srgb, var(--lab-ink) 54%, transparent);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+
+  .liveReadPanel dl {
+    display: grid;
+    gap: 9px;
+    margin: 0;
+  }
+
+  .liveReadPanel div {
+    border-top: 1px solid color-mix(in srgb, var(--lab-line) 10%, transparent);
+    display: grid;
+    gap: 4px;
+    padding-top: 9px;
+  }
+
+  .liveReadPanel dt {
+    color: color-mix(in srgb, var(--lab-ink) 44%, transparent);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .liveReadPanel dd {
+    color: color-mix(in srgb, var(--lab-ink) 76%, transparent);
+    font-size: 14px;
+    line-height: 1.28;
+    margin: 0;
+    overflow-wrap: break-word;
   }
 
   .quickMarks {

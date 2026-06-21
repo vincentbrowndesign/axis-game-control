@@ -96,24 +96,39 @@ The active lab preview is a Context Dashboard mock with:
 
 Desktop preserves the three-region reference layout. Tablet portrait and phone collapse into a single readable flow.
 
-## Axis Reality Marks v0
+## Axis Game Reality Review Surface
 
-Axis Reality Marks v0 exists only in `/axis/lab`.
+Axis Game Reality Review Surface exists only in `/axis/lab`.
+
+It is a local game-use preview for manually timestamping moments and seeing how those moments might shape a review surface.
 
 Reality Marks:
 
 - use local React state only
 - mark human-selected moments
-- are created from the preview composer `+` menu
+- may be created from the preview composer `+` menu or the mobile game surface
 - appear in the local Thread Timeline
 - appear at the start of Recent Reality
 - may create local proof-candidate suggestions for proof-like labels
+- may update the local Live Read preview
 - reset on refresh
 
 Every created Reality Mark is:
 
 - `sourceType: manual`
+- `provenance: manual`
 - `verification: unverified`
+- `preRollSeconds: 15`
+- `postRollSeconds: 10`
+
+The lab source clock is a local clock only. It does not connect to media, request device permissions, attach files, or synchronize with a real video source.
+
+The Live Read preview is deterministic and conservative:
+
+- it uses manual labels, counts, notes, and timestamps only
+- it shows Pattern, Proof Needed, and Next
+- it labels every derived item as local preview / manual input / unverified
+- it must not say Axis detected, saw, proved, confirmed, or verified anything
 
 Reality Marks do not:
 
@@ -125,10 +140,13 @@ Reality Marks do not:
 - persist to storage
 - create Data Asset records
 - activate Axis Lens
+- create evidence
 
 A `clip` Reality Mark is only a marker for a moment. It does not contain a clip, capture video, or prove anything.
 
 Reality Mark proof candidates require future confirmation. They are local UI suggestions only.
+
+Axis Lens, CV, media capture, evidence verification, storage, persistence, and Data Asset promotion remain inactive. Any promotion from this lab preview into the active product requires a separate product decision.
 
 ## Mock-Only Rule
 

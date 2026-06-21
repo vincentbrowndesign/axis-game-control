@@ -52,6 +52,12 @@ const PROOF_CANDIDATE_LABELS = new Set<AxisRealityMarkLabel>([
   "clip",
 ]);
 
+type AxisLiveRead = {
+  pattern: string;
+  proofNeeded: string;
+  next: string;
+};
+
 function parsePreviewState(value: string | null): AxisLabPreviewState {
   return VALID_STATES.includes(value as AxisLabPreviewState)
     ? (value as AxisLabPreviewState)
@@ -88,6 +94,55 @@ function createMarkId() {
 
 function createSessionId() {
   return `game-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function countMarks(marks: AxisRealityMark[], label: AxisRealityMarkLabel) {
+  return marks.filter((mark) => mark.label === label).length;
+}
+
+function createLiveRead(marks: AxisRealityMark[], status: AxisGameSession["status"]): AxisLiveRead {
+  if (marks.length === 0) {
+    return {
+      pattern: status === "live"
+        ? "No manual marks yet. Local preview only."
+        : "Start the local session before marking live moments.",
+      proofNeeded: "Manual inputs only. No evidence or Lens confirmation.",
+      next: "Use one Reality Mark when the next useful moment happens.",
+    };
+  }
+
+  const latest = marks[0];
+  const latestTime = getSessionTimestamp(latest.sessionTime);
+  const rushingCount = countMarks(marks, "rushing");
+  const turnoverCount = countMarks(marks, "turnover");
+  const spacingCount = countMarks(marks, "spacing");
+  const stopCount = countMarks(marks, "stop");
+  const foulCount = countMarks(marks, "foul");
+  const pressureCount = rushingCount + turnoverCount + spacingCount;
+  const proofLabels = marks.filter((mark) => PROOF_CANDIDATE_LABELS.has(mark.label)).length;
+
+  const pattern =
+    pressureCount > 1
+      ? `Manual marks show ${pressureCount} pressure-related moments so far. Unverified local preview.`
+      : `${getMarkTitle(latest.label)} was marked at ${latestTime}. Manual input. Unverified.`;
+
+  const proofNeeded =
+    proofLabels > 0
+      ? `${proofLabels} mark${proofLabels === 1 ? "" : "s"} could be reviewed later, but none are confirmed evidence.`
+      : "No proof candidate yet. Manual labels are not evidence.";
+
+  let next = "Add one short note if the mark needs context.";
+  if (turnoverCount > 0 || rushingCount > 0) {
+    next = "Check whether the next possession slows down after pressure.";
+  } else if (spacingCount > 0) {
+    next = "Watch whether the next action creates cleaner spacing.";
+  } else if (stopCount > 0) {
+    next = "Look for the next stop before calling it a pattern.";
+  } else if (foulCount > 0) {
+    next = "Watch whether contact is changing the next decision.";
+  }
+
+  return { pattern, proofNeeded, next };
 }
 
 export default function AxisLabPreview() {
@@ -148,6 +203,10 @@ function DashboardPreview({
   const recentReality = useMemo(
     () => [...realityMarks.map(createMarkRecentReality), ...axisLabDashboard.recentReality],
     [realityMarks],
+  );
+  const liveRead = useMemo(
+    () => createLiveRead(realityMarks, gameSession.status),
+    [gameSession.status, realityMarks],
   );
 
   const createRealityMark = useCallback((label: AxisRealityMarkLabel, note?: string) => {
@@ -250,6 +309,9 @@ function DashboardPreview({
       ? undefined
       : {
           ...axisLabDashboard.activeContext,
+          nextMove: liveRead.next,
+          proofNeeded: liveRead.proofNeeded,
+          support: liveRead.pattern,
           detail: expanded ? (
             <section className={styles.expandedMock} aria-label="Expanded preview detail">
               <h2>Selected mock detail</h2>
@@ -301,6 +363,7 @@ function DashboardPreview({
       <MobileGameSurface
         boardOpen={mobileBoardOpen}
         gameSession={gameSession}
+        liveRead={liveRead}
         marks={realityMarks}
         onAddToastNote={addToastNote}
         onCloseBoard={() => setMobileBoardOpen(false)}
@@ -528,6 +591,7 @@ function DashboardComposer({
 function MobileGameSurface({
   boardOpen,
   gameSession,
+  liveRead,
   marks,
   onAddToastNote,
   onCloseBoard,
@@ -549,6 +613,7 @@ function MobileGameSurface({
 }: {
   boardOpen: boolean;
   gameSession: AxisGameSession;
+  liveRead: AxisLiveRead;
   marks: AxisRealityMark[];
   onAddToastNote: () => void;
   onCloseBoard: () => void;
@@ -641,6 +706,24 @@ function MobileGameSurface({
         ))}
       </section>
 
+      <section className={styles.liveReadPanel} aria-labelledby="axis-game-live-read">
+        <h2 id="axis-game-live-read">Live Read</h2>
+        <dl>
+          <div>
+            <dt>Pattern</dt>
+            <dd>{liveRead.pattern}</dd>
+          </div>
+          <div>
+            <dt>Proof Needed</dt>
+            <dd>{liveRead.proofNeeded}</dd>
+          </div>
+          <div>
+            <dt>Next</dt>
+            <dd>{liveRead.next}</dd>
+          </div>
+        </dl>
+      </section>
+
       {toastMark && (
         <section className={styles.markToast} aria-live="polite" aria-label="Latest Reality Mark">
           <div>
@@ -691,6 +774,7 @@ function MobileGameSurface({
                   {getSessionTimestamp(mark.sessionTime)}
                 </time>
                 <strong>{getMarkTitle(mark.label)}</strong>
+                <span>Created {getClockTime(mark.createdAt)}</span>
                 {mark.note && <span>{mark.note}</span>}
                 <em>Manual - Unverified</em>
               </li>
@@ -712,14 +796,24 @@ function MobileGameSurface({
             <p className={styles.regionEyebrow}>Review Board</p>
             <h2>{axisLabDashboard.activeContext.mainText}</h2>
             <p>{axisLabDashboard.activeContext.support}</p>
-            <h3>Next Cue</h3>
-            <p>{axisLabDashboard.activeContext.nextMove}</p>
-            <h3>Need To Check</h3>
-            <ul>
-              {axisLabDashboard.openLoops.map((loop) => (
-                <li key={loop}>{loop}</li>
-              ))}
-            </ul>
+            <h3>Pattern</h3>
+            <p>{liveRead.pattern}</p>
+            <h3>Proof Needed</h3>
+            <p>{liveRead.proofNeeded}</p>
+            <h3>Next</h3>
+            <p>{liveRead.next}</p>
+            <h3>Recent Reality</h3>
+            {marks.length === 0 ? (
+              <p>No manual marks yet.</p>
+            ) : (
+              <ul>
+                {marks.slice(0, 5).map((mark) => (
+                  <li key={mark.id}>
+                    {getSessionTimestamp(mark.sessionTime)} - {getMarkTitle(mark.label)} - Manual - Unverified
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
       )}
