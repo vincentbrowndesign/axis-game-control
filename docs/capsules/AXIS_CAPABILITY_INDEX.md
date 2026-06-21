@@ -54,6 +54,7 @@ This index controls which capability capsules are active, which are future, and 
 | Axis UI Lab v1 | Internal preview | Refine Current | Mock-only aperture work-surface at `/axis/lab`. Aperture Shell pattern, focus states, Lens Bridge preview. No API, Supabase, auth, persistence, media, Data Asset runtime, CV, or active-product behavior. Capsule: `docs/capsules/AXIS_UI_LAB.md`. |
 | Axis Context Dashboard Shell Preview | Internal preview source | Refine Current | `/axis/lab` may import shared Context Dashboard shell components and feed them mock data. Lab Reality Marks and visual-source behavior remain lab-only. |
 | Axis Lens UI Bridge | Internal mock preview | Refine Current in `/axis/lab` only | Mock-only visual-source presentation inside the Aperture Shell. No CV runtime, no media permissions, no camera, no file selection, no clip analysis, no upload. Source candidates are not verified evidence. Promotion to a real Lens runtime requires a separate decision to advance the Axis Lens capsule (currently Do Not Build Yet). |
+| Axis Game-Ready Reality Marks Core | Internal local experiment | Build Now in `/axis/lab` only | Local game-session clock and manual Reality Marks for mark/glance/recover testing. Marks are `manual` and `unverified`; no media, CV, persistence, evidence, Data Asset runtime, or active `/axis` behavior. |
 
 ## Build Rule
 

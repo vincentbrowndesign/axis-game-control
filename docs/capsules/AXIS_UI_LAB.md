@@ -102,6 +102,8 @@ Axis Game Reality Review Surface exists only in `/axis/lab`.
 
 It is a local game-use preview for manually timestamping moments and seeing how those moments might shape a review surface.
 
+During live-game use, the lab rule is mark, glance, and recover: no long typing, no media capture, and no verified claims.
+
 Reality Marks:
 
 - use local React state only
@@ -112,6 +114,7 @@ Reality Marks:
 - may create local proof-candidate suggestions for proof-like labels
 - may update the local Live Read preview
 - reset on refresh
+- are disabled unless the local game session is live
 
 Every created Reality Mark is:
 

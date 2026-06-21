@@ -1288,14 +1288,22 @@
     gap: 7px;
   }
 
+  .gameSessionFinal {
+    border-top: 1px solid color-mix(in srgb, var(--lab-line) 10%, transparent);
+    padding-top: 9px;
+  }
+
   .gameSessionActions button,
   .markToast button,
-  .markToast input {
+  .markToast input,
+  .mobileCustomMark button,
+  .mobileCustomMark input {
     font: inherit;
   }
 
   .gameSessionActions button,
-  .markToast button {
+  .markToast button,
+  .mobileCustomMark button {
     background: transparent;
     border: 1px solid color-mix(in srgb, var(--lab-line) 14%, transparent);
     border-radius: 999px;
@@ -1308,7 +1316,8 @@
   }
 
   .gameSessionActions button:disabled,
-  .markToast button:disabled {
+  .markToast button:disabled,
+  .mobileCustomMark button:disabled {
     cursor: default;
     opacity: 0.42;
   }
@@ -1413,6 +1422,31 @@
     display: grid;
     gap: 8px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mobileCustomMark {
+    align-items: center;
+    background: color-mix(in srgb, var(--lab-paper) 88%, white);
+    border: 1px solid color-mix(in srgb, var(--lab-line) 12%, transparent);
+    border-radius: 13px;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding: 10px;
+  }
+
+  .mobileCustomMark input {
+    background: transparent;
+    border: 0;
+    color: color-mix(in srgb, var(--lab-ink) 82%, transparent);
+    font-size: 14px;
+    min-height: 38px;
+    min-width: 0;
+    outline: 0;
+  }
+
+  .mobileCustomMark input::placeholder {
+    color: color-mix(in srgb, var(--lab-ink) 36%, transparent);
   }
 
   .quickMarks button,

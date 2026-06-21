@@ -33,14 +33,16 @@ const REALITY_MARK_LABELS: AxisRealityMarkLabel[] = [
   "custom",
 ];
 const GAME_MARK_LABELS: AxisRealityMarkLabel[] = [
-  "score",
-  "stop",
   "turnover",
   "rushing",
   "spacing",
+  "score",
+  "stop",
   "foul",
   "question",
+  "proof",
   "clip",
+  "custom",
 ];
 const PROOF_CANDIDATE_LABELS = new Set<AxisRealityMarkLabel>([
   "proof",
@@ -634,6 +636,34 @@ function MobileGameSurface({
   toastNoteOpen: boolean;
 }) {
   const canMark = gameSession.status === "live";
+  const [mobileCustomOpen, setMobileCustomOpen] = useState(false);
+  const [mobileCustomValue, setMobileCustomValue] = useState("");
+  const mobileCustomInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!mobileCustomOpen) return;
+    requestAnimationFrame(() => mobileCustomInputRef.current?.focus());
+  }, [mobileCustomOpen]);
+
+  function closeMobileCustom() {
+    setMobileCustomOpen(false);
+    setMobileCustomValue("");
+  }
+
+  function createMobileMark(label: AxisRealityMarkLabel) {
+    if (label === "custom") {
+      setMobileCustomOpen(true);
+      return;
+    }
+    onCreateRealityMark(label);
+  }
+
+  function createMobileCustomMark() {
+    const note = mobileCustomValue.trim();
+    if (!note) return;
+    onCreateRealityMark("custom", note);
+    closeMobileCustom();
+  }
 
   return (
     <main className={styles.gameSurface} aria-label="Axis Lab mobile game surface">
@@ -672,6 +702,9 @@ function MobileGameSurface({
             </>
           )}
         </div>
+        {gameSession.status === "ended" && (
+          <p className={styles.gameSessionFinal}>Final local mark count: {marks.length}</p>
+        )}
       </section>
 
       <section className={styles.gameReadCard} aria-labelledby="axis-game-current-read">
@@ -698,13 +731,44 @@ function MobileGameSurface({
           <button
             key={label}
             type="button"
-            onClick={() => onCreateRealityMark(label)}
+            onClick={() => createMobileMark(label)}
             disabled={!canMark}
           >
             {getMarkTitle(label)}
           </button>
         ))}
       </section>
+
+      {mobileCustomOpen && (
+        <div className={styles.mobileCustomMark}>
+          <label className={styles.srOnly} htmlFor="axis-lab-mobile-custom-mark">
+            Custom Reality Mark note
+          </label>
+          <input
+            id="axis-lab-mobile-custom-mark"
+            ref={mobileCustomInputRef}
+            value={mobileCustomValue}
+            onChange={(event) => setMobileCustomValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                createMobileCustomMark();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeMobileCustom();
+              }
+            }}
+            placeholder="Short custom mark..."
+          />
+          <button type="button" onClick={createMobileCustomMark} disabled={!mobileCustomValue.trim()}>
+            Add
+          </button>
+          <button type="button" onClick={closeMobileCustom}>
+            Cancel
+          </button>
+        </div>
+      )}
 
       <section className={styles.liveReadPanel} aria-labelledby="axis-game-live-read">
         <h2 id="axis-game-live-read">Live Read</h2>
