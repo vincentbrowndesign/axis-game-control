@@ -60,6 +60,8 @@ type AxisLiveRead = {
   next: string;
 };
 
+const LOCAL_PREVIEW_COPY = "Manual inputs. Unverified. Local preview.";
+
 function parsePreviewState(value: string | null): AxisLabPreviewState {
   return VALID_STATES.includes(value as AxisLabPreviewState)
     ? (value as AxisLabPreviewState)
@@ -102,14 +104,27 @@ function countMarks(marks: AxisRealityMark[], label: AxisRealityMarkLabel) {
   return marks.filter((mark) => mark.label === label).length;
 }
 
+function countNearbyPairs(
+  marks: AxisRealityMark[],
+  firstLabel: AxisRealityMarkLabel,
+  secondLabel: AxisRealityMarkLabel,
+  seconds: number,
+) {
+  const firstMarks = marks.filter((mark) => mark.label === firstLabel);
+  const secondMarks = marks.filter((mark) => mark.label === secondLabel);
+  return firstMarks.filter((firstMark) =>
+    secondMarks.some((secondMark) => Math.abs(firstMark.sessionTime - secondMark.sessionTime) <= seconds),
+  ).length;
+}
+
 function createLiveRead(marks: AxisRealityMark[], status: AxisGameSession["status"]): AxisLiveRead {
   if (marks.length === 0) {
     return {
       pattern: status === "live"
-        ? "No manual marks yet. Local preview only."
-        : "Start the local session before marking live moments.",
-      proofNeeded: "Manual inputs only. No evidence or Lens confirmation.",
-      next: "Use one Reality Mark when the next useful moment happens.",
+        ? `No manual marks yet. ${LOCAL_PREVIEW_COPY}`
+        : `Start the local session before marking live moments. ${LOCAL_PREVIEW_COPY}`,
+      proofNeeded: `No proof candidate yet. ${LOCAL_PREVIEW_COPY}`,
+      next: `Use one Reality Mark when the next useful moment happens. ${LOCAL_PREVIEW_COPY}`,
     };
   }
 
@@ -122,26 +137,29 @@ function createLiveRead(marks: AxisRealityMark[], status: AxisGameSession["statu
   const foulCount = countMarks(marks, "foul");
   const pressureCount = rushingCount + turnoverCount + spacingCount;
   const proofLabels = marks.filter((mark) => PROOF_CANDIDATE_LABELS.has(mark.label)).length;
+  const turnoverRushingPairs = countNearbyPairs(marks, "turnover", "rushing", 20);
 
   const pattern =
-    pressureCount > 1
-      ? `Manual marks show ${pressureCount} pressure-related moments so far. Unverified local preview.`
-      : `${getMarkTitle(latest.label)} was marked at ${latestTime}. Manual input. Unverified.`;
+    turnoverRushingPairs > 0
+      ? `Turnover and Rushing were marked within 20 seconds ${turnoverRushingPairs} time${turnoverRushingPairs === 1 ? "" : "s"}. ${LOCAL_PREVIEW_COPY}`
+      : pressureCount > 1
+        ? `${pressureCount} pressure-related marks so far. ${LOCAL_PREVIEW_COPY}`
+        : `${getMarkTitle(latest.label)} marked at ${latestTime}. ${LOCAL_PREVIEW_COPY}`;
 
   const proofNeeded =
     proofLabels > 0
-      ? `${proofLabels} mark${proofLabels === 1 ? "" : "s"} could be reviewed later, but none are confirmed evidence.`
-      : "No proof candidate yet. Manual labels are not evidence.";
+      ? `${proofLabels} mark${proofLabels === 1 ? "" : "s"} could be reviewed later. ${LOCAL_PREVIEW_COPY}`
+      : `No proof candidate yet. Manual labels are not evidence. ${LOCAL_PREVIEW_COPY}`;
 
-  let next = "Add one short note if the mark needs context.";
+  let next = `Add one short note if the latest mark needs context. ${LOCAL_PREVIEW_COPY}`;
   if (turnoverCount > 0 || rushingCount > 0) {
-    next = "Check whether the next possession slows down after pressure.";
+    next = `Review Rushing and Turnover mark times before making a claim. ${LOCAL_PREVIEW_COPY}`;
   } else if (spacingCount > 0) {
-    next = "Watch whether the next action creates cleaner spacing.";
+    next = `Review Spacing mark times before making a claim. ${LOCAL_PREVIEW_COPY}`;
   } else if (stopCount > 0) {
-    next = "Look for the next stop before calling it a pattern.";
+    next = `Review Stop mark times before calling it a pattern. ${LOCAL_PREVIEW_COPY}`;
   } else if (foulCount > 0) {
-    next = "Watch whether contact is changing the next decision.";
+    next = `Review Foul mark times before making a contact claim. ${LOCAL_PREVIEW_COPY}`;
   }
 
   return { pattern, proofNeeded, next };
@@ -187,7 +205,7 @@ function DashboardPreview({
       realityMarks.map((mark) => ({
         detail: getMarkTitle(mark.label),
         mark,
-        meta: "Manual - Unverified",
+        meta: `${getSessionTimestamp(mark.sessionTime)} - Manual - Unverified`,
         time: getClockTime(mark.createdAt),
         title: "Reality mark",
       })),
@@ -354,9 +372,7 @@ function DashboardPreview({
         id: event.mark?.id ?? `${event.time}-${event.title}-${index}`,
         mediaKind: event.meta ? "voice" : "clip",
         mediaLabel: event.mediaLabel,
-        meta: event.mark
-          ? `Manual - Unverified - ${getSessionTimestamp(event.mark.sessionTime)}`
-          : event.meta,
+        meta: event.meta,
         time: event.time,
         title: event.title,
       }))}
@@ -394,11 +410,11 @@ function createMarkProofCandidate(mark: AxisRealityMark): AxisLabProofCandidate 
   return {
     boundary: "Needs confirmation",
     confidence: "Unverified",
-    duration: timestamp || "Manual",
+    duration: timestamp,
     id: mark.id,
-    meta: "Manual Reality Mark",
+    meta: "Unverified",
     source: "Manual Reality Mark",
-    time: timestamp || getClockTime(mark.createdAt),
+    time: timestamp,
     title: getMarkTitle(mark.label),
   };
 }
@@ -427,10 +443,66 @@ function createRecentItem(item: AxisLabRecentReality): AxisContextRecentItem {
     id: item.mark?.id ?? item.title,
     kind: item.kind,
     meta: markMeta,
-    preview: item.mark ? <RealityMarkPreview mark={item.mark} /> : undefined,
+    preview: item.mark ? <RealityMarkPreview mark={item.mark} /> : <MockRecentPreview item={item} />,
     time: item.time,
     title: item.title,
   };
+}
+
+function MockRecentPreview({ item }: { item: AxisLabRecentReality }) {
+  const className = [
+    styles.mockRecentPreview,
+    styles[`mockRecent-${item.kind.toLowerCase().replace(/\s+/g, "-")}`],
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (item.kind === "Clip") {
+    return (
+      <div className={className}>
+        <strong>Clip preview</strong>
+        <em>Preview only</em>
+        {item.duration && <b>{item.duration}</b>}
+      </div>
+    );
+  }
+
+  if (item.kind === "Voice") {
+    return (
+      <div className={className}>
+        <span aria-hidden="true" />
+        <span aria-hidden="true" />
+        <span aria-hidden="true" />
+        <em>Voice preview</em>
+        {item.duration && <b>{item.duration}</b>}
+      </div>
+    );
+  }
+
+  if (item.kind === "Image") {
+    return (
+      <div className={className}>
+        <strong>Diagram</strong>
+        <em>Preview only</em>
+      </div>
+    );
+  }
+
+  if (item.kind === "Note") {
+    return (
+      <div className={className}>
+        <strong>Note</strong>
+        <em>Preview only</em>
+      </div>
+    );
+  }
+
+  return (
+    <div className={className}>
+      <strong>Source</strong>
+      <em>Preview only</em>
+    </div>
+  );
 }
 
 function EmptyDashboard() {
@@ -913,16 +985,25 @@ function RealityMarkPreview({ mark }: { mark: AxisRealityMark }) {
       <span className={styles.realityMarkAccent} aria-hidden="true" />
       {mark.label === "clip" ? (
         <>
-          <strong>Clip mark</strong>
+          <strong>Clip mark - no media attached</strong>
           <em>No media attached</em>
           {sessionTimestamp && <b>{sessionTimestamp}</b>}
         </>
       ) : mark.label === "question" ? (
-        <strong>?</strong>
+        <>
+          <strong>Question</strong>
+          <em>{sessionTimestamp}</em>
+        </>
       ) : mark.label === "score" ? (
-        <strong>00</strong>
+        <>
+          <strong>Score</strong>
+          <em>{sessionTimestamp}</em>
+        </>
       ) : (
-        <strong>{title}</strong>
+        <>
+          <strong>{title}</strong>
+          <em>{sessionTimestamp}</em>
+        </>
       )}
     </div>
   );

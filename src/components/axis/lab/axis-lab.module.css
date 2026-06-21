@@ -780,6 +780,19 @@
   position: relative;
 }
 
+.mockRecentPreview {
+  align-content: center;
+  aspect-ratio: 16 / 9;
+  background: color-mix(in srgb, var(--lab-paper) 88%, var(--lab-room));
+  border: 1px solid color-mix(in srgb, var(--lab-line) 10%, transparent);
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  overflow: hidden;
+  padding: 9px;
+  position: relative;
+}
+
 .realityMarkAccent {
   background: var(--mark-accent, var(--lab-context));
   border-radius: 999px;
@@ -790,7 +803,8 @@
   width: 6px;
 }
 
-.realityMarkPreview strong {
+.realityMarkPreview strong,
+.mockRecentPreview strong {
   color: color-mix(in srgb, var(--lab-ink) 68%, transparent);
   font-size: 13px;
   font-weight: 600;
@@ -799,7 +813,9 @@
 }
 
 .realityMarkPreview em,
-.realityMarkPreview b {
+.realityMarkPreview b,
+.mockRecentPreview em,
+.mockRecentPreview b {
   color: color-mix(in srgb, var(--lab-ink) 46%, transparent);
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 10px;
@@ -808,24 +824,55 @@
 }
 
 .markPreview-proof {
-  --mark-accent: var(--lab-proof);
+  --mark-accent: color-mix(in srgb, #315f86 72%, var(--lab-proof));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, #315f86 11%, transparent), transparent 34%),
+    color-mix(in srgb, var(--lab-paper) 88%, var(--lab-room));
 }
 
 .markPreview-turnover,
-.markPreview-rushing,
 .markPreview-stop,
 .markPreview-foul {
-  --mark-accent: color-mix(in srgb, var(--lab-proof) 55%, var(--lab-action));
+  --mark-accent: color-mix(in srgb, #9a533f 64%, var(--lab-action));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, #9a533f 10%, transparent), transparent 42%),
+    color-mix(in srgb, var(--lab-paper) 88%, var(--lab-room));
 }
 
-.markPreview-spacing,
+.markPreview-rushing {
+  --mark-accent: color-mix(in srgb, #b8792f 58%, #9a533f);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, #b8792f 9%, transparent) 0 3px,
+      transparent 3px 12px
+    ),
+    color-mix(in srgb, var(--lab-paper) 88%, var(--lab-room));
+}
+
+.markPreview-spacing {
+  --mark-accent: color-mix(in srgb, #b8792f 68%, var(--lab-context));
+  background:
+    linear-gradient(color-mix(in srgb, #b8792f 12%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, #b8792f 12%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--lab-paper) 88%, var(--lab-room));
+  background-size: 18px 18px, 18px 18px, auto;
+}
+
 .markPreview-score {
   --mark-accent: color-mix(in srgb, var(--lab-action) 70%, var(--lab-context));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--lab-action) 9%, transparent), transparent 38%),
+    color-mix(in srgb, var(--lab-paper) 88%, var(--lab-room));
 }
 
 .markPreview-question,
 .markPreview-custom {
   --mark-accent: var(--lab-context);
+  background:
+    linear-gradient(color-mix(in srgb, var(--lab-line) 8%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--lab-paper) 90%, transparent);
+  background-size: 100% 13px;
 }
 
 .markPreview-clip {
@@ -836,6 +883,44 @@
 .markPreview-clip em,
 .markPreview-clip b {
   color: color-mix(in srgb, var(--lab-paper) 90%, transparent);
+}
+
+.mockRecent-clip {
+  background:
+    radial-gradient(circle at 25% 28%, color-mix(in srgb, var(--lab-paper) 18%, transparent), transparent 22%),
+    color-mix(in srgb, var(--lab-ink) 82%, var(--lab-room));
+}
+
+.mockRecent-clip strong,
+.mockRecent-clip em,
+.mockRecent-clip b {
+  color: color-mix(in srgb, var(--lab-paper) 90%, transparent);
+}
+
+.mockRecent-voice {
+  align-items: center;
+  grid-template-columns: repeat(3, 1fr) auto;
+}
+
+.mockRecent-voice span {
+  background: color-mix(in srgb, var(--lab-line) 28%, transparent);
+  border-radius: 999px;
+  height: 32px;
+  width: 4px;
+}
+
+.mockRecent-image {
+  background:
+    linear-gradient(135deg, transparent 58%, color-mix(in srgb, var(--lab-action) 12%, transparent) 58%),
+    color-mix(in srgb, var(--lab-paper) 86%, var(--lab-room));
+}
+
+.mockRecent-note,
+.mockRecent-source {
+  background:
+    linear-gradient(color-mix(in srgb, var(--lab-line) 8%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--lab-paper) 90%, transparent);
+  background-size: 100% 12px;
 }
 
 .realityMeta,
