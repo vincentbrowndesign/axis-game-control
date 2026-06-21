@@ -83,6 +83,8 @@ export default function AxisPage() {
     -1,
   );
   const latestAssistant = messages[latestAssistantIndex];
+  const latestRealAssistant =
+    latestAssistant && !isInitialAxisMessage(latestAssistant) ? latestAssistant : undefined;
   const latestBoard = latestAssistant?.threadBoard ?? null;
   const hasUserMessages = messages.some((message) => message.role === "user");
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
@@ -96,6 +98,15 @@ export default function AxisPage() {
     () => deriveBoardPresentation(sanitizedSections),
     [sanitizedSections],
   );
+  const activeReadTitle =
+    latestBoard?.title?.trim() ||
+    latestUserMessage?.content.trim() ||
+    latestRealAssistant?.content.trim() ||
+    "Current thread";
+  const activeReadSupport =
+    latestBoard?.summary?.trim() ||
+    latestRealAssistant?.content.trim() ||
+    (loading ? "Axis is shaping the thread into the first useful read." : "Add the next rough note.");
   const timelineItems = useMemo(
     () => createTimelineItems(messages, threadStartedAt),
     [messages, threadStartedAt],
@@ -417,10 +428,10 @@ export default function AxisPage() {
                       <p>{latestUserMessage.content}</p>
                     </div>
                   )}
-                  {latestAssistant?.content && (
+                  {latestRealAssistant?.content && (
                     <div>
                       <span>Axis</span>
-                      <p>{latestAssistant.content}</p>
+                      <p>{latestRealAssistant.content}</p>
                     </div>
                   )}
                 </section>
@@ -433,14 +444,14 @@ export default function AxisPage() {
               )}
             </>
           ),
-          label: latestBoard ? "Current Read" : "Conversation",
+          label: hasUserMessages ? "Current Read" : "Conversation",
           mainText: hasUserMessages
-            ? latestBoard?.title?.trim() || latestAssistant?.content || "Current thread"
+            ? activeReadTitle
             : "WHAT ARE WE WORKING ON?",
           nextMove: boardDerivatives.nextMove,
           proofNeeded: boardDerivatives.proofNeeded,
           support: hasUserMessages
-            ? latestBoard?.summary?.trim() || latestAssistant?.content || "Axis is shaping the first read."
+            ? activeReadSupport
             : "Bring the rough version. Axis will help it develop.",
         }}
         actions={boardDerivatives.actions}
@@ -1042,10 +1053,10 @@ function deriveBoardPresentation(sections: ThreadBoardSection[]) {
   });
 
   return {
-    actions,
+    actions: actions.slice(0, 2),
     centerSections,
     nextMove,
-    openLoops,
+    openLoops: openLoops.slice(0, 2),
     proofNeeded,
   };
 }
