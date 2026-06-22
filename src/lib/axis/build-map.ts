@@ -949,4 +949,24 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
       "no backend call, route change, persistence, or run execution yet",
     ],
   },
+  {
+    id: 64,
+    title: "/api/axis/run AxisOutput adapter contract",
+    items: [
+      "adapter contract previews the legacy /api/axis/run POST payload and expected response shape",
+      "output detail shows route, method, compatibility, dry-run-only state, submit lock, missing requirements, and AxisOutput mapping",
+      "active run card shows adapter contract readiness without unlocking submit",
+      "adapter contract only / no route calls / no side effects",
+    ],
+  },
+  {
+    id: 65,
+    title: "Local adapter dry-run simulation",
+    items: [
+      "output detail previews what the adapter would send, receive, and create as an AxisOutput",
+      "dry-run simulation explicitly records that no route was called",
+      "dry-run output remains a local preview object only",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
 ];

@@ -1,13 +1,16 @@
 import type {
   AxisOutput,
   AxisRunAdapterContract,
+  AxisRunAdapterDryRunPreview,
   AxisRunCompatibilityState,
   AxisRunContractPreview,
   AxisRunContractValidation,
   AxisRunExecutionState,
+  AxisRunAdapterPreview,
   AxisRunPayload,
   AxisRunRequestPreview,
   AxisRunResultEnvelope,
+  AxisRunRouteCompatibility,
   AxisRunSubmitGuard,
   AxisRunWiringChecklistItem,
 } from "./types";
@@ -119,6 +122,83 @@ export function getAxisRunCompatibilityState(): AxisRunCompatibilityState {
   };
 }
 
+export function getAxisRunRouteCompatibility(contract: AxisRunContractPreview): AxisRunRouteCompatibility {
+  const missing: string[] = [];
+  const validation = validateAxisRunContractPreview(contract);
+
+  if (!validation.ok) missing.push(validation.label);
+  missing.push("side-effect-safe route adapter implementation");
+  missing.push("dry-run route guard");
+  missing.push("explicit submit unlock");
+
+  return {
+    canDryRun: false,
+    canSubmit: false,
+    compatible: validation.ok,
+    missing,
+    reason: validation.ok
+      ? "Adapter contract ready. Submit is still locked."
+      : validation.message,
+  };
+}
+
+export function buildAxisRunAdapterPreview(contract: AxisRunContractPreview): AxisRunAdapterPreview {
+  const routeCompatibility = getAxisRunRouteCompatibility(contract);
+  const payloadPreview = buildAxisRunPayloadPreview(contract.payload);
+
+  return {
+    compatible: routeCompatibility.compatible,
+    dryRunOnly: true,
+    expectedResponsePreview: {
+      cards: "AxisCard[]",
+      comparison: "legacy comparison | null",
+      operatingSystem: "legacy operating system | null",
+      sidebarThreads: "legacy sidebar thread list",
+      threadId: "string",
+      understanding: "AxisUnderstanding",
+    },
+    method: "POST",
+    missing: routeCompatibility.missing,
+    outputAdapterPreview: mapAxisRunResponseToAxisOutputPreview(contract),
+    payloadPreview,
+    route: AXIS_RUN_TARGET_ROUTE,
+    submitLocked: true,
+  };
+}
+
+export function buildAxisRunAdapterDryRunPreview(contract: AxisRunContractPreview): AxisRunAdapterDryRunPreview {
+  const adapterPreview = buildAxisRunAdapterPreview(contract);
+  const outputType = adapterPreview.outputAdapterPreview.outputType;
+
+  return {
+    message: "Dry-run preview only. No route was called and no output was created.",
+    routeCalled: false,
+    status: "dry_run_only",
+    wouldCreateOutput: {
+      id: `axis-dry-run-${contract.result.output.id}`,
+      title: contract.result.output.title || "Axis run output",
+      type: outputType,
+      status: adapterPreview.outputAdapterPreview.status,
+      createdAt: contract.result.createdAt,
+      localAttachment: contract.result.output.localAttachment,
+      summary: "Would map legacy Axis run response into an AxisOutput after route adapter wiring.",
+      sourceLabel: "Dry Run",
+    },
+    wouldReceive: adapterPreview.expectedResponsePreview,
+    wouldSend: adapterPreview.payloadPreview,
+  };
+}
+
+export function mapAxisRunResponseToAxisOutputPreview(
+  contract: AxisRunContractPreview,
+): AxisRunAdapterPreview["outputAdapterPreview"] {
+  return {
+    outputType: contract.payload?.outputType ?? contract.result.output.type,
+    status: "processing",
+    willMapToAxisOutput: true,
+  };
+}
+
 export function getAxisRunAdapterContract(): AxisRunAdapterContract {
   return {
     accepts: [
@@ -135,6 +215,18 @@ export function getAxisRunAdapterContract(): AxisRunAdapterContract {
     ],
     status: "needed",
     targetRoute: AXIS_RUN_TARGET_ROUTE,
+  };
+}
+
+function buildAxisRunPayloadPreview(payload: AxisRunPayload | undefined) {
+  return {
+    attachmentPath: null,
+    attachmentType: payload?.localAttachment?.type ?? null,
+    attachmentUrl: null,
+    evidenceId: null,
+    fileName: payload?.localAttachment?.name ?? null,
+    message: payload?.inputText ?? "",
+    threadId: payload?.sessionId ?? null,
   };
 }
 

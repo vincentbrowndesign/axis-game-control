@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
+  buildAxisRunAdapterDryRunPreview,
+  buildAxisRunAdapterPreview,
   createAxisRunContractPreview,
   fetchRecentAxisOutputs,
   getFallbackAxisOutputs,
@@ -535,6 +537,94 @@ export function AxisOutputSurface({
           padding: 0.52rem;
         }
 
+        .axis-output-detail__adapter {
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-left: 2px solid rgba(141, 66, 255, 0.42);
+          border-radius: 0.72rem;
+          display: grid;
+          gap: 0.55rem;
+          padding: 0.65rem;
+        }
+
+        .axis-output-detail__adapter > p {
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.66rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__adapter dl {
+          gap: 0.45rem;
+        }
+
+        .axis-output-detail__adapter dl div {
+          background: rgba(255, 255, 255, 0.035);
+          padding: 0.52rem;
+        }
+
+        .axis-output-detail__adapter small {
+          color: rgba(244, 241, 234, 0.48);
+          font-size: 0.7rem;
+          line-height: 1.35;
+        }
+
+        .axis-output-detail__adapter ul {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-output-detail__adapter li {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.52);
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          padding: 0.18rem 0.4rem;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__dry-run {
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-left: 2px solid rgba(121, 226, 145, 0.38);
+          border-radius: 0.72rem;
+          display: grid;
+          gap: 0.55rem;
+          padding: 0.65rem;
+        }
+
+        .axis-output-detail__dry-run > p {
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.66rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__dry-run span {
+          color: rgba(244, 241, 234, 0.58);
+          font-size: 0.72rem;
+          line-height: 1.35;
+        }
+
+        .axis-output-detail__dry-run dl {
+          gap: 0.45rem;
+        }
+
+        .axis-output-detail__dry-run dl div {
+          background: rgba(255, 255, 255, 0.035);
+          padding: 0.52rem;
+        }
+
         .axis-output-detail__result {
           background: rgba(255, 255, 255, 0.035);
           border: 1px solid rgba(121, 226, 145, 0.16);
@@ -694,6 +784,8 @@ function OutputDetailPreview({
   const compatibility = runContract ? getAxisRunCompatibilityState() : null;
   const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
   const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
+  const adapterPreview = runContract ? buildAxisRunAdapterPreview(runContract) : null;
+  const dryRunPreview = runContract ? buildAxisRunAdapterDryRunPreview(runContract) : null;
 
   return (
     <aside className="axis-output-detail" aria-label="Output detail preview">
@@ -762,6 +854,73 @@ function OutputDetailPreview({
             <div>
               <dt>Media</dt>
               <dd>{runPayload.localAttachment?.name || (runPayload.mediaSourceId ? "attached" : "none")}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+      {adapterPreview && (
+        <div className="axis-output-detail__adapter" aria-label="Axis run adapter contract preview">
+          <p>Adapter contract</p>
+          <dl>
+            <div>
+              <dt>Route</dt>
+              <dd>{adapterPreview.route}</dd>
+            </div>
+            <div>
+              <dt>Method</dt>
+              <dd>{adapterPreview.method}</dd>
+            </div>
+            <div>
+              <dt>Compatible</dt>
+              <dd>{adapterPreview.compatible ? "yes" : "no"}</dd>
+            </div>
+            <div>
+              <dt>Dry Run</dt>
+              <dd>{adapterPreview.dryRunOnly ? "only" : "no"}</dd>
+            </div>
+            <div>
+              <dt>Submit</dt>
+              <dd>{adapterPreview.submitLocked ? "locked" : "ready"}</dd>
+            </div>
+            <div>
+              <dt>Output</dt>
+              <dd>
+                {adapterPreview.outputAdapterPreview.willMapToAxisOutput
+                  ? `${formatOutputType(adapterPreview.outputAdapterPreview.outputType)} ${adapterPreview.outputAdapterPreview.status}`
+                  : "not mapped"}
+              </dd>
+            </div>
+          </dl>
+          <small>Expected response: threadId, understanding, cards, comparison, operatingSystem, sidebarThreads.</small>
+          <ul>
+            {adapterPreview.missing.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {dryRunPreview && (
+        <div className="axis-output-detail__dry-run" aria-label="Local adapter dry-run preview">
+          <p>Dry-run simulation</p>
+          <span>{dryRunPreview.message}</span>
+          <dl>
+            <div>
+              <dt>Route Called</dt>
+              <dd>{dryRunPreview.routeCalled ? "yes" : "no"}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{dryRunPreview.status.replaceAll("_", " ")}</dd>
+            </div>
+            <div>
+              <dt>Would Create</dt>
+              <dd>
+                {formatOutputType(dryRunPreview.wouldCreateOutput.type)} {dryRunPreview.wouldCreateOutput.status}
+              </dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd>{dryRunPreview.wouldCreateOutput.sourceLabel}</dd>
             </div>
           </dl>
         </div>

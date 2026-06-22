@@ -103,6 +103,39 @@ export type AxisRunAdapterContract = {
   targetRoute: "/api/axis/run";
 };
 
+export type AxisRunRouteCompatibility = {
+  compatible: boolean;
+  reason?: string;
+  missing: string[];
+  canDryRun: boolean;
+  canSubmit: false;
+};
+
+export type AxisRunAdapterPreview = {
+  route: "/api/axis/run";
+  method: "POST";
+  compatible: boolean;
+  dryRunOnly: true;
+  submitLocked: true;
+  payloadPreview: unknown;
+  expectedResponsePreview: unknown;
+  outputAdapterPreview: {
+    willMapToAxisOutput: boolean;
+    outputType: AxisOutput["type"];
+    status: AxisOutput["status"];
+  };
+  missing: string[];
+};
+
+export type AxisRunAdapterDryRunPreview = {
+  routeCalled: false;
+  wouldSend: unknown;
+  wouldReceive: unknown;
+  wouldCreateOutput: AxisOutput;
+  status: "dry_run_only";
+  message: string;
+};
+
 export type AxisCommandValidationResult =
   | {
       ok: true;

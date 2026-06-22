@@ -1,7 +1,9 @@
 import {
+  buildAxisRunAdapterPreview,
   createAxisRunContractPreview,
   getAxisRunAdapterContract,
   getAxisRunCompatibilityState,
+  getAxisRunRouteCompatibility,
   getAxisRunSubmitGuard,
   getAxisRunWiringChecklist,
   validateAxisRunContractPreview,
@@ -26,6 +28,8 @@ export function AxisStatus({
   const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
   const compatibility = runContract ? getAxisRunCompatibilityState() : null;
   const adapterContract = runContract ? getAxisRunAdapterContract() : null;
+  const routeCompatibility = runContract ? getAxisRunRouteCompatibility(runContract) : null;
+  const adapterPreview = runContract ? buildAxisRunAdapterPreview(runContract) : null;
   const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
 
   return (
@@ -88,11 +92,19 @@ export function AxisStatus({
           </div>
           <div>
             <dt>Route</dt>
-            <dd>{compatibility?.compatible ? "compatible" : "adapter needed"}</dd>
+            <dd>{adapterPreview ? `${adapterPreview.method} ${adapterPreview.route}` : "none"}</dd>
           </div>
           <div>
             <dt>Adapter</dt>
-            <dd>{adapterContract?.status}</dd>
+            <dd>{routeCompatibility?.compatible ? "contract ready" : adapterContract?.status}</dd>
+          </div>
+          <div>
+            <dt>Dry Run</dt>
+            <dd>{adapterPreview?.dryRunOnly ? "only" : "none"}</dd>
+          </div>
+          <div>
+            <dt>Mapping</dt>
+            <dd>{adapterPreview?.outputAdapterPreview.willMapToAxisOutput ? "AxisOutput" : "none"}</dd>
           </div>
         </dl>
       )}
@@ -122,7 +134,8 @@ export function AxisStatus({
         </section>
       )}
       <p className="axis-status-card__note">
-        {compatibility?.message ||
+        {routeCompatibility?.reason ||
+          compatibility?.message ||
           contractValidation?.message ||
           runContract?.execution.message ||
           "Local progress preview. No backend run yet."}
