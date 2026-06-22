@@ -27,8 +27,6 @@ type ModelStatus = "idle" | "loading" | "ready" | "error";
 type AiStatus = "idle" | "running" | "error";
 type FacingMode = "environment" | "user";
 type CalMode = AxisCalibrationState["mode"];
-type PlayerAssignments = Record<string, string>;
-type LockedPlayers = Record<string, boolean>;
 type VisionStatus = "idle" | "starting_camera" | "camera_ready" | "loading_ai" | "running" | "error" | "stopped";
 type RecordingStatus = "idle" | "recording" | "stopping" | "ready" | "error";
 type DrillZonePoint = { x: number; y: number };
@@ -49,9 +47,21 @@ type RecordingMetadata = {
   recordingIncludesOverlay: true;
 };
 
+type AxisPlayerSlot = {
+  displaySlotId: string;
+  playerName?: string;
+  currentRawTrackId?: string;
+  rawTrackHistory: string[];
+  bbox: [number, number, number, number];
+  score: number;
+  lastSeenAt: number;
+  locked: boolean;
+};
+
 const inferenceIntervalMs = 200;
 const maxStoredFrames = 600;
 const defaultMaxDisplayedPlayers = 5;
+const playerSlotStaleMs = 2_000;
 const MONO = "700 11px ui-monospace, SFMono-Regular, Menlo, monospace";
 
 function createSessionId() {
@@ -99,9 +109,9 @@ export default function AxisLiveVision() {
   const recentBallLostRef = useRef(false);
   const calibrationRef = useRef<AxisCalibrationState>(defaultCal());
   const ballTrailRef = useRef<AxisBallTrailState>({ points: [], visible: false });
-  const playerAssignmentsRef = useRef<PlayerAssignments>({});
-  const lockedPlayersRef = useRef<LockedPlayers>({});
-  const displayLabelsRef = useRef<Record<string, string>>({});
+  const playerSlotsRef = useRef<AxisPlayerSlot[]>([]);
+  const rawTrackSeenCountsRef = useRef<Record<string, number>>({});
+  const nextPlayerSlotIndexRef = useRef(1);
   const showTrailRef = useRef(true);
   const showCalibrationRef = useRef(true);
   const drillZoneRef = useRef<DrillZone | null>(null);
@@ -135,9 +145,8 @@ export default function AxisLiveVision() {
   const [calibrationMode, setCalibrationMode] = useState<CalMode>("off");
   const [calibrationMenuOpen, setCalibrationMenuOpen] = useState(false);
   const [ballTrail, setBallTrail] = useState<AxisBallTrailState>({ points: [], visible: false });
-  const [playerAssignments, setPlayerAssignments] = useState<PlayerAssignments>({});
-  const [lockedPlayers, setLockedPlayers] = useState<LockedPlayers>({});
-  const [selectedPlayerTrackId, setSelectedPlayerTrackId] = useState<string | null>(null);
+  const [playerSlots, setPlayerSlots] = useState<AxisPlayerSlot[]>([]);
+  const [selectedPlayerSlotId, setSelectedPlayerSlotId] = useState<string | null>(null);
   const [playerNameDraft, setPlayerNameDraft] = useState("");
   const [showTrail, setShowTrail] = useState(true);
   const [maxDisplayedPlayers] = useState(defaultMaxDisplayedPlayers);
@@ -168,14 +177,6 @@ export default function AxisLiveVision() {
   }, [showTrail]);
 
   useEffect(() => {
-    playerAssignmentsRef.current = playerAssignments;
-  }, [playerAssignments]);
-
-  useEffect(() => {
-    lockedPlayersRef.current = lockedPlayers;
-  }, [lockedPlayers]);
-
-  useEffect(() => {
     drillZoneRef.current = drillZone;
   }, [drillZone]);
 
@@ -193,7 +194,7 @@ export default function AxisLiveVision() {
     tracksRef.current = activeTracks;
     drawDetections(activeTracks);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail, playerAssignments, lockedPlayers, showConfidence, showRawTrackIds, showAllDetections, drillZone]);
+  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail, playerSlots, showConfidence, showRawTrackIds, showAllDetections, drillZone]);
 
   // ─── Canvas click / calibration ────────────────────────────────
 
@@ -347,47 +348,52 @@ export default function AxisLiveVision() {
   }
 
   function openPlayerAssignmentFromPoint(x: number, y: number) {
-    const personTrack = findPersonTrackAtPoint(x, y);
+    const slot = findPlayerSlotAtPoint(x, y);
 
-    if (!personTrack) return;
-    openPlayerAssignment(personTrack.trackId);
+    if (!slot) return;
+    openPlayerAssignment(slot.displaySlotId);
   }
 
-  function findPersonTrackAtPoint(x: number, y: number) {
-    const personTracks = getDisplayedTracks(tracksRef.current).filter((track) => track.kind === "person");
-    const paddedHit = personTracks
-      .filter((track) => pointInsidePaddedBbox(x, y, track.bbox, 34))
+  function findPlayerSlotAtPoint(x: number, y: number) {
+    const slots = getDisplayedPlayerSlots();
+    const paddedHit = slots
+      .filter((slot) => pointInsidePaddedBbox(x, y, slot.bbox, 34))
       .sort((a, b) => bboxArea(a.bbox) - bboxArea(b.bbox))[0];
 
     if (paddedHit) return paddedHit;
 
     const point = { x, y };
-    return personTracks
-      .map((track) => {
-        const center = bboxCenter(track.bbox);
-        const [, , width, height] = track.bbox;
+    return slots
+      .map((slot) => {
+        const center = bboxCenter(slot.bbox);
+        const [, , width, height] = slot.bbox;
         const maxDistance = Math.max(90, Math.min(width, height) * 0.75);
-        return { distance: distanceBetween(point, center), maxDistance, track };
+        return { distance: distanceBetween(point, center), maxDistance, slot };
       })
       .filter((candidate) => candidate.distance <= candidate.maxDistance)
-      .sort((a, b) => a.distance - b.distance)[0]?.track;
+      .sort((a, b) => a.distance - b.distance)[0]?.slot;
   }
 
-  function openPlayerAssignment(trackId: string) {
-    lockPlayer(trackId);
-    setSelectedPlayerTrackId(trackId);
-    setPlayerNameDraft(playerAssignmentsRef.current[trackId] ?? "");
+  function openPlayerAssignment(displaySlotId: string) {
+    lockPlayer(displaySlotId);
+    const slot = playerSlotsRef.current.find((item) => item.displaySlotId === displaySlotId);
+    setSelectedPlayerSlotId(displaySlotId);
+    setPlayerNameDraft(slot?.playerName ?? "");
     setEvidencePanelOpen(false);
     setCalibrationMenuOpen(false);
     setToolsOpen(false);
   }
 
-  function lockPlayer(trackId: string) {
-    setLockedPlayers((current) => {
-      const next = { ...current, [trackId]: true };
-      lockedPlayersRef.current = next;
-      return next;
-    });
+  function updatePlayerSlot(displaySlotId: string, patch: Partial<AxisPlayerSlot>) {
+    const next = playerSlotsRef.current.map((slot) =>
+      slot.displaySlotId === displaySlotId ? { ...slot, ...patch } : slot,
+    );
+    playerSlotsRef.current = next;
+    setPlayerSlots(next);
+  }
+
+  function lockPlayer(displaySlotId: string) {
+    updatePlayerSlot(displaySlotId, { locked: true });
   }
 
   function toggleCalibrationMenu() {
@@ -400,42 +406,39 @@ export default function AxisLiveVision() {
   }
 
   function savePlayerAssignment() {
-    if (!selectedPlayerTrackId) return;
+    if (!selectedPlayerSlotId) return;
     const trimmed = playerNameDraft.trim();
-    setPlayerAssignments((current) => {
-      const next = { ...current };
-      if (trimmed) next[selectedPlayerTrackId] = trimmed;
-      else delete next[selectedPlayerTrackId];
-      playerAssignmentsRef.current = next;
-      return next;
+    updatePlayerSlot(selectedPlayerSlotId, {
+      locked: true,
+      playerName: trimmed || undefined,
     });
-    lockPlayer(selectedPlayerTrackId);
-    setSelectedPlayerTrackId(null);
+    setSelectedPlayerSlotId(null);
     setPlayerNameDraft("");
   }
 
   function clearSelectedPlayerAssignment() {
-    if (!selectedPlayerTrackId) return;
-    setPlayerAssignments((current) => {
-      const next = { ...current };
-      delete next[selectedPlayerTrackId];
-      playerAssignmentsRef.current = next;
-      return next;
+    if (!selectedPlayerSlotId) return;
+    updatePlayerSlot(selectedPlayerSlotId, {
+      locked: false,
+      playerName: undefined,
     });
-    setSelectedPlayerTrackId(null);
+    setSelectedPlayerSlotId(null);
     setPlayerNameDraft("");
   }
 
   function cancelPlayerAssignment() {
-    setSelectedPlayerTrackId(null);
+    setSelectedPlayerSlotId(null);
     setPlayerNameDraft("");
   }
 
   function clearPlayerTags() {
-    playerAssignmentsRef.current = {};
-    lockedPlayersRef.current = {};
-    setPlayerAssignments({});
-    setLockedPlayers({});
+    const next = playerSlotsRef.current.map((slot) => ({
+      ...slot,
+      locked: false,
+      playerName: undefined,
+    }));
+    playerSlotsRef.current = next;
+    setPlayerSlots(next);
   }
 
   function startDrillZone() {
@@ -666,6 +669,7 @@ export default function AxisLiveVision() {
 
         const ballTrack = nextTracks.find((t) => t.kind === "ball" && t.status === "active");
         const nextTrail = updateBallTrail(ballTrailRef.current, ballTrack, frameCountRef.current, timestamp);
+        const nextPlayerSlots = updatePlayerSlots(nextTracks, timestamp);
         ballTrailRef.current = nextTrail;
 
         tracksRef.current = nextTracks;
@@ -676,6 +680,7 @@ export default function AxisLiveVision() {
         setBallLostCount(ballLostFramesRef.current);
         setMaxPeopleCount(maxPeopleCountRef.current);
         setBallTrail(nextTrail);
+        setPlayerSlots(nextPlayerSlots);
 
         const fpsElapsed = now - fpsWindowStartedAtRef.current;
         if (fpsElapsed >= 1000) {
@@ -715,21 +720,6 @@ export default function AxisLiveVision() {
     drawAxisOverlay(ctx, rect.width, rect.height, video, nextTracks);
   }
 
-  function getDisplayLabel(track: AxisVisionTrack) {
-    if (showRawTrackIds) return track.trackId;
-    const assignedName = playerAssignmentsRef.current[track.trackId];
-    if (assignedName) return assignedName;
-
-    if (!displayLabelsRef.current[track.trackId]) {
-      const used = new Set(Object.values(displayLabelsRef.current));
-      let nextIndex = 1;
-      while (used.has(`P${nextIndex}`)) nextIndex += 1;
-      displayLabelsRef.current[track.trackId] = `P${nextIndex}`;
-    }
-
-    return displayLabelsRef.current[track.trackId];
-  }
-
   function isTrackInDrillZone(track: AxisVisionTrack) {
     const zone = drillZoneRef.current;
     if (!zone || track.kind === "ball") return true;
@@ -740,33 +730,156 @@ export default function AxisLiveVision() {
       && center.y <= zone.y + zone.height;
   }
 
-  function getDisplayedTracks(nextTracks: AxisVisionTrack[]) {
-    if (showAllDetections) return nextTracks;
-
-    const balls = nextTracks.filter((track) => track.kind === "ball");
-    const people = nextTracks
-      .filter((track) => track.kind === "person")
-      .map((track) => {
-        const assigned = Boolean(playerAssignmentsRef.current[track.trackId]);
-        const locked = Boolean(lockedPlayersRef.current[track.trackId]);
-        const inZone = isTrackInDrillZone(track);
-        const priority = (assigned ? 1_000 : 0)
-          + (locked ? 500 : 0)
-          + (inZone ? 100 : -500)
-          + track.score * 10
-          + bboxArea(track.bbox) / 100_000;
-        return { assigned, inZone, locked, priority, track };
-      })
-      .filter((item) => item.assigned || item.locked || item.inZone)
-      .sort((a, b) => b.priority - a.priority)
-      .slice(0, maxDisplayedPlayers)
-      .map((item) => item.track);
-
-    return [...people, ...balls];
+  function isSlotInDrillZone(slot: AxisPlayerSlot) {
+    const zone = drillZoneRef.current;
+    if (!zone) return true;
+    const center = bboxCenter(slot.bbox);
+    return center.x >= zone.x
+      && center.x <= zone.x + zone.width
+      && center.y >= zone.y
+      && center.y <= zone.y + zone.height;
   }
 
-  function getDisplayPeopleCount(nextTracks = tracksRef.current) {
-    return getDisplayedTracks(nextTracks).filter((track) => track.kind === "person").length;
+  function getPlayerSlotLabel(slot: AxisPlayerSlot) {
+    if (showRawTrackIds && slot.currentRawTrackId) return slot.currentRawTrackId;
+    return slot.playerName || slot.displaySlotId;
+  }
+
+  function updatePlayerSlots(nextTracks: AxisVisionTrack[], timestamp: number) {
+    const rawPeople = suppressDuplicateRawPeople(
+      nextTracks.filter((track) => track.kind === "person" && track.status === "active"),
+    );
+    const slots = playerSlotsRef.current.map((slot) => ({ ...slot }));
+    const matchedSlotIds = new Set<string>();
+
+    for (const track of rawPeople) {
+      rawTrackSeenCountsRef.current[track.trackId] = (rawTrackSeenCountsRef.current[track.trackId] ?? 0) + 1;
+      const match = findMatchingPlayerSlot(slots, track, timestamp, matchedSlotIds);
+
+      if (match) {
+        const history = match.rawTrackHistory.includes(track.trackId)
+          ? match.rawTrackHistory
+          : [...match.rawTrackHistory, track.trackId];
+        Object.assign(match, {
+          bbox: track.bbox,
+          currentRawTrackId: track.trackId,
+          lastSeenAt: timestamp,
+          rawTrackHistory: history,
+          score: track.score,
+        });
+        matchedSlotIds.add(match.displaySlotId);
+        continue;
+      }
+
+      const seenCount = rawTrackSeenCountsRef.current[track.trackId] ?? 0;
+      const shouldCreate = seenCount >= 3 || track.score >= 0.82;
+      if (!shouldCreate || !isTrackInDrillZone(track)) continue;
+
+      const displaySlotId = `P${nextPlayerSlotIndexRef.current++}`;
+      slots.push({
+        bbox: track.bbox,
+        currentRawTrackId: track.trackId,
+        displaySlotId,
+        lastSeenAt: timestamp,
+        locked: false,
+        playerName: undefined,
+        rawTrackHistory: [track.trackId],
+        score: track.score,
+      });
+      matchedSlotIds.add(displaySlotId);
+    }
+
+    const nextSlots = slots
+      .filter((slot) => slot.locked || timestamp - slot.lastSeenAt <= playerSlotStaleMs)
+      .map((slot) => ({
+        ...slot,
+        currentRawTrackId: timestamp - slot.lastSeenAt <= playerSlotStaleMs ? slot.currentRawTrackId : undefined,
+      }));
+
+    playerSlotsRef.current = nextSlots;
+    return nextSlots;
+  }
+
+  function suppressDuplicateRawPeople(rawPeople: AxisVisionTrack[]) {
+    return [...rawPeople]
+      .sort((a, b) => b.score - a.score)
+      .reduce<AxisVisionTrack[]>((kept, track) => {
+        const duplicate = kept.some((existing) => {
+          const overlap = calculateBboxIoU(existing.bbox, track.bbox);
+          const distance = distanceBetween(bboxCenter(existing.bbox), bboxCenter(track.bbox));
+          const bodyWidth = Math.max(existing.bbox[2], track.bbox[2], 1);
+          return overlap > 0.48 || distance < bodyWidth * 0.28;
+        });
+        if (!duplicate) kept.push(track);
+        return kept;
+      }, []);
+  }
+
+  function findMatchingPlayerSlot(
+    slots: AxisPlayerSlot[],
+    track: AxisVisionTrack,
+    timestamp: number,
+    matchedSlotIds: Set<string>,
+  ) {
+    const center = bboxCenter(track.bbox);
+
+    return slots
+      .filter((slot) => !matchedSlotIds.has(slot.displaySlotId))
+      .map((slot) => {
+        const slotCenter = bboxCenter(slot.bbox);
+        const distance = distanceBetween(center, slotCenter);
+        const maxDistance = Math.max(100, Math.max(slot.bbox[2], slot.bbox[3]) * 0.75);
+        const iou = calculateBboxIoU(slot.bbox, track.bbox);
+        const sizeRatio = Math.min(bboxArea(slot.bbox), bboxArea(track.bbox))
+          / Math.max(bboxArea(slot.bbox), bboxArea(track.bbox), 1);
+        const recentlySeen = timestamp - slot.lastSeenAt <= playerSlotStaleMs;
+        const sameRawTrack = slot.currentRawTrackId === track.trackId || slot.rawTrackHistory.includes(track.trackId);
+        const score = (sameRawTrack ? 2 : 0)
+          + (recentlySeen ? 1 : 0)
+          + iou * 3
+          + Math.max(0, 1 - distance / maxDistance)
+          + sizeRatio;
+        return { distance, iou, maxDistance, score, sizeRatio, slot };
+      })
+      .filter((candidate) =>
+        candidate.slot.locked
+          ? candidate.distance <= candidate.maxDistance * 1.25 || candidate.iou > 0.08
+          : candidate.distance <= candidate.maxDistance || candidate.iou > 0.18,
+      )
+      .filter((candidate) => candidate.sizeRatio > 0.28 || candidate.iou > 0.2)
+      .sort((a, b) => b.score - a.score)[0]?.slot;
+  }
+
+  function getDisplayedPlayerSlots() {
+    const slots = playerSlotsRef.current;
+    if (showAllDetections) return slots;
+
+    return slots
+      .map((slot) => {
+        const assigned = Boolean(slot.playerName);
+        const inZone = isSlotInDrillZone(slot);
+        const priority = (assigned ? 1_000 : 0)
+          + (slot.locked ? 500 : 0)
+          + (inZone ? 100 : -500)
+          + slot.score * 10
+          + bboxArea(slot.bbox) / 100_000;
+        return { assigned, inZone, priority, slot };
+      })
+      .filter((item) => item.assigned || item.slot.locked || item.inZone)
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, maxDisplayedPlayers)
+      .map((item) => item.slot);
+  }
+
+  function getDisplayedTracks(nextTracks: AxisVisionTrack[]) {
+    const balls = nextTracks.filter((track) => track.kind === "ball");
+    if (showAllDetections) return nextTracks;
+
+    return [...balls];
+  }
+
+  function getDisplayPeopleCount() {
+    return getDisplayedPlayerSlots().length;
   }
 
   function drawAxisOverlay(
@@ -783,34 +896,57 @@ export default function AxisLiveVision() {
     const ox = (width - vw * scale) / 2;
     const oy = (height - vh * scale) / 2;
 
+    const displayedPlayerSlots = getDisplayedPlayerSlots();
     const displayedTracks = getDisplayedTracks(nextTracks);
 
     drawDrillZone(ctx, drillZoneRef.current, ox, oy, scale);
 
-    for (const track of displayedTracks) {
-      const [x, y, w, h] = track.bbox;
+    for (const slot of displayedPlayerSlots) {
+      const [x, y, w, h] = slot.bbox;
       const bx = ox + x * scale;
       const by = oy + y * scale;
       const bw = w * scale;
       const bh = h * scale;
-      const outsideZone = !isTrackInDrillZone(track);
-      const color = track.kind === "ball" ? "#f8d45c" : "#7cf7d4";
-      const label = track.kind === "ball"
-        ? `BALL${showConfidence ? ` ${Math.round(track.score * 100)}%` : ""}`
-        : `${getDisplayLabel(track)}${showConfidence ? ` ${Math.round(track.score * 100)}%` : ""}`;
+      const outsideZone = !isSlotInDrillZone(slot);
+      const label = `${getPlayerSlotLabel(slot)}${showConfidence ? ` ${Math.round(slot.score * 100)}%` : ""}`;
 
-      ctx.strokeStyle = color;
+      ctx.strokeStyle = "#7cf7d4";
       ctx.globalAlpha = outsideZone ? 0.35 : 1;
-      ctx.lineWidth = track.kind === "ball" ? 2 : 1.4;
+      ctx.lineWidth = slot.locked ? 2 : 1.4;
       ctx.strokeRect(bx, by, bw, bh);
 
       ctx.fillStyle = "rgba(0,0,0,0.58)";
       const lw = Math.max(44, ctx.measureText(label).width + 14);
       ctx.fillRect(bx, Math.max(0, by - 22), lw, 19);
-      ctx.fillStyle = color;
+      ctx.fillStyle = "#7cf7d4";
       ctx.font = MONO;
       ctx.fillText(label, bx + 7, Math.max(14, by - 8));
       ctx.globalAlpha = 1;
+    }
+
+    for (const track of displayedTracks) {
+      if (track.kind !== "ball") {
+        if (!showAllDetections) continue;
+      }
+      const [x, y, w, h] = track.bbox;
+      const bx = ox + x * scale;
+      const by = oy + y * scale;
+      const bw = w * scale;
+      const bh = h * scale;
+      const color = track.kind === "ball" ? "#f8d45c" : "rgba(124,247,212,0.42)";
+      const label = track.kind === "ball"
+        ? `BALL${showConfidence ? ` ${Math.round(track.score * 100)}%` : ""}`
+        : `${track.trackId}${showConfidence ? ` ${Math.round(track.score * 100)}%` : ""}`;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = track.kind === "ball" ? 2 : 1;
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      const lw = Math.max(44, ctx.measureText(label).width + 14);
+      ctx.fillRect(bx, Math.max(0, by - 22), lw, 19);
+      ctx.fillStyle = color;
+      ctx.font = MONO;
+      ctx.fillText(label, bx + 7, Math.max(14, by - 8));
     }
 
     if (showCalibrationRef.current) drawCalibration(ctx, calibrationRef.current, ox, oy, scale);
@@ -828,7 +964,7 @@ export default function AxisLiveVision() {
       ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, monospace";
       ctx.fillText(`AXIS REC ${formatRecordingTime(elapsed)}`, 47, 47);
       ctx.font = MONO;
-      ctx.fillText(`${getDisplayPeopleCount(nextTracks)}/${maxDisplayedPlayers} ACTIVE`, 28, 65);
+      ctx.fillText(`${getDisplayPeopleCount()}/${maxDisplayedPlayers} ACTIVE`, 28, 65);
     }
   }
 
@@ -985,27 +1121,17 @@ export default function AxisLiveVision() {
           showConfidence,
           showRawTrackIds,
         },
-        displayedPlayers: getDisplayedTracks(tracksRef.current)
-          .filter((track) => track.kind === "person")
-          .map((track) => ({
-            displayTrackId: getDisplayLabel(track),
-            playerName: playerAssignmentsRef.current[track.trackId],
-            rawTrackId: track.trackId,
-          })),
+        displayedPlayers: getDisplayedPlayerSlots().map((slot) => ({
+          displaySlotId: slot.displaySlotId,
+          playerName: slot.playerName,
+          rawTrackId: slot.currentRawTrackId,
+        })),
         drillZone: drillZoneRef.current,
         maxDisplayedPlayers,
       },
-      playerAssignments: playerAssignmentsRef.current,
-      playerDisplayAssignments: Object.fromEntries(
-        Object.entries(displayLabelsRef.current).map(([rawTrackId, displayTrackId]) => [
-          rawTrackId,
-          {
-            displayTrackId,
-            locked: Boolean(lockedPlayersRef.current[rawTrackId]),
-            playerName: playerAssignmentsRef.current[rawTrackId],
-            rawTrackId,
-          },
-        ]),
+      playerSlots: playerSlotsRef.current,
+      rawTrackHistory: Object.fromEntries(
+        playerSlotsRef.current.map((slot) => [slot.displaySlotId, slot.rawTrackHistory]),
       ),
       recording: recordingMetadata ?? {
         recordingIncludesOverlay: true,
@@ -1259,9 +1385,9 @@ export default function AxisLiveVision() {
     ballLostFramesRef.current = 0;
     recentBallLostRef.current = false;
     ballTrailRef.current = { points: [], visible: false };
-    playerAssignmentsRef.current = {};
-    lockedPlayersRef.current = {};
-    displayLabelsRef.current = {};
+    playerSlotsRef.current = [];
+    rawTrackSeenCountsRef.current = {};
+    nextPlayerSlotIndexRef.current = 1;
     drillZoneRef.current = null;
     setSessionId(nextId);
     setSessionStartedAt(nextAt);
@@ -1273,8 +1399,7 @@ export default function AxisLiveVision() {
     setBallVisible(false);
     setBallLostCount(0);
     setBallTrail({ points: [], visible: false });
-    setPlayerAssignments({});
-    setLockedPlayers({});
+    setPlayerSlots([]);
     setDrillZone(null);
     setDrillZoneDraft(null);
     setDrillZoneMode(false);
@@ -1307,12 +1432,11 @@ export default function AxisLiveVision() {
   const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Experimental";
   const ballDirection = ballTrail.direction ?? "unknown";
   const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
-  const playerAssignmentEntries = Object.entries(playerAssignments);
   const activePersonTracks = activeTracks.filter((track) => track.kind === "person");
-  const displayedPeopleCount = getDisplayPeopleCount(activeTracks);
+  const displayedPeopleCount = getDisplayPeopleCount();
   const rawPeopleCount = activePersonTracks.length;
-  const selectedPlayerTrack = selectedPlayerTrackId
-    ? activeTracks.find((track) => track.trackId === selectedPlayerTrackId)
+  const selectedPlayerSlot = selectedPlayerSlotId
+    ? playerSlots.find((slot) => slot.displaySlotId === selectedPlayerSlotId)
     : null;
   const calibrationInstruction = drillZoneMode
     ? drillZoneDraft
@@ -1414,8 +1538,11 @@ export default function AxisLiveVision() {
                 <div>
                   <dt>Player tags</dt>
                   <dd>
-                    {playerAssignmentEntries.length > 0
-                      ? playerAssignmentEntries.map(([trackId, name]) => `${trackId}: ${name}`).join(", ")
+                    {playerSlots.some((slot) => slot.playerName)
+                      ? playerSlots
+                        .filter((slot) => slot.playerName)
+                        .map((slot) => `${slot.displaySlotId}: ${slot.playerName}`)
+                        .join(", ")
                       : "None"}
                   </dd>
                 </div>
@@ -1439,16 +1566,16 @@ export default function AxisLiveVision() {
               </button>
               <div className="axis-live-vision__player-tags" aria-label="Player tags">
                 <p>Player Tags</p>
-                {activePersonTracks.length > 0 ? (
-                  activePersonTracks.map((track) => (
-                    <div className="axis-live-vision__player-tag-row" key={track.trackId}>
-                      <span>{getDisplayLabel(track)}</span>
-                      <strong>{playerAssignments[track.trackId] || "Unknown"}</strong>
-                      <button onClick={() => openPlayerAssignment(track.trackId)} type="button">Edit</button>
+                {playerSlots.length > 0 ? (
+                  playerSlots.map((slot) => (
+                    <div className="axis-live-vision__player-tag-row" key={slot.displaySlotId}>
+                      <span>{slot.displaySlotId}</span>
+                      <strong>{slot.playerName || "Unknown"}</strong>
+                      <button onClick={() => openPlayerAssignment(slot.displaySlotId)} type="button">Edit</button>
                     </div>
                   ))
                 ) : (
-                  <span className="axis-live-vision__muted">No active person tracks</span>
+                  <span className="axis-live-vision__muted">No player slots yet</span>
                 )}
               </div>
               <div className="axis-live-vision__evidence-actions">
@@ -1545,11 +1672,11 @@ export default function AxisLiveVision() {
         </section>
       )}
 
-      {selectedPlayerTrackId && !calActive && (
+      {selectedPlayerSlotId && !calActive && (
         <section className="axis-live-vision__assign-sheet" aria-label="Assign player">
           <div className="axis-live-vision__assign-card">
             <p>Assign Player</p>
-            <h2>{selectedPlayerTrack?.trackId ?? selectedPlayerTrackId}</h2>
+            <h2>{selectedPlayerSlot?.displaySlotId ?? selectedPlayerSlotId}</h2>
             <label>
               Player name
               <input
@@ -2130,6 +2257,21 @@ function pointInsidePaddedBbox(
 
 function bboxArea([, , width, height]: [number, number, number, number]) {
   return width * height;
+}
+
+function calculateBboxIoU(
+  a: [number, number, number, number],
+  b: [number, number, number, number],
+) {
+  const [ax, ay, aw, ah] = a;
+  const [bx, by, bw, bh] = b;
+  const x1 = Math.max(ax, bx);
+  const y1 = Math.max(ay, by);
+  const x2 = Math.min(ax + aw, bx + bw);
+  const y2 = Math.min(ay + ah, by + bh);
+  const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const union = bboxArea(a) + bboxArea(b) - intersection;
+  return union > 0 ? intersection / union : 0;
 }
 
 function bboxCenter([x, y, width, height]: [number, number, number, number]) {
