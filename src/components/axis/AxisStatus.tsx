@@ -1,3 +1,9 @@
+import {
+  createAxisRunContractPreview,
+  getAxisRunSubmitGuard,
+  getAxisRunWiringChecklist,
+  validateAxisRunContractPreview,
+} from "../../lib/axis/client";
 import type { AxisOutput, AxisRunRequestPreview } from "../../lib/axis/types";
 
 export function AxisStatus({
@@ -13,6 +19,10 @@ export function AxisStatus({
 
   const stages = getRunStages(activeOutput);
   const previousPreviews = runPreviewHistory.filter((preview) => preview.id !== runPreview?.id).slice(0, 3);
+  const runContract = runPreview ? createAxisRunContractPreview(activeOutput, runPreview) : null;
+  const contractValidation = runContract ? validateAxisRunContractPreview(runContract) : null;
+  const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
+  const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
 
   return (
     <aside className="axis-status-card" aria-label="Active run progress">
@@ -52,6 +62,26 @@ export function AxisStatus({
             <dt>Media</dt>
             <dd>{runPreview.localAttachment?.name || (runPreview.mediaSourceId ? "attached" : "none")}</dd>
           </div>
+          <div>
+            <dt>Payload</dt>
+            <dd>{runContract?.payload?.targetRoute ? "ready" : "none"}</dd>
+          </div>
+          <div>
+            <dt>Execution</dt>
+            <dd>{runContract?.execution.enabled ? "ready" : "locked"}</dd>
+          </div>
+          <div>
+            <dt>Link</dt>
+            <dd>{runContract?.isLinkedToOutput ? "matched" : "preview"}</dd>
+          </div>
+          <div>
+            <dt>Check</dt>
+            <dd>{contractValidation?.ok ? "ready" : "review"}</dd>
+          </div>
+          <div>
+            <dt>Submit</dt>
+            <dd>{submitGuard?.canSubmit ? "ready" : "blocked"}</dd>
+          </div>
         </dl>
       )}
       {previousPreviews.length > 0 && (
@@ -67,7 +97,21 @@ export function AxisStatus({
           </ol>
         </section>
       )}
-      <p className="axis-status-card__note">Local progress preview. No backend run yet.</p>
+      {wiringChecklist.length > 0 && (
+        <section className="axis-status-card__wiring" aria-label="Local run wiring checklist">
+          <p>Run wiring</p>
+          <ul>
+            {wiringChecklist.map((item) => (
+              <li data-ready={item.ready ? "true" : "false"} key={item.label}>
+                {item.label}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <p className="axis-status-card__note">
+        {contractValidation?.message || runContract?.execution.message || "Local progress preview. No backend run yet."}
+      </p>
 
       <style>{`
         .axis-status-card,
@@ -212,6 +256,47 @@ export function AxisStatus({
           display: grid;
           gap: 0.48rem;
           padding-top: 0.7rem;
+        }
+
+        .axis-status-card__wiring {
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          display: grid;
+          gap: 0.45rem;
+          padding-top: 0.7rem;
+        }
+
+        .axis-status-card__wiring p {
+          color: rgba(244, 241, 234, 0.42);
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-status-card__wiring ul {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-status-card__wiring li {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.52);
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          padding: 0.18rem 0.4rem;
+          text-transform: uppercase;
+        }
+
+        .axis-status-card__wiring li[data-ready="true"] {
+          border-color: rgba(121, 226, 145, 0.24);
+          color: rgba(121, 226, 145, 0.72);
         }
 
         .axis-status-card__history p {

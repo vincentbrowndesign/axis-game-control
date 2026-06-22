@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { getAxisRunExecutionState } from "../../lib/axis/client";
 import type { AxisCommandValidationResult, AxisLocalAttachment, AxisOutput } from "../../lib/axis/types";
 
 type AxisCommandMode = Extract<AxisOutput["type"], "automation" | "file" | "report" | "text" | "video">;
@@ -31,6 +32,7 @@ export function AxisCommandComposer({
   const [shouldFail, setShouldFail] = useState(false);
   const [validationMessage, setValidationMessage] = useState("");
   const readiness = getReadinessState(command, selectedMode, attachment);
+  const runExecutionState = getAxisRunExecutionState();
 
   function submitCommand(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,7 +106,9 @@ export function AxisCommandComposer({
         </div>
       )}
       <div className="axis-command-composer__footer">
-        <p>Creates a local pending Axis Output. No backend run yet.</p>
+        <p>
+          {runExecutionState.label}. Target: {runExecutionState.targetRoute}. {runExecutionState.message}
+        </p>
         <label>
           <input
             checked={shouldFail}

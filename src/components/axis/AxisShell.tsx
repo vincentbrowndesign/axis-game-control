@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
-import { AXIS_UI_V2_ENABLED } from "../../lib/axis/client";
+import { AXIS_RUN_TARGET_ROUTE, AXIS_UI_V2_ENABLED } from "../../lib/axis/client";
 import type {
   AxisAsk,
   AxisChatMessage,
@@ -217,7 +217,7 @@ export function AxisShell() {
       id: createLocalId("axis-run-preview"),
       inputText: command,
       selectedOutputType: outputType,
-      targetRoute: "/api/axis/run",
+      targetRoute: AXIS_RUN_TARGET_ROUTE,
       createdAt,
       status: "local_preview",
       sessionId: activeSession?.id,
@@ -244,7 +244,7 @@ export function AxisShell() {
       id: createLocalId("axis-run-preview"),
       inputText: outputToRetry.title,
       selectedOutputType: outputToRetry.type,
-      targetRoute: "/api/axis/run",
+      targetRoute: AXIS_RUN_TARGET_ROUTE,
       createdAt: new Date().toISOString(),
       status: "local_preview",
       sessionId: previousPreview?.sessionId,

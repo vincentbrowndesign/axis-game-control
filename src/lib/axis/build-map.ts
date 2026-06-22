@@ -709,4 +709,214 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
       "no backend fetch change, route change, persistence, or output type change",
     ],
   },
+  {
+    id: 40,
+    title: "Local Axis shell checkpoint commit",
+    items: [
+      "local output shell steps 18 through 39 were committed as one checkpoint",
+      "frontend shell remains local/read-only except recent output reads",
+      "backend routes and /api/axis/run wiring remain untouched",
+      "checkpoint commit 32dbce0 was pushed",
+    ],
+  },
+  {
+    id: 41,
+    title: "Local Axis run payload envelope",
+    items: [
+      "local run previews can be converted into a typed future /api/axis/run payload",
+      "active run card shows when the local payload envelope is ready",
+      "payload helper is pure frontend contract preparation only",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 42,
+    title: "Local run payload detail preview",
+    items: [
+      "output detail preview shows the future run payload summary for local previews",
+      "payload display uses the same typed envelope as the active run card",
+      "route, mode, session, and media fields are visible without provider details",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 43,
+    title: "Local run result envelope",
+    items: [
+      "local preview outputs can be wrapped in a typed future run result envelope",
+      "output detail preview shows the result envelope status without backend execution",
+      "result envelope points back to the same local AxisOutput and payload contract",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 44,
+    title: "Local run execution lock",
+    items: [
+      "frontend exposes a shared execution state for future /api/axis/run wiring",
+      "active run and output detail surfaces show that execution is currently locked",
+      "the prepared payload/result contracts remain visible without starting a run",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 45,
+    title: "Local run locked handoff action",
+    items: [
+      "output detail preview shows a disabled Run locked handoff action for local previews",
+      "the action confirms that future execution is prepared but intentionally unavailable",
+      "retry and open-output actions still behave as local/read-only previews",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 46,
+    title: "Local composer execution boundary",
+    items: [
+      "composer footer uses the shared execution state instead of one-off copy",
+      "the command surface tells users that run wiring is prepared but locked",
+      "active run, output detail, and composer now share one local execution boundary",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 47,
+    title: "Local run contract preview",
+    items: [
+      "payload, result envelope, and execution lock are grouped into one typed local contract preview",
+      "active run and output detail surfaces use the same contract helper",
+      "local previews can show whether the run contract matches the expected output",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 48,
+    title: "Local run contract type layer",
+    items: [
+      "future run payload, result envelope, execution state, and contract preview types live in the shared Axis type layer",
+      "client helpers now import the shared contract types instead of declaring them locally",
+      "the frontend contract is easier to reuse when /api/axis/run wiring begins",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 49,
+    title: "Local run contract validation",
+    items: [
+      "frontend can validate that a local run contract has a payload, matching route, and matched output link",
+      "active run and output detail surfaces show the local contract check result",
+      "validation is a pure frontend guard for future /api/axis/run wiring",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 50,
+    title: "Local output contract status",
+    items: [
+      "local preview output cards show a quiet contract status before opening detail",
+      "status comes from the same local contract validation helper",
+      "backend, saved, and fallback outputs do not get fake run contract labels",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 51,
+    title: "Local contract readiness summary",
+    items: [
+      "Recent Outputs summary counts local preview contracts that are ready or need review",
+      "summary is derived from the same local contract validation helper as cards and detail",
+      "saved, backend, and fallback outputs remain separate from local contract health",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 52,
+    title: "Local run target route constant",
+    items: [
+      "future /api/axis/run route target is centralized as a frontend contract constant",
+      "local preview creation and retry use the shared route constant",
+      "execution-state helper uses the same route target",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 53,
+    title: "Local composer target visibility",
+    items: [
+      "composer footer displays the shared future run target route from execution state",
+      "target copy comes from the same contract constant used by preview creation and retry",
+      "the command surface remains locked and display-only",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 54,
+    title: "Local run wiring checklist",
+    items: [
+      "active run card shows which frontend run-contract pieces are ready",
+      "checklist marks backend execution as locked until run wiring is explicitly enabled",
+      "checklist is derived from local client contract helpers only",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 55,
+    title: "Local output detail wiring checklist",
+    items: [
+      "output detail preview shows the same local run wiring checklist as the active run card",
+      "frontend contract readiness and locked backend execution remain visible while inspecting an output",
+      "checklist appears only for local preview outputs with a run contract",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 56,
+    title: "Local run submit guard",
+    items: [
+      "frontend can decide whether a local run contract is submit-ready, needs review, or locked",
+      "active run card shows the submit decision without enabling execution",
+      "output detail handoff button uses the shared submit guard label and message",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 57,
+    title: "Local output submit status",
+    items: [
+      "local preview output cards show both contract readiness and submit guard status",
+      "cards can say contract ready while run execution remains locked",
+      "status comes from the same submit guard used by active run and detail",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 58,
+    title: "Local submit readiness summary",
+    items: [
+      "Recent Outputs summary counts local previews that are submit-ready or run-locked",
+      "summary is derived from the same submit guard used by cards, active run, and detail",
+      "locked execution remains visible at the surface level before backend wiring",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 59,
+    title: "Local run sender lock message",
+    items: [
+      "dormant sendAxisRun helper now uses the shared execution lock message",
+      "accidental frontend calls fail with the same boundary shown in the UI",
+      "run target remains prepared but intentionally disabled",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 60,
+    title: "Local run contract checkpoint",
+    items: [
+      "local payload, result envelope, validation, submit guard, and wiring checklist are now represented",
+      "the shell can show prepared-but-locked run state before backend wiring begins",
+      "next real build decision should choose whether to wire /api/axis/run or commit this frontend contract checkpoint first",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
 ];

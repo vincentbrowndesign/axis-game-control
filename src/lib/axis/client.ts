@@ -1,19 +1,141 @@
-import type { AxisOutput } from "./types";
+import type {
+  AxisOutput,
+  AxisRunContractPreview,
+  AxisRunContractValidation,
+  AxisRunExecutionState,
+  AxisRunPayload,
+  AxisRunRequestPreview,
+  AxisRunResultEnvelope,
+  AxisRunSubmitGuard,
+  AxisRunWiringChecklistItem,
+} from "./types";
 
 export const AXIS_UI_V2_ENABLED = process.env.NEXT_PUBLIC_AXIS_UI_V2 === "true";
+export const AXIS_RUN_WIRING_ENABLED = false;
+export const AXIS_RUN_TARGET_ROUTE = "/api/axis/run" as const;
 
-export type AxisRunPayload = {
-  cameraCapture?: File;
-  currentProject?: string;
-  inputText: string;
-  mode: "type" | "voice" | "upload" | "camera";
-  uploadedFile?: File;
-  userId?: string;
-  voiceTranscript?: string;
-};
+export function createAxisRunPayloadFromPreview(preview: AxisRunRequestPreview): AxisRunPayload {
+  return {
+    currentProject: preview.sessionId,
+    expectedOutputId: preview.expectedOutputId,
+    inputText: preview.inputText,
+    localAttachment: preview.localAttachment,
+    mediaSourceId: preview.mediaSourceId,
+    mode: "type",
+    outputType: preview.selectedOutputType,
+    previewId: preview.id,
+    sessionId: preview.sessionId,
+    targetRoute: preview.targetRoute,
+  };
+}
+
+export function createAxisRunResultEnvelope(
+  output: AxisOutput,
+  preview?: AxisRunRequestPreview,
+): AxisRunResultEnvelope {
+  return {
+    createdAt: output.createdAt,
+    id: `axis-run-result-${output.id}`,
+    output,
+    payload: preview ? createAxisRunPayloadFromPreview(preview) : undefined,
+    source: "local_preview",
+    status: output.status,
+  };
+}
+
+export function createAxisRunContractPreview(
+  output: AxisOutput,
+  preview?: AxisRunRequestPreview,
+): AxisRunContractPreview {
+  return {
+    execution: getAxisRunExecutionState(),
+    isLinkedToOutput: Boolean(preview?.expectedOutputId && preview.expectedOutputId === output.id),
+    payload: preview ? createAxisRunPayloadFromPreview(preview) : undefined,
+    result: createAxisRunResultEnvelope(output, preview),
+  };
+}
+
+export function validateAxisRunContractPreview(contract: AxisRunContractPreview): AxisRunContractValidation {
+  if (!contract.payload) {
+    return {
+      ok: false,
+      label: "Missing payload",
+      message: "This local preview has a result shape, but no future run payload yet.",
+    };
+  }
+
+  if (contract.payload.targetRoute !== contract.execution.targetRoute) {
+    return {
+      ok: false,
+      label: "Route mismatch",
+      message: "The local payload route does not match the execution target.",
+    };
+  }
+
+  if (!contract.isLinkedToOutput) {
+    return {
+      ok: false,
+      label: "Output link missing",
+      message: "The local payload is not matched to this output yet.",
+    };
+  }
+
+  return {
+    ok: true,
+    label: "Contract ready",
+    message: "Payload, output, and execution boundary match locally.",
+  };
+}
+
+export function getAxisRunExecutionState(): AxisRunExecutionState {
+  return {
+    enabled: AXIS_RUN_WIRING_ENABLED,
+    label: AXIS_RUN_WIRING_ENABLED ? "Execution ready" : "Execution locked",
+    message: AXIS_RUN_WIRING_ENABLED
+      ? "Axis run wiring is ready to receive this payload."
+      : "Axis run wiring is prepared, but no backend run is called yet.",
+    targetRoute: AXIS_RUN_TARGET_ROUTE,
+  };
+}
+
+export function getAxisRunWiringChecklist(): AxisRunWiringChecklistItem[] {
+  return [
+    { label: "typed payload", ready: true },
+    { label: "result envelope", ready: true },
+    { label: "contract validation", ready: true },
+    { label: "backend execution", ready: AXIS_RUN_WIRING_ENABLED },
+  ];
+}
+
+export function getAxisRunSubmitGuard(contract: AxisRunContractPreview): AxisRunSubmitGuard {
+  const validation = validateAxisRunContractPreview(contract);
+
+  if (!validation.ok) {
+    return {
+      canSubmit: false,
+      label: "Run needs review",
+      message: validation.message,
+    };
+  }
+
+  if (!contract.execution.enabled) {
+    return {
+      canSubmit: false,
+      label: "Run locked",
+      message: contract.execution.message,
+    };
+  }
+
+  return {
+    canSubmit: true,
+    label: "Run ready",
+    message: "This contract can be submitted to Axis run wiring.",
+  };
+}
 
 export async function sendAxisRun(_payload: AxisRunPayload) {
-  throw new Error("Axis run wiring is not active yet. Static UI ships first.");
+  const executionState = getAxisRunExecutionState();
+  throw new Error(`${executionState.label}: ${executionState.message}`);
 }
 
 export type AxisRecentOutputsResult = {

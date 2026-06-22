@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchRecentAxisOutputs, getFallbackAxisOutputs, type AxisRecentOutputsResult } from "../../lib/axis/client";
+import {
+  createAxisRunContractPreview,
+  fetchRecentAxisOutputs,
+  getFallbackAxisOutputs,
+  getAxisRunSubmitGuard,
+  getAxisRunWiringChecklist,
+  validateAxisRunContractPreview,
+  type AxisRecentOutputsResult,
+} from "../../lib/axis/client";
 import type { AxisOutput, AxisRunRequestPreview } from "../../lib/axis/types";
 
 type OutputState =
@@ -75,6 +83,8 @@ export function AxisOutputSurface({
   const selectedRunTrace = selectedOutputDetails
     ? localRunPreviews.find((preview) => preview.expectedOutputId === selectedOutputDetails.id)
     : undefined;
+  const localContractSummary = getLocalContractSummary(localOutputs, localRunPreviews);
+  const localSubmitSummary = getLocalSubmitSummary(localOutputs, localRunPreviews);
 
   function clearLocalOutputPreviews() {
     if (selectedOutput && localOutputs.some((output) => output.id === selectedOutput.id)) {
@@ -103,15 +113,35 @@ export function AxisOutputSurface({
       {message && localOutputs.length === 0 && <p className="axis-output-surface__message">{message}</p>}
       <p className="axis-output-surface__counts" aria-live="polite">
         {outputCountSummary}
+        {localContractSummary && <> - {localContractSummary}</>}
+        {localSubmitSummary && <> - {localSubmitSummary}</>}
       </p>
 
       <div className="axis-output-surface__list" aria-live="polite">
         {outputState.status === "loading" ? (
           <OutputSkeleton />
         ) : outputs.length > 0 ? (
-          outputs.map((output) => (
-            <OutputCard key={output.id} output={output} onSelect={() => setSelectedOutput(output)} />
-          ))
+          outputs.map((output) => {
+            const runTrace = localRunPreviews.find((preview) => preview.expectedOutputId === output.id);
+            const runContract = runTrace ? createAxisRunContractPreview(output, runTrace) : null;
+            const contractValidation = runContract ? validateAxisRunContractPreview(runContract) : null;
+            const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
+
+            return (
+              <OutputCard
+                contractStatus={
+                  contractValidation
+                    ? `${contractValidation.ok ? "Contract ready" : contractValidation.label}${
+                        submitGuard ? ` - ${submitGuard.label}` : ""
+                      }`
+                    : undefined
+                }
+                key={output.id}
+                output={output}
+                onSelect={() => setSelectedOutput(output)}
+              />
+            );
+          })
         ) : (
           <p className="axis-output-surface__empty">No recent outputs found.</p>
         )}
@@ -287,6 +317,16 @@ export function AxisOutputSurface({
           text-transform: uppercase;
         }
 
+        .axis-output-card__contract {
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          color: rgba(244, 241, 234, 0.46);
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          padding-top: 0.45rem;
+          text-transform: uppercase;
+        }
+
         .axis-output-detail {
           background: rgba(8, 10, 15, 0.98);
           border: 1px solid rgba(255, 255, 255, 0.14);
@@ -333,12 +373,14 @@ export function AxisOutputSurface({
 
         .axis-output-detail__close,
         .axis-output-detail__link,
+        .axis-output-detail__locked,
         .axis-output-detail__retry {
           justify-content: center;
         }
 
         .axis-output-detail__close,
-        .axis-output-detail__link {
+        .axis-output-detail__link,
+        .axis-output-detail__locked {
           align-items: center;
           border-radius: 999px;
           color: #f4f1ea;
@@ -348,6 +390,13 @@ export function AxisOutputSurface({
           min-height: 2rem;
           padding: 0 0.72rem;
           text-decoration: none;
+        }
+
+        .axis-output-detail__locked {
+          background: rgba(255, 255, 255, 0.045);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: rgba(244, 241, 234, 0.46);
+          cursor: not-allowed;
         }
 
         .axis-output-detail__close {
@@ -458,6 +507,89 @@ export function AxisOutputSurface({
           line-height: 1.35;
         }
 
+        .axis-output-detail__payload {
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 0.72rem;
+          display: grid;
+          gap: 0.55rem;
+          padding: 0.65rem;
+        }
+
+        .axis-output-detail__payload > p {
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.66rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__payload dl {
+          gap: 0.45rem;
+        }
+
+        .axis-output-detail__payload dl div {
+          background: rgba(255, 255, 255, 0.035);
+          padding: 0.52rem;
+        }
+
+        .axis-output-detail__result {
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(121, 226, 145, 0.16);
+          border-left: 2px solid rgba(121, 226, 145, 0.42);
+          border-radius: 0.72rem;
+          display: grid;
+          gap: 0.3rem;
+          padding: 0.65rem;
+        }
+
+        .axis-output-detail__result p {
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.66rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__result span {
+          color: rgba(244, 241, 234, 0.68);
+          font-size: 0.76rem;
+          line-height: 1.35;
+        }
+
+        .axis-output-detail__result small {
+          color: rgba(244, 241, 234, 0.48);
+          font-size: 0.7rem;
+          line-height: 1.35;
+        }
+
+        .axis-output-detail__wiring {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+          list-style: none;
+          margin: 0.15rem 0 0;
+          padding: 0;
+        }
+
+        .axis-output-detail__wiring li {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.52);
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          padding: 0.18rem 0.4rem;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__wiring li[data-ready="true"] {
+          border-color: rgba(121, 226, 145, 0.24);
+          color: rgba(121, 226, 145, 0.72);
+        }
+
         .axis-output-detail__attachment p {
           color: rgba(244, 241, 234, 0.5);
           font-size: 0.66rem;
@@ -512,7 +644,15 @@ export function AxisOutputSurface({
   );
 }
 
-function OutputCard({ onSelect, output }: { onSelect: () => void; output: AxisOutput }) {
+function OutputCard({
+  contractStatus,
+  onSelect,
+  output,
+}: {
+  contractStatus?: string;
+  onSelect: () => void;
+  output: AxisOutput;
+}) {
   return (
     <button className="axis-output-card" onClick={onSelect} type="button">
       <div className="axis-output-card__top">
@@ -526,6 +666,7 @@ function OutputCard({ onSelect, output }: { onSelect: () => void; output: AxisOu
         <span className="axis-output-card__status">{output.status}</span>
       </div>
       {output.summary && <p>{output.summary}</p>}
+      {contractStatus && <span className="axis-output-card__contract">{contractStatus}</span>}
     </button>
   );
 }
@@ -544,6 +685,13 @@ function OutputDetailPreview({
   runTrace?: AxisRunRequestPreview;
 }) {
   const sourceLabel = output.sourceLabel || formatOutputType(output.type);
+  const runContract = runTrace ? createAxisRunContractPreview(output, runTrace) : null;
+  const runPayload = runContract?.payload;
+  const runResult = runContract?.result;
+  const runExecutionState = runContract?.execution;
+  const contractValidation = runContract ? validateAxisRunContractPreview(runContract) : null;
+  const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
+  const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
 
   return (
     <aside className="axis-output-detail" aria-label="Output detail preview">
@@ -593,6 +741,53 @@ function OutputDetailPreview({
           </span>
         </div>
       )}
+      {runPayload && (
+        <div className="axis-output-detail__payload" aria-label="Future run payload preview">
+          <p>Future run payload</p>
+          <dl>
+            <div>
+              <dt>Route</dt>
+              <dd>{runPayload.targetRoute}</dd>
+            </div>
+            <div>
+              <dt>Mode</dt>
+              <dd>{runPayload.mode}</dd>
+            </div>
+            <div>
+              <dt>Session</dt>
+              <dd>{runPayload.sessionId ? "attached" : "none"}</dd>
+            </div>
+            <div>
+              <dt>Media</dt>
+              <dd>{runPayload.localAttachment?.name || (runPayload.mediaSourceId ? "attached" : "none")}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+      {runResult && (
+        <div className="axis-output-detail__result" aria-label="Future run result envelope preview">
+          <p>Future result envelope</p>
+          <span>
+            {formatOutputStatus(runResult.status)} {formatOutputType(runResult.output.type)} output from{" "}
+            {runResult.source.replace("_", " ")}. Contract {runContract?.isLinkedToOutput ? "matched" : "preview only"}.
+          </span>
+          {runExecutionState && (
+            <small>
+              {runExecutionState.label}: {runExecutionState.message}
+            </small>
+          )}
+          {contractValidation && <small>{contractValidation.label}: {contractValidation.message}</small>}
+          {wiringChecklist.length > 0 && (
+            <ul className="axis-output-detail__wiring">
+              {wiringChecklist.map((item) => (
+                <li data-ready={item.ready ? "true" : "false"} key={item.label}>
+                  {item.label}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {output.localAttachment && (
         <div className="axis-output-detail__attachment" aria-label="Local attachment used">
           <p>Attached locally</p>
@@ -605,6 +800,11 @@ function OutputDetailPreview({
       )}
 
       <div className="axis-output-detail__actions">
+        {submitGuard && !submitGuard.canSubmit && (
+          <button className="axis-output-detail__locked" disabled title={submitGuard.message} type="button">
+            {submitGuard.label}
+          </button>
+        )}
         {canRetry && onRetry && (
           <button className="axis-output-detail__retry" onClick={onRetry} type="button">
             Retry
@@ -624,6 +824,42 @@ function OutputDetailPreview({
 
 function OutputSkeleton() {
   return <div className="axis-output-skeleton" aria-label="Loading recent outputs" />;
+}
+
+function getLocalContractSummary(outputs: AxisOutput[], previews: AxisRunRequestPreview[]) {
+  if (outputs.length === 0) return "";
+
+  const contractStates = outputs.map((output) => {
+    const runTrace = previews.find((preview) => preview.expectedOutputId === output.id);
+    if (!runTrace) return false;
+    return validateAxisRunContractPreview(createAxisRunContractPreview(output, runTrace)).ok;
+  });
+  const readyCount = contractStates.filter(Boolean).length;
+  const reviewCount = contractStates.length - readyCount;
+  const readyLabel = formatCount(readyCount, "contract ready");
+
+  return reviewCount > 0 ? `${readyLabel} - ${formatCount(reviewCount, "contract to review")}` : readyLabel;
+}
+
+function getLocalSubmitSummary(outputs: AxisOutput[], previews: AxisRunRequestPreview[]) {
+  if (outputs.length === 0) return "";
+
+  const submitStates = outputs.flatMap((output) => {
+      const runTrace = previews.find((preview) => preview.expectedOutputId === output.id);
+      if (!runTrace) return [];
+      return [getAxisRunSubmitGuard(createAxisRunContractPreview(output, runTrace))];
+    });
+
+  if (submitStates.length === 0) return "";
+
+  const readyCount = submitStates.filter((state) => state.canSubmit).length;
+  const lockedCount = submitStates.length - readyCount;
+
+  if (readyCount > 0 && lockedCount > 0) {
+    return `${formatCount(readyCount, "submit ready")} - ${formatCount(lockedCount, "run locked")}`;
+  }
+
+  return readyCount > 0 ? formatCount(readyCount, "submit ready") : formatCount(lockedCount, "run locked");
 }
 
 function formatOutputType(value: AxisOutput["type"]) {

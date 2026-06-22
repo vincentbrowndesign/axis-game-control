@@ -32,6 +32,63 @@ export type AxisRunRequestPreview = {
   expectedOutputId?: string;
 };
 
+export type AxisRunPayload = {
+  cameraCapture?: File;
+  currentProject?: string;
+  expectedOutputId?: string;
+  inputText: string;
+  localAttachment?: AxisLocalAttachment;
+  mediaSourceId?: string;
+  mode: "type" | "voice" | "upload" | "camera";
+  outputType?: AxisOutput["type"];
+  previewId?: string;
+  targetRoute?: "/api/axis/run";
+  sessionId?: string;
+  uploadedFile?: File;
+  userId?: string;
+  voiceTranscript?: string;
+};
+
+export type AxisRunResultEnvelope = {
+  createdAt: string;
+  id: string;
+  output: AxisOutput;
+  payload?: AxisRunPayload;
+  source: "local_preview";
+  status: AxisOutput["status"];
+};
+
+export type AxisRunExecutionState = {
+  enabled: boolean;
+  label: string;
+  message: string;
+  targetRoute: "/api/axis/run";
+};
+
+export type AxisRunContractPreview = {
+  execution: AxisRunExecutionState;
+  isLinkedToOutput: boolean;
+  payload?: AxisRunPayload;
+  result: AxisRunResultEnvelope;
+};
+
+export type AxisRunContractValidation = {
+  ok: boolean;
+  label: string;
+  message: string;
+};
+
+export type AxisRunWiringChecklistItem = {
+  label: string;
+  ready: boolean;
+};
+
+export type AxisRunSubmitGuard = {
+  canSubmit: boolean;
+  label: string;
+  message: string;
+};
+
 export type AxisCommandValidationResult =
   | {
       ok: true;
