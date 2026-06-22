@@ -90,6 +90,7 @@ export default function AxisLiveVision() {
   const [lastError, setLastError] = useState("");
   const [calibration, setCalibration] = useState<AxisCalibrationState>(defaultCal());
   const [calibrationMode, setCalibrationMode] = useState<CalMode>("off");
+  const [calibrationMenuOpen, setCalibrationMenuOpen] = useState(false);
   const [ballTrail, setBallTrail] = useState<AxisBallTrailState>({ points: [], visible: false });
   const [showTrail, setShowTrail] = useState(true);
 
@@ -163,6 +164,7 @@ export default function AxisLiveVision() {
         floorTapCountRef.current = 1;
         next = {
           ...prev,
+          mode: "set_floor",
           points: [...prev.points.filter((p) => p.type !== "left_floor" && p.type !== "right_floor"), lf],
           updatedAt: Date.now(),
         };
@@ -190,7 +192,7 @@ export default function AxisLiveVision() {
       const paintPoints = [...prev.paintPoints, pt];
       next = {
         ...prev,
-        mode: paintPoints.length >= 2 ? "off" : prev.mode,
+        mode: paintPoints.length >= 2 ? "off" : "set_paint",
         paintPoints,
         points: [...prev.points, pt],
         updatedAt: Date.now(),
@@ -202,12 +204,22 @@ export default function AxisLiveVision() {
     calibrationRef.current = next;
     setCalibration(next);
     setCalibrationMode(next.mode);
+    if (next.mode === "off") setCalibrationMenuOpen(false);
   }
 
   function activateCalMode(mode: CalMode) {
     const next = mode === calibrationMode ? "off" : mode;
     if (mode === "set_floor") floorTapCountRef.current = 0;
+    const nextCalibration: AxisCalibrationState = {
+      ...calibrationRef.current,
+      mode: next,
+      paintPoints: next === "set_paint" ? [] : calibrationRef.current.paintPoints,
+      updatedAt: Date.now(),
+    };
+    calibrationRef.current = nextCalibration;
+    setCalibration(nextCalibration);
     setCalibrationMode(next);
+    setCalibrationMenuOpen(false);
   }
 
   function clearCalibration() {
@@ -216,6 +228,16 @@ export default function AxisLiveVision() {
     floorTapCountRef.current = 0;
     setCalibration(next);
     setCalibrationMode("off");
+    setCalibrationMenuOpen(false);
+  }
+
+  function cancelCalibration() {
+    const next: AxisCalibrationState = { ...calibrationRef.current, mode: "off", updatedAt: Date.now() };
+    calibrationRef.current = next;
+    floorTapCountRef.current = 0;
+    setCalibration(next);
+    setCalibrationMode("off");
+    setCalibrationMenuOpen(false);
   }
 
   // ─── Camera / AI ────────────────────────────────────────────────
@@ -475,7 +497,6 @@ export default function AxisLiveVision() {
 
     if (showCalibrationRef.current) drawCalibration(ctx, calibrationRef.current, ox, oy, scale);
     if (showTrailRef.current) drawTrail(ctx, ballTrailRef.current, ox, oy, scale);
-    drawHud(ctx, rect.width, nextTracks);
   }
 
   function drawCalibration(
@@ -722,6 +743,20 @@ export default function AxisLiveVision() {
       : "Start Live Vision";
 
   const calActive = calibrationMode !== "off";
+  const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Searching";
+  const ballDirection = ballTrail.direction ?? "unknown";
+  const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
+  const calibrationInstruction = calibrationMode === "set_rim"
+    ? "Tap video to set rim"
+    : calibrationMode === "set_floor"
+      ? floorTapCountRef.current === 0
+        ? "Tap floor point A"
+        : "Tap floor point B"
+      : calibrationMode === "set_paint"
+        ? calibration.paintPoints.length === 0
+          ? "Tap paint point A"
+          : "Tap paint point B"
+        : "";
 
   return (
     <main className="axis-live-vision">
@@ -754,126 +789,119 @@ export default function AxisLiveVision() {
           </div>
         )}
 
-        {calActive && (
-          <div className="axis-live-vision__cal-hint">
-            {calibrationMode === "set_rim" && "TAP VIDEO TO SET RIM"}
-            {calibrationMode === "set_floor" && (
-              floorTapCountRef.current === 0 ? "TAP LEFT FLOOR POINT" : "TAP RIGHT FLOOR POINT"
-            )}
-            {calibrationMode === "set_paint" && (
-              calibration.paintPoints.length === 0 ? "TAP PAINT POINT 1" : "TAP PAINT POINT 2"
-            )}
-          </div>
-        )}
+        {calActive && <div className="axis-live-vision__cal-hint">{calibrationInstruction}</div>}
       </section>
 
-      <header className="axis-live-vision__top">
+      <header className={`axis-live-vision__top${calActive ? " axis-live-vision__top--cal" : ""}`}>
         <div>
-          <p>AXIS LIVE VISION</p>
-          <strong>LIVE CAMERA</strong>
+          <p>AXIS LIVE</p>
         </div>
-        <span data-live={isCameraLive ? "true" : "false"}>{isCameraLive ? "LIVE" : cameraStatus.toUpperCase()}</span>
+        {calActive ? (
+          <button className="axis-live-vision__cancel" onClick={cancelCalibration} type="button">Cancel</button>
+        ) : (
+          <span data-live={isCameraLive ? "true" : "false"}>{isCameraLive ? "LIVE" : cameraStatus.toUpperCase()}</span>
+        )}
       </header>
 
-      <aside className="axis-live-vision__status" aria-label="Live detection status">
-        <div><span>Camera</span><strong>{isCameraLive ? (facingMode === "environment" ? "Back" : "Front") : cameraStatus}</strong></div>
-        <div><span>AI</span><strong>{aiStatus === "running" ? "Running" : modelStatus}</strong></div>
-        <div><span>People</span><strong>{peopleCount} / {maxPeopleCount}</strong></div>
-        <div><span>Ball</span><strong>{ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Searching"}</strong></div>
-        <div><span>Tracks</span><strong>{activeTrackLabel}</strong></div>
-        <div><span>Frames</span><strong>{visionFrames.length}</strong></div>
-      </aside>
+      {!calActive && (
+        <aside className="axis-live-vision__quick-status" aria-label="Live detection status">
+          <span>AI {aiStatus === "running" ? "Running" : modelStatus}</span>
+          <span>Ball {ballStatus}</span>
+          <span>People {peopleCount}</span>
+        </aside>
+      )}
 
-      <section
-        className={`axis-live-vision__evidence ${evidencePanelOpen ? "is-open" : ""}`}
-        aria-label="Evidence session panel"
-      >
-        <button
-          className="axis-live-vision__evidence-toggle"
-          onClick={() => setEvidencePanelOpen((o) => !o)}
-          type="button"
+      {!calActive && (
+        <section
+          className={`axis-live-vision__evidence ${evidencePanelOpen ? "is-open" : ""}`}
+          aria-label="Evidence session panel"
         >
-          Evidence {visionFrames.length}
-        </button>
-        {evidencePanelOpen && (
-          <div className="axis-live-vision__evidence-body">
-            <dl>
-              <div><dt>Session</dt><dd>{sessionId}</dd></div>
-              <div><dt>Duration</dt><dd>{durationSeconds}s</dd></div>
-              <div><dt>Frames</dt><dd>{visionFrames.length}</dd></div>
-              <div><dt>Max people</dt><dd>{maxPeopleCount}</dd></div>
-              <div><dt>Ball seen</dt><dd>{ballSeenFramesRef.current}</dd></div>
-              <div><dt>Ball lost</dt><dd>{ballLostCount}</dd></div>
-              <div><dt>Tracks</dt><dd>{activeTracks.map((t) => t.trackId).join(", ") || "None"}</dd></div>
-              <div><dt>Rim</dt><dd>{calibration.rim ? "Set" : "Not set"}</dd></div>
-              <div><dt>Floor</dt><dd>{calibration.floorLine ? "Set" : "Not set"}</dd></div>
-              <div><dt>Trail pts</dt><dd>{ballTrail.points.length}</dd></div>
-            </dl>
-            <div className="axis-live-vision__evidence-actions">
-              <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
-              <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
-              <button onClick={clearSession} type="button">Clear Session</button>
+          <button
+            className="axis-live-vision__evidence-toggle"
+            onClick={() => setEvidencePanelOpen((o) => !o)}
+            type="button"
+          >
+            Evidence
+          </button>
+          {evidencePanelOpen && (
+            <div className="axis-live-vision__evidence-body">
+              <dl>
+                <div><dt>Session ID</dt><dd>{sessionId}</dd></div>
+                <div><dt>Duration</dt><dd>{durationSeconds}s</dd></div>
+                <div><dt>FPS</dt><dd>{fps.toFixed(1)}</dd></div>
+                <div><dt>Frames</dt><dd>{visionFrames.length}</dd></div>
+                <div><dt>Tracks</dt><dd>{activeTrackLabel}</dd></div>
+                <div><dt>Active tracks</dt><dd>{activeTracks.map((t) => t.trackId).join(", ") || "None"}</dd></div>
+                <div><dt>Max people</dt><dd>{maxPeopleCount}</dd></div>
+                <div><dt>Ball seen</dt><dd>{ballSeenFramesRef.current}</dd></div>
+                <div><dt>Ball lost</dt><dd>{ballLostCount}</dd></div>
+                <div><dt>Ball direction</dt><dd>{ballDirection}</dd></div>
+                <div><dt>Ball speed</dt><dd>{ballSpeed === null ? "unknown" : ballSpeed}</dd></div>
+                <div><dt>Rim</dt><dd>{calibration.rim ? "Set" : "Not set"}</dd></div>
+                <div><dt>Floor</dt><dd>{calibration.floorLine ? "Set" : "Not set"}</dd></div>
+                <div><dt>Paint</dt><dd>{calibration.paintPoints.length >= 2 ? "Set" : "Not set"}</dd></div>
+                <div><dt>Trail</dt><dd>{showTrail ? "On" : "Off"}</dd></div>
+              </dl>
+              <button
+                className="axis-live-vision__trail-toggle"
+                data-active={showTrail ? "true" : undefined}
+                onClick={() => {
+                  const next = !showTrail;
+                  showTrailRef.current = next;
+                  setShowTrail(next);
+                }}
+                type="button"
+              >
+                Trail {showTrail ? "On" : "Off"}
+              </button>
+              <div className="axis-live-vision__evidence-actions">
+                <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
+                <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
+                <button onClick={clearSession} type="button">Clear Session</button>
+              </div>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
 
-      <div className="axis-live-vision__tools" aria-label="Calibration and trail tools">
-        <button
-          data-active={calibrationMode === "set_rim" ? "true" : undefined}
-          onClick={() => activateCalMode("set_rim")}
-          type="button"
-        >
-          Set Rim
-        </button>
-        <button
-          data-active={calibrationMode === "set_floor" ? "true" : undefined}
-          onClick={() => activateCalMode("set_floor")}
-          type="button"
-        >
-          Set Floor
-        </button>
-        <button
-          data-active={calibrationMode === "set_paint" ? "true" : undefined}
-          onClick={() => activateCalMode("set_paint")}
-          type="button"
-        >
-          Set Paint
-        </button>
-        <button onClick={clearCalibration} type="button">Clear Cal</button>
-        <button
-          data-active={showTrail ? "true" : undefined}
-          onClick={() => {
-            const next = !showTrail;
-            showTrailRef.current = next;
-            setShowTrail(next);
-          }}
-          type="button"
-        >
-          Trail {showTrail ? "On" : "Off"}
-        </button>
-      </div>
+      {!calActive && (
+        <div className="axis-live-vision__tools" aria-label="Calibration tools">
+          <button onClick={() => setCalibrationMenuOpen((open) => !open)} type="button">
+            Calibrate
+          </button>
+          {calibrationMenuOpen && (
+            <div className="axis-live-vision__cal-menu">
+              <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
+              <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
+              <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
+              <button onClick={clearCalibration} type="button">Clear Calibration</button>
+            </div>
+          )}
+        </div>
+      )}
 
-      <footer className="axis-live-vision__controls" aria-label="Live vision controls">
-        <button
-          disabled={cameraStatus === "requesting" || modelStatus === "loading"}
-          onClick={startLiveVision}
-          type="button"
-        >
-          {isAiRunning ? "Vision Running" : "Start Vision"}
-        </button>
-        <button
-          disabled={!isCameraLive || modelStatus === "loading" || isAiRunning}
-          onClick={startAI}
-          type="button"
-        >
-          Start AI
-        </button>
-        <button disabled={cameraStatus === "requesting"} onClick={flipCamera} type="button">
-          Flip
-        </button>
-        <button onClick={stopCamera} type="button">Stop</button>
-      </footer>
+      {!calActive && (
+        <footer className="axis-live-vision__controls" aria-label="Live vision controls">
+          <button
+            disabled={cameraStatus === "requesting" || modelStatus === "loading"}
+            onClick={startLiveVision}
+            type="button"
+          >
+            {isAiRunning ? "Vision Running" : "Start Vision"}
+          </button>
+          <button
+            disabled={!isCameraLive || modelStatus === "loading" || isAiRunning}
+            onClick={startAI}
+            type="button"
+          >
+            Start AI
+          </button>
+          <button disabled={cameraStatus === "requesting"} onClick={flipCamera} type="button">
+            Flip
+          </button>
+          <button onClick={stopCamera} type="button">Stop</button>
+        </footer>
+      )}
 
       {lastError && <p className="axis-live-vision__error">{lastError}</p>}
 
@@ -914,6 +942,7 @@ export default function AxisLiveVision() {
         .axis-live-vision__canvas--cal {
           cursor: crosshair;
           pointer-events: auto;
+          z-index: 6;
         }
 
         .axis-live-vision__empty {
@@ -945,12 +974,13 @@ export default function AxisLiveVision() {
           top: max(4rem, env(safe-area-inset-top, 0px) + 4rem);
           transform: translateX(-50%);
           white-space: nowrap;
-          z-index: 5;
+          pointer-events: none;
+          z-index: 7;
         }
 
         .axis-live-vision__empty p,
         .axis-live-vision__top p,
-        .axis-live-vision__status span,
+        .axis-live-vision__quick-status span,
         .axis-live-vision__evidence dt {
           color: rgba(248, 247, 242, 0.58);
           font-size: 0.72rem;
@@ -996,6 +1026,7 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__top {
           align-items: center;
+          pointer-events: none;
           display: flex;
           justify-content: space-between;
           left: 0;
@@ -1003,18 +1034,20 @@ export default function AxisLiveVision() {
           position: absolute;
           right: 0;
           top: 0;
-          z-index: 4;
+          z-index: 8;
         }
 
         .axis-live-vision__top strong {
           display: block;
-          font-size: 1.05rem;
+          font-size: 0.78rem;
           letter-spacing: 0.04em;
           margin-top: 0.18rem;
+          text-transform: uppercase;
         }
 
         .axis-live-vision__top span,
-        .axis-live-vision__evidence-toggle {
+        .axis-live-vision__evidence-toggle,
+        .axis-live-vision__cancel {
           align-items: center;
           background: rgba(0, 0, 0, 0.52);
           border: 1px solid rgba(248, 247, 242, 0.18);
@@ -1025,7 +1058,9 @@ export default function AxisLiveVision() {
           font-weight: 900;
           gap: 0.45rem;
           letter-spacing: 0.08em;
+          min-height: 2.3rem;
           padding: 0.55rem 0.72rem;
+          pointer-events: auto;
         }
 
         .axis-live-vision__top span::before {
@@ -1041,27 +1076,29 @@ export default function AxisLiveVision() {
           box-shadow: 0 0 1rem rgba(124, 247, 212, 0.78);
         }
 
-        .axis-live-vision__status {
-          background: rgba(0, 0, 0, 0.58);
-          border: 1px solid rgba(248, 247, 242, 0.12);
-          border-radius: 1rem;
-          bottom: calc(9.8rem + env(safe-area-inset-bottom));
-          display: grid;
-          gap: 0.65rem;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          left: 1rem;
-          padding: 0.8rem;
+        .axis-live-vision__quick-status {
+          align-items: center;
+          background: rgba(0, 0, 0, 0.46);
+          border: 1px solid rgba(248, 247, 242, 0.14);
+          border-radius: 999px;
+          display: flex;
+          gap: 0.35rem;
+          left: 50%;
+          max-width: calc(100vw - 2rem);
+          padding: 0.42rem;
           position: absolute;
-          right: 1rem;
+          top: max(4.8rem, env(safe-area-inset-top, 0px) + 4rem);
+          transform: translateX(-50%);
           z-index: 4;
         }
 
-        .axis-live-vision__status div {
-          display: grid;
-          gap: 0.15rem;
+        .axis-live-vision__quick-status span {
+          background: rgba(248, 247, 242, 0.08);
+          border-radius: 999px;
+          padding: 0.42rem 0.58rem;
+          white-space: nowrap;
         }
 
-        .axis-live-vision__status strong,
         .axis-live-vision__evidence dd {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: 0.88rem;
@@ -1070,10 +1107,10 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__evidence {
-          bottom: calc(14.4rem + env(safe-area-inset-bottom));
+          bottom: calc(5.2rem + env(safe-area-inset-bottom));
           left: 1rem;
           position: absolute;
-          z-index: 5;
+          z-index: 6;
         }
 
         .axis-live-vision__evidence-body {
@@ -1081,7 +1118,9 @@ export default function AxisLiveVision() {
           border: 1px solid rgba(248, 247, 242, 0.14);
           border-radius: 1rem;
           margin-top: 0.55rem;
+          max-height: min(68dvh, 34rem);
           max-width: min(23rem, calc(100vw - 2rem));
+          overflow: auto;
           padding: 0.85rem;
         }
 
@@ -1103,22 +1142,38 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__evidence-actions button,
+        .axis-live-vision__trail-toggle,
         .axis-live-vision__tools button,
         .axis-live-vision__controls button:not(:first-child) {
           background: rgba(248, 247, 242, 0.08);
           color: #f8f7f2;
         }
 
+        .axis-live-vision__trail-toggle {
+          margin-top: 0.85rem;
+          width: 100%;
+        }
+
         .axis-live-vision__tools {
           bottom: calc(5.6rem + env(safe-area-inset-bottom));
-          display: grid;
-          gap: 0.5rem;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          left: 0;
-          padding: 0 1rem;
+          left: 50%;
           position: absolute;
-          right: 0;
+          transform: translateX(-50%);
           z-index: 4;
+        }
+
+        .axis-live-vision__cal-menu {
+          background: rgba(0, 0, 0, 0.72);
+          border: 1px solid rgba(248, 247, 242, 0.14);
+          border-radius: 1rem;
+          bottom: calc(100% + 0.55rem);
+          display: grid;
+          gap: 0.45rem;
+          left: 50%;
+          min-width: min(16rem, calc(100vw - 2rem));
+          padding: 0.55rem;
+          position: absolute;
+          transform: translateX(-50%);
         }
 
         .axis-live-vision__controls {
@@ -1164,15 +1219,13 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__evidence {
-            bottom: 10rem;
+            bottom: 6rem;
             left: auto;
             right: 1.4rem;
           }
 
           .axis-live-vision__tools {
             bottom: 5.6rem;
-            grid-template-columns: repeat(5, minmax(0, 10rem));
-            justify-content: center;
           }
 
           .axis-live-vision__controls {
@@ -1183,8 +1236,9 @@ export default function AxisLiveVision() {
         }
 
         @media (max-width: 560px) {
-          .axis-live-vision__tools {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+          .axis-live-vision__quick-status {
+            bottom: calc(8.9rem + env(safe-area-inset-bottom));
+            top: auto;
           }
 
           .axis-live-vision__controls {
