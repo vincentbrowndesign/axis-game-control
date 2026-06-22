@@ -3,6 +3,7 @@ import {
   createAxisRunContractPreview,
   getAxisRunAdapterContract,
   getAxisRunCompatibilityState,
+  getAxisRunDryRunGuard,
   getAxisRunRouteCompatibility,
   getAxisRunSubmitGuard,
   getAxisRunWiringChecklist,
@@ -30,6 +31,7 @@ export function AxisStatus({
   const adapterContract = runContract ? getAxisRunAdapterContract() : null;
   const routeCompatibility = runContract ? getAxisRunRouteCompatibility(runContract) : null;
   const adapterPreview = runContract ? buildAxisRunAdapterPreview(runContract) : null;
+  const dryRunGuard = runContract ? getAxisRunDryRunGuard(runContract) : null;
   const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
 
   return (
@@ -100,7 +102,7 @@ export function AxisStatus({
           </div>
           <div>
             <dt>Dry Run</dt>
-            <dd>{adapterPreview?.dryRunOnly ? "only" : "none"}</dd>
+            <dd>{dryRunGuard?.canDryRun ? "ready" : "locked"}</dd>
           </div>
           <div>
             <dt>Mapping</dt>

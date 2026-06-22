@@ -7,6 +7,7 @@ import type {
   AxisRunContractValidation,
   AxisRunExecutionState,
   AxisRunAdapterPreview,
+  AxisRunDryRunGuard,
   AxisRunPayload,
   AxisRunRequestPreview,
   AxisRunResultEnvelope,
@@ -186,6 +187,14 @@ export function buildAxisRunAdapterDryRunPreview(contract: AxisRunContractPrevie
     },
     wouldReceive: adapterPreview.expectedResponsePreview,
     wouldSend: adapterPreview.payloadPreview,
+  };
+}
+
+export function getAxisRunDryRunGuard(_contract: AxisRunContractPreview): AxisRunDryRunGuard {
+  return {
+    canDryRun: false,
+    label: "Dry run locked",
+    message: "Local simulation is available, but no side-effect-safe route dry run is wired yet.",
   };
 }
 

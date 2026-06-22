@@ -136,6 +136,12 @@ export type AxisRunAdapterDryRunPreview = {
   message: string;
 };
 
+export type AxisRunDryRunGuard = {
+  canDryRun: boolean;
+  label: string;
+  message: string;
+};
+
 export type AxisCommandValidationResult =
   | {
       ok: true;

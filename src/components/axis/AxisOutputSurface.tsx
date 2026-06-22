@@ -8,6 +8,7 @@ import {
   fetchRecentAxisOutputs,
   getFallbackAxisOutputs,
   getAxisRunCompatibilityState,
+  getAxisRunDryRunGuard,
   getAxisRunSubmitGuard,
   getAxisRunWiringChecklist,
   validateAxisRunContractPreview,
@@ -616,6 +617,12 @@ export function AxisOutputSurface({
           line-height: 1.35;
         }
 
+        .axis-output-detail__dry-run small {
+          color: rgba(244, 241, 234, 0.48);
+          font-size: 0.7rem;
+          line-height: 1.35;
+        }
+
         .axis-output-detail__dry-run dl {
           gap: 0.45rem;
         }
@@ -786,6 +793,7 @@ function OutputDetailPreview({
   const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
   const adapterPreview = runContract ? buildAxisRunAdapterPreview(runContract) : null;
   const dryRunPreview = runContract ? buildAxisRunAdapterDryRunPreview(runContract) : null;
+  const dryRunGuard = runContract ? getAxisRunDryRunGuard(runContract) : null;
 
   return (
     <aside className="axis-output-detail" aria-label="Output detail preview">
@@ -903,6 +911,7 @@ function OutputDetailPreview({
         <div className="axis-output-detail__dry-run" aria-label="Local adapter dry-run preview">
           <p>Dry-run simulation</p>
           <span>{dryRunPreview.message}</span>
+          {dryRunGuard && <small>{dryRunGuard.label}: {dryRunGuard.message}</small>}
           <dl>
             <div>
               <dt>Route Called</dt>

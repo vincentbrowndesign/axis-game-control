@@ -969,4 +969,14 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
       "no backend call, route change, persistence, or run execution yet",
     ],
   },
+  {
+    id: 66,
+    title: "Local dry-run route guard",
+    items: [
+      "frontend distinguishes local dry-run simulation from an actual route dry run",
+      "active run card and output detail show dry-run routing as locked",
+      "guard is local contract state only and does not call /api/axis/run",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
 ];
