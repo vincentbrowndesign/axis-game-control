@@ -3,9 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadAxisLiveDetector,
-  type AxisLiveDetection,
   type AxisLiveDetector,
 } from "../../lib/axis/axis-live-detector";
+import { createAxisTracker } from "../../lib/axis/axis-simple-tracker";
+import type {
+  AxisLiveDetection,
+  AxisVisionFrame,
+  AxisVisionSession,
+  AxisVisionTrack,
+} from "../../lib/axis/axis-vision-types";
 
 type CameraStatus = "idle" | "requesting" | "live" | "denied" | "error" | "unsupported";
 type ModelStatus = "idle" | "loading" | "ready" | "error";
@@ -13,36 +19,57 @@ type AiStatus = "idle" | "running" | "error";
 type FacingMode = "environment" | "user";
 
 const inferenceIntervalMs = 200;
+const maxStoredFrames = 600;
+
+function createSessionId() {
+  return `vision-${Date.now().toString(36)}`;
+}
 
 export default function AxisLiveVision() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<AxisLiveDetector | null>(null);
+  const trackerRef = useRef(createAxisTracker());
   const rafRef = useRef<number | null>(null);
   const lastInferenceAtRef = useRef(0);
   const aiRunningRef = useRef(false);
-  const detectionsRef = useRef<AxisLiveDetection[]>([]);
+  const tracksRef = useRef<AxisVisionTrack[]>([]);
   const frameCountRef = useRef(0);
   const fpsWindowStartedAtRef = useRef(0);
   const fpsFramesRef = useRef(0);
+  const sessionIdRef = useRef(createSessionId());
+  const sessionStartedAtRef = useRef(Date.now());
+  const visionFramesRef = useRef<AxisVisionFrame[]>([]);
+  const maxPeopleCountRef = useRef(0);
+  const ballSeenFramesRef = useRef(0);
+  const ballLostFramesRef = useRef(0);
+  const recentBallLostRef = useRef(false);
 
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
   const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
   const [detections, setDetections] = useState<AxisLiveDetection[]>([]);
+  const [activeTracks, setActiveTracks] = useState<AxisVisionTrack[]>([]);
+  const [visionFrames, setVisionFrames] = useState<AxisVisionFrame[]>([]);
+  const [sessionStartedAt, setSessionStartedAt] = useState(sessionStartedAtRef.current);
+  const [sessionId, setSessionId] = useState(sessionIdRef.current);
+  const [ballVisible, setBallVisible] = useState(false);
+  const [ballLostCount, setBallLostCount] = useState(0);
+  const [maxPeopleCount, setMaxPeopleCount] = useState(0);
+  const [evidencePanelOpen, setEvidencePanelOpen] = useState(false);
   const [facingMode, setFacingMode] = useState<FacingMode>("environment");
   const [fps, setFps] = useState(0);
   const [frameCount, setFrameCount] = useState(0);
   const [lastError, setLastError] = useState("");
 
   const peopleCount = useMemo(
-    () => detections.filter((detection) => detection.kind === "person").length,
-    [detections],
+    () => activeTracks.filter((track) => track.kind === "person").length,
+    [activeTracks],
   );
   const ballCount = useMemo(
-    () => detections.filter((detection) => detection.kind === "ball").length,
-    [detections],
+    () => activeTracks.filter((track) => track.kind === "ball").length,
+    [activeTracks],
   );
 
   useEffect(() => {
@@ -53,9 +80,9 @@ export default function AxisLiveVision() {
   }, []);
 
   useEffect(() => {
-    detectionsRef.current = detections;
-    drawDetections(detections);
-  }, [detections, cameraStatus, aiStatus, fps, frameCount]);
+    tracksRef.current = activeTracks;
+    drawDetections(activeTracks);
+  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount]);
 
   async function startLiveVision() {
     const cameraStarted = await startCamera();
@@ -92,7 +119,7 @@ export default function AxisLiveVision() {
       await video.play();
 
       setCameraStatus("live");
-      requestAnimationFrame(() => drawDetections(detectionsRef.current));
+      requestAnimationFrame(() => drawDetections(tracksRef.current));
       return true;
     } catch (error) {
       stopCameraTracks();
@@ -108,8 +135,10 @@ export default function AxisLiveVision() {
     stopCameraTracks();
     setCameraStatus("idle");
     setDetections([]);
+    setActiveTracks([]);
     setFps(0);
     setFrameCount(0);
+    tracksRef.current = [];
     clearCanvas();
   }
 
@@ -174,7 +203,6 @@ export default function AxisLiveVision() {
       aiRunningRef.current = true;
       setAiStatus("running");
       lastInferenceAtRef.current = 0;
-      frameCountRef.current = 0;
       fpsFramesRef.current = 0;
       fpsWindowStartedAtRef.current = performance.now();
       loop();
@@ -198,7 +226,7 @@ export default function AxisLiveVision() {
 
     const now = performance.now();
     if (now - lastInferenceAtRef.current < inferenceIntervalMs) {
-      drawDetections(detectionsRef.current);
+      drawDetections(tracksRef.current);
       rafRef.current = requestAnimationFrame(loop);
       return;
     }
@@ -210,11 +238,44 @@ export default function AxisLiveVision() {
       const detector = detectorRef.current;
 
       if (video && detector && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const timestamp = Date.now();
         const nextDetections = await detector.detect(video);
+        const nextTracks = trackerRef.current.update(nextDetections, timestamp);
+        const nextPeopleCount = nextTracks.filter((track) => track.kind === "person").length;
+        const nextBallCount = nextTracks.filter((track) => track.kind === "ball").length;
+        const nextBallVisible = nextBallCount > 0;
+
         frameCountRef.current += 1;
         fpsFramesRef.current += 1;
+
+        const nextFrame: AxisVisionFrame = {
+          ballCount: nextBallCount,
+          ballVisible: nextBallVisible,
+          detections: nextDetections,
+          frameId: frameCountRef.current,
+          peopleCount: nextPeopleCount,
+          timestamp,
+          tracks: nextTracks,
+        };
+
+        visionFramesRef.current = [...visionFramesRef.current, nextFrame].slice(-maxStoredFrames);
+        maxPeopleCountRef.current = Math.max(maxPeopleCountRef.current, nextPeopleCount);
+        if (nextBallVisible) {
+          ballSeenFramesRef.current += 1;
+          recentBallLostRef.current = false;
+        } else {
+          ballLostFramesRef.current += 1;
+          recentBallLostRef.current = ballSeenFramesRef.current > 0;
+        }
+
+        tracksRef.current = nextTracks;
         setFrameCount(frameCountRef.current);
         setDetections(nextDetections);
+        setActiveTracks(nextTracks);
+        setVisionFrames(visionFramesRef.current);
+        setBallVisible(nextBallVisible);
+        setBallLostCount(ballLostFramesRef.current);
+        setMaxPeopleCount(maxPeopleCountRef.current);
 
         const fpsElapsed = now - fpsWindowStartedAtRef.current;
         if (fpsElapsed >= 1000) {
@@ -233,7 +294,7 @@ export default function AxisLiveVision() {
     rafRef.current = requestAnimationFrame(loop);
   }
 
-  function drawDetections(nextDetections = detectionsRef.current) {
+  function drawDetections(nextTracks = tracksRef.current) {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
@@ -257,42 +318,49 @@ export default function AxisLiveVision() {
     const offsetX = (rect.width - renderedWidth) / 2;
     const offsetY = (rect.height - renderedHeight) / 2;
 
-    for (const detection of nextDetections) {
-      const [x, y, width, height] = detection.bbox;
+    for (const track of nextTracks) {
+      const [x, y, width, height] = track.bbox;
       const boxX = offsetX + x * scale;
       const boxY = offsetY + y * scale;
       const boxWidth = width * scale;
       const boxHeight = height * scale;
-      const color = detection.kind === "ball" ? "#f8d45c" : "#7cf7d4";
-      const label = `${detection.kind === "ball" ? "BALL" : "PERSON"} ${Math.round(detection.score * 100)}%`;
+      const color = track.kind === "ball" ? "#f8d45c" : "#7cf7d4";
+      const label = track.kind === "ball"
+        ? `${track.trackId} BALL ${Math.round(track.score * 100)}%`
+        : `${track.trackId} ${Math.round(track.score * 100)}%`;
 
       ctx.strokeStyle = color;
-      ctx.lineWidth = detection.kind === "ball" ? 3 : 2;
+      ctx.lineWidth = track.kind === "ball" ? 3 : 2;
       ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
 
       ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
-      const labelWidth = Math.max(88, ctx.measureText(label).width + 18);
+      const labelWidth = Math.max(78, ctx.measureText(label).width + 18);
       ctx.fillRect(boxX, Math.max(0, boxY - 28), labelWidth, 24);
       ctx.fillStyle = color;
       ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, monospace";
       ctx.fillText(label, boxX + 9, Math.max(16, boxY - 11));
     }
 
-    drawHud(ctx, rect.width, peopleCountFrom(nextDetections), ballCountFrom(nextDetections));
+    drawHud(ctx, rect.width, nextTracks);
   }
 
-  function drawHud(ctx: CanvasRenderingContext2D, width: number, people: number, balls: number) {
+  function drawHud(ctx: CanvasRenderingContext2D, width: number, tracks: AxisVisionTrack[]) {
+    const people = tracks.filter((track) => track.kind === "person").length;
+    const balls = tracks.filter((track) => track.kind === "ball").length;
+    const ballState = balls > 0 ? "LIVE" : recentBallLostRef.current ? "LOST" : "SEARCHING";
+
     ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
-    ctx.fillRect(14, 14, Math.min(270, width - 28), 132);
+    ctx.fillRect(14, 14, Math.min(310, width - 28), 178);
     ctx.fillStyle = "#f8f7f2";
     ctx.font = "800 14px ui-monospace, SFMono-Regular, Menlo, monospace";
     ctx.fillText("AXIS LIVE VISION", 28, 38);
     ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, monospace";
-    ctx.fillText(`CAMERA: ${cameraStatus.toUpperCase()}`, 28, 62);
-    ctx.fillText(`AI: ${aiStatus.toUpperCase()}`, 28, 84);
-    ctx.fillText(`PEOPLE: ${people}`, 28, 106);
-    ctx.fillText(`BALLS: ${balls}`, 28, 128);
-    ctx.fillText(`FPS: ${fps.toFixed(1)}`, 150, 128);
+    ctx.fillText(`AI ${aiStatus.toUpperCase()}`, 28, 62);
+    ctx.fillText(`PEOPLE: ${people} / ${maxPeopleCountRef.current}`, 28, 86);
+    ctx.fillText(`BALL: ${ballState}`, 28, 110);
+    ctx.fillText(`TRACKS: ${tracks.length}`, 28, 134);
+    ctx.fillText(`FRAMES: ${frameCountRef.current}`, 28, 158);
+    ctx.fillText(`FPS: ${fps.toFixed(1)}`, 28, 182);
   }
 
   function clearCanvas() {
@@ -301,8 +369,93 @@ export default function AxisLiveVision() {
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
+  function buildSessionExport(): AxisVisionSession {
+    return {
+      ballLostFrames: ballLostFramesRef.current,
+      ballSeenFrames: ballSeenFramesRef.current,
+      frames: visionFramesRef.current,
+      maxPeopleCount: maxPeopleCountRef.current,
+      sessionId,
+      startedAt: sessionStartedAt,
+    };
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportEvidenceJson() {
+    const session = buildSessionExport();
+    const blob = new Blob([JSON.stringify(session, null, 2)], {
+      type: "application/json",
+    });
+    downloadBlob(blob, `axis-vision-session-${session.sessionId}.json`);
+  }
+
+  async function captureSnapshot() {
+    const video = videoRef.current;
+    const overlay = canvasRef.current;
+    if (!overlay) return;
+
+    const rect = overlay.getBoundingClientRect();
+    const pixelRatio = window.devicePixelRatio || 1;
+    const snapshot = document.createElement("canvas");
+    snapshot.width = Math.max(1, Math.floor(rect.width * pixelRatio));
+    snapshot.height = Math.max(1, Math.floor(rect.height * pixelRatio));
+    const ctx = snapshot.getContext("2d");
+    if (!ctx) return;
+
+    ctx.scale(pixelRatio, pixelRatio);
+    ctx.fillStyle = "#020304";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+      const scale = Math.min(rect.width / video.videoWidth, rect.height / video.videoHeight);
+      const renderedWidth = video.videoWidth * scale;
+      const renderedHeight = video.videoHeight * scale;
+      const offsetX = (rect.width - renderedWidth) / 2;
+      const offsetY = (rect.height - renderedHeight) / 2;
+      ctx.drawImage(video, offsetX, offsetY, renderedWidth, renderedHeight);
+    }
+    ctx.drawImage(overlay, 0, 0, rect.width, rect.height);
+
+    const blob = await new Promise<Blob | null>((resolve) => snapshot.toBlob(resolve, "image/png"));
+    if (blob) downloadBlob(blob, `axis-vision-snapshot-${sessionId}.png`);
+  }
+
+  function clearSession() {
+    const nextSessionId = createSessionId();
+    const nextStartedAt = Date.now();
+    trackerRef.current.reset();
+    sessionIdRef.current = nextSessionId;
+    sessionStartedAtRef.current = nextStartedAt;
+    visionFramesRef.current = [];
+    tracksRef.current = [];
+    frameCountRef.current = 0;
+    maxPeopleCountRef.current = 0;
+    ballSeenFramesRef.current = 0;
+    ballLostFramesRef.current = 0;
+    recentBallLostRef.current = false;
+    setSessionId(nextSessionId);
+    setSessionStartedAt(nextStartedAt);
+    setVisionFrames([]);
+    setActiveTracks([]);
+    setDetections([]);
+    setFrameCount(0);
+    setMaxPeopleCount(0);
+    setBallVisible(false);
+    setBallLostCount(0);
+    drawDetections([]);
+  }
+
   const isCameraLive = cameraStatus === "live";
   const isAiRunning = aiStatus === "running";
+  const durationSeconds = Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000));
+  const activeTrackLabel = activeTracks.length === 1 ? "1 track" : `${activeTracks.length} tracks`;
   const primaryLabel = cameraStatus === "requesting"
     ? "Starting camera..."
     : modelStatus === "loading"
@@ -352,21 +505,45 @@ export default function AxisLiveVision() {
         </div>
         <div>
           <span>People</span>
-          <strong>{peopleCount}</strong>
+          <strong>{peopleCount} / {maxPeopleCount}</strong>
         </div>
         <div>
           <span>Ball</span>
-          <strong>{ballCount > 0 ? ballCount : "Searching"}</strong>
+          <strong>{ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Searching"}</strong>
         </div>
         <div>
-          <span>FPS</span>
-          <strong>{fps.toFixed(1)}</strong>
+          <span>Tracks</span>
+          <strong>{activeTrackLabel}</strong>
         </div>
         <div>
           <span>Frames</span>
-          <strong>{frameCount}</strong>
+          <strong>{visionFrames.length}</strong>
         </div>
       </aside>
+
+      <section className={`axis-live-vision__evidence ${evidencePanelOpen ? "is-open" : ""}`} aria-label="Evidence session panel">
+        <button className="axis-live-vision__evidence-toggle" onClick={() => setEvidencePanelOpen((open) => !open)} type="button">
+          Evidence {visionFrames.length}
+        </button>
+        {evidencePanelOpen && (
+          <div className="axis-live-vision__evidence-body">
+            <dl>
+              <div><dt>Session</dt><dd>{sessionId}</dd></div>
+              <div><dt>Duration</dt><dd>{durationSeconds}s</dd></div>
+              <div><dt>Frames</dt><dd>{visionFrames.length}</dd></div>
+              <div><dt>Max people</dt><dd>{maxPeopleCount}</dd></div>
+              <div><dt>Ball seen</dt><dd>{ballSeenFramesRef.current}</dd></div>
+              <div><dt>Ball lost</dt><dd>{ballLostCount}</dd></div>
+              <div><dt>Active tracks</dt><dd>{activeTracks.map((track) => track.trackId).join(", ") || "None"}</dd></div>
+            </dl>
+            <div className="axis-live-vision__evidence-actions">
+              <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
+              <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
+              <button onClick={clearSession} type="button">Clear Session</button>
+            </div>
+          </div>
+        )}
+      </section>
 
       <footer className="axis-live-vision__controls" aria-label="Live vision controls">
         <button onClick={startLiveVision} type="button" disabled={cameraStatus === "requesting" || modelStatus === "loading"}>
@@ -435,7 +612,8 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__empty p,
         .axis-live-vision__top p,
-        .axis-live-vision__status span {
+        .axis-live-vision__status span,
+        .axis-live-vision__evidence dt {
           color: rgba(248, 247, 242, 0.58);
           font-size: 0.72rem;
           font-weight: 800;
@@ -459,11 +637,11 @@ export default function AxisLiveVision() {
           color: #030405;
           cursor: pointer;
           font: inherit;
-          font-size: 0.78rem;
+          font-size: 0.72rem;
           font-weight: 900;
           letter-spacing: 0.08em;
-          min-height: 3rem;
-          padding: 0 1.2rem;
+          min-height: 2.8rem;
+          padding: 0 1rem;
           text-transform: uppercase;
         }
 
@@ -491,11 +669,13 @@ export default function AxisLiveVision() {
           margin-top: 0.18rem;
         }
 
-        .axis-live-vision__top span {
+        .axis-live-vision__top span,
+        .axis-live-vision__evidence-toggle {
           align-items: center;
           background: rgba(0, 0, 0, 0.52);
           border: 1px solid rgba(248, 247, 242, 0.18);
           border-radius: 999px;
+          color: #f8f7f2;
           display: inline-flex;
           font-size: 0.72rem;
           font-weight: 900;
@@ -537,10 +717,51 @@ export default function AxisLiveVision() {
           gap: 0.15rem;
         }
 
-        .axis-live-vision__status strong {
+        .axis-live-vision__status strong,
+        .axis-live-vision__evidence dd {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-          font-size: 0.92rem;
+          font-size: 0.88rem;
+          margin: 0;
           overflow-wrap: anywhere;
+        }
+
+        .axis-live-vision__evidence {
+          bottom: calc(10.8rem + env(safe-area-inset-bottom));
+          left: 1rem;
+          position: absolute;
+          z-index: 5;
+        }
+
+        .axis-live-vision__evidence-body {
+          background: rgba(0, 0, 0, 0.72);
+          border: 1px solid rgba(248, 247, 242, 0.14);
+          border-radius: 1rem;
+          margin-top: 0.55rem;
+          max-width: min(23rem, calc(100vw - 2rem));
+          padding: 0.85rem;
+        }
+
+        .axis-live-vision__evidence dl {
+          display: grid;
+          gap: 0.55rem;
+          margin: 0;
+        }
+
+        .axis-live-vision__evidence dl div {
+          display: grid;
+          gap: 0.15rem;
+        }
+
+        .axis-live-vision__evidence-actions {
+          display: grid;
+          gap: 0.45rem;
+          margin-top: 0.85rem;
+        }
+
+        .axis-live-vision__evidence-actions button,
+        .axis-live-vision__controls button:not(:first-child) {
+          background: rgba(248, 247, 242, 0.08);
+          color: #f8f7f2;
         }
 
         .axis-live-vision__controls {
@@ -553,11 +774,6 @@ export default function AxisLiveVision() {
           position: absolute;
           right: 0;
           z-index: 4;
-        }
-
-        .axis-live-vision__controls button:not(:first-child) {
-          background: rgba(248, 247, 242, 0.08);
-          color: #f8f7f2;
         }
 
         .axis-live-vision__error {
@@ -590,6 +806,12 @@ export default function AxisLiveVision() {
             width: 13rem;
           }
 
+          .axis-live-vision__evidence {
+            bottom: 6rem;
+            left: auto;
+            right: 1.4rem;
+          }
+
           .axis-live-vision__controls {
             grid-template-columns: repeat(4, minmax(0, 12rem));
             justify-content: center;
@@ -609,12 +831,4 @@ export default function AxisLiveVision() {
       `}</style>
     </main>
   );
-}
-
-function peopleCountFrom(detections: AxisLiveDetection[]) {
-  return detections.filter((detection) => detection.kind === "person").length;
-}
-
-function ballCountFrom(detections: AxisLiveDetection[]) {
-  return detections.filter((detection) => detection.kind === "ball").length;
 }
