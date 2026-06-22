@@ -26,6 +26,17 @@ type AiStatus = "idle" | "running" | "error";
 type FacingMode = "environment" | "user";
 type CalMode = AxisCalibrationState["mode"];
 type PlayerAssignments = Record<string, string>;
+type VisionStatus = "idle" | "starting_camera" | "camera_ready" | "loading_ai" | "running" | "error" | "stopped";
+type RecordingStatus = "idle" | "recording" | "stopping" | "ready" | "error";
+
+type RecordingMetadata = {
+  recordingStartedAt?: number;
+  recordingStoppedAt?: number;
+  recordingDurationMs?: number;
+  recordingMimeType?: string;
+  recordingFileName?: string;
+  recordingIncludesOverlay: true;
+};
 
 const inferenceIntervalMs = 200;
 const maxStoredFrames = 600;
@@ -51,12 +62,18 @@ function makePoint(
 export default function AxisLiveVision() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const recordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<AxisLiveDetector | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const trackerRef = useRef(createAxisTracker());
   const rafRef = useRef<number | null>(null);
+  const recordingRafRef = useRef<number | null>(null);
   const lastInferenceAtRef = useRef(0);
   const aiRunningRef = useRef(false);
+  const recordingChunksRef = useRef<BlobPart[]>([]);
+  const recordingStartedAtRef = useRef<number | undefined>(undefined);
+  const recordingMimeTypeRef = useRef("");
   const tracksRef = useRef<AxisVisionTrack[]>([]);
   const frameCountRef = useRef(0);
   const fpsWindowStartedAtRef = useRef(0);
@@ -78,6 +95,15 @@ export default function AxisLiveVision() {
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
   const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
+  const [visionStatus, setVisionStatus] = useState<VisionStatus>("idle");
+  const [gymMode] = useState(true);
+  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>("idle");
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingUrl, setRecordingUrl] = useState("");
+  const [recordingFileName, setRecordingFileName] = useState("");
+  const [recordingMetadata, setRecordingMetadata] = useState<RecordingMetadata | null>(null);
   const [activeTracks, setActiveTracks] = useState<AxisVisionTrack[]>([]);
   const [visionFrames, setVisionFrames] = useState<AxisVisionFrame[]>([]);
   const [sessionStartedAt, setSessionStartedAt] = useState(sessionStartedAtRef.current);
@@ -106,6 +132,8 @@ export default function AxisLiveVision() {
 
   useEffect(() => {
     return () => {
+      stopRecordingLoop();
+      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
       stopAI();
       stopCamera();
     };
@@ -123,6 +151,16 @@ export default function AxisLiveVision() {
   useEffect(() => {
     playerAssignmentsRef.current = playerAssignments;
   }, [playerAssignments]);
+
+  useEffect(() => {
+    if (recordingStatus !== "recording" || recordingStartedAt === null) return undefined;
+
+    const interval = window.setInterval(() => {
+      setRecordingElapsedMs(Date.now() - recordingStartedAt);
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [recordingStatus, recordingStartedAt]);
 
   useEffect(() => {
     tracksRef.current = activeTracks;
@@ -220,6 +258,11 @@ export default function AxisLiveVision() {
   }
 
   function activateCalMode(mode: CalMode) {
+    if (recordingStatus === "recording") {
+      setLastError("Stop recording before calibration.");
+      return;
+    }
+
     const next = mode === calibrationMode ? "off" : mode;
     if (mode === "set_floor") floorTapCountRef.current = 0;
     const nextCalibration: AxisCalibrationState = {
@@ -232,6 +275,10 @@ export default function AxisLiveVision() {
     setCalibration(nextCalibration);
     setCalibrationMode(next);
     setCalibrationMenuOpen(false);
+    if (next !== "off") {
+      setEvidencePanelOpen(false);
+      cancelPlayerAssignment();
+    }
   }
 
   function clearCalibration() {
@@ -286,6 +333,15 @@ export default function AxisLiveVision() {
     setCalibrationMenuOpen(false);
   }
 
+  function toggleCalibrationMenu() {
+    if (recordingStatus === "recording") {
+      setLastError("Stop recording before calibration.");
+      return;
+    }
+
+    setCalibrationMenuOpen((open) => !open);
+  }
+
   function savePlayerAssignment() {
     if (!selectedPlayerTrackId) return;
     const trimmed = playerNameDraft.trim();
@@ -325,8 +381,18 @@ export default function AxisLiveVision() {
   // ─── Camera / AI ────────────────────────────────────────────────
 
   async function startLiveVision() {
+    if (aiRunningRef.current) return;
+    setVisionStatus("starting_camera");
     const cameraStarted = await startCamera();
-    if (cameraStarted) await startAI();
+    if (!cameraStarted) {
+      setVisionStatus("error");
+      return;
+    }
+
+    setVisionStatus("camera_ready");
+    setVisionStatus("loading_ai");
+    const aiStarted = await startAI();
+    setVisionStatus(aiStarted ? "running" : "error");
   }
 
   async function startCamera() {
@@ -368,9 +434,11 @@ export default function AxisLiveVision() {
   }
 
   function stopCamera() {
+    if (recordingStatus === "recording") stopRecording();
     stopAI();
     stopCameraTracks();
     setCameraStatus("idle");
+    setVisionStatus("stopped");
 
     setActiveTracks([]);
     setFps(0);
@@ -389,6 +457,7 @@ export default function AxisLiveVision() {
     const next = facingMode === "environment" ? "user" : "environment";
     setFacingMode(next);
     stopAI();
+    setVisionStatus("starting_camera");
 
     if (cameraStatus === "live" || cameraStatus === "requesting") {
       setLastError("");
@@ -406,20 +475,23 @@ export default function AxisLiveVision() {
         video.srcObject = stream;
         await video.play();
         setCameraStatus("live");
-        await startAI();
+        setVisionStatus("loading_ai");
+        const aiStarted = await startAI();
+        setVisionStatus(aiStarted ? "running" : "error");
       } catch (error) {
         stopCameraTracks();
         setCameraStatus("error");
+        setVisionStatus("error");
         setLastError(error instanceof Error ? error.message : "Camera could not flip.");
       }
     }
   }
 
   async function startAI() {
-    if (aiRunningRef.current) return;
+    if (aiRunningRef.current) return true;
     if (cameraStatus !== "live" && !streamRef.current) {
       const ok = await startCamera();
-      if (!ok) return;
+      if (!ok) return false;
     }
 
     setLastError("");
@@ -437,11 +509,13 @@ export default function AxisLiveVision() {
       fpsFramesRef.current = 0;
       fpsWindowStartedAtRef.current = performance.now();
       loop();
+      return true;
     } catch (error) {
       aiRunningRef.current = false;
       setAiStatus("error");
       setModelStatus("error");
       setLastError(error instanceof Error ? error.message : "AI model could not start.");
+      return false;
     }
   }
 
@@ -548,11 +622,22 @@ export default function AxisLiveVision() {
     ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
 
+    drawAxisOverlay(ctx, rect.width, rect.height, video, nextTracks);
+  }
+
+  function drawAxisOverlay(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    video: HTMLVideoElement,
+    nextTracks = tracksRef.current,
+    includeRecordingStatus = false,
+  ) {
     const vw = video.videoWidth || 1280;
     const vh = video.videoHeight || 720;
-    const scale = Math.min(rect.width / vw, rect.height / vh);
-    const ox = (rect.width - vw * scale) / 2;
-    const oy = (rect.height - vh * scale) / 2;
+    const scale = Math.min(width / vw, height / vh);
+    const ox = (width - vw * scale) / 2;
+    const oy = (height - vh * scale) / 2;
 
     for (const track of nextTracks) {
       const [x, y, w, h] = track.bbox;
@@ -580,6 +665,21 @@ export default function AxisLiveVision() {
 
     if (showCalibrationRef.current) drawCalibration(ctx, calibrationRef.current, ox, oy, scale);
     if (showTrailRef.current) drawTrail(ctx, ballTrailRef.current, ox, oy, scale);
+
+    if (includeRecordingStatus) {
+      const elapsed = recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : 0;
+      ctx.fillStyle = "rgba(0,0,0,0.58)";
+      ctx.fillRect(14, 14, 214, 58);
+      ctx.fillStyle = "#ff4f4f";
+      ctx.beginPath();
+      ctx.arc(33, 43, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f8f7f2";
+      ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.fillText(`AXIS REC ${formatRecordingTime(elapsed)}`, 47, 47);
+      ctx.font = MONO;
+      ctx.fillText(`${activeTracks.length} TRACKS · ${peopleCount} PEOPLE`, 28, 65);
+    }
   }
 
   function drawCalibration(
@@ -695,6 +795,11 @@ export default function AxisLiveVision() {
       ...base,
       calibration: calibrationRef.current,
       playerAssignments: playerAssignmentsRef.current,
+      recording: recordingMetadata ?? {
+        recordingIncludesOverlay: true,
+        recordingMimeType: recordingMimeTypeRef.current || undefined,
+        recordingStartedAt: recordingStartedAtRef.current,
+      },
       ballTrailSummary: {
         direction: trail.direction,
         lastSeenAt: trail.lastSeenAt,
@@ -750,6 +855,183 @@ export default function AxisLiveVision() {
     if (blob) downloadBlob(blob, `axis-vision-snapshot-${sessionId}.png`);
   }
 
+  function getSupportedRecordingMimeType() {
+    if (typeof MediaRecorder === "undefined") return "";
+
+    const candidates = [
+      "video/mp4",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+
+    return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
+  }
+
+  function startRecording() {
+    const video = videoRef.current;
+    if (!video || !isVisionRunning) {
+      setLastError("Start Axis Vision before recording.");
+      return;
+    }
+
+    if (recordingStatus === "recording" || recordingStatus === "stopping") return;
+
+    const mimeType = getSupportedRecordingMimeType();
+    if (!mimeType) {
+      setRecordingStatus("error");
+      setLastError("Recording is not supported in this browser.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    recordingCanvasRef.current = canvas;
+    recordingChunksRef.current = [];
+    recordingMimeTypeRef.current = mimeType;
+
+    try {
+      const stream = canvas.captureStream(30);
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const startedAt = Date.now();
+      const fileExtension = mimeType.includes("mp4") ? "mp4" : "webm";
+      const fileName = `axis-vision-clip-${sessionId}-${startedAt}.${fileExtension}`;
+
+      mediaRecorderRef.current = recorder;
+      recordingStartedAtRef.current = startedAt;
+      setRecordingStartedAt(startedAt);
+      setRecordingElapsedMs(0);
+      setRecordingFileName(fileName);
+      setRecordingBlob(null);
+      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+      setRecordingUrl("");
+      setRecordingMetadata(null);
+      setEvidencePanelOpen(false);
+      setCalibrationMenuOpen(false);
+      setLastError("");
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const stoppedAt = Date.now();
+        const blob = new Blob(recordingChunksRef.current, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        stopRecordingLoop();
+        setRecordingBlob(blob);
+        setRecordingUrl(url);
+        setRecordingStatus("ready");
+        setRecordingStartedAt(null);
+        setRecordingElapsedMs(stoppedAt - startedAt);
+        setRecordingMetadata({
+          recordingDurationMs: stoppedAt - startedAt,
+          recordingFileName: fileName,
+          recordingIncludesOverlay: true,
+          recordingMimeType: mimeType,
+          recordingStartedAt: startedAt,
+          recordingStoppedAt: stoppedAt,
+        });
+        mediaRecorderRef.current = null;
+        recordingStartedAtRef.current = undefined;
+        recordingChunksRef.current = [];
+      };
+
+      recorder.onerror = () => {
+        stopRecordingLoop();
+        setRecordingStatus("error");
+        setLastError("Recording failed.");
+        mediaRecorderRef.current = null;
+        recordingStartedAtRef.current = undefined;
+      };
+
+      setRecordingStatus("recording");
+      recorder.start(1000);
+      drawRecordingFrame();
+    } catch (error) {
+      stopRecordingLoop();
+      setRecordingStatus("error");
+      setLastError(error instanceof Error ? error.message : "Recording could not start.");
+    }
+  }
+
+  function drawRecordingFrame() {
+    const video = videoRef.current;
+    const canvas = recordingCanvasRef.current;
+    if (!video || !canvas || recordingStatus === "error") return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = "#020304";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+      const renderedWidth = video.videoWidth * scale;
+      const renderedHeight = video.videoHeight * scale;
+      const offsetX = (canvas.width - renderedWidth) / 2;
+      const offsetY = (canvas.height - renderedHeight) / 2;
+      ctx.drawImage(video, offsetX, offsetY, renderedWidth, renderedHeight);
+    }
+    drawAxisOverlay(ctx, canvas.width, canvas.height, video, tracksRef.current, true);
+
+    if (mediaRecorderRef.current?.state === "recording") {
+      recordingRafRef.current = requestAnimationFrame(drawRecordingFrame);
+    }
+  }
+
+  function stopRecordingLoop() {
+    if (recordingRafRef.current !== null) cancelAnimationFrame(recordingRafRef.current);
+    recordingRafRef.current = null;
+  }
+
+  function stopRecording() {
+    if (recordingStatus !== "recording") return;
+    setRecordingStatus("stopping");
+    stopRecordingLoop();
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  }
+
+  function downloadClip() {
+    if (!recordingBlob) return;
+    downloadBlob(recordingBlob, recordingFileName || `axis-vision-clip-${sessionId}.webm`);
+  }
+
+  async function shareClip() {
+    if (!recordingBlob) return;
+
+    const file = new File([recordingBlob], recordingFileName || `axis-vision-clip-${sessionId}.webm`, {
+      type: recordingBlob.type,
+    });
+    const shareData = { files: [file], title: "Axis Vision Clip" };
+
+    if ("canShare" in navigator && navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+      }
+    }
+
+    downloadClip();
+  }
+
+  function discardClip() {
+    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    setRecordingBlob(null);
+    setRecordingUrl("");
+    setRecordingFileName("");
+    setRecordingMetadata(null);
+    setRecordingStatus("idle");
+    setRecordingElapsedMs(0);
+  }
+
   function clearSession() {
     const nextId = createSessionId();
     const nextAt = Date.now();
@@ -781,13 +1063,25 @@ export default function AxisLiveVision() {
 
   const isCameraLive = cameraStatus === "live";
   const isAiRunning = aiStatus === "running";
+  const isRecording = recordingStatus === "recording";
   const durationSeconds = Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000));
   const activeTrackLabel = activeTracks.length === 1 ? "1 track" : `${activeTracks.length} tracks`;
-  const primaryLabel = cameraStatus === "requesting"
-    ? "Starting camera..."
-    : modelStatus === "loading"
-      ? "Loading AI model..."
-      : "Start Live Vision";
+  const isVisionRunning = visionStatus === "running" && isAiRunning;
+  const isVisionBusy = visionStatus === "starting_camera" || visionStatus === "camera_ready" || visionStatus === "loading_ai";
+  const primaryLabel = visionStatus === "starting_camera"
+    ? "Starting Camera..."
+    : visionStatus === "loading_ai" || visionStatus === "camera_ready"
+      ? "Loading AI..."
+      : visionStatus === "running"
+        ? "Vision Running"
+        : visionStatus === "error"
+          ? "Retry Axis Vision"
+          : "Start Axis Vision";
+  const recordingLabel = recordingStatus === "recording"
+    ? "Stop Rec"
+    : recordingStatus === "stopping"
+      ? "Stopping"
+      : "Record";
 
   const calActive = calibrationMode !== "off";
   const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Searching";
@@ -811,7 +1105,7 @@ export default function AxisLiveVision() {
         : "";
 
   return (
-    <main className="axis-live-vision">
+    <main className={`axis-live-vision${gymMode ? " axis-live-vision--gym" : ""}`}>
       <section className="axis-live-vision__stage" aria-label="Axis live camera AI detection">
         <video
           aria-label="Live camera feed"
@@ -832,7 +1126,7 @@ export default function AxisLiveVision() {
             <p>AXIS</p>
             <h1>Live camera AI</h1>
             <button
-              disabled={cameraStatus === "requesting" || modelStatus === "loading"}
+              disabled={isVisionBusy}
               onClick={startLiveVision}
               type="button"
             >
@@ -860,23 +1154,16 @@ export default function AxisLiveVision() {
           <span>AI {aiStatus === "running" ? "Running" : modelStatus}</span>
           <span>Ball {ballStatus}</span>
           <span>People {peopleCount}</span>
+          {isRecording && <span className="axis-live-vision__rec-pill">REC {formatRecordingTime(recordingElapsedMs)}</span>}
         </aside>
       )}
 
-      {!calActive && (
+      {!calActive && evidencePanelOpen && (
         <section
           className={`axis-live-vision__evidence ${evidencePanelOpen ? "is-open" : ""}`}
           aria-label="Evidence session panel"
         >
-          <button
-            className="axis-live-vision__evidence-toggle"
-            onClick={() => setEvidencePanelOpen((o) => !o)}
-            type="button"
-          >
-            Evidence
-          </button>
-          {evidencePanelOpen && (
-            <div className="axis-live-vision__evidence-body">
+          <div className="axis-live-vision__evidence-body">
               <dl>
                 <div><dt>Session ID</dt><dd>{sessionId}</dd></div>
                 <div><dt>Duration</dt><dd>{durationSeconds}s</dd></div>
@@ -929,50 +1216,81 @@ export default function AxisLiveVision() {
                 )}
               </div>
               <div className="axis-live-vision__evidence-actions">
+                {isCameraLive && <button onClick={flipCamera} type="button">Flip Camera</button>}
                 <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
                 <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
                 <button onClick={clearPlayerTags} type="button">Clear Player Tags</button>
                 <button onClick={clearSession} type="button">Clear Session</button>
               </div>
-            </div>
-          )}
+          </div>
         </section>
       )}
 
-      {!calActive && (
-        <footer className="axis-live-vision__controls" aria-label="Live vision controls">
-          <button
-            disabled={cameraStatus === "requesting" || modelStatus === "loading"}
-            onClick={startLiveVision}
-            type="button"
-          >
-            {isAiRunning ? "Vision Running" : "Start Vision"}
-          </button>
-          <button
-            disabled={!isCameraLive || modelStatus === "loading" || isAiRunning}
-            onClick={startAI}
-            type="button"
-          >
-            Start AI
-          </button>
-          <button disabled={cameraStatus === "requesting"} onClick={flipCamera} type="button">
-            Flip
-          </button>
-          <div className="axis-live-vision__control-wrap">
-            <button onClick={() => setCalibrationMenuOpen((open) => !open)} type="button">
-              Calibrate
+      {!calActive && isCameraLive && (
+        <footer className={`axis-live-vision__controls${isVisionRunning ? " axis-live-vision__controls--running" : ""}`} aria-label="Live vision controls">
+          {!isVisionRunning ? (
+            <button
+              className="axis-live-vision__primary-start"
+              disabled={isVisionBusy}
+              onClick={startLiveVision}
+              type="button"
+            >
+              {primaryLabel}
             </button>
-            {calibrationMenuOpen && (
-              <div className="axis-live-vision__cal-menu">
-                <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
-                <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
-                <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
-                <button onClick={clearCalibration} type="button">Clear Calibration</button>
+          ) : (
+            <>
+              <button
+                data-active={isRecording ? "true" : undefined}
+                disabled={recordingStatus === "stopping"}
+                onClick={isRecording ? stopRecording : startRecording}
+                type="button"
+              >
+                {recordingLabel}
+              </button>
+              <div className="axis-live-vision__control-wrap">
+                <button onClick={toggleCalibrationMenu} type="button">
+                  Calibrate
+                </button>
+                {calibrationMenuOpen && (
+                  <div className="axis-live-vision__cal-menu">
+                    <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
+                    <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
+                    <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
+                    <button onClick={clearCalibration} type="button">Clear Calibration</button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <button onClick={stopCamera} type="button">Stop</button>
+              <button disabled={isRecording} onClick={() => setEvidencePanelOpen(true)} type="button">Tag Players</button>
+              <button
+                data-active={showTrail ? "true" : undefined}
+                onClick={() => {
+                  const next = !showTrail;
+                  showTrailRef.current = next;
+                  setShowTrail(next);
+                }}
+                type="button"
+              >
+                Trail
+              </button>
+              <button disabled={isRecording} onClick={() => setEvidencePanelOpen((open) => !open)} type="button">Evidence</button>
+              <button onClick={stopCamera} type="button">Stop</button>
+            </>
+          )}
         </footer>
+      )}
+
+      {recordingStatus === "ready" && recordingUrl && (
+        <section className="axis-live-vision__clip-sheet" aria-label="Recorded Axis clip preview">
+          <div className="axis-live-vision__clip-card">
+            <p>Axis Clip Ready</p>
+            <video controls playsInline src={recordingUrl} />
+            <div className="axis-live-vision__clip-actions">
+              <button onClick={downloadClip} type="button">Download Clip</button>
+              <button onClick={shareClip} type="button">Share / Save Clip</button>
+              <button onClick={discardClip} type="button">Discard Clip</button>
+            </div>
+          </div>
+        </section>
       )}
 
       {selectedPlayerTrackId && !calActive && (
@@ -1195,6 +1513,11 @@ export default function AxisLiveVision() {
           white-space: nowrap;
         }
 
+        .axis-live-vision__quick-status .axis-live-vision__rec-pill {
+          background: rgba(255, 48, 48, 0.18);
+          color: #ff6b6b;
+        }
+
         .axis-live-vision__evidence dd {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: 0.88rem;
@@ -1308,12 +1631,22 @@ export default function AxisLiveVision() {
           bottom: 0;
           display: grid;
           gap: 0.45rem;
-          grid-template-columns: 1.25fr 0.9fr 0.7fr 0.9fr 0.7fr;
+          grid-template-columns: minmax(0, 1fr);
           left: 0;
           padding: 0 1rem max(1rem, env(safe-area-inset-bottom));
           position: absolute;
           right: 0;
           z-index: 4;
+        }
+
+        .axis-live-vision__controls--running {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+
+        .axis-live-vision__primary-start {
+          justify-self: center;
+          max-width: 24rem;
+          width: min(100%, 24rem);
         }
 
         .axis-live-vision__control-wrap {
@@ -1345,6 +1678,51 @@ export default function AxisLiveVision() {
           padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
           position: absolute;
           z-index: 9;
+        }
+
+        .axis-live-vision__clip-sheet {
+          align-items: end;
+          background: rgba(0, 0, 0, 0.2);
+          display: grid;
+          inset: 0;
+          padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
+          position: absolute;
+          z-index: 9;
+        }
+
+        .axis-live-vision__clip-card {
+          background: rgba(8, 9, 10, 0.92);
+          border: 1px solid rgba(248, 247, 242, 0.16);
+          border-radius: 1.25rem;
+          box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.45);
+          display: grid;
+          gap: 0.85rem;
+          justify-self: center;
+          max-width: 34rem;
+          padding: 1rem;
+          width: min(100%, 34rem);
+        }
+
+        .axis-live-vision__clip-card p {
+          color: rgba(248, 247, 242, 0.72);
+          font-size: 0.72rem;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__clip-card video {
+          background: #020304;
+          border-radius: 0.85rem;
+          max-height: 42dvh;
+          width: 100%;
+        }
+
+        .axis-live-vision__clip-actions {
+          display: grid;
+          gap: 0.5rem;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .axis-live-vision__assign-card {
@@ -1436,9 +1814,13 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls {
-            grid-template-columns: repeat(5, minmax(0, 9.5rem));
+            grid-template-columns: minmax(0, 24rem);
             justify-content: center;
             padding-bottom: 1.25rem;
+          }
+
+          .axis-live-vision__controls--running {
+            grid-template-columns: repeat(6, minmax(0, 9rem));
           }
         }
 
@@ -1449,12 +1831,17 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls {
-            grid-template-columns: repeat(5, minmax(0, 1fr));
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .axis-live-vision__controls--running {
+            grid-template-columns: repeat(6, minmax(4.4rem, 1fr));
+            overflow-x: auto;
           }
 
           .axis-live-vision__controls button {
             min-height: 2.8rem;
-            padding: 0 0.45rem;
+            padding: 0 0.35rem;
           }
         }
       `}</style>
@@ -1484,4 +1871,11 @@ function bboxCenter([x, y, width, height]: [number, number, number, number]) {
 
 function distanceBetween(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function formatRecordingTime(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
