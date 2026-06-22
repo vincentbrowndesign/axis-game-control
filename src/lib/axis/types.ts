@@ -142,6 +142,90 @@ export type AxisRunDryRunGuard = {
   message: string;
 };
 
+export type AxisRunDryRunRequest = {
+  dryRun: true;
+  input: string;
+  mode: "text" | "voice" | "vision" | "image" | "video" | "file" | "report" | "automation";
+  sessionId?: string;
+  playerId?: string;
+  projectId?: string;
+  media?: {
+    id?: string;
+    type: "image" | "video" | "audio" | "file";
+    name?: string;
+    url?: string;
+    size?: number;
+  };
+  requestedOutputType?: AxisOutput["type"];
+  createdAt: string;
+};
+
+export type AxisRunDryRunResponse = {
+  ok: true;
+  dryRun: true;
+  route: "/api/axis/run";
+  receivedAt: string;
+  accepted: {
+    input: string;
+    mode: AxisRunDryRunRequest["mode"];
+    requestedOutputType?: AxisOutput["type"];
+    hasMedia: boolean;
+    sessionId?: string;
+    playerId?: string;
+    projectId?: string;
+  };
+  executionPlanPreview: {
+    router: "pending";
+    orchestrator: "pending";
+    nextAgent: string;
+    outputType: AxisOutput["type"];
+    willWrite: false;
+    willStartJob: false;
+    willCallModel: false;
+    willUploadMedia: false;
+  };
+};
+
+export type AxisRunDryRunResult =
+  | {
+      ok: true;
+      response: AxisRunDryRunResponse;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+export type AxisRunAdapterStatusPreview = {
+  label: "Adapter handshake ready" | "Adapter handshake blocked";
+  message: string;
+  route: "/api/axis/run";
+  accepted: boolean;
+  outputType?: AxisOutput["type"];
+  nextAgent?: string;
+  noWrite: boolean;
+  noJob: boolean;
+  noModelCall: boolean;
+  noUpload: boolean;
+  submitLocked: true;
+};
+
+export type AxisRunDryRunHistoryItem = {
+  id: string;
+  outputId: string;
+  outputTitle: string;
+  createdAt: string;
+  result: AxisRunDryRunResult;
+};
+
+export type AxisRunSubmitReadinessSummary = {
+  canUnlockSubmit: false;
+  label: "Submit still locked";
+  completed: string[];
+  remaining: string[];
+  message: string;
+};
+
 export type AxisCommandValidationResult =
   | {
       ok: true;

@@ -6,17 +6,29 @@ import {
   getAxisRunDryRunGuard,
   getAxisRunRouteCompatibility,
   getAxisRunSubmitGuard,
+  getAxisRunSubmitReadinessSummary,
   getAxisRunWiringChecklist,
+  mapAxisRunDryRunToAdapterStatus,
   validateAxisRunContractPreview,
 } from "../../lib/axis/client";
-import type { AxisOutput, AxisRunRequestPreview } from "../../lib/axis/types";
+import type {
+  AxisOutput,
+  AxisRunDryRunHistoryItem,
+  AxisRunDryRunResult,
+  AxisRunRequestPreview,
+  AxisRunSubmitReadinessSummary,
+} from "../../lib/axis/types";
 
 export function AxisStatus({
   activeOutput,
+  routeDryRunHistory = [],
+  routeDryRunResult,
   runPreview,
   runPreviewHistory = [],
 }: {
   activeOutput?: AxisOutput;
+  routeDryRunHistory?: AxisRunDryRunHistoryItem[];
+  routeDryRunResult?: AxisRunDryRunResult;
   runPreview?: AxisRunRequestPreview | null;
   runPreviewHistory?: AxisRunRequestPreview[];
 }) {
@@ -33,6 +45,9 @@ export function AxisStatus({
   const adapterPreview = runContract ? buildAxisRunAdapterPreview(runContract) : null;
   const dryRunGuard = runContract ? getAxisRunDryRunGuard(runContract) : null;
   const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
+  const adapterStatus = mapAxisRunDryRunToAdapterStatus(routeDryRunResult ?? null);
+  const submitReadiness = runContract ? getAxisRunSubmitReadinessSummary(runContract, routeDryRunResult) : null;
+  const recentRouteDryRuns = routeDryRunHistory.slice(0, 3);
 
   return (
     <aside className="axis-status-card" aria-label="Active run progress">
@@ -123,6 +138,32 @@ export function AxisStatus({
           </ol>
         </section>
       )}
+      {adapterStatus && (
+        <section className="axis-status-card__adapter-status" data-accepted={adapterStatus.accepted ? "true" : "false"}>
+          <p>{adapterStatus.label}</p>
+          <span>{adapterStatus.nextAgent ?? "Route dry-run checked"}</span>
+          <ul>
+            <li data-ready={adapterStatus.noWrite ? "true" : "false"}>No write</li>
+            <li data-ready={adapterStatus.noJob ? "true" : "false"}>No job</li>
+            <li data-ready={adapterStatus.noModelCall ? "true" : "false"}>No model</li>
+            <li data-ready={adapterStatus.submitLocked ? "true" : "false"}>Submit locked</li>
+          </ul>
+        </section>
+      )}
+      {recentRouteDryRuns.length > 0 && (
+        <section className="axis-status-card__dry-run-history" aria-label="Recent route dry-runs">
+          <p>Route dry-runs</p>
+          <ol>
+            {recentRouteDryRuns.map((item) => (
+              <li data-ok={item.result.ok ? "true" : "false"} key={item.id}>
+                <span>{item.result.ok ? "Ready" : "Review"}</span>
+                <strong>{item.outputTitle}</strong>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+      {submitReadiness && <SubmitReadinessSummary summary={submitReadiness} />}
       {wiringChecklist.length > 0 && (
         <section className="axis-status-card__wiring" aria-label="Local run wiring checklist">
           <p>Run wiring</p>
@@ -295,6 +336,157 @@ export function AxisStatus({
           padding-top: 0.7rem;
         }
 
+        .axis-status-card__adapter-status {
+          border-left: 2px solid rgba(121, 226, 145, 0.42);
+          border-radius: 0.65rem;
+          background: rgba(121, 226, 145, 0.055);
+          display: grid;
+          gap: 0.42rem;
+          padding: 0.58rem 0.62rem;
+        }
+
+        .axis-status-card__adapter-status[data-accepted="false"] {
+          background: rgba(255, 107, 87, 0.055);
+          border-left-color: rgba(255, 107, 87, 0.58);
+        }
+
+        .axis-status-card__adapter-status p {
+          color: rgba(244, 241, 234, 0.72);
+          font-size: 0.66rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-status-card__adapter-status span {
+          color: rgba(244, 241, 234, 0.58);
+          font-size: 0.74rem;
+          line-height: 1.35;
+        }
+
+        .axis-status-card__adapter-status ul {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.32rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-status-card__adapter-status li {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.58rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          padding: 0.14rem 0.34rem;
+          text-transform: uppercase;
+        }
+
+        .axis-status-card__adapter-status li[data-ready="true"] {
+          border-color: rgba(121, 226, 145, 0.22);
+          color: rgba(121, 226, 145, 0.7);
+        }
+
+        .axis-status-card__dry-run-history {
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          display: grid;
+          gap: 0.45rem;
+          padding-top: 0.7rem;
+        }
+
+        .axis-status-card__dry-run-history p {
+          color: rgba(244, 241, 234, 0.42);
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-status-card__dry-run-history ol {
+          display: grid;
+          gap: 0.38rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-status-card__dry-run-history li {
+          align-items: center;
+          display: grid;
+          gap: 0.42rem;
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .axis-status-card__dry-run-history li span {
+          border: 1px solid rgba(121, 226, 145, 0.24);
+          border-radius: 999px;
+          color: rgba(121, 226, 145, 0.68);
+          font-size: 0.58rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          padding: 0.14rem 0.34rem;
+          text-transform: uppercase;
+        }
+
+        .axis-status-card__dry-run-history li[data-ok="false"] span {
+          border-color: rgba(255, 107, 87, 0.24);
+          color: #ffb4a8;
+        }
+
+        .axis-status-card__dry-run-history li strong {
+          color: rgba(244, 241, 234, 0.66);
+          font-size: 0.72rem;
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .axis-status-card__submit-readiness {
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          display: grid;
+          gap: 0.45rem;
+          padding-top: 0.7rem;
+        }
+
+        .axis-status-card__submit-readiness p {
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.64rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-status-card__submit-readiness span {
+          color: rgba(244, 241, 234, 0.56);
+          font-size: 0.72rem;
+          line-height: 1.35;
+        }
+
+        .axis-status-card__submit-readiness ul {
+          display: grid;
+          gap: 0.26rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-status-card__submit-readiness li {
+          color: rgba(244, 241, 234, 0.52);
+          font-size: 0.7rem;
+          line-height: 1.3;
+        }
+
+        .axis-status-card__submit-readiness li::before {
+          color: rgba(255, 180, 168, 0.72);
+          content: "- ";
+        }
+
         .axis-status-card__wiring p {
           color: rgba(244, 241, 234, 0.42);
           font-size: 0.62rem;
@@ -391,6 +583,20 @@ export function AxisStatus({
         }
       `}</style>
     </aside>
+  );
+}
+
+function SubmitReadinessSummary({ summary }: { summary: AxisRunSubmitReadinessSummary }) {
+  return (
+    <section className="axis-status-card__submit-readiness" aria-label="Submit readiness summary">
+      <p>{summary.label}</p>
+      <span>{summary.message}</span>
+      <ul>
+        {summary.remaining.slice(0, 4).map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

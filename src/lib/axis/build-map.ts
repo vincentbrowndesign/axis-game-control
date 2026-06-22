@@ -979,4 +979,74 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
       "no backend call, route change, persistence, or run execution yet",
     ],
   },
+  {
+    id: 68,
+    title: "/api/axis/run dry-run handshake",
+    items: [
+      "local preview outputs can test /api/axis/run with dryRun true only",
+      "route returns a typed execution plan preview with no write, no job, no upload, and no model call",
+      "dry-run responses stay in the detail preview and never become Recent Outputs",
+      "route dry-run only / no side effects / submit locked",
+    ],
+  },
+  {
+    id: 69,
+    title: "Dry-run adapter status preview",
+    items: [
+      "successful route dry-runs map into a local adapter handshake status",
+      "detail preview shows accepted route, next agent, output type, and submit-locked state",
+      "no-write, no-job, no-model-call, and no-upload guarantees remain visible after the handshake",
+      "status preview only / no output creation / no real submit unlock",
+    ],
+  },
+  {
+    id: 70,
+    title: "Active run dry-run handshake status",
+    items: [
+      "route dry-run results are lifted into the active run status card for the matching local output",
+      "active run shows adapter handshake, next agent, no-side-effect guarantees, and submit-locked state",
+      "dry-run result remains local UI state keyed by output id",
+      "no output creation / no persistence / no real submit unlock",
+    ],
+  },
+  {
+    id: 71,
+    title: "Local route dry-run history",
+    items: [
+      "recent route dry-run results are tracked in local UI state",
+      "active run card shows the last few route dry-run checks with ready or review status",
+      "history clears with local preview outputs and never becomes Recent Outputs",
+      "local history only / no persistence / no real submit unlock",
+    ],
+  },
+  {
+    id: 72,
+    title: "Dry-run payload inspector",
+    items: [
+      "output detail can reveal the dry-run request and response payloads after a route test",
+      "payload inspector is hidden behind a local toggle and remains read-only",
+      "inspector does not add dry-run data to Recent Outputs or active run history",
+      "detail-only inspector / no persistence / no real submit unlock",
+    ],
+  },
+  {
+    id: 73,
+    title: "Real submit readiness summary",
+    items: [
+      "active run and output detail summarize what is complete locally before real submit",
+      "summary separates completed contract pieces from remaining execution requirements",
+      "remaining requirements include the real AxisOutput adapter, execution unlock, submit policy, and side-effect gates",
+      "readiness summary only / no route execution / no real submit unlock",
+    ],
+  },
+  {
+    id: 74,
+    title: "Route dry-run checkpoint commit",
+    items: [
+      "steps 68 through 73 are grouped as the route dry-run handshake checkpoint",
+      "checkpoint includes dry-run route branch, adapter status, history, payload inspector, and submit readiness summary",
+      "real submit remains locked after the checkpoint",
+      "checkpoint only / no jobs / no writes / no uploads / no model calls",
+    ],
+  },
 ];

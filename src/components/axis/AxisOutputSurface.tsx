@@ -4,17 +4,27 @@ import { useEffect, useState } from "react";
 import {
   buildAxisRunAdapterDryRunPreview,
   buildAxisRunAdapterPreview,
+  buildAxisRunDryRunRequest,
   createAxisRunContractPreview,
   fetchRecentAxisOutputs,
   getFallbackAxisOutputs,
   getAxisRunCompatibilityState,
   getAxisRunDryRunGuard,
   getAxisRunSubmitGuard,
+  getAxisRunSubmitReadinessSummary,
   getAxisRunWiringChecklist,
+  mapAxisRunDryRunToAdapterStatus,
+  testAxisRunDryRun,
   validateAxisRunContractPreview,
   type AxisRecentOutputsResult,
 } from "../../lib/axis/client";
-import type { AxisOutput, AxisRunRequestPreview } from "../../lib/axis/types";
+import type {
+  AxisOutput,
+  AxisRunAdapterStatusPreview,
+  AxisRunDryRunResult,
+  AxisRunRequestPreview,
+  AxisRunSubmitReadinessSummary,
+} from "../../lib/axis/types";
 
 type OutputState =
   | {
@@ -30,12 +40,14 @@ export function AxisOutputSurface({
   localOutputs = [],
   onClearLocalOutputs,
   onRetryOutput,
+  onRouteDryRunResult,
   retryableOutputIds = [],
 }: {
   localRunPreviews?: AxisRunRequestPreview[];
   localOutputs?: AxisOutput[];
   onClearLocalOutputs?: () => void;
   onRetryOutput?: (outputId: string) => void;
+  onRouteDryRunResult?: (outputId: string, result: AxisRunDryRunResult) => void;
   retryableOutputIds?: string[];
 }) {
   const [outputState, setOutputState] = useState<OutputState>({ status: "loading" });
@@ -156,6 +168,7 @@ export function AxisOutputSurface({
           canRetry={retryableOutputIds.includes(selectedOutputDetails.id)}
           onClose={() => setSelectedOutput(null)}
           onRetry={onRetryOutput ? () => onRetryOutput(selectedOutputDetails.id) : undefined}
+          onRouteDryRunResult={onRouteDryRunResult}
           output={selectedOutputDetails}
           runTrace={selectedRunTrace}
         />
@@ -623,6 +636,252 @@ export function AxisOutputSurface({
           line-height: 1.35;
         }
 
+        .axis-output-detail__dry-run-button {
+          background: rgba(121, 226, 145, 0.12);
+          border: 1px solid rgba(121, 226, 145, 0.28);
+          border-radius: 999px;
+          color: #f4f1ea;
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.76rem;
+          min-height: 2rem;
+          padding: 0 0.72rem;
+          width: fit-content;
+        }
+
+        .axis-output-detail__dry-run-button:disabled {
+          cursor: default;
+          opacity: 0.55;
+        }
+
+        .axis-output-detail__route-result {
+          background: rgba(121, 226, 145, 0.055);
+          border: 1px solid rgba(121, 226, 145, 0.14);
+          border-radius: 0.65rem;
+          display: grid;
+          gap: 0.42rem;
+          padding: 0.55rem;
+        }
+
+        .axis-output-detail__route-result p {
+          color: rgba(244, 241, 234, 0.68);
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__route-result ul {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.32rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-output-detail__route-result li {
+          border: 1px solid rgba(121, 226, 145, 0.18);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.56);
+          font-size: 0.6rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          padding: 0.16rem 0.36rem;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__adapter-status {
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-left: 2px solid rgba(121, 226, 145, 0.38);
+          border-radius: 0.65rem;
+          display: grid;
+          gap: 0.5rem;
+          padding: 0.55rem;
+        }
+
+        .axis-output-detail__adapter-status[data-accepted="false"] {
+          border-left-color: rgba(255, 107, 87, 0.58);
+        }
+
+        .axis-output-detail__adapter-status p {
+          color: rgba(244, 241, 234, 0.68);
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__adapter-status span {
+          color: rgba(244, 241, 234, 0.58);
+          font-size: 0.72rem;
+          line-height: 1.35;
+        }
+
+        .axis-output-detail__adapter-status dl {
+          gap: 0.42rem;
+        }
+
+        .axis-output-detail__adapter-status dl div {
+          background: rgba(255, 255, 255, 0.035);
+          padding: 0.5rem;
+        }
+
+        .axis-output-detail__adapter-status ul {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.32rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-output-detail__adapter-status li {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.6rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          padding: 0.16rem 0.36rem;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__adapter-status li[data-ready="true"] {
+          border-color: rgba(121, 226, 145, 0.2);
+          color: rgba(121, 226, 145, 0.68);
+        }
+
+        .axis-output-detail__submit-readiness {
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-left: 2px solid rgba(255, 180, 168, 0.5);
+          border-radius: 0.65rem;
+          display: grid;
+          gap: 0.55rem;
+          padding: 0.55rem;
+        }
+
+        .axis-output-detail__submit-readiness > p {
+          color: rgba(244, 241, 234, 0.68);
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__submit-readiness > span {
+          color: rgba(244, 241, 234, 0.58);
+          font-size: 0.72rem;
+          line-height: 1.35;
+        }
+
+        .axis-output-detail__submit-readiness-grid {
+          display: grid;
+          gap: 0.5rem;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .axis-output-detail__submit-readiness-grid div {
+          display: grid;
+          gap: 0.32rem;
+          min-width: 0;
+        }
+
+        .axis-output-detail__submit-readiness-grid strong {
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.62rem;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__submit-readiness-grid ul {
+          display: grid;
+          gap: 0.24rem;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .axis-output-detail__submit-readiness-grid li {
+          color: rgba(244, 241, 234, 0.56);
+          font-size: 0.68rem;
+          line-height: 1.3;
+        }
+
+        .axis-output-detail__submit-readiness-grid li::before {
+          color: rgba(121, 226, 145, 0.62);
+          content: "- ";
+        }
+
+        .axis-output-detail__submit-readiness-grid div:last-child li::before {
+          color: rgba(255, 180, 168, 0.72);
+        }
+
+        .axis-output-detail__payload-inspector {
+          display: grid;
+          gap: 0.5rem;
+        }
+
+        .axis-output-detail__payload-inspector > button {
+          background: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.72);
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.72rem;
+          min-height: 1.9rem;
+          padding: 0 0.65rem;
+          width: fit-content;
+        }
+
+        .axis-output-detail__payload-inspector > button:hover,
+        .axis-output-detail__payload-inspector > button:focus-visible {
+          border-color: rgba(141, 66, 255, 0.48);
+          outline: none;
+        }
+
+        .axis-output-detail__payload-json {
+          display: grid;
+          gap: 0.5rem;
+        }
+
+        .axis-output-detail__payload-json div {
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 0.65rem;
+          display: grid;
+          gap: 0.35rem;
+          min-width: 0;
+          padding: 0.55rem;
+        }
+
+        .axis-output-detail__payload-json p {
+          color: rgba(244, 241, 234, 0.5);
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__payload-json pre {
+          color: rgba(244, 241, 234, 0.68);
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+          font-size: 0.66rem;
+          line-height: 1.35;
+          margin: 0;
+          max-height: 11rem;
+          overflow: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
         .axis-output-detail__dry-run dl {
           gap: 0.45rem;
         }
@@ -736,6 +995,10 @@ export function AxisOutputSurface({
           .axis-output-detail dl {
             grid-template-columns: 1fr;
           }
+
+          .axis-output-detail__submit-readiness-grid {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </section>
@@ -769,19 +1032,84 @@ function OutputCard({
   );
 }
 
+function AdapterStatusPreview({ status }: { status: AxisRunAdapterStatusPreview }) {
+  return (
+    <div className="axis-output-detail__adapter-status" data-accepted={status.accepted ? "true" : "false"}>
+      <p>{status.label}</p>
+      <span>{status.message}</span>
+      <dl>
+        <div>
+          <dt>Route</dt>
+          <dd>{status.route}</dd>
+        </div>
+        <div>
+          <dt>Next</dt>
+          <dd>{status.nextAgent ?? "not selected"}</dd>
+        </div>
+        <div>
+          <dt>Output</dt>
+          <dd>{status.outputType ? formatOutputType(status.outputType) : "none"}</dd>
+        </div>
+        <div>
+          <dt>Submit</dt>
+          <dd>{status.submitLocked ? "locked" : "ready"}</dd>
+        </div>
+      </dl>
+      <ul>
+        <li data-ready={status.noWrite ? "true" : "false"}>No write</li>
+        <li data-ready={status.noJob ? "true" : "false"}>No job</li>
+        <li data-ready={status.noModelCall ? "true" : "false"}>No model call</li>
+        <li data-ready={status.noUpload ? "true" : "false"}>No upload</li>
+      </ul>
+    </div>
+  );
+}
+
+function SubmitReadinessDetail({ summary }: { summary: AxisRunSubmitReadinessSummary }) {
+  return (
+    <div className="axis-output-detail__submit-readiness">
+      <p>{summary.label}</p>
+      <span>{summary.message}</span>
+      <div className="axis-output-detail__submit-readiness-grid">
+        <div>
+          <strong>Done locally</strong>
+          <ul>
+            {summary.completed.slice(0, 5).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <strong>Still required</strong>
+          <ul>
+            {summary.remaining.slice(0, 5).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OutputDetailPreview({
   canRetry,
   onClose,
   onRetry,
+  onRouteDryRunResult,
   output,
   runTrace,
 }: {
   canRetry: boolean;
   onClose: () => void;
   onRetry?: () => void;
+  onRouteDryRunResult?: (outputId: string, result: AxisRunDryRunResult) => void;
   output: AxisOutput;
   runTrace?: AxisRunRequestPreview;
 }) {
+  const [routeDryRunResult, setRouteDryRunResult] = useState<AxisRunDryRunResult | null>(null);
+  const [isTestingRouteDryRun, setIsTestingRouteDryRun] = useState(false);
+  const [showDryRunPayloads, setShowDryRunPayloads] = useState(false);
   const sourceLabel = output.sourceLabel || formatOutputType(output.type);
   const runContract = runTrace ? createAxisRunContractPreview(output, runTrace) : null;
   const runPayload = runContract?.payload;
@@ -794,6 +1122,35 @@ function OutputDetailPreview({
   const adapterPreview = runContract ? buildAxisRunAdapterPreview(runContract) : null;
   const dryRunPreview = runContract ? buildAxisRunAdapterDryRunPreview(runContract) : null;
   const dryRunGuard = runContract ? getAxisRunDryRunGuard(runContract) : null;
+  const adapterStatus = mapAxisRunDryRunToAdapterStatus(routeDryRunResult);
+  const dryRunRequestPreview = runContract ? buildAxisRunDryRunRequest(runContract) : null;
+  const submitReadiness = runContract ? getAxisRunSubmitReadinessSummary(runContract, routeDryRunResult) : null;
+
+  useEffect(() => {
+    setRouteDryRunResult(null);
+    setIsTestingRouteDryRun(false);
+    setShowDryRunPayloads(false);
+  }, [output.id]);
+
+  async function testRouteDryRun() {
+    if (!runContract || !dryRunGuard?.canDryRun || isTestingRouteDryRun) return;
+
+    setIsTestingRouteDryRun(true);
+    try {
+      const result = await testAxisRunDryRun(runContract);
+      setRouteDryRunResult(result);
+      onRouteDryRunResult?.(output.id, result);
+    } catch {
+      const result: AxisRunDryRunResult = {
+        ok: false,
+        message: "Route dry-run did not finish. Try again.",
+      };
+      setRouteDryRunResult(result);
+      onRouteDryRunResult?.(output.id, result);
+    } finally {
+      setIsTestingRouteDryRun(false);
+    }
+  }
 
   return (
     <aside className="axis-output-detail" aria-label="Output detail preview">
@@ -932,6 +1289,63 @@ function OutputDetailPreview({
               <dd>{dryRunPreview.wouldCreateOutput.sourceLabel}</dd>
             </div>
           </dl>
+          {dryRunGuard?.canDryRun && (
+            <button
+              className="axis-output-detail__dry-run-button"
+              disabled={isTestingRouteDryRun}
+              onClick={testRouteDryRun}
+              type="button"
+            >
+              {isTestingRouteDryRun ? "Testing dry-run..." : "Test route dry-run"}
+            </button>
+          )}
+          {routeDryRunResult && (
+            <div className="axis-output-detail__route-result" aria-live="polite">
+              <p>{routeDryRunResult.ok ? "Route dry-run ready" : "Route dry-run needs review"}</p>
+              {routeDryRunResult.ok ? (
+                <>
+                  <span>
+                    {routeDryRunResult.response.accepted.mode} accepted -{" "}
+                    {formatOutputType(routeDryRunResult.response.executionPlanPreview.outputType)} preview.
+                  </span>
+                  <ul>
+                    <li>No write</li>
+                    <li>No job</li>
+                    <li>No model call</li>
+                    <li>No upload</li>
+                    <li>Real submit still locked</li>
+                  </ul>
+                </>
+              ) : (
+                <span>{routeDryRunResult.message}</span>
+              )}
+            </div>
+          )}
+          {adapterStatus && <AdapterStatusPreview status={adapterStatus} />}
+          {submitReadiness && <SubmitReadinessDetail summary={submitReadiness} />}
+          {routeDryRunResult && dryRunRequestPreview && (
+            <div className="axis-output-detail__payload-inspector">
+              <button
+                aria-expanded={showDryRunPayloads}
+                onClick={() => setShowDryRunPayloads((isVisible) => !isVisible)}
+                type="button"
+              >
+                {showDryRunPayloads ? "Hide payloads" : "Show payloads"}
+              </button>
+              {showDryRunPayloads && (
+                <div className="axis-output-detail__payload-json" aria-label="Dry-run payload inspector">
+                  <div>
+                    <p>Dry-run request</p>
+                    <pre>{formatJson(dryRunRequestPreview)}</pre>
+                  </div>
+                  <div>
+                    <p>Dry-run response</p>
+                    <pre>{formatJson(routeDryRunResult)}</pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
       {runResult && (
@@ -1073,5 +1487,9 @@ function formatAttachmentSize(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatJson(value: unknown) {
+  return JSON.stringify(value, null, 2);
 }
 

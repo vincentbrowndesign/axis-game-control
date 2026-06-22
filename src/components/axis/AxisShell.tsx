@@ -10,6 +10,8 @@ import type {
   AxisLocalAttachment,
   AxisMediaSource,
   AxisOutput,
+  AxisRunDryRunHistoryItem,
+  AxisRunDryRunResult,
   AxisRunRequestPreview,
   AxisSession,
 } from "../../lib/axis/types";
@@ -50,6 +52,8 @@ export function AxisShell() {
   const [activeSession, setActiveSession] = useState<AxisSession | null>(null);
   const [localFailedOutputIds, setLocalFailedOutputIds] = useState<string[]>([]);
   const [localPendingOutputs, setLocalPendingOutputs] = useState<AxisOutput[]>([]);
+  const [routeDryRunResultsByOutputId, setRouteDryRunResultsByOutputId] = useState<Record<string, AxisRunDryRunResult>>({});
+  const [routeDryRunHistory, setRouteDryRunHistory] = useState<AxisRunDryRunHistoryItem[]>([]);
   const [latestRunPreview, setLatestRunPreview] = useState<AxisRunRequestPreview | null>(null);
   const [runPreviewHistory, setRunPreviewHistory] = useState<AxisRunRequestPreview[]>([]);
   const [latestAsk, setLatestAsk] = useState<AxisAsk | null>(null);
@@ -274,6 +278,8 @@ export function AxisShell() {
     setLocalPendingOutputs([]);
     setLatestRunPreview(null);
     setRunPreviewHistory([]);
+    setRouteDryRunResultsByOutputId({});
+    setRouteDryRunHistory([]);
   }
 
   function removeLocalAttachment() {
@@ -287,6 +293,8 @@ export function AxisShell() {
       <AxisSidebar />
       <AxisStatus
         activeOutput={localPendingOutputs[0]}
+        routeDryRunResult={localPendingOutputs[0] ? routeDryRunResultsByOutputId[localPendingOutputs[0].id] : undefined}
+        routeDryRunHistory={routeDryRunHistory}
         runPreview={latestRunPreview}
         runPreviewHistory={runPreviewHistory}
       />
@@ -295,6 +303,9 @@ export function AxisShell() {
         localOutputs={localPendingOutputs}
         onClearLocalOutputs={clearLocalOutputs}
         onRetryOutput={retryLocalOutput}
+        onRouteDryRunResult={(outputId, result) =>
+          handleRouteDryRunResult(outputId, result)
+        }
         retryableOutputIds={localPendingOutputs
           .filter((output) => output.status === "failed")
           .map((output) => output.id)}
@@ -1142,6 +1153,27 @@ export function AxisShell() {
       `}</style>
     </main>
   );
+
+  function handleRouteDryRunResult(outputId: string, result: AxisRunDryRunResult) {
+    const output = localPendingOutputs.find((item) => item.id === outputId);
+
+    setRouteDryRunResultsByOutputId((results) => ({
+      ...results,
+      [outputId]: result,
+    }));
+    setRouteDryRunHistory((items) =>
+      [
+        {
+          id: createLocalId("axis-dry-run-history"),
+          outputId,
+          outputTitle: output?.title ?? "Axis output",
+          createdAt: new Date().toISOString(),
+          result,
+        },
+        ...items,
+      ].slice(0, 5),
+    );
+  }
 }
 
 function createLocalId(prefix = "axis-session") {

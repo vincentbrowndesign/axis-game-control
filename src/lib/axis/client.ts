@@ -5,6 +5,10 @@ import type {
   AxisRunCompatibilityState,
   AxisRunContractPreview,
   AxisRunContractValidation,
+  AxisRunAdapterStatusPreview,
+  AxisRunDryRunRequest,
+  AxisRunDryRunResponse,
+  AxisRunDryRunResult,
   AxisRunExecutionState,
   AxisRunAdapterPreview,
   AxisRunDryRunGuard,
@@ -13,6 +17,7 @@ import type {
   AxisRunResultEnvelope,
   AxisRunRouteCompatibility,
   AxisRunSubmitGuard,
+  AxisRunSubmitReadinessSummary,
   AxisRunWiringChecklistItem,
 } from "./types";
 
@@ -128,12 +133,11 @@ export function getAxisRunRouteCompatibility(contract: AxisRunContractPreview): 
   const validation = validateAxisRunContractPreview(contract);
 
   if (!validation.ok) missing.push(validation.label);
-  missing.push("side-effect-safe route adapter implementation");
-  missing.push("dry-run route guard");
+  missing.push("real AxisOutput adapter implementation");
   missing.push("explicit submit unlock");
 
   return {
-    canDryRun: false,
+    canDryRun: validation.ok,
     canSubmit: false,
     compatible: validation.ok,
     missing,
@@ -190,11 +194,154 @@ export function buildAxisRunAdapterDryRunPreview(contract: AxisRunContractPrevie
   };
 }
 
-export function getAxisRunDryRunGuard(_contract: AxisRunContractPreview): AxisRunDryRunGuard {
+export function getAxisRunDryRunGuard(contract: AxisRunContractPreview): AxisRunDryRunGuard {
+  const validation = validateAxisRunContractPreview(contract);
+
+  if (!validation.ok) {
+    return {
+      canDryRun: false,
+      label: "Dry run needs review",
+      message: validation.message,
+    };
+  }
+
   return {
-    canDryRun: false,
-    label: "Dry run locked",
-    message: "Local simulation is available, but no side-effect-safe route dry run is wired yet.",
+    canDryRun: true,
+    label: "Route dry-run ready",
+    message: "No write, no job, no model call. Real submit is still locked.",
+  };
+}
+
+export function buildAxisRunDryRunRequest(contract: AxisRunContractPreview): AxisRunDryRunRequest {
+  const payload = contract.payload;
+  const requestedOutputType = payload?.outputType ?? contract.result.output.type;
+  const media = payload?.localAttachment
+    ? {
+        id: payload.localAttachment.id,
+        type: payload.localAttachment.type,
+        name: payload.localAttachment.name,
+        size: payload.localAttachment.size,
+      }
+    : undefined;
+
+  return {
+    dryRun: true,
+    input: payload?.inputText ?? contract.result.output.title,
+    mode: mapAxisOutputTypeToDryRunMode(requestedOutputType),
+    sessionId: payload?.sessionId,
+    projectId: payload?.currentProject,
+    media,
+    requestedOutputType,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export async function testAxisRunDryRun(contract: AxisRunContractPreview): Promise<AxisRunDryRunResult> {
+  const guard = getAxisRunDryRunGuard(contract);
+  if (!guard.canDryRun) {
+    return {
+      ok: false,
+      message: guard.message,
+    };
+  }
+
+  const response = await fetch(AXIS_RUN_TARGET_ROUTE, {
+    body: JSON.stringify(buildAxisRunDryRunRequest(contract)),
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+  const payload = (await response.json().catch(() => null)) as unknown;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: getDryRunErrorMessage(payload) || "Route dry-run did not finish. Try again.",
+    };
+  }
+
+  if (!isAxisRunDryRunResponse(payload)) {
+    return {
+      ok: false,
+      message: "Route dry-run returned an unexpected preview shape.",
+    };
+  }
+
+  return {
+    ok: true,
+    response: payload,
+  };
+}
+
+export function mapAxisRunDryRunToAdapterStatus(
+  result: AxisRunDryRunResult | null,
+): AxisRunAdapterStatusPreview | null {
+  if (!result) return null;
+
+  if (!result.ok) {
+    return {
+      accepted: false,
+      label: "Adapter handshake blocked",
+      message: result.message,
+      noJob: true,
+      noModelCall: true,
+      noUpload: true,
+      noWrite: true,
+      route: AXIS_RUN_TARGET_ROUTE,
+      submitLocked: true,
+    };
+  }
+
+  const plan = result.response.executionPlanPreview;
+
+  return {
+    accepted: true,
+    label: "Adapter handshake ready",
+    message: "Dry-run route accepted the local run payload and returned a no-side-effect execution preview.",
+    nextAgent: plan.nextAgent,
+    noJob: !plan.willStartJob,
+    noModelCall: !plan.willCallModel,
+    noUpload: !plan.willUploadMedia,
+    noWrite: !plan.willWrite,
+    outputType: plan.outputType,
+    route: result.response.route,
+    submitLocked: true,
+  };
+}
+
+export function getAxisRunSubmitReadinessSummary(
+  contract: AxisRunContractPreview,
+  dryRunResult?: AxisRunDryRunResult | null,
+): AxisRunSubmitReadinessSummary {
+  const validation = validateAxisRunContractPreview(contract);
+  const dryRunAccepted = dryRunResult?.ok === true;
+  const completed = [
+    "typed local payload",
+    "AxisOutput result envelope",
+    "submit guard",
+    ...(validation.ok ? ["contract validation"] : []),
+    ...(dryRunAccepted ? ["route dry-run handshake"] : []),
+    ...(dryRunAccepted ? ["no-side-effect route preview"] : []),
+  ];
+  const remaining = [
+    ...(!validation.ok ? [validation.label] : []),
+    ...(!dryRunAccepted ? ["successful route dry-run"] : []),
+    "real AxisOutput adapter implementation",
+    "execution feature flag unlock",
+    "server-side submit policy",
+    "side-effect gates for writes, jobs, uploads, and model calls",
+  ];
+
+  return {
+    canUnlockSubmit: false,
+    completed,
+    label: "Submit still locked",
+    message: dryRunAccepted
+      ? "Dry-run proved the route handshake. Real submit still needs the execution adapter and side-effect gates."
+      : "Local contract is prepared, but real submit needs a successful route dry-run and execution adapter work.",
+    remaining,
   };
 }
 
@@ -237,6 +384,25 @@ function buildAxisRunPayloadPreview(payload: AxisRunPayload | undefined) {
     message: payload?.inputText ?? "",
     threadId: payload?.sessionId ?? null,
   };
+}
+
+function mapAxisOutputTypeToDryRunMode(outputType: AxisOutput["type"]): AxisRunDryRunRequest["mode"] {
+  if (outputType === "audio") return "voice";
+  if (outputType === "clip") return "video";
+  if (outputType === "image") return "image";
+  return outputType;
+}
+
+function isAxisRunDryRunResponse(value: unknown): value is AxisRunDryRunResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.ok === true && record.dryRun === true && record.route === AXIS_RUN_TARGET_ROUTE;
+}
+
+function getDryRunErrorMessage(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const record = value as Record<string, unknown>;
+  return typeof record.error === "string" ? record.error : "";
 }
 
 export function getAxisRunSubmitGuard(contract: AxisRunContractPreview): AxisRunSubmitGuard {

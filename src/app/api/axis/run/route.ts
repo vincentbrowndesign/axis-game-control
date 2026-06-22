@@ -24,6 +24,7 @@ import {
   filterAxisMovementPrimitives,
 } from "../../../../lib/axis-movement-language";
 import { runAxisOperatingSystem } from "../../../../lib/axis-operating-system";
+import type { AxisOutput, AxisRunDryRunRequest, AxisRunDryRunResponse } from "../../../../lib/axis/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -841,13 +842,18 @@ export async function POST(req: Request) {
 }
 
 async function handleRunCanonical(req: Request): Promise<Response> {
-  let body: RunRequest;
+  let rawBody: unknown;
   try {
-    body = (await req.json()) as RunRequest;
+    rawBody = await req.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  if (isRecord(rawBody) && "dryRun" in rawBody) {
+    return handleDryRun(rawBody);
+  }
+
+  const body = rawBody as RunRequest;
   const message = body.message?.trim();
   const hasAttachment = !!body.attachmentUrl;
   const isAttachmentOnly = hasAttachment && !message;
@@ -1022,4 +1028,148 @@ async function handleRunCanonical(req: Request): Promise<Response> {
     operatingSystem: response.operatingSystem,
     sidebarThreads: sidebarData ?? [],
   });
+}
+
+function handleDryRun(body: Record<string, unknown>): Response {
+  const validation = validateDryRunRequest(body);
+  if (!validation.ok) {
+    return Response.json({ error: validation.error }, { status: 400 });
+  }
+
+  const request = validation.request;
+  const response: AxisRunDryRunResponse = {
+    ok: true,
+    dryRun: true,
+    route: "/api/axis/run",
+    receivedAt: new Date().toISOString(),
+    accepted: {
+      input: request.input.trim(),
+      mode: request.mode,
+      requestedOutputType: request.requestedOutputType,
+      hasMedia: Boolean(request.media),
+      sessionId: request.sessionId,
+      playerId: request.playerId,
+      projectId: request.projectId,
+    },
+    executionPlanPreview: {
+      router: "pending",
+      orchestrator: "pending",
+      nextAgent: getDryRunNextAgent(request.mode),
+      outputType: request.requestedOutputType ?? getDryRunOutputType(request.mode),
+      willWrite: false,
+      willStartJob: false,
+      willCallModel: false,
+      willUploadMedia: false,
+    },
+  };
+
+  return Response.json(response);
+}
+
+function validateDryRunRequest(
+  body: Record<string, unknown>,
+): { ok: true; request: AxisRunDryRunRequest } | { error: string; ok: false } {
+  if (body.dryRun !== true) {
+    return { error: "Dry run must be true.", ok: false };
+  }
+
+  const input = typeof body.input === "string" ? body.input.trim() : "";
+  if (!input) {
+    return { error: "Add an input before testing the route dry-run.", ok: false };
+  }
+
+  if (!isDryRunMode(body.mode)) {
+    return { error: "Choose a supported Axis mode before testing the route dry-run.", ok: false };
+  }
+
+  const media = parseDryRunMedia(body.media);
+  if ((body.mode === "video" || body.mode === "file") && !media) {
+    return { error: "Attach media before testing a video or file dry-run.", ok: false };
+  }
+
+  const requestedOutputType = isAxisOutputType(body.requestedOutputType)
+    ? body.requestedOutputType
+    : undefined;
+
+  return {
+    ok: true,
+    request: {
+      dryRun: true,
+      input,
+      mode: body.mode,
+      sessionId: getOptionalString(body.sessionId),
+      playerId: getOptionalString(body.playerId),
+      projectId: getOptionalString(body.projectId),
+      media,
+      requestedOutputType,
+      createdAt: getOptionalString(body.createdAt) ?? new Date().toISOString(),
+    },
+  };
+}
+
+function parseDryRunMedia(value: unknown): AxisRunDryRunRequest["media"] | undefined {
+  if (!isRecord(value)) return undefined;
+  if (!isDryRunMediaType(value.type)) return undefined;
+
+  return {
+    id: getOptionalString(value.id),
+    type: value.type,
+    name: getOptionalString(value.name),
+    url: getOptionalString(value.url),
+    size: typeof value.size === "number" && Number.isFinite(value.size) ? value.size : undefined,
+  };
+}
+
+function getDryRunNextAgent(mode: AxisRunDryRunRequest["mode"]) {
+  if (mode === "voice") return "Voice Agent";
+  if (mode === "vision" || mode === "image") return "Vision Agent";
+  if (mode === "video") return "Video Understanding Agent";
+  if (mode === "report") return "Report Agent";
+  if (mode === "automation") return "Follow-Up / Sales Agent";
+  if (mode === "file") return "Media Intake Agent";
+  return "Axis LLM Orchestrator Agent";
+}
+
+function getDryRunOutputType(mode: AxisRunDryRunRequest["mode"]): AxisOutput["type"] {
+  if (mode === "voice") return "audio";
+  if (mode === "vision" || mode === "image") return "image";
+  return mode;
+}
+
+function isDryRunMode(value: unknown): value is AxisRunDryRunRequest["mode"] {
+  return (
+    value === "text" ||
+    value === "voice" ||
+    value === "vision" ||
+    value === "image" ||
+    value === "video" ||
+    value === "file" ||
+    value === "report" ||
+    value === "automation"
+  );
+}
+
+function isAxisOutputType(value: unknown): value is AxisOutput["type"] {
+  return (
+    value === "text" ||
+    value === "audio" ||
+    value === "image" ||
+    value === "video" ||
+    value === "clip" ||
+    value === "report" ||
+    value === "automation" ||
+    value === "file"
+  );
+}
+
+function isDryRunMediaType(value: unknown): value is NonNullable<AxisRunDryRunRequest["media"]>["type"] {
+  return value === "image" || value === "video" || value === "audio" || value === "file";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function getOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
