@@ -1,5 +1,5 @@
-import { AxisShell } from "../../components/axis/AxisShell";
+import AxisLiveVision from "../../components/axis/AxisLiveVision";
 
 export default function AxisPage() {
-  return <AxisShell />;
+  return <AxisLiveVision />;
 }
