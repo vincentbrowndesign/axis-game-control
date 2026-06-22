@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+/* eslint-disable react-hooks/immutability, react-hooks/purity, react-hooks/refs */
+
+import { useEffect, useRef, useState } from "react";
 import {
   loadAxisLiveDetector,
   type AxisLiveDetector,
@@ -26,8 +28,17 @@ type AiStatus = "idle" | "running" | "error";
 type FacingMode = "environment" | "user";
 type CalMode = AxisCalibrationState["mode"];
 type PlayerAssignments = Record<string, string>;
+type LockedPlayers = Record<string, boolean>;
 type VisionStatus = "idle" | "starting_camera" | "camera_ready" | "loading_ai" | "running" | "error" | "stopped";
 type RecordingStatus = "idle" | "recording" | "stopping" | "ready" | "error";
+type DrillZonePoint = { x: number; y: number };
+type DrillZone = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  createdAt: number;
+};
 
 type RecordingMetadata = {
   recordingStartedAt?: number;
@@ -40,6 +51,7 @@ type RecordingMetadata = {
 
 const inferenceIntervalMs = 200;
 const maxStoredFrames = 600;
+const defaultMaxDisplayedPlayers = 5;
 const MONO = "700 11px ui-monospace, SFMono-Regular, Menlo, monospace";
 
 function createSessionId() {
@@ -88,8 +100,11 @@ export default function AxisLiveVision() {
   const calibrationRef = useRef<AxisCalibrationState>(defaultCal());
   const ballTrailRef = useRef<AxisBallTrailState>({ points: [], visible: false });
   const playerAssignmentsRef = useRef<PlayerAssignments>({});
+  const lockedPlayersRef = useRef<LockedPlayers>({});
+  const displayLabelsRef = useRef<Record<string, string>>({});
   const showTrailRef = useRef(true);
   const showCalibrationRef = useRef(true);
+  const drillZoneRef = useRef<DrillZone | null>(null);
   const floorTapCountRef = useRef(0);
 
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
@@ -121,14 +136,18 @@ export default function AxisLiveVision() {
   const [calibrationMenuOpen, setCalibrationMenuOpen] = useState(false);
   const [ballTrail, setBallTrail] = useState<AxisBallTrailState>({ points: [], visible: false });
   const [playerAssignments, setPlayerAssignments] = useState<PlayerAssignments>({});
+  const [lockedPlayers, setLockedPlayers] = useState<LockedPlayers>({});
   const [selectedPlayerTrackId, setSelectedPlayerTrackId] = useState<string | null>(null);
   const [playerNameDraft, setPlayerNameDraft] = useState("");
   const [showTrail, setShowTrail] = useState(true);
-
-  const peopleCount = useMemo(
-    () => activeTracks.filter((t) => t.kind === "person").length,
-    [activeTracks],
-  );
+  const [maxDisplayedPlayers] = useState(defaultMaxDisplayedPlayers);
+  const [showConfidence, setShowConfidence] = useState(false);
+  const [showRawTrackIds, setShowRawTrackIds] = useState(false);
+  const [showAllDetections, setShowAllDetections] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [drillZone, setDrillZone] = useState<DrillZone | null>(null);
+  const [drillZoneMode, setDrillZoneMode] = useState(false);
+  const [drillZoneDraft, setDrillZoneDraft] = useState<DrillZonePoint | null>(null);
 
   useEffect(() => {
     return () => {
@@ -153,6 +172,14 @@ export default function AxisLiveVision() {
   }, [playerAssignments]);
 
   useEffect(() => {
+    lockedPlayersRef.current = lockedPlayers;
+  }, [lockedPlayers]);
+
+  useEffect(() => {
+    drillZoneRef.current = drillZone;
+  }, [drillZone]);
+
+  useEffect(() => {
     if (recordingStatus !== "recording" || recordingStartedAt === null) return undefined;
 
     const interval = window.setInterval(() => {
@@ -166,7 +193,7 @@ export default function AxisLiveVision() {
     tracksRef.current = activeTracks;
     drawDetections(activeTracks);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail, playerAssignments]);
+  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail, playerAssignments, lockedPlayers, showConfidence, showRawTrackIds, showAllDetections, drillZone]);
 
   // ─── Canvas click / calibration ────────────────────────────────
 
@@ -190,6 +217,26 @@ export default function AxisLiveVision() {
     const coords = getVideoCoords(e);
     if (!coords) return;
     const { vx, vy } = coords;
+
+    if (drillZoneMode) {
+      if (!drillZoneDraft) {
+        setDrillZoneDraft({ x: vx, y: vy });
+        return;
+      }
+
+      const nextZone: DrillZone = {
+        createdAt: Date.now(),
+        height: Math.abs(vy - drillZoneDraft.y),
+        width: Math.abs(vx - drillZoneDraft.x),
+        x: Math.min(vx, drillZoneDraft.x),
+        y: Math.min(vy, drillZoneDraft.y),
+      };
+      drillZoneRef.current = nextZone;
+      setDrillZone(nextZone);
+      setDrillZoneDraft(null);
+      setDrillZoneMode(false);
+      return;
+    }
 
     if (mode === "off") {
       openPlayerAssignmentFromPoint(vx, vy);
@@ -307,7 +354,7 @@ export default function AxisLiveVision() {
   }
 
   function findPersonTrackAtPoint(x: number, y: number) {
-    const personTracks = tracksRef.current.filter((track) => track.kind === "person");
+    const personTracks = getDisplayedTracks(tracksRef.current).filter((track) => track.kind === "person");
     const paddedHit = personTracks
       .filter((track) => pointInsidePaddedBbox(x, y, track.bbox, 34))
       .sort((a, b) => bboxArea(a.bbox) - bboxArea(b.bbox))[0];
@@ -327,10 +374,20 @@ export default function AxisLiveVision() {
   }
 
   function openPlayerAssignment(trackId: string) {
+    lockPlayer(trackId);
     setSelectedPlayerTrackId(trackId);
     setPlayerNameDraft(playerAssignmentsRef.current[trackId] ?? "");
     setEvidencePanelOpen(false);
     setCalibrationMenuOpen(false);
+    setToolsOpen(false);
+  }
+
+  function lockPlayer(trackId: string) {
+    setLockedPlayers((current) => {
+      const next = { ...current, [trackId]: true };
+      lockedPlayersRef.current = next;
+      return next;
+    });
   }
 
   function toggleCalibrationMenu() {
@@ -352,6 +409,7 @@ export default function AxisLiveVision() {
       playerAssignmentsRef.current = next;
       return next;
     });
+    lockPlayer(selectedPlayerTrackId);
     setSelectedPlayerTrackId(null);
     setPlayerNameDraft("");
   }
@@ -375,7 +433,39 @@ export default function AxisLiveVision() {
 
   function clearPlayerTags() {
     playerAssignmentsRef.current = {};
+    lockedPlayersRef.current = {};
     setPlayerAssignments({});
+    setLockedPlayers({});
+  }
+
+  function startDrillZone() {
+    if (recordingStatus === "recording") {
+      setLastError("Stop recording before setting Drill Zone.");
+      return;
+    }
+
+    const nextCalibration: AxisCalibrationState = { ...calibrationRef.current, mode: "off", updatedAt: Date.now() };
+    calibrationRef.current = nextCalibration;
+    setCalibration(nextCalibration);
+    setCalibrationMode("off");
+    setCalibrationMenuOpen(false);
+    setToolsOpen(false);
+    setEvidencePanelOpen(false);
+    cancelPlayerAssignment();
+    setDrillZoneDraft(null);
+    setDrillZoneMode(true);
+  }
+
+  function clearDrillZone() {
+    drillZoneRef.current = null;
+    setDrillZone(null);
+    setDrillZoneDraft(null);
+    setDrillZoneMode(false);
+  }
+
+  function cancelDrillZone() {
+    setDrillZoneDraft(null);
+    setDrillZoneMode(false);
   }
 
   // ─── Camera / AI ────────────────────────────────────────────────
@@ -625,6 +715,60 @@ export default function AxisLiveVision() {
     drawAxisOverlay(ctx, rect.width, rect.height, video, nextTracks);
   }
 
+  function getDisplayLabel(track: AxisVisionTrack) {
+    if (showRawTrackIds) return track.trackId;
+    const assignedName = playerAssignmentsRef.current[track.trackId];
+    if (assignedName) return assignedName;
+
+    if (!displayLabelsRef.current[track.trackId]) {
+      const used = new Set(Object.values(displayLabelsRef.current));
+      let nextIndex = 1;
+      while (used.has(`P${nextIndex}`)) nextIndex += 1;
+      displayLabelsRef.current[track.trackId] = `P${nextIndex}`;
+    }
+
+    return displayLabelsRef.current[track.trackId];
+  }
+
+  function isTrackInDrillZone(track: AxisVisionTrack) {
+    const zone = drillZoneRef.current;
+    if (!zone || track.kind === "ball") return true;
+    const center = bboxCenter(track.bbox);
+    return center.x >= zone.x
+      && center.x <= zone.x + zone.width
+      && center.y >= zone.y
+      && center.y <= zone.y + zone.height;
+  }
+
+  function getDisplayedTracks(nextTracks: AxisVisionTrack[]) {
+    if (showAllDetections) return nextTracks;
+
+    const balls = nextTracks.filter((track) => track.kind === "ball");
+    const people = nextTracks
+      .filter((track) => track.kind === "person")
+      .map((track) => {
+        const assigned = Boolean(playerAssignmentsRef.current[track.trackId]);
+        const locked = Boolean(lockedPlayersRef.current[track.trackId]);
+        const inZone = isTrackInDrillZone(track);
+        const priority = (assigned ? 1_000 : 0)
+          + (locked ? 500 : 0)
+          + (inZone ? 100 : -500)
+          + track.score * 10
+          + bboxArea(track.bbox) / 100_000;
+        return { assigned, inZone, locked, priority, track };
+      })
+      .filter((item) => item.assigned || item.locked || item.inZone)
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, maxDisplayedPlayers)
+      .map((item) => item.track);
+
+    return [...people, ...balls];
+  }
+
+  function getDisplayPeopleCount(nextTracks = tracksRef.current) {
+    return getDisplayedTracks(nextTracks).filter((track) => track.kind === "person").length;
+  }
+
   function drawAxisOverlay(
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -639,28 +783,34 @@ export default function AxisLiveVision() {
     const ox = (width - vw * scale) / 2;
     const oy = (height - vh * scale) / 2;
 
-    for (const track of nextTracks) {
+    const displayedTracks = getDisplayedTracks(nextTracks);
+
+    drawDrillZone(ctx, drillZoneRef.current, ox, oy, scale);
+
+    for (const track of displayedTracks) {
       const [x, y, w, h] = track.bbox;
       const bx = ox + x * scale;
       const by = oy + y * scale;
       const bw = w * scale;
       const bh = h * scale;
+      const outsideZone = !isTrackInDrillZone(track);
       const color = track.kind === "ball" ? "#f8d45c" : "#7cf7d4";
-      const assignedName = playerAssignmentsRef.current[track.trackId];
       const label = track.kind === "ball"
-        ? `${track.trackId} BALL ${Math.round(track.score * 100)}%`
-        : `${assignedName || track.trackId} ${Math.round(track.score * 100)}%`;
+        ? `BALL${showConfidence ? ` ${Math.round(track.score * 100)}%` : ""}`
+        : `${getDisplayLabel(track)}${showConfidence ? ` ${Math.round(track.score * 100)}%` : ""}`;
 
       ctx.strokeStyle = color;
-      ctx.lineWidth = track.kind === "ball" ? 3 : 2;
+      ctx.globalAlpha = outsideZone ? 0.35 : 1;
+      ctx.lineWidth = track.kind === "ball" ? 2 : 1.4;
       ctx.strokeRect(bx, by, bw, bh);
 
-      ctx.fillStyle = "rgba(0,0,0,0.72)";
-      const lw = Math.max(78, ctx.measureText(label).width + 18);
-      ctx.fillRect(bx, Math.max(0, by - 28), lw, 24);
+      ctx.fillStyle = "rgba(0,0,0,0.58)";
+      const lw = Math.max(44, ctx.measureText(label).width + 14);
+      ctx.fillRect(bx, Math.max(0, by - 22), lw, 19);
       ctx.fillStyle = color;
       ctx.font = MONO;
-      ctx.fillText(label, bx + 9, Math.max(16, by - 11));
+      ctx.fillText(label, bx + 7, Math.max(14, by - 8));
+      ctx.globalAlpha = 1;
     }
 
     if (showCalibrationRef.current) drawCalibration(ctx, calibrationRef.current, ox, oy, scale);
@@ -678,7 +828,7 @@ export default function AxisLiveVision() {
       ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, monospace";
       ctx.fillText(`AXIS REC ${formatRecordingTime(elapsed)}`, 47, 47);
       ctx.font = MONO;
-      ctx.fillText(`${activeTracks.length} TRACKS · ${peopleCount} PEOPLE`, 28, 65);
+      ctx.fillText(`${getDisplayPeopleCount(nextTracks)}/${maxDisplayedPlayers} ACTIVE`, 28, 65);
     }
   }
 
@@ -745,6 +895,40 @@ export default function AxisLiveVision() {
     }
   }
 
+  function drawDrillZone(
+    ctx: CanvasRenderingContext2D,
+    zone: DrillZone | null,
+    ox: number,
+    oy: number,
+    scale: number,
+  ) {
+    if (!zone && !drillZoneDraft) return;
+
+    ctx.save();
+    ctx.strokeStyle = "#f8d45c";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+
+    if (zone) {
+      ctx.strokeRect(ox + zone.x * scale, oy + zone.y * scale, zone.width * scale, zone.height * scale);
+      ctx.fillStyle = "rgba(248, 212, 92, 0.72)";
+      ctx.font = MONO;
+      ctx.fillText("DRILL ZONE", ox + zone.x * scale + 8, oy + zone.y * scale + 16);
+    }
+
+    if (drillZoneDraft) {
+      const x = ox + drillZoneDraft.x * scale;
+      const y = oy + drillZoneDraft.y * scale;
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#f8d45c";
+      ctx.fillText("ZONE A", x + 10, y + 4);
+    }
+
+    ctx.restore();
+  }
+
   function drawTrail(
     ctx: CanvasRenderingContext2D,
     trail: AxisBallTrailState,
@@ -793,8 +977,36 @@ export default function AxisLiveVision() {
     const trail = ballTrailRef.current;
     return {
       ...base,
+      ballTrackingNote: "COCO-SSD sports ball detection is experimental and not verified game truth.",
       calibration: calibrationRef.current,
+      display: {
+        debug: {
+          showAllDetections,
+          showConfidence,
+          showRawTrackIds,
+        },
+        displayedPlayers: getDisplayedTracks(tracksRef.current)
+          .filter((track) => track.kind === "person")
+          .map((track) => ({
+            displayTrackId: getDisplayLabel(track),
+            playerName: playerAssignmentsRef.current[track.trackId],
+            rawTrackId: track.trackId,
+          })),
+        drillZone: drillZoneRef.current,
+        maxDisplayedPlayers,
+      },
       playerAssignments: playerAssignmentsRef.current,
+      playerDisplayAssignments: Object.fromEntries(
+        Object.entries(displayLabelsRef.current).map(([rawTrackId, displayTrackId]) => [
+          rawTrackId,
+          {
+            displayTrackId,
+            locked: Boolean(lockedPlayersRef.current[rawTrackId]),
+            playerName: playerAssignmentsRef.current[rawTrackId],
+            rawTrackId,
+          },
+        ]),
+      ),
       recording: recordingMetadata ?? {
         recordingIncludesOverlay: true,
         recordingMimeType: recordingMimeTypeRef.current || undefined,
@@ -909,6 +1121,7 @@ export default function AxisLiveVision() {
       setRecordingMetadata(null);
       setEvidencePanelOpen(false);
       setCalibrationMenuOpen(false);
+      setToolsOpen(false);
       setLastError("");
 
       recorder.ondataavailable = (event) => {
@@ -1047,6 +1260,9 @@ export default function AxisLiveVision() {
     recentBallLostRef.current = false;
     ballTrailRef.current = { points: [], visible: false };
     playerAssignmentsRef.current = {};
+    lockedPlayersRef.current = {};
+    displayLabelsRef.current = {};
+    drillZoneRef.current = null;
     setSessionId(nextId);
     setSessionStartedAt(nextAt);
     setVisionFrames([]);
@@ -1058,6 +1274,10 @@ export default function AxisLiveVision() {
     setBallLostCount(0);
     setBallTrail({ points: [], visible: false });
     setPlayerAssignments({});
+    setLockedPlayers({});
+    setDrillZone(null);
+    setDrillZoneDraft(null);
+    setDrillZoneMode(false);
     drawDetections([]);
   }
 
@@ -1083,16 +1303,22 @@ export default function AxisLiveVision() {
       ? "Stopping"
       : "Record";
 
-  const calActive = calibrationMode !== "off";
-  const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Searching";
+  const calActive = calibrationMode !== "off" || drillZoneMode;
+  const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Experimental";
   const ballDirection = ballTrail.direction ?? "unknown";
   const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
   const playerAssignmentEntries = Object.entries(playerAssignments);
   const activePersonTracks = activeTracks.filter((track) => track.kind === "person");
+  const displayedPeopleCount = getDisplayPeopleCount(activeTracks);
+  const rawPeopleCount = activePersonTracks.length;
   const selectedPlayerTrack = selectedPlayerTrackId
     ? activeTracks.find((track) => track.trackId === selectedPlayerTrackId)
     : null;
-  const calibrationInstruction = calibrationMode === "set_rim"
+  const calibrationInstruction = drillZoneMode
+    ? drillZoneDraft
+      ? "Tap opposite corner of Drill Zone"
+      : "Tap first corner of Drill Zone"
+    : calibrationMode === "set_rim"
     ? "Tap video to set rim"
     : calibrationMode === "set_floor"
       ? floorTapCountRef.current === 0
@@ -1102,7 +1328,7 @@ export default function AxisLiveVision() {
         ? calibration.paintPoints.length === 0
           ? "Tap paint point A"
           : "Tap paint point B"
-        : "";
+      : "";
 
   return (
     <main className={`axis-live-vision${gymMode ? " axis-live-vision--gym" : ""}`}>
@@ -1143,7 +1369,13 @@ export default function AxisLiveVision() {
           <p>AXIS LIVE</p>
         </div>
         {calActive ? (
-          <button className="axis-live-vision__cancel" onClick={cancelCalibration} type="button">Cancel</button>
+          <button
+            className="axis-live-vision__cancel"
+            onClick={drillZoneMode ? cancelDrillZone : cancelCalibration}
+            type="button"
+          >
+            Cancel
+          </button>
         ) : (
           <span data-live={isCameraLive ? "true" : "false"}>{isCameraLive ? "LIVE" : cameraStatus.toUpperCase()}</span>
         )}
@@ -1153,7 +1385,7 @@ export default function AxisLiveVision() {
         <aside className="axis-live-vision__quick-status" aria-label="Live detection status">
           <span>AI {aiStatus === "running" ? "Running" : modelStatus}</span>
           <span>Ball {ballStatus}</span>
-          <span>People {peopleCount}</span>
+          <span>Active {displayedPeopleCount}/{maxDisplayedPlayers}</span>
           {isRecording && <span className="axis-live-vision__rec-pill">REC {formatRecordingTime(recordingElapsedMs)}</span>}
         </aside>
       )}
@@ -1171,7 +1403,10 @@ export default function AxisLiveVision() {
                 <div><dt>Frames</dt><dd>{visionFrames.length}</dd></div>
                 <div><dt>Tracks</dt><dd>{activeTrackLabel}</dd></div>
                 <div><dt>Active tracks</dt><dd>{activeTracks.map((t) => t.trackId).join(", ") || "None"}</dd></div>
+                <div><dt>Raw people</dt><dd>{rawPeopleCount}</dd></div>
+                <div><dt>Displayed people</dt><dd>{displayedPeopleCount}/{maxDisplayedPlayers}</dd></div>
                 <div><dt>Max people</dt><dd>{maxPeopleCount}</dd></div>
+                <div><dt>Ball tracking</dt><dd>Experimental COCO-SSD signal</dd></div>
                 <div><dt>Ball seen</dt><dd>{ballSeenFramesRef.current}</dd></div>
                 <div><dt>Ball lost</dt><dd>{ballLostCount}</dd></div>
                 <div><dt>Ball direction</dt><dd>{ballDirection}</dd></div>
@@ -1187,6 +1422,7 @@ export default function AxisLiveVision() {
                 <div><dt>Rim</dt><dd>{calibration.rim ? "Set" : "Not set"}</dd></div>
                 <div><dt>Floor</dt><dd>{calibration.floorLine ? "Set" : "Not set"}</dd></div>
                 <div><dt>Paint</dt><dd>{calibration.paintPoints.length >= 2 ? "Set" : "Not set"}</dd></div>
+                <div><dt>Drill Zone</dt><dd>{drillZone ? "Set" : "Not set"}</dd></div>
                 <div><dt>Trail</dt><dd>{showTrail ? "On" : "Off"}</dd></div>
               </dl>
               <button
@@ -1206,7 +1442,7 @@ export default function AxisLiveVision() {
                 {activePersonTracks.length > 0 ? (
                   activePersonTracks.map((track) => (
                     <div className="axis-live-vision__player-tag-row" key={track.trackId}>
-                      <span>{track.trackId}</span>
+                      <span>{getDisplayLabel(track)}</span>
                       <strong>{playerAssignments[track.trackId] || "Unknown"}</strong>
                       <button onClick={() => openPlayerAssignment(track.trackId)} type="button">Edit</button>
                     </div>
@@ -1217,9 +1453,19 @@ export default function AxisLiveVision() {
               </div>
               <div className="axis-live-vision__evidence-actions">
                 {isCameraLive && <button onClick={flipCamera} type="button">Flip Camera</button>}
+                <button onClick={() => setShowConfidence((value) => !value)} type="button">
+                  Show Confidence {showConfidence ? "On" : "Off"}
+                </button>
+                <button onClick={() => setShowRawTrackIds((value) => !value)} type="button">
+                  Show Raw IDs {showRawTrackIds ? "On" : "Off"}
+                </button>
+                <button onClick={() => setShowAllDetections((value) => !value)} type="button">
+                  Show All Detections {showAllDetections ? "On" : "Off"}
+                </button>
                 <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
                 <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
                 <button onClick={clearPlayerTags} type="button">Clear Player Tags</button>
+                <button onClick={clearDrillZone} type="button">Clear Drill Zone</button>
                 <button onClick={clearSession} type="button">Clear Session</button>
               </div>
           </div>
@@ -1248,31 +1494,37 @@ export default function AxisLiveVision() {
                 {recordingLabel}
               </button>
               <div className="axis-live-vision__control-wrap">
-                <button onClick={toggleCalibrationMenu} type="button">
-                  Calibrate
+                <button disabled={isRecording} onClick={() => setToolsOpen((open) => !open)} type="button">
+                  Tools
                 </button>
-                {calibrationMenuOpen && (
-                  <div className="axis-live-vision__cal-menu">
-                    <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
-                    <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
-                    <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
-                    <button onClick={clearCalibration} type="button">Clear Calibration</button>
+                {toolsOpen && (
+                  <div className="axis-live-vision__tools-sheet">
+                    <button onClick={toggleCalibrationMenu} type="button">Calibrate</button>
+                    {calibrationMenuOpen && (
+                      <div className="axis-live-vision__cal-menu">
+                        <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
+                        <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
+                        <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
+                        <button onClick={clearCalibration} type="button">Clear Calibration</button>
+                      </div>
+                    )}
+                    <button onClick={() => setEvidencePanelOpen(true)} type="button">Tag Players</button>
+                    <button
+                      data-active={showTrail ? "true" : undefined}
+                      onClick={() => {
+                        const next = !showTrail;
+                        showTrailRef.current = next;
+                        setShowTrail(next);
+                      }}
+                      type="button"
+                    >
+                      Trail {showTrail ? "On" : "Off"}
+                    </button>
+                    <button onClick={() => setEvidencePanelOpen((open) => !open)} type="button">Evidence</button>
+                    <button onClick={startDrillZone} type="button">Drill Zone</button>
                   </div>
                 )}
               </div>
-              <button disabled={isRecording} onClick={() => setEvidencePanelOpen(true)} type="button">Tag Players</button>
-              <button
-                data-active={showTrail ? "true" : undefined}
-                onClick={() => {
-                  const next = !showTrail;
-                  showTrailRef.current = next;
-                  setShowTrail(next);
-                }}
-                type="button"
-              >
-                Trail
-              </button>
-              <button disabled={isRecording} onClick={() => setEvidencePanelOpen((open) => !open)} type="button">Evidence</button>
               <button onClick={stopCamera} type="button">Stop</button>
             </>
           )}
@@ -1613,18 +1865,34 @@ export default function AxisLiveVision() {
           padding: 0 0.65rem;
         }
 
+        .axis-live-vision__tools-sheet,
         .axis-live-vision__cal-menu {
           background: rgba(0, 0, 0, 0.72);
           border: 1px solid rgba(248, 247, 242, 0.14);
           border-radius: 1rem;
-          bottom: calc(100% + 0.55rem);
           display: grid;
           gap: 0.45rem;
-          left: 50%;
           min-width: min(16rem, calc(100vw - 2rem));
           padding: 0.55rem;
           position: absolute;
+        }
+
+        .axis-live-vision__tools-sheet {
+          bottom: calc(100% + 0.55rem);
+          left: 50%;
           transform: translateX(-50%);
+        }
+
+        .axis-live-vision__cal-menu {
+          bottom: 0;
+          right: calc(100% + 0.55rem);
+        }
+
+        .axis-live-vision__tools-sheet .axis-live-vision__cal-menu {
+          bottom: auto;
+          min-width: 0;
+          position: static;
+          right: auto;
         }
 
         .axis-live-vision__controls {
@@ -1640,7 +1908,7 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__controls--running {
-          grid-template-columns: repeat(6, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .axis-live-vision__primary-start {
@@ -1820,7 +2088,7 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls--running {
-            grid-template-columns: repeat(6, minmax(0, 9rem));
+            grid-template-columns: repeat(3, minmax(0, 9rem));
           }
         }
 
@@ -1835,8 +2103,7 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls--running {
-            grid-template-columns: repeat(6, minmax(4.4rem, 1fr));
-            overflow-x: auto;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
 
           .axis-live-vision__controls button {
