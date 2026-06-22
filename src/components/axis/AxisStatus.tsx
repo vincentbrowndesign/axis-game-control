@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   buildAxisRunAdapterPreview,
   createAxisRunContractPreview,
@@ -32,6 +34,8 @@ export function AxisStatus({
   runPreview?: AxisRunRequestPreview | null;
   runPreviewHistory?: AxisRunRequestPreview[];
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (!activeOutput) return null;
 
   const stages = getRunStages(activeOutput);
@@ -50,26 +54,38 @@ export function AxisStatus({
   const recentRouteDryRuns = routeDryRunHistory.slice(0, 3);
 
   return (
-    <aside className="axis-status-card" aria-label="Active run progress">
+    <aside className="axis-status-card" aria-label="Active run progress" data-expanded={isExpanded ? "true" : "false"}>
       <div className="axis-status-card__header">
-        <p>Active run</p>
-        <span>{formatOutputStatus(activeOutput.status)}</span>
+        <div>
+          <p>Active run</p>
+          <h2>{activeOutput.title}</h2>
+        </div>
+        <button onClick={() => setIsExpanded((value) => !value)} type="button">
+          {isExpanded ? "Hide" : "Details"}
+        </button>
       </div>
-      <h2>{activeOutput.title}</h2>
-      <ol>
-        {stages.map((stage) => (
-          <li data-state={stage.state} key={stage.label}>
-            <span />
-            {stage.label}
-          </li>
-        ))}
-      </ol>
+      <div className="axis-status-card__quick">
+        <span>Prepared</span>
+        <span>Dry-run only</span>
+        <span>No write</span>
+        <span>Real submit locked</span>
+      </div>
+      {isExpanded && (
+        <ol>
+          {stages.map((stage) => (
+            <li data-state={stage.state} key={stage.label}>
+              <span />
+              {stage.label}
+            </li>
+          ))}
+        </ol>
+      )}
       {activeOutput.summary && activeOutput.status !== "processing" && (
         <p className="axis-status-card__completion" data-state={activeOutput.status}>
           {activeOutput.summary}
         </p>
       )}
-      {runPreview && (
+      {isExpanded && runPreview && (
         <dl className="axis-status-card__preview" aria-label="Local run request preview">
           <div>
             <dt>Route</dt>
@@ -125,7 +141,7 @@ export function AxisStatus({
           </div>
         </dl>
       )}
-      {previousPreviews.length > 0 && (
+      {isExpanded && previousPreviews.length > 0 && (
         <section className="axis-status-card__history" aria-label="Recent local run requests">
           <p>Recent local requests</p>
           <ol>
@@ -150,7 +166,7 @@ export function AxisStatus({
           </ul>
         </section>
       )}
-      {recentRouteDryRuns.length > 0 && (
+      {isExpanded && recentRouteDryRuns.length > 0 && (
         <section className="axis-status-card__dry-run-history" aria-label="Recent route dry-runs">
           <p>Route dry-runs</p>
           <ol>
@@ -163,8 +179,8 @@ export function AxisStatus({
           </ol>
         </section>
       )}
-      {submitReadiness && <SubmitReadinessSummary summary={submitReadiness} />}
-      {wiringChecklist.length > 0 && (
+      {isExpanded && submitReadiness && <SubmitReadinessSummary summary={submitReadiness} />}
+      {isExpanded && wiringChecklist.length > 0 && (
         <section className="axis-status-card__wiring" aria-label="Local run wiring checklist">
           <p>Run wiring</p>
           <ul>
@@ -176,13 +192,13 @@ export function AxisStatus({
           </ul>
         </section>
       )}
-      <p className="axis-status-card__note">
+      {isExpanded && <p className="axis-status-card__note">
         {routeCompatibility?.reason ||
           compatibility?.message ||
           contractValidation?.message ||
           runContract?.execution.message ||
           "Local progress preview. No backend run yet."}
-      </p>
+      </p>}
 
       <style>{`
         .axis-status-card,
@@ -212,14 +228,30 @@ export function AxisStatus({
           justify-content: space-between;
         }
 
-        .axis-status-card__header p,
-        .axis-status-card__header span {
+        .axis-status-card__header > div {
+          min-width: 0;
+        }
+
+        .axis-status-card__header p {
           color: rgba(244, 241, 234, 0.5);
           font-size: 0.68rem;
           font-weight: 800;
           letter-spacing: 0.12em;
-          margin: 0;
+          margin: 0 0 0.24rem;
           text-transform: uppercase;
+        }
+
+        .axis-status-card__header button {
+          background: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.7);
+          cursor: pointer;
+          flex: none;
+          font: inherit;
+          font-size: 0.68rem;
+          min-height: 1.8rem;
+          padding: 0 0.6rem;
         }
 
         .axis-status-card h2 {
@@ -228,6 +260,23 @@ export function AxisStatus({
           line-height: 1.2;
           margin: 0;
           overflow-wrap: anywhere;
+        }
+
+        .axis-status-card__quick {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+        }
+
+        .axis-status-card__quick span {
+          border: 1px solid rgba(121, 226, 145, 0.2);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.62);
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          padding: 0.18rem 0.42rem;
+          text-transform: uppercase;
         }
 
         .axis-status-card ol {

@@ -1049,4 +1049,14 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
       "checkpoint only / no jobs / no writes / no uploads / no model calls",
     ],
   },
+  {
+    id: 75,
+    title: "Axis Shell cleanup + wiring readiness",
+    items: [
+      "/axis separates the product surface from build-map and developer contract UI",
+      "Recent Outputs stay compact with three visible results and fallback examples",
+      "Active Run and dry-run details are secondary, collapsible, and labeled as no-write submit-locked readiness",
+      "cleanup only / no route execution / no backend behavior changes / no real submit unlock",
+    ],
+  },
 ];

@@ -80,6 +80,7 @@ export function AxisOutputSurface({
 
   const backendOutputs = outputState.status === "ready" ? outputState.result.outputs : [];
   const outputs = [...localOutputs, ...backendOutputs];
+  const visibleOutputs = outputs.slice(0, 3);
   const message = outputState.status === "ready" ? outputState.result.message : "Checking saved output history...";
   const isFallback = outputState.status === "ready" && outputState.result.source === "fallback";
   const historyLabel =
@@ -99,8 +100,6 @@ export function AxisOutputSurface({
   const selectedRunTrace = selectedOutputDetails
     ? localRunPreviews.find((preview) => preview.expectedOutputId === selectedOutputDetails.id)
     : undefined;
-  const localContractSummary = getLocalContractSummary(localOutputs, localRunPreviews);
-  const localSubmitSummary = getLocalSubmitSummary(localOutputs, localRunPreviews);
 
   function clearLocalOutputPreviews() {
     if (selectedOutput && localOutputs.some((output) => output.id === selectedOutput.id)) {
@@ -129,29 +128,15 @@ export function AxisOutputSurface({
       {message && localOutputs.length === 0 && <p className="axis-output-surface__message">{message}</p>}
       <p className="axis-output-surface__counts" aria-live="polite">
         {outputCountSummary}
-        {localContractSummary && <> - {localContractSummary}</>}
-        {localSubmitSummary && <> - {localSubmitSummary}</>}
       </p>
 
       <div className="axis-output-surface__list" aria-live="polite">
         {outputState.status === "loading" ? (
           <OutputSkeleton />
         ) : outputs.length > 0 ? (
-          outputs.map((output) => {
-            const runTrace = localRunPreviews.find((preview) => preview.expectedOutputId === output.id);
-            const runContract = runTrace ? createAxisRunContractPreview(output, runTrace) : null;
-            const contractValidation = runContract ? validateAxisRunContractPreview(runContract) : null;
-            const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
-
+          visibleOutputs.map((output) => {
             return (
               <OutputCard
-                contractStatus={
-                  contractValidation
-                    ? `${contractValidation.ok ? "Contract ready" : contractValidation.label}${
-                        submitGuard ? ` - ${submitGuard.label}` : ""
-                      }`
-                    : undefined
-                }
                 key={output.id}
                 output={output}
                 onSelect={() => setSelectedOutput(output)}
@@ -522,6 +507,53 @@ export function AxisOutputSurface({
           color: rgba(244, 241, 234, 0.52);
           font-size: 0.72rem;
           line-height: 1.35;
+        }
+
+        .axis-output-detail__wiring-summary {
+          align-items: center;
+          background: rgba(255, 255, 255, 0.028);
+          border: 1px solid rgba(255, 255, 255, 0.075);
+          border-radius: 0.72rem;
+          display: flex;
+          gap: 0.6rem;
+          justify-content: space-between;
+          padding: 0.58rem;
+        }
+
+        .axis-output-detail__wiring-summary div {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+        }
+
+        .axis-output-detail__wiring-summary span {
+          border: 1px solid rgba(121, 226, 145, 0.18);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.58);
+          font-size: 0.66rem;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          padding: 0.18rem 0.44rem;
+          text-transform: uppercase;
+        }
+
+        .axis-output-detail__wiring-summary button {
+          background: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 999px;
+          color: rgba(244, 241, 234, 0.68);
+          cursor: pointer;
+          flex: 0 0 auto;
+          font: inherit;
+          font-size: 0.68rem;
+          min-height: 1.9rem;
+          padding: 0 0.62rem;
+        }
+
+        .axis-output-detail__wiring-summary button:hover,
+        .axis-output-detail__wiring-summary button:focus-visible {
+          border-color: rgba(141, 66, 255, 0.42);
+          outline: none;
         }
 
         .axis-output-detail__payload {
@@ -1109,6 +1141,7 @@ function OutputDetailPreview({
 }) {
   const [routeDryRunResult, setRouteDryRunResult] = useState<AxisRunDryRunResult | null>(null);
   const [isTestingRouteDryRun, setIsTestingRouteDryRun] = useState(false);
+  const [showWiringDetails, setShowWiringDetails] = useState(false);
   const [showDryRunPayloads, setShowDryRunPayloads] = useState(false);
   const sourceLabel = output.sourceLabel || formatOutputType(output.type);
   const runContract = runTrace ? createAxisRunContractPreview(output, runTrace) : null;
@@ -1129,6 +1162,7 @@ function OutputDetailPreview({
   useEffect(() => {
     setRouteDryRunResult(null);
     setIsTestingRouteDryRun(false);
+    setShowWiringDetails(false);
     setShowDryRunPayloads(false);
   }, [output.id]);
 
@@ -1200,6 +1234,25 @@ function OutputDetailPreview({
           </span>
         </div>
       )}
+      {runContract && (
+        <div className="axis-output-detail__wiring-summary" aria-label="Run readiness summary">
+          <div>
+            <span>Prepared</span>
+            <span>Dry-run only</span>
+            <span>No write</span>
+            <span>Real submit locked</span>
+          </div>
+          <button
+            aria-expanded={showWiringDetails}
+            onClick={() => setShowWiringDetails((isVisible) => !isVisible)}
+            type="button"
+          >
+            {showWiringDetails ? "Hide wiring details" : "Show wiring details"}
+          </button>
+        </div>
+      )}
+      {showWiringDetails && (
+        <>
       {runPayload && (
         <div className="axis-output-detail__payload" aria-label="Future run payload preview">
           <p>Future run payload</p>
@@ -1373,6 +1426,8 @@ function OutputDetailPreview({
           )}
         </div>
       )}
+        </>
+      )}
       {output.localAttachment && (
         <div className="axis-output-detail__attachment" aria-label="Local attachment used">
           <p>Attached locally</p>
@@ -1409,42 +1464,6 @@ function OutputDetailPreview({
 
 function OutputSkeleton() {
   return <div className="axis-output-skeleton" aria-label="Loading recent outputs" />;
-}
-
-function getLocalContractSummary(outputs: AxisOutput[], previews: AxisRunRequestPreview[]) {
-  if (outputs.length === 0) return "";
-
-  const contractStates = outputs.map((output) => {
-    const runTrace = previews.find((preview) => preview.expectedOutputId === output.id);
-    if (!runTrace) return false;
-    return validateAxisRunContractPreview(createAxisRunContractPreview(output, runTrace)).ok;
-  });
-  const readyCount = contractStates.filter(Boolean).length;
-  const reviewCount = contractStates.length - readyCount;
-  const readyLabel = formatCount(readyCount, "contract ready");
-
-  return reviewCount > 0 ? `${readyLabel} - ${formatCount(reviewCount, "contract to review")}` : readyLabel;
-}
-
-function getLocalSubmitSummary(outputs: AxisOutput[], previews: AxisRunRequestPreview[]) {
-  if (outputs.length === 0) return "";
-
-  const submitStates = outputs.flatMap((output) => {
-      const runTrace = previews.find((preview) => preview.expectedOutputId === output.id);
-      if (!runTrace) return [];
-      return [getAxisRunSubmitGuard(createAxisRunContractPreview(output, runTrace))];
-    });
-
-  if (submitStates.length === 0) return "";
-
-  const readyCount = submitStates.filter((state) => state.canSubmit).length;
-  const lockedCount = submitStates.length - readyCount;
-
-  if (readyCount > 0 && lockedCount > 0) {
-    return `${formatCount(readyCount, "submit ready")} - ${formatCount(lockedCount, "run locked")}`;
-  }
-
-  return readyCount > 0 ? formatCount(readyCount, "submit ready") : formatCount(lockedCount, "run locked");
 }
 
 function formatOutputType(value: AxisOutput["type"]) {

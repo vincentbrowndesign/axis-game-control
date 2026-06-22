@@ -64,7 +64,6 @@ export function AxisShell() {
   const [sessionType, setSessionType] = useState<SessionType>("training");
   const [askContent, setAskContent] = useState("");
   const [reportActionNotice, setReportActionNotice] = useState("");
-  const [followUpNotice, setFollowUpNotice] = useState("");
   const [hasHydratedLocalMemory, setHasHydratedLocalMemory] = useState(false);
   const [localMemoryStatus, setLocalMemoryStatus] = useState<LocalMemoryStatus>("loading");
 
@@ -316,23 +315,29 @@ export function AxisShell() {
         onRemoveAttachment={removeLocalAttachment}
       />
       <section className="axis-blank__identity" aria-label="Axis entry">
-        <h1>AXIS <span>9</span></h1>
-        <div className="axis-blank__actions">
-          <button type="button" onClick={() => setIsCreatingSession(true)}>
-            New Session
-          </button>
-          <button type="button" onClick={() => setIsAskingAxis(true)}>
-            Ask Axis
-          </button>
-          <label className="axis-upload-trigger">
-            Upload Media
-            <input
-              accept="audio/*,image/*,video/*,.pdf,.txt,.doc,.docx"
-              onChange={createMediaSource}
-              type="file"
-            />
-          </label>
-          <Link href="/axis/build-map">Open Build Map</Link>
+        <div className="axis-blank__top-row">
+          <h1>AXIS <span>9</span></h1>
+          <span className="axis-blank__status">Axis Ready</span>
+          <Link className="axis-blank__admin-link" href="/axis/build-map">Open Build Map</Link>
+        </div>
+        <div className="axis-blank__command-zone">
+          <p>Start with the thing you want Axis to make, inspect, summarize, or prepare.</p>
+          <div className="axis-blank__actions">
+            <button type="button" onClick={() => setIsCreatingSession(true)}>
+              New Session
+            </button>
+            <button type="button" onClick={() => setIsAskingAxis(true)}>
+              Ask Axis
+            </button>
+            <label className="axis-upload-trigger">
+              Upload Media
+              <input
+                accept="audio/*,image/*,video/*,.pdf,.txt,.doc,.docx"
+                onChange={createMediaSource}
+                type="file"
+              />
+            </label>
+          </div>
         </div>
       </section>
 
@@ -458,14 +463,6 @@ export function AxisShell() {
           <button className="axis-active-session__detail" type="button" onClick={() => setIsViewingReportPreview(true)}>
             View Report Draft
           </button>
-          <button
-            className="axis-active-session__detail"
-            type="button"
-            onClick={() => setFollowUpNotice("Follow-up automation staged locally. No message or reminder was sent.")}
-          >
-            Stage Follow-Up
-          </button>
-          {followUpNotice && <span className="axis-active-session__memory">{followUpNotice}</span>}
         </section>
       )}
 
@@ -636,40 +633,6 @@ export function AxisShell() {
         </section>
       )}
 
-      {(latestAsk || latestMediaSource) && (
-        <div className="axis-local-stack">
-          {latestAsk && (
-            <section className="axis-local-ask" aria-label="Latest Ask Axis draft">
-              <p>Ask Axis Draft</p>
-              <blockquote>{latestAsk.content}</blockquote>
-              <span>{activeSession ? "Attached to current draft session" : "Not attached to a session"}</span>
-            </section>
-          )}
-
-          {latestMediaSource && (
-            <section className="axis-local-media" aria-label="Latest media intake draft">
-              <p>Media Intake Draft</p>
-              <h2>{latestMediaSource.fileName}</h2>
-              <dl>
-                <div>
-                  <dt>Type</dt>
-                  <dd>{formatMediaType(latestMediaSource.mediaType)}</dd>
-                </div>
-                <div>
-                  <dt>Size</dt>
-                  <dd>{formatBytes(latestMediaSource.sizeBytes)}</dd>
-                </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd>local only</dd>
-                </div>
-              </dl>
-              <span>{activeSession ? "Attached to current draft session" : "Not attached to a session"}</span>
-            </section>
-          )}
-        </div>
-      )}
-
       <style>{`
         :root {
           color-scheme: dark;
@@ -696,15 +659,27 @@ export function AxisShell() {
             Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           justify-content: center;
           min-height: 100dvh;
-          padding: 1rem;
+          padding: 6rem 1rem 9rem;
           position: relative;
           width: 100%;
         }
 
         .axis-blank__identity {
+          align-items: center;
           display: grid;
-          gap: 1rem;
+          gap: 1.25rem;
           justify-items: center;
+          max-width: min(42rem, calc(100vw - 2rem));
+          text-align: center;
+          width: 100%;
+        }
+
+        .axis-blank__top-row {
+          align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          justify-content: center;
         }
 
         .axis-blank h1 {
@@ -716,6 +691,39 @@ export function AxisShell() {
 
         .axis-blank h1 span {
           color: #8d42ff;
+        }
+
+        .axis-blank__status {
+          border: 1px solid rgba(121, 226, 145, 0.26);
+          border-radius: 999px;
+          color: rgba(121, 226, 145, 0.82);
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          padding: 0.32rem 0.62rem;
+          text-transform: uppercase;
+        }
+
+        .axis-blank__admin-link {
+          background: rgba(255, 255, 255, 0.035);
+          border-color: rgba(255, 255, 255, 0.12) !important;
+          color: rgba(244, 241, 234, 0.62) !important;
+          min-height: 2rem !important;
+          padding: 0 0.72rem !important;
+        }
+
+        .axis-blank__command-zone {
+          display: grid;
+          gap: 0.9rem;
+          justify-items: center;
+        }
+
+        .axis-blank__command-zone p {
+          color: rgba(244, 241, 234, 0.62);
+          font-size: clamp(0.95rem, 2vw, 1.08rem);
+          line-height: 1.45;
+          margin: 0;
+          max-width: 32rem;
         }
 
         .axis-blank__actions {
@@ -759,6 +767,10 @@ export function AxisShell() {
           cursor: pointer;
         }
 
+        .axis-upload-trigger {
+          background: rgba(255, 255, 255, 0.035);
+        }
+
         .axis-blank button:disabled {
           cursor: default;
           opacity: 0.45;
@@ -768,9 +780,7 @@ export function AxisShell() {
         .axis-active-session,
         .axis-session-detail,
         .axis-player-profile,
-        .axis-report-preview,
-        .axis-local-ask,
-        .axis-local-media {
+        .axis-report-preview {
           background: rgba(12, 14, 20, 0.94);
           border: 1px solid rgba(255, 255, 255, 0.13);
           border-radius: 1rem;
@@ -1025,21 +1035,6 @@ export function AxisShell() {
           margin-top: 0.8rem;
         }
 
-        .axis-local-stack {
-          bottom: max(1rem, env(safe-area-inset-bottom));
-          display: grid;
-          gap: 0.75rem;
-          position: fixed;
-          right: max(1rem, env(safe-area-inset-right));
-          width: min(24rem, calc(100vw - 2rem));
-        }
-
-        .axis-local-ask,
-        .axis-local-media {
-          padding: 1rem;
-          width: 100%;
-        }
-
         .axis-active-session dl {
           display: grid;
           gap: 0.55rem;
@@ -1063,72 +1058,17 @@ export function AxisShell() {
           text-transform: capitalize;
         }
 
-        .axis-local-ask p,
-        .axis-local-media p {
-          color: rgba(244, 241, 234, 0.52);
-          font-size: 0.72rem;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          margin: 0 0 0.55rem;
-          text-transform: uppercase;
-        }
-
-        .axis-local-media h2 {
-          font-size: 0.95rem;
-          line-height: 1.2;
-          margin: 0;
-          overflow-wrap: anywhere;
-        }
-
-        .axis-local-media dl {
-          display: grid;
-          gap: 0.45rem;
-          margin: 0.75rem 0 0;
-        }
-
-        .axis-local-media dl div {
-          display: flex;
-          justify-content: space-between;
-        }
-
-        .axis-local-media dt,
-        .axis-local-media dd {
-          color: rgba(244, 241, 234, 0.62);
-          font-size: 0.8rem;
-          margin: 0;
-        }
-
-        .axis-local-media dd {
-          color: #f4f1ea;
-        }
-
-        .axis-local-ask blockquote {
-          color: #f4f1ea;
-          font-size: 0.95rem;
-          line-height: 1.35;
-          margin: 0;
-        }
-
-        .axis-local-ask span,
-        .axis-local-media span {
-          color: rgba(244, 241, 234, 0.48);
-          display: block;
-          font-size: 0.78rem;
-          margin-top: 0.7rem;
-        }
-
         @media (max-width: 720px) {
           .axis-blank {
             align-items: start;
-            padding-top: 28dvh;
+            padding: 6rem 1rem 14rem;
           }
 
           .axis-session-panel,
           .axis-active-session,
           .axis-session-detail,
           .axis-player-profile,
-          .axis-report-preview,
-          .axis-local-stack {
+          .axis-report-preview {
             left: 1rem;
             right: 1rem;
             transform: none;
@@ -1146,9 +1086,6 @@ export function AxisShell() {
             bottom: calc(8.5rem + env(safe-area-inset-bottom));
           }
 
-          .axis-local-stack {
-            bottom: 1rem;
-          }
         }
       `}</style>
     </main>
