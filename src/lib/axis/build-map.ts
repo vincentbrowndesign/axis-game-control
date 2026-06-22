@@ -1059,4 +1059,54 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
       "cleanup only / no route execution / no backend behavior changes / no real submit unlock",
     ],
   },
+  {
+    id: 76,
+    title: "Persist New Session draft",
+    items: [
+      "blocked: no safe existing draft-session persistence target was found",
+      "legacy axis_sessions requires mission_id, objective, constraint, target, and mission status values instead of draft session fields",
+      "axis_threads remains exact conversation-thread storage and was not reused as a session table",
+      "local draft session now marks source/persisted state and displays Saved locally until a session_drafts-compatible target exists",
+    ],
+  },
+  {
+    id: 77,
+    title: "Session draft persistence target contract",
+    items: [
+      "defines the future /api/axis/sessions create-draft contract without adding the route yet",
+      "requires an owner-scoped axis_session_drafts target with title, optional player fields, session_type, draft status, and timestamps",
+      "forbids uploads, jobs, model calls, artifacts, exports, and reports from the draft-save path",
+      "contract only / no table / no migration / no backend write / New Session remains local",
+    ],
+  },
+  {
+    id: 78,
+    title: "Session draft persistence path",
+    items: [
+      "adds owner-scoped axis_session_drafts storage for New Session drafts",
+      "adds /api/axis/sessions with list and create draft behavior only",
+      "New Session attempts backend save and falls back to Saved locally when unavailable",
+      "draft persistence only / no uploads / no jobs / no models / no reports / no exports / real submit locked",
+    ],
+  },
+  {
+    id: 79,
+    title: "Saved session draft restore",
+    items: [
+      "frontend reads existing draft sessions from /api/axis/sessions",
+      "Saved Drafts appears only when owner-scoped backend drafts are available",
+      "restoring a draft only sets the current local session surface",
+      "restore only / no outputs / no execution / no uploads / no jobs / real submit locked",
+    ],
+  },
+  {
+    id: 80,
+    title: "Session draft save retry",
+    items: [
+      "local New Session drafts show a quiet Retry Save action when backend persistence is unavailable",
+      "retry uses the existing /api/axis/sessions create-draft route only",
+      "successful retry swaps the current session to the backend saved draft and updates Saved Drafts",
+      "retry only / no outputs / no execution / no uploads / no jobs / real submit locked",
+    ],
+  },
 ];

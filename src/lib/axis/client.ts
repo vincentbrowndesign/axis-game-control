@@ -16,14 +16,110 @@ import type {
   AxisRunRequestPreview,
   AxisRunResultEnvelope,
   AxisRunRouteCompatibility,
+  AxisSession,
+  AxisSessionDraftCreateRequest,
+  AxisSessionDraftCreateResponse,
+  AxisSessionDraftListResponse,
   AxisRunSubmitGuard,
   AxisRunSubmitReadinessSummary,
   AxisRunWiringChecklistItem,
 } from "./types";
+import { axisAuthenticatedFetch } from "../axis-client-auth";
 
 export const AXIS_UI_V2_ENABLED = process.env.NEXT_PUBLIC_AXIS_UI_V2 === "true";
 export const AXIS_RUN_WIRING_ENABLED = false;
 export const AXIS_RUN_TARGET_ROUTE = "/api/axis/run" as const;
+export const AXIS_SESSION_DRAFT_ROUTE = "/api/axis/sessions" as const;
+
+export async function createAxisSessionDraftRequest(
+  session: AxisSession,
+): Promise<AxisSessionDraftCreateResponse> {
+  const payload: AxisSessionDraftCreateRequest = {
+    createdAt: session.createdAt,
+    ...(session.playerId ? { playerId: session.playerId } : {}),
+    ...(session.playerName ? { playerName: session.playerName } : {}),
+    sessionType: session.sessionType,
+    status: "draft",
+    title: session.title,
+  };
+
+  const response = await axisAuthenticatedFetch(AXIS_SESSION_DRAFT_ROUTE, {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+  const body = await response.json().catch(() => null) as Partial<AxisSessionDraftCreateResponse> | null;
+
+  if (!response.ok || !body || body.ok === false) {
+    return {
+      error: body && "error" in body && typeof body.error === "string"
+        ? body.error
+        : "Session draft could not be saved.",
+      ok: false,
+    };
+  }
+
+  const sessionBody = "session" in body ? body.session : null;
+  if (!isAxisSession(sessionBody)) {
+    return { error: "Session draft response was invalid.", ok: false };
+  }
+
+  return {
+    ok: true,
+    session: {
+      ...sessionBody,
+      persisted: true,
+      source: "backend",
+    },
+  };
+}
+
+export async function listAxisSessionDraftsRequest(): Promise<AxisSessionDraftListResponse> {
+  const response = await axisAuthenticatedFetch(AXIS_SESSION_DRAFT_ROUTE);
+  const body = await response.json().catch(() => null) as Partial<AxisSessionDraftListResponse> | null;
+
+  if (!response.ok || !body || body.ok === false) {
+    return {
+      error: body && "error" in body && typeof body.error === "string"
+        ? body.error
+        : "Session drafts could not be loaded.",
+      ok: false,
+      sessions: [],
+    };
+  }
+
+  const sessions = Array.isArray(body.sessions) ? body.sessions.filter(isAxisSession) : [];
+  return {
+    ok: true,
+    sessions: sessions.map((session) => ({
+      ...session,
+      persisted: true,
+      source: "backend",
+    })),
+  };
+}
+
+function isAxisSession(value: unknown): value is AxisSession {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.title === "string" &&
+    typeof record.createdAt === "string" &&
+    isAxisSessionType(record.sessionType) &&
+    isAxisSessionStatus(record.status)
+  );
+}
+
+function isAxisSessionType(value: unknown): value is AxisSession["sessionType"] {
+  return value === "training" || value === "game" || value === "film" || value === "practice" || value === "other";
+}
+
+function isAxisSessionStatus(value: unknown): value is AxisSession["status"] {
+  return value === "draft" || value === "active" || value === "processing" || value === "complete";
+}
 
 export function createAxisRunPayloadFromPreview(preview: AxisRunRequestPreview): AxisRunPayload {
   return {

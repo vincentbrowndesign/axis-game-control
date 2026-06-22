@@ -248,9 +248,63 @@ export type AxisSession = {
   id: string;
   title: string;
   playerName?: string;
+  playerId?: string;
   sessionType: "training" | "game" | "film" | "practice" | "other";
   status: "draft" | "active" | "processing" | "complete";
   createdAt: string;
+  persisted?: boolean;
+  source?: "local" | "backend";
+};
+
+export type AxisSessionDraftCreateRequest = {
+  title: string;
+  playerName?: string;
+  playerId?: string;
+  sessionType: AxisSession["sessionType"];
+  status: "draft";
+  createdAt: string;
+};
+
+export type AxisSessionDraftCreateResponse =
+  | {
+      ok: true;
+      session: AxisSession & {
+        persisted: true;
+        source: "backend";
+      };
+    }
+  | {
+      error: string;
+      ok: false;
+    };
+
+export type AxisSessionDraftListResponse =
+  | {
+      ok: true;
+      sessions: AxisSession[];
+    }
+  | {
+      error: string;
+      ok: false;
+      sessions: [];
+    };
+
+export type AxisSessionDraftPersistenceTarget = {
+  route: "/api/axis/sessions";
+  table: "axis_session_drafts";
+  status: "required";
+  requiredFields: Array<
+    | "id"
+    | "owner_id"
+    | "title"
+    | "player_name"
+    | "player_id"
+    | "session_type"
+    | "status"
+    | "created_at"
+    | "updated_at"
+  >;
+  forbiddenSideEffects: Array<"upload" | "job" | "model_call" | "artifact" | "export" | "report">;
 };
 
 export type AxisPlayer = {

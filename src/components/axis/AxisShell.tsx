@@ -2,7 +2,12 @@
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
-import { AXIS_RUN_TARGET_ROUTE, AXIS_UI_V2_ENABLED } from "../../lib/axis/client";
+import {
+  AXIS_RUN_TARGET_ROUTE,
+  AXIS_UI_V2_ENABLED,
+  createAxisSessionDraftRequest,
+  listAxisSessionDraftsRequest,
+} from "../../lib/axis/client";
 import type {
   AxisAsk,
   AxisChatMessage,
@@ -22,6 +27,8 @@ import { AxisStatus } from "./AxisStatus";
 
 type SessionType = AxisSession["sessionType"];
 type LocalMemoryStatus = "loading" | "ready" | "saved" | "unavailable";
+type SessionDraftSaveStatus = "idle" | "saving" | "saved" | "local";
+type SessionDraftListStatus = "idle" | "loading" | "ready" | "unavailable";
 
 type AxisLocalMemorySnapshot = {
   activeSession: AxisSession | null;
@@ -47,6 +54,7 @@ export function AxisShell() {
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isAskingAxis, setIsAskingAxis] = useState(false);
   const [isViewingSessionDetail, setIsViewingSessionDetail] = useState(false);
+  const [isViewingSessionDrafts, setIsViewingSessionDrafts] = useState(false);
   const [isViewingPlayerProfile, setIsViewingPlayerProfile] = useState(false);
   const [isViewingReportPreview, setIsViewingReportPreview] = useState(false);
   const [activeSession, setActiveSession] = useState<AxisSession | null>(null);
@@ -64,6 +72,9 @@ export function AxisShell() {
   const [sessionType, setSessionType] = useState<SessionType>("training");
   const [askContent, setAskContent] = useState("");
   const [reportActionNotice, setReportActionNotice] = useState("");
+  const [sessionDraftSaveStatus, setSessionDraftSaveStatus] = useState<SessionDraftSaveStatus>("idle");
+  const [sessionDraftListStatus, setSessionDraftListStatus] = useState<SessionDraftListStatus>("idle");
+  const [savedSessionDrafts, setSavedSessionDrafts] = useState<AxisSession[]>([]);
   const [hasHydratedLocalMemory, setHasHydratedLocalMemory] = useState(false);
   const [localMemoryStatus, setLocalMemoryStatus] = useState<LocalMemoryStatus>("loading");
 
@@ -103,6 +114,11 @@ export function AxisShell() {
   }, [activeSession, askMessages, hasHydratedLocalMemory, latestAsk, latestMediaSource, localMemoryStatus]);
 
   useEffect(() => {
+    if (!hasHydratedLocalMemory) return;
+    void loadSavedSessionDrafts();
+  }, [hasHydratedLocalMemory]);
+
+  useEffect(() => {
     const processingOutputIds = localPendingOutputs
       .filter((output) => output.status === "processing")
       .map((output) => output.id);
@@ -128,7 +144,7 @@ export function AxisShell() {
     return () => window.clearTimeout(timer);
   }, [localFailedOutputIds, localPendingOutputs]);
 
-  function createSession(event: FormEvent<HTMLFormElement>) {
+  async function createSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
@@ -137,14 +153,79 @@ export function AxisShell() {
       id: createLocalId(),
       title: trimmedTitle,
       playerName: playerName.trim() || undefined,
+      persisted: false,
+      source: "local",
       sessionType,
       status: "draft",
       createdAt: new Date().toISOString(),
     };
 
     setActiveSession(nextSession);
+    setSessionDraftSaveStatus("saving");
     setIsViewingSessionDetail(true);
     setIsCreatingSession(false);
+
+    try {
+      const saved = await createAxisSessionDraftRequest(nextSession);
+      if (saved.ok) {
+        setActiveSession(saved.session);
+        setSessionDraftSaveStatus("saved");
+        setSavedSessionDrafts((sessions) => mergeSessionDrafts(saved.session, sessions));
+        return;
+      }
+    } catch {
+      // Local fallback keeps the session usable when auth or persistence is unavailable.
+    }
+
+    setActiveSession(nextSession);
+    setSessionDraftSaveStatus("local");
+  }
+
+  async function retrySessionDraftSave() {
+    if (!activeSession || activeSession.persisted || sessionDraftSaveStatus === "saving") return;
+
+    setSessionDraftSaveStatus("saving");
+    try {
+      const saved = await createAxisSessionDraftRequest(activeSession);
+      if (saved.ok) {
+        setActiveSession(saved.session);
+        setSessionDraftSaveStatus("saved");
+        setSavedSessionDrafts((sessions) => mergeSessionDrafts(saved.session, sessions));
+        return;
+      }
+    } catch {
+      // Keep the local draft intact when auth or persistence is unavailable.
+    }
+
+    setSessionDraftSaveStatus("local");
+  }
+
+  async function loadSavedSessionDrafts() {
+    setSessionDraftListStatus("loading");
+    try {
+      const result = await listAxisSessionDraftsRequest();
+      if (result.ok) {
+        setSavedSessionDrafts(result.sessions);
+        setSessionDraftListStatus("ready");
+        return;
+      }
+    } catch {
+      // Draft restore stays quiet when auth or persistence is unavailable.
+    }
+
+    setSavedSessionDrafts([]);
+    setSessionDraftListStatus("unavailable");
+  }
+
+  function restoreSavedSessionDraft(session: AxisSession) {
+    setActiveSession({
+      ...session,
+      persisted: true,
+      source: "backend",
+    });
+    setSessionDraftSaveStatus("saved");
+    setIsViewingSessionDrafts(false);
+    setIsViewingSessionDetail(true);
   }
 
   function createAsk(event: FormEvent<HTMLFormElement>) {
@@ -337,6 +418,11 @@ export function AxisShell() {
                 type="file"
               />
             </label>
+            {savedSessionDrafts.length > 0 && (
+              <button type="button" onClick={() => setIsViewingSessionDrafts(true)}>
+                Saved Drafts
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -384,6 +470,37 @@ export function AxisShell() {
               Create Draft Session
             </button>
           </form>
+        </section>
+      )}
+
+      {isViewingSessionDrafts && (
+        <section className="axis-session-panel" aria-labelledby="axis-saved-drafts-title">
+          <div className="axis-session-panel__header">
+            <div>
+              <p>Saved Drafts</p>
+              <h2 id="axis-saved-drafts-title">Session drafts</h2>
+            </div>
+            <button type="button" onClick={() => setIsViewingSessionDrafts(false)}>
+              Close
+            </button>
+          </div>
+          {sessionDraftListStatus === "loading" ? (
+            <p className="axis-session-panel__note">Loading saved drafts...</p>
+          ) : savedSessionDrafts.length > 0 ? (
+            <div className="axis-session-drafts-list">
+              {savedSessionDrafts.slice(0, 5).map((session) => (
+                <button key={session.id} onClick={() => restoreSavedSessionDraft(session)} type="button">
+                  <strong>{session.title}</strong>
+                  <span>
+                    {formatSessionType(session.sessionType)} - {formatTime(session.createdAt)}
+                    {session.playerName ? ` - ${session.playerName}` : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="axis-session-panel__note">No saved session drafts yet.</p>
+          )}
         </section>
       )}
 
@@ -441,6 +558,10 @@ export function AxisShell() {
               <dd>{activeSession.status}</dd>
             </div>
             <div>
+              <dt>Save</dt>
+              <dd>{formatSessionPersistence(activeSession, sessionDraftSaveStatus)}</dd>
+            </div>
+            <div>
               <dt>Type</dt>
               <dd>{formatSessionType(activeSession.sessionType)}</dd>
             </div>
@@ -452,6 +573,16 @@ export function AxisShell() {
             )}
           </dl>
           <span className="axis-active-session__memory">{formatLocalMemoryStatus(localMemoryStatus)}</span>
+          {!activeSession.persisted && (
+            <button
+              className="axis-active-session__detail"
+              disabled={sessionDraftSaveStatus === "saving"}
+              onClick={retrySessionDraftSave}
+              type="button"
+            >
+              {sessionDraftSaveStatus === "saving" ? "Saving..." : "Retry Save"}
+            </button>
+          )}
           <button className="axis-active-session__detail" type="button" onClick={() => setIsViewingSessionDetail(true)}>
             View Session Detail
           </button>
@@ -482,6 +613,10 @@ export function AxisShell() {
             <div>
               <dt>Status</dt>
               <dd>{activeSession.status}</dd>
+            </div>
+            <div>
+              <dt>Save</dt>
+              <dd>{formatSessionPersistence(activeSession, sessionDraftSaveStatus)}</dd>
             </div>
             <div>
               <dt>Type</dt>
@@ -924,6 +1059,49 @@ export function AxisShell() {
           margin-top: 0.2rem;
         }
 
+        .axis-session-panel__note {
+          color: rgba(244, 241, 234, 0.58);
+          font-size: 0.82rem;
+          line-height: 1.35;
+          margin: 0;
+        }
+
+        .axis-session-drafts-list {
+          display: grid;
+          gap: 0.55rem;
+        }
+
+        .axis-session-drafts-list button {
+          background: rgba(255, 255, 255, 0.045);
+          border: 1px solid rgba(255, 255, 255, 0.09);
+          border-radius: 0.75rem;
+          color: inherit;
+          cursor: pointer;
+          display: grid;
+          gap: 0.3rem;
+          padding: 0.72rem;
+          text-align: left;
+        }
+
+        .axis-session-drafts-list button:hover,
+        .axis-session-drafts-list button:focus-visible {
+          border-color: rgba(141, 66, 255, 0.48);
+          outline: none;
+        }
+
+        .axis-session-drafts-list strong {
+          color: #f4f1ea;
+          font-size: 0.88rem;
+          line-height: 1.2;
+          overflow-wrap: anywhere;
+        }
+
+        .axis-session-drafts-list span {
+          color: rgba(244, 241, 234, 0.52);
+          font-size: 0.74rem;
+          line-height: 1.3;
+        }
+
         .axis-session-detail,
         .axis-player-profile,
         .axis-report-preview {
@@ -1120,6 +1298,10 @@ function createLocalId(prefix = "axis-session") {
   return `${prefix}-${Date.now()}`;
 }
 
+function mergeSessionDrafts(session: AxisSession, sessions: AxisSession[]) {
+  return [session, ...sessions.filter((item) => item.id !== session.id)].slice(0, 20);
+}
+
 function validateLocalRunCommand(
   command: string,
   outputType: AxisOutput["type"],
@@ -1179,6 +1361,12 @@ function getAttachmentType(mediaType: AxisMediaSource["mediaType"]): AxisLocalAt
 
 function formatSessionType(value: SessionType) {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatSessionPersistence(session: AxisSession, saveStatus: SessionDraftSaveStatus) {
+  if (saveStatus === "saving") return "Saving...";
+  if (session.persisted && session.source === "backend") return "Saved";
+  return "Saved locally";
 }
 
 function inferMediaType(fileType: string, fileName: string): AxisMediaSource["mediaType"] {
