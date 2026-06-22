@@ -25,6 +25,7 @@ type ModelStatus = "idle" | "loading" | "ready" | "error";
 type AiStatus = "idle" | "running" | "error";
 type FacingMode = "environment" | "user";
 type CalMode = AxisCalibrationState["mode"];
+type PlayerAssignments = Record<string, string>;
 
 const inferenceIntervalMs = 200;
 const maxStoredFrames = 600;
@@ -69,6 +70,7 @@ export default function AxisLiveVision() {
   const recentBallLostRef = useRef(false);
   const calibrationRef = useRef<AxisCalibrationState>(defaultCal());
   const ballTrailRef = useRef<AxisBallTrailState>({ points: [], visible: false });
+  const playerAssignmentsRef = useRef<PlayerAssignments>({});
   const showTrailRef = useRef(true);
   const showCalibrationRef = useRef(true);
   const floorTapCountRef = useRef(0);
@@ -92,6 +94,7 @@ export default function AxisLiveVision() {
   const [calibrationMode, setCalibrationMode] = useState<CalMode>("off");
   const [calibrationMenuOpen, setCalibrationMenuOpen] = useState(false);
   const [ballTrail, setBallTrail] = useState<AxisBallTrailState>({ points: [], visible: false });
+  const [playerAssignments, setPlayerAssignments] = useState<PlayerAssignments>({});
   const [showTrail, setShowTrail] = useState(true);
 
   const peopleCount = useMemo(
@@ -116,10 +119,14 @@ export default function AxisLiveVision() {
   }, [showTrail]);
 
   useEffect(() => {
+    playerAssignmentsRef.current = playerAssignments;
+  }, [playerAssignments]);
+
+  useEffect(() => {
     tracksRef.current = activeTracks;
     drawDetections(activeTracks);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail]);
+  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail, playerAssignments]);
 
   // ─── Canvas click / calibration ────────────────────────────────
 
@@ -140,11 +147,14 @@ export default function AxisLiveVision() {
 
   function handleCanvasClick(e: React.MouseEvent<HTMLCanvasElement>) {
     const mode = calibrationRef.current.mode !== "off" ? calibrationRef.current.mode : calibrationMode;
-    if (mode === "off") return;
-
     const coords = getVideoCoords(e);
     if (!coords) return;
     const { vx, vy } = coords;
+
+    if (mode === "off") {
+      assignPlayerToTrack(vx, vy);
+      return;
+    }
 
     const prev = calibrationRef.current;
     let next: AxisCalibrationState;
@@ -238,6 +248,32 @@ export default function AxisLiveVision() {
     setCalibration(next);
     setCalibrationMode("off");
     setCalibrationMenuOpen(false);
+  }
+
+  function assignPlayerToTrack(x: number, y: number) {
+    const personTrack = tracksRef.current
+      .filter((track) => track.kind === "person" && pointInsideBbox(x, y, track.bbox))
+      .sort((a, b) => bboxArea(a.bbox) - bboxArea(b.bbox))[0];
+
+    if (!personTrack) return;
+
+    const existing = playerAssignmentsRef.current[personTrack.trackId] ?? "";
+    const nextName = window.prompt(`Name ${personTrack.trackId}`, existing);
+    if (nextName === null) return;
+
+    const trimmed = nextName.trim();
+    setPlayerAssignments((current) => {
+      const next = { ...current };
+      if (trimmed) next[personTrack.trackId] = trimmed;
+      else delete next[personTrack.trackId];
+      playerAssignmentsRef.current = next;
+      return next;
+    });
+  }
+
+  function clearPlayerTags() {
+    playerAssignmentsRef.current = {};
+    setPlayerAssignments({});
   }
 
   // ─── Camera / AI ────────────────────────────────────────────────
@@ -479,9 +515,10 @@ export default function AxisLiveVision() {
       const bw = w * scale;
       const bh = h * scale;
       const color = track.kind === "ball" ? "#f8d45c" : "#7cf7d4";
+      const assignedName = playerAssignmentsRef.current[track.trackId];
       const label = track.kind === "ball"
         ? `${track.trackId} BALL ${Math.round(track.score * 100)}%`
-        : `${track.trackId} ${Math.round(track.score * 100)}%`;
+        : `${assignedName || track.trackId} ${Math.round(track.score * 100)}%`;
 
       ctx.strokeStyle = color;
       ctx.lineWidth = track.kind === "ball" ? 3 : 2;
@@ -589,45 +626,6 @@ export default function AxisLiveVision() {
     ctx.fill();
   }
 
-  function drawHud(ctx: CanvasRenderingContext2D, width: number, tracks: AxisVisionTrack[]) {
-    const people = tracks.filter((t) => t.kind === "person").length;
-    const balls = tracks.filter((t) => t.kind === "ball").length;
-    const ballState = balls > 0 ? "LIVE" : recentBallLostRef.current ? "LOST" : "SEARCHING";
-    const cal = calibrationRef.current;
-    const trail = ballTrailRef.current;
-
-    const rimStr = `RIM: ${cal.rim ? "SET" : "NOT SET"}`;
-    const trailStr = `TRAIL: ${showTrailRef.current ? "ON" : "OFF"}`;
-    const dirStr = `BALL DIR: ${(trail.direction ?? "—").toUpperCase()}`;
-    const speedStr = `BALL SPEED: ${trail.velocity ? Math.round(trail.velocity.speed) : "—"}`;
-
-    const lines = [
-      "AXIS LIVE VISION",
-      `AI ${aiStatus.toUpperCase()}`,
-      `PEOPLE: ${people} / ${maxPeopleCountRef.current}`,
-      `BALL: ${ballState}`,
-      `TRACKS: ${tracks.length}`,
-      `FRAMES: ${frameCountRef.current}`,
-      `FPS: ${fps.toFixed(1)}`,
-      rimStr,
-      trailStr,
-      dirStr,
-      speedStr,
-    ];
-
-    const boxH = 14 + lines.length * 24 + 8;
-    ctx.fillStyle = "rgba(0,0,0,0.58)";
-    ctx.fillRect(14, 14, Math.min(310, width - 28), boxH);
-
-    lines.forEach((line, i) => {
-      const y = 38 + i * 24;
-      ctx.fillStyle = "#f8f7f2";
-      ctx.font = i === 0
-        ? "800 14px ui-monospace, SFMono-Regular, Menlo, monospace"
-        : MONO;
-      ctx.fillText(line, 28, y);
-    });
-  }
 
   function clearCanvas() {
     const canvas = canvasRef.current;
@@ -650,6 +648,7 @@ export default function AxisLiveVision() {
     return {
       ...base,
       calibration: calibrationRef.current,
+      playerAssignments: playerAssignmentsRef.current,
       ballTrailSummary: {
         direction: trail.direction,
         lastSeenAt: trail.lastSeenAt,
@@ -719,6 +718,7 @@ export default function AxisLiveVision() {
     ballLostFramesRef.current = 0;
     recentBallLostRef.current = false;
     ballTrailRef.current = { points: [], visible: false };
+    playerAssignmentsRef.current = {};
     setSessionId(nextId);
     setSessionStartedAt(nextAt);
     setVisionFrames([]);
@@ -729,6 +729,7 @@ export default function AxisLiveVision() {
     setBallVisible(false);
     setBallLostCount(0);
     setBallTrail({ points: [], visible: false });
+    setPlayerAssignments({});
     drawDetections([]);
   }
 
@@ -746,6 +747,7 @@ export default function AxisLiveVision() {
   const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Searching";
   const ballDirection = ballTrail.direction ?? "unknown";
   const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
+  const playerAssignmentEntries = Object.entries(playerAssignments);
   const calibrationInstruction = calibrationMode === "set_rim"
     ? "Tap video to set rim"
     : calibrationMode === "set_floor"
@@ -837,6 +839,14 @@ export default function AxisLiveVision() {
                 <div><dt>Ball lost</dt><dd>{ballLostCount}</dd></div>
                 <div><dt>Ball direction</dt><dd>{ballDirection}</dd></div>
                 <div><dt>Ball speed</dt><dd>{ballSpeed === null ? "unknown" : ballSpeed}</dd></div>
+                <div>
+                  <dt>Player tags</dt>
+                  <dd>
+                    {playerAssignmentEntries.length > 0
+                      ? playerAssignmentEntries.map(([trackId, name]) => `${trackId}: ${name}`).join(", ")
+                      : "None"}
+                  </dd>
+                </div>
                 <div><dt>Rim</dt><dd>{calibration.rim ? "Set" : "Not set"}</dd></div>
                 <div><dt>Floor</dt><dd>{calibration.floorLine ? "Set" : "Not set"}</dd></div>
                 <div><dt>Paint</dt><dd>{calibration.paintPoints.length >= 2 ? "Set" : "Not set"}</dd></div>
@@ -857,6 +867,7 @@ export default function AxisLiveVision() {
               <div className="axis-live-vision__evidence-actions">
                 <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
                 <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
+                <button onClick={clearPlayerTags} type="button">Clear Player Tags</button>
                 <button onClick={clearSession} type="button">Clear Session</button>
               </div>
             </div>
@@ -935,7 +946,7 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__canvas {
-          pointer-events: none;
+          pointer-events: auto;
           z-index: 2;
         }
 
@@ -1252,4 +1263,16 @@ export default function AxisLiveVision() {
       `}</style>
     </main>
   );
+}
+
+function pointInsideBbox(
+  x: number,
+  y: number,
+  [boxX, boxY, width, height]: [number, number, number, number],
+) {
+  return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
+}
+
+function bboxArea([, , width, height]: [number, number, number, number]) {
+  return width * height;
 }
