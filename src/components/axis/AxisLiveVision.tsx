@@ -95,6 +95,8 @@ export default function AxisLiveVision() {
   const [calibrationMenuOpen, setCalibrationMenuOpen] = useState(false);
   const [ballTrail, setBallTrail] = useState<AxisBallTrailState>({ points: [], visible: false });
   const [playerAssignments, setPlayerAssignments] = useState<PlayerAssignments>({});
+  const [selectedPlayerTrackId, setSelectedPlayerTrackId] = useState<string | null>(null);
+  const [playerNameDraft, setPlayerNameDraft] = useState("");
   const [showTrail, setShowTrail] = useState(true);
 
   const peopleCount = useMemo(
@@ -130,7 +132,7 @@ export default function AxisLiveVision() {
 
   // ─── Canvas click / calibration ────────────────────────────────
 
-  function getVideoCoords(e: React.MouseEvent<HTMLCanvasElement>) {
+  function getVideoCoords(e: { clientX: number; clientY: number }) {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return null;
@@ -145,14 +147,14 @@ export default function AxisLiveVision() {
     return { vx: (cx - ox) / scale, vy: (cy - oy) / scale };
   }
 
-  function handleCanvasClick(e: React.MouseEvent<HTMLCanvasElement>) {
+  function handleCanvasPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
     const mode = calibrationRef.current.mode !== "off" ? calibrationRef.current.mode : calibrationMode;
     const coords = getVideoCoords(e);
     if (!coords) return;
     const { vx, vy } = coords;
 
     if (mode === "off") {
-      assignPlayerToTrack(vx, vy);
+      openPlayerAssignmentFromPoint(vx, vy);
       return;
     }
 
@@ -250,25 +252,69 @@ export default function AxisLiveVision() {
     setCalibrationMenuOpen(false);
   }
 
-  function assignPlayerToTrack(x: number, y: number) {
-    const personTrack = tracksRef.current
-      .filter((track) => track.kind === "person" && pointInsideBbox(x, y, track.bbox))
-      .sort((a, b) => bboxArea(a.bbox) - bboxArea(b.bbox))[0];
+  function openPlayerAssignmentFromPoint(x: number, y: number) {
+    const personTrack = findPersonTrackAtPoint(x, y);
 
     if (!personTrack) return;
+    openPlayerAssignment(personTrack.trackId);
+  }
 
-    const existing = playerAssignmentsRef.current[personTrack.trackId] ?? "";
-    const nextName = window.prompt(`Name ${personTrack.trackId}`, existing);
-    if (nextName === null) return;
+  function findPersonTrackAtPoint(x: number, y: number) {
+    const personTracks = tracksRef.current.filter((track) => track.kind === "person");
+    const paddedHit = personTracks
+      .filter((track) => pointInsidePaddedBbox(x, y, track.bbox, 34))
+      .sort((a, b) => bboxArea(a.bbox) - bboxArea(b.bbox))[0];
 
-    const trimmed = nextName.trim();
+    if (paddedHit) return paddedHit;
+
+    const point = { x, y };
+    return personTracks
+      .map((track) => {
+        const center = bboxCenter(track.bbox);
+        const [, , width, height] = track.bbox;
+        const maxDistance = Math.max(90, Math.min(width, height) * 0.75);
+        return { distance: distanceBetween(point, center), maxDistance, track };
+      })
+      .filter((candidate) => candidate.distance <= candidate.maxDistance)
+      .sort((a, b) => a.distance - b.distance)[0]?.track;
+  }
+
+  function openPlayerAssignment(trackId: string) {
+    setSelectedPlayerTrackId(trackId);
+    setPlayerNameDraft(playerAssignmentsRef.current[trackId] ?? "");
+    setEvidencePanelOpen(false);
+    setCalibrationMenuOpen(false);
+  }
+
+  function savePlayerAssignment() {
+    if (!selectedPlayerTrackId) return;
+    const trimmed = playerNameDraft.trim();
     setPlayerAssignments((current) => {
       const next = { ...current };
-      if (trimmed) next[personTrack.trackId] = trimmed;
-      else delete next[personTrack.trackId];
+      if (trimmed) next[selectedPlayerTrackId] = trimmed;
+      else delete next[selectedPlayerTrackId];
       playerAssignmentsRef.current = next;
       return next;
     });
+    setSelectedPlayerTrackId(null);
+    setPlayerNameDraft("");
+  }
+
+  function clearSelectedPlayerAssignment() {
+    if (!selectedPlayerTrackId) return;
+    setPlayerAssignments((current) => {
+      const next = { ...current };
+      delete next[selectedPlayerTrackId];
+      playerAssignmentsRef.current = next;
+      return next;
+    });
+    setSelectedPlayerTrackId(null);
+    setPlayerNameDraft("");
+  }
+
+  function cancelPlayerAssignment() {
+    setSelectedPlayerTrackId(null);
+    setPlayerNameDraft("");
   }
 
   function clearPlayerTags() {
@@ -748,6 +794,10 @@ export default function AxisLiveVision() {
   const ballDirection = ballTrail.direction ?? "unknown";
   const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
   const playerAssignmentEntries = Object.entries(playerAssignments);
+  const activePersonTracks = activeTracks.filter((track) => track.kind === "person");
+  const selectedPlayerTrack = selectedPlayerTrackId
+    ? activeTracks.find((track) => track.trackId === selectedPlayerTrackId)
+    : null;
   const calibrationInstruction = calibrationMode === "set_rim"
     ? "Tap video to set rim"
     : calibrationMode === "set_floor"
@@ -773,7 +823,7 @@ export default function AxisLiveVision() {
         />
         <canvas
           className={`axis-live-vision__canvas${calActive ? " axis-live-vision__canvas--cal" : ""}`}
-          onClick={handleCanvasClick}
+          onPointerUp={handleCanvasPointerUp}
           ref={canvasRef}
         />
 
@@ -864,6 +914,20 @@ export default function AxisLiveVision() {
               >
                 Trail {showTrail ? "On" : "Off"}
               </button>
+              <div className="axis-live-vision__player-tags" aria-label="Player tags">
+                <p>Player Tags</p>
+                {activePersonTracks.length > 0 ? (
+                  activePersonTracks.map((track) => (
+                    <div className="axis-live-vision__player-tag-row" key={track.trackId}>
+                      <span>{track.trackId}</span>
+                      <strong>{playerAssignments[track.trackId] || "Unknown"}</strong>
+                      <button onClick={() => openPlayerAssignment(track.trackId)} type="button">Edit</button>
+                    </div>
+                  ))
+                ) : (
+                  <span className="axis-live-vision__muted">No active person tracks</span>
+                )}
+              </div>
               <div className="axis-live-vision__evidence-actions">
                 <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
                 <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
@@ -873,22 +937,6 @@ export default function AxisLiveVision() {
             </div>
           )}
         </section>
-      )}
-
-      {!calActive && (
-        <div className="axis-live-vision__tools" aria-label="Calibration tools">
-          <button onClick={() => setCalibrationMenuOpen((open) => !open)} type="button">
-            Calibrate
-          </button>
-          {calibrationMenuOpen && (
-            <div className="axis-live-vision__cal-menu">
-              <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
-              <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
-              <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
-              <button onClick={clearCalibration} type="button">Clear Calibration</button>
-            </div>
-          )}
-        </div>
       )}
 
       {!calActive && (
@@ -910,8 +958,45 @@ export default function AxisLiveVision() {
           <button disabled={cameraStatus === "requesting"} onClick={flipCamera} type="button">
             Flip
           </button>
+          <div className="axis-live-vision__control-wrap">
+            <button onClick={() => setCalibrationMenuOpen((open) => !open)} type="button">
+              Calibrate
+            </button>
+            {calibrationMenuOpen && (
+              <div className="axis-live-vision__cal-menu">
+                <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
+                <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
+                <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
+                <button onClick={clearCalibration} type="button">Clear Calibration</button>
+              </div>
+            )}
+          </div>
           <button onClick={stopCamera} type="button">Stop</button>
         </footer>
+      )}
+
+      {selectedPlayerTrackId && !calActive && (
+        <section className="axis-live-vision__assign-sheet" aria-label="Assign player">
+          <div className="axis-live-vision__assign-card">
+            <p>Assign Player</p>
+            <h2>{selectedPlayerTrack?.trackId ?? selectedPlayerTrackId}</h2>
+            <label>
+              Player name
+              <input
+                autoFocus
+                onChange={(event) => setPlayerNameDraft(event.target.value)}
+                placeholder="Unknown"
+                type="text"
+                value={playerNameDraft}
+              />
+            </label>
+            <div className="axis-live-vision__assign-actions">
+              <button onClick={savePlayerAssignment} type="button">Save</button>
+              <button onClick={cancelPlayerAssignment} type="button">Cancel</button>
+              <button onClick={clearSelectedPlayerAssignment} type="button">Clear Assignment</button>
+            </div>
+          </div>
+        </section>
       )}
 
       {lastError && <p className="axis-live-vision__error">{lastError}</p>}
@@ -1154,7 +1239,6 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__evidence-actions button,
         .axis-live-vision__trail-toggle,
-        .axis-live-vision__tools button,
         .axis-live-vision__controls button:not(:first-child) {
           background: rgba(248, 247, 242, 0.08);
           color: #f8f7f2;
@@ -1165,12 +1249,45 @@ export default function AxisLiveVision() {
           width: 100%;
         }
 
-        .axis-live-vision__tools {
-          bottom: calc(5.6rem + env(safe-area-inset-bottom));
-          left: 50%;
-          position: absolute;
-          transform: translateX(-50%);
-          z-index: 4;
+        .axis-live-vision__player-tags {
+          border-top: 1px solid rgba(248, 247, 242, 0.12);
+          display: grid;
+          gap: 0.45rem;
+          margin-top: 0.85rem;
+          padding-top: 0.85rem;
+        }
+
+        .axis-live-vision__player-tags p {
+          color: rgba(248, 247, 242, 0.58);
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.14em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__player-tag-row {
+          align-items: center;
+          display: grid;
+          gap: 0.45rem;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+        }
+
+        .axis-live-vision__player-tag-row span,
+        .axis-live-vision__muted {
+          color: rgba(248, 247, 242, 0.58);
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 0.78rem;
+        }
+
+        .axis-live-vision__player-tag-row strong {
+          font-size: 0.86rem;
+          overflow-wrap: anywhere;
+        }
+
+        .axis-live-vision__player-tag-row button {
+          min-height: 2.1rem;
+          padding: 0 0.65rem;
         }
 
         .axis-live-vision__cal-menu {
@@ -1190,13 +1307,18 @@ export default function AxisLiveVision() {
         .axis-live-vision__controls {
           bottom: 0;
           display: grid;
-          gap: 0.65rem;
-          grid-template-columns: 1.4fr 1fr 0.75fr 0.75fr;
+          gap: 0.45rem;
+          grid-template-columns: 1.25fr 0.9fr 0.7fr 0.9fr 0.7fr;
           left: 0;
           padding: 0 1rem max(1rem, env(safe-area-inset-bottom));
           position: absolute;
           right: 0;
           z-index: 4;
+        }
+
+        .axis-live-vision__control-wrap {
+          display: grid;
+          position: relative;
         }
 
         .axis-live-vision__error {
@@ -1213,6 +1335,80 @@ export default function AxisLiveVision() {
           right: 1rem;
           top: 5.2rem;
           z-index: 5;
+        }
+
+        .axis-live-vision__assign-sheet {
+          align-items: end;
+          background: rgba(0, 0, 0, 0.24);
+          display: grid;
+          inset: 0;
+          padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
+          position: absolute;
+          z-index: 9;
+        }
+
+        .axis-live-vision__assign-card {
+          background: rgba(8, 9, 10, 0.9);
+          border: 1px solid rgba(248, 247, 242, 0.16);
+          border-radius: 1.25rem;
+          box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.45);
+          display: grid;
+          gap: 0.85rem;
+          justify-self: center;
+          max-width: 28rem;
+          padding: 1rem;
+          width: min(100%, 28rem);
+        }
+
+        .axis-live-vision__assign-card p {
+          color: rgba(248, 247, 242, 0.58);
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.14em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__assign-card h2 {
+          font-size: 1.25rem;
+          margin: 0;
+        }
+
+        .axis-live-vision__assign-card label {
+          color: rgba(248, 247, 242, 0.7);
+          display: grid;
+          font-size: 0.8rem;
+          font-weight: 800;
+          gap: 0.45rem;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__assign-card input {
+          background: rgba(248, 247, 242, 0.08);
+          border: 1px solid rgba(248, 247, 242, 0.18);
+          border-radius: 0.85rem;
+          color: #f8f7f2;
+          font: inherit;
+          font-size: 1rem;
+          min-height: 2.9rem;
+          padding: 0 0.85rem;
+          text-transform: none;
+        }
+
+        .axis-live-vision__assign-card input:focus {
+          border-color: rgba(248, 212, 92, 0.7);
+          outline: none;
+        }
+
+        .axis-live-vision__assign-actions {
+          display: grid;
+          gap: 0.5rem;
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .axis-live-vision__assign-actions button:last-child {
+          grid-column: 1 / -1;
         }
 
         @media (min-width: 880px) {
@@ -1240,7 +1436,7 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls {
-            grid-template-columns: repeat(4, minmax(0, 12rem));
+            grid-template-columns: repeat(5, minmax(0, 9.5rem));
             justify-content: center;
             padding-bottom: 1.25rem;
           }
@@ -1253,11 +1449,12 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls {
-            grid-template-columns: 1fr 0.72fr;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
           }
 
           .axis-live-vision__controls button {
             min-height: 2.8rem;
+            padding: 0 0.45rem;
           }
         }
       `}</style>
@@ -1265,14 +1462,26 @@ export default function AxisLiveVision() {
   );
 }
 
-function pointInsideBbox(
+function pointInsidePaddedBbox(
   x: number,
   y: number,
   [boxX, boxY, width, height]: [number, number, number, number],
+  padding: number,
 ) {
-  return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
+  return x >= boxX - padding
+    && x <= boxX + width + padding
+    && y >= boxY - padding
+    && y <= boxY + height + padding;
 }
 
 function bboxArea([, , width, height]: [number, number, number, number]) {
   return width * height;
+}
+
+function bboxCenter([x, y, width, height]: [number, number, number, number]) {
+  return { x: x + width / 2, y: y + height / 2 };
+}
+
+function distanceBetween(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
