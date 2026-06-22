@@ -489,4 +489,224 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
     title: "Follow-up automation",
     items: ["local follow-up draft action exists", "no message sent", "no automation scheduled yet"],
   },
+  {
+    id: 18,
+    title: "Backend read: Recent Axis Outputs",
+    items: [
+      "reads existing artifact and export histories",
+      "maps backend records into AxisOutput",
+      "read-only integration with static fallback",
+      "no /api/axis/run wiring yet",
+    ],
+  },
+  {
+    id: 19,
+    title: "Output Detail preview",
+    items: [
+      "recent output cards open a local detail preview",
+      "shows mapped AxisOutput fields only",
+      "open link appears when fileUrl exists",
+      "read-only selection state with no persistence",
+    ],
+  },
+  {
+    id: 20,
+    title: "Static command composer",
+    items: [
+      "composer creates local pending AxisOutput drafts",
+      "pending outputs appear in Recent Outputs",
+      "no /api/axis/run request yet",
+      "no backend writes or session persistence",
+    ],
+  },
+  {
+    id: 21,
+    title: "Local command mode selection",
+    items: [
+      "composer can draft text, report, video, file, or automation outputs",
+      "selected mode sets the local AxisOutput type",
+      "mode choice stays frontend-only",
+      "no /api/axis/run request yet",
+    ],
+  },
+  {
+    id: 22,
+    title: "Local active run progress",
+    items: [
+      "latest pending output appears in an active run panel",
+      "shows local queued/routing/drafting stages",
+      "progress is presentation-only",
+      "no /api/axis/run request or backend job yet",
+    ],
+  },
+  {
+    id: 23,
+    title: "Local output lifecycle",
+    items: [
+      "pending local outputs transition from processing to ready",
+      "ready state updates the local output summary",
+      "lifecycle is timer-based frontend state only",
+      "no /api/axis/run request or backend job yet",
+    ],
+  },
+  {
+    id: 24,
+    title: "Local failed-state simulation",
+    items: [
+      "composer can simulate a failed local output",
+      "failed outputs update after the local lifecycle delay",
+      "active run panel shows a failed preview stage",
+      "no /api/axis/run request or backend error wiring yet",
+    ],
+  },
+  {
+    id: 25,
+    title: "Local retry for failed outputs",
+    items: [
+      "failed local outputs expose a retry action in detail preview",
+      "retry returns the output to processing",
+      "same frontend lifecycle moves retry to ready",
+      "no backend retry, job, or route wiring yet",
+    ],
+  },
+  {
+    id: 26,
+    title: "Clear local preview outputs",
+    items: [
+      "local preview outputs can be cleared from Recent Outputs",
+      "backend-sourced outputs remain untouched",
+      "failure bookkeeping clears with local previews",
+      "no delete route, persistence, or backend mutation",
+    ],
+  },
+  {
+    id: 27,
+    title: "Recent Outputs count summary",
+    items: [
+      "Recent Outputs shows local preview count separately from saved output count",
+      "fallback records are labeled as examples, not saved backend data",
+      "summary updates from frontend state only",
+      "no backend route, write, or persistence change",
+    ],
+  },
+  {
+    id: 28,
+    title: "Local run request preview",
+    items: [
+      "composer submissions create a typed local /api/axis/run request preview",
+      "preview captures input, selected output type, session attachment, and media attachment",
+      "active run card displays the preview contract quietly",
+      "no /api/axis/run call, backend write, or job execution yet",
+    ],
+  },
+  {
+    id: 29,
+    title: "Local run history preview",
+    items: [
+      "last few local run request previews stay visible in the active run card",
+      "history shows command text and selected output type",
+      "history clears with local preview outputs",
+      "no persistence, route call, backend job, or analytics tracking yet",
+    ],
+  },
+  {
+    id: 30,
+    title: "Local run payload validation",
+    items: [
+      "composer validates local run previews before creating outputs",
+      "empty, too-long, unsupported, and media-required previews show quiet inline errors",
+      "invalid previews do not enter Recent Outputs or run history",
+      "no /api/axis/run call, backend validation route, or persistence yet",
+    ],
+  },
+  {
+    id: 31,
+    title: "Local media attachment badge",
+    items: [
+      "composer shows the current local media attachment when one exists",
+      "badge displays media type, file name, size, and ready-for-preview state",
+      "remove clears local attachment state so video/file validation requires media again",
+      "no upload system, backend route, storage delete, or persistence yet",
+    ],
+  },
+  {
+    id: 32,
+    title: "Local attachment-to-run preview linkage",
+    items: [
+      "local run previews snapshot the attachment used at creation time",
+      "local AxisOutput drafts retain the same attachment snapshot",
+      "active run and output detail surfaces show which attachment was used",
+      "no upload, backend call, storage write, or persistence yet",
+    ],
+  },
+  {
+    id: 33,
+    title: "Local run readiness summary",
+    items: [
+      "composer shows whether the selected mode is ready for a local preview",
+      "video and file modes explain when media must be attached",
+      "readiness updates from command text, selected mode, and local attachment state",
+      "no validation rule, backend route, /api/axis/run call, or persistence change",
+    ],
+  },
+  {
+    id: 34,
+    title: "Local active run completion summary",
+    items: [
+      "active run card shows the local completion or failure summary after processing",
+      "completion copy comes from the existing local AxisOutput summary",
+      "processing state remains quiet until the local preview finishes",
+      "no backend route, /api/axis/run call, persistence, or type change",
+    ],
+  },
+  {
+    id: 35,
+    title: "Local run source trace",
+    items: [
+      "output detail preview shows the local command that created a preview output",
+      "trace resolves through the existing local run preview expectedOutputId",
+      "shows selected mode, target route, and local preview time",
+      "no backend fetch, write, route change, persistence, or AxisOutput type change",
+    ],
+  },
+  {
+    id: 36,
+    title: "Local output duplicate guard",
+    items: [
+      "rapid repeated submits no longer create duplicate processing previews",
+      "duplicate check compares normalized command text and selected output type",
+      "finished ready or failed outputs do not permanently block a new preview",
+      "no backend route, /api/axis/run call, persistence, or validation API change",
+    ],
+  },
+  {
+    id: 37,
+    title: "Local clear selected-output safety",
+    items: [
+      "clearing local previews closes the detail preview when it belongs to a cleared local output",
+      "saved or fallback output detail state remains independent of local preview clearing",
+      "clear action still removes local previews only",
+      "no backend delete, route change, persistence, or output type change",
+    ],
+  },
+  {
+    id: 38,
+    title: "Local run retry trace update",
+    items: [
+      "retrying a failed local output creates a fresh local run preview entry",
+      "retry preview stays tied to the same local AxisOutput through expectedOutputId",
+      "active run and output detail surfaces can show the latest retry trace",
+      "no backend retry, /api/axis/run call, route change, persistence, or type change",
+    ],
+  },
+  {
+    id: 39,
+    title: "Local output empty-state reset polish",
+    items: [
+      "Recent Outputs header returns to saved or example history after local previews are cleared",
+      "local preview label appears only while local previews exist",
+      "count summary separates local previews from saved or example outputs cleanly",
+      "no backend fetch change, route change, persistence, or output type change",
+    ],
+  },
 ];

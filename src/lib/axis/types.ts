@@ -14,8 +14,40 @@ export type AxisOutput = {
   createdAt: string;
   thumbnailUrl?: string;
   fileUrl?: string;
+  localAttachment?: AxisLocalAttachment;
   summary?: string;
   sourceLabel?: string;
+};
+
+export type AxisRunRequestPreview = {
+  id: string;
+  inputText: string;
+  selectedOutputType: AxisOutput["type"];
+  targetRoute: "/api/axis/run";
+  createdAt: string;
+  status: "local_preview";
+  sessionId?: string;
+  mediaSourceId?: string;
+  localAttachment?: AxisLocalAttachment;
+  expectedOutputId?: string;
+};
+
+export type AxisCommandValidationResult =
+  | {
+      ok: true;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+export type AxisLocalAttachment = {
+  id: string;
+  type: "image" | "video" | "audio" | "file";
+  name: string;
+  size?: number;
+  previewUrl?: string;
+  createdAt: string;
 };
 
 export type AxisSession = {

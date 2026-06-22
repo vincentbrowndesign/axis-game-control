@@ -3,7 +3,16 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { AXIS_UI_V2_ENABLED } from "../../lib/axis/client";
-import type { AxisAsk, AxisChatMessage, AxisMediaSource, AxisSession } from "../../lib/axis/types";
+import type {
+  AxisAsk,
+  AxisChatMessage,
+  AxisCommandValidationResult,
+  AxisLocalAttachment,
+  AxisMediaSource,
+  AxisOutput,
+  AxisRunRequestPreview,
+  AxisSession,
+} from "../../lib/axis/types";
 import { AxisCommandComposer } from "./AxisCommandComposer";
 import { AxisOutputSurface } from "./AxisOutputSurface";
 import { AxisSidebar } from "./AxisSidebar";
@@ -29,6 +38,9 @@ const sessionTypes: Array<{ label: string; value: SessionType }> = [
   { label: "Other", value: "other" },
 ];
 
+const localRunOutputTypes: AxisOutput["type"][] = ["automation", "file", "report", "text", "video"];
+const maxLocalCommandLength = 240;
+
 export function AxisShell() {
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isAskingAxis, setIsAskingAxis] = useState(false);
@@ -36,6 +48,10 @@ export function AxisShell() {
   const [isViewingPlayerProfile, setIsViewingPlayerProfile] = useState(false);
   const [isViewingReportPreview, setIsViewingReportPreview] = useState(false);
   const [activeSession, setActiveSession] = useState<AxisSession | null>(null);
+  const [localFailedOutputIds, setLocalFailedOutputIds] = useState<string[]>([]);
+  const [localPendingOutputs, setLocalPendingOutputs] = useState<AxisOutput[]>([]);
+  const [latestRunPreview, setLatestRunPreview] = useState<AxisRunRequestPreview | null>(null);
+  const [runPreviewHistory, setRunPreviewHistory] = useState<AxisRunRequestPreview[]>([]);
   const [latestAsk, setLatestAsk] = useState<AxisAsk | null>(null);
   const [askMessages, setAskMessages] = useState<AxisChatMessage[]>([]);
   const [latestMediaSource, setLatestMediaSource] = useState<AxisMediaSource | null>(null);
@@ -82,6 +98,32 @@ export function AxisShell() {
       setLocalMemoryStatus("unavailable");
     }
   }, [activeSession, askMessages, hasHydratedLocalMemory, latestAsk, latestMediaSource, localMemoryStatus]);
+
+  useEffect(() => {
+    const processingOutputIds = localPendingOutputs
+      .filter((output) => output.status === "processing")
+      .map((output) => output.id);
+
+    if (processingOutputIds.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      setLocalPendingOutputs((outputs) =>
+        outputs.map((output) =>
+          processingOutputIds.includes(output.id)
+            ? {
+                ...output,
+                status: localFailedOutputIds.includes(output.id) ? "failed" : "ready",
+                summary: localFailedOutputIds.includes(output.id)
+                  ? `${formatOutputType(output.type)} output failed locally for preview. No backend run was called.`
+                  : `${formatOutputType(output.type)} output preview is ready locally. No backend run was called.`,
+              }
+            : output,
+        ),
+      );
+    }, 2200);
+
+    return () => window.clearTimeout(timer);
+  }, [localFailedOutputIds, localPendingOutputs]);
 
   function createSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -145,12 +187,123 @@ export function AxisShell() {
     event.target.value = "";
   }
 
+  function createPendingOutput(
+    command: string,
+    outputType: AxisOutput["type"],
+    shouldFail: boolean,
+  ): AxisCommandValidationResult {
+    const validationResult = validateLocalRunCommand(command, outputType, latestMediaSource);
+    if (!validationResult.ok) return validationResult;
+    if (hasDuplicateProcessingOutput(localPendingOutputs, command, outputType)) {
+      return { message: "That preview is already running locally.", ok: false };
+    }
+
+    const outputId = createLocalId("axis-output");
+    const createdAt = new Date().toISOString();
+    const attachmentSnapshot = latestMediaSource ? createLocalAttachment(latestMediaSource) : undefined;
+    const nextOutput: AxisOutput = {
+      id: outputId,
+      title: command,
+      type: outputType,
+      status: "processing",
+      createdAt,
+      localAttachment: attachmentSnapshot,
+      summary: shouldFail
+        ? `${formatOutputType(outputType)} output drafted locally with failed-state simulation.`
+        : `${formatOutputType(outputType)} output drafted locally. Axis run wiring is not active yet.`,
+      sourceLabel: formatOutputType(outputType),
+    };
+    const nextRunPreview: AxisRunRequestPreview = {
+      id: createLocalId("axis-run-preview"),
+      inputText: command,
+      selectedOutputType: outputType,
+      targetRoute: "/api/axis/run",
+      createdAt,
+      status: "local_preview",
+      sessionId: activeSession?.id,
+      mediaSourceId: latestMediaSource?.id,
+      localAttachment: attachmentSnapshot,
+      expectedOutputId: outputId,
+    };
+
+    if (shouldFail) {
+      setLocalFailedOutputIds((outputIds) => [outputId, ...outputIds].slice(0, 8));
+    }
+    setLatestRunPreview(nextRunPreview);
+    setRunPreviewHistory((previews) => [nextRunPreview, ...previews].slice(0, 5));
+    setLocalPendingOutputs((outputs) => [nextOutput, ...outputs].slice(0, 4));
+    return { ok: true };
+  }
+
+  function retryLocalOutput(outputId: string) {
+    const outputToRetry = localPendingOutputs.find((output) => output.id === outputId && output.status === "failed");
+    if (!outputToRetry) return;
+
+    const previousPreview = runPreviewHistory.find((preview) => preview.expectedOutputId === outputId);
+    const retryPreview: AxisRunRequestPreview = {
+      id: createLocalId("axis-run-preview"),
+      inputText: outputToRetry.title,
+      selectedOutputType: outputToRetry.type,
+      targetRoute: "/api/axis/run",
+      createdAt: new Date().toISOString(),
+      status: "local_preview",
+      sessionId: previousPreview?.sessionId,
+      mediaSourceId: previousPreview?.mediaSourceId,
+      localAttachment: outputToRetry.localAttachment,
+      expectedOutputId: outputId,
+    };
+
+    setLocalFailedOutputIds((outputIds) => outputIds.filter((id) => id !== outputId));
+    setLatestRunPreview(retryPreview);
+    setRunPreviewHistory((previews) => [retryPreview, ...previews].slice(0, 5));
+    setLocalPendingOutputs((outputs) =>
+      outputs.map((output) =>
+        output.id === outputId && output.status === "failed"
+          ? {
+              ...output,
+              status: "processing",
+              summary: `${formatOutputType(output.type)} output retry is running locally. No backend run was called.`,
+            }
+          : output,
+      ),
+    );
+  }
+
+  function clearLocalOutputs() {
+    setLocalFailedOutputIds([]);
+    setLocalPendingOutputs([]);
+    setLatestRunPreview(null);
+    setRunPreviewHistory([]);
+  }
+
+  function removeLocalAttachment() {
+    setLatestMediaSource(null);
+  }
+
+  const localAttachment = latestMediaSource ? createLocalAttachment(latestMediaSource) : null;
+
   return (
     <main className="axis-blank" data-axis-ui-v2={AXIS_UI_V2_ENABLED ? "true" : "false"}>
       <AxisSidebar />
-      <AxisStatus />
-      <AxisOutputSurface />
-      <AxisCommandComposer />
+      <AxisStatus
+        activeOutput={localPendingOutputs[0]}
+        runPreview={latestRunPreview}
+        runPreviewHistory={runPreviewHistory}
+      />
+      <AxisOutputSurface
+        localRunPreviews={runPreviewHistory}
+        localOutputs={localPendingOutputs}
+        onClearLocalOutputs={clearLocalOutputs}
+        onRetryOutput={retryLocalOutput}
+        retryableOutputIds={localPendingOutputs
+          .filter((output) => output.status === "failed")
+          .map((output) => output.id)}
+      />
+      <AxisCommandComposer
+        attachment={localAttachment}
+        onCreateOutput={createPendingOutput}
+        onRemoveAttachment={removeLocalAttachment}
+      />
       <section className="axis-blank__identity" aria-label="Axis entry">
         <h1>AXIS <span>9</span></h1>
         <div className="axis-blank__actions">
@@ -991,11 +1144,68 @@ export function AxisShell() {
   );
 }
 
-function createLocalId() {
+function createLocalId(prefix = "axis-session") {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
-  return `axis-session-${Date.now()}`;
+  return `${prefix}-${Date.now()}`;
+}
+
+function validateLocalRunCommand(
+  command: string,
+  outputType: AxisOutput["type"],
+  mediaSource: AxisMediaSource | null,
+): AxisCommandValidationResult {
+  if (!command.trim()) {
+    return { message: "Add a command first.", ok: false };
+  }
+
+  if (command.length > maxLocalCommandLength) {
+    return { message: `Keep this preview under ${maxLocalCommandLength} characters for now.`, ok: false };
+  }
+
+  if (!localRunOutputTypes.includes(outputType)) {
+    return { message: "That output type is not available in the local preview yet.", ok: false };
+  }
+
+  if ((outputType === "file" || outputType === "video") && !mediaSource) {
+    return { message: `Attach media before drafting a ${formatOutputType(outputType)} run preview.`, ok: false };
+  }
+
+  return { ok: true };
+}
+
+function hasDuplicateProcessingOutput(
+  outputs: AxisOutput[],
+  command: string,
+  outputType: AxisOutput["type"],
+) {
+  const normalizedCommand = normalizeLocalCommand(command);
+  return outputs.some(
+    (output) =>
+      output.status === "processing" &&
+      output.type === outputType &&
+      normalizeLocalCommand(output.title) === normalizedCommand,
+  );
+}
+
+function normalizeLocalCommand(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function createLocalAttachment(mediaSource: AxisMediaSource): AxisLocalAttachment {
+  return {
+    id: mediaSource.id,
+    type: getAttachmentType(mediaSource.mediaType),
+    name: mediaSource.fileName,
+    size: mediaSource.sizeBytes,
+    createdAt: mediaSource.createdAt,
+  };
+}
+
+function getAttachmentType(mediaType: AxisMediaSource["mediaType"]): AxisLocalAttachment["type"] {
+  if (mediaType === "image" || mediaType === "video" || mediaType === "audio") return mediaType;
+  return "file";
 }
 
 function formatSessionType(value: SessionType) {
@@ -1011,6 +1221,10 @@ function inferMediaType(fileType: string, fileName: string): AxisMediaSource["me
 }
 
 function formatMediaType(value: AxisMediaSource["mediaType"]) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatOutputType(value: AxisOutput["type"]) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
