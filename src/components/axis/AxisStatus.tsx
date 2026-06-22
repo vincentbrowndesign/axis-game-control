@@ -1,5 +1,7 @@
 import {
   createAxisRunContractPreview,
+  getAxisRunAdapterContract,
+  getAxisRunCompatibilityState,
   getAxisRunSubmitGuard,
   getAxisRunWiringChecklist,
   validateAxisRunContractPreview,
@@ -22,6 +24,8 @@ export function AxisStatus({
   const runContract = runPreview ? createAxisRunContractPreview(activeOutput, runPreview) : null;
   const contractValidation = runContract ? validateAxisRunContractPreview(runContract) : null;
   const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
+  const compatibility = runContract ? getAxisRunCompatibilityState() : null;
+  const adapterContract = runContract ? getAxisRunAdapterContract() : null;
   const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
 
   return (
@@ -82,6 +86,14 @@ export function AxisStatus({
             <dt>Submit</dt>
             <dd>{submitGuard?.canSubmit ? "ready" : "blocked"}</dd>
           </div>
+          <div>
+            <dt>Route</dt>
+            <dd>{compatibility?.compatible ? "compatible" : "adapter needed"}</dd>
+          </div>
+          <div>
+            <dt>Adapter</dt>
+            <dd>{adapterContract?.status}</dd>
+          </div>
         </dl>
       )}
       {previousPreviews.length > 0 && (
@@ -110,7 +122,10 @@ export function AxisStatus({
         </section>
       )}
       <p className="axis-status-card__note">
-        {contractValidation?.message || runContract?.execution.message || "Local progress preview. No backend run yet."}
+        {compatibility?.message ||
+          contractValidation?.message ||
+          runContract?.execution.message ||
+          "Local progress preview. No backend run yet."}
       </p>
 
       <style>{`

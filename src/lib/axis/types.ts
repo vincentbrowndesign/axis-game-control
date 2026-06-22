@@ -89,6 +89,20 @@ export type AxisRunSubmitGuard = {
   message: string;
 };
 
+export type AxisRunCompatibilityState = {
+  compatible: boolean;
+  label: string;
+  message: string;
+  route: "/api/axis/run";
+};
+
+export type AxisRunAdapterContract = {
+  accepts: string[];
+  returns: string[];
+  status: "needed" | "ready";
+  targetRoute: "/api/axis/run";
+};
+
 export type AxisCommandValidationResult =
   | {
       ok: true;

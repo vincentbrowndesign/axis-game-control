@@ -1,5 +1,7 @@
 import type {
   AxisOutput,
+  AxisRunAdapterContract,
+  AxisRunCompatibilityState,
   AxisRunContractPreview,
   AxisRunContractValidation,
   AxisRunExecutionState,
@@ -103,12 +105,42 @@ export function getAxisRunWiringChecklist(): AxisRunWiringChecklistItem[] {
     { label: "typed payload", ready: true },
     { label: "result envelope", ready: true },
     { label: "contract validation", ready: true },
+    { label: "route adapter", ready: getAxisRunCompatibilityState().compatible },
     { label: "backend execution", ready: AXIS_RUN_WIRING_ENABLED },
   ];
 }
 
+export function getAxisRunCompatibilityState(): AxisRunCompatibilityState {
+  return {
+    compatible: false,
+    label: "Adapter needed",
+    message: "Current /api/axis/run is legacy AxisUnderstanding. Unified AxisOutput transport is not wired yet.",
+    route: AXIS_RUN_TARGET_ROUTE,
+  };
+}
+
+export function getAxisRunAdapterContract(): AxisRunAdapterContract {
+  return {
+    accepts: [
+      "AxisRunPayload",
+      "selected output type",
+      "local attachment reference",
+      "optional session/project context",
+    ],
+    returns: [
+      "AxisOutput",
+      "run status",
+      "optional file or artifact link",
+      "user-facing summary",
+    ],
+    status: "needed",
+    targetRoute: AXIS_RUN_TARGET_ROUTE,
+  };
+}
+
 export function getAxisRunSubmitGuard(contract: AxisRunContractPreview): AxisRunSubmitGuard {
   const validation = validateAxisRunContractPreview(contract);
+  const compatibility = getAxisRunCompatibilityState();
 
   if (!validation.ok) {
     return {
@@ -121,8 +153,8 @@ export function getAxisRunSubmitGuard(contract: AxisRunContractPreview): AxisRun
   if (!contract.execution.enabled) {
     return {
       canSubmit: false,
-      label: "Run locked",
-      message: contract.execution.message,
+      label: compatibility.compatible ? "Run locked" : compatibility.label,
+      message: compatibility.compatible ? contract.execution.message : compatibility.message,
     };
   }
 

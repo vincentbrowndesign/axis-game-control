@@ -5,6 +5,7 @@ import {
   createAxisRunContractPreview,
   fetchRecentAxisOutputs,
   getFallbackAxisOutputs,
+  getAxisRunCompatibilityState,
   getAxisRunSubmitGuard,
   getAxisRunWiringChecklist,
   validateAxisRunContractPreview,
@@ -690,6 +691,7 @@ function OutputDetailPreview({
   const runResult = runContract?.result;
   const runExecutionState = runContract?.execution;
   const contractValidation = runContract ? validateAxisRunContractPreview(runContract) : null;
+  const compatibility = runContract ? getAxisRunCompatibilityState() : null;
   const submitGuard = runContract ? getAxisRunSubmitGuard(runContract) : null;
   const wiringChecklist = runContract ? getAxisRunWiringChecklist() : [];
 
@@ -776,6 +778,7 @@ function OutputDetailPreview({
               {runExecutionState.label}: {runExecutionState.message}
             </small>
           )}
+          {compatibility && <small>{compatibility.label}: {compatibility.message}</small>}
           {contractValidation && <small>{contractValidation.label}: {contractValidation.message}</small>}
           {wiringChecklist.length > 0 && (
             <ul className="axis-output-detail__wiring">

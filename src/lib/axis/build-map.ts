@@ -919,4 +919,34 @@ export const axisBuildOrder: AxisBuildOrderItem[] = [
       "no backend call, route change, persistence, or run execution yet",
     ],
   },
+  {
+    id: 61,
+    title: "Local run route compatibility guard",
+    items: [
+      "frontend contract now records that current /api/axis/run is legacy AxisUnderstanding, not unified AxisOutput transport",
+      "active run card and submit guard show Adapter needed before execution can be enabled",
+      "wiring checklist includes route adapter as a required missing piece",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 62,
+    title: "Local run adapter contract",
+    items: [
+      "frontend defines the adapter contract needed between AxisRunPayload and AxisOutput",
+      "adapter contract records expected accepts and returns shape for future route wiring",
+      "active run card shows adapter status as needed",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
+  {
+    id: 63,
+    title: "Local output detail compatibility guard",
+    items: [
+      "output detail preview shows the same route compatibility guard as the active run card",
+      "inspected outputs state that the current /api/axis/run route needs an AxisOutput adapter",
+      "submit guard and wiring checklist remain locked until adapter work is explicit",
+      "no backend call, route change, persistence, or run execution yet",
+    ],
+  },
 ];
