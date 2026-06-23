@@ -106,7 +106,7 @@ const modeConfigs: Record<AxisVisionMode, {
 }> = {
   axis_lab: {
     ballRelevant: true,
-    description: "Debug and raw detection testing.",
+    description: "Advanced camera diagnostics and lab testing.",
     label: "Axis Lab",
     requiresRim: false,
     suggestedPlayers: 5,
@@ -229,6 +229,10 @@ export default function AxisLiveVision() {
   const [manualEvents, setManualEvents] = useState<ManualPracticeEvent[]>([]);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [sessionEditOpen, setSessionEditOpen] = useState(false);
+  const [sessionPlayerDraft, setSessionPlayerDraft] = useState("");
+  const [sessionFocusDraft, setSessionFocusDraft] = useState("");
+  const [axisLabOpen, setAxisLabOpen] = useState(false);
   const [practiceElapsedMs, setPracticeElapsedMs] = useState(0);
   const [practiceEndedAt, setPracticeEndedAt] = useState<number | null>(null);
   const [setupChecks, setSetupChecks] = useState<SetupChecks>({
@@ -257,7 +261,7 @@ export default function AxisLiveVision() {
   const [lastError, setLastError] = useState("");
   const [calibration, setCalibration] = useState<AxisCalibrationState>(defaultCal());
   const [calibrationMode, setCalibrationMode] = useState<CalMode>("off");
-  const [calibrationMenuOpen, setCalibrationMenuOpen] = useState(false);
+  const [, setCalibrationMenuOpen] = useState(false);
   const [ballTrail, setBallTrail] = useState<AxisBallTrailState>({ points: [], visible: false });
   const [playerSlots, setPlayerSlots] = useState<AxisPlayerSlot[]>([]);
   const [selectedPlayerSlotId, setSelectedPlayerSlotId] = useState<string | null>(null);
@@ -533,6 +537,7 @@ export default function AxisLiveVision() {
     setCalibrationMenuOpen(false);
     if (next !== "off") {
       setEvidencePanelOpen(false);
+      setToolsOpen(false);
       cancelPlayerAssignment();
     }
   }
@@ -604,15 +609,6 @@ export default function AxisLiveVision() {
     updatePlayerSlot(slotId, { locked: true, status: "active" });
   }
 
-  function toggleCalibrationMenu() {
-    if (recordingStatus === "recording") {
-      setLastError("Stop recording before calibration.");
-      return;
-    }
-
-    setCalibrationMenuOpen((open) => !open);
-  }
-
   function savePlayerAssignment() {
     if (!selectedPlayerSlotId) return;
     const trimmed = playerNameDraft.trim();
@@ -651,7 +647,7 @@ export default function AxisLiveVision() {
 
   function startDrillZone() {
     if (recordingStatus === "recording") {
-      setLastError("Stop recording before setting Drill Zone.");
+      setLastError("Stop recording before setting the Focus Area.");
       return;
     }
 
@@ -670,7 +666,7 @@ export default function AxisLiveVision() {
 
   function startIgnoreZone() {
     if (recordingStatus === "recording") {
-      setLastError("Stop recording before setting Ignore Zone.");
+      setLastError("Stop recording before blocking noise.");
       return;
     }
 
@@ -838,6 +834,55 @@ export default function AxisLiveVision() {
     setPracticeStatus("setup");
     setPracticeElapsedMs(0);
     setPracticeEndedAt(null);
+    setAxisLabOpen(false);
+  }
+
+  function openSessionEditor() {
+    setSessionPlayerDraft(practicePlayerInput);
+    setSessionFocusDraft(practiceObjective);
+    setSessionEditOpen(true);
+    setToolsOpen(false);
+  }
+
+  function saveSessionEditor() {
+    setPracticePlayerInput(sessionPlayerDraft);
+    setPracticeObjective(sessionFocusDraft);
+    setSessionEditOpen(false);
+  }
+
+  function openFrameCheck() {
+    setAxisLabOpen(false);
+    setEvidencePanelOpen(true);
+    setToolsOpen(false);
+  }
+
+  function openSessionReview() {
+    setAxisLabOpen(false);
+    setEvidencePanelOpen(true);
+    setToolsOpen(false);
+  }
+
+  function openAxisLab() {
+    setAxisLabOpen(true);
+    setEvidencePanelOpen(true);
+    setToolsOpen(false);
+  }
+
+  function openWhoIsWorking() {
+    setAxisLabOpen(false);
+    setEvidencePanelOpen(true);
+    setToolsOpen(false);
+  }
+
+  function lockDisplayedPlayers() {
+    const displayed = getDisplayedPlayerSlots();
+    const displayedIds = new Set(displayed.map((slot) => slot.slotId));
+    const next = playerSlotsRef.current.map((slot) =>
+      displayedIds.has(slot.slotId) ? { ...slot, locked: true, status: "active" as const } : slot,
+    );
+    playerSlotsRef.current = next;
+    setPlayerSlots(next);
+    setToolsOpen(false);
   }
 
   function updateSetupCheck(key: keyof SetupChecks, value: boolean) {
@@ -1958,12 +2003,12 @@ export default function AxisLiveVision() {
   const aiEvidenceCaptured = visionFrames.length > 0;
   const calibrationInstruction = ignoreZoneMode
     ? drillZoneDraft
-      ? "Tap opposite corner of Ignore Zone"
-      : "Tap first corner of Ignore Zone"
+      ? "Tap opposite corner to block noise"
+      : "Mark the object or area to ignore"
     : drillZoneMode
     ? drillZoneDraft
-      ? "Tap opposite corner of Drill Zone"
-      : "Tap first corner of Drill Zone"
+      ? "Tap opposite corner of the workout space"
+      : "Drag around the workout space"
     : calibrationMode === "set_rim"
     ? "Tap video to set rim"
     : calibrationMode === "set_floor"
@@ -1978,7 +2023,7 @@ export default function AxisLiveVision() {
 
   return (
     <main className={`axis-live-vision${gymMode ? " axis-live-vision--gym" : ""}`}>
-      <section className="axis-live-vision__stage" aria-label="Axis live camera AI detection">
+      <section className="axis-live-vision__stage" aria-label="Axis practice camera">
         <video
           aria-label="Live camera feed"
           autoPlay
@@ -2129,7 +2174,7 @@ export default function AxisLiveVision() {
       )}
 
       {!showPracticeStart && !showEndSummary && !calActive && (
-        <aside className="axis-live-vision__quick-status" aria-label="Live detection status">
+        <aside className="axis-live-vision__quick-status" aria-label="Live practice status">
           <span>{isRecording ? "Recording" : `${formatRecordingTime(practiceElapsedMs)} Practice`}</span>
           {modeConfig?.ballRelevant && <span>Ball {ballStatus}</span>}
           <span>Active {displayedPeopleCount}/{activePlayerLimit}</span>
@@ -2141,26 +2186,20 @@ export default function AxisLiveVision() {
       {!calActive && evidencePanelOpen && (
         <section
           className={`axis-live-vision__evidence ${evidencePanelOpen ? "is-open" : ""}`}
-          aria-label="Evidence session panel"
+          aria-label="Session review panel"
         >
           <div className="axis-live-vision__evidence-body">
               <dl>
-                <div><dt>Session ID</dt><dd>{sessionId}</dd></div>
+                <div><dt>Session</dt><dd>{modeConfig?.label ?? "Practice"}</dd></div>
                 <div><dt>Duration</dt><dd>{durationSeconds}s</dd></div>
-                <div><dt>FPS</dt><dd>{fps.toFixed(1)}</dd></div>
-                <div><dt>Frames</dt><dd>{visionFrames.length}</dd></div>
-                <div><dt>Tracks</dt><dd>{activeTrackLabel}</dd></div>
-                <div><dt>Active tracks</dt><dd>{activeTracks.map((t) => t.trackId).join(", ") || "None"}</dd></div>
-                <div><dt>Raw people</dt><dd>{rawPeopleCount}</dd></div>
-                <div><dt>Displayed people</dt><dd>{displayedPeopleCount}/{activePlayerLimit}</dd></div>
-                <div><dt>Max people</dt><dd>{maxPeopleCount}</dd></div>
-                <div><dt>Ball tracking</dt><dd>Experimental COCO-SSD signal</dd></div>
-                <div><dt>Ball seen</dt><dd>{ballSeenFramesRef.current}</dd></div>
-                <div><dt>Ball lost</dt><dd>{ballLostCount}</dd></div>
-                <div><dt>Ball direction</dt><dd>{ballDirection}</dd></div>
-                <div><dt>Ball speed</dt><dd>{ballSpeed === null ? "unknown" : ballSpeed}</dd></div>
+                <div><dt>Good Rep</dt><dd>{goodRepCount}</dd></div>
+                <div><dt>Again</dt><dd>{againCount}</dd></div>
+                <div><dt>Notes</dt><dd>{noteCount}</dd></div>
+                <div><dt>Snapshots</dt><dd>{snapshotCount}</dd></div>
+                <div><dt>Active players</dt><dd>{displayedPeopleCount}/{activePlayerLimit}</dd></div>
+                <div><dt>Ball</dt><dd>{modeConfig?.ballRelevant ? ballStatus : "Not prioritized"}</dd></div>
                 <div>
-                  <dt>Player tags</dt>
+                  <dt>Players</dt>
                   <dd>
                     {playerSlots.some((slot) => slot.playerName)
                       ? playerSlots
@@ -2173,24 +2212,12 @@ export default function AxisLiveVision() {
                 <div><dt>Rim</dt><dd>{calibration.rim ? "Set" : "Not set"}</dd></div>
                 <div><dt>Floor</dt><dd>{calibration.floorLine ? "Set" : "Not set"}</dd></div>
                 <div><dt>Paint</dt><dd>{calibration.paintPoints.length >= 2 ? "Set" : "Not set"}</dd></div>
-                <div><dt>Drill Zone</dt><dd>{drillZone ? "Set" : "Not set"}</dd></div>
-                <div><dt>Ignore Zones</dt><dd>{ignoreZones.length}</dd></div>
+                <div><dt>Focus Area</dt><dd>{drillZone ? "Set" : "Not set"}</dd></div>
+                <div><dt>Blocked Noise</dt><dd>{ignoreZones.length}</dd></div>
                 <div><dt>Trail</dt><dd>{showTrail ? "On" : "Off"}</dd></div>
               </dl>
-              <button
-                className="axis-live-vision__trail-toggle"
-                data-active={showTrail ? "true" : undefined}
-                onClick={() => {
-                  const next = !showTrail;
-                  showTrailRef.current = next;
-                  setShowTrail(next);
-                }}
-                type="button"
-              >
-                Trail {showTrail ? "On" : "Off"}
-              </button>
               <div className="axis-live-vision__player-tags" aria-label="Player tags">
-                <p>Player Tags</p>
+                <p>Who&apos;s Working?</p>
                 {playerSlots.length > 0 ? (
                   playerSlots.map((slot) => (
                     <div className="axis-live-vision__player-tag-row" key={slot.slotId}>
@@ -2207,26 +2234,44 @@ export default function AxisLiveVision() {
               </div>
               <div className="axis-live-vision__evidence-actions">
                 {isCameraLive && <button onClick={flipCamera} type="button">Flip Camera</button>}
-                <button onClick={() => setShowConfidence((value) => !value)} type="button">
-                  Show Confidence {showConfidence ? "On" : "Off"}
-                </button>
-                <button onClick={() => setShowRawTrackIds((value) => !value)} type="button">
-                  Show Raw IDs {showRawTrackIds ? "On" : "Off"}
-                </button>
-                <button onClick={() => setShowAllDetections((value) => !value)} type="button">
-                  Show Raw Detections {showAllDetections ? "On" : "Off"}
-                </button>
-                <button onClick={() => setShowCandidates((value) => !value)} type="button">
-                  Show Candidates {showCandidates ? "On" : "Off"}
-                </button>
-                <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
-                <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
-                <button onClick={clearPlayerTags} type="button">Clear Player Tags</button>
-                <button onClick={clearDrillZone} type="button">Clear Drill Zone</button>
-                <button onClick={clearIgnoreZones} type="button">Clear Ignore Zones</button>
+                <button onClick={exportEvidenceJson} type="button">Export Session Data</button>
+                <button onClick={captureSnapshot} type="button">Snapshot</button>
+                <button onClick={clearPlayerTags} type="button">Clear Player Names</button>
+                <button onClick={clearDrillZone} type="button">Clear Focus Area</button>
+                <button onClick={clearIgnoreZones} type="button">Clear Blocked Noise</button>
                 <button onClick={resetGymSetup} type="button">Reset Gym Setup</button>
                 <button onClick={clearSession} type="button">Clear Session</button>
               </div>
+              {axisLabOpen && (
+                <div className="axis-live-vision__axis-lab" aria-label="Axis Lab diagnostics">
+                  <p>Axis Lab</p>
+                  <dl>
+                    <div><dt>FPS</dt><dd>{fps.toFixed(1)}</dd></div>
+                    <div><dt>Frames</dt><dd>{visionFrames.length}</dd></div>
+                    <div><dt>Model status</dt><dd>{aiStatus}</dd></div>
+                    <div><dt>Tracks</dt><dd>{activeTrackLabel}</dd></div>
+                    <div><dt>Active track IDs</dt><dd>{activeTracks.map((t) => t.trackId).join(", ") || "None"}</dd></div>
+                    <div><dt>Raw people</dt><dd>{rawPeopleCount}</dd></div>
+                    <div><dt>Ball direction</dt><dd>{ballDirection}</dd></div>
+                    <div><dt>Ball speed</dt><dd>{ballSpeed === null ? "unknown" : ballSpeed}</dd></div>
+                  </dl>
+                  <div className="axis-live-vision__evidence-actions">
+                    <button onClick={() => setShowConfidence((value) => !value)} type="button">
+                      Show confidence {showConfidence ? "On" : "Off"}
+                    </button>
+                    <button onClick={() => setShowRawTrackIds((value) => !value)} type="button">
+                      Show raw IDs {showRawTrackIds ? "On" : "Off"}
+                    </button>
+                    <button onClick={() => setShowAllDetections((value) => !value)} type="button">
+                      Show raw detections {showAllDetections ? "On" : "Off"}
+                    </button>
+                    <button onClick={() => setShowCandidates((value) => !value)} type="button">
+                      Show candidates {showCandidates ? "On" : "Off"}
+                    </button>
+                    <button onClick={clearCalibration} type="button">Clear calibration</button>
+                  </div>
+                </div>
+              )}
           </div>
         </section>
       )}
@@ -2243,43 +2288,117 @@ export default function AxisLiveVision() {
                 </button>
                 {toolsOpen && (
                   <div className="axis-live-vision__tools-sheet">
-                    <button
-                      data-active={isRecording ? "true" : undefined}
-                      disabled={!isVisionRunning || recordingStatus === "stopping"}
-                      onClick={isRecording ? stopRecording : startRecording}
-                      type="button"
-                    >
-                      {recordingLabel}
-                    </button>
-                    <button disabled={isVisionBusy || isVisionRunning} onClick={startLiveVision} type="button">
-                      {primaryLabel}
-                    </button>
-                    <button onClick={toggleCalibrationMenu} type="button">Calibrate</button>
-                    {calibrationMenuOpen && (
-                      <div className="axis-live-vision__cal-menu">
-                        <button onClick={() => activateCalMode("set_rim")} type="button">Set Rim</button>
-                        <button onClick={() => activateCalMode("set_floor")} type="button">Set Floor</button>
-                        <button onClick={() => activateCalMode("set_paint")} type="button">Set Paint</button>
-                        <button onClick={clearCalibration} type="button">Clear Calibration</button>
-                      </div>
-                    )}
-                    <button onClick={() => setEvidencePanelOpen(true)} type="button">Tag Players</button>
-                    <button onClick={captureSnapshot} type="button">Snapshot</button>
-                    <button
-                      data-active={showTrail ? "true" : undefined}
-                      onClick={() => {
-                        const next = !showTrail;
-                        showTrailRef.current = next;
-                        setShowTrail(next);
-                      }}
-                      type="button"
-                    >
-                      Trail {showTrail ? "On" : "Off"}
-                    </button>
-                    <button onClick={() => setEvidencePanelOpen((open) => !open)} type="button">Evidence</button>
-                    <button onClick={startDrillZone} type="button">Drill Zone</button>
-                    <button onClick={startIgnoreZone} type="button">Ignore Zone</button>
-                    <button onClick={() => setEvidencePanelOpen(true)} type="button">Debug</button>
+                    <div className="axis-live-vision__tool-section">
+                      <p>Session</p>
+                      <button onClick={openSessionEditor} type="button">
+                        <strong>Edit Player</strong>
+                        <span>Update who this work is for</span>
+                        <em>{getPracticePlayers().length > 0 ? "Set" : "Optional"}</em>
+                      </button>
+                      <button onClick={openSessionEditor} type="button">
+                        <strong>Edit Focus</strong>
+                        <span>Adjust today&apos;s practice objective</span>
+                        <em>{practiceObjective.trim() ? "Set" : "Optional"}</em>
+                      </button>
+                      <button onClick={() => { setNoteOpen(true); setToolsOpen(false); }} type="button">
+                        <strong>Add Note</strong>
+                        <span>Save a quick coaching note</span>
+                        <em>{noteCount}</em>
+                      </button>
+                    </div>
+                    <div className="axis-live-vision__tool-section">
+                      <p>Capture</p>
+                      <button
+                        data-active={isRecording ? "true" : undefined}
+                        disabled={!isVisionRunning || recordingStatus === "stopping"}
+                        onClick={isRecording ? stopRecording : startRecording}
+                        type="button"
+                      >
+                        <strong>{isRecording ? "Stop Clip" : "Record Clip"}</strong>
+                        <span>Capture the camera view with Axis overlay</span>
+                        <em>{recordingLabel}</em>
+                      </button>
+                      <button onClick={captureSnapshot} type="button">
+                        <strong>Snapshot</strong>
+                        <span>Save the current frame with the overlay</span>
+                        <em>{snapshotCount}</em>
+                      </button>
+                      <button
+                        data-active={showTrail ? "true" : undefined}
+                        onClick={() => {
+                          const next = !showTrail;
+                          showTrailRef.current = next;
+                          setShowTrail(next);
+                        }}
+                        type="button"
+                      >
+                        <strong>Trail</strong>
+                        <span>Show ball path when available</span>
+                        <em>{showTrail ? "On" : "Off"}</em>
+                      </button>
+                    </div>
+                    <div className="axis-live-vision__tool-section">
+                      <p>Setup</p>
+                      <button onClick={openFrameCheck} type="button">
+                        <strong>Frame Check</strong>
+                        <span>Check camera, rim, floor, and player view</span>
+                        <em>{isCameraLive ? "Live" : "Needed"}</em>
+                      </button>
+                      <button onClick={startDrillZone} type="button">
+                        <strong>Focus Area</strong>
+                        <span>Only pay attention to the workout space</span>
+                        <em>{drillZone ? "Set" : "Optional"}</em>
+                      </button>
+                      <button onClick={startIgnoreZone} type="button">
+                        <strong>Block Noise</strong>
+                        <span>Hide benches, rim machine, background traffic</span>
+                        <em>{ignoreZones.length} blocks</em>
+                      </button>
+                      <button onClick={() => activateCalMode("set_rim")} type="button">
+                        <strong>Calibrate Rim</strong>
+                        <span>Tap the rim for cleaner visual reference</span>
+                        <em>{calibration.rim ? "Set" : "Optional"}</em>
+                      </button>
+                    </div>
+                    <div className="axis-live-vision__tool-section">
+                      <p>Players</p>
+                      <button onClick={openWhoIsWorking} type="button">
+                        <strong>Who&apos;s Working?</strong>
+                        <span>Edit names and assign current slots</span>
+                        <em>{playerSlots.filter((slot) => slot.playerName).length} named</em>
+                      </button>
+                      <button onClick={lockDisplayedPlayers} type="button">
+                        <strong>Lock Players</strong>
+                        <span>Keep visible players attached to their slots</span>
+                        <em>{playerSlots.filter((slot) => slot.locked).length} locked</em>
+                      </button>
+                    </div>
+                    <div className="axis-live-vision__tool-section">
+                      <p>Review</p>
+                      <button onClick={openSessionReview} type="button">
+                        <strong>Session Summary</strong>
+                        <span>Review reps, notes, snapshots, and setup</span>
+                        <em>{manualEvents.length} events</em>
+                      </button>
+                      <button onClick={exportEvidenceJson} type="button">
+                        <strong>Export Session Data</strong>
+                        <span>Download the local practice record</span>
+                        <em>Ready</em>
+                      </button>
+                    </div>
+                    <div className="axis-live-vision__tool-section">
+                      <p>Advanced</p>
+                      <button data-active={debugEnabled ? "true" : undefined} onClick={openAxisLab} type="button">
+                        <strong>Axis Lab</strong>
+                        <span>Diagnostics and advanced camera checks</span>
+                        <em>{debugEnabled ? "On" : "Off"}</em>
+                      </button>
+                      <button onClick={resetGymSetup} type="button">
+                        <strong>Reset Setup</strong>
+                        <span>Clear saved rim, areas, trail, and lab settings</span>
+                        <em>Local</em>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2320,6 +2439,37 @@ export default function AxisLiveVision() {
         </section>
       )}
 
+      {sessionEditOpen && !calActive && (
+        <section className="axis-live-vision__note-sheet" aria-label="Edit practice session">
+          <div className="axis-live-vision__note-card">
+            <p>Edit Session</p>
+            <label>
+              Player / Players
+              <input
+                autoFocus
+                onChange={(event) => setSessionPlayerDraft(event.target.value)}
+                placeholder="Hailey"
+                type="text"
+                value={sessionPlayerDraft}
+              />
+            </label>
+            <label>
+              Focus
+              <input
+                onChange={(event) => setSessionFocusDraft(event.target.value)}
+                placeholder="Pound stop pivot finish"
+                type="text"
+                value={sessionFocusDraft}
+              />
+            </label>
+            <div className="axis-live-vision__note-actions">
+              <button onClick={saveSessionEditor} type="button">Save</button>
+              <button onClick={() => setSessionEditOpen(false)} type="button">Cancel</button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {showEndSummary && (
         <section className="axis-live-vision__summary" aria-label="Practice session summary">
           <div className="axis-live-vision__summary-card">
@@ -2332,10 +2482,10 @@ export default function AxisLiveVision() {
               <div><dt>Again</dt><dd>{againCount}</dd></div>
               <div><dt>Notes</dt><dd>{noteCount}</dd></div>
               <div><dt>Snapshots</dt><dd>{snapshotCount}</dd></div>
-              <div><dt>AI Evidence captured</dt><dd>{aiEvidenceCaptured ? "Yes" : "No"}</dd></div>
+              <div><dt>Practice data captured</dt><dd>{aiEvidenceCaptured ? "Yes" : "No"}</dd></div>
             </dl>
             <div className="axis-live-vision__summary-actions">
-              <button onClick={() => setEvidencePanelOpen(true)} type="button">Review Evidence</button>
+              <button onClick={openSessionReview} type="button">Review Session</button>
               <button onClick={exportEvidenceJson} type="button">Export Session Data</button>
               <button onClick={startAnotherPractice} type="button">Start Another</button>
             </div>
@@ -2511,6 +2661,7 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__practice-start input,
         .axis-live-vision__practice-start select,
+        .axis-live-vision__note-card input,
         .axis-live-vision__note-card textarea {
           background: rgba(248, 247, 242, 0.08);
           border: 1px solid rgba(248, 247, 242, 0.18);
@@ -2530,6 +2681,7 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__practice-start input:focus,
         .axis-live-vision__practice-start select:focus,
+        .axis-live-vision__note-card input:focus,
         .axis-live-vision__note-card textarea:focus {
           border-color: rgba(248, 212, 92, 0.72);
           outline: none;
@@ -2887,7 +3039,81 @@ export default function AxisLiveVision() {
         .axis-live-vision__tools-sheet {
           bottom: calc(100% + 0.55rem);
           left: 50%;
+          max-height: min(72dvh, 42rem);
+          overflow: auto;
           transform: translateX(-50%);
+          width: min(28rem, calc(100vw - 1.5rem));
+        }
+
+        .axis-live-vision__tool-section {
+          border-bottom: 1px solid rgba(248, 247, 242, 0.1);
+          display: grid;
+          gap: 0.4rem;
+          padding-bottom: 0.55rem;
+        }
+
+        .axis-live-vision__tool-section:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+
+        .axis-live-vision__tool-section p,
+        .axis-live-vision__axis-lab p {
+          color: rgba(248, 247, 242, 0.52);
+          font-size: 0.68rem;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__tool-section button {
+          align-items: center;
+          background: rgba(248, 247, 242, 0.075);
+          border-color: rgba(248, 247, 242, 0.12);
+          border-radius: 0.95rem;
+          color: #f8f7f2;
+          display: grid;
+          gap: 0.18rem 0.65rem;
+          grid-template-columns: minmax(0, 1fr) auto;
+          min-height: 3.9rem;
+          padding: 0.65rem 0.72rem;
+          text-align: left;
+          text-transform: none;
+        }
+
+        .axis-live-vision__tool-section button strong {
+          font-size: 0.86rem;
+          letter-spacing: 0;
+        }
+
+        .axis-live-vision__tool-section button span {
+          color: rgba(248, 247, 242, 0.56);
+          font-size: 0.74rem;
+          font-weight: 750;
+          letter-spacing: 0;
+          line-height: 1.25;
+        }
+
+        .axis-live-vision__tool-section button em {
+          align-self: center;
+          background: rgba(248, 247, 242, 0.08);
+          border-radius: 999px;
+          color: rgba(248, 247, 242, 0.76);
+          font-size: 0.66rem;
+          font-style: normal;
+          font-weight: 900;
+          grid-column: 2;
+          grid-row: 1 / span 2;
+          letter-spacing: 0.04em;
+          padding: 0.26rem 0.45rem;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        .axis-live-vision__tool-section button[data-active] em {
+          background: rgba(248, 212, 92, 0.16);
+          color: #f8d45c;
         }
 
         .axis-live-vision__cal-menu {
@@ -2900,6 +3126,14 @@ export default function AxisLiveVision() {
           min-width: 0;
           position: static;
           right: auto;
+        }
+
+        .axis-live-vision__axis-lab {
+          border-top: 1px solid rgba(248, 212, 92, 0.24);
+          display: grid;
+          gap: 0.65rem;
+          margin-top: 0.85rem;
+          padding-top: 0.85rem;
         }
 
         .axis-live-vision__controls {
