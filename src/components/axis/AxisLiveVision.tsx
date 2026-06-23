@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/immutability, react-hooks/purity, react-hooks/refs, react-hooks/set-state-in-effect */
 
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
   loadAxisLiveDetector,
   type AxisLiveDetector,
@@ -29,8 +29,10 @@ type FacingMode = "environment" | "user";
 type CalMode = AxisCalibrationState["mode"];
 type VisionStatus = "idle" | "starting_camera" | "camera_ready" | "loading_ai" | "running" | "error" | "stopped";
 type RecordingStatus = "idle" | "recording" | "stopping" | "ready" | "error";
+type PracticeStatus = "setup" | "live" | "ended";
 type AxisVisionMode =
   | "shot_workout"
+  | "finishing"
   | "ball_handling"
   | "small_sided"
   | "team_practice"
@@ -73,6 +75,28 @@ type SetupChecks = {
   readyToRecord: boolean;
 };
 
+type ManualPracticeEventType =
+  | "START_SESSION"
+  | "GOOD_REP"
+  | "AGAIN"
+  | "NOTE"
+  | "SNAPSHOT"
+  | "END_SESSION";
+
+type ManualPracticeEvent = {
+  id: string;
+  type: ManualPracticeEventType;
+  timestamp: number;
+  elapsedSessionTime: number;
+  playerName?: string;
+  players: string[];
+  objective: string;
+  sessionType: string;
+  playerSlots: AxisPlayerSlot[];
+  ballStatus: string;
+  text?: string;
+};
+
 const modeConfigs: Record<AxisVisionMode, {
   label: string;
   description: string;
@@ -92,6 +116,13 @@ const modeConfigs: Record<AxisVisionMode, {
     description: "One player, ball trail, and active drill space.",
     label: "Ball Handling",
     requiresRim: false,
+    suggestedPlayers: 1,
+  },
+  finishing: {
+    ballRelevant: true,
+    description: "Finishing reps with a clean player view.",
+    label: "Finishing",
+    requiresRim: true,
     suggestedPlayers: 1,
   },
   game_film: {
@@ -190,7 +221,16 @@ export default function AxisLiveVision() {
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
   const [visionStatus, setVisionStatus] = useState<VisionStatus>("idle");
   const [gymMode] = useState(true);
-  const [selectedMode, setSelectedMode] = useState<AxisVisionMode | null>(null);
+  const [practiceStatus, setPracticeStatus] = useState<PracticeStatus>("setup");
+  const [practiceStarting, setPracticeStarting] = useState(false);
+  const [practicePlayerInput, setPracticePlayerInput] = useState("");
+  const [practiceObjective, setPracticeObjective] = useState("");
+  const [selectedMode, setSelectedMode] = useState<AxisVisionMode | null>("ball_handling");
+  const [manualEvents, setManualEvents] = useState<ManualPracticeEvent[]>([]);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [practiceElapsedMs, setPracticeElapsedMs] = useState(0);
+  const [practiceEndedAt, setPracticeEndedAt] = useState<number | null>(null);
   const [setupChecks, setSetupChecks] = useState<SetupChecks>({
     cameraStable: false,
     playerVisible: false,
@@ -339,6 +379,16 @@ export default function AxisLiveVision() {
 
     return () => window.clearInterval(interval);
   }, [recordingStatus, recordingStartedAt]);
+
+  useEffect(() => {
+    if (practiceStatus !== "live") return undefined;
+
+    const interval = window.setInterval(() => {
+      setPracticeElapsedMs(Date.now() - sessionStartedAtRef.current);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [practiceStatus]);
 
   useEffect(() => {
     tracksRef.current = activeTracks;
@@ -672,6 +722,124 @@ export default function AxisLiveVision() {
     showTrailRef.current = mode === "ball_handling" || mode === "shot_workout";
   }
 
+  function getPracticePlayers() {
+    return practicePlayerInput
+      .split(/[,;\n]/)
+      .map((player) => player.trim())
+      .filter(Boolean);
+  }
+
+  function getPracticePlayerLabel() {
+    const players = getPracticePlayers();
+    if (players.length === 0) return "Practice";
+    if (players.length === 1) return players[0];
+    return `${players[0]} + ${players.length - 1}`;
+  }
+
+  function getBallStatusLabel() {
+    if (ballVisible) return "live";
+    if (ballLostCount > 0) return "lost";
+    return "experimental";
+  }
+
+  function createManualEvent(type: ManualPracticeEventType, text?: string): ManualPracticeEvent {
+    const now = Date.now();
+    const players = getPracticePlayers();
+    return {
+      ballStatus: getBallStatusLabel(),
+      elapsedSessionTime: Math.max(0, now - sessionStartedAtRef.current),
+      id: `${type.toLowerCase()}-${now.toString(36)}-${manualEvents.length}`,
+      objective: practiceObjective.trim(),
+      playerName: players[0],
+      players,
+      playerSlots: playerSlotsRef.current,
+      sessionType: selectedMode ? modeConfigs[selectedMode].label : "Practice",
+      text,
+      timestamp: now,
+      type,
+    };
+  }
+
+  function addManualEvent(type: ManualPracticeEventType, text?: string) {
+    const event = createManualEvent(type, text);
+    setManualEvents((current) => [...current, event]);
+    return event;
+  }
+
+  async function startPracticeSession(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const nextId = createSessionId();
+    const now = Date.now();
+    sessionIdRef.current = nextId;
+    sessionStartedAtRef.current = now;
+    setSessionId(nextId);
+    setSessionStartedAt(now);
+    setPracticeElapsedMs(0);
+    setPracticeEndedAt(null);
+    setManualEvents([]);
+    setPracticeStatus("live");
+    setPracticeStarting(true);
+    selectMode(selectedMode ?? "ball_handling");
+
+    const startEvent = createManualEvent("START_SESSION");
+    setManualEvents([startEvent]);
+
+    try {
+      await startLiveVision();
+    } finally {
+      setPracticeStarting(false);
+    }
+  }
+
+  function resetPracticeForm() {
+    setPracticePlayerInput("");
+    setPracticeObjective("");
+    setSelectedMode("ball_handling");
+    setSetupChecks({ cameraStable: false, playerVisible: false, readyToRecord: false });
+    setLastError("");
+  }
+
+  function logGoodRep() {
+    addManualEvent("GOOD_REP");
+  }
+
+  function logAgain() {
+    addManualEvent("AGAIN");
+  }
+
+  function savePracticeNote() {
+    const text = noteDraft.trim();
+    if (!text) return;
+    addManualEvent("NOTE", text);
+    setNoteDraft("");
+    setNoteOpen(false);
+  }
+
+  function endPracticeSession() {
+    const endedAt = Date.now();
+    setPracticeElapsedMs(Math.max(0, endedAt - sessionStartedAtRef.current));
+    setPracticeEndedAt(endedAt);
+    addManualEvent("END_SESSION");
+    if (recordingStatus === "recording") stopRecording();
+    stopAI();
+    stopCameraTracks();
+    setCameraStatus("idle");
+    setVisionStatus("stopped");
+    setPracticeStatus("ended");
+    clearCanvas();
+  }
+
+  function startAnotherPractice() {
+    clearSession();
+    discardClip();
+    resetPracticeForm();
+    setManualEvents([]);
+    setNoteOpen(false);
+    setPracticeStatus("setup");
+    setPracticeElapsedMs(0);
+    setPracticeEndedAt(null);
+  }
+
   function updateSetupCheck(key: keyof SetupChecks, value: boolean) {
     setSetupChecks((current) => ({ ...current, [key]: value }));
   }
@@ -732,18 +900,19 @@ export default function AxisLiveVision() {
   // ─── Camera / AI ────────────────────────────────────────────────
 
   async function startLiveVision() {
-    if (aiRunningRef.current) return;
+    if (aiRunningRef.current) return true;
     setVisionStatus("starting_camera");
     const cameraStarted = await startCamera();
     if (!cameraStarted) {
       setVisionStatus("error");
-      return;
+      return false;
     }
 
     setVisionStatus("camera_ready");
     setVisionStatus("loading_ai");
     const aiStarted = await startAI();
     setVisionStatus(aiStarted ? "running" : "error");
+    return aiStarted;
   }
 
   async function startCamera() {
@@ -1411,6 +1580,20 @@ export default function AxisLiveVision() {
       ballTrackingNote: "COCO-SSD sports ball detection is experimental and not verified game truth.",
       calibration: calibrationRef.current,
       selectedMode: selectedMode ? modeConfigs[selectedMode].label : null,
+      sessionType: selectedMode ? modeConfigs[selectedMode].label : null,
+      objective: practiceObjective.trim(),
+      players: getPracticePlayers(),
+      manualEvents,
+      goodRepCount: manualEvents.filter((event) => event.type === "GOOD_REP").length,
+      againCount: manualEvents.filter((event) => event.type === "AGAIN").length,
+      noteCount: manualEvents.filter((event) => event.type === "NOTE").length,
+      snapshotCount: manualEvents.filter((event) => event.type === "SNAPSHOT").length,
+      sessionStartedAt,
+      sessionEndedAt: practiceEndedAt ?? undefined,
+      durationSeconds: Math.max(
+        0,
+        Math.round(((practiceEndedAt ?? Date.now()) - sessionStartedAt) / 1000),
+      ),
       setupChecklist,
       display: {
         debug: {
@@ -1505,7 +1688,10 @@ export default function AxisLiveVision() {
     ctx.drawImage(overlay, 0, 0, rect.width, rect.height);
 
     const blob = await new Promise<Blob | null>((resolve) => snap.toBlob(resolve, "image/png"));
-    if (blob) downloadBlob(blob, `axis-vision-snapshot-${sessionId}.png`);
+    if (blob) {
+      addManualEvent("SNAPSHOT");
+      downloadBlob(blob, `axis-vision-snapshot-${sessionId}.png`);
+    }
   }
 
   function getSupportedRecordingMimeType() {
@@ -1751,8 +1937,9 @@ export default function AxisLiveVision() {
   const calActive = calibrationMode !== "off" || drillZoneMode || ignoreZoneMode;
   const modeConfig = selectedMode ? modeConfigs[selectedMode] : null;
   const setupChecklist = buildSetupChecklist();
-  const showModePicker = !selectedMode;
-  const showSetupPanel = Boolean(selectedMode) && !setupChecks.readyToRecord;
+  const showPracticeStart = practiceStatus === "setup";
+  const showEndSummary = practiceStatus === "ended";
+  const showSetupPanel = false;
   const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Experimental";
   const ballDirection = ballTrail.direction ?? "unknown";
   const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
@@ -1764,6 +1951,11 @@ export default function AxisLiveVision() {
   const selectedPlayerSlot = selectedPlayerSlotId
     ? playerSlots.find((slot) => slot.slotId === selectedPlayerSlotId)
     : null;
+  const goodRepCount = manualEvents.filter((event) => event.type === "GOOD_REP").length;
+  const againCount = manualEvents.filter((event) => event.type === "AGAIN").length;
+  const noteCount = manualEvents.filter((event) => event.type === "NOTE").length;
+  const snapshotCount = manualEvents.filter((event) => event.type === "SNAPSHOT").length;
+  const aiEvidenceCaptured = visionFrames.length > 0;
   const calibrationInstruction = ignoreZoneMode
     ? drillZoneDraft
       ? "Tap opposite corner of Ignore Zone"
@@ -1801,25 +1993,60 @@ export default function AxisLiveVision() {
           ref={canvasRef}
         />
 
-        {showModePicker && (
-          <div className="axis-live-vision__empty axis-live-vision__mode-picker">
-            <p>AXIS MODE SETUP</p>
-            <h1>Choose the session</h1>
-            <div className="axis-live-vision__mode-grid">
-              {(Object.keys(modeConfigs) as AxisVisionMode[]).map((mode) => (
-                <button key={mode} onClick={() => selectMode(mode)} type="button">
-                  <strong>{modeConfigs[mode].label}</strong>
-                  <span>{modeConfigs[mode].description}</span>
-                </button>
-              ))}
+        {showPracticeStart && (
+          <form className="axis-live-vision__practice-start" onSubmit={startPracticeSession}>
+            <p>AXIS PRACTICE</p>
+            <h1>Today&apos;s Session</h1>
+            <label>
+              Player / Players
+              <input
+                autoComplete="off"
+                onChange={(event) => setPracticePlayerInput(event.target.value)}
+                placeholder="Hailey"
+                type="text"
+                value={practicePlayerInput}
+              />
+            </label>
+            <label>
+              Focus / Objective
+              <input
+                autoComplete="off"
+                onChange={(event) => setPracticeObjective(event.target.value)}
+                placeholder="Pound stop pivot finish"
+                type="text"
+                value={practiceObjective}
+              />
+            </label>
+            <label>
+              Session Type
+              <select
+                onChange={(event) => selectMode(event.target.value as AxisVisionMode)}
+                value={selectedMode ?? "ball_handling"}
+              >
+                <option value="ball_handling">Ball Handling</option>
+                <option value="shot_workout">Shooting</option>
+                <option value="finishing">Finishing</option>
+                <option value="small_sided">1v1 / 2v2</option>
+                <option value="team_practice">Team Practice</option>
+                <option value="game_film">Game Film</option>
+                <option value="axis_lab">Axis Lab</option>
+              </select>
+            </label>
+            <button disabled={practiceStarting || isVisionBusy} type="submit">
+              {practiceStarting || isVisionBusy ? primaryLabel : "Start Session"}
+            </button>
+            <div className="axis-live-vision__start-links">
+              <button onClick={() => setLastError("Frame check starts after Start Session.")} type="button">Frame Check</button>
+              <button onClick={() => setLastError("Tools open after Start Session.")} type="button">Tools</button>
+              <button onClick={resetPracticeForm} type="button">Reset</button>
             </div>
-          </div>
+          </form>
         )}
 
-        {!showModePicker && !isCameraLive && (
+        {practiceStatus === "live" && !isCameraLive && (
           <div className="axis-live-vision__empty">
             <p>AXIS</p>
-            <h1>{modeConfig?.label ?? "Live camera AI"}</h1>
+            <h1>{modeConfig?.label ?? "Practice"}</h1>
             <button
               disabled={isVisionBusy}
               onClick={startLiveVision}
@@ -1827,6 +2054,7 @@ export default function AxisLiveVision() {
             >
               {primaryLabel}
             </button>
+            <span className="axis-live-vision__manual-note">Manual reps and notes still work if camera or AI is unavailable.</span>
           </div>
         )}
 
@@ -1880,9 +2108,11 @@ export default function AxisLiveVision() {
         {calActive && <div className="axis-live-vision__cal-hint">{calibrationInstruction}</div>}
       </section>
 
+      {!showPracticeStart && !showEndSummary && (
       <header className={`axis-live-vision__top${calActive ? " axis-live-vision__top--cal" : ""}`}>
         <div>
           <p>{modeConfig?.label ?? "AXIS LIVE"}</p>
+          <strong>{getPracticePlayerLabel()} · {practiceObjective.trim() || "Practice"}</strong>
         </div>
         {calActive ? (
           <button
@@ -1896,10 +2126,11 @@ export default function AxisLiveVision() {
           <span data-live={isCameraLive ? "true" : "false"}>{isCameraLive ? "LIVE" : cameraStatus.toUpperCase()}</span>
         )}
       </header>
+      )}
 
-      {!calActive && (
+      {!showPracticeStart && !showEndSummary && !calActive && (
         <aside className="axis-live-vision__quick-status" aria-label="Live detection status">
-          <span>{isRecording ? "Recording" : setupChecks.readyToRecord ? "Ready" : "Setup"}</span>
+          <span>{isRecording ? "Recording" : `${formatRecordingTime(practiceElapsedMs)} Practice`}</span>
           {modeConfig?.ballRelevant && <span>Ball {ballStatus}</span>}
           <span>Active {displayedPeopleCount}/{activePlayerLimit}</span>
           {debugEnabled && <span className="axis-live-vision__debug-pill">DEBUG VIEW</span>}
@@ -2000,33 +2231,29 @@ export default function AxisLiveVision() {
         </section>
       )}
 
-      {!calActive && isCameraLive && !showSetupPanel && (
+      {!calActive && practiceStatus === "live" && !showSetupPanel && (
         <footer className={`axis-live-vision__controls${isVisionRunning ? " axis-live-vision__controls--running" : ""}`} aria-label="Live vision controls">
-          {!isVisionRunning ? (
-            <button
-              className="axis-live-vision__primary-start"
-              disabled={isVisionBusy}
-              onClick={startLiveVision}
-              type="button"
-            >
-              {primaryLabel}
-            </button>
-          ) : (
-            <>
-              <button
-                data-active={isRecording ? "true" : undefined}
-                disabled={recordingStatus === "stopping"}
-                onClick={isRecording ? stopRecording : startRecording}
-                type="button"
-              >
-                {recordingLabel}
-              </button>
+          <>
+              <button onClick={logGoodRep} type="button">Good Rep</button>
+              <button onClick={logAgain} type="button">Again</button>
+              <button onClick={() => setNoteOpen(true)} type="button">Note</button>
               <div className="axis-live-vision__control-wrap">
                 <button disabled={isRecording} onClick={() => setToolsOpen((open) => !open)} type="button">
                   Tools
                 </button>
                 {toolsOpen && (
                   <div className="axis-live-vision__tools-sheet">
+                    <button
+                      data-active={isRecording ? "true" : undefined}
+                      disabled={!isVisionRunning || recordingStatus === "stopping"}
+                      onClick={isRecording ? stopRecording : startRecording}
+                      type="button"
+                    >
+                      {recordingLabel}
+                    </button>
+                    <button disabled={isVisionBusy || isVisionRunning} onClick={startLiveVision} type="button">
+                      {primaryLabel}
+                    </button>
                     <button onClick={toggleCalibrationMenu} type="button">Calibrate</button>
                     {calibrationMenuOpen && (
                       <div className="axis-live-vision__cal-menu">
@@ -2037,6 +2264,7 @@ export default function AxisLiveVision() {
                       </div>
                     )}
                     <button onClick={() => setEvidencePanelOpen(true)} type="button">Tag Players</button>
+                    <button onClick={captureSnapshot} type="button">Snapshot</button>
                     <button
                       data-active={showTrail ? "true" : undefined}
                       onClick={() => {
@@ -2055,9 +2283,8 @@ export default function AxisLiveVision() {
                   </div>
                 )}
               </div>
-              <button onClick={stopCamera} type="button">Stop</button>
-            </>
-          )}
+              <button onClick={endPracticeSession} type="button">Stop</button>
+          </>
         </footer>
       )}
 
@@ -2070,6 +2297,47 @@ export default function AxisLiveVision() {
               <button onClick={downloadClip} type="button">Download Clip</button>
               <button onClick={shareClip} type="button">Share / Save Clip</button>
               <button onClick={discardClip} type="button">Discard Clip</button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {noteOpen && !calActive && (
+        <section className="axis-live-vision__note-sheet" aria-label="Practice note">
+          <div className="axis-live-vision__note-card">
+            <p>Practice Note</p>
+            <textarea
+              autoFocus
+              onChange={(event) => setNoteDraft(event.target.value)}
+              placeholder="Say the rough note..."
+              value={noteDraft}
+            />
+            <div className="axis-live-vision__note-actions">
+              <button onClick={savePracticeNote} type="button">Save Note</button>
+              <button onClick={() => setNoteOpen(false)} type="button">Cancel</button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {showEndSummary && (
+        <section className="axis-live-vision__summary" aria-label="Practice session summary">
+          <div className="axis-live-vision__summary-card">
+            <p>Session Complete</p>
+            <h1>{getPracticePlayerLabel()}</h1>
+            <span>{practiceObjective.trim() || "Practice"} · {modeConfig?.label ?? "Session"}</span>
+            <dl>
+              <div><dt>Duration</dt><dd>{formatRecordingTime(practiceElapsedMs)}</dd></div>
+              <div><dt>Good Rep</dt><dd>{goodRepCount}</dd></div>
+              <div><dt>Again</dt><dd>{againCount}</dd></div>
+              <div><dt>Notes</dt><dd>{noteCount}</dd></div>
+              <div><dt>Snapshots</dt><dd>{snapshotCount}</dd></div>
+              <div><dt>AI Evidence captured</dt><dd>{aiEvidenceCaptured ? "Yes" : "No"}</dd></div>
+            </dl>
+            <div className="axis-live-vision__summary-actions">
+              <button onClick={() => setEvidencePanelOpen(true)} type="button">Review Evidence</button>
+              <button onClick={exportEvidenceJson} type="button">Export Session Data</button>
+              <button onClick={startAnotherPractice} type="button">Start Another</button>
             </div>
           </div>
         </section>
@@ -2192,6 +2460,107 @@ export default function AxisLiveVision() {
           line-height: 0.92;
           margin: 0.65rem 0 1.8rem;
           text-transform: uppercase;
+        }
+
+        .axis-live-vision__practice-start {
+          align-content: center;
+          background:
+            radial-gradient(circle at 50% 28%, rgba(124, 247, 212, 0.1), transparent 31rem),
+            rgba(2, 3, 4, 0.94);
+          display: grid;
+          gap: 0.8rem;
+          inset: 0;
+          justify-items: stretch;
+          margin: 0 auto;
+          max-width: 28rem;
+          padding: max(2rem, env(safe-area-inset-top)) 1.15rem max(1.2rem, env(safe-area-inset-bottom));
+          position: absolute;
+          width: 100%;
+          z-index: 10;
+        }
+
+        .axis-live-vision__practice-start p,
+        .axis-live-vision__summary-card p,
+        .axis-live-vision__note-card p {
+          color: rgba(248, 247, 242, 0.58);
+          font-size: 0.72rem;
+          font-weight: 900;
+          letter-spacing: 0.16em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__practice-start h1 {
+          font-size: clamp(2.7rem, 13vw, 5.8rem);
+          letter-spacing: -0.05em;
+          line-height: 0.9;
+          margin: 0 0 0.7rem;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__practice-start label,
+        .axis-live-vision__note-card label {
+          color: rgba(248, 247, 242, 0.68);
+          display: grid;
+          font-size: 0.72rem;
+          font-weight: 900;
+          gap: 0.45rem;
+          letter-spacing: 0.09em;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__practice-start input,
+        .axis-live-vision__practice-start select,
+        .axis-live-vision__note-card textarea {
+          background: rgba(248, 247, 242, 0.08);
+          border: 1px solid rgba(248, 247, 242, 0.18);
+          border-radius: 1rem;
+          color: #f8f7f2;
+          font: inherit;
+          font-size: 1rem;
+          min-height: 3.1rem;
+          padding: 0 0.95rem;
+          text-transform: none;
+          width: 100%;
+        }
+
+        .axis-live-vision__practice-start select {
+          appearance: none;
+        }
+
+        .axis-live-vision__practice-start input:focus,
+        .axis-live-vision__practice-start select:focus,
+        .axis-live-vision__note-card textarea:focus {
+          border-color: rgba(248, 212, 92, 0.72);
+          outline: none;
+        }
+
+        .axis-live-vision__practice-start > button {
+          background: #f8d45c;
+          border-color: #f8d45c;
+          color: #020304;
+          margin-top: 0.4rem;
+        }
+
+        .axis-live-vision__start-links {
+          display: grid;
+          gap: 0.5rem;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .axis-live-vision__start-links button {
+          background: rgba(248, 247, 242, 0.08);
+          color: #f8f7f2;
+          min-height: 2.4rem;
+          padding: 0 0.45rem;
+        }
+
+        .axis-live-vision__manual-note {
+          color: rgba(248, 247, 242, 0.64);
+          display: block;
+          font-size: 0.86rem;
+          font-weight: 700;
+          max-width: 18rem;
         }
 
         .axis-live-vision__mode-picker {
@@ -2415,7 +2784,7 @@ export default function AxisLiveVision() {
           bottom: calc(5.2rem + env(safe-area-inset-bottom));
           left: 1rem;
           position: absolute;
-          z-index: 6;
+          z-index: 12;
         }
 
         .axis-live-vision__evidence-body {
@@ -2546,7 +2915,7 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__controls--running {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(5, minmax(0, 1fr));
         }
 
         .axis-live-vision__primary-start {
@@ -2584,6 +2953,98 @@ export default function AxisLiveVision() {
           padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
           position: absolute;
           z-index: 9;
+        }
+
+        .axis-live-vision__note-sheet,
+        .axis-live-vision__summary {
+          align-items: end;
+          background: rgba(0, 0, 0, 0.4);
+          display: grid;
+          inset: 0;
+          padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
+          position: absolute;
+          z-index: 11;
+        }
+
+        .axis-live-vision__note-card,
+        .axis-live-vision__summary-card {
+          background: rgba(8, 9, 10, 0.94);
+          border: 1px solid rgba(248, 247, 242, 0.16);
+          border-radius: 1.25rem;
+          box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.45);
+          display: grid;
+          gap: 0.85rem;
+          justify-self: center;
+          max-width: 31rem;
+          padding: 1rem;
+          width: min(100%, 31rem);
+        }
+
+        .axis-live-vision__note-card textarea {
+          min-height: 8rem;
+          padding: 0.85rem;
+          resize: vertical;
+        }
+
+        .axis-live-vision__note-actions,
+        .axis-live-vision__summary-actions {
+          display: grid;
+          gap: 0.5rem;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .axis-live-vision__summary {
+          align-items: center;
+        }
+
+        .axis-live-vision__summary-card h1 {
+          font-size: clamp(2rem, 11vw, 4.6rem);
+          letter-spacing: -0.05em;
+          line-height: 0.92;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__summary-card > span {
+          color: rgba(248, 247, 242, 0.7);
+          font-size: 0.95rem;
+          font-weight: 800;
+          line-height: 1.35;
+        }
+
+        .axis-live-vision__summary-card dl {
+          display: grid;
+          gap: 0.5rem;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          margin: 0;
+        }
+
+        .axis-live-vision__summary-card dl div {
+          background: rgba(248, 247, 242, 0.07);
+          border: 1px solid rgba(248, 247, 242, 0.1);
+          border-radius: 0.9rem;
+          display: grid;
+          gap: 0.2rem;
+          min-height: 4.2rem;
+          padding: 0.7rem;
+        }
+
+        .axis-live-vision__summary-card dt {
+          color: rgba(248, 247, 242, 0.54);
+          font-size: 0.68rem;
+          font-weight: 900;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__summary-card dd {
+          font-size: 1.12rem;
+          font-weight: 900;
+          margin: 0;
+        }
+
+        .axis-live-vision__summary-actions {
+          grid-template-columns: 1fr;
         }
 
         .axis-live-vision__clip-sheet {
@@ -2726,7 +3187,7 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls--running {
-            grid-template-columns: repeat(3, minmax(0, 9rem));
+            grid-template-columns: repeat(5, minmax(0, 8rem));
           }
         }
 
@@ -2741,12 +3202,13 @@ export default function AxisLiveVision() {
           }
 
           .axis-live-vision__controls--running {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
           }
 
           .axis-live-vision__controls button {
+            font-size: 0.62rem;
             min-height: 2.8rem;
-            padding: 0 0.35rem;
+            padding: 0 0.18rem;
           }
         }
       `}</style>
