@@ -48,7 +48,7 @@ type RecordingMetadata = {
 };
 
 type AxisPlayerSlot = {
-  displaySlotId: string;
+  slotId: string;
   playerName?: string;
   currentRawTrackId?: string;
   rawTrackHistory: string[];
@@ -56,6 +56,7 @@ type AxisPlayerSlot = {
   score: number;
   lastSeenAt: number;
   locked: boolean;
+  status: "active" | "lost" | "candidate";
 };
 
 const inferenceIntervalMs = 200;
@@ -153,6 +154,7 @@ export default function AxisLiveVision() {
   const [showConfidence, setShowConfidence] = useState(false);
   const [showRawTrackIds, setShowRawTrackIds] = useState(false);
   const [showAllDetections, setShowAllDetections] = useState(false);
+  const [showCandidates, setShowCandidates] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [drillZone, setDrillZone] = useState<DrillZone | null>(null);
   const [drillZoneMode, setDrillZoneMode] = useState(false);
@@ -194,7 +196,7 @@ export default function AxisLiveVision() {
     tracksRef.current = activeTracks;
     drawDetections(activeTracks);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail, playerSlots, showConfidence, showRawTrackIds, showAllDetections, drillZone]);
+  }, [activeTracks, cameraStatus, aiStatus, fps, frameCount, ballVisible, maxPeopleCount, calibration, ballTrail, showTrail, playerSlots, showConfidence, showRawTrackIds, showAllDetections, showCandidates, drillZone]);
 
   // ─── Canvas click / calibration ────────────────────────────────
 
@@ -351,7 +353,7 @@ export default function AxisLiveVision() {
     const slot = findPlayerSlotAtPoint(x, y);
 
     if (!slot) return;
-    openPlayerAssignment(slot.displaySlotId);
+    openPlayerAssignment(slot.slotId);
   }
 
   function findPlayerSlotAtPoint(x: number, y: number) {
@@ -374,26 +376,26 @@ export default function AxisLiveVision() {
       .sort((a, b) => a.distance - b.distance)[0]?.slot;
   }
 
-  function openPlayerAssignment(displaySlotId: string) {
-    lockPlayer(displaySlotId);
-    const slot = playerSlotsRef.current.find((item) => item.displaySlotId === displaySlotId);
-    setSelectedPlayerSlotId(displaySlotId);
+  function openPlayerAssignment(slotId: string) {
+    lockPlayer(slotId);
+    const slot = playerSlotsRef.current.find((item) => item.slotId === slotId);
+    setSelectedPlayerSlotId(slotId);
     setPlayerNameDraft(slot?.playerName ?? "");
     setEvidencePanelOpen(false);
     setCalibrationMenuOpen(false);
     setToolsOpen(false);
   }
 
-  function updatePlayerSlot(displaySlotId: string, patch: Partial<AxisPlayerSlot>) {
+  function updatePlayerSlot(slotId: string, patch: Partial<AxisPlayerSlot>) {
     const next = playerSlotsRef.current.map((slot) =>
-      slot.displaySlotId === displaySlotId ? { ...slot, ...patch } : slot,
+      slot.slotId === slotId ? { ...slot, ...patch } : slot,
     );
     playerSlotsRef.current = next;
     setPlayerSlots(next);
   }
 
-  function lockPlayer(displaySlotId: string) {
-    updatePlayerSlot(displaySlotId, { locked: true });
+  function lockPlayer(slotId: string) {
+    updatePlayerSlot(slotId, { locked: true, status: "active" });
   }
 
   function toggleCalibrationMenu() {
@@ -742,7 +744,7 @@ export default function AxisLiveVision() {
 
   function getPlayerSlotLabel(slot: AxisPlayerSlot) {
     if (showRawTrackIds && slot.currentRawTrackId) return slot.currentRawTrackId;
-    return slot.playerName || slot.displaySlotId;
+    return slot.playerName || slot.slotId;
   }
 
   function updatePlayerSlots(nextTracks: AxisVisionTrack[], timestamp: number) {
@@ -757,6 +759,8 @@ export default function AxisLiveVision() {
       const match = findMatchingPlayerSlot(slots, track, timestamp, matchedSlotIds);
 
       if (match) {
+        const seenCount = rawTrackSeenCountsRef.current[track.trackId] ?? 0;
+        const confirmed = match.locked || match.playerName || seenCount >= 3 || track.score >= 0.82;
         const history = match.rawTrackHistory.includes(track.trackId)
           ? match.rawTrackHistory
           : [...match.rawTrackHistory, track.trackId];
@@ -766,27 +770,29 @@ export default function AxisLiveVision() {
           lastSeenAt: timestamp,
           rawTrackHistory: history,
           score: track.score,
+          status: confirmed ? "active" as const : "candidate" as const,
         });
-        matchedSlotIds.add(match.displaySlotId);
+        matchedSlotIds.add(match.slotId);
         continue;
       }
 
       const seenCount = rawTrackSeenCountsRef.current[track.trackId] ?? 0;
       const shouldCreate = seenCount >= 3 || track.score >= 0.82;
-      if (!shouldCreate || !isTrackInDrillZone(track)) continue;
+      if (!isTrackInDrillZone(track)) continue;
 
-      const displaySlotId = `P${nextPlayerSlotIndexRef.current++}`;
+      const slotId = `P${nextPlayerSlotIndexRef.current++}`;
       slots.push({
         bbox: track.bbox,
         currentRawTrackId: track.trackId,
-        displaySlotId,
+        slotId,
         lastSeenAt: timestamp,
         locked: false,
         playerName: undefined,
         rawTrackHistory: [track.trackId],
         score: track.score,
+        status: shouldCreate ? "active" : "candidate",
       });
-      matchedSlotIds.add(displaySlotId);
+      matchedSlotIds.add(slotId);
     }
 
     const nextSlots = slots
@@ -794,6 +800,7 @@ export default function AxisLiveVision() {
       .map((slot) => ({
         ...slot,
         currentRawTrackId: timestamp - slot.lastSeenAt <= playerSlotStaleMs ? slot.currentRawTrackId : undefined,
+        status: timestamp - slot.lastSeenAt <= playerSlotStaleMs ? slot.status : "lost" as const,
       }));
 
     playerSlotsRef.current = nextSlots;
@@ -824,7 +831,7 @@ export default function AxisLiveVision() {
     const center = bboxCenter(track.bbox);
 
     return slots
-      .filter((slot) => !matchedSlotIds.has(slot.displaySlotId))
+      .filter((slot) => !matchedSlotIds.has(slot.slotId))
       .map((slot) => {
         const slotCenter = bboxCenter(slot.bbox);
         const distance = distanceBetween(center, slotCenter);
@@ -843,7 +850,7 @@ export default function AxisLiveVision() {
       })
       .filter((candidate) =>
         candidate.slot.locked
-          ? candidate.distance <= candidate.maxDistance * 1.25 || candidate.iou > 0.08
+          ? candidate.sizeRatio > 0.38 && (candidate.distance <= candidate.maxDistance * 0.9 || candidate.iou > 0.14)
           : candidate.distance <= candidate.maxDistance || candidate.iou > 0.18,
       )
       .filter((candidate) => candidate.sizeRatio > 0.28 || candidate.iou > 0.2)
@@ -852,9 +859,9 @@ export default function AxisLiveVision() {
 
   function getDisplayedPlayerSlots() {
     const slots = playerSlotsRef.current;
-    if (showAllDetections) return slots;
 
     return slots
+      .filter((slot) => slot.status === "active" || (slot.status === "candidate" && showCandidates))
       .map((slot) => {
         const assigned = Boolean(slot.playerName);
         const inZone = isSlotInDrillZone(slot);
@@ -1117,21 +1124,30 @@ export default function AxisLiveVision() {
       calibration: calibrationRef.current,
       display: {
         debug: {
+          showCandidates,
           showAllDetections,
           showConfidence,
           showRawTrackIds,
         },
         displayedPlayers: getDisplayedPlayerSlots().map((slot) => ({
-          displaySlotId: slot.displaySlotId,
+          slotId: slot.slotId,
           playerName: slot.playerName,
           rawTrackId: slot.currentRawTrackId,
         })),
+        displayedPlayerCount: getDisplayPeopleCount(),
         drillZone: drillZoneRef.current,
         maxDisplayedPlayers,
+        rawDetectionCount: tracksRef.current.length,
+        rawPersonDetectionCount: tracksRef.current.filter((track) => track.kind === "person").length,
       },
+      playerAssignments: Object.fromEntries(
+        playerSlotsRef.current
+          .filter((slot) => slot.playerName)
+          .map((slot) => [slot.slotId, slot.playerName]),
+      ),
       playerSlots: playerSlotsRef.current,
       rawTrackHistory: Object.fromEntries(
-        playerSlotsRef.current.map((slot) => [slot.displaySlotId, slot.rawTrackHistory]),
+        playerSlotsRef.current.map((slot) => [slot.slotId, slot.rawTrackHistory]),
       ),
       recording: recordingMetadata ?? {
         recordingIncludesOverlay: true,
@@ -1436,7 +1452,7 @@ export default function AxisLiveVision() {
   const displayedPeopleCount = getDisplayPeopleCount();
   const rawPeopleCount = activePersonTracks.length;
   const selectedPlayerSlot = selectedPlayerSlotId
-    ? playerSlots.find((slot) => slot.displaySlotId === selectedPlayerSlotId)
+    ? playerSlots.find((slot) => slot.slotId === selectedPlayerSlotId)
     : null;
   const calibrationInstruction = drillZoneMode
     ? drillZoneDraft
@@ -1541,7 +1557,7 @@ export default function AxisLiveVision() {
                     {playerSlots.some((slot) => slot.playerName)
                       ? playerSlots
                         .filter((slot) => slot.playerName)
-                        .map((slot) => `${slot.displaySlotId}: ${slot.playerName}`)
+                        .map((slot) => `${slot.slotId}: ${slot.playerName}`)
                         .join(", ")
                       : "None"}
                   </dd>
@@ -1568,10 +1584,10 @@ export default function AxisLiveVision() {
                 <p>Player Tags</p>
                 {playerSlots.length > 0 ? (
                   playerSlots.map((slot) => (
-                    <div className="axis-live-vision__player-tag-row" key={slot.displaySlotId}>
-                      <span>{slot.displaySlotId}</span>
+                    <div className="axis-live-vision__player-tag-row" key={slot.slotId}>
+                      <span>{slot.slotId}</span>
                       <strong>{slot.playerName || "Unknown"}</strong>
-                      <button onClick={() => openPlayerAssignment(slot.displaySlotId)} type="button">Edit</button>
+                      <button onClick={() => openPlayerAssignment(slot.slotId)} type="button">Edit</button>
                     </div>
                   ))
                 ) : (
@@ -1587,7 +1603,10 @@ export default function AxisLiveVision() {
                   Show Raw IDs {showRawTrackIds ? "On" : "Off"}
                 </button>
                 <button onClick={() => setShowAllDetections((value) => !value)} type="button">
-                  Show All Detections {showAllDetections ? "On" : "Off"}
+                  Show Raw Detections {showAllDetections ? "On" : "Off"}
+                </button>
+                <button onClick={() => setShowCandidates((value) => !value)} type="button">
+                  Show Candidates {showCandidates ? "On" : "Off"}
                 </button>
                 <button onClick={exportEvidenceJson} type="button">Export Evidence JSON</button>
                 <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
@@ -1676,7 +1695,7 @@ export default function AxisLiveVision() {
         <section className="axis-live-vision__assign-sheet" aria-label="Assign player">
           <div className="axis-live-vision__assign-card">
             <p>Assign Player</p>
-            <h2>{selectedPlayerSlot?.displaySlotId ?? selectedPlayerSlotId}</h2>
+            <h2>{selectedPlayerSlot?.slotId ?? selectedPlayerSlotId}</h2>
             <label>
               Player name
               <input
