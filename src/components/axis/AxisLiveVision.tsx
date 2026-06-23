@@ -279,6 +279,7 @@ export default function AxisLiveVision() {
   const [ignoreZoneMode, setIgnoreZoneMode] = useState(false);
   const [drillZoneDraft, setDrillZoneDraft] = useState<DrillZonePoint | null>(null);
   const [setupLoaded, setSetupLoaded] = useState(false);
+  const [hasSavedSetup, setHasSavedSetup] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -298,6 +299,9 @@ export default function AxisLiveVision() {
           calibration?: AxisCalibrationState;
           drillZone?: DrillZone | null;
           ignoreZones?: IgnoreZone[];
+          lastObjective?: string;
+          lastPlayerInput?: string;
+          lastSessionType?: AxisVisionMode;
           showAllDetections?: boolean;
           showCandidates?: boolean;
           showConfidence?: boolean;
@@ -305,6 +309,7 @@ export default function AxisLiveVision() {
           showTrail?: boolean;
         };
 
+        setHasSavedSetup(true);
         if (parsed.calibration) {
           calibrationRef.current = parsed.calibration;
           setCalibration(parsed.calibration);
@@ -325,6 +330,9 @@ export default function AxisLiveVision() {
         if (typeof parsed.showCandidates === "boolean") setShowCandidates(parsed.showCandidates);
         if (typeof parsed.showConfidence === "boolean") setShowConfidence(parsed.showConfidence);
         if (typeof parsed.showRawTrackIds === "boolean") setShowRawTrackIds(parsed.showRawTrackIds);
+        if (typeof parsed.lastPlayerInput === "string") setPracticePlayerInput(parsed.lastPlayerInput);
+        if (typeof parsed.lastObjective === "string") setPracticeObjective(parsed.lastObjective);
+        if (parsed.lastSessionType && parsed.lastSessionType in modeConfigs) setSelectedMode(parsed.lastSessionType);
       }
     } catch {
       // A bad local setup should not block the camera.
@@ -339,6 +347,9 @@ export default function AxisLiveVision() {
       calibration,
       drillZone,
       ignoreZones,
+      lastObjective: practiceObjective.trim(),
+      lastPlayerInput: practicePlayerInput.trim(),
+      lastSessionType: selectedMode,
       showAllDetections,
       showCandidates,
       showConfidence,
@@ -350,6 +361,9 @@ export default function AxisLiveVision() {
     calibration,
     drillZone,
     ignoreZones,
+    practiceObjective,
+    practicePlayerInput,
+    selectedMode,
     setupLoaded,
     showAllDetections,
     showCandidates,
@@ -926,6 +940,52 @@ export default function AxisLiveVision() {
     setShowTrail(true);
     setToolsOpen(false);
     window.localStorage.removeItem(gymSetupStorageKey);
+    setHasSavedSetup(false);
+  }
+
+  function useLastSetup() {
+    try {
+      const saved = window.localStorage.getItem(gymSetupStorageKey);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as {
+        calibration?: AxisCalibrationState;
+        drillZone?: DrillZone | null;
+        ignoreZones?: IgnoreZone[];
+        lastObjective?: string;
+        lastPlayerInput?: string;
+        lastSessionType?: AxisVisionMode;
+        showTrail?: boolean;
+      };
+
+      if (typeof parsed.lastPlayerInput === "string") setPracticePlayerInput(parsed.lastPlayerInput);
+      if (typeof parsed.lastObjective === "string") setPracticeObjective(parsed.lastObjective);
+      if (parsed.lastSessionType && parsed.lastSessionType in modeConfigs) selectMode(parsed.lastSessionType);
+      if (parsed.calibration) {
+        calibrationRef.current = parsed.calibration;
+        setCalibration(parsed.calibration);
+      }
+      if (parsed.drillZone !== undefined) {
+        drillZoneRef.current = parsed.drillZone;
+        setDrillZone(parsed.drillZone);
+      }
+      if (Array.isArray(parsed.ignoreZones)) {
+        ignoreZonesRef.current = parsed.ignoreZones;
+        setIgnoreZones(parsed.ignoreZones);
+      }
+      if (typeof parsed.showTrail === "boolean") {
+        showTrailRef.current = parsed.showTrail;
+        setShowTrail(parsed.showTrail);
+      }
+      setLastError("Last setup loaded.");
+    } catch {
+      setLastError("Last setup could not be loaded. Reset setup and try again.");
+    }
+  }
+
+  function continueWithoutAi() {
+    setLastError("");
+    setVisionStatus("stopped");
+    setAiStatus("idle");
   }
 
   function buildSetupChecklist() {
@@ -1993,6 +2053,7 @@ export default function AxisLiveVision() {
   const activePlayerLimit = getMaxDisplayedPlayers();
   const rawPeopleCount = activePersonTracks.length;
   const debugEnabled = showAllDetections || showCandidates || showConfidence || showRawTrackIds;
+  const aiEvidenceLabel = isVisionRunning ? "AI Evidence On" : "AI Evidence Limited";
   const selectedPlayerSlot = selectedPlayerSlotId
     ? playerSlots.find((slot) => slot.slotId === selectedPlayerSlotId)
     : null;
@@ -2083,6 +2144,7 @@ export default function AxisLiveVision() {
             <div className="axis-live-vision__start-links">
               <button onClick={() => setLastError("Frame check starts after Start Session.")} type="button">Frame Check</button>
               <button onClick={() => setLastError("Tools open after Start Session.")} type="button">Tools</button>
+              {hasSavedSetup && <button onClick={useLastSetup} type="button">Last Setup</button>}
               <button onClick={resetPracticeForm} type="button">Reset</button>
             </div>
           </form>
@@ -2176,6 +2238,7 @@ export default function AxisLiveVision() {
       {!showPracticeStart && !showEndSummary && !calActive && (
         <aside className="axis-live-vision__quick-status" aria-label="Live practice status">
           <span>{isRecording ? "Recording" : `${formatRecordingTime(practiceElapsedMs)} Practice`}</span>
+          <span>{aiEvidenceLabel}</span>
           {modeConfig?.ballRelevant && <span>Ball {ballStatus}</span>}
           <span>Active {displayedPeopleCount}/{activePlayerLimit}</span>
           {debugEnabled && <span className="axis-live-vision__debug-pill">DEBUG VIEW</span>}
@@ -2288,6 +2351,11 @@ export default function AxisLiveVision() {
                 </button>
                 {toolsOpen && (
                   <div className="axis-live-vision__tools-sheet">
+                    <div className="axis-live-vision__tools-header">
+                      <span />
+                      <strong>Tools</strong>
+                      <button onClick={() => setToolsOpen(false)} type="button">Close</button>
+                    </div>
                     <div className="axis-live-vision__tool-section">
                       <p>Session</p>
                       <button onClick={openSessionEditor} type="button">
@@ -2517,11 +2585,24 @@ export default function AxisLiveVision() {
         </section>
       )}
 
-      {lastError && <p className="axis-live-vision__error">{lastError}</p>}
+      {lastError && (
+        <div className="axis-live-vision__error" role="status">
+          <p>{lastError}</p>
+          {practiceStatus === "live" && (
+            <div>
+              <button disabled={isVisionBusy} onClick={startLiveVision} type="button">Retry</button>
+              <button onClick={continueWithoutAi} type="button">Continue Without AI</button>
+              <button onClick={resetGymSetup} type="button">Reset Setup</button>
+            </div>
+          )}
+        </div>
+      )}
 
       <style jsx>{`
         .axis-live-vision {
-          background: #020304;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(14, 78, 61, 0.32), transparent 34rem),
+            linear-gradient(180deg, #07100d 0%, #020403 56%, #010202 100%);
           color: #f8f7f2;
           font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           height: 100dvh;
@@ -2562,8 +2643,8 @@ export default function AxisLiveVision() {
         .axis-live-vision__empty {
           align-items: center;
           background:
-            radial-gradient(circle at 50% 35%, rgba(122, 247, 212, 0.12), transparent 34rem),
-            rgba(2, 3, 4, 0.88);
+            radial-gradient(circle at 50% 35%, rgba(124, 247, 212, 0.1), transparent 34rem),
+            rgba(2, 4, 3, 0.86);
           display: grid;
           inset: 0;
           justify-items: center;
@@ -2615,17 +2696,23 @@ export default function AxisLiveVision() {
         .axis-live-vision__practice-start {
           align-content: center;
           background:
-            radial-gradient(circle at 50% 28%, rgba(124, 247, 212, 0.1), transparent 31rem),
-            rgba(2, 3, 4, 0.94);
+            radial-gradient(circle at 50% 18%, rgba(124, 247, 212, 0.12), transparent 28rem),
+            linear-gradient(180deg, rgba(8, 19, 15, 0.98), rgba(2, 3, 4, 0.98));
+          border: 1px solid rgba(248, 247, 242, 0.1);
+          border-radius: 2rem;
+          box-shadow: 0 1.6rem 5rem rgba(0, 0, 0, 0.42);
           display: grid;
-          gap: 0.8rem;
-          inset: 0;
+          gap: 0.95rem;
+          left: 50%;
+          max-height: calc(100dvh - max(2rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
           justify-items: stretch;
-          margin: 0 auto;
-          max-width: 28rem;
-          padding: max(2rem, env(safe-area-inset-top)) 1.15rem max(1.2rem, env(safe-area-inset-bottom));
+          max-width: min(28rem, calc(100vw - 1.5rem));
+          overflow: auto;
+          padding: 1.25rem;
           position: absolute;
-          width: 100%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          width: min(28rem, calc(100vw - 1.5rem));
           z-index: 10;
         }
 
@@ -2641,7 +2728,7 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__practice-start h1 {
-          font-size: clamp(2.7rem, 13vw, 5.8rem);
+          font-size: clamp(2.6rem, 12vw, 5.2rem);
           letter-spacing: -0.05em;
           line-height: 0.9;
           margin: 0 0 0.7rem;
@@ -2664,12 +2751,12 @@ export default function AxisLiveVision() {
         .axis-live-vision__note-card input,
         .axis-live-vision__note-card textarea {
           background: rgba(248, 247, 242, 0.08);
-          border: 1px solid rgba(248, 247, 242, 0.18);
-          border-radius: 1rem;
+          border: 1px solid rgba(248, 247, 242, 0.2);
+          border-radius: 1.05rem;
           color: #f8f7f2;
           font: inherit;
           font-size: 1rem;
-          min-height: 3.1rem;
+          min-height: 3.25rem;
           padding: 0 0.95rem;
           text-transform: none;
           width: 100%;
@@ -2692,18 +2779,20 @@ export default function AxisLiveVision() {
           border-color: #f8d45c;
           color: #020304;
           margin-top: 0.4rem;
+          min-height: 3.35rem;
+          box-shadow: 0 0.8rem 2.4rem rgba(248, 212, 92, 0.18);
         }
 
         .axis-live-vision__start-links {
           display: grid;
           gap: 0.5rem;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .axis-live-vision__start-links button {
           background: rgba(248, 247, 242, 0.08);
           color: #f8f7f2;
-          min-height: 2.4rem;
+          min-height: 2.55rem;
           padding: 0 0.45rem;
         }
 
@@ -2815,8 +2904,8 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision button {
-          background: rgba(248, 247, 242, 0.92);
-          border: 1px solid rgba(248, 247, 242, 0.45);
+          background: rgba(248, 247, 242, 0.9);
+          border: 1px solid rgba(248, 247, 242, 0.34);
           border-radius: 999px;
           color: #030405;
           cursor: pointer;
@@ -2824,7 +2913,7 @@ export default function AxisLiveVision() {
           font-size: 0.72rem;
           font-weight: 900;
           letter-spacing: 0.08em;
-          min-height: 2.8rem;
+          min-height: 3rem;
           padding: 0 1rem;
           text-transform: uppercase;
         }
@@ -2846,7 +2935,7 @@ export default function AxisLiveVision() {
           display: flex;
           justify-content: space-between;
           left: 0;
-          padding: max(1rem, env(safe-area-inset-top)) 1rem 0;
+          padding: max(0.85rem, env(safe-area-inset-top)) 1rem 0;
           position: absolute;
           right: 0;
           top: 0;
@@ -2855,7 +2944,7 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__top strong {
           display: block;
-          font-size: 0.78rem;
+          font-size: clamp(0.78rem, 2.8vw, 1.05rem);
           letter-spacing: 0.04em;
           margin-top: 0.18rem;
           text-transform: uppercase;
@@ -2894,9 +2983,10 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__quick-status {
           align-items: center;
-          background: rgba(0, 0, 0, 0.46);
-          border: 1px solid rgba(248, 247, 242, 0.14);
+          background: rgba(3, 9, 7, 0.58);
+          border: 1px solid rgba(248, 247, 242, 0.12);
           border-radius: 999px;
+          backdrop-filter: blur(16px);
           display: flex;
           gap: 0.35rem;
           left: 50%;
@@ -2909,7 +2999,7 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__quick-status span {
-          background: rgba(248, 247, 242, 0.08);
+          background: rgba(248, 247, 242, 0.07);
           border-radius: 999px;
           padding: 0.42rem 0.58rem;
           white-space: nowrap;
@@ -2940,9 +3030,10 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__evidence-body {
-          background: rgba(0, 0, 0, 0.72);
+          background: rgba(6, 10, 9, 0.82);
+          backdrop-filter: blur(22px);
           border: 1px solid rgba(248, 247, 242, 0.14);
-          border-radius: 1rem;
+          border-radius: 1.25rem;
           margin-top: 0.55rem;
           max-height: min(68dvh, 34rem);
           max-width: min(23rem, calc(100vw - 2rem));
@@ -3026,23 +3117,65 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__tools-sheet,
         .axis-live-vision__cal-menu {
-          background: rgba(0, 0, 0, 0.72);
+          background: rgba(5, 10, 8, 0.9);
+          backdrop-filter: blur(24px);
           border: 1px solid rgba(248, 247, 242, 0.14);
-          border-radius: 1rem;
+          border-radius: 1.35rem 1.35rem 0 0;
           display: grid;
           gap: 0.45rem;
           min-width: min(16rem, calc(100vw - 2rem));
-          padding: 0.55rem;
+          padding: 0.7rem 0.7rem max(1rem, env(safe-area-inset-bottom));
           position: absolute;
         }
 
         .axis-live-vision__tools-sheet {
-          bottom: calc(100% + 0.55rem);
-          left: 50%;
-          max-height: min(72dvh, 42rem);
+          bottom: 0;
+          box-shadow: 0 -1rem 3.8rem rgba(0, 0, 0, 0.5);
+          left: 0;
+          max-height: min(82dvh, 44rem);
           overflow: auto;
-          transform: translateX(-50%);
-          width: min(28rem, calc(100vw - 1.5rem));
+          position: fixed;
+          right: 0;
+          transform: none;
+          width: 100vw;
+          z-index: 14;
+        }
+
+        .axis-live-vision__tools-header {
+          align-items: center;
+          display: grid;
+          gap: 0.65rem;
+          grid-template-columns: 1fr auto 1fr;
+          padding: 0.2rem 0 0.4rem;
+        }
+
+        .axis-live-vision__tools-header span {
+          background: rgba(248, 247, 242, 0.28);
+          border-radius: 999px;
+          grid-column: 2;
+          height: 0.28rem;
+          justify-self: center;
+          width: 2.7rem;
+        }
+
+        .axis-live-vision__tools-header strong {
+          color: rgba(248, 247, 242, 0.76);
+          font-size: 0.72rem;
+          font-weight: 900;
+          grid-column: 1 / -1;
+          letter-spacing: 0.14em;
+          text-align: center;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__tools-header button {
+          background: rgba(248, 247, 242, 0.08);
+          color: rgba(248, 247, 242, 0.72);
+          grid-column: 3;
+          grid-row: 1 / span 2;
+          justify-self: end;
+          min-height: 2.35rem;
+          padding: 0 0.7rem;
         }
 
         .axis-live-vision__tool-section {
@@ -3069,15 +3202,15 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__tool-section button {
           align-items: center;
-          background: rgba(248, 247, 242, 0.075);
+          background: rgba(248, 247, 242, 0.07);
           border-color: rgba(248, 247, 242, 0.12);
           border-radius: 0.95rem;
           color: #f8f7f2;
           display: grid;
           gap: 0.18rem 0.65rem;
           grid-template-columns: minmax(0, 1fr) auto;
-          min-height: 3.9rem;
-          padding: 0.65rem 0.72rem;
+          min-height: 4.2rem;
+          padding: 0.72rem 0.78rem;
           text-align: left;
           text-transform: none;
         }
@@ -3139,10 +3272,10 @@ export default function AxisLiveVision() {
         .axis-live-vision__controls {
           bottom: 0;
           display: grid;
-          gap: 0.45rem;
+          gap: 0.5rem;
           grid-template-columns: minmax(0, 1fr);
           left: 0;
-          padding: 0 1rem max(1rem, env(safe-area-inset-bottom));
+          padding: 0 0.75rem max(0.8rem, env(safe-area-inset-bottom));
           position: absolute;
           right: 0;
           z-index: 4;
@@ -3150,6 +3283,24 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__controls--running {
           grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+
+        .axis-live-vision__controls button {
+          background: rgba(248, 247, 242, 0.11);
+          backdrop-filter: blur(18px);
+          border-color: rgba(248, 247, 242, 0.16);
+          color: #f8f7f2;
+          min-height: 3.25rem;
+        }
+
+        .axis-live-vision__controls button:first-child {
+          background: #f8d45c;
+          border-color: #f8d45c;
+          color: #020304;
+        }
+
+        .axis-live-vision__controls button:last-child {
+          color: #ff9b9b;
         }
 
         .axis-live-vision__primary-start {
@@ -3164,19 +3315,39 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__error {
-          background: rgba(255, 80, 80, 0.16);
+          background: rgba(42, 12, 12, 0.78);
+          backdrop-filter: blur(18px);
           border: 1px solid rgba(255, 130, 130, 0.28);
-          border-radius: 0.85rem;
+          border-radius: 1.1rem;
           color: #ffd7d7;
-          font-size: 0.84rem;
+          display: grid;
+          gap: 0.7rem;
+          font-size: 0.86rem;
           left: 1rem;
           line-height: 1.35;
           margin: 0;
-          padding: 0.75rem;
+          padding: 0.85rem;
           position: absolute;
           right: 1rem;
           top: 5.2rem;
-          z-index: 5;
+          z-index: 15;
+        }
+
+        .axis-live-vision__error p {
+          margin: 0;
+        }
+
+        .axis-live-vision__error div {
+          display: grid;
+          gap: 0.45rem;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .axis-live-vision__error button {
+          background: rgba(248, 247, 242, 0.1);
+          color: #f8f7f2;
+          min-height: 2.55rem;
+          padding: 0 0.35rem;
         }
 
         .axis-live-vision__assign-sheet {
@@ -3192,7 +3363,9 @@ export default function AxisLiveVision() {
         .axis-live-vision__note-sheet,
         .axis-live-vision__summary {
           align-items: end;
-          background: rgba(0, 0, 0, 0.4);
+          background:
+            radial-gradient(circle at 50% 20%, rgba(124, 247, 212, 0.08), transparent 28rem),
+            rgba(0, 0, 0, 0.58);
           display: grid;
           inset: 0;
           padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
@@ -3202,9 +3375,10 @@ export default function AxisLiveVision() {
 
         .axis-live-vision__note-card,
         .axis-live-vision__summary-card {
-          background: rgba(8, 9, 10, 0.94);
+          background: rgba(7, 13, 11, 0.94);
+          backdrop-filter: blur(22px);
           border: 1px solid rgba(248, 247, 242, 0.16);
-          border-radius: 1.25rem;
+          border-radius: 1.45rem;
           box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.45);
           display: grid;
           gap: 0.85rem;
@@ -3232,7 +3406,7 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__summary-card h1 {
-          font-size: clamp(2rem, 11vw, 4.6rem);
+          font-size: clamp(2.3rem, 12vw, 4.8rem);
           letter-spacing: -0.05em;
           line-height: 0.92;
           margin: 0;
@@ -3254,7 +3428,7 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__summary-card dl div {
-          background: rgba(248, 247, 242, 0.07);
+          background: rgba(248, 247, 242, 0.075);
           border: 1px solid rgba(248, 247, 242, 0.1);
           border-radius: 0.9rem;
           display: grid;
@@ -3272,13 +3446,19 @@ export default function AxisLiveVision() {
         }
 
         .axis-live-vision__summary-card dd {
-          font-size: 1.12rem;
+          font-size: 1.35rem;
           font-weight: 900;
           margin: 0;
         }
 
         .axis-live-vision__summary-actions {
           grid-template-columns: 1fr;
+        }
+
+        .axis-live-vision__summary-actions button:nth-child(2) {
+          background: #f8d45c;
+          border-color: #f8d45c;
+          color: #020304;
         }
 
         .axis-live-vision__clip-sheet {
