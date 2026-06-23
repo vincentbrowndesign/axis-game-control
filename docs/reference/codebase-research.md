@@ -1,3 +1,11 @@
+Status: REFERENCE
+
+Why moved: codebase research is useful background, not current product truth.
+
+Current replacement source: `docs/AXIS_INDEX.md`
+
+---
+
 # Axis Codebase Research
 
 ## Architecture in One Page

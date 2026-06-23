@@ -1,3 +1,11 @@
+Status: ARCHIVE
+
+Why moved: older video/replay/CV engineering framing; current active gate lives in AGENTS and the docs index.
+
+Current replacement source: `AGENTS.md` and `docs/AXIS_INDEX.md`
+
+---
+
 # AXIS_ENGINEERING_CONSTITUTION.md
 
 ---

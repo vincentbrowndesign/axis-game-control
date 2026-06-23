@@ -1,19 +1,22 @@
 # Contributing
 
-Before opening a pull request or merging code, read and follow:
+Before opening a pull request or merging code, read:
 
-* [AXIS_ENGINEERING_CONSTITUTION.md](./AXIS_ENGINEERING_CONSTITUTION.md)
+1. `AGENTS.md`
+2. `docs/AXIS_INDEX.md`
+3. `docs/AXIS_BUILD_MAP.md`
 
-Every change should be explainable in plain English and should improve the core Axis flow:
+Every change should support the current Axis product truth:
 
 ```text
-Video
-->
-Detection
-->
-Tracking
-->
-Overlay
-->
-Export
+Open phone
+-> sign in
+-> start session
+-> type / talk / tap moment
+-> end session
+-> memory exists
 ```
+
+Do not use archived, reference, or future docs as current build direction unless a task explicitly promotes them.
+
+The previous contributing guide is preserved at `docs/archive/CONTRIBUTING.md`.

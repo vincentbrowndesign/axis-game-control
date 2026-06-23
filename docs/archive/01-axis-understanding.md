@@ -1,3 +1,11 @@
+Status: ARCHIVE
+
+Why moved: older understanding-layer note; current product truth is session memory.
+
+Current replacement source: `docs/AXIS_PRODUCT_MAP.md` and `docs/capsules/AXIS_SESSION_MEMORY.md`
+
+---
+
 # 01 Axis Understanding
 
 ## Purpose

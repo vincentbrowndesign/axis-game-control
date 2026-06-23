@@ -1,3 +1,11 @@
+Status: REFERENCE
+
+Why moved: useful audit material, but not current build direction.
+
+Current replacement source: `docs/AXIS_INDEX.md`
+
+---
+
 # Axis Duplication Risks
 
 Audit date: 2026-06-18

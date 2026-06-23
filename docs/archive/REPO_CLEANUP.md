@@ -1,3 +1,11 @@
+Status: ARCHIVE
+
+Why moved: historical cleanup record, not current build direction.
+
+Current replacement source: `docs/AXIS_INDEX.md`
+
+---
+
 # Repo Cleanup
 
 ## Build Map + Capability Index

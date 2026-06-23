@@ -1,3 +1,11 @@
+Status: ARCHIVE
+
+Why moved: superseded mission/objective framing that conflicts with current session-memory product truth.
+
+Current replacement source: `docs/AXIS_PRODUCT_MAP.md`
+
+---
+
 # Axis Core
 
 This document is the single source of truth for Axis.

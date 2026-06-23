@@ -1,3 +1,11 @@
+Status: REFERENCE
+
+Why moved: broad capability list is useful for orientation but should not override the active build map.
+
+Current replacement source: `docs/AXIS_BUILD_MAP.md`
+
+---
+
 # Axis Capability Index
 
 Purpose:

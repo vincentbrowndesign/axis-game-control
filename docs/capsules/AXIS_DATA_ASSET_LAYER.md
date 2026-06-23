@@ -25,7 +25,7 @@ Current status:
 - Axis Data Asset Contract v0: Active foundation - complete
 - Operational Axis Data Asset Layer: Future / Define Capsule
 - Runtime behavior: Unchanged
-- Next runtime build: Active-thread entity integrity
+- Next runtime build: A1 session memory integrity
 
 ## Locked Sentence
 
@@ -77,10 +77,10 @@ A packaged reusable object created from governed records and datasets.
 
 ## Boundaries
 
-- Thread remains the active conversation and persistence object.
-- Do not rename Thread to Research Trail in the active product.
-- A future Research Trail may be derived from one or more threads.
-- Thread Persistence saves exact transcript history.
+- Session remains the active product object.
+- Do not rename Session to Research Trail in the active product.
+- A future Research Trail may be derived from one or more saved sessions.
+- Session persistence saves exact owner-scoped session drafts and future session memory.
 - Data Asset Layer may later structure derived material.
 - Persistence is not player memory.
 - Observation is not Claim.
@@ -91,8 +91,7 @@ A packaged reusable object created from governed records and datasets.
 - Output Product is not source of truth.
 - Visual proof status is not verified evidence.
 - BoardSectionObject arrangement is not a data asset.
-- Thread Persistence remains exact-thread storage only.
-- Thread Persistence must not become cross-thread player memory, inferred truth, or automatic data asset promotion.
+- Session persistence must not become cross-thread player memory, inferred truth, or automatic data asset promotion.
 
 ## Contract-Only Behavior
 
@@ -147,17 +146,17 @@ Asynchronous processing is future work, not part of v0.
 
 ## Relationship To Current Capabilities
 
-Axis Conversation:
-Where rough work develops.
+Axis Session Memory:
+Where basketball work becomes searchable, reviewable, correctable memory.
 
-Axis Thread:
-The exact saved conversation trail.
+Axis Session:
+The exact saved basketball session shell and future memory container.
 
-Axis Thread Board:
-Current organized understanding.
+Axis Moment:
+One typed, tapped, spoken, or supported thing that happened in the session.
 
-Axis Thread Persistence:
-Restores exact thread messages and board snapshots.
+Axis Session Persistence:
+Restores owner-scoped session drafts and future saved session memory.
 
 Axis Data Asset Contract:
 Defines future structured records, datasets, assets, and outputs.
@@ -178,9 +177,9 @@ Strategy only. Defines a possible future business and field-test loop for govern
 
 The Data Asset Contract does not replace the active runtime priorities:
 
-- Active-thread entity integrity
-- Live Supabase persistence verification
-- Thread Board quality
+- session entity integrity
+- live Supabase persistence verification
+- session memory quality
 
 ## Do Not Build Yet
 

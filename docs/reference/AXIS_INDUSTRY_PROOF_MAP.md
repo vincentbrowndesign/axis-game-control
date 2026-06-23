@@ -1,3 +1,11 @@
+Status: REFERENCE
+
+Why moved: useful research map, but not current runtime or product truth.
+
+Current replacement source: `docs/AXIS_PRODUCT_MAP.md`
+
+---
+
 # Axis Industry Proof Map
 
 Audit date: 2026-06-18

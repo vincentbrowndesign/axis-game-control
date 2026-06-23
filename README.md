@@ -1,65 +1,66 @@
 # Axis
 
-Axis is a conversation product. The conversation itself is the product.
+Axis is a basketball session memory system.
 
-**Current MVP:** Axis Conversation — a single page where Axis helps the work develop through conversation.
+Axis captures any basketball session, turns what happened into structured memory, and helps the user search, review, correct, export, and build from it.
 
-## What Axis is today
+## Current Product Truth
 
-A clean conversation interface. The user brings rough work. Axis helps it develop.
+The first product win is:
 
-Axis is not an analytics dashboard, metrics dashboard, notebook, coach bot, tracker, analytics tool, or training system.
+```text
+Open phone
+-> sign in
+-> start session
+-> type / talk / tap moment
+-> end session
+-> memory exists
+```
 
-Axis Auth v0 supports signed-in, owner-scoped thread continuity. It is not profiles, organizations, billing, roles, memory, or analytics dashboard access.
+The capture screen is not the whole product. The product is the memory system created from the session.
 
-Axis may use a Context Dashboard shell as current-thread presentation. That shell is not analytics, monitoring, metrics, Lens, evidence, media, memory, or Data Asset runtime.
+## Active Surface
 
-Active route: `/` → `/axis`
+- Main route: `/axis`
+- Session draft API: `/api/axis/sessions`
+- Build map route: `/axis/build-map`
 
-## How to run
+## What Axis Is Now
+
+- a mobile-first basketball session capture surface
+- a structured session memory loop
+- a system for creating searchable, reviewable, correctable memory
+- useful even when camera, voice, AI, or internet are imperfect
+
+## What Axis Is Not
+
+- a debug dashboard
+- a raw AI camera demo
+- a provider/API menu
+- a stat tracker first
+- a desktop analytics workspace
+- a CV or video product first
+
+## Source Of Truth
+
+Start here:
+
+1. `docs/AXIS_INDEX.md`
+2. `docs/AXIS_PRODUCT_MAP.md`
+3. `docs/AXIS_BUILD_MAP.md`
+4. `docs/AXIS_DESIGN_CONSTITUTION.md`
+5. `docs/AXIS_MOBILE_PRIORITY.md`
+
+## Development
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000/axis`.
 
-## Where the active MVP lives
+## Boundaries
 
-- Page: `src/app/axis/page.tsx`
-- API: `src/app/api/axis/conversation/route.ts`
+Preserved backend infrastructure may exist for video, CV, artifacts, auth, jobs, exports, and processing.
 
-## What is intentionally out of scope today
-
-- Voice
-- Camera
-- Upload
-- Analytics dashboards
-- Metrics dashboards
-- Sidebars
-- Cards
-- Analytics
-- Missions
-- Game tracking
-- Computer vision
-- Long-term memory
-
-These capabilities exist in the codebase as infrastructure. They are not active in the current MVP page.
-
-## Current Axis Source of Truth
-
-| Source | Purpose |
-|---|---|
-| `docs/AXIS_CONVERSATION_MVP.md` | MVP scope, product truth, acceptance tests, anti-patterns |
-| `docs/REPO_CLEANUP.md` | What changed, what was archived, what to not touch |
-| `src/app/axis/page.tsx` | Active page |
-| `src/app/api/axis/conversation/route.ts` | Active conversation API |
-
-Archived docs in `archive/*.legacy.md` are **historical context only** — they describe prior product directions (check-in loop, leaderboard, video overlay). They are not current truth.
-
-## Legacy and infrastructure
-
-Video, CV, replay, overlay, and tracking infrastructure lives in:
-- `src/app/api/axis/` (all non-conversation API routes)
-- `src/lib/` (axis-operating-system, axis-cv-overlay, etc.)
-- `archive/` — archived product docs from prior directions
+Do not expose those systems on the main user surface unless the active build map explicitly unlocks that layer.

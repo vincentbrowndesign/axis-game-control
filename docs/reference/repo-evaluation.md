@@ -1,5 +1,13 @@
 # Repo Evaluation — Axis Integration
 
+Status: REFERENCE
+
+Why moved: repo evaluation is useful background, not current product truth.
+
+Current replacement source: `docs/AXIS_INDEX.md`
+
+---
+
 Evaluated against Axis architecture:
 ```
 Intent → Expand → Understand → Experiment → Witness → Expand

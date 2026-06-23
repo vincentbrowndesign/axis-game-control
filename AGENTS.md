@@ -2,229 +2,145 @@
 
 ---
 
-## CURRENT PRODUCT DIRECTION — 2026-06-17
+## CURRENT PRODUCT DIRECTION - 2026-06-23
 
-> **Read this first. It supersedes everything below.**
+Read this first. It supersedes older product framing.
 
-**Active MVP:** Axis Conversation at `/axis`.
+Active MVP: Axis basketball session memory at `/axis`.
 
-The conversation itself is the product. Axis helps the work develop.
+Axis is a basketball session memory system.
+
+First product win:
+
+```text
+Open phone
+-> sign in
+-> start session
+-> type / talk / tap moment
+-> end session
+-> memory exists
+```
 
 | Item | Value |
 |---|---|
 | Active page | `src/app/axis/page.tsx` |
-| Active API | `src/app/api/axis/conversation/route.ts` |
-| Saved thread API | `src/app/api/axis/threads` — exact owner-scoped thread persistence |
-| Auth capsule | `docs/capsules/AXIS_AUTH.md` - explicit sign-in/sign-out for owner-scoped continuity |
-| Presentation shell | `src/components/axis/context-dashboard/` - reusable current-thread presentation components |
-| CV foundation | `docs/capsules/AXIS_CV_FOUNDATION.md` - isolated visual reality processing; suggested observations only |
-| Legacy mission page | `src/app/axis/mission/page.tsx` — redirects to `/axis` |
-| Legacy conversation API | `src/app/api/axis/run` — preserved, not used by MVP |
-| Product truth | The conversation is the product |
-| Source of truth | `docs/AXIS_CONVERSATION_MVP.md` |
-| Repo cleanup record | `docs/REPO_CLEANUP.md` |
-| Archived product docs | `archive/*.legacy.md` — historical context only |
+| Active session API | `src/app/api/axis/sessions/route.ts` |
+| Source of truth | `docs/AXIS_INDEX.md` |
+| Product map | `docs/AXIS_PRODUCT_MAP.md` |
+| Build map | `docs/AXIS_BUILD_MAP.md` |
+| Design rules | `docs/AXIS_DESIGN_CONSTITUTION.md` |
+| Mobile rules | `docs/AXIS_MOBILE_PRIORITY.md` |
+| Session memory capsule | `docs/capsules/AXIS_SESSION_MEMORY.md` |
 
-**Do not** wire `/api/axis/run` into `/axis` unless intentionally migrating.
-**Do not** re-introduce missions, analytics dashboards, metrics dashboards, check-in, or leaderboards into the active `/axis` page.
-**Do not** treat the archived `.legacy.md` files as current product direction.
+Do not wire `/api/axis/run`, CV, video, replay, upload, evidence, mission, or dashboard infrastructure into `/axis` unless an active build ticket explicitly unlocks that layer.
+
+Do not show APIs, routers, provider names, model names, JSON, raw detections, FPS, frame counts, track IDs, rim setup, zones, calibration, or debug UI on the main `/axis` landing screen.
+
+Do not treat docs in `docs/archive/`, `docs/reference/`, or `docs/future/` as current build direction.
 
 ---
 
 ## Current Build Gate
 
-Before coding Axis MVP work, read:
+Before coding Axis product work, read:
 
-* `docs/AXIS_BUILD_MAP.md`
-* `docs/capsules/AXIS_CAPABILITY_INDEX.md`
+1. `docs/AXIS_INDEX.md`
+2. `docs/AXIS_PRODUCT_MAP.md`
+3. `docs/AXIS_BUILD_MAP.md`
 
-Only build items marked:
+Only build items marked Build Now or Refine Current in the active build map.
 
-* Build Now
-* Refine Current
-
-Do not build Hold, Future Layer, Research Proof, or Do Not Build Yet items unless explicitly instructed.
-
-Axis CV Foundation v0 is now allowed only as an active foundation. It does not change the active `/axis` conversation contract and does not unlock replay, overlay, evidence, witness, memory, dashboard, upload product workflow, or player model work.
+Future, reference, archive, research, lab, or old capability docs may inform decisions, but they do not unlock implementation.
 
 ---
 
-## Axis Conversation Behavior
+## Axis Session Memory Behavior
 
 Axis should:
 
-* notice what is forming
-* name what is developing
-* protect the important point
-* make the work more useful, understandable, or real
-* ask the smallest next question only when it moves the work forward
-* keep narrowing ambiguity without interrogating
-* give the user language they can use
+* start a session quickly on a phone
+* capture typed/tap moments even when camera, mic, AI, or network fails
+* structure rough input into useful session memory
+* show the last interpreted moment
+* let the user correct or mark review
+* end the session cleanly
+* make saved/local memory visible
+* keep advanced tools hidden by default
 
 Axis should not:
 
-* frame the user as stuck
-* ask generic AI questions
-* sound like a consultant or coach cliché machine
-* say "this sounds like a clarity problem"
-* say "this feels like a product identity issue"
-* ask "what are your goals?"
-* ask "what challenges are you facing?"
-* ask "can you provide more context?"
+* require camera, voice, upload, or AI before memory can be created
+* become a raw AI camera demo
+* become a desktop analytics dashboard
+* expose debug machinery on the main screen
+* create fake stats or unsupported basketball truth
 
 ---
 
 ## Active MVP Boundaries
 
-Current MVP is text-only. No other capabilities are active on `/axis`.
+Current MVP is mobile-first session memory.
 
-Axis may persist exact conversation threads and assistant Thread Board snapshots for the signed-in owner. This is not long-term player memory, cross-thread recall, evidence persistence, or persistent board arrangement.
-
-Axis may use the Axis Context Dashboard shell as a presentation layer for the current thread only. In this context, "dashboard" means active-thread context presentation: timeline, active context, organized sections, open loops, next action, and composer around the existing conversation. It does not mean analytics, monitoring, metrics, management console, Lens runtime, evidence runtime, media ingestion, memory, or Data Asset runtime.
-
-Axis Auth v0 is active only to protect owner-scoped Thread Persistence:
-
-* allow sign-in, account creation, sign-out, session restoration, and account switching
-* clear saved thread list, active saved-thread id, loaded transcript, latest restored board, metadata, and save state when the owner changes
-* keep signed-out conversation local and show "Sign in to save"
-* do not add profiles, organizations, roles, billing, dashboard access, cross-thread memory, player memory, or Data Asset runtime operations
-
-Do not add to the active `/axis` page:
+Do not add to the active `/axis` landing screen:
 
 * Mission Control or mission language
 * analytics dashboards
-* objective or constraint panels
-* progress panels
-* evidence cards
-* check-in or check-out flows
-* leaderboard surface
-* streaks
-* uploads
-* voice
-* camera
-* sketches
-* analytics
-* game tracking
-* training tracker language
-* role modes (coach mode, player mode, etc.)
-* sidebar threads
-* long-term database memory
-* video overlay framing
-
-These may exist as legacy or future infrastructure in `src/lib/` and `src/app/api/axis/`. They are not active in the current MVP.
-
----
-
-## Axis Data Asset Contract Boundary
-
-* Axis Data Asset Contract v0 is active as a foundation and complete.
-* `93cfbfe` locked the technical vocabulary.
-* `31a214f` locked the product and build boundaries.
-* `src/lib/axis-data-assets.ts` defines future types.
-* No current runtime creates or persists these objects.
-* Thread Persistence remains exact-thread storage.
-* Thread Persistence must not become cross-thread player memory, inferred truth, or automatic data asset promotion.
-* Do not wire legacy player-model, evidence, mission, or AxisUnderstanding systems into the contract.
-* Do not promote suggested records to verified.
-* Do not build cross-thread player memory from this contract.
-* Do not add a third Data Asset implementation chunk yet.
-* Operational Data Asset Layer remains future.
-
-Current runtime priorities:
-
-1. Active-thread entity integrity
-2. Live Supabase persistence verification
-3. Thread Board quality
-
----
-
-## Axis CV Foundation v0 Boundary
-
-Axis CV Foundation v0 is active as an isolated foundation.
-
-CV may produce:
-
-* detections
-* tracks
-* event candidates
-* frame summaries
-* debug artifacts
-* debug JSON
-* debug MP4
-
-CV may not create:
-
-* verified evidence
-* witness verdicts
-* player memory
-* cross-thread recall
-* replay UI
-* overlay UI
-* dashboards
-* automatic game truth
+* provider/API menus
+* debug panels
+* raw detections
+* FPS or frame counters
+* track IDs
+* rim setup on landing
+* zones or calibration on landing
+* uploads as a required first flow
+* voice-first requirement
+* camera-first requirement
+* long-term player model
 * automatic scouting reports
-* upload product workflows
-* active `/axis` conversation behavior changes
+* fake stats
+* role modes
+* desktop sidebars
 
-The locked sentence is:
-
-Axis CV turns video into suggested observations, not truth.
-
-Preserve the active `/axis` conversation boundary and the response contract:
-
-```json
-{
-  "reply": "string",
-  "threadBoard": null
-}
-```
-
-or the same shape with a generated `threadBoard` object. Do not add CV output to the conversation API contract without an explicit migration decision.
+These may exist as preserved infrastructure in the repo. They are not active product truth unless explicitly unlocked.
 
 ---
 
-## Axis Whiteboard Boundary
+## Axis Data Asset Boundary
 
-Whiteboard is a thread comprehension view. It organizes the current Axis conversation thread into a readable board.
+Axis Data Asset Contract v0 is an active foundation and remains documentation/contract-level unless explicitly unlocked.
 
-Whiteboard is **not** a separate product, blank canvas, diagramming tool, hierarchy view, evidence engine, memory layer, or dashboard.
+Operational Data Asset runtime remains future.
 
-Whiteboard **is** a page-based layout of sections generated entirely from the conversation history. Internal primitives drive the API reasoning but are never exposed to the user.
+Do not create:
 
-Internal primitives (API only — never shown to the user):
-Points · Relationships · Groups · Time · Evidence · States · Changes
+* persistent Source Records
+* persistent Structured Records
+* automatic datasets
+* verified assets
+* Keeper workflows
+* cross-thread player memory
+* reports as automatic truth
+* sponsor/subscription/marketplace runtime
 
-User-facing sections (what the board shows):
-Main Idea · What We Noticed · What It Means · Evidence / Signals · Next Move
-
-Files:
-- `src/app/api/axis/whiteboard/route.ts` — Whiteboard API
-- `src/app/axis/whiteboard-view.tsx` — Whiteboard component
-- `src/app/axis/page.tsx` — View toggle (Conversation | Whiteboard)
-
-Blank/early state message: "Keep the conversation going. Whiteboard organizes the thread once there is something to understand."
-
-Do not:
-- Add manual editing or drag-and-drop to the whiteboard
-- Expose primitive labels to the user
-- Make whiteboard a separate page or route
-- Persist whiteboard state in the database
-- Add a canvas, floating cards, or SVG arrow layout
+Session persistence must not become inferred truth, automatic player memory, or automatic Data Asset promotion.
 
 ---
 
 ## Legacy / Future Boundaries
 
-Preserved infrastructure — do not remove without explicit direction:
+Preserved infrastructure - do not remove without explicit direction:
 
-* `src/app/api/axis/run` — prior AxisUnderstanding conversation system (Supabase-backed)
-* `src/app/api/axis/sketch` — SVG generation
-* `src/app/api/axis/evidence/`, `ball/`, `video-job/`, etc. — CV/video pipeline
-* `src/lib/` — all lib files (axis-operating-system, axis-cv-overlay, axis-ball-processing, etc.)
-* `supabase/migrations/` — all DB migrations
-* `archive/` — all archived docs
+* `src/app/api/axis/run`
+* `src/app/api/axis/conversation`
+* `src/app/api/axis/whiteboard`
+* CV/video/replay/upload/evidence routes
+* `src/lib/`
+* `supabase/migrations/`
+* `docs/archive/`
+* `docs/reference/`
+* `docs/future/`
 
-Do not wire preserved legacy infrastructure back into `/axis` without a documented migration decision.
+Do not wire preserved infrastructure back into `/axis` without a documented migration decision.
 
 ---
 
@@ -254,9 +170,9 @@ Every task must identify:
 
 Use only scripts that exist in `package.json`:
 
-* `npx tsc --noEmit` — TypeScript check
-* `npm run build` — Next.js build
-* `npm run lint` — ESLint (note: pre-existing warnings are broad; focus on changed files only)
+* `npx tsc --noEmit` - TypeScript check
+* `npm run build` - Next.js build
+* `npm run lint` - ESLint (note: pre-existing warnings are broad; focus on changed files only)
 
 ---
 
@@ -283,13 +199,3 @@ Before modifying Next.js behavior:
 * check for deprecations
 * preserve existing routing and infrastructure
 * avoid unnecessary architectural rewrites
-
----
-
-## Legacy Agent Instructions
-
-The old AGENTS.md contained product framing for prior Axis directions (check-in loop, leaderboard, surface hierarchy, mission/overlay product). That content has been archived at:
-
-`archive/AGENTS.legacy.md`
-
-It is historical context only.

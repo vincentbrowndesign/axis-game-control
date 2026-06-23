@@ -1,3 +1,11 @@
+Status: REFERENCE
+
+Why moved: useful audit material, but too broad to act as current build truth.
+
+Current replacement source: `docs/AXIS_INDEX.md`
+
+---
+
 # Axis Concept Inventory
 
 Audit date: 2026-06-18

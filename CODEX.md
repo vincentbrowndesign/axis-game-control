@@ -2,7 +2,12 @@
 
 Before implementation, read and follow:
 
-* [AGENTS.md](./AGENTS.md)
-* [AXIS_ENGINEERING_CONSTITUTION.md](./AXIS_ENGINEERING_CONSTITUTION.md)
+1. `AGENTS.md`
+2. `docs/AXIS_INDEX.md`
+3. `docs/AXIS_BUILD_MAP.md`
 
-Future AI prompts and PR reviews must follow the engineering constitution before code changes are made.
+Axis is currently a basketball session memory system.
+
+Do not use archived, reference, or future docs as current build direction unless a task explicitly promotes them.
+
+The previous Codex instructions are preserved at `docs/archive/CODEX.md`.

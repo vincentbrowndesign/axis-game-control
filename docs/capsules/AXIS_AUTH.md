@@ -5,9 +5,9 @@ Build Decision: Build Now
 
 ## Product Rule
 
-Axis Auth v0 protects owner-scoped Thread Persistence.
+Axis Auth v0 protects owner-scoped session memory.
 
-Auth exists so a user can sign in, save exact active threads, reopen those threads across devices, sign out, and switch accounts without leaking another owner's saved work.
+Auth exists so a user can sign in, save session drafts and future memory objects, reopen their own work across devices, sign out, and switch accounts without leaking another owner's saved work.
 
 Auth is not a profile system, organization system, billing system, memory layer, role system, dashboard, or new Axis mode.
 
@@ -54,27 +54,16 @@ Operational setup required outside the repo:
 - `/auth/callback` included in Supabase redirect allow list
 - production and localhost callback URLs verified
 
-## Thread Persistence Boundary
+## Session Persistence Boundary
 
-Thread Persistence APIs remain:
+Current session draft API:
 
-- `GET /api/axis/threads`
-- `POST /api/axis/threads`
-- `GET /api/axis/threads/[threadId]`
-- `POST /api/axis/threads/[threadId]`
+- `GET /api/axis/sessions`
+- `POST /api/axis/sessions`
 
 The client attaches the current Supabase access token to persistence requests. The server derives the owner from the verified session token. Database owner scope and RLS remain the security boundary.
 
-The conversation API remains unchanged:
-
-```json
-{
-  "reply": "string",
-  "threadBoard": null
-}
-```
-
-Auth does not add `board_items`, memory objects, player facts, Data Asset records, or BoardSectionObject persistence.
+Auth does not add player facts, Data Asset records, verified evidence, reports, dashboards, or cross-thread memory.
 
 ## Owner Change Rule
 
@@ -82,14 +71,13 @@ When the signed-in owner changes, Axis must immediately clear owner-scoped clien
 
 Clear:
 
-- saved thread list
-- active saved-thread id
-- active thread metadata
-- loaded owner transcript
-- latest restored Thread Board snapshot
+- saved session list
+- active saved-session id
+- active session metadata
+- loaded owner memory preview
 - save status
 
-Then fetch the new owner-scoped thread list.
+Then fetch the new owner-scoped session list.
 
 Sign-out follows the same boundary. The local room starts fresh and remains usable without saving.
 
@@ -118,5 +106,5 @@ Axis Auth v0 passes when:
 4. The signed-in account is visible in the header.
 5. Sign-out clears owner-scoped thread state and starts a fresh local thread.
 6. User A's saved threads do not appear for User B.
-7. Direct access to another owner's thread remains denied by the existing persistence API and database boundary.
+7. Direct access to another owner's session remains denied by the existing persistence API and database boundary.
 8. No profile, organization, billing, memory, Data Asset runtime, dashboard, or new mode is introduced.

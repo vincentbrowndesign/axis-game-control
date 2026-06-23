@@ -1,1406 +1,1208 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import Link from "next/link";
-import {
-  AXIS_RUN_TARGET_ROUTE,
-  AXIS_UI_V2_ENABLED,
-  createAxisSessionDraftRequest,
-  listAxisSessionDraftsRequest,
-} from "../../lib/axis/client";
-import type {
-  AxisAsk,
-  AxisChatMessage,
-  AxisCommandValidationResult,
-  AxisLocalAttachment,
-  AxisMediaSource,
-  AxisOutput,
-  AxisRunDryRunHistoryItem,
-  AxisRunDryRunResult,
-  AxisRunRequestPreview,
-  AxisSession,
-} from "../../lib/axis/types";
-import { AxisCommandComposer } from "./AxisCommandComposer";
-import { AxisOutputSurface } from "./AxisOutputSurface";
-import { AxisSidebar } from "./AxisSidebar";
-import { AxisStatus } from "./AxisStatus";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { createAxisSessionDraftRequest, listAxisSessionDraftsRequest } from "../../lib/axis/client";
+import type { AxisSession } from "../../lib/axis/types";
+import { useAxisAuth } from "../../app/axis/axis-auth-control";
+import { AxisAskSurface } from "./AxisAskSurface";
+import { AxisBottomNav, type AxisNavKey } from "./AxisBottomNav";
+import { AxisEmptyState } from "./AxisEmptyState";
+import { AxisInputDock } from "./AxisInputDock";
+import { AxisMemoryPreview } from "./AxisMemoryPreview";
+import { AxisMemorySurface } from "./AxisMemorySurface";
+import { AxisPlayersSurface } from "./AxisPlayersSurface";
+import { AxisSessionCard } from "./AxisSessionCard";
+import { AxisToolsSurface } from "./AxisToolsSurface";
+import { AxisTopBar } from "./AxisTopBar";
 
-type SessionType = AxisSession["sessionType"];
-type LocalMemoryStatus = "loading" | "ready" | "saved" | "unavailable";
-type SessionDraftSaveStatus = "idle" | "saving" | "saved" | "local";
-type SessionDraftListStatus = "idle" | "loading" | "ready" | "unavailable";
+export type AxisMomentType = "typed" | "tap";
 
-type AxisLocalMemorySnapshot = {
-  activeSession: AxisSession | null;
-  latestAsk: AxisAsk | null;
-  askMessages: AxisChatMessage[];
-  latestMediaSource: AxisMediaSource | null;
+export type AxisMomentStructure = {
+  situation: string;
+  actor: string;
+  action: string;
+  outcome: string;
+  cause: string;
+  correction: string;
+  evidence: string;
 };
 
-const AXIS_LOCAL_MEMORY_KEY = "axis-ui-v2-local-memory";
+export type AxisMomentReviewState = "needs_review" | "correct" | "refine" | "not_right";
 
-const sessionTypes: Array<{ label: string; value: SessionType }> = [
+export type AxisMoment = {
+  id: string;
+  content: string;
+  createdAt: string;
+  elapsedSeconds: number;
+  interpretedTitle: string;
+  needsReview: boolean;
+  reviewState: AxisMomentReviewState;
+  structure: AxisMomentStructure;
+  type: AxisMomentType;
+};
+
+export type AxisMemorySession = {
+  id: string;
+  title: string;
+  playerName?: string;
+  objective: string;
+  sessionType: string;
+  startedAt: string;
+  endedAt?: string;
+  moments: AxisMoment[];
+  nextFocus: string;
+  savedState: "local" | "needs_sign_in" | "saved";
+};
+
+type AxisSessionType = AxisSession["sessionType"];
+type AxisShellStatus = "idle" | "starting" | "running" | "saved";
+
+const localMemoryKey = "axis-a1-mobile-memory";
+
+const sessionTypes: Array<{ label: string; value: AxisSessionType }> = [
+  { label: "Practice", value: "practice" },
   { label: "Training", value: "training" },
   { label: "Game", value: "game" },
   { label: "Film", value: "film" },
-  { label: "Practice", value: "practice" },
   { label: "Other", value: "other" },
 ];
 
-const localRunOutputTypes: AxisOutput["type"][] = ["automation", "file", "report", "text", "video"];
-const maxLocalCommandLength = 240;
+const quickMarks = [
+  { label: "Paint Touch", content: "Got paint" },
+  { label: "Extra Pass", content: "Extra pass was there" },
+  { label: "Late", content: "Too late" },
+  { label: "Footwork", content: "Feet too narrow" },
+  { label: "Spacing", content: "Spacing was off" },
+  { label: "Finish", content: "Finish at the rim" },
+  { label: "Turnover", content: "Turnover" },
+  { label: "Great Rep", content: "The current focus worked on this rep" },
+];
 
 export function AxisShell() {
-  const [isCreatingSession, setIsCreatingSession] = useState(false);
-  const [isAskingAxis, setIsAskingAxis] = useState(false);
-  const [isViewingSessionDetail, setIsViewingSessionDetail] = useState(false);
-  const [isViewingSessionDrafts, setIsViewingSessionDrafts] = useState(false);
-  const [isViewingPlayerProfile, setIsViewingPlayerProfile] = useState(false);
-  const [isViewingReportPreview, setIsViewingReportPreview] = useState(false);
-  const [activeSession, setActiveSession] = useState<AxisSession | null>(null);
-  const [localFailedOutputIds, setLocalFailedOutputIds] = useState<string[]>([]);
-  const [localPendingOutputs, setLocalPendingOutputs] = useState<AxisOutput[]>([]);
-  const [routeDryRunResultsByOutputId, setRouteDryRunResultsByOutputId] = useState<Record<string, AxisRunDryRunResult>>({});
-  const [routeDryRunHistory, setRouteDryRunHistory] = useState<AxisRunDryRunHistoryItem[]>([]);
-  const [latestRunPreview, setLatestRunPreview] = useState<AxisRunRequestPreview | null>(null);
-  const [runPreviewHistory, setRunPreviewHistory] = useState<AxisRunRequestPreview[]>([]);
-  const [latestAsk, setLatestAsk] = useState<AxisAsk | null>(null);
-  const [askMessages, setAskMessages] = useState<AxisChatMessage[]>([]);
-  const [latestMediaSource, setLatestMediaSource] = useState<AxisMediaSource | null>(null);
-  const [title, setTitle] = useState("");
+  const auth = useAxisAuth();
+  const [activeNav, setActiveNav] = useState<AxisNavKey>("session");
+  const [shellStatus, setShellStatus] = useState<AxisShellStatus>("idle");
+  const [sessionTitle, setSessionTitle] = useState("Today's Session");
   const [playerName, setPlayerName] = useState("");
-  const [sessionType, setSessionType] = useState<SessionType>("training");
-  const [askContent, setAskContent] = useState("");
-  const [reportActionNotice, setReportActionNotice] = useState("");
-  const [sessionDraftSaveStatus, setSessionDraftSaveStatus] = useState<SessionDraftSaveStatus>("idle");
-  const [sessionDraftListStatus, setSessionDraftListStatus] = useState<SessionDraftListStatus>("idle");
-  const [savedSessionDrafts, setSavedSessionDrafts] = useState<AxisSession[]>([]);
-  const [hasHydratedLocalMemory, setHasHydratedLocalMemory] = useState(false);
-  const [localMemoryStatus, setLocalMemoryStatus] = useState<LocalMemoryStatus>("loading");
+  const [objective, setObjective] = useState("");
+  const [sessionType, setSessionType] = useState<AxisSessionType>("practice");
+  const [activeSession, setActiveSession] = useState<AxisMemorySession | null>(null);
+  const [recentSessions, setRecentSessions] = useState<AxisMemorySession[]>([]);
+  const [backendDrafts, setBackendDrafts] = useState<AxisSession[]>([]);
+  const [momentDraft, setMomentDraft] = useState("");
+  const [saveLabel, setSaveLabel] = useState("Local");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     try {
-      const rawSnapshot = window.localStorage.getItem(AXIS_LOCAL_MEMORY_KEY);
-      if (rawSnapshot) {
-        const snapshot = JSON.parse(rawSnapshot) as Partial<AxisLocalMemorySnapshot>;
-        setActiveSession(snapshot.activeSession ?? null);
-        setLatestAsk(snapshot.latestAsk ?? null);
-        setAskMessages(Array.isArray(snapshot.askMessages) ? snapshot.askMessages : []);
-        setLatestMediaSource(snapshot.latestMediaSource ?? null);
+      const raw = window.localStorage.getItem(localMemoryKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { recentSessions?: AxisMemorySession[] };
+      if (Array.isArray(parsed.recentSessions)) {
+        setRecentSessions(parsed.recentSessions.map(normalizeAxisMemorySession).filter(isPresent).slice(0, 8));
       }
-      setLocalMemoryStatus("ready");
     } catch {
-      setLocalMemoryStatus("unavailable");
-    } finally {
-      setHasHydratedLocalMemory(true);
+      setErrorMessage("Local memory could not be restored.");
     }
   }, []);
 
   useEffect(() => {
-    if (!hasHydratedLocalMemory || localMemoryStatus === "unavailable") return;
-
     try {
-      const snapshot: AxisLocalMemorySnapshot = {
-        activeSession,
-        latestAsk,
-        askMessages,
-        latestMediaSource,
-      };
-      window.localStorage.setItem(AXIS_LOCAL_MEMORY_KEY, JSON.stringify(snapshot));
-      setLocalMemoryStatus("saved");
+      window.localStorage.setItem(localMemoryKey, JSON.stringify({ recentSessions }));
     } catch {
-      setLocalMemoryStatus("unavailable");
+      // Local fallback should never block the session.
     }
-  }, [activeSession, askMessages, hasHydratedLocalMemory, latestAsk, latestMediaSource, localMemoryStatus]);
+  }, [recentSessions]);
 
   useEffect(() => {
-    if (!hasHydratedLocalMemory) return;
-    void loadSavedSessionDrafts();
-  }, [hasHydratedLocalMemory]);
+    if (auth.status !== "signed_in") return;
+    let cancelled = false;
+    listAxisSessionDraftsRequest()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.ok) setBackendDrafts(result.sessions.slice(0, 5));
+      })
+      .catch(() => {
+        if (!cancelled) setBackendDrafts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.status]);
 
-  useEffect(() => {
-    const processingOutputIds = localPendingOutputs
-      .filter((output) => output.status === "processing")
-      .map((output) => output.id);
+  const elapsedSeconds = useSessionTimer(shellStatus === "running", activeSession?.startedAt);
+  const latestMoment = activeSession?.moments.at(-1) ?? null;
 
-    if (processingOutputIds.length === 0) return;
+  const topStatus = useMemo(() => {
+    if (auth.status === "loading") return "Checking sign in";
+    if (auth.status === "signed_in") return shellStatus === "saved" ? "Saved to Memory" : "Signed in";
+    if (auth.status === "error") return "Local mode";
+    return "Sign in to save memory";
+  }, [auth.status, shellStatus]);
 
-    const timer = window.setTimeout(() => {
-      setLocalPendingOutputs((outputs) =>
-        outputs.map((output) =>
-          processingOutputIds.includes(output.id)
-            ? {
-                ...output,
-                status: localFailedOutputIds.includes(output.id) ? "failed" : "ready",
-                summary: localFailedOutputIds.includes(output.id)
-                  ? `${formatOutputType(output.type)} output failed locally for preview. No backend run was called.`
-                  : `${formatOutputType(output.type)} output preview is ready locally. No backend run was called.`,
-              }
-            : output,
-        ),
-      );
-    }, 2200);
-
-    return () => window.clearTimeout(timer);
-  }, [localFailedOutputIds, localPendingOutputs]);
-
-  async function createSession(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) return;
-
-    const nextSession: AxisSession = {
+  async function startSession(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const now = new Date().toISOString();
+    const title = sessionTitle.trim() || "Today's Session";
+    const nextSession: AxisMemorySession = {
       id: createLocalId(),
-      title: trimmedTitle,
+      title,
       playerName: playerName.trim() || undefined,
-      persisted: false,
-      source: "local",
+      objective: objective.trim() || "Open run",
       sessionType,
-      status: "draft",
-      createdAt: new Date().toISOString(),
+      startedAt: now,
+      moments: [],
+      nextFocus: "Capture one real moment, then name the correction before the session ends.",
+      savedState: "local",
     };
 
     setActiveSession(nextSession);
-    setSessionDraftSaveStatus("saving");
-    setIsViewingSessionDetail(true);
-    setIsCreatingSession(false);
-
-    try {
-      const saved = await createAxisSessionDraftRequest(nextSession);
-      if (saved.ok) {
-        setActiveSession(saved.session);
-        setSessionDraftSaveStatus("saved");
-        setSavedSessionDrafts((sessions) => mergeSessionDrafts(saved.session, sessions));
-        return;
-      }
-    } catch {
-      // Local fallback keeps the session usable when auth or persistence is unavailable.
-    }
-
-    setActiveSession(nextSession);
-    setSessionDraftSaveStatus("local");
+    setShellStatus("starting");
+    setSaveLabel(auth.status === "signed_in" ? "Memory will save when the session ends" : "Sign in to save memory");
+    setErrorMessage("");
+    setShellStatus("running");
   }
 
-  async function retrySessionDraftSave() {
-    if (!activeSession || activeSession.persisted || sessionDraftSaveStatus === "saving") return;
+  function markMoment(content: string, type: AxisMomentType = "tap") {
+    const trimmed = content.trim();
+    if (!trimmed || !activeSession) return;
 
-    setSessionDraftSaveStatus("saving");
-    try {
-      const saved = await createAxisSessionDraftRequest(activeSession);
-      if (saved.ok) {
-        setActiveSession(saved.session);
-        setSessionDraftSaveStatus("saved");
-        setSavedSessionDrafts((sessions) => mergeSessionDrafts(saved.session, sessions));
-        return;
-      }
-    } catch {
-      // Keep the local draft intact when auth or persistence is unavailable.
-    }
+    const now = new Date().toISOString();
+    const nextMoment: AxisMoment = {
+      id: createLocalId(),
+      content: trimmed,
+      createdAt: now,
+      elapsedSeconds,
+      interpretedTitle: interpretMoment(trimmed),
+      needsReview: true,
+      reviewState: "needs_review",
+      structure: structureMoment(trimmed, activeSession, type),
+      type,
+    };
 
-    setSessionDraftSaveStatus("local");
-  }
-
-  async function loadSavedSessionDrafts() {
-    setSessionDraftListStatus("loading");
-    try {
-      const result = await listAxisSessionDraftsRequest();
-      if (result.ok) {
-        setSavedSessionDrafts(result.sessions);
-        setSessionDraftListStatus("ready");
-        return;
-      }
-    } catch {
-      // Draft restore stays quiet when auth or persistence is unavailable.
-    }
-
-    setSavedSessionDrafts([]);
-    setSessionDraftListStatus("unavailable");
-  }
-
-  function restoreSavedSessionDraft(session: AxisSession) {
     setActiveSession({
-      ...session,
-      persisted: true,
-      source: "backend",
+      ...activeSession,
+      moments: [...activeSession.moments, nextMoment],
+      nextFocus: getNextFocus(trimmed),
     });
-    setSessionDraftSaveStatus("saved");
-    setIsViewingSessionDrafts(false);
-    setIsViewingSessionDetail(true);
+    setMomentDraft("");
+    setSaveLabel("Memory updated locally");
   }
 
-  function createAsk(event: FormEvent<HTMLFormElement>) {
+  function submitMoment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedAsk = askContent.trim();
-    if (!trimmedAsk) return;
-
-    const nextAsk = {
-      id: createLocalId(),
-      content: trimmedAsk,
-      createdAt: new Date().toISOString(),
-      sessionId: activeSession?.id,
-      status: "draft" as const,
-    };
-
-    setLatestAsk(nextAsk);
-    setAskMessages((messages) => [
-      ...messages,
-      {
-        ...nextAsk,
-        role: "user",
-        status: "local",
-      },
-    ]);
-    setAskContent("");
+    markMoment(momentDraft, "typed");
   }
 
-  function createMediaSource(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setLatestMediaSource({
-      id: createLocalId(),
-      fileName: file.name,
-      fileType: file.type || "unknown",
-      mediaType: inferMediaType(file.type, file.name),
-      sizeBytes: file.size,
-      status: "local",
-      createdAt: new Date().toISOString(),
-      sessionId: activeSession?.id,
-    });
-
-    event.target.value = "";
-  }
-
-  function createPendingOutput(
-    command: string,
-    outputType: AxisOutput["type"],
-    shouldFail: boolean,
-  ): AxisCommandValidationResult {
-    const validationResult = validateLocalRunCommand(command, outputType, latestMediaSource);
-    if (!validationResult.ok) return validationResult;
-    if (hasDuplicateProcessingOutput(localPendingOutputs, command, outputType)) {
-      return { message: "That preview is already running locally.", ok: false };
-    }
-
-    const outputId = createLocalId("axis-output");
-    const createdAt = new Date().toISOString();
-    const attachmentSnapshot = latestMediaSource ? createLocalAttachment(latestMediaSource) : undefined;
-    const nextOutput: AxisOutput = {
-      id: outputId,
-      title: command,
-      type: outputType,
-      status: "processing",
-      createdAt,
-      localAttachment: attachmentSnapshot,
-      summary: shouldFail
-        ? `${formatOutputType(outputType)} output drafted locally with failed-state simulation.`
-        : `${formatOutputType(outputType)} output drafted locally. Axis run wiring is not active yet.`,
-      sourceLabel: formatOutputType(outputType),
-    };
-    const nextRunPreview: AxisRunRequestPreview = {
-      id: createLocalId("axis-run-preview"),
-      inputText: command,
-      selectedOutputType: outputType,
-      targetRoute: AXIS_RUN_TARGET_ROUTE,
-      createdAt,
-      status: "local_preview",
-      sessionId: activeSession?.id,
-      mediaSourceId: latestMediaSource?.id,
-      localAttachment: attachmentSnapshot,
-      expectedOutputId: outputId,
-    };
-
-    if (shouldFail) {
-      setLocalFailedOutputIds((outputIds) => [outputId, ...outputIds].slice(0, 8));
-    }
-    setLatestRunPreview(nextRunPreview);
-    setRunPreviewHistory((previews) => [nextRunPreview, ...previews].slice(0, 5));
-    setLocalPendingOutputs((outputs) => [nextOutput, ...outputs].slice(0, 4));
-    return { ok: true };
-  }
-
-  function retryLocalOutput(outputId: string) {
-    const outputToRetry = localPendingOutputs.find((output) => output.id === outputId && output.status === "failed");
-    if (!outputToRetry) return;
-
-    const previousPreview = runPreviewHistory.find((preview) => preview.expectedOutputId === outputId);
-    const retryPreview: AxisRunRequestPreview = {
-      id: createLocalId("axis-run-preview"),
-      inputText: outputToRetry.title,
-      selectedOutputType: outputToRetry.type,
-      targetRoute: AXIS_RUN_TARGET_ROUTE,
-      createdAt: new Date().toISOString(),
-      status: "local_preview",
-      sessionId: previousPreview?.sessionId,
-      mediaSourceId: previousPreview?.mediaSourceId,
-      localAttachment: outputToRetry.localAttachment,
-      expectedOutputId: outputId,
-    };
-
-    setLocalFailedOutputIds((outputIds) => outputIds.filter((id) => id !== outputId));
-    setLatestRunPreview(retryPreview);
-    setRunPreviewHistory((previews) => [retryPreview, ...previews].slice(0, 5));
-    setLocalPendingOutputs((outputs) =>
-      outputs.map((output) =>
-        output.id === outputId && output.status === "failed"
+  function correctLatestMoment(reviewState: AxisMomentReviewState) {
+    if (!activeSession || !latestMoment) return;
+    setActiveSession({
+      ...activeSession,
+      moments: activeSession.moments.map((moment) =>
+        moment.id === latestMoment.id
           ? {
-              ...output,
-              status: "processing",
-              summary: `${formatOutputType(output.type)} output retry is running locally. No backend run was called.`,
+              ...moment,
+              needsReview: reviewState !== "correct",
+              reviewState,
+              structure: {
+                ...moment.structure,
+                correction: getCorrectionForReview(reviewState, moment.structure.correction),
+              },
             }
-          : output,
+          : moment,
       ),
-    );
+      nextFocus: getNextFocusForReview(reviewState, latestMoment),
+    });
+    setSaveLabel("Moment updated locally");
   }
 
-  function clearLocalOutputs() {
-    setLocalFailedOutputIds([]);
-    setLocalPendingOutputs([]);
-    setLatestRunPreview(null);
-    setRunPreviewHistory([]);
-    setRouteDryRunResultsByOutputId({});
-    setRouteDryRunHistory([]);
+  function rememberSession(session: AxisMemorySession) {
+    setRecentSessions((sessions) => [session, ...sessions.filter((stored) => stored.id !== session.id)].slice(0, 8));
   }
 
-  function removeLocalAttachment() {
-    setLatestMediaSource(null);
+  async function endSession() {
+    if (!activeSession) return;
+    const endedAt = new Date().toISOString();
+    const localEnded: AxisMemorySession = {
+      ...activeSession,
+      endedAt,
+      savedState: auth.status === "signed_in" ? "local" : "needs_sign_in",
+    };
+
+    if (auth.status !== "signed_in") {
+      rememberSession(localEnded);
+      setActiveSession(localEnded);
+      setShellStatus("saved");
+      setSaveLabel("Saved locally");
+      return;
+    }
+
+    setSaveLabel("Saving memory...");
+
+    try {
+      const saved = await createAxisSessionDraftRequest({
+        id: localEnded.id,
+        title: getSavedSessionTitle(localEnded),
+        playerName: localEnded.playerName,
+        sessionType: coerceAxisSessionType(localEnded.sessionType),
+        status: "draft",
+        createdAt: localEnded.startedAt,
+      });
+
+      if (saved.ok) {
+        const persistedEnded: AxisMemorySession = {
+          ...localEnded,
+          id: saved.session.id,
+          savedState: "saved",
+          title: saved.session.title,
+        };
+        rememberSession(persistedEnded);
+        setActiveSession(persistedEnded);
+        setSaveLabel("Saved to Memory");
+        setBackendDrafts((sessions) => [saved.session, ...sessions.filter((session) => session.id !== saved.session.id)].slice(0, 5));
+      } else {
+        rememberSession({ ...localEnded, savedState: "local" });
+        setActiveSession({ ...localEnded, savedState: "local" });
+        setSaveLabel("Saved locally");
+      }
+    } catch {
+      rememberSession({ ...localEnded, savedState: "local" });
+      setActiveSession({ ...localEnded, savedState: "local" });
+      setSaveLabel("Saved locally");
+    }
+
+    setShellStatus("saved");
   }
 
-  const localAttachment = latestMediaSource ? createLocalAttachment(latestMediaSource) : null;
+  function startAnother() {
+    setActiveSession(null);
+    setShellStatus("idle");
+    setMomentDraft("");
+    setSaveLabel(auth.status === "signed_in" ? "Ready" : "Sign in to save memory");
+  }
+
+  async function signOut() {
+    await auth.signOut();
+    setBackendDrafts([]);
+    setSaveLabel("Local");
+  }
+
+  const recentMemory = mergeRecentMemory(recentSessions, backendDrafts);
 
   return (
-    <main className="axis-blank" data-axis-ui-v2={AXIS_UI_V2_ENABLED ? "true" : "false"}>
-      <AxisSidebar />
-      <AxisStatus
-        activeOutput={localPendingOutputs[0]}
-        routeDryRunResult={localPendingOutputs[0] ? routeDryRunResultsByOutputId[localPendingOutputs[0].id] : undefined}
-        routeDryRunHistory={routeDryRunHistory}
-        runPreview={latestRunPreview}
-        runPreviewHistory={runPreviewHistory}
+    <main className="axis-mobile-shell">
+      <AxisTopBar
+        authStatus={auth.status}
+        email={auth.email}
+        onSignIn={auth.signInWithGoogle}
+        onSignOut={signOut}
+        status={topStatus}
       />
-      <AxisOutputSurface
-        localRunPreviews={runPreviewHistory}
-        localOutputs={localPendingOutputs}
-        onClearLocalOutputs={clearLocalOutputs}
-        onRetryOutput={retryLocalOutput}
-        onRouteDryRunResult={(outputId, result) =>
-          handleRouteDryRunResult(outputId, result)
-        }
-        retryableOutputIds={localPendingOutputs
-          .filter((output) => output.status === "failed")
-          .map((output) => output.id)}
-      />
-      <AxisCommandComposer
-        attachment={localAttachment}
-        onCreateOutput={createPendingOutput}
-        onRemoveAttachment={removeLocalAttachment}
-      />
-      <section className="axis-blank__identity" aria-label="Axis entry">
-        <div className="axis-blank__top-row">
-          <h1>AXIS <span>9</span></h1>
-          <span className="axis-blank__status">Axis Ready</span>
-          <Link className="axis-blank__admin-link" href="/axis/build-map">Open Build Map</Link>
-        </div>
-        <div className="axis-blank__command-zone">
-          <p>Start with the thing you want Axis to make, inspect, summarize, or prepare.</p>
-          <div className="axis-blank__actions">
-            <button type="button" onClick={() => setIsCreatingSession(true)}>
-              New Session
-            </button>
-            <button type="button" onClick={() => setIsAskingAxis(true)}>
-              Ask Axis
-            </button>
-            <label className="axis-upload-trigger">
-              Upload Media
-              <input
-                accept="audio/*,image/*,video/*,.pdf,.txt,.doc,.docx"
-                onChange={createMediaSource}
-                type="file"
+
+      <section className="axis-mobile-shell__body" aria-label="Axis session memory">
+        {activeNav === "session" && (
+          <>
+            {!activeSession && (
+              <AxisEmptyState
+                errorMessage={errorMessage}
+                objective={objective}
+                onObjectiveChange={setObjective}
+                onPlayerNameChange={setPlayerName}
+                onSessionTitleChange={setSessionTitle}
+                onSessionTypeChange={setSessionType}
+                onStartSession={startSession}
+                playerName={playerName}
+                saveLabel={saveLabel}
+                sessionTitle={sessionTitle}
+                sessionType={sessionType}
+                sessionTypes={sessionTypes}
+                signedIn={auth.status === "signed_in"}
               />
-            </label>
-            {savedSessionDrafts.length > 0 && (
-              <button type="button" onClick={() => setIsViewingSessionDrafts(true)}>
-                Saved Drafts
-              </button>
             )}
-          </div>
-        </div>
+
+            {activeSession && (
+              <AxisSessionCard
+                elapsedSeconds={elapsedSeconds}
+                latestMoment={latestMoment}
+                onCorrect={correctLatestMoment}
+                onEndSession={endSession}
+                onStartAnother={startAnother}
+                saveLabel={saveLabel}
+                session={activeSession}
+                status={shellStatus}
+              />
+            )}
+          </>
+        )}
+
+        {activeNav === "ask" && (
+          <AxisAskSurface sessions={recentMemory} />
+        )}
+
+        {activeNav === "memory" && (
+          <AxisMemorySurface sessions={recentMemory} />
+        )}
+
+        {activeNav === "players" && (
+          <AxisPlayersSurface sessions={recentMemory} onStartSession={() => setActiveNav("session")} />
+        )}
+
+        {activeNav === "tools" && (
+          <AxisToolsSurface />
+        )}
+
+        {activeNav === "session" && activeSession && shellStatus === "running" && (
+          <AxisInputDock
+            draft={momentDraft}
+            onDraftChange={setMomentDraft}
+            onEndSession={endSession}
+            onQuickMark={(content) => markMoment(content)}
+            quickMarks={quickMarks}
+            onSubmit={submitMoment}
+          />
+        )}
+
+        <AxisMemoryPreview sessions={recentMemory.slice(0, 3)} compact />
       </section>
 
-      {isCreatingSession && (
-        <section className="axis-session-panel" aria-labelledby="axis-new-session-title">
-          <div className="axis-session-panel__header">
-            <div>
-              <p>Local draft</p>
-              <h2 id="axis-new-session-title">New Session</h2>
-            </div>
-            <button type="button" onClick={() => setIsCreatingSession(false)}>
-              Close
-            </button>
-          </div>
-          <form onSubmit={createSession}>
-            <label>
-              Session title
-              <input
-                autoFocus
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="Handles under pressure"
-              />
-            </label>
-            <label>
-              Player name <span>optional</span>
-              <input
-                value={playerName}
-                onChange={(event) => setPlayerName(event.target.value)}
-                placeholder="Hailey Johnson"
-              />
-            </label>
-            <label>
-              Session type
-              <select value={sessionType} onChange={(event) => setSessionType(event.target.value as SessionType)}>
-                {sessionTypes.map((type) => (
-                  <option value={type.value} key={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" disabled={!title.trim()}>
-              Create Draft Session
-            </button>
-          </form>
-        </section>
-      )}
+      <AxisBottomNav active={activeNav} onChange={setActiveNav} />
 
-      {isViewingSessionDrafts && (
-        <section className="axis-session-panel" aria-labelledby="axis-saved-drafts-title">
-          <div className="axis-session-panel__header">
-            <div>
-              <p>Saved Drafts</p>
-              <h2 id="axis-saved-drafts-title">Session drafts</h2>
-            </div>
-            <button type="button" onClick={() => setIsViewingSessionDrafts(false)}>
-              Close
-            </button>
-          </div>
-          {sessionDraftListStatus === "loading" ? (
-            <p className="axis-session-panel__note">Loading saved drafts...</p>
-          ) : savedSessionDrafts.length > 0 ? (
-            <div className="axis-session-drafts-list">
-              {savedSessionDrafts.slice(0, 5).map((session) => (
-                <button key={session.id} onClick={() => restoreSavedSessionDraft(session)} type="button">
-                  <strong>{session.title}</strong>
-                  <span>
-                    {formatSessionType(session.sessionType)} - {formatTime(session.createdAt)}
-                    {session.playerName ? ` - ${session.playerName}` : ""}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="axis-session-panel__note">No saved session drafts yet.</p>
-          )}
-        </section>
-      )}
-
-      {isAskingAxis && (
-        <section className="axis-session-panel axis-ask-panel" aria-labelledby="axis-ask-title">
-          <div className="axis-session-panel__header">
-            <div>
-              <p>Local chat</p>
-              <h2 id="axis-ask-title">Ask Axis</h2>
-            </div>
-            <button type="button" onClick={() => setIsAskingAxis(false)}>
-              Close
-            </button>
-          </div>
-          <div className="axis-ask-chat" aria-label="Local Ask Axis messages">
-            {askMessages.length > 0 ? (
-              askMessages.map((message) => (
-                <article className="axis-ask-chat__message" key={message.id}>
-                  <div>
-                    <strong>You</strong>
-                    <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
-                  </div>
-                  <p>{message.content}</p>
-                </article>
-              ))
-            ) : (
-              <p className="axis-ask-chat__empty">Ask Axis drafts will collect here before real agent wiring.</p>
-            )}
-          </div>
-          <form onSubmit={createAsk}>
-            <label>
-              Question or note
-              <textarea
-                autoFocus
-                value={askContent}
-                onChange={(event) => setAskContent(event.target.value)}
-                placeholder="What happened at 0:18?"
-                rows={4}
-              />
-            </label>
-            <button type="submit" disabled={!askContent.trim()}>
-              Add Message
-            </button>
-          </form>
-        </section>
-      )}
-
-      {activeSession && (
-        <section className="axis-active-session" aria-label="Current active session">
-          <p>Current Session</p>
-          <h2>{activeSession.title}</h2>
-          <dl>
-            <div>
-              <dt>Status</dt>
-              <dd>{activeSession.status}</dd>
-            </div>
-            <div>
-              <dt>Save</dt>
-              <dd>{formatSessionPersistence(activeSession, sessionDraftSaveStatus)}</dd>
-            </div>
-            <div>
-              <dt>Type</dt>
-              <dd>{formatSessionType(activeSession.sessionType)}</dd>
-            </div>
-            {activeSession.playerName && (
-              <div>
-                <dt>Player</dt>
-                <dd>{activeSession.playerName}</dd>
-              </div>
-            )}
-          </dl>
-          <span className="axis-active-session__memory">{formatLocalMemoryStatus(localMemoryStatus)}</span>
-          {!activeSession.persisted && (
-            <button
-              className="axis-active-session__detail"
-              disabled={sessionDraftSaveStatus === "saving"}
-              onClick={retrySessionDraftSave}
-              type="button"
-            >
-              {sessionDraftSaveStatus === "saving" ? "Saving..." : "Retry Save"}
-            </button>
-          )}
-          <button className="axis-active-session__detail" type="button" onClick={() => setIsViewingSessionDetail(true)}>
-            View Session Detail
-          </button>
-          {activeSession.playerName && (
-            <button className="axis-active-session__detail" type="button" onClick={() => setIsViewingPlayerProfile(true)}>
-              View Player Profile
-            </button>
-          )}
-          <button className="axis-active-session__detail" type="button" onClick={() => setIsViewingReportPreview(true)}>
-            View Report Draft
-          </button>
-        </section>
-      )}
-
-      {activeSession && isViewingSessionDetail && (
-        <section className="axis-session-detail" aria-labelledby="axis-session-detail-title">
-          <div className="axis-session-panel__header">
-            <div>
-              <p>Session Detail</p>
-              <h2 id="axis-session-detail-title">{activeSession.title}</h2>
-            </div>
-            <button type="button" onClick={() => setIsViewingSessionDetail(false)}>
-              Close
-            </button>
-          </div>
-
-          <dl className="axis-session-detail__facts">
-            <div>
-              <dt>Status</dt>
-              <dd>{activeSession.status}</dd>
-            </div>
-            <div>
-              <dt>Save</dt>
-              <dd>{formatSessionPersistence(activeSession, sessionDraftSaveStatus)}</dd>
-            </div>
-            <div>
-              <dt>Type</dt>
-              <dd>{formatSessionType(activeSession.sessionType)}</dd>
-            </div>
-            <div>
-              <dt>Created</dt>
-              <dd>{formatTime(activeSession.createdAt)}</dd>
-            </div>
-            {activeSession.playerName && (
-              <div>
-                <dt>Player</dt>
-                <dd>{activeSession.playerName}</dd>
-              </div>
-            )}
-          </dl>
-
-          <div className="axis-session-detail__section">
-            <h3>Local intake</h3>
-            {latestMediaSource ? (
-              <ul>
-                <li>{latestMediaSource.fileName}</li>
-                <li>{formatMediaType(latestMediaSource.mediaType)} - {formatBytes(latestMediaSource.sizeBytes)}</li>
-                <li>Local metadata only</li>
-              </ul>
-            ) : (
-              <p>No media draft attached yet.</p>
-            )}
-          </div>
-
-          <div className="axis-session-detail__section">
-            <h3>Latest ask</h3>
-            {latestAsk ? <p>{latestAsk.content}</p> : <p>No Ask Axis draft yet.</p>}
-          </div>
-        </section>
-      )}
-
-      {activeSession?.playerName && isViewingPlayerProfile && (
-        <section className="axis-player-profile" aria-labelledby="axis-player-profile-title">
-          <div className="axis-session-panel__header">
-            <div>
-              <p>Player Profile</p>
-              <h2 id="axis-player-profile-title">{activeSession.playerName}</h2>
-            </div>
-            <button type="button" onClick={() => setIsViewingPlayerProfile(false)}>
-              Close
-            </button>
-          </div>
-
-          <dl className="axis-session-detail__facts">
-            <div>
-              <dt>Status</dt>
-              <dd>draft</dd>
-            </div>
-            <div>
-              <dt>Source</dt>
-              <dd>current session</dd>
-            </div>
-            <div>
-              <dt>Session</dt>
-              <dd>{activeSession.title}</dd>
-            </div>
-            <div>
-              <dt>Type</dt>
-              <dd>{formatSessionType(activeSession.sessionType)}</dd>
-            </div>
-          </dl>
-
-          <div className="axis-session-detail__section">
-            <h3>Current notes</h3>
-            {latestAsk ? <p>{latestAsk.content}</p> : <p>No Ask Axis draft attached yet.</p>}
-          </div>
-
-          <div className="axis-session-detail__section">
-            <h3>Local boundary</h3>
-            <ul>
-              <li>Profile preview only</li>
-              <li>No saved player memory</li>
-              <li>No verified stats or cross-session history</li>
-            </ul>
-          </div>
-        </section>
-      )}
-
-      {activeSession && isViewingReportPreview && (
-        <section className="axis-report-preview" aria-labelledby="axis-report-preview-title">
-          <div className="axis-session-panel__header">
-            <div>
-              <p>Report Draft</p>
-              <h2 id="axis-report-preview-title">{activeSession.title}</h2>
-            </div>
-            <button type="button" onClick={() => setIsViewingReportPreview(false)}>
-              Close
-            </button>
-          </div>
-
-          <dl className="axis-session-detail__facts">
-            <div>
-              <dt>Status</dt>
-              <dd>draft</dd>
-            </div>
-            <div>
-              <dt>Audience</dt>
-              <dd>not selected</dd>
-            </div>
-            <div>
-              <dt>Session</dt>
-              <dd>{formatSessionType(activeSession.sessionType)}</dd>
-            </div>
-            <div>
-              <dt>Player</dt>
-              <dd>{activeSession.playerName || "not assigned"}</dd>
-            </div>
-          </dl>
-
-          <div className="axis-session-detail__section">
-            <h3>Draft inputs</h3>
-            <ul>
-              <li>{latestAsk ? `Latest note: ${latestAsk.content}` : "No Ask Axis note yet"}</li>
-              <li>{latestMediaSource ? `Local source: ${latestMediaSource.fileName}` : "No media source attached"}</li>
-              <li>Session metadata only</li>
-            </ul>
-          </div>
-
-          <div className="axis-session-detail__section">
-            <h3>Report boundary</h3>
-            <ul>
-              <li>No generated claims yet</li>
-              <li>No verified evidence yet</li>
-              <li>Export and send are local drafts only</li>
-            </ul>
-          </div>
-
-          <div className="axis-report-preview__actions" aria-label="Local report actions">
-            <button type="button" onClick={() => setReportActionNotice("Export draft staged locally. No PDF was generated.")}>
-              Stage Export Draft
-            </button>
-            <button type="button" onClick={() => setReportActionNotice("Send draft staged locally. Nothing was sent.")}>
-              Stage Send Draft
-            </button>
-            <button
-              type="button"
-              onClick={() => setReportActionNotice("Follow-up draft staged locally. No automation was scheduled.")}
-            >
-              Stage Follow-Up
-            </button>
-          </div>
-          {reportActionNotice && <p className="axis-report-preview__notice">{reportActionNotice}</p>}
-        </section>
-      )}
-
-      <style>{`
-        :root {
-          color-scheme: dark;
-        }
-
-        html,
-        body {
-          margin: 0;
-          min-height: 100%;
-          overflow-x: hidden;
-        }
-
-        .axis-blank,
-        .axis-blank * {
-          box-sizing: border-box;
-        }
-
-        .axis-blank {
-          align-items: center;
-          background: #050608;
-          color: #f4f1ea;
-          display: flex;
-          font-family:
-            Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          justify-content: center;
-          min-height: 100dvh;
-          padding: 6rem 1rem 9rem;
-          position: relative;
-          width: 100%;
-        }
-
-        .axis-blank__identity {
-          align-items: center;
-          display: grid;
-          gap: 1.25rem;
-          justify-items: center;
-          max-width: min(42rem, calc(100vw - 2rem));
-          text-align: center;
-          width: 100%;
-        }
-
-        .axis-blank__top-row {
-          align-items: center;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.75rem;
-          justify-content: center;
-        }
-
-        .axis-blank h1 {
-          font-size: clamp(1.8rem, 5vw, 3.5rem);
-          font-weight: 850;
-          letter-spacing: -0.04em;
-          margin: 0;
-        }
-
-        .axis-blank h1 span {
-          color: #8d42ff;
-        }
-
-        .axis-blank__status {
-          border: 1px solid rgba(121, 226, 145, 0.26);
-          border-radius: 999px;
-          color: rgba(121, 226, 145, 0.82);
-          font-size: 0.72rem;
-          font-weight: 800;
-          letter-spacing: 0.08em;
-          padding: 0.32rem 0.62rem;
-          text-transform: uppercase;
-        }
-
-        .axis-blank__admin-link {
-          background: rgba(255, 255, 255, 0.035);
-          border-color: rgba(255, 255, 255, 0.12) !important;
-          color: rgba(244, 241, 234, 0.62) !important;
-          min-height: 2rem !important;
-          padding: 0 0.72rem !important;
-        }
-
-        .axis-blank__command-zone {
-          display: grid;
-          gap: 0.9rem;
-          justify-items: center;
-        }
-
-        .axis-blank__command-zone p {
-          color: rgba(244, 241, 234, 0.62);
-          font-size: clamp(0.95rem, 2vw, 1.08rem);
-          line-height: 1.45;
-          margin: 0;
-          max-width: 32rem;
-        }
-
-        .axis-blank__actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.7rem;
-          justify-content: center;
-        }
-
-        .axis-blank a,
-        .axis-blank button,
-        .axis-upload-trigger {
-          border-radius: 999px;
-          color: #f4f1ea;
-          font: inherit;
-          font-size: 0.88rem;
-          min-height: 2.65rem;
-          padding: 0 1rem;
-          text-decoration: none;
-        }
-
-        .axis-blank a,
-        .axis-upload-trigger {
-          align-items: center;
-          border: 1px solid rgba(141, 66, 255, 0.55);
-          cursor: pointer;
-          display: inline-flex;
-        }
-
-        .axis-upload-trigger input {
-          height: 1px;
-          opacity: 0;
-          pointer-events: none;
-          position: absolute;
-          width: 1px;
-        }
-
-        .axis-blank button {
-          background: #8d42ff;
-          border: 1px solid rgba(141, 66, 255, 0.7);
-          cursor: pointer;
-        }
-
-        .axis-upload-trigger {
-          background: rgba(255, 255, 255, 0.035);
-        }
-
-        .axis-blank button:disabled {
-          cursor: default;
-          opacity: 0.45;
-        }
-
-        .axis-session-panel,
-        .axis-active-session,
-        .axis-session-detail,
-        .axis-player-profile,
-        .axis-report-preview {
-          background: rgba(12, 14, 20, 0.94);
-          border: 1px solid rgba(255, 255, 255, 0.13);
-          border-radius: 1rem;
-          box-shadow: 0 1.2rem 4rem rgba(0, 0, 0, 0.32);
-          width: min(24rem, calc(100vw - 2rem));
-        }
-
-        .axis-session-panel,
-        .axis-active-session,
-        .axis-session-detail,
-        .axis-player-profile,
-        .axis-report-preview {
-          position: fixed;
-        }
-
-        .axis-session-panel {
-          display: grid;
-          gap: 1rem;
-          padding: 1rem;
-          right: max(1rem, env(safe-area-inset-right));
-          top: max(1rem, env(safe-area-inset-top));
-        }
-
-        .axis-session-panel__header {
-          align-items: start;
-          display: flex;
-          gap: 1rem;
-          justify-content: space-between;
-        }
-
-        .axis-session-panel__header p,
-        .axis-active-session p {
-          color: rgba(244, 241, 234, 0.52);
-          font-size: 0.72rem;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          margin: 0 0 0.3rem;
-          text-transform: uppercase;
-        }
-
-        .axis-session-panel h2,
-        .axis-active-session h2 {
-          font-size: 1.05rem;
-          margin: 0;
-        }
-
-        .axis-session-panel__header button {
-          background: transparent;
-          border-color: rgba(255, 255, 255, 0.16);
-          min-height: 2rem;
-          padding: 0 0.75rem;
-        }
-
-        .axis-session-panel form {
-          display: grid;
-          gap: 0.85rem;
-        }
-
-        .axis-ask-chat {
-          display: grid;
-          gap: 0.65rem;
-          max-height: 13rem;
-          overflow-y: auto;
-          padding-right: 0.2rem;
-        }
-
-        .axis-ask-chat__message {
-          background: rgba(255, 255, 255, 0.045);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 0.75rem;
-          padding: 0.7rem;
-        }
-
-        .axis-ask-chat__message div {
-          align-items: center;
-          display: flex;
-          gap: 0.5rem;
-          justify-content: space-between;
-        }
-
-        .axis-ask-chat__message strong,
-        .axis-ask-chat__message time,
-        .axis-ask-chat__empty {
-          color: rgba(244, 241, 234, 0.52);
-          font-size: 0.74rem;
-        }
-
-        .axis-ask-chat__message p,
-        .axis-ask-chat__empty {
-          line-height: 1.38;
-          margin: 0;
-        }
-
-        .axis-ask-chat__message p {
-          color: #f4f1ea;
-          font-size: 0.88rem;
-          margin-top: 0.45rem;
-        }
-
-        .axis-session-panel label {
-          color: rgba(244, 241, 234, 0.72);
-          display: grid;
-          font-size: 0.82rem;
-          gap: 0.35rem;
-        }
-
-        .axis-session-panel label span {
-          color: rgba(244, 241, 234, 0.42);
-        }
-
-        .axis-session-panel input,
-        .axis-session-panel select,
-        .axis-session-panel textarea {
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 0.7rem;
-          color: #f4f1ea;
-          font: inherit;
-          padding: 0 0.75rem;
-        }
-
-        .axis-session-panel input,
-        .axis-session-panel select {
-          min-height: 2.65rem;
-        }
-
-        .axis-session-panel textarea {
-          line-height: 1.4;
-          padding-bottom: 0.7rem;
-          padding-top: 0.7rem;
-          resize: vertical;
-        }
-
-        .axis-session-panel option {
-          background: #101219;
-          color: #f4f1ea;
-        }
-
-        .axis-session-panel form > button {
-          border-radius: 0.8rem;
-          margin-top: 0.2rem;
-        }
-
-        .axis-session-panel__note {
-          color: rgba(244, 241, 234, 0.58);
-          font-size: 0.82rem;
-          line-height: 1.35;
-          margin: 0;
-        }
-
-        .axis-session-drafts-list {
-          display: grid;
-          gap: 0.55rem;
-        }
-
-        .axis-session-drafts-list button {
-          background: rgba(255, 255, 255, 0.045);
-          border: 1px solid rgba(255, 255, 255, 0.09);
-          border-radius: 0.75rem;
-          color: inherit;
-          cursor: pointer;
-          display: grid;
-          gap: 0.3rem;
-          padding: 0.72rem;
-          text-align: left;
-        }
-
-        .axis-session-drafts-list button:hover,
-        .axis-session-drafts-list button:focus-visible {
-          border-color: rgba(141, 66, 255, 0.48);
-          outline: none;
-        }
-
-        .axis-session-drafts-list strong {
-          color: #f4f1ea;
-          font-size: 0.88rem;
-          line-height: 1.2;
-          overflow-wrap: anywhere;
-        }
-
-        .axis-session-drafts-list span {
-          color: rgba(244, 241, 234, 0.52);
-          font-size: 0.74rem;
-          line-height: 1.3;
-        }
-
-        .axis-session-detail,
-        .axis-player-profile,
-        .axis-report-preview {
-          display: grid;
-          gap: 1rem;
-          left: 50%;
-          padding: 1rem;
-          top: max(1rem, env(safe-area-inset-top));
-          transform: translateX(-50%);
-          width: min(34rem, calc(100vw - 2rem));
-          z-index: 3;
-        }
-
-        .axis-session-detail__facts {
-          display: grid;
-          gap: 0.6rem;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          margin: 0;
-        }
-
-        .axis-session-detail__facts div,
-        .axis-session-detail__section {
-          background: rgba(255, 255, 255, 0.045);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 0.75rem;
-          padding: 0.75rem;
-        }
-
-        .axis-session-detail dt,
-        .axis-session-detail dd {
-          margin: 0;
-        }
-
-        .axis-session-detail dt,
-        .axis-session-detail h3 {
-          color: rgba(244, 241, 234, 0.52);
-          font-size: 0.72rem;
-          font-weight: 800;
-          letter-spacing: 0.1em;
-          margin: 0 0 0.35rem;
-          text-transform: uppercase;
-        }
-
-        .axis-session-detail dd,
-        .axis-session-detail li,
-        .axis-session-detail__section p {
-          color: rgba(244, 241, 234, 0.78);
-          font-size: 0.86rem;
-          line-height: 1.38;
-        }
-
-        .axis-session-detail dd {
-          color: #f4f1ea;
-          text-transform: capitalize;
-        }
-
-        .axis-session-detail ul {
-          display: grid;
-          gap: 0.35rem;
-          list-style: none;
-          margin: 0;
-          padding: 0;
-        }
-
-        .axis-session-detail li::before {
-          color: #8d42ff;
-          content: "- ";
-        }
-
-        .axis-session-detail__section p {
-          margin: 0;
-        }
-
-        .axis-report-preview__actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.6rem;
-        }
-
-        .axis-report-preview__actions button {
-          background: transparent;
-          border-color: rgba(255, 255, 255, 0.16);
-        }
-
-        .axis-report-preview__notice {
-          color: rgba(244, 241, 234, 0.62);
-          font-size: 0.82rem;
-          line-height: 1.35;
-          margin: -0.2rem 0 0;
-        }
-
-        .axis-active-session {
-          bottom: max(1rem, env(safe-area-inset-bottom));
-          left: max(1rem, env(safe-area-inset-left));
-          padding: 1rem;
-        }
-
-        .axis-active-session__detail {
-          background: transparent;
-          border-color: rgba(255, 255, 255, 0.16);
-          margin-top: 0.85rem;
-          width: 100%;
-        }
-
-        .axis-active-session__memory {
-          color: rgba(244, 241, 234, 0.48);
-          display: block;
-          font-size: 0.76rem;
-          margin-top: 0.8rem;
-        }
-
-        .axis-active-session dl {
-          display: grid;
-          gap: 0.55rem;
-          margin: 0.9rem 0 0;
-        }
-
-        .axis-active-session dl div {
-          display: flex;
-          justify-content: space-between;
-        }
-
-        .axis-active-session dt,
-        .axis-active-session dd {
-          color: rgba(244, 241, 234, 0.66);
-          font-size: 0.84rem;
-          margin: 0;
-        }
-
-        .axis-active-session dd {
-          color: #f4f1ea;
-          text-transform: capitalize;
-        }
-
-        @media (max-width: 720px) {
-          .axis-blank {
-            align-items: start;
-            padding: 6rem 1rem 14rem;
-          }
-
-          .axis-session-panel,
-          .axis-active-session,
-          .axis-session-detail,
-          .axis-player-profile,
-          .axis-report-preview {
-            left: 1rem;
-            right: 1rem;
-            transform: none;
-            width: auto;
-          }
-
-          .axis-session-detail,
-          .axis-player-profile,
-          .axis-report-preview {
-            max-height: calc(100dvh - 2rem);
-            overflow-y: auto;
-          }
-
-          .axis-active-session {
-            bottom: calc(8.5rem + env(safe-area-inset-bottom));
-          }
-
-        }
-      `}</style>
+      <style jsx global>{axisShellStyles}</style>
     </main>
   );
-
-  function handleRouteDryRunResult(outputId: string, result: AxisRunDryRunResult) {
-    const output = localPendingOutputs.find((item) => item.id === outputId);
-
-    setRouteDryRunResultsByOutputId((results) => ({
-      ...results,
-      [outputId]: result,
-    }));
-    setRouteDryRunHistory((items) =>
-      [
-        {
-          id: createLocalId("axis-dry-run-history"),
-          outputId,
-          outputTitle: output?.title ?? "Axis output",
-          createdAt: new Date().toISOString(),
-          result,
-        },
-        ...items,
-      ].slice(0, 5),
-    );
-  }
 }
 
-function createLocalId(prefix = "axis-session") {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${prefix}-${Date.now()}`;
+function useSessionTimer(active: boolean, startedAt?: string) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!active || !startedAt) return undefined;
+    const started = Date.parse(startedAt);
+    const update = () => setElapsed(Math.max(0, Math.floor((Date.now() - started) / 1000)));
+    update();
+    const interval = window.setInterval(update, 1000);
+    return () => window.clearInterval(interval);
+  }, [active, startedAt]);
+
+  return elapsed;
 }
 
-function mergeSessionDrafts(session: AxisSession, sessions: AxisSession[]) {
-  return [session, ...sessions.filter((item) => item.id !== session.id)].slice(0, 20);
+function mergeRecentMemory(localSessions: AxisMemorySession[], backendDrafts: AxisSession[]): AxisMemorySession[] {
+  const mappedDrafts: AxisMemorySession[] = backendDrafts.map((session) => ({
+    id: session.id,
+    title: session.title,
+    playerName: session.playerName,
+    objective: session.title,
+    sessionType: session.sessionType,
+    startedAt: session.createdAt,
+    moments: [],
+    nextFocus: "Reopen this saved session draft and continue building memory.",
+    savedState: "saved",
+  }));
+
+  const byId = new Map<string, AxisMemorySession>();
+  [...mappedDrafts, ...localSessions].forEach((session) => byId.set(session.id, session));
+  return [...byId.values()].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
 }
 
-function validateLocalRunCommand(
-  command: string,
-  outputType: AxisOutput["type"],
-  mediaSource: AxisMediaSource | null,
-): AxisCommandValidationResult {
-  if (!command.trim()) {
-    return { message: "Add a command first.", ok: false };
-  }
-
-  if (command.length > maxLocalCommandLength) {
-    return { message: `Keep this preview under ${maxLocalCommandLength} characters for now.`, ok: false };
-  }
-
-  if (!localRunOutputTypes.includes(outputType)) {
-    return { message: "That output type is not available in the local preview yet.", ok: false };
-  }
-
-  if ((outputType === "file" || outputType === "video") && !mediaSource) {
-    return { message: `Attach media before drafting a ${formatOutputType(outputType)} run preview.`, ok: false };
-  }
-
-  return { ok: true };
+function getSavedSessionTitle(session: AxisMemorySession) {
+  const focus = session.objective.trim();
+  if (!focus || focus === "Open run") return session.title;
+  return `${session.title} - ${focus}`;
 }
 
-function hasDuplicateProcessingOutput(
-  outputs: AxisOutput[],
-  command: string,
-  outputType: AxisOutput["type"],
-) {
-  const normalizedCommand = normalizeLocalCommand(command);
-  return outputs.some(
-    (output) =>
-      output.status === "processing" &&
-      output.type === outputType &&
-      normalizeLocalCommand(output.title) === normalizedCommand,
-  );
+function coerceAxisSessionType(type: string): AxisSessionType {
+  if (type === "training" || type === "game" || type === "film" || type === "practice" || type === "other") {
+    return type;
+  }
+
+  return "practice";
 }
 
-function normalizeLocalCommand(value: string) {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
+function interpretMoment(input: string) {
+  const normalized = input.toLowerCase();
+  if (hasPaintExtraRead(normalized)) return "Got paint, missed the extra.";
+  if (normalized.includes("horns")) return "Too slow getting back to horns.";
+  if (normalized.includes("feet too narrow")) return "Feet too narrow.";
+  if (normalized.includes("again") || normalized.includes("run it again")) return "Repeat the rep and fix the detail.";
+  if (normalized.includes("great") || normalized.includes("worked")) return "Current focus worked on this rep.";
+  if (normalized.includes("feet") || normalized.includes("footwork")) return "Footwork changed the rep.";
+  if (normalized.includes("extra pass")) return "Extra pass decision captured.";
+  if (normalized.includes("spacing")) return "Spacing changed the rep.";
+  if (normalized.includes("finish")) return "Finishing moment captured.";
+  if (normalized.includes("shot")) return "Shot moment captured.";
+  if (normalized.includes("turnover")) return "Possession broke down.";
+  if (normalized.includes("late")) return "Timing was late.";
+  if (normalized.includes("paint")) return "Paint touch created the decision.";
+  return input.length > 48 ? `${input.slice(0, 45)}...` : input;
 }
 
-function createLocalAttachment(mediaSource: AxisMediaSource): AxisLocalAttachment {
+function getNextFocus(input: string) {
+  const normalized = input.toLowerCase();
+  if (hasPaintExtraRead(normalized)) return "Recognize help earlier and make the extra pass on time.";
+  if (normalized.includes("horns")) return "Reset faster into horns before the next possession.";
+  if (normalized.includes("feet too narrow")) return "Widen the base before the next rep.";
+  if (normalized.includes("again") || normalized.includes("run it again")) return "Run the next rep with one clear correction.";
+  if (normalized.includes("great") || normalized.includes("worked")) return "Keep the cue that made this rep work and see if it repeats.";
+  if (normalized.includes("feet") || normalized.includes("footwork")) return "Check base, balance, and timing next.";
+  if (normalized.includes("paint")) return "Look for the next decision after the paint touch.";
+  return "Add one cause or correction before ending the session.";
+}
+
+function structureMoment(input: string, session: AxisMemorySession, type: AxisMomentType): AxisMomentStructure {
+  const normalized = input.toLowerCase();
+  const actor = session.playerName || "Current player";
+  const evidence = "Manual note";
+
+  if (hasPaintExtraRead(normalized)) {
+    return {
+      situation: "Advantage created",
+      actor: "Offense",
+      action: "Paint touch",
+      outcome: "Extra pass missed",
+      cause: "Timing / decision",
+      correction: "Recognize help earlier",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("horns")) {
+    return {
+      situation: "Shape transition",
+      actor: "Team",
+      action: "Return to horns",
+      outcome: "Late",
+      cause: "Timing",
+      correction: "Reset faster",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("feet too narrow")) {
+    return {
+      situation: "Biomechanics",
+      actor: session.playerName || "Player",
+      action: "Base",
+      outcome: "Unstable",
+      cause: "Feet too narrow",
+      correction: "Widen base",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("again") || normalized.includes("run it again")) {
+    return {
+      situation: session.objective,
+      actor,
+      action: "Repeat the rep",
+      outcome: "The current attempt needs another look",
+      cause: "One detail needs to be fixed before moving on",
+      correction: "Run it again with the correction named out loud",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("great") || normalized.includes("worked")) {
+    return {
+      situation: session.objective,
+      actor,
+      action: "Executed the current focus",
+      outcome: "The rep is worth keeping in memory",
+      cause: "The cue or setup worked on this attempt",
+      correction: "Repeat the same cue and see if it holds",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("feet") || normalized.includes("footwork")) {
+    return {
+      situation: "Footwork",
+      actor,
+      action: "Changed base, timing, or step pattern",
+      outcome: "The rep depends on how the feet organize the action",
+      cause: "Footwork is shaping the result",
+      correction: "Name the footwork detail before the next rep",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("shot")) {
+    return {
+      situation: "Shot moment",
+      actor,
+      action: "Took or prepared for a shot",
+      outcome: "Shot detail needs review",
+      cause: "Timing, balance, or decision may be driving the result",
+      correction: "Capture what changed before the shot",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("extra pass")) {
+    return {
+      situation: "Decision after advantage",
+      actor: "Offense",
+      action: "Extra pass",
+      outcome: "Decision needs review",
+      cause: "Timing / recognition",
+      correction: "Move the ball one count earlier",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("spacing")) {
+    return {
+      situation: "Spacing",
+      actor: "Team",
+      action: "Floor balance",
+      outcome: "Spacing was off",
+      cause: "Shape or timing",
+      correction: "Restore spacing before the next action",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("finish")) {
+    return {
+      situation: "Finishing",
+      actor,
+      action: "Finish at the rim",
+      outcome: "Finish needs review",
+      cause: "Balance, angle, or contact",
+      correction: "Name the finishing detail before the next rep",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("turnover")) {
+    return {
+      situation: "Possession",
+      actor,
+      action: "Lost the ball or advantage",
+      outcome: "Turnover",
+      cause: "Decision, spacing, or pressure needs review",
+      correction: "Identify what gave the possession away",
+      evidence,
+    };
+  }
+
+  if (normalized.includes("paint")) {
+    return {
+      situation: "Advantage near the paint",
+      actor,
+      action: "Got paint or forced help",
+      outcome: "The next decision became important",
+      cause: "The defense had to react",
+      correction: "Look for the pass, finish, or reset that keeps the advantage",
+      evidence,
+    };
+  }
+
   return {
-    id: mediaSource.id,
-    type: getAttachmentType(mediaSource.mediaType),
-    name: mediaSource.fileName,
-    size: mediaSource.sizeBytes,
-    createdAt: mediaSource.createdAt,
+    situation: session.objective,
+    actor,
+    action: input.length > 72 ? `${input.slice(0, 69)}...` : input,
+    outcome: "Moment captured for review",
+    cause: "Cause is not locked yet",
+    correction: "Add the next correction when it becomes clear",
+    evidence,
   };
 }
 
-function getAttachmentType(mediaType: AxisMediaSource["mediaType"]): AxisLocalAttachment["type"] {
-  if (mediaType === "image" || mediaType === "video" || mediaType === "audio") return mediaType;
-  return "file";
+function hasPaintExtraRead(normalized: string) {
+  return normalized.includes("paint") && (normalized.includes("extra") || normalized.includes("missed the extra"));
 }
 
-function formatSessionType(value: SessionType) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function getCorrectionForReview(reviewState: AxisMomentReviewState, currentCorrection: string) {
+  if (reviewState === "correct") return "Keep this structure and repeat the useful cue";
+  if (reviewState === "refine") return "Refine this moment with one sharper detail";
+  if (reviewState === "not_right") return "Rewrite this moment before trusting it";
+  return currentCorrection;
 }
 
-function formatSessionPersistence(session: AxisSession, saveStatus: SessionDraftSaveStatus) {
-  if (saveStatus === "saving") return "Saving...";
-  if (session.persisted && session.source === "backend") return "Saved";
-  return "Saved locally";
+function getNextFocusForReview(reviewState: AxisMomentReviewState, moment: AxisMoment) {
+  if (reviewState === "correct") return `Carry over: ${moment.structure.correction}`;
+  if (reviewState === "refine") return "Add one sharper detail before the next session.";
+  if (reviewState === "not_right") return "Correct the memory before building from it.";
+  return "Review the latest moment before ending the session.";
 }
 
-function inferMediaType(fileType: string, fileName: string): AxisMediaSource["mediaType"] {
-  if (fileType.startsWith("video/")) return "video";
-  if (fileType.startsWith("image/")) return "image";
-  if (fileType.startsWith("audio/")) return "audio";
-  if (/\.(pdf|txt|doc|docx)$/i.test(fileName)) return "document";
-  return "unknown";
+function createLocalId() {
+  return `axis-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function formatMediaType(value: AxisMediaSource["mediaType"]) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function isAxisMemorySession(value: unknown): value is AxisMemorySession {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<AxisMemorySession>;
+  return typeof record.id === "string" && typeof record.title === "string" && typeof record.startedAt === "string";
 }
 
-function formatOutputType(value: AxisOutput["type"]) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function normalizeAxisMemorySession(value: unknown): AxisMemorySession | null {
+  if (!isAxisMemorySession(value)) return null;
+  const session = value as AxisMemorySession;
+  return {
+    ...session,
+    moments: Array.isArray(session.moments)
+      ? session.moments.map((moment) => normalizeAxisMoment(moment, session)).filter(isPresent)
+      : [],
+    nextFocus: typeof session.nextFocus === "string" ? session.nextFocus : "Start with the clearest carryover.",
+    savedState: isAxisMemorySavedState(session.savedState) ? session.savedState : "local",
+  };
 }
 
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function isAxisMemorySavedState(value: unknown): value is AxisMemorySession["savedState"] {
+  return value === "local" || value === "needs_sign_in" || value === "saved";
 }
 
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+function normalizeAxisMoment(value: unknown, session: AxisMemorySession): AxisMoment | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Partial<AxisMoment>;
+  if (typeof record.id !== "string" || typeof record.content !== "string" || typeof record.createdAt !== "string") {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    content: record.content,
+    createdAt: record.createdAt,
+    elapsedSeconds: typeof record.elapsedSeconds === "number" ? record.elapsedSeconds : 0,
+    interpretedTitle: typeof record.interpretedTitle === "string" ? record.interpretedTitle : interpretMoment(record.content),
+    needsReview: typeof record.needsReview === "boolean" ? record.needsReview : true,
+    reviewState: isAxisMomentReviewState(record.reviewState) ? record.reviewState : "needs_review",
+    structure: isAxisMomentStructure(record.structure) ? record.structure : structureMoment(record.content, session, record.type ?? "typed"),
+    type: record.type === "tap" ? "tap" : "typed",
+  };
 }
 
-function formatLocalMemoryStatus(status: LocalMemoryStatus) {
-  if (status === "loading") return "Loading local memory";
-  if (status === "saved") return "Saved in this browser";
-  if (status === "unavailable") return "Local memory unavailable";
-  return "Local memory ready";
+function isAxisMomentReviewState(value: unknown): value is AxisMomentReviewState {
+  return value === "needs_review" || value === "correct" || value === "refine" || value === "not_right";
 }
+
+function isAxisMomentStructure(value: unknown): value is AxisMomentStructure {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<AxisMomentStructure>;
+  return (
+    typeof record.situation === "string" &&
+    typeof record.actor === "string" &&
+    typeof record.action === "string" &&
+    typeof record.outcome === "string" &&
+    typeof record.cause === "string" &&
+    typeof record.correction === "string" &&
+    typeof record.evidence === "string"
+  );
+}
+
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
+const axisShellStyles = `
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background: #030504;
+  }
+
+  .axis-mobile-shell {
+    min-height: 100dvh;
+    width: 100%;
+    background:
+      radial-gradient(circle at 50% -10%, rgba(238, 103, 42, 0.22), transparent 18rem),
+      linear-gradient(180deg, #0a100d 0%, #030504 48%, #010202 100%);
+    color: #f8f5ee;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow-x: hidden;
+  }
+
+  .axis-mobile-shell__body {
+    display: grid;
+    gap: 1rem;
+    margin: 0 auto;
+    max-width: 31rem;
+    min-height: calc(100dvh - 8.4rem);
+    padding: max(5.2rem, env(safe-area-inset-top) + 4.6rem) 0.85rem calc(7.5rem + env(safe-area-inset-bottom));
+  }
+
+  .axis-topbar {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    left: 50%;
+    max-width: 31rem;
+    padding: max(0.85rem, env(safe-area-inset-top)) 0.85rem 0;
+    position: fixed;
+    top: 0;
+    transform: translateX(-50%);
+    width: 100%;
+    z-index: 20;
+  }
+
+  .axis-topbar__brand p,
+  .axis-panel p,
+  .axis-empty-state__eyebrow,
+  .axis-memory-preview > p,
+  .axis-surface-header p,
+  .axis-session-card__eyebrow {
+    color: rgba(248, 245, 238, 0.58);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+
+  .axis-topbar__brand strong {
+    display: block;
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+  }
+
+  .axis-topbar__actions {
+    align-items: center;
+    display: flex;
+    gap: 0.45rem;
+  }
+
+  .axis-pill,
+  .axis-topbar button,
+  .axis-panel a {
+    align-items: center;
+    background: rgba(248, 245, 238, 0.09);
+    border: 1px solid rgba(248, 245, 238, 0.13);
+    border-radius: 999px;
+    color: #f8f5ee;
+    display: inline-flex;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 850;
+    min-height: 2.3rem;
+    padding: 0 0.75rem;
+    text-decoration: none;
+  }
+
+  .axis-pill[data-state="live"]::before {
+    background: #83f4c8;
+    border-radius: 50%;
+    content: "";
+    height: 0.46rem;
+    margin-right: 0.42rem;
+    width: 0.46rem;
+  }
+
+  .axis-card,
+  .axis-panel,
+  .axis-memory-preview,
+  .axis-input-dock,
+  .axis-surface {
+    background: rgba(12, 17, 14, 0.78);
+    backdrop-filter: blur(22px);
+    border: 1px solid rgba(248, 245, 238, 0.12);
+    border-radius: 1.45rem;
+    box-shadow: 0 1.2rem 3.2rem rgba(0, 0, 0, 0.24);
+  }
+
+  .axis-empty-state,
+  .axis-session-card,
+  .axis-panel,
+  .axis-surface {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .axis-empty-state h1,
+  .axis-session-card h1,
+  .axis-panel h2,
+  .axis-surface-header h2 {
+    font-size: clamp(2.15rem, 12vw, 4.4rem);
+    letter-spacing: -0.06em;
+    line-height: 0.92;
+    margin: 0;
+  }
+
+  .axis-empty-state form,
+  .axis-input-dock form,
+  .axis-ask-form {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .axis-empty-state label,
+  .axis-input-dock label,
+  .axis-ask-form label {
+    color: rgba(248, 245, 238, 0.66);
+    display: grid;
+    font-size: 0.7rem;
+    font-weight: 850;
+    gap: 0.4rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .axis-empty-state input,
+  .axis-empty-state select,
+  .axis-input-dock input,
+  .axis-ask-form input {
+    background: rgba(248, 245, 238, 0.08);
+    border: 1px solid rgba(248, 245, 238, 0.16);
+    border-radius: 1rem;
+    color: #f8f5ee;
+    font: inherit;
+    font-size: 1rem;
+    min-height: 3.25rem;
+    padding: 0 0.95rem;
+    width: 100%;
+  }
+
+  .axis-empty-state input:focus,
+  .axis-empty-state select:focus,
+  .axis-input-dock input:focus,
+  .axis-ask-form input:focus {
+    border-color: rgba(238, 103, 42, 0.8);
+    outline: none;
+  }
+
+  .axis-primary,
+  .axis-session-card__end,
+  .axis-input-dock__mark {
+    background: #ee672a;
+    border: 1px solid #ee672a;
+    border-radius: 999px;
+    color: #120704;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 950;
+    min-height: 3.35rem;
+    padding: 0 1rem;
+    text-transform: uppercase;
+  }
+
+  .axis-secondary,
+  .axis-correction-chip,
+  .axis-input-dock button:not(.axis-input-dock__mark),
+  .axis-session-card__again,
+  .axis-suggestion-list button,
+  .axis-memory-actions button,
+  .axis-tool-row a {
+    background: rgba(248, 245, 238, 0.08);
+    border: 1px solid rgba(248, 245, 238, 0.14);
+    border-radius: 999px;
+    color: #f8f5ee;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 850;
+    min-height: 2.85rem;
+    padding: 0 0.8rem;
+  }
+
+  .axis-empty-state__meta,
+  .axis-session-card__meta,
+  .axis-panel span,
+  .axis-surface-header span {
+    color: rgba(248, 245, 238, 0.64);
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .axis-session-card__header {
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+  }
+
+  .axis-session-card__timer {
+    color: #83f4c8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1.1rem;
+    font-weight: 900;
+  }
+
+  .axis-session-card__moment {
+    background: rgba(248, 245, 238, 0.07);
+    border: 1px solid rgba(248, 245, 238, 0.1);
+    border-radius: 1.1rem;
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.85rem;
+  }
+
+  .axis-session-card__moment strong {
+    font-size: 1rem;
+  }
+
+  .axis-session-card__moment small,
+  .axis-next-session-card small {
+    color: rgba(248, 245, 238, 0.48);
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .axis-session-card__moment span,
+  .axis-memory-item span,
+  .axis-next-session-card span {
+    color: rgba(248, 245, 238, 0.62);
+    font-size: 0.84rem;
+    line-height: 1.4;
+  }
+
+  .axis-moment-structure {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.25rem 0 0;
+  }
+
+  .axis-moment-structure div {
+    border-top: 1px solid rgba(248, 245, 238, 0.08);
+    display: grid;
+    gap: 0.18rem;
+    grid-template-columns: 5.7rem minmax(0, 1fr);
+    padding-top: 0.45rem;
+  }
+
+  .axis-moment-structure dt,
+  .axis-moment-structure dd {
+    margin: 0;
+  }
+
+  .axis-moment-structure dt {
+    color: rgba(248, 245, 238, 0.48);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-moment-structure dd {
+    color: rgba(248, 245, 238, 0.78);
+    font-size: 0.86rem;
+    line-height: 1.35;
+  }
+
+  .axis-session-card__corrections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .axis-next-session-card {
+    background: rgba(131, 244, 200, 0.08);
+    border: 1px solid rgba(131, 244, 200, 0.15);
+    border-radius: 1.1rem;
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.85rem;
+  }
+
+  .axis-next-session-card strong {
+    color: #d6ffe9;
+    font-size: 0.98rem;
+    line-height: 1.25;
+  }
+
+  .axis-session-card__actions,
+  .axis-input-dock__quick,
+  .axis-empty-state__links {
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .axis-session-card__actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .axis-input-dock {
+    bottom: calc(4.1rem + env(safe-area-inset-bottom));
+    display: grid;
+    gap: 0.65rem;
+    left: 50%;
+    max-width: 31rem;
+    padding: 0.65rem;
+    position: fixed;
+    transform: translateX(-50%);
+    width: calc(100% - 1rem);
+    z-index: 18;
+  }
+
+  .axis-input-dock__row {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .axis-input-dock__quick {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .axis-memory-preview {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem;
+  }
+
+  .axis-memory-preview[data-compact="true"] {
+    box-shadow: none;
+  }
+
+  .axis-memory-list {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .axis-memory-item {
+    background: rgba(248, 245, 238, 0.06);
+    border: 1px solid rgba(248, 245, 238, 0.09);
+    border-radius: 1rem;
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.75rem;
+  }
+
+  .axis-memory-item strong {
+    font-size: 0.96rem;
+  }
+
+  .axis-memory-item small {
+    color: rgba(248, 245, 238, 0.48);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-bottom-nav {
+    background: rgba(4, 7, 6, 0.86);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(248, 245, 238, 0.1);
+    border-radius: 1.2rem 1.2rem 0 0;
+    bottom: 0;
+    display: grid;
+    gap: 0.2rem;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    left: 50%;
+    max-width: 31rem;
+    padding: 0.45rem 0.45rem max(0.55rem, env(safe-area-inset-bottom));
+    position: fixed;
+    transform: translateX(-50%);
+    width: 100%;
+    z-index: 19;
+  }
+
+  .axis-bottom-nav button {
+    background: transparent;
+    border: 0;
+    border-radius: 0.9rem;
+    color: rgba(248, 245, 238, 0.54);
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 900;
+    min-height: 3rem;
+  }
+
+  .axis-bottom-nav button[data-active="true"] {
+    background: rgba(238, 103, 42, 0.16);
+    color: #ffb085;
+  }
+
+  .axis-panel {
+    min-height: 18rem;
+  }
+
+  .axis-surface-header {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .axis-suggestion-list,
+  .axis-memory-actions {
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: 1fr;
+  }
+
+  .axis-answer-card,
+  .axis-empty-memory-card,
+  .axis-memory-detail,
+  .axis-memory-detail__section,
+  .axis-player-card,
+  .axis-tool-row {
+    background: rgba(248, 245, 238, 0.06);
+    border: 1px solid rgba(248, 245, 238, 0.09);
+    border-radius: 1rem;
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.85rem;
+  }
+
+  .axis-answer-card small,
+  .axis-memory-detail small,
+  .axis-memory-detail__section small,
+  .axis-player-card small,
+  .axis-tool-row small {
+    color: rgba(248, 245, 238, 0.48);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-answer-card strong,
+  .axis-empty-memory-card strong,
+  .axis-memory-detail strong,
+  .axis-memory-detail h3,
+  .axis-player-card strong,
+  .axis-tool-row strong {
+    color: #f8f5ee;
+    font-size: 1rem;
+    line-height: 1.25;
+    margin: 0;
+  }
+
+  .axis-answer-card span,
+  .axis-empty-memory-card span,
+  .axis-memory-detail span,
+  .axis-player-card span,
+  .axis-tool-row span {
+    color: rgba(248, 245, 238, 0.64);
+    font-size: 0.84rem;
+    line-height: 1.4;
+  }
+
+  .axis-memory-detail__back {
+    justify-self: start;
+  }
+
+  .axis-memory-moment-list,
+  .axis-player-list,
+  .axis-tool-list {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .axis-memory-moment-list article {
+    border-top: 1px solid rgba(248, 245, 238, 0.08);
+    display: grid;
+    gap: 0.2rem;
+    padding-top: 0.55rem;
+  }
+
+  .axis-tool-row {
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .axis-tool-row a {
+    min-height: 2.45rem;
+  }
+
+  @media (min-width: 720px) {
+    .axis-mobile-shell__body {
+      padding-left: 0;
+      padding-right: 0;
+    }
+  }
+`;

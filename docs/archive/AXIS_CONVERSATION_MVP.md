@@ -1,3 +1,11 @@
+Status: ARCHIVE
+
+Why moved: superseded by the basketball session memory product direction.
+
+Current replacement source: `docs/AXIS_PRODUCT_MAP.md` and `docs/capsules/AXIS_SESSION_MEMORY.md`
+
+---
+
 # Axis Conversation MVP
 
 ## Product truth

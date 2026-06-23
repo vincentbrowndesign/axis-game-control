@@ -1,3 +1,11 @@
+Status: REFERENCE
+
+Why moved: implementation-token reference only; current product design truth lives in the design constitution.
+
+Current replacement source: `docs/AXIS_DESIGN_CONSTITUTION.md`
+
+---
+
 # Axis Visual Language
 
 Status: Active foundation

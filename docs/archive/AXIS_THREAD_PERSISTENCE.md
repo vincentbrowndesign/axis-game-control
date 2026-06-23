@@ -1,3 +1,11 @@
+Status: ARCHIVE
+
+Why moved: thread persistence was the prior conversation-MVP direction; current active product is session memory.
+
+Current replacement source: `docs/capsules/AXIS_SESSION_MEMORY.md` and `docs/capsules/AXIS_AUTH.md`
+
+---
+
 # Axis Thread Persistence v0
 
 Status: Active narrow capability

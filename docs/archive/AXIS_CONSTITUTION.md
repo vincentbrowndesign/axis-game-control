@@ -1,3 +1,11 @@
+Status: ARCHIVE
+
+Why moved: older broad product constitution; current product truth is session memory.
+
+Current replacement source: `docs/AXIS_PRODUCT_MAP.md`
+
+---
+
 # AXIS CONSTITUTION
 
 Axis is a personal athletic continuity system.
