@@ -136,7 +136,17 @@ function findMatchingSessions(question: string, sessions: AxisMemorySession[]) {
       session.playerName,
       session.objective,
       session.nextFocus,
-      ...session.moments.flatMap((moment) => [moment.content, moment.interpretedTitle, moment.structure.action]),
+      ...session.moments.flatMap((moment) => [
+        moment.content,
+        moment.interpretedTitle,
+        moment.structure.situation,
+        moment.structure.actor,
+        moment.structure.action,
+        moment.structure.outcome,
+        moment.structure.cause,
+        moment.structure.correction,
+        moment.structure.evidence,
+      ]),
     ]
       .filter(Boolean)
       .join(" ")

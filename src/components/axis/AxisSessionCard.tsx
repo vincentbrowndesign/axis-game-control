@@ -48,37 +48,12 @@ export function AxisSessionCard({
         {latestMoment ? (
           <>
             <strong>{latestMoment.interpretedTitle}</strong>
-            <span>{latestMoment.content}</span>
-            <dl className="axis-moment-structure">
-              <div>
-                <dt>Situation</dt>
-                <dd>{latestMoment.structure.situation}</dd>
-              </div>
-              <div>
-                <dt>Actor</dt>
-                <dd>{latestMoment.structure.actor}</dd>
-              </div>
-              <div>
-                <dt>Action</dt>
-                <dd>{latestMoment.structure.action}</dd>
-              </div>
-              <div>
-                <dt>Outcome</dt>
-                <dd>{latestMoment.structure.outcome}</dd>
-              </div>
-              <div>
-                <dt>Cause</dt>
-                <dd>{latestMoment.structure.cause}</dd>
-              </div>
-              <div>
-                <dt>Correction</dt>
-                <dd>{latestMoment.structure.correction}</dd>
-              </div>
-              <div>
-                <dt>Evidence</dt>
-                <dd>{latestMoment.structure.evidence}</dd>
-              </div>
-            </dl>
+            <div className="axis-live-tags" aria-label="Moment tags">
+              <span>{latestMoment.structure.situation}</span>
+              <span>{latestMoment.structure.action}</span>
+            </div>
+            <span>{latestMoment.structure.outcome}</span>
+            <span>Next: {latestMoment.structure.correction}</span>
             <div className="axis-session-card__corrections" aria-label="Correction controls">
               <button className="axis-correction-chip" type="button" onClick={() => onCorrect("correct")}>
                 Correct
@@ -90,6 +65,39 @@ export function AxisSessionCard({
                 Not Right
               </button>
             </div>
+            <details className="axis-moment-detail">
+              <summary>Show full moment</summary>
+              <dl className="axis-moment-structure">
+                <div>
+                  <dt>Situation</dt>
+                  <dd>{latestMoment.structure.situation}</dd>
+                </div>
+                <div>
+                  <dt>Actor</dt>
+                  <dd>{latestMoment.structure.actor}</dd>
+                </div>
+                <div>
+                  <dt>Action</dt>
+                  <dd>{latestMoment.structure.action}</dd>
+                </div>
+                <div>
+                  <dt>Outcome</dt>
+                  <dd>{latestMoment.structure.outcome}</dd>
+                </div>
+                <div>
+                  <dt>Cause</dt>
+                  <dd>{latestMoment.structure.cause}</dd>
+                </div>
+                <div>
+                  <dt>Correction</dt>
+                  <dd>{latestMoment.structure.correction}</dd>
+                </div>
+                <div>
+                  <dt>Evidence</dt>
+                  <dd>{latestMoment.structure.evidence}</dd>
+                </div>
+              </dl>
+            </details>
           </>
         ) : (
           <span>Type a quick note or tap a moment when something happens.</span>
@@ -110,6 +118,7 @@ export function AxisSessionCard({
             <button className="axis-session-card__end" type="button" onClick={onEndSession}>
               End Session
             </button>
+            <span className="axis-session-card__save-help">Memory saves when the session ends.</span>
           </>
         )}
       </div>

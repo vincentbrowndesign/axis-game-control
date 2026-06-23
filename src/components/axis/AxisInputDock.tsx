@@ -5,7 +5,6 @@ import type { FormEvent } from "react";
 type Props = {
   draft: string;
   onDraftChange: (value: string) => void;
-  onEndSession: () => void;
   onQuickMark: (content: string) => void;
   quickMarks: Array<{
     content: string;
@@ -17,7 +16,6 @@ type Props = {
 export function AxisInputDock({
   draft,
   onDraftChange,
-  onEndSession,
   onQuickMark,
   quickMarks,
   onSubmit,
@@ -47,10 +45,6 @@ export function AxisInputDock({
           </button>
         ))}
       </div>
-
-      <button type="button" onClick={onEndSession}>
-        End Session
-      </button>
     </aside>
   );
 }

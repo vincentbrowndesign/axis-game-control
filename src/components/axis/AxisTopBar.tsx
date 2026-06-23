@@ -12,12 +12,13 @@ type Props = {
 
 export function AxisTopBar({ authStatus, email, onSignIn, onSignOut, status }: Props) {
   const signedIn = authStatus === "signed_in";
+  const accountLabel = signedIn ? shortenEmail(email) : "Basketball memory";
 
   return (
     <header className="axis-topbar">
       <div className="axis-topbar__brand">
         <strong>Axis</strong>
-        <p>{signedIn ? email ?? "Signed in" : "Basketball memory"}</p>
+        <p title={email ?? undefined}>{accountLabel}</p>
       </div>
 
       <div className="axis-topbar__actions">
@@ -30,4 +31,12 @@ export function AxisTopBar({ authStatus, email, onSignIn, onSignOut, status }: P
       </div>
     </header>
   );
+}
+
+function shortenEmail(email: string | null) {
+  if (!email) return "Signed in";
+  const [name, domain] = email.split("@");
+  if (!domain) return email.length > 18 ? `${email.slice(0, 15)}...` : email;
+  const shortName = name.length > 8 ? `${name.slice(0, 7)}...` : name;
+  return `${shortName}@${domain}`;
 }

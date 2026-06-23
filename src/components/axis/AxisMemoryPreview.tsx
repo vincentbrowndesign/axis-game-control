@@ -16,8 +16,7 @@ export function AxisMemoryPreview({ compact = false, sessions }: Props) {
 
       {visibleSessions.length === 0 ? (
         <div className="axis-memory-item">
-          <strong>No memory yet.</strong>
-          <span>Start a session and capture one moment. Axis will keep the useful shape here.</span>
+          <strong>No memory yet. Start a session and capture one moment.</strong>
         </div>
       ) : (
         <div className="axis-memory-list">

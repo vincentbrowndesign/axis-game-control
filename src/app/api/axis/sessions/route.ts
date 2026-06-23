@@ -9,9 +9,19 @@ export const runtime = "nodejs";
 
 type CreateSessionBody = {
   createdAt?: unknown;
+  durationSeconds?: unknown;
+  endedAt?: unknown;
+  focus?: unknown;
+  moments?: unknown;
+  nextSessionCard?: unknown;
   playerId?: unknown;
   playerName?: unknown;
+  searchableText?: unknown;
   sessionType?: unknown;
+  source?: unknown;
+  startedAt?: unknown;
+  status?: unknown;
+  summary?: unknown;
   title?: unknown;
 };
 
@@ -57,21 +67,52 @@ function parseCreateSessionBody(
   const createdAt = typeof body.createdAt === "string" && Number.isFinite(Date.parse(body.createdAt))
     ? body.createdAt
     : new Date().toISOString();
+  const startedAt = typeof body.startedAt === "string" && Number.isFinite(Date.parse(body.startedAt))
+    ? body.startedAt
+    : undefined;
+  const endedAt = typeof body.endedAt === "string" && Number.isFinite(Date.parse(body.endedAt))
+    ? body.endedAt
+    : undefined;
+  const durationSeconds = typeof body.durationSeconds === "number" && Number.isFinite(body.durationSeconds)
+    ? Math.max(0, Math.floor(body.durationSeconds))
+    : undefined;
+  const focus = typeof body.focus === "string" && body.focus.trim()
+    ? body.focus.trim()
+    : undefined;
+  const moments = parseMoments(body.moments);
+  const nextSessionCard = parsePlainRecord(body.nextSessionCard);
   const playerName = typeof body.playerName === "string" && body.playerName.trim()
     ? body.playerName.trim()
     : undefined;
   const playerId = typeof body.playerId === "string" && body.playerId.trim()
     ? body.playerId.trim()
     : undefined;
+  const searchableText = typeof body.searchableText === "string" && body.searchableText.trim()
+    ? body.searchableText.trim()
+    : undefined;
+  const source = isSessionSource(body.source) ? body.source : undefined;
+  const status = isSessionStatus(body.status) ? body.status : "draft";
+  const summary = typeof body.summary === "string" && body.summary.trim()
+    ? body.summary.trim()
+    : undefined;
 
   return {
     ok: true,
     value: {
       createdAt,
+      ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+      ...(endedAt ? { endedAt } : {}),
+      ...(focus ? { focus } : {}),
+      ...(moments ? { moments } : {}),
+      ...(nextSessionCard ? { nextSessionCard } : {}),
       ...(playerId ? { playerId } : {}),
       ...(playerName ? { playerName } : {}),
+      ...(searchableText ? { searchableText } : {}),
       sessionType: body.sessionType,
-      status: "draft",
+      ...(source ? { source } : {}),
+      ...(startedAt ? { startedAt } : {}),
+      status,
+      ...(summary ? { summary } : {}),
       title,
     },
   };
@@ -79,4 +120,22 @@ function parseCreateSessionBody(
 
 function isSessionType(value: unknown): value is AxisSession["sessionType"] {
   return value === "training" || value === "game" || value === "film" || value === "practice" || value === "other";
+}
+
+function isSessionStatus(value: unknown): value is AxisSession["status"] {
+  return value === "draft" || value === "active" || value === "processing" || value === "complete";
+}
+
+function isSessionSource(value: unknown): value is NonNullable<AxisSessionDraftCreateRequest["source"]> {
+  return value === "typed" || value === "tap" || value === "mixed";
+}
+
+function parseMoments(value: unknown): AxisSessionDraftCreateRequest["moments"] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((moment) => moment && typeof moment === "object" && !Array.isArray(moment)).slice(0, 200) as AxisSessionDraftCreateRequest["moments"];
+}
+
+function parsePlainRecord(value: unknown): AxisSessionDraftCreateRequest["nextSessionCard"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as AxisSessionDraftCreateRequest["nextSessionCard"];
 }

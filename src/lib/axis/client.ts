@@ -36,10 +36,19 @@ export async function createAxisSessionDraftRequest(
 ): Promise<AxisSessionDraftCreateResponse> {
   const payload: AxisSessionDraftCreateRequest = {
     createdAt: session.createdAt,
+    ...(typeof session.durationSeconds === "number" ? { durationSeconds: session.durationSeconds } : {}),
+    ...(session.endedAt ? { endedAt: session.endedAt } : {}),
+    ...(session.focus ? { focus: session.focus } : {}),
+    ...(session.moments ? { moments: session.moments } : {}),
+    ...(session.nextSessionCard ? { nextSessionCard: session.nextSessionCard } : {}),
     ...(session.playerId ? { playerId: session.playerId } : {}),
     ...(session.playerName ? { playerName: session.playerName } : {}),
+    ...(session.searchableText ? { searchableText: session.searchableText } : {}),
     sessionType: session.sessionType,
-    status: "draft",
+    ...(session.source === "mixed" || session.source === "tap" || session.source === "typed" ? { source: session.source } : {}),
+    ...(session.startedAt ? { startedAt: session.startedAt } : {}),
+    status: session.status,
+    ...(session.summary ? { summary: session.summary } : {}),
     title: session.title,
   };
 
@@ -71,7 +80,6 @@ export async function createAxisSessionDraftRequest(
     session: {
       ...sessionBody,
       persisted: true,
-      source: "backend",
     },
   };
 }
@@ -96,7 +104,6 @@ export async function listAxisSessionDraftsRequest(): Promise<AxisSessionDraftLi
     sessions: sessions.map((session) => ({
       ...session,
       persisted: true,
-      source: "backend",
     })),
   };
 }

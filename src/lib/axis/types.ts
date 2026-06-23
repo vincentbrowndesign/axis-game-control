@@ -252,16 +252,59 @@ export type AxisSession = {
   sessionType: "training" | "game" | "film" | "practice" | "other";
   status: "draft" | "active" | "processing" | "complete";
   createdAt: string;
+  durationSeconds?: number;
+  endedAt?: string;
+  focus?: string;
+  moments?: AxisSessionMoment[];
+  nextSessionCard?: AxisNextSessionCard;
+  searchableText?: string;
+  startedAt?: string;
+  summary?: string;
   persisted?: boolean;
-  source?: "local" | "backend";
+  source?: "ai" | "backend" | "local" | "mixed" | "tap" | "typed" | "video" | "voice";
+};
+
+export type AxisSessionMoment = {
+  id: string;
+  content: string;
+  createdAt: string;
+  elapsedSeconds: number;
+  interpretedTitle: string;
+  reviewState: "correct" | "needs_review" | "not_right" | "refine";
+  source: "tap" | "typed";
+  structure: {
+    situation: string;
+    actor: string;
+    action: string;
+    outcome: string;
+    cause: string;
+    correction: string;
+    evidence: string;
+  };
+};
+
+export type AxisNextSessionCard = {
+  title: string;
+  nextFocus: string;
+  carryover: string;
+  reminders: string[];
 };
 
 export type AxisSessionDraftCreateRequest = {
   title: string;
+  durationSeconds?: number;
+  endedAt?: string;
+  focus?: string;
+  moments?: AxisSessionMoment[];
+  nextSessionCard?: AxisNextSessionCard;
   playerName?: string;
   playerId?: string;
+  searchableText?: string;
   sessionType: AxisSession["sessionType"];
-  status: "draft";
+  source?: "mixed" | "tap" | "typed";
+  startedAt?: string;
+  status: AxisSession["status"];
+  summary?: string;
   createdAt: string;
 };
 
@@ -270,7 +313,6 @@ export type AxisSessionDraftCreateResponse =
       ok: true;
       session: AxisSession & {
         persisted: true;
-        source: "backend";
       };
     }
   | {
@@ -281,7 +323,7 @@ export type AxisSessionDraftCreateResponse =
 export type AxisSessionDraftListResponse =
   | {
       ok: true;
-      sessions: AxisSession[];
+      sessions: Array<AxisSession & { persisted: true }>;
     }
   | {
       error: string;
@@ -303,6 +345,15 @@ export type AxisSessionDraftPersistenceTarget = {
     | "status"
     | "created_at"
     | "updated_at"
+    | "duration_seconds"
+    | "ended_at"
+    | "focus"
+    | "moments"
+    | "next_session_card"
+    | "searchable_text"
+    | "source"
+    | "started_at"
+    | "summary"
   >;
   forbiddenSideEffects: Array<"upload" | "job" | "model_call" | "artifact" | "export" | "report">;
 };

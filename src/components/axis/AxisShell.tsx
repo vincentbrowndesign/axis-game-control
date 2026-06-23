@@ -241,12 +241,21 @@ export function AxisShell() {
 
     try {
       const saved = await createAxisSessionDraftRequest({
-        id: localEnded.id,
-        title: getSavedSessionTitle(localEnded),
-        playerName: localEnded.playerName,
-        sessionType: coerceAxisSessionType(localEnded.sessionType),
-        status: "draft",
         createdAt: localEnded.startedAt,
+        durationSeconds: getSessionDurationSeconds(localEnded),
+        endedAt: localEnded.endedAt,
+        focus: localEnded.objective,
+        id: localEnded.id,
+        moments: localEnded.moments.map(mapMomentForBackend),
+        nextSessionCard: createNextSessionCard(localEnded),
+        playerName: localEnded.playerName,
+        searchableText: createSearchableText(localEnded),
+        sessionType: coerceAxisSessionType(localEnded.sessionType),
+        source: getSessionMemorySource(localEnded),
+        startedAt: localEnded.startedAt,
+        status: "complete",
+        summary: createSessionSummary(localEnded),
+        title: localEnded.title,
       });
 
       if (saved.ok) {
@@ -355,14 +364,13 @@ export function AxisShell() {
           <AxisInputDock
             draft={momentDraft}
             onDraftChange={setMomentDraft}
-            onEndSession={endSession}
             onQuickMark={(content) => markMoment(content)}
             quickMarks={quickMarks}
             onSubmit={submitMoment}
           />
         )}
 
-        <AxisMemoryPreview sessions={recentMemory.slice(0, 3)} compact />
+        {activeNav === "session" && <AxisMemoryPreview sessions={recentMemory.slice(0, 3)} compact />}
       </section>
 
       <AxisBottomNav active={activeNav} onChange={setActiveNav} />
@@ -388,27 +396,11 @@ function useSessionTimer(active: boolean, startedAt?: string) {
 }
 
 function mergeRecentMemory(localSessions: AxisMemorySession[], backendDrafts: AxisSession[]): AxisMemorySession[] {
-  const mappedDrafts: AxisMemorySession[] = backendDrafts.map((session) => ({
-    id: session.id,
-    title: session.title,
-    playerName: session.playerName,
-    objective: session.title,
-    sessionType: session.sessionType,
-    startedAt: session.createdAt,
-    moments: [],
-    nextFocus: "Reopen this saved session draft and continue building memory.",
-    savedState: "saved",
-  }));
+  const mappedDrafts: AxisMemorySession[] = backendDrafts.map(mapBackendSessionToMemory);
 
   const byId = new Map<string, AxisMemorySession>();
-  [...mappedDrafts, ...localSessions].forEach((session) => byId.set(session.id, session));
+  [...localSessions, ...mappedDrafts].forEach((session) => byId.set(session.id, session));
   return [...byId.values()].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
-}
-
-function getSavedSessionTitle(session: AxisMemorySession) {
-  const focus = session.objective.trim();
-  if (!focus || focus === "Open run") return session.title;
-  return `${session.title} - ${focus}`;
 }
 
 function coerceAxisSessionType(type: string): AxisSessionType {
@@ -417,6 +409,102 @@ function coerceAxisSessionType(type: string): AxisSessionType {
   }
 
   return "practice";
+}
+
+function mapBackendSessionToMemory(session: AxisSession): AxisMemorySession {
+  const moments = (session.moments ?? []).map((moment) => ({
+    id: moment.id,
+    content: moment.content,
+    createdAt: moment.createdAt,
+    elapsedSeconds: moment.elapsedSeconds,
+    interpretedTitle: moment.interpretedTitle,
+    needsReview: moment.reviewState !== "correct",
+    reviewState: moment.reviewState,
+    structure: moment.structure,
+    type: moment.source,
+  }));
+
+  return {
+    id: session.id,
+    title: session.title,
+    playerName: session.playerName,
+    objective: session.focus || session.title,
+    sessionType: session.sessionType,
+    startedAt: session.startedAt || session.createdAt,
+    ...(session.endedAt ? { endedAt: session.endedAt } : {}),
+    moments,
+    nextFocus: session.nextSessionCard?.nextFocus || "Reopen this saved session and continue the carryover.",
+    savedState: "saved",
+  };
+}
+
+function mapMomentForBackend(moment: AxisMoment): NonNullable<AxisSession["moments"]>[number] {
+  return {
+    id: moment.id,
+    content: moment.content,
+    createdAt: moment.createdAt,
+    elapsedSeconds: moment.elapsedSeconds,
+    interpretedTitle: moment.interpretedTitle,
+    reviewState: moment.reviewState,
+    source: moment.type,
+    structure: moment.structure,
+  };
+}
+
+function createNextSessionCard(session: AxisMemorySession): NonNullable<AxisSession["nextSessionCard"]> {
+  return {
+    title: "Next Session Card",
+    nextFocus: session.nextFocus,
+    carryover: session.moments.at(-1)?.structure.correction || session.nextFocus,
+    reminders: [
+      session.playerName ? `Start with ${session.playerName}.` : "Start with the group.",
+      "Check the carryover before adding new work.",
+    ],
+  };
+}
+
+function createSessionSummary(session: AxisMemorySession) {
+  const momentCount = session.moments.length;
+  const latestMoment = session.moments.at(-1);
+  if (!latestMoment) return `${session.title}: ${session.objective}. No moments were captured yet.`;
+  return `${session.title}: ${session.objective}. ${momentCount} moment${momentCount === 1 ? "" : "s"} captured. Latest: ${latestMoment.interpretedTitle}`;
+}
+
+function createSearchableText(session: AxisMemorySession) {
+  return [
+    session.title,
+    session.sessionType,
+    session.objective,
+    session.playerName,
+    createSessionSummary(session),
+    session.nextFocus,
+    ...session.moments.flatMap((moment) => [
+      moment.interpretedTitle,
+      moment.content,
+      moment.structure.situation,
+      moment.structure.actor,
+      moment.structure.action,
+      moment.structure.outcome,
+      moment.structure.cause,
+      moment.structure.correction,
+      moment.structure.evidence,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function getSessionDurationSeconds(session: AxisMemorySession) {
+  if (!session.endedAt) return undefined;
+  return Math.max(0, Math.floor((Date.parse(session.endedAt) - Date.parse(session.startedAt)) / 1000));
+}
+
+function getSessionMemorySource(session: AxisMemorySession): "mixed" | "tap" | "typed" {
+  const hasTyped = session.moments.some((moment) => moment.type === "typed");
+  const hasTap = session.moments.some((moment) => moment.type === "tap");
+  if (hasTyped && hasTap) return "mixed";
+  if (hasTap) return "tap";
+  return "typed";
 }
 
 function interpretMoment(input: string) {
@@ -718,16 +806,17 @@ const axisShellStyles = `
 
   .axis-mobile-shell__body {
     display: grid;
-    gap: 1rem;
+    gap: 0.82rem;
     margin: 0 auto;
     max-width: 31rem;
     min-height: calc(100dvh - 8.4rem);
-    padding: max(5.2rem, env(safe-area-inset-top) + 4.6rem) 0.85rem calc(7.5rem + env(safe-area-inset-bottom));
+    padding: max(4.75rem, env(safe-area-inset-top) + 4.15rem) 0.85rem calc(7.15rem + env(safe-area-inset-bottom));
   }
 
   .axis-topbar {
     align-items: center;
     display: flex;
+    gap: 0.55rem;
     justify-content: space-between;
     left: 50%;
     max-width: 31rem;
@@ -737,6 +826,10 @@ const axisShellStyles = `
     transform: translateX(-50%);
     width: 100%;
     z-index: 20;
+  }
+
+  .axis-topbar__brand {
+    min-width: 0;
   }
 
   .axis-topbar__brand p,
@@ -753,6 +846,13 @@ const axisShellStyles = `
     text-transform: uppercase;
   }
 
+  .axis-topbar__brand p {
+    max-width: min(52vw, 14rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .axis-topbar__brand strong {
     display: block;
     font-size: 1.05rem;
@@ -763,6 +863,8 @@ const axisShellStyles = `
     align-items: center;
     display: flex;
     gap: 0.45rem;
+    flex-shrink: 0;
+    min-width: 0;
   }
 
   .axis-pill,
@@ -777,9 +879,10 @@ const axisShellStyles = `
     font: inherit;
     font-size: 0.72rem;
     font-weight: 850;
-    min-height: 2.3rem;
-    padding: 0 0.75rem;
+    min-height: 2.2rem;
+    padding: 0 0.68rem;
     text-decoration: none;
+    white-space: nowrap;
   }
 
   .axis-pill[data-state="live"]::before {
@@ -808,17 +911,17 @@ const axisShellStyles = `
   .axis-panel,
   .axis-surface {
     display: grid;
-    gap: 1rem;
-    padding: 1rem;
+    gap: 0.85rem;
+    padding: 0.92rem;
   }
 
   .axis-empty-state h1,
   .axis-session-card h1,
   .axis-panel h2,
   .axis-surface-header h2 {
-    font-size: clamp(2.15rem, 12vw, 4.4rem);
-    letter-spacing: -0.06em;
-    line-height: 0.92;
+    font-size: clamp(1.72rem, 8.6vw, 3.65rem);
+    letter-spacing: -0.045em;
+    line-height: 0.96;
     margin: 0;
   }
 
@@ -908,14 +1011,16 @@ const axisShellStyles = `
 
   .axis-session-card__header {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
     justify-content: space-between;
+    min-width: 0;
   }
 
   .axis-session-card__timer {
     color: #83f4c8;
+    flex-shrink: 0;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 1.1rem;
+    font-size: 0.98rem;
     font-weight: 900;
   }
 
@@ -924,12 +1029,13 @@ const axisShellStyles = `
     border: 1px solid rgba(248, 245, 238, 0.1);
     border-radius: 1.1rem;
     display: grid;
-    gap: 0.45rem;
-    padding: 0.85rem;
+    gap: 0.42rem;
+    padding: 0.78rem;
   }
 
   .axis-session-card__moment strong {
-    font-size: 1rem;
+    font-size: 1.05rem;
+    line-height: 1.16;
   }
 
   .axis-session-card__moment small,
@@ -947,6 +1053,37 @@ const axisShellStyles = `
     color: rgba(248, 245, 238, 0.62);
     font-size: 0.84rem;
     line-height: 1.4;
+  }
+
+  .axis-live-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .axis-live-tags span {
+    background: rgba(238, 103, 42, 0.12);
+    border: 1px solid rgba(238, 103, 42, 0.18);
+    border-radius: 999px;
+    color: rgba(255, 209, 184, 0.9);
+    font-size: 0.7rem;
+    font-weight: 850;
+    line-height: 1.1;
+    padding: 0.34rem 0.5rem;
+  }
+
+  .axis-moment-detail {
+    border-top: 1px solid rgba(248, 245, 238, 0.08);
+    margin-top: 0.1rem;
+    padding-top: 0.45rem;
+  }
+
+  .axis-moment-detail summary {
+    color: rgba(255, 176, 133, 0.9);
+    cursor: pointer;
+    font-size: 0.74rem;
+    font-weight: 900;
+    list-style-position: inside;
   }
 
   .axis-moment-structure {
@@ -1015,13 +1152,28 @@ const axisShellStyles = `
     grid-template-columns: 1fr 1fr;
   }
 
+  .axis-session-card__actions .axis-secondary {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .axis-session-card__save-help {
+    color: rgba(248, 245, 238, 0.52);
+    font-size: 0.76rem;
+    grid-column: 1 / -1;
+    line-height: 1.35;
+    text-align: center;
+  }
+
   .axis-input-dock {
-    bottom: calc(4.1rem + env(safe-area-inset-bottom));
+    bottom: calc(3.75rem + env(safe-area-inset-bottom));
     display: grid;
-    gap: 0.65rem;
+    gap: 0.55rem;
     left: 50%;
     max-width: 31rem;
-    padding: 0.65rem;
+    padding: 0.58rem;
     position: fixed;
     transform: translateX(-50%);
     width: calc(100% - 1rem);
@@ -1035,7 +1187,7 @@ const axisShellStyles = `
   }
 
   .axis-input-dock__quick {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .axis-memory-preview {
@@ -1100,7 +1252,7 @@ const axisShellStyles = `
     font: inherit;
     font-size: 0.68rem;
     font-weight: 900;
-    min-height: 3rem;
+    min-height: 3.05rem;
   }
 
   .axis-bottom-nav button[data-active="true"] {
@@ -1203,6 +1355,22 @@ const axisShellStyles = `
     .axis-mobile-shell__body {
       padding-left: 0;
       padding-right: 0;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .axis-pill {
+      max-width: 8.5rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .axis-topbar button {
+      padding: 0 0.55rem;
+    }
+
+    .axis-input-dock__quick {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 `;
