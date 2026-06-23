@@ -29,6 +29,13 @@ type FacingMode = "environment" | "user";
 type CalMode = AxisCalibrationState["mode"];
 type VisionStatus = "idle" | "starting_camera" | "camera_ready" | "loading_ai" | "running" | "error" | "stopped";
 type RecordingStatus = "idle" | "recording" | "stopping" | "ready" | "error";
+type AxisVisionMode =
+  | "shot_workout"
+  | "ball_handling"
+  | "small_sided"
+  | "team_practice"
+  | "game_film"
+  | "axis_lab";
 type DrillZonePoint = { x: number; y: number };
 type DrillZone = {
   x: number;
@@ -58,6 +65,63 @@ type AxisPlayerSlot = {
   lastSeenAt: number;
   locked: boolean;
   status: "active" | "lost" | "candidate";
+};
+
+type SetupChecks = {
+  cameraStable: boolean;
+  playerVisible: boolean;
+  readyToRecord: boolean;
+};
+
+const modeConfigs: Record<AxisVisionMode, {
+  label: string;
+  description: string;
+  ballRelevant: boolean;
+  requiresRim: boolean;
+  suggestedPlayers: number;
+}> = {
+  axis_lab: {
+    ballRelevant: true,
+    description: "Debug and raw detection testing.",
+    label: "Axis Lab",
+    requiresRim: false,
+    suggestedPlayers: 5,
+  },
+  ball_handling: {
+    ballRelevant: true,
+    description: "One player, ball trail, and active drill space.",
+    label: "Ball Handling",
+    requiresRim: false,
+    suggestedPlayers: 1,
+  },
+  game_film: {
+    ballRelevant: false,
+    description: "Clean recording and evidence with minimal overlay.",
+    label: "Game Film",
+    requiresRim: false,
+    suggestedPlayers: 5,
+  },
+  shot_workout: {
+    ballRelevant: true,
+    description: "Rim, ball, and one shooter.",
+    label: "Shot Workout",
+    requiresRim: true,
+    suggestedPlayers: 1,
+  },
+  small_sided: {
+    ballRelevant: true,
+    description: "Player tags and a controlled drill zone.",
+    label: "1v1 / 2v2",
+    requiresRim: false,
+    suggestedPlayers: 4,
+  },
+  team_practice: {
+    ballRelevant: false,
+    description: "Clean capture with limited active players.",
+    label: "Team Practice",
+    requiresRim: false,
+    suggestedPlayers: 5,
+  },
 };
 
 const inferenceIntervalMs = 200;
@@ -122,10 +186,16 @@ export default function AxisLiveVision() {
   const floorTapCountRef = useRef(0);
 
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
-  const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
+  const [, setModelStatus] = useState<ModelStatus>("idle");
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
   const [visionStatus, setVisionStatus] = useState<VisionStatus>("idle");
   const [gymMode] = useState(true);
+  const [selectedMode, setSelectedMode] = useState<AxisVisionMode | null>(null);
+  const [setupChecks, setSetupChecks] = useState<SetupChecks>({
+    cameraStable: false,
+    playerVisible: false,
+    readyToRecord: false,
+  });
   const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>("idle");
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
@@ -580,6 +650,32 @@ export default function AxisLiveVision() {
     setIgnoreZoneMode(false);
   }
 
+  function selectMode(mode: AxisVisionMode) {
+    setSelectedMode(mode);
+    setSetupChecks({ cameraStable: false, playerVisible: false, readyToRecord: false });
+    setEvidencePanelOpen(false);
+    setToolsOpen(false);
+
+    if (mode === "axis_lab") {
+      setShowAllDetections(true);
+      setShowRawTrackIds(true);
+      setShowConfidence(true);
+      setShowCandidates(true);
+      return;
+    }
+
+    setShowAllDetections(false);
+    setShowRawTrackIds(false);
+    setShowConfidence(false);
+    setShowCandidates(false);
+    setShowTrail(mode === "ball_handling" || mode === "shot_workout");
+    showTrailRef.current = mode === "ball_handling" || mode === "shot_workout";
+  }
+
+  function updateSetupCheck(key: keyof SetupChecks, value: boolean) {
+    setSetupChecks((current) => ({ ...current, [key]: value }));
+  }
+
   function clearIgnoreZones() {
     ignoreZonesRef.current = [];
     setIgnoreZones([]);
@@ -617,6 +713,20 @@ export default function AxisLiveVision() {
     setShowTrail(true);
     setToolsOpen(false);
     window.localStorage.removeItem(gymSetupStorageKey);
+  }
+
+  function buildSetupChecklist() {
+    const modeConfig = selectedMode ? modeConfigs[selectedMode] : null;
+    return {
+      cameraStable: setupChecks.cameraStable,
+      drillZoneSet: Boolean(drillZone),
+      ignoreZonesSet: ignoreZones.length > 0,
+      mode: modeConfig?.label ?? null,
+      playerVisible: setupChecks.playerVisible,
+      playersTagged: playerSlots.some((slot) => Boolean(slot.playerName)),
+      readyToRecord: setupChecks.readyToRecord,
+      rimVisible: modeConfig?.requiresRim ? Boolean(calibration.rim) : true,
+    };
   }
 
   // ─── Camera / AI ────────────────────────────────────────────────
@@ -1022,6 +1132,7 @@ export default function AxisLiveVision() {
 
   function getDisplayedPlayerSlots() {
     const slots = playerSlotsRef.current;
+    const playerLimit = getMaxDisplayedPlayers();
 
     return slots
       .filter((slot) => slot.status === "active" || (slot.status === "candidate" && showCandidates))
@@ -1037,8 +1148,12 @@ export default function AxisLiveVision() {
       })
       .filter((item) => item.assigned || item.slot.locked || item.inZone)
       .sort((a, b) => b.priority - a.priority)
-      .slice(0, maxDisplayedPlayers)
+      .slice(0, playerLimit)
       .map((item) => item.slot);
+  }
+
+  function getMaxDisplayedPlayers() {
+    return selectedMode ? modeConfigs[selectedMode].suggestedPlayers : maxDisplayedPlayers;
   }
 
   function getDisplayedTracks(nextTracks: AxisVisionTrack[]) {
@@ -1134,7 +1249,7 @@ export default function AxisLiveVision() {
       ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, monospace";
       ctx.fillText(`AXIS REC ${formatRecordingTime(elapsed)}`, 47, 47);
       ctx.font = MONO;
-      ctx.fillText(`${getDisplayPeopleCount()}/${maxDisplayedPlayers} ACTIVE`, 28, 65);
+      ctx.fillText(`${getDisplayPeopleCount()}/${getMaxDisplayedPlayers()} ACTIVE`, 28, 65);
     }
   }
 
@@ -1281,6 +1396,7 @@ export default function AxisLiveVision() {
   // ─── Evidence / export ───────────────────────────────────────────
 
   function buildSessionExport() {
+    const setupChecklist = buildSetupChecklist();
     const base: AxisVisionSession = {
       ballLostFrames: ballLostFramesRef.current,
       ballSeenFrames: ballSeenFramesRef.current,
@@ -1294,6 +1410,8 @@ export default function AxisLiveVision() {
       ...base,
       ballTrackingNote: "COCO-SSD sports ball detection is experimental and not verified game truth.",
       calibration: calibrationRef.current,
+      selectedMode: selectedMode ? modeConfigs[selectedMode].label : null,
+      setupChecklist,
       display: {
         debug: {
           showCandidates,
@@ -1309,7 +1427,7 @@ export default function AxisLiveVision() {
         displayedPlayerCount: getDisplayPeopleCount(),
         drillZone: drillZoneRef.current,
         ignoreZones: ignoreZonesRef.current,
-        maxDisplayedPlayers,
+        maxDisplayedPlayers: getMaxDisplayedPlayers(),
         rawDetectionCount: tracksRef.current.length,
         rawPersonDetectionCount: tracksRef.current.filter((track) => track.kind === "person").length,
       },
@@ -1333,6 +1451,8 @@ export default function AxisLiveVision() {
         recordingMimeType: recordingMimeTypeRef.current || undefined,
         recordingStartedAt: recordingStartedAtRef.current,
       },
+      recordingStartedAt: recordingMetadata?.recordingStartedAt ?? recordingStartedAtRef.current,
+      recordingDuration: recordingMetadata?.recordingDurationMs ?? recordingElapsedMs,
       ballTrailSummary: {
         direction: trail.direction,
         lastSeenAt: trail.lastSeenAt,
@@ -1405,6 +1525,11 @@ export default function AxisLiveVision() {
     const video = videoRef.current;
     if (!video || !isVisionRunning) {
       setLastError("Start Axis Vision before recording.");
+      return;
+    }
+
+    if (!setupChecks.readyToRecord) {
+      setLastError("Finish setup before recording.");
       return;
     }
 
@@ -1624,11 +1749,16 @@ export default function AxisLiveVision() {
       : "Record";
 
   const calActive = calibrationMode !== "off" || drillZoneMode || ignoreZoneMode;
+  const modeConfig = selectedMode ? modeConfigs[selectedMode] : null;
+  const setupChecklist = buildSetupChecklist();
+  const showModePicker = !selectedMode;
+  const showSetupPanel = Boolean(selectedMode) && !setupChecks.readyToRecord;
   const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Experimental";
   const ballDirection = ballTrail.direction ?? "unknown";
   const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
   const activePersonTracks = activeTracks.filter((track) => track.kind === "person");
   const displayedPeopleCount = getDisplayPeopleCount();
+  const activePlayerLimit = getMaxDisplayedPlayers();
   const rawPeopleCount = activePersonTracks.length;
   const debugEnabled = showAllDetections || showCandidates || showConfidence || showRawTrackIds;
   const selectedPlayerSlot = selectedPlayerSlotId
@@ -1671,10 +1801,25 @@ export default function AxisLiveVision() {
           ref={canvasRef}
         />
 
-        {!isCameraLive && (
+        {showModePicker && (
+          <div className="axis-live-vision__empty axis-live-vision__mode-picker">
+            <p>AXIS MODE SETUP</p>
+            <h1>Choose the session</h1>
+            <div className="axis-live-vision__mode-grid">
+              {(Object.keys(modeConfigs) as AxisVisionMode[]).map((mode) => (
+                <button key={mode} onClick={() => selectMode(mode)} type="button">
+                  <strong>{modeConfigs[mode].label}</strong>
+                  <span>{modeConfigs[mode].description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!showModePicker && !isCameraLive && (
           <div className="axis-live-vision__empty">
             <p>AXIS</p>
-            <h1>Live camera AI</h1>
+            <h1>{modeConfig?.label ?? "Live camera AI"}</h1>
             <button
               disabled={isVisionBusy}
               onClick={startLiveVision}
@@ -1685,12 +1830,59 @@ export default function AxisLiveVision() {
           </div>
         )}
 
+        {showSetupPanel && isCameraLive && !calActive && (
+          <div className="axis-live-vision__setup-panel">
+            <p>{modeConfig?.label ?? "Axis"} setup</p>
+            <h2>Get ready to record</h2>
+            <div className="axis-live-vision__setup-list">
+              <button
+                data-complete={setupChecklist.cameraStable ? "true" : undefined}
+                onClick={() => updateSetupCheck("cameraStable", !setupChecks.cameraStable)}
+                type="button"
+              >
+                Camera stable
+              </button>
+              <button
+                data-complete={setupChecklist.playerVisible ? "true" : undefined}
+                onClick={() => updateSetupCheck("playerVisible", !setupChecks.playerVisible)}
+                type="button"
+              >
+                Player visible
+              </button>
+              {modeConfig?.requiresRim && (
+                <button data-complete={setupChecklist.rimVisible ? "true" : undefined} onClick={() => activateCalMode("set_rim")} type="button">
+                  Rim visible
+                </button>
+              )}
+              <button data-complete={setupChecklist.drillZoneSet ? "true" : undefined} onClick={startDrillZone} type="button">
+                Drill zone set
+              </button>
+              <button data-complete={setupChecklist.ignoreZonesSet ? "true" : undefined} onClick={startIgnoreZone} type="button">
+                Ignore zones set
+              </button>
+              <button data-complete={setupChecklist.playersTagged ? "true" : undefined} onClick={() => setEvidencePanelOpen(true)} type="button">
+                Players tagged
+              </button>
+            </div>
+            <button
+              className="axis-live-vision__setup-ready"
+              onClick={() => updateSetupCheck("readyToRecord", true)}
+              type="button"
+            >
+              Ready to record
+            </button>
+            <button className="axis-live-vision__setup-stop" onClick={stopCamera} type="button">
+              Stop camera
+            </button>
+          </div>
+        )}
+
         {calActive && <div className="axis-live-vision__cal-hint">{calibrationInstruction}</div>}
       </section>
 
       <header className={`axis-live-vision__top${calActive ? " axis-live-vision__top--cal" : ""}`}>
         <div>
-          <p>AXIS LIVE</p>
+          <p>{modeConfig?.label ?? "AXIS LIVE"}</p>
         </div>
         {calActive ? (
           <button
@@ -1707,9 +1899,9 @@ export default function AxisLiveVision() {
 
       {!calActive && (
         <aside className="axis-live-vision__quick-status" aria-label="Live detection status">
-          <span>AI {aiStatus === "running" ? "Running" : modelStatus}</span>
-          <span>Ball {ballStatus}</span>
-          <span>Active {displayedPeopleCount}/{maxDisplayedPlayers}</span>
+          <span>{isRecording ? "Recording" : setupChecks.readyToRecord ? "Ready" : "Setup"}</span>
+          {modeConfig?.ballRelevant && <span>Ball {ballStatus}</span>}
+          <span>Active {displayedPeopleCount}/{activePlayerLimit}</span>
           {debugEnabled && <span className="axis-live-vision__debug-pill">DEBUG VIEW</span>}
           {isRecording && <span className="axis-live-vision__rec-pill">REC {formatRecordingTime(recordingElapsedMs)}</span>}
         </aside>
@@ -1729,7 +1921,7 @@ export default function AxisLiveVision() {
                 <div><dt>Tracks</dt><dd>{activeTrackLabel}</dd></div>
                 <div><dt>Active tracks</dt><dd>{activeTracks.map((t) => t.trackId).join(", ") || "None"}</dd></div>
                 <div><dt>Raw people</dt><dd>{rawPeopleCount}</dd></div>
-                <div><dt>Displayed people</dt><dd>{displayedPeopleCount}/{maxDisplayedPlayers}</dd></div>
+                <div><dt>Displayed people</dt><dd>{displayedPeopleCount}/{activePlayerLimit}</dd></div>
                 <div><dt>Max people</dt><dd>{maxPeopleCount}</dd></div>
                 <div><dt>Ball tracking</dt><dd>Experimental COCO-SSD signal</dd></div>
                 <div><dt>Ball seen</dt><dd>{ballSeenFramesRef.current}</dd></div>
@@ -1808,7 +2000,7 @@ export default function AxisLiveVision() {
         </section>
       )}
 
-      {!calActive && isCameraLive && (
+      {!calActive && isCameraLive && !showSetupPanel && (
         <footer className={`axis-live-vision__controls${isVisionRunning ? " axis-live-vision__controls--running" : ""}`} aria-label="Live vision controls">
           {!isVisionRunning ? (
             <button
@@ -2000,6 +2192,105 @@ export default function AxisLiveVision() {
           line-height: 0.92;
           margin: 0.65rem 0 1.8rem;
           text-transform: uppercase;
+        }
+
+        .axis-live-vision__mode-picker {
+          align-content: center;
+          gap: 1rem;
+          overflow: auto;
+          z-index: 10;
+        }
+
+        .axis-live-vision__mode-grid {
+          display: grid;
+          gap: 0.65rem;
+          max-width: 44rem;
+          width: min(100%, 44rem);
+        }
+
+        .axis-live-vision__mode-grid button {
+          align-items: start;
+          background: rgba(248, 247, 242, 0.08);
+          color: #f8f7f2;
+          display: grid;
+          gap: 0.25rem;
+          min-height: 4.4rem;
+          padding: 0.85rem 1rem;
+          text-align: left;
+          text-transform: none;
+        }
+
+        .axis-live-vision__mode-grid button strong {
+          font-size: 0.92rem;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__mode-grid button span {
+          color: rgba(248, 247, 242, 0.58);
+          font-size: 0.78rem;
+          font-weight: 700;
+          letter-spacing: 0;
+          line-height: 1.35;
+        }
+
+        .axis-live-vision__setup-panel {
+          background: rgba(0, 0, 0, 0.66);
+          border: 1px solid rgba(248, 247, 242, 0.14);
+          border-radius: 1.25rem;
+          bottom: max(1rem, env(safe-area-inset-bottom));
+          display: grid;
+          gap: 0.75rem;
+          left: 50%;
+          max-width: min(31rem, calc(100vw - 2rem));
+          padding: 1rem;
+          position: absolute;
+          transform: translateX(-50%);
+          width: min(31rem, calc(100vw - 2rem));
+          z-index: 5;
+        }
+
+        .axis-live-vision__setup-panel p {
+          color: rgba(248, 247, 242, 0.62);
+          font-size: 0.72rem;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+          margin: 0;
+          text-transform: uppercase;
+        }
+
+        .axis-live-vision__setup-panel h2 {
+          font-size: 1.1rem;
+          margin: 0;
+        }
+
+        .axis-live-vision__setup-list {
+          display: grid;
+          gap: 0.45rem;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .axis-live-vision__setup-list button {
+          background: rgba(248, 247, 242, 0.08);
+          color: #f8f7f2;
+          min-height: 2.45rem;
+        }
+
+        .axis-live-vision__setup-list button[data-complete] {
+          background: rgba(124, 247, 212, 0.16);
+          border-color: rgba(124, 247, 212, 0.36);
+          color: #7cf7d4;
+        }
+
+        .axis-live-vision__setup-ready {
+          background: #f8d45c;
+          border-color: #f8d45c;
+          color: #020304;
+        }
+
+        .axis-live-vision__setup-stop {
+          background: rgba(248, 247, 242, 0.08);
+          color: #f8f7f2;
         }
 
         .axis-live-vision button {
