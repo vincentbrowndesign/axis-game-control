@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable react-hooks/immutability, react-hooks/purity, react-hooks/refs */
+/* eslint-disable react-hooks/immutability, react-hooks/purity, react-hooks/refs, react-hooks/set-state-in-effect */
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -37,6 +37,7 @@ type DrillZone = {
   height: number;
   createdAt: number;
 };
+type IgnoreZone = DrillZone & { id: string };
 
 type RecordingMetadata = {
   recordingStartedAt?: number;
@@ -63,6 +64,7 @@ const inferenceIntervalMs = 200;
 const maxStoredFrames = 600;
 const defaultMaxDisplayedPlayers = 5;
 const playerSlotStaleMs = 2_000;
+const gymSetupStorageKey = "axis-live-vision:gym-setup:v1";
 const MONO = "700 11px ui-monospace, SFMono-Regular, Menlo, monospace";
 
 function createSessionId() {
@@ -116,6 +118,7 @@ export default function AxisLiveVision() {
   const showTrailRef = useRef(true);
   const showCalibrationRef = useRef(true);
   const drillZoneRef = useRef<DrillZone | null>(null);
+  const ignoreZonesRef = useRef<IgnoreZone[]>([]);
   const floorTapCountRef = useRef(0);
 
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
@@ -157,8 +160,11 @@ export default function AxisLiveVision() {
   const [showCandidates, setShowCandidates] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [drillZone, setDrillZone] = useState<DrillZone | null>(null);
+  const [ignoreZones, setIgnoreZones] = useState<IgnoreZone[]>([]);
   const [drillZoneMode, setDrillZoneMode] = useState(false);
+  const [ignoreZoneMode, setIgnoreZoneMode] = useState(false);
   const [drillZoneDraft, setDrillZoneDraft] = useState<DrillZonePoint | null>(null);
+  const [setupLoaded, setSetupLoaded] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -171,6 +177,74 @@ export default function AxisLiveVision() {
   }, []);
 
   useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(gymSetupStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as {
+          calibration?: AxisCalibrationState;
+          drillZone?: DrillZone | null;
+          ignoreZones?: IgnoreZone[];
+          showAllDetections?: boolean;
+          showCandidates?: boolean;
+          showConfidence?: boolean;
+          showRawTrackIds?: boolean;
+          showTrail?: boolean;
+        };
+
+        if (parsed.calibration) {
+          calibrationRef.current = parsed.calibration;
+          setCalibration(parsed.calibration);
+        }
+        if (parsed.drillZone !== undefined) {
+          drillZoneRef.current = parsed.drillZone;
+          setDrillZone(parsed.drillZone);
+        }
+        if (Array.isArray(parsed.ignoreZones)) {
+          ignoreZonesRef.current = parsed.ignoreZones;
+          setIgnoreZones(parsed.ignoreZones);
+        }
+        if (typeof parsed.showTrail === "boolean") {
+          showTrailRef.current = parsed.showTrail;
+          setShowTrail(parsed.showTrail);
+        }
+        if (typeof parsed.showAllDetections === "boolean") setShowAllDetections(parsed.showAllDetections);
+        if (typeof parsed.showCandidates === "boolean") setShowCandidates(parsed.showCandidates);
+        if (typeof parsed.showConfidence === "boolean") setShowConfidence(parsed.showConfidence);
+        if (typeof parsed.showRawTrackIds === "boolean") setShowRawTrackIds(parsed.showRawTrackIds);
+      }
+    } catch {
+      // A bad local setup should not block the camera.
+    } finally {
+      setSetupLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!setupLoaded) return;
+    const setup = {
+      calibration,
+      drillZone,
+      ignoreZones,
+      showAllDetections,
+      showCandidates,
+      showConfidence,
+      showRawTrackIds,
+      showTrail,
+    };
+    window.localStorage.setItem(gymSetupStorageKey, JSON.stringify(setup));
+  }, [
+    calibration,
+    drillZone,
+    ignoreZones,
+    setupLoaded,
+    showAllDetections,
+    showCandidates,
+    showConfidence,
+    showRawTrackIds,
+    showTrail,
+  ]);
+
+  useEffect(() => {
     calibrationRef.current = calibration;
   }, [calibration]);
 
@@ -181,6 +255,10 @@ export default function AxisLiveVision() {
   useEffect(() => {
     drillZoneRef.current = drillZone;
   }, [drillZone]);
+
+  useEffect(() => {
+    ignoreZonesRef.current = ignoreZones;
+  }, [ignoreZones]);
 
   useEffect(() => {
     if (recordingStatus !== "recording" || recordingStartedAt === null) return undefined;
@@ -221,23 +299,31 @@ export default function AxisLiveVision() {
     if (!coords) return;
     const { vx, vy } = coords;
 
-    if (drillZoneMode) {
+    if (drillZoneMode || ignoreZoneMode) {
       if (!drillZoneDraft) {
         setDrillZoneDraft({ x: vx, y: vy });
         return;
       }
 
-      const nextZone: DrillZone = {
+      const nextZone = {
         createdAt: Date.now(),
         height: Math.abs(vy - drillZoneDraft.y),
         width: Math.abs(vx - drillZoneDraft.x),
         x: Math.min(vx, drillZoneDraft.x),
         y: Math.min(vy, drillZoneDraft.y),
       };
-      drillZoneRef.current = nextZone;
-      setDrillZone(nextZone);
+      if (drillZoneMode) {
+        drillZoneRef.current = nextZone;
+        setDrillZone(nextZone);
+      } else {
+        const ignoreZone: IgnoreZone = { ...nextZone, id: `ignore-${Date.now().toString(36)}` };
+        const nextZones = [...ignoreZonesRef.current, ignoreZone];
+        ignoreZonesRef.current = nextZones;
+        setIgnoreZones(nextZones);
+      }
       setDrillZoneDraft(null);
       setDrillZoneMode(false);
+      setIgnoreZoneMode(false);
       return;
     }
 
@@ -458,7 +544,27 @@ export default function AxisLiveVision() {
     setEvidencePanelOpen(false);
     cancelPlayerAssignment();
     setDrillZoneDraft(null);
+    setIgnoreZoneMode(false);
     setDrillZoneMode(true);
+  }
+
+  function startIgnoreZone() {
+    if (recordingStatus === "recording") {
+      setLastError("Stop recording before setting Ignore Zone.");
+      return;
+    }
+
+    const nextCalibration: AxisCalibrationState = { ...calibrationRef.current, mode: "off", updatedAt: Date.now() };
+    calibrationRef.current = nextCalibration;
+    setCalibration(nextCalibration);
+    setCalibrationMode("off");
+    setCalibrationMenuOpen(false);
+    setToolsOpen(false);
+    setEvidencePanelOpen(false);
+    cancelPlayerAssignment();
+    setDrillZoneDraft(null);
+    setDrillZoneMode(false);
+    setIgnoreZoneMode(true);
   }
 
   function clearDrillZone() {
@@ -471,6 +577,46 @@ export default function AxisLiveVision() {
   function cancelDrillZone() {
     setDrillZoneDraft(null);
     setDrillZoneMode(false);
+    setIgnoreZoneMode(false);
+  }
+
+  function clearIgnoreZones() {
+    ignoreZonesRef.current = [];
+    setIgnoreZones([]);
+  }
+
+  function unlockPlayerSlot(slotId: string) {
+    updatePlayerSlot(slotId, { locked: false });
+  }
+
+  function clearPlayerSlot(slotId: string) {
+    const next = playerSlotsRef.current.filter((slot) => slot.slotId !== slotId);
+    playerSlotsRef.current = next;
+    setPlayerSlots(next);
+    if (selectedPlayerSlotId === slotId) cancelPlayerAssignment();
+  }
+
+  function resetGymSetup() {
+    const nextCal = defaultCal();
+    calibrationRef.current = nextCal;
+    drillZoneRef.current = null;
+    ignoreZonesRef.current = [];
+    showTrailRef.current = true;
+    setCalibration(nextCal);
+    setCalibrationMode("off");
+    setCalibrationMenuOpen(false);
+    setDrillZone(null);
+    setDrillZoneDraft(null);
+    setDrillZoneMode(false);
+    setIgnoreZoneMode(false);
+    setIgnoreZones([]);
+    setShowAllDetections(false);
+    setShowCandidates(false);
+    setShowConfidence(false);
+    setShowRawTrackIds(false);
+    setShowTrail(true);
+    setToolsOpen(false);
+    window.localStorage.removeItem(gymSetupStorageKey);
   }
 
   // ─── Camera / AI ────────────────────────────────────────────────
@@ -732,6 +878,19 @@ export default function AxisLiveVision() {
       && center.y <= zone.y + zone.height;
   }
 
+  function isPointInZone(point: { x: number; y: number }, zone: DrillZone) {
+    return point.x >= zone.x
+      && point.x <= zone.x + zone.width
+      && point.y >= zone.y
+      && point.y <= zone.y + zone.height;
+  }
+
+  function isTrackInIgnoreZone(track: AxisVisionTrack) {
+    if (track.kind !== "person") return false;
+    const center = bboxCenter(track.bbox);
+    return ignoreZonesRef.current.some((zone) => isPointInZone(center, zone));
+  }
+
   function isSlotInDrillZone(slot: AxisPlayerSlot) {
     const zone = drillZoneRef.current;
     if (!zone) return true;
@@ -749,7 +908,11 @@ export default function AxisLiveVision() {
 
   function updatePlayerSlots(nextTracks: AxisVisionTrack[], timestamp: number) {
     const rawPeople = suppressDuplicateRawPeople(
-      nextTracks.filter((track) => track.kind === "person" && track.status === "active"),
+      nextTracks.filter((track) =>
+        track.kind === "person"
+        && track.status === "active"
+        && !isTrackInIgnoreZone(track),
+      ),
     );
     const slots = playerSlotsRef.current.map((slot) => ({ ...slot }));
     const matchedSlotIds = new Set<string>();
@@ -906,7 +1069,7 @@ export default function AxisLiveVision() {
     const displayedPlayerSlots = getDisplayedPlayerSlots();
     const displayedTracks = getDisplayedTracks(nextTracks);
 
-    drawDrillZone(ctx, drillZoneRef.current, ox, oy, scale);
+    drawZones(ctx, drillZoneRef.current, ignoreZonesRef.current, ox, oy, scale);
 
     for (const slot of displayedPlayerSlots) {
       const [x, y, w, h] = slot.bbox;
@@ -1038,25 +1201,34 @@ export default function AxisLiveVision() {
     }
   }
 
-  function drawDrillZone(
+  function drawZones(
     ctx: CanvasRenderingContext2D,
-    zone: DrillZone | null,
+    drill: DrillZone | null,
+    ignored: IgnoreZone[],
     ox: number,
     oy: number,
     scale: number,
   ) {
-    if (!zone && !drillZoneDraft) return;
+    if (!drill && ignored.length === 0 && !drillZoneDraft) return;
 
     ctx.save();
-    ctx.strokeStyle = "#f8d45c";
     ctx.lineWidth = 1.5;
     ctx.setLineDash([5, 4]);
 
-    if (zone) {
-      ctx.strokeRect(ox + zone.x * scale, oy + zone.y * scale, zone.width * scale, zone.height * scale);
+    if (drill) {
+      ctx.strokeStyle = "#f8d45c";
+      ctx.strokeRect(ox + drill.x * scale, oy + drill.y * scale, drill.width * scale, drill.height * scale);
       ctx.fillStyle = "rgba(248, 212, 92, 0.72)";
       ctx.font = MONO;
-      ctx.fillText("DRILL ZONE", ox + zone.x * scale + 8, oy + zone.y * scale + 16);
+      ctx.fillText("DRILL ZONE", ox + drill.x * scale + 8, oy + drill.y * scale + 16);
+    }
+
+    for (const zone of ignored) {
+      ctx.strokeStyle = "rgba(255, 104, 104, 0.85)";
+      ctx.strokeRect(ox + zone.x * scale, oy + zone.y * scale, zone.width * scale, zone.height * scale);
+      ctx.fillStyle = "rgba(255, 104, 104, 0.72)";
+      ctx.font = MONO;
+      ctx.fillText("IGNORE", ox + zone.x * scale + 8, oy + zone.y * scale + 16);
     }
 
     if (drillZoneDraft) {
@@ -1066,7 +1238,7 @@ export default function AxisLiveVision() {
       ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = "#f8d45c";
-      ctx.fillText("ZONE A", x + 10, y + 4);
+      ctx.fillText(ignoreZoneMode ? "IGNORE A" : "ZONE A", x + 10, y + 4);
     }
 
     ctx.restore();
@@ -1136,10 +1308,17 @@ export default function AxisLiveVision() {
         })),
         displayedPlayerCount: getDisplayPeopleCount(),
         drillZone: drillZoneRef.current,
+        ignoreZones: ignoreZonesRef.current,
         maxDisplayedPlayers,
         rawDetectionCount: tracksRef.current.length,
         rawPersonDetectionCount: tracksRef.current.filter((track) => track.kind === "person").length,
       },
+      testDuration: Date.now() - sessionStartedAt,
+      drillZoneSet: Boolean(drillZoneRef.current),
+      ignoreZoneCount: ignoreZonesRef.current.length,
+      displayedPlayerCount: getDisplayPeopleCount(),
+      rawDetectionCount: tracksRef.current.length,
+      debugEnabled: showAllDetections || showCandidates || showConfidence || showRawTrackIds,
       playerAssignments: Object.fromEntries(
         playerSlotsRef.current
           .filter((slot) => slot.playerName)
@@ -1444,17 +1623,22 @@ export default function AxisLiveVision() {
       ? "Stopping"
       : "Record";
 
-  const calActive = calibrationMode !== "off" || drillZoneMode;
+  const calActive = calibrationMode !== "off" || drillZoneMode || ignoreZoneMode;
   const ballStatus = ballVisible ? "Live" : ballLostCount > 0 ? "Lost" : "Experimental";
   const ballDirection = ballTrail.direction ?? "unknown";
   const ballSpeed = ballTrail.velocity ? Math.round(ballTrail.velocity.speed) : null;
   const activePersonTracks = activeTracks.filter((track) => track.kind === "person");
   const displayedPeopleCount = getDisplayPeopleCount();
   const rawPeopleCount = activePersonTracks.length;
+  const debugEnabled = showAllDetections || showCandidates || showConfidence || showRawTrackIds;
   const selectedPlayerSlot = selectedPlayerSlotId
     ? playerSlots.find((slot) => slot.slotId === selectedPlayerSlotId)
     : null;
-  const calibrationInstruction = drillZoneMode
+  const calibrationInstruction = ignoreZoneMode
+    ? drillZoneDraft
+      ? "Tap opposite corner of Ignore Zone"
+      : "Tap first corner of Ignore Zone"
+    : drillZoneMode
     ? drillZoneDraft
       ? "Tap opposite corner of Drill Zone"
       : "Tap first corner of Drill Zone"
@@ -1511,7 +1695,7 @@ export default function AxisLiveVision() {
         {calActive ? (
           <button
             className="axis-live-vision__cancel"
-            onClick={drillZoneMode ? cancelDrillZone : cancelCalibration}
+            onClick={drillZoneMode || ignoreZoneMode ? cancelDrillZone : cancelCalibration}
             type="button"
           >
             Cancel
@@ -1526,6 +1710,7 @@ export default function AxisLiveVision() {
           <span>AI {aiStatus === "running" ? "Running" : modelStatus}</span>
           <span>Ball {ballStatus}</span>
           <span>Active {displayedPeopleCount}/{maxDisplayedPlayers}</span>
+          {debugEnabled && <span className="axis-live-vision__debug-pill">DEBUG VIEW</span>}
           {isRecording && <span className="axis-live-vision__rec-pill">REC {formatRecordingTime(recordingElapsedMs)}</span>}
         </aside>
       )}
@@ -1566,6 +1751,7 @@ export default function AxisLiveVision() {
                 <div><dt>Floor</dt><dd>{calibration.floorLine ? "Set" : "Not set"}</dd></div>
                 <div><dt>Paint</dt><dd>{calibration.paintPoints.length >= 2 ? "Set" : "Not set"}</dd></div>
                 <div><dt>Drill Zone</dt><dd>{drillZone ? "Set" : "Not set"}</dd></div>
+                <div><dt>Ignore Zones</dt><dd>{ignoreZones.length}</dd></div>
                 <div><dt>Trail</dt><dd>{showTrail ? "On" : "Off"}</dd></div>
               </dl>
               <button
@@ -1586,8 +1772,10 @@ export default function AxisLiveVision() {
                   playerSlots.map((slot) => (
                     <div className="axis-live-vision__player-tag-row" key={slot.slotId}>
                       <span>{slot.slotId}</span>
-                      <strong>{slot.playerName || "Unknown"}</strong>
+                      <strong>{slot.playerName || "Unknown"} - {slot.locked ? "Locked" : "Unlocked"}</strong>
                       <button onClick={() => openPlayerAssignment(slot.slotId)} type="button">Edit</button>
+                      <button onClick={() => unlockPlayerSlot(slot.slotId)} type="button">Unlock</button>
+                      <button onClick={() => clearPlayerSlot(slot.slotId)} type="button">Clear</button>
                     </div>
                   ))
                 ) : (
@@ -1612,6 +1800,8 @@ export default function AxisLiveVision() {
                 <button onClick={captureSnapshot} type="button">Capture Snapshot</button>
                 <button onClick={clearPlayerTags} type="button">Clear Player Tags</button>
                 <button onClick={clearDrillZone} type="button">Clear Drill Zone</button>
+                <button onClick={clearIgnoreZones} type="button">Clear Ignore Zones</button>
+                <button onClick={resetGymSetup} type="button">Reset Gym Setup</button>
                 <button onClick={clearSession} type="button">Clear Session</button>
               </div>
           </div>
@@ -1668,6 +1858,8 @@ export default function AxisLiveVision() {
                     </button>
                     <button onClick={() => setEvidencePanelOpen((open) => !open)} type="button">Evidence</button>
                     <button onClick={startDrillZone} type="button">Drill Zone</button>
+                    <button onClick={startIgnoreZone} type="button">Ignore Zone</button>
+                    <button onClick={() => setEvidencePanelOpen(true)} type="button">Debug</button>
                   </div>
                 )}
               </div>
@@ -1916,6 +2108,11 @@ export default function AxisLiveVision() {
           color: #ff6b6b;
         }
 
+        .axis-live-vision__quick-status .axis-live-vision__debug-pill {
+          background: rgba(248, 212, 92, 0.16);
+          color: #f8d45c;
+        }
+
         .axis-live-vision__evidence dd {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: 0.88rem;
@@ -1991,7 +2188,7 @@ export default function AxisLiveVision() {
           align-items: center;
           display: grid;
           gap: 0.45rem;
-          grid-template-columns: auto minmax(0, 1fr) auto;
+          grid-template-columns: auto minmax(0, 1fr);
         }
 
         .axis-live-vision__player-tag-row span,
@@ -2009,6 +2206,10 @@ export default function AxisLiveVision() {
         .axis-live-vision__player-tag-row button {
           min-height: 2.1rem;
           padding: 0 0.65rem;
+        }
+
+        .axis-live-vision__player-tag-row button:nth-of-type(1) {
+          grid-column: 1 / -1;
         }
 
         .axis-live-vision__tools-sheet,
