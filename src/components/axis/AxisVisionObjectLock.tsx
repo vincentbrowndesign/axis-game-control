@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadAxisLiveDetector, type AxisLiveDetector } from "../../lib/axis/axis-live-detector";
 import { createAxisTracker } from "../../lib/axis/axis-simple-tracker";
 import {
   calculateVisionRelationships,
@@ -9,7 +8,7 @@ import {
   smoothBox,
   trackToBox,
 } from "../../lib/axis/axis-object-lock";
-import type { AxisVisionTrack } from "../../lib/axis/axis-vision-types";
+import type { AxisLiveDetection, AxisVisionTrack } from "../../lib/axis/axis-vision-types";
 import type { VisionBox, VisionFrameState, VisionObject } from "../../lib/axis/axis-object-lock-types";
 
 type CameraState = "idle" | "starting" | "live" | "error";
@@ -17,18 +16,21 @@ type ModelState = "idle" | "loading" | "ready" | "error";
 type OverlayMode = "product" | "debug";
 
 const maxPlayers = 3;
+const inferenceIntervalMs = 650;
 
 export function AxisVisionObjectLock() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectorRef = useRef<AxisLiveDetector | null>(null);
   const trackerRef = useRef(createAxisTracker({ ballIouThreshold: 0.12, maxMissedFrames: 8, personIouThreshold: 0.2 }));
   const rafRef = useRef<number | null>(null);
   const lastInferenceAtRef = useRef(0);
+  const inferenceRunningRef = useRef(false);
   const objectsRef = useRef<VisionObject[]>([]);
   const frameIdRef = useRef(0);
   const pressTimerRef = useRef<number | null>(null);
+  const objectStateRef = useRef<Record<string, VisionObject["state"]>>({});
 
   const [cameraState, setCameraState] = useState<CameraState>("idle");
   const [modelState, setModelState] = useState<ModelState>("idle");
@@ -80,11 +82,7 @@ export function AxisVisionObjectLock() {
       setCameraState("live");
       recordAxisVisionObjectEvent("camera_started");
 
-      if (!detectorRef.current) {
-        setModelState("loading");
-        detectorRef.current = await loadAxisLiveDetector();
-        setModelState("ready");
-      }
+      setModelState("ready");
 
       loop();
     } catch {
@@ -101,27 +99,28 @@ export function AxisVisionObjectLock() {
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraState("idle");
+    setModelState("idle");
   }
 
   function loop() {
     rafRef.current = requestAnimationFrame(loop);
     const video = videoRef.current;
-    const detector = detectorRef.current;
-    if (!video || !detector || video.readyState < 2) return;
+    if (!video || video.readyState < 2) return;
 
     const now = performance.now();
-    if (now - lastInferenceAtRef.current < 160) {
+    if (now - lastInferenceAtRef.current < inferenceIntervalMs || inferenceRunningRef.current) {
       draw();
       return;
     }
 
     lastInferenceAtRef.current = now;
-    void runInference(video, detector, now);
+    void runInference(video, now);
   }
 
-  async function runInference(video: HTMLVideoElement, detector: AxisLiveDetector, timestamp: number) {
+  async function runInference(video: HTMLVideoElement, timestamp: number) {
+    inferenceRunningRef.current = true;
     try {
-      const detections = await detector.detect(video);
+      const detections = await detectWithYolo(video, frameIdRef.current + 1, timestamp);
       const tracks = trackerRef.current.update(detections, timestamp);
       const nextObjects = buildObjectsFromTracks(tracks, timestamp);
       const relationships = calculateVisionRelationships(nextObjects, timestamp);
@@ -137,12 +136,16 @@ export function AxisVisionObjectLock() {
       objectsRef.current = nextObjects;
       setObjects(nextObjects);
       setFrameState(nextFrame);
+      setModelState("ready");
+      setError("");
 
       nextObjects.forEach((object) => {
         if (object.state === "locked") {
           recordAxisVisionObjectEvent("object_detected", { id: object.id, type: object.type });
         }
       });
+
+      recordObjectLossEvents(nextObjects);
 
       relationships.forEach((relationship) => {
         if (relationship.type === "possible_possession") recordAxisVisionObjectEvent("ball_possession_candidate", relationship);
@@ -152,8 +155,35 @@ export function AxisVisionObjectLock() {
       });
     } catch {
       setModelState("error");
-      setError("Vision lost the model for a moment. Try restarting Axis Vision.");
+      setError("Detector route unavailable. Camera stays usable.");
+    } finally {
+      inferenceRunningRef.current = false;
     }
+  }
+
+  async function detectWithYolo(video: HTMLVideoElement, frameId: number, timestamp: number): Promise<AxisLiveDetection[]> {
+    const imageDataUrl = captureVideoFrame(video);
+    const response = await fetch("/api/axis/vision/detect", {
+      body: JSON.stringify({ frameId, imageDataUrl, timestamp }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as { detections?: AxisLiveDetection[]; error?: string; ok?: boolean } | null;
+    if (!response.ok || !result?.ok) throw new Error(result?.error || "Detection failed.");
+    return Array.isArray(result.detections) ? result.detections : [];
+  }
+
+  function captureVideoFrame(video: HTMLVideoElement) {
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    const canvas = captureCanvasRef.current ?? document.createElement("canvas");
+    captureCanvasRef.current = canvas;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Frame capture is unavailable.");
+    ctx.drawImage(video, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", 0.72);
   }
 
   function buildObjectsFromTracks(tracks: AxisVisionTrack[], timestamp: number): VisionObject[] {
@@ -221,6 +251,17 @@ export function AxisVisionObjectLock() {
       : null;
 
     return [...nextPlayers, ...(rimObject ? [rimObject] : []), ...(nextBall ? [nextBall] : [])];
+  }
+
+  function recordObjectLossEvents(nextObjects: VisionObject[]) {
+    const nextStates: Record<string, VisionObject["state"]> = {};
+    nextObjects.forEach((object) => {
+      nextStates[object.id] = object.state;
+      if (object.state === "lost" && objectStateRef.current[object.id] !== "lost") {
+        recordAxisVisionObjectEvent("object_lost", { id: object.id, type: object.type });
+      }
+    });
+    objectStateRef.current = nextStates;
   }
 
   function handleCanvasPointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
