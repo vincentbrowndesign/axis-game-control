@@ -77,20 +77,22 @@ export function createAxisTracker(options: TrackerOptions = {}) {
 
       detections.forEach((detection, detectionIndex) => {
         let bestTrackIndex = -1;
-        let bestIou = 0;
+        let bestScore = 0;
 
         activeTracks.forEach((track) => {
           const trackIndex = tracks.indexOf(track);
           if (matchedTrackIndexes.has(trackIndex) || track.kind !== detection.kind) return;
 
           const iou = calculateIoU(track.bbox, detection.bbox);
-          if (iou > bestIou) {
-            bestIou = iou;
+          const distanceScore = centerDistanceScore(track.bbox, detection.bbox);
+          const score = Math.max(iou, distanceScore);
+          if (score > bestScore) {
+            bestScore = score;
             bestTrackIndex = trackIndex;
           }
         });
 
-        if (bestTrackIndex >= 0 && bestIou >= thresholdFor(detection.kind)) {
+        if (bestTrackIndex >= 0 && bestScore >= thresholdFor(detection.kind)) {
           const track = tracks[bestTrackIndex];
           track.bbox = detection.bbox;
           track.classId = detection.classId;
@@ -127,4 +129,19 @@ export function createAxisTracker(options: TrackerOptions = {}) {
         .map((track) => ({ ...track }));
     },
   };
+}
+
+function centerDistanceScore(
+  a: [number, number, number, number],
+  b: [number, number, number, number],
+) {
+  const [ax, ay, aw, ah] = a;
+  const [bx, by, bw, bh] = b;
+  const acx = ax + aw / 2;
+  const acy = ay + ah / 2;
+  const bcx = bx + bw / 2;
+  const bcy = by + bh / 2;
+  const distance = Math.hypot(acx - bcx, acy - bcy);
+  const allowed = Math.max(80, Math.min(260, Math.max(aw, ah, bw, bh) * 0.46));
+  return Math.max(0, 1 - distance / allowed);
 }

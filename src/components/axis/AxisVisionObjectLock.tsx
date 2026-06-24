@@ -14,9 +14,16 @@ import type { VisionBox, VisionFrameState, VisionObject } from "../../lib/axis/a
 type CameraState = "idle" | "starting" | "live" | "error";
 type ModelState = "idle" | "loading" | "ready" | "error";
 type OverlayMode = "product" | "debug";
+type RimEditMode = "idle" | "placing" | "adjusting";
+type RimDragMode = "move" | "resize";
 
 const maxPlayers = 3;
 const inferenceIntervalMs = 700;
+const productPlayerMinConfidence = 0.38;
+const productPlayerMinAreaRatio = 0.035;
+const productPlayerEdgeMarginRatio = 0.04;
+const productPlayerAliveMs = 2100;
+const ballAliveMs = 1200;
 
 type AxisVisionObjectLockProps = {
   detectEndpoint?: string;
@@ -35,23 +42,40 @@ export function AxisVisionObjectLock({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const trackerRef = useRef(createAxisTracker({ ballIouThreshold: 0.12, maxMissedFrames: 8, personIouThreshold: 0.2 }));
+  const trackerRef = useRef(createAxisTracker({ ballIouThreshold: 0.12, maxMissedFrames: 3, personIouThreshold: 0.22 }));
   const rafRef = useRef<number | null>(null);
   const lastInferenceAtRef = useRef(0);
   const inferenceRunningRef = useRef(false);
   const objectsRef = useRef<VisionObject[]>([]);
+  const rawObjectsRef = useRef<VisionObject[]>([]);
   const frameIdRef = useRef(0);
   const pressTimerRef = useRef<number | null>(null);
   const objectStateRef = useRef<Record<string, VisionObject["state"]>>({});
+  const primaryPlayerTrackIdRef = useRef<string | null>(null);
+  const detectorMissesRef = useRef(0);
+  const droppedFramesRef = useRef(0);
+  const rawDetectionCountRef = useRef(0);
+  const modelClassesRef = useRef("");
+  const rimDraftRef = useRef<VisionBox | null>(null);
+  const rimDragRef = useRef<{
+    mode: RimDragMode;
+    offsetX: number;
+    offsetY: number;
+    startBox: VisionBox;
+    startX: number;
+    startY: number;
+  } | null>(null);
 
   const [cameraState, setCameraState] = useState<CameraState>("idle");
   const [modelState, setModelState] = useState<ModelState>("idle");
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("product");
+  const [multiPlayer, setMultiPlayer] = useState(false);
   const [objects, setObjects] = useState<VisionObject[]>([]);
   const [frameState, setFrameState] = useState<VisionFrameState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [rimSetup, setRimSetup] = useState(initialRimSetup);
+  const [rimSetup, setRimSetup] = useState<RimEditMode>(initialRimSetup ? "placing" : "idle");
   const [rimBox, setRimBox] = useState<VisionBox | null>(null);
+  const [rimLocked, setRimLocked] = useState(false);
   const [playerNames, setPlayerNames] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [detectorUrl, setDetectorUrl] = useState("http://127.0.0.1:8011");
@@ -62,7 +86,6 @@ export function AxisVisionObjectLock({
   const players = objects.filter((object) => object.type === "player");
   const rim = objects.find((object) => object.type === "rim");
   const ball = objects.find((object) => object.type === "ball");
-  const relationships = frameState?.relationships ?? [];
 
   useEffect(() => {
     recordAxisVisionObjectEvent("vision_opened", { productName, route });
@@ -72,7 +95,7 @@ export function AxisVisionObjectLock({
   useEffect(() => {
     draw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objects, overlayMode, frameState, selectedId]);
+  }, [objects, overlayMode, frameState, selectedId, rimSetup, rimBox, rimLocked]);
 
   async function startVision() {
     if (cameraState === "starting" || cameraState === "live") return;
@@ -125,6 +148,7 @@ export function AxisVisionObjectLock({
 
     const now = performance.now();
     if (now - lastInferenceAtRef.current < inferenceIntervalMs || inferenceRunningRef.current) {
+      if (inferenceRunningRef.current) droppedFramesRef.current += 1;
       draw();
       return;
     }
@@ -140,6 +164,8 @@ export function AxisVisionObjectLock({
     try {
       const result = await detectWithYolo(video, frameIdRef.current + 1, timestamp);
       const detections = result.detections;
+      rawDetectionCountRef.current = detections.length;
+      modelClassesRef.current = summarizeDetectionClasses(detections);
       const tracks = trackerRef.current.update(detections, timestamp);
       const nextObjects = buildObjectsFromTracks(tracks, timestamp);
       const relationships = calculateVisionRelationships(nextObjects, timestamp);
@@ -153,10 +179,12 @@ export function AxisVisionObjectLock({
 
       frameIdRef.current = nextFrame.frameId;
       objectsRef.current = nextObjects;
+      rawObjectsRef.current = buildRawObjectsFromTracks(tracks, timestamp);
       setObjects(nextObjects);
       setFrameState(nextFrame);
       setModelState("ready");
       setError("");
+      detectorMissesRef.current = 0;
       setDetectorError("");
       setDetectorUrl(result.detectorUrl || "http://127.0.0.1:8011");
       setLastCadenceMs(cadenceMs);
@@ -178,9 +206,12 @@ export function AxisVisionObjectLock({
       });
     } catch (caughtError) {
       const reason = caughtError instanceof Error ? caughtError.message : "Detector service unavailable.";
+      detectorMissesRef.current += 1;
       setModelState("error");
       setDetectorError(reason);
-      setError("Detector service unavailable. Camera stays usable.");
+      if (detectorMissesRef.current >= 3 || overlayMode === "debug") {
+        setError("Detector service unavailable. Camera stays usable.");
+      }
       setLastInferenceMs(performance.now() - startedAt);
     } finally {
       inferenceRunningRef.current = false;
@@ -222,18 +253,16 @@ export function AxisVisionObjectLock({
   function buildObjectsFromTracks(tracks: AxisVisionTrack[], timestamp: number): VisionObject[] {
     const previous = objectsRef.current;
     const selected = selectedId;
-    const playerTracks = tracks
-      .filter((track) => track.kind === "person")
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxPlayers);
+    const playerTracks = selectVisiblePlayerTracks(tracks, timestamp);
     const ballTrack = tracks.filter((track) => track.kind === "ball").sort((a, b) => b.score - a.score)[0];
 
     const nextPlayers: VisionObject[] = playerTracks.map((track, index) => {
       const previousObject = previous.find((object) => object.trackId === track.trackId);
-      const id = previousObject?.id ?? `player-${track.trackId}`;
-      const fallbackLabel = `P${index + 1}`;
+      const isPrimary = track.trackId === primaryPlayerTrackIdRef.current || index === 0;
+      const id = isPrimary ? "player-primary" : (previousObject?.id ?? `player-${track.trackId}`);
+      const fallbackLabel = isPrimary ? "P1" : `P${index + 1}`;
       return {
-        bbox: smoothBox(previousObject?.bbox, trackToBox(track), 0.34),
+        bbox: smoothBox(previousObject?.bbox, trackToBox(track), 0.24),
         classId: track.classId,
         className: track.className,
         confidence: track.score,
@@ -242,7 +271,7 @@ export function AxisVisionObjectLock({
         lastSeenAt: timestamp,
         manuallyLocked: Boolean(playerNames[id]),
         selected: selected === id,
-        state: track.seenFrames > 2 || track.score > 0.7 ? "locked" : "candidate",
+        state: track.seenFrames >= 2 || track.score > 0.72 ? "locked" : "candidate",
         trackId: track.trackId,
         type: "player",
       };
@@ -250,7 +279,7 @@ export function AxisVisionObjectLock({
 
     const nextBall: VisionObject | null = ballTrack
       ? {
-          bbox: smoothBox(previous.find((object) => object.type === "ball")?.bbox, trackToBox(ballTrack), 0.48),
+          bbox: smoothBox(previous.find((object) => object.type === "ball")?.bbox, trackToBox(ballTrack), 0.38),
           classId: ballTrack.classId,
           className: ballTrack.className,
           confidence: ballTrack.score,
@@ -263,7 +292,7 @@ export function AxisVisionObjectLock({
           trackId: ballTrack.trackId,
           type: "ball",
         }
-      : previous.find((object) => object.type === "ball" && timestamp - object.lastSeenAt < 1100)
+      : previous.find((object) => object.type === "ball" && timestamp - object.lastSeenAt < ballAliveMs)
         ? {
             ...previous.find((object) => object.type === "ball")!,
             confidence: Math.max(0.12, previous.find((object) => object.type === "ball")!.confidence * 0.86),
@@ -281,13 +310,94 @@ export function AxisVisionObjectLock({
           lastSeenAt: timestamp,
           manuallyLocked: true,
           selected: selected === "rim-1",
-          state: "manual_override",
+          state: rimLocked ? "manual_override" : "candidate",
           trackId: "manual-rim",
           type: "rim",
         }
       : null;
 
     return [...nextPlayers, ...(rimObject ? [rimObject] : []), ...(nextBall ? [nextBall] : [])];
+  }
+
+  function buildRawObjectsFromTracks(tracks: AxisVisionTrack[], timestamp: number): VisionObject[] {
+    const previous = rawObjectsRef.current;
+    const rawPlayers = tracks
+      .filter((track) => track.kind === "person")
+      .sort((a, b) => detectionPriority(b) - detectionPriority(a))
+      .slice(0, maxPlayers)
+      .map((track, index): VisionObject => {
+        const previousObject = previous.find((object) => object.trackId === track.trackId);
+        return {
+          bbox: smoothBox(previousObject?.bbox, trackToBox(track), 0.4),
+          classId: track.classId,
+          className: track.className,
+          confidence: track.score,
+          id: previousObject?.id ?? `raw-player-${track.trackId}`,
+          label: `P${index + 1}`,
+          lastSeenAt: timestamp,
+          manuallyLocked: false,
+          selected: selectedId === previousObject?.id,
+          state: track.seenFrames >= 2 ? "locked" : "candidate",
+          trackId: track.trackId,
+          type: "player" as const,
+        };
+      });
+
+    return rawPlayers;
+  }
+
+  function selectVisiblePlayerTracks(tracks: AxisVisionTrack[], timestamp: number) {
+    const playerTracks = tracks
+      .filter((track) => track.kind === "person")
+      .filter((track) => isUsablePlayerTrack(track, timestamp))
+      .sort((a, b) => detectionPriority(b) - detectionPriority(a));
+
+    if (overlayMode === "debug" && multiPlayer) return playerTracks.slice(0, maxPlayers);
+
+    const currentPrimary = playerTracks.find((track) => track.trackId === primaryPlayerTrackIdRef.current);
+    const best = currentPrimary ?? playerTracks[0];
+    primaryPlayerTrackIdRef.current = best?.trackId ?? primaryPlayerTrackIdRef.current;
+
+    return best ? [best] : [];
+  }
+
+  function isUsablePlayerTrack(track: AxisVisionTrack, timestamp: number) {
+    const box = trackToBox(track);
+    const video = videoRef.current;
+    const width = video?.videoWidth || 1280;
+    const height = video?.videoHeight || 720;
+    const areaRatio = (box.width * box.height) / Math.max(1, width * height);
+    const selected = selectedId && objectsRef.current.find((object) => object.trackId === track.trackId && object.id === selectedId);
+    const isPrimary = track.trackId === primaryPlayerTrackIdRef.current;
+
+    if (timestamp - track.lastSeenAt > productPlayerAliveMs) return false;
+    if (!isPrimary && !selected && track.score < productPlayerMinConfidence) return false;
+    if (!isPrimary && areaRatio < productPlayerMinAreaRatio) return false;
+    if (!isPrimary && track.seenFrames < 2) return false;
+
+    const edgeMarginX = width * productPlayerEdgeMarginRatio;
+    const edgeMarginY = height * productPlayerEdgeMarginRatio;
+    const nearEdge =
+      box.x <= edgeMarginX ||
+      box.y <= edgeMarginY ||
+      box.x + box.width >= width - edgeMarginX ||
+      box.y + box.height >= height - edgeMarginY;
+
+    return Boolean(isPrimary || selected || !nearEdge);
+  }
+
+  function detectionPriority(track: AxisVisionTrack) {
+    const [,, width, height] = track.bbox;
+    const video = videoRef.current;
+    const frameArea = Math.max(1, (video?.videoWidth || 1280) * (video?.videoHeight || 720));
+    const areaScore = Math.min(1, (width * height) / frameArea / 0.22);
+    const persistenceScore = Math.min(1, track.seenFrames / 4);
+    return track.score * 0.55 + areaScore * 0.32 + persistenceScore * 0.13;
+  }
+
+  function summarizeDetectionClasses(detections: AxisLiveDetection[]) {
+    const classes = Array.from(new Set(detections.map((detection) => detection.className || detection.kind))).filter(Boolean);
+    return classes.length ? classes.join(", ") : "none";
   }
 
   function recordObjectLossEvents(nextObjects: VisionObject[]) {
@@ -304,18 +414,37 @@ export function AxisVisionObjectLock({
   function handleCanvasPointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
     const point = canvasPoint(event);
 
-    if (rimSetup) {
+    if (rimSetup === "placing") {
       const box = {
         height: 54,
         width: 86,
         x: point.x - 43,
         y: point.y - 27,
       };
+      rimDraftRef.current = box;
       setRimBox(box);
-      setRimSetup(false);
-      recordAxisVisionObjectEvent("rim_locked", { bbox: box });
-      recordAxisVisionObjectEvent("object_locked", { id: "rim-1", type: "rim" });
+      setRimSetup("adjusting");
+      setRimLocked(false);
+      setSelectedId("rim-1");
       return;
+    }
+
+    if (rimSetup === "adjusting" && rimBox) {
+      const handle = getRimResizeHandle(rimBox);
+      const nearHandle = Math.hypot(point.x - handle.x, point.y - handle.y) <= 28;
+      const inBox = point.x >= rimBox.x && point.x <= rimBox.x + rimBox.width && point.y >= rimBox.y && point.y <= rimBox.y + rimBox.height;
+      if (nearHandle || inBox) {
+        rimDragRef.current = {
+          mode: nearHandle ? "resize" : "move",
+          offsetX: point.x - rimBox.x,
+          offsetY: point.y - rimBox.y,
+          startBox: rimBox,
+          startX: point.x,
+          startY: point.y,
+        };
+        setSelectedId("rim-1");
+        return;
+      }
     }
 
     const object = hitTest(point.x, point.y);
@@ -330,13 +459,61 @@ export function AxisVisionObjectLock({
     }
 
     if (object.type === "rim" && object.manuallyLocked) {
-      setRimSetup(true);
+      startRimSetup();
     }
+  }
+
+  function handleCanvasPointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!rimDragRef.current) return;
+    const point = canvasPoint(event);
+    const drag = rimDragRef.current;
+    const nextBox = drag.mode === "move"
+      ? {
+          ...drag.startBox,
+          x: point.x - drag.offsetX,
+          y: point.y - drag.offsetY,
+        }
+      : {
+          ...drag.startBox,
+          height: Math.max(32, drag.startBox.height + (point.y - drag.startY)),
+          width: Math.max(48, drag.startBox.width + (point.x - drag.startX)),
+        };
+
+    rimDraftRef.current = nextBox;
+    setRimBox(nextBox);
   }
 
   function handleCanvasPointerUp() {
     if (pressTimerRef.current) window.clearTimeout(pressTimerRef.current);
     pressTimerRef.current = null;
+    rimDragRef.current = null;
+  }
+
+  function startRimSetup() {
+    setRimSetup(rimBox ? "adjusting" : "placing");
+    setRimLocked(false);
+    setSelectedId("rim-1");
+  }
+
+  function lockRim() {
+    if (!rimBox) {
+      setRimSetup("placing");
+      return;
+    }
+
+    rimDraftRef.current = rimBox;
+    setRimLocked(true);
+    setRimSetup("idle");
+    setSelectedId(null);
+    recordAxisVisionObjectEvent("rim_locked", { bbox: rimBox });
+    recordAxisVisionObjectEvent("object_locked", { id: "rim-1", type: "rim" });
+  }
+
+  function cancelRimSetup() {
+    if (!rimLocked) setRimBox(null);
+    setRimSetup("idle");
+    setSelectedId(null);
+    rimDragRef.current = null;
   }
 
   function assignPlayerName(id: string, currentLabel: string) {
@@ -347,7 +524,7 @@ export function AxisVisionObjectLock({
   }
 
   function hitTest(x: number, y: number) {
-    return [...objectsRef.current]
+    return [...getDrawableObjects()]
       .reverse()
       .find((object) => x >= object.bbox.x - 12 && x <= object.bbox.x + object.bbox.width + 12 && y >= object.bbox.y - 12 && y <= object.bbox.y + object.bbox.height + 12);
   }
@@ -377,13 +554,38 @@ export function AxisVisionObjectLock({
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    objectsRef.current.forEach((object) => drawObject(ctx, object));
+    getDrawableObjects().forEach((object) => drawObject(ctx, object));
 
     if (overlayMode === "debug") {
       drawDebug(ctx);
-    } else {
-      drawRelationshipHint(ctx);
     }
+  }
+
+  function getDrawableObjects() {
+    const withImmediateRim = appendImmediateRim(overlayMode !== "debug"
+      ? objectsRef.current
+      : [...rawObjectsRef.current, ...objectsRef.current.filter((object) => object.type !== "player")]);
+    return withImmediateRim;
+  }
+
+  function appendImmediateRim(drawableObjects: VisionObject[]) {
+    if (!rimBox || drawableObjects.some((object) => object.type === "rim")) return drawableObjects;
+    return [...drawableObjects, rimObjectFromBox(rimBox, performance.now())];
+  }
+
+  function rimObjectFromBox(box: VisionBox, timestamp: number): VisionObject {
+    return {
+      bbox: box,
+      confidence: 1,
+      id: "rim-1",
+      label: "Rim",
+      lastSeenAt: timestamp,
+      manuallyLocked: true,
+      selected: selectedId === "rim-1",
+      state: rimLocked ? "manual_override" : "candidate",
+      trackId: "manual-rim",
+      type: "rim",
+    };
   }
 
   function drawObject(ctx: CanvasRenderingContext2D, object: VisionObject) {
@@ -405,6 +607,14 @@ export function AxisVisionObjectLock({
       ctx.fillStyle = "#ffffff";
       ctx.font = "600 13px system-ui";
       ctx.fillText(label, object.bbox.x + 8, Math.max(14, object.bbox.y - 9));
+    }
+
+    if (object.type === "rim" && rimSetup === "adjusting") {
+      const handle = getRimResizeHandle(object.bbox);
+      ctx.fillStyle = "#d8ad52";
+      ctx.beginPath();
+      ctx.arc(handle.x, handle.y, 7, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }
@@ -432,31 +642,29 @@ export function AxisVisionObjectLock({
     ctx.stroke();
   }
 
-  function drawRelationshipHint(ctx: CanvasRenderingContext2D) {
-    const relationship = relationships.find((item) => item.type !== "lost_ball");
-    if (!relationship) return;
-    ctx.save();
-    ctx.fillStyle = "rgba(8, 10, 9, 0.52)";
-    ctx.fillRect(16, 16, 190, 30);
-    ctx.fillStyle = "#f7f4eb";
-    ctx.font = "700 13px system-ui";
-    ctx.fillText(labelRelationship(relationship.type), 28, 36);
-    ctx.restore();
+  function getRimResizeHandle(box: VisionBox) {
+    return {
+      x: box.x + box.width,
+      y: box.y + box.height,
+    };
   }
 
   function drawDebug(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
-    ctx.fillRect(16, 16, 320, detectorError ? 166 : 146);
+    ctx.fillRect(16, 16, 360, detectorError ? 236 : 216);
     ctx.fillStyle = "#ffffff";
     ctx.font = "600 13px system-ui";
     ctx.fillText(`DEBUG VIEW`, 28, 38);
-    ctx.fillText(`Objects: ${objectsRef.current.length}`, 28, 60);
+    ctx.fillText(`Objects: ${getDrawableObjects().length}  Raw detections: ${rawDetectionCountRef.current}`, 28, 60);
     ctx.fillText(`Frame: ${frameIdRef.current}`, 28, 82);
     ctx.fillText(`Model: ${modelState}`, 28, 104);
     ctx.fillText(`Detector: ${detectorUrl.replace("http://", "")}`, 28, 126);
     ctx.fillText(`Cadence: ${Math.round(lastCadenceMs)}ms  Latency: ${Math.round(lastInferenceMs)}ms`, 28, 148);
-    if (detectorError) ctx.fillText(`Error: ${detectorError.slice(0, 34)}`, 28, 170);
+    ctx.fillText(`Misses: ${detectorMissesRef.current}  Dropped: ${droppedFramesRef.current}`, 28, 170);
+    ctx.fillText(`Classes: ${modelClassesRef.current || "none"}`, 28, 192);
+    ctx.fillText(`Multi-player: ${multiPlayer ? "on" : "off"}`, 28, 214);
+    if (detectorError) ctx.fillText(`Error: ${detectorError.slice(0, 38)}`, 28, 236);
     ctx.restore();
   }
 
@@ -468,11 +676,11 @@ export function AxisVisionObjectLock({
   const status = useMemo(() => {
     const lockedPlayers = players.filter((object) => object.state === "locked" || object.state === "manual_override").length;
     return {
-      ball: ball?.state === "lost" ? "lost" : ball ? "locked" : "searching",
-      players: `${lockedPlayers || players.length} locked`,
-      rim: rim ? "locked" : "searching",
+      ball: ball?.state === "lost" ? "searching" : ball ? "detected" : "searching",
+      players: lockedPlayers || players.length ? "locked" : "searching",
+      rim: rimLocked && rimBox ? "locked" : rimBox ? "placed" : "manual",
     };
-  }, [ball, players, rim]);
+  }, [ball, players, rimBox, rimLocked]);
 
   return (
     <main className="axis-object-lock">
@@ -483,6 +691,7 @@ export function AxisVisionObjectLock({
           className="axis-object-lock__canvas"
           onPointerDown={handleCanvasPointerDown}
           onPointerLeave={handleCanvasPointerUp}
+          onPointerMove={handleCanvasPointerMove}
           onPointerUp={handleCanvasPointerUp}
         />
 
@@ -509,12 +718,38 @@ export function AxisVisionObjectLock({
               Debug
             </button>
           </div>
-          <button data-active={rimSetup} type="button" onClick={() => setRimSetup((current) => !current)}>
+          <button data-active={rimSetup !== "idle"} type="button" onClick={startRimSetup}>
             Set Rim
           </button>
         </header>
 
-        {rimSetup && <div className="axis-object-lock__hint">Tap the rim to lock the anchor.</div>}
+        <div className="axis-object-lock__flow" aria-label="Axis Vision setup flow">
+          <span data-active={cameraState === "live"}>1 Start camera</span>
+          <span data-active={players.length > 0}>2 Lock player</span>
+          <span data-active={Boolean(rim)}>3 Set rim</span>
+          <span data-active={Boolean(ball)}>4 Ball</span>
+        </div>
+
+        {rimSetup !== "idle" && (
+          <div className="axis-object-lock__hint">
+            <span>{rimSetup === "placing" ? "Tap where the rim is." : "Drag or resize the rim box."}</span>
+            {rimSetup === "adjusting" && (
+              <div>
+                <button type="button" onClick={lockRim}>Lock Rim</button>
+                <button type="button" onClick={cancelRimSetup}>Cancel</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {overlayMode === "debug" && (
+          <div className="axis-object-lock__debug-controls">
+            <label>
+              <input checked={multiPlayer} onChange={(event) => setMultiPlayer(event.target.checked)} type="checkbox" />
+              Multi-player
+            </label>
+          </div>
+        )}
 
         <footer className="axis-object-lock__bottom">
           <div><span>Player</span><strong>{status.players}</strong></div>
@@ -527,20 +762,11 @@ export function AxisVisionObjectLock({
           )}
         </footer>
 
-        {error && <p className="axis-object-lock__error">{error}</p>}
+        {(overlayMode === "debug" || detectorMissesRef.current >= 3) && error && <p className="axis-object-lock__error">{error}</p>}
       </section>
       <style jsx>{styles}</style>
     </main>
   );
-}
-
-function labelRelationship(type: string) {
-  if (type === "possible_possession") return "Possession possible";
-  if (type === "shot_window") return "Shot window";
-  if (type === "drive_window") return "Drive window";
-  if (type === "finish_window") return "Finish window";
-  if (type === "contested_window") return "Contested";
-  return "Ball lost";
 }
 
 const styles = `
@@ -615,11 +841,13 @@ const styles = `
   .axis-object-lock__top,
   .axis-object-lock__bottom,
   .axis-object-lock__hint,
-  .axis-object-lock__error {
+  .axis-object-lock__error,
+  .axis-object-lock__flow,
+  .axis-object-lock__debug-controls {
     backdrop-filter: blur(18px);
     background: rgba(5, 7, 6, 0.48);
     border: 1px solid rgba(247, 244, 235, 0.12);
-    border-radius: 1.2rem;
+    border-radius: 0.5rem;
     position: absolute;
     z-index: 4;
   }
@@ -665,11 +893,69 @@ const styles = `
   }
 
   .axis-object-lock__hint {
+    display: grid;
+    gap: 0.55rem;
     left: 50%;
+    min-width: min(22rem, calc(100vw - 2rem));
     padding: 0.7rem 0.9rem;
-    top: 5.6rem;
+    text-align: center;
+    top: 8.9rem;
     transform: translateX(-50%);
-    white-space: nowrap;
+  }
+
+  .axis-object-lock__hint div {
+    display: flex;
+    gap: 0.45rem;
+    justify-content: center;
+  }
+
+  .axis-object-lock__hint button {
+    min-height: 2.2rem;
+  }
+
+  .axis-object-lock__flow {
+    display: flex;
+    gap: 0.4rem;
+    left: 0.75rem;
+    overflow-x: auto;
+    padding: 0.45rem;
+    right: 0.75rem;
+    top: 5.35rem;
+  }
+
+  .axis-object-lock__flow span {
+    background: rgba(247, 244, 235, 0.08);
+    border: 1px solid rgba(247, 244, 235, 0.1);
+    border-radius: 999px;
+    color: rgba(247, 244, 235, 0.62);
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 0.38rem 0.6rem;
+  }
+
+  .axis-object-lock__flow span[data-active="true"] {
+    background: rgba(216, 173, 82, 0.88);
+    color: #151008;
+  }
+
+  .axis-object-lock__debug-controls {
+    bottom: 6rem;
+    color: #f7f4eb;
+    font-size: 0.8rem;
+    font-weight: 800;
+    padding: 0.55rem 0.7rem;
+    right: 0.75rem;
+  }
+
+  .axis-object-lock__debug-controls label {
+    align-items: center;
+    display: flex;
+    gap: 0.45rem;
+  }
+
+  .axis-object-lock__debug-controls input {
+    accent-color: #d8ad52;
   }
 
   .axis-object-lock__bottom {
