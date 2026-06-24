@@ -1,31 +1,62 @@
 import Link from "next/link";
 
-export default function AxisMeasureHome() {
+import { getAxisSurface } from "../lib/axis/surface";
+
+const surfaceCopy = {
+  axis: {
+    actions: [
+      { href: "/axis", label: "Start Session" },
+      { href: "/vision", label: "Start Vision" },
+    ],
+    domain: "ontheaxis.com",
+    strip: ["Start Session", "Capture", "Saved Memory"],
+    subtitle: "Start sessions, capture moments, and keep basketball memory ready for the next run.",
+    title: "Axis",
+  },
+  measure: {
+    actions: [
+      { href: "/vision", label: "Open Object Lock" },
+      { href: "/calibrate", label: "Calibrate Rim" },
+    ],
+    domain: "axismeasure.com",
+    strip: ["Player", "Rim", "Ball"],
+    subtitle: "Player detection. Rim lock. Ball detection.",
+    title: "Axis Measure",
+  },
+};
+
+export default function Home() {
+  const surface = getAxisSurface();
+  const copy = surfaceCopy[surface];
+
   return (
-    <main className="axis-measure-home" aria-labelledby="axis-measure-title">
-      <section className="axis-measure-home__hero">
-        <p>axismeasure.com</p>
-        <h1 id="axis-measure-title">Axis Measure</h1>
-        <strong>Player detection. Rim lock. Ball detection.</strong>
-        <div className="axis-measure-home__actions">
-          <Link href="/vision">Open Vision</Link>
-          <Link href="/calibrate">Calibrate Rim</Link>
+    <main className="axis-surface-home" aria-labelledby="axis-surface-title">
+      <section className="axis-surface-home__hero">
+        <p>{copy.domain}</p>
+        <h1 id="axis-surface-title">{copy.title}</h1>
+        <strong>{copy.subtitle}</strong>
+        <div className="axis-surface-home__actions">
+          {copy.actions.map((action) => (
+            <Link href={action.href} key={action.href}>
+              {action.label}
+            </Link>
+          ))}
         </div>
       </section>
 
-      <section className="axis-measure-home__strip" aria-label="Measurement scope">
-        <span>Player</span>
-        <span>Rim</span>
-        <span>Ball</span>
+      <section className="axis-surface-home__strip" aria-label={surface === "measure" ? "Measurement scope" : "Axis product loop"}>
+        {copy.strip.map((item) => (
+          <span key={item}>{item}</span>
+        ))}
       </section>
 
       <style>{`
-        .axis-measure-home,
-        .axis-measure-home * {
+        .axis-surface-home,
+        .axis-surface-home * {
           box-sizing: border-box;
         }
 
-        .axis-measure-home {
+        .axis-surface-home {
           align-items: stretch;
           background: #050706;
           color: #f7f4eb;
@@ -35,7 +66,7 @@ export default function AxisMeasureHome() {
           padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
         }
 
-        .axis-measure-home__hero {
+        .axis-surface-home__hero {
           align-content: center;
           display: grid;
           gap: 1rem;
@@ -43,7 +74,7 @@ export default function AxisMeasureHome() {
           min-height: 78dvh;
         }
 
-        .axis-measure-home__hero p {
+        .axis-surface-home__hero p {
           color: rgba(247, 244, 235, 0.58);
           font-size: 0.78rem;
           font-weight: 850;
@@ -52,7 +83,7 @@ export default function AxisMeasureHome() {
           text-transform: uppercase;
         }
 
-        .axis-measure-home h1 {
+        .axis-surface-home h1 {
           font-size: clamp(3.4rem, 18vw, 8.5rem);
           letter-spacing: -0.08em;
           line-height: 0.86;
@@ -60,20 +91,20 @@ export default function AxisMeasureHome() {
           max-width: 7ch;
         }
 
-        .axis-measure-home__hero strong {
+        .axis-surface-home__hero strong {
           color: rgba(247, 244, 235, 0.76);
           font-size: clamp(1.1rem, 4vw, 1.8rem);
           line-height: 1.2;
           max-width: 18rem;
         }
 
-        .axis-measure-home__actions {
+        .axis-surface-home__actions {
           display: flex;
           flex-wrap: wrap;
           gap: 0.7rem;
         }
 
-        .axis-measure-home__actions a {
+        .axis-surface-home__actions a {
           align-items: center;
           background: #f7f4eb;
           border: 1px solid rgba(247, 244, 235, 0.18);
@@ -87,12 +118,12 @@ export default function AxisMeasureHome() {
           text-decoration: none;
         }
 
-        .axis-measure-home__actions a:last-child {
+        .axis-surface-home__actions a:last-child {
           background: rgba(247, 244, 235, 0.08);
           color: #f7f4eb;
         }
 
-        .axis-measure-home__strip {
+        .axis-surface-home__strip {
           align-self: end;
           border: 1px solid rgba(247, 244, 235, 0.12);
           border-radius: 1.2rem;
@@ -102,7 +133,7 @@ export default function AxisMeasureHome() {
           padding: 0.6rem;
         }
 
-        .axis-measure-home__strip span {
+        .axis-surface-home__strip span {
           background: rgba(247, 244, 235, 0.08);
           border-radius: 999px;
           color: rgba(247, 244, 235, 0.82);
@@ -114,11 +145,11 @@ export default function AxisMeasureHome() {
         }
 
         @media (min-width: 760px) {
-          .axis-measure-home {
+          .axis-surface-home {
             padding: 2rem;
           }
 
-          .axis-measure-home__hero {
+          .axis-surface-home__hero {
             min-height: 72dvh;
           }
         }

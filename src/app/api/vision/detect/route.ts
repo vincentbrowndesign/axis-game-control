@@ -109,7 +109,7 @@ function normalizeImageDataUrl(body: DetectBody | null) {
 function getDetectorError(result: DetectorResult | null, status: number) {
   const error = getString(result?.error);
   if (error) return error;
-  return `Axis Measure detector returned ${status}.`;
+  return `Vision detector returned ${status}.`;
 }
 
 function normalizeDetections(result: DetectorResult): AxisLiveDetection[] {
