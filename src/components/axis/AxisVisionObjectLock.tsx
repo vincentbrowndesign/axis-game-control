@@ -18,7 +18,19 @@ type OverlayMode = "product" | "debug";
 const maxPlayers = 3;
 const inferenceIntervalMs = 700;
 
-export function AxisVisionObjectLock() {
+type AxisVisionObjectLockProps = {
+  detectEndpoint?: string;
+  initialRimSetup?: boolean;
+  productName?: string;
+  route?: string;
+};
+
+export function AxisVisionObjectLock({
+  detectEndpoint = "/api/axis/vision/detect",
+  initialRimSetup = false,
+  productName = "Axis Vision",
+  route = "/axis/vision",
+}: AxisVisionObjectLockProps = {}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -38,7 +50,7 @@ export function AxisVisionObjectLock() {
   const [objects, setObjects] = useState<VisionObject[]>([]);
   const [frameState, setFrameState] = useState<VisionFrameState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [rimSetup, setRimSetup] = useState(false);
+  const [rimSetup, setRimSetup] = useState(initialRimSetup);
   const [rimBox, setRimBox] = useState<VisionBox | null>(null);
   const [playerNames, setPlayerNames] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -53,9 +65,9 @@ export function AxisVisionObjectLock() {
   const relationships = frameState?.relationships ?? [];
 
   useEffect(() => {
-    recordAxisVisionObjectEvent("vision_opened", { route: "/axis/vision" });
+    recordAxisVisionObjectEvent("vision_opened", { productName, route });
     return () => stopVision();
-  }, []);
+  }, [productName, route]);
 
   useEffect(() => {
     draw();
@@ -181,7 +193,7 @@ export function AxisVisionObjectLock() {
     timestamp: number,
   ): Promise<{ detections: AxisLiveDetection[]; detectorUrl?: string }> {
     const imageDataUrl = captureVideoFrame(video);
-    const response = await fetch("/api/axis/vision/detect", {
+    const response = await fetch(detectEndpoint, {
       body: JSON.stringify({ frameId, imageDataUrl, timestamp }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -476,7 +488,7 @@ export function AxisVisionObjectLock() {
 
         {cameraState !== "live" && (
           <div className="axis-object-lock__empty">
-            <strong>Axis Vision</strong>
+            <strong>{productName}</strong>
             <p>Find the player. Find the rim. Find the ball.</p>
             <button type="button" onClick={() => void startVision()}>
               Start Vision
@@ -486,7 +498,7 @@ export function AxisVisionObjectLock() {
 
         <header className="axis-object-lock__top">
           <div>
-            <strong>Axis Vision</strong>
+            <strong>{productName}</strong>
             <span>{cameraState === "live" ? "Live" : cameraState}</span>
           </div>
           <div className="axis-object-lock__toggle" aria-label="Overlay mode">
