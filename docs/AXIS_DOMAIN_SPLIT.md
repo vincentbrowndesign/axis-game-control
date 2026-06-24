@@ -5,11 +5,21 @@ Status: active deployment boundary
 ## Domains
 
 ```text
-ontheaxis.com -> NEXT_PUBLIC_AXIS_SURFACE=axis
-axismeasure.com -> NEXT_PUBLIC_AXIS_SURFACE=measure
+axis-game-control -> NEXT_PUBLIC_AXIS_SURFACE=auto
+ontheaxis.com -> auto resolves to axis
+axismeasure.com -> auto resolves to measure
 ```
 
-If `NEXT_PUBLIC_AXIS_SURFACE` is missing, the repo defaults to `axis` so the public Axis product does not accidentally show Axis Measure branding.
+`NEXT_PUBLIC_AXIS_SURFACE=auto` lets one Vercel project serve both domains from the request host.
+
+Explicit overrides are still supported:
+
+```text
+NEXT_PUBLIC_AXIS_SURFACE=axis
+NEXT_PUBLIC_AXIS_SURFACE=measure
+```
+
+If `NEXT_PUBLIC_AXIS_SURFACE` is missing, the repo behaves like `auto`. Unknown hosts resolve to `axis` so the public Axis product does not accidentally show Axis Measure branding.
 
 ## Product Roles
 

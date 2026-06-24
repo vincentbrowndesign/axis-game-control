@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 
 import { getAxisSurface } from "../lib/axis/surface";
 
@@ -25,8 +26,9 @@ const surfaceCopy = {
   },
 };
 
-export default function Home() {
-  const surface = getAxisSurface();
+export default async function Home() {
+  const requestHeaders = await headers();
+  const surface = getAxisSurface(requestHeaders.get("x-forwarded-host") || requestHeaders.get("host"));
   const copy = surfaceCopy[surface];
 
   return (
