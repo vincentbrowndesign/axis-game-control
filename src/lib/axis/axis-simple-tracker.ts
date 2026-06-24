@@ -43,6 +43,8 @@ export function createAxisTracker(options: TrackerOptions = {}) {
 
     return {
       bbox: detection.bbox,
+      classId: detection.classId,
+      className: detection.className,
       firstSeenAt: timestamp,
       kind: detection.kind,
       label: detection.label,
@@ -52,6 +54,7 @@ export function createAxisTracker(options: TrackerOptions = {}) {
       seenFrames: 1,
       status: "active",
       trackId: `${prefix}${counters[detection.kind]}`,
+      mappedType: detection.mappedType,
     };
   }
 
@@ -90,8 +93,11 @@ export function createAxisTracker(options: TrackerOptions = {}) {
         if (bestTrackIndex >= 0 && bestIou >= thresholdFor(detection.kind)) {
           const track = tracks[bestTrackIndex];
           track.bbox = detection.bbox;
+          track.classId = detection.classId;
+          track.className = detection.className;
           track.label = detection.label;
           track.lastSeenAt = timestamp;
+          track.mappedType = detection.mappedType;
           track.missedFrames = 0;
           track.score = detection.score;
           track.seenFrames += 1;

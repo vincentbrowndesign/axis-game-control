@@ -33,6 +33,8 @@ export type VisionObject = {
   selected: boolean;
   manuallyLocked: boolean;
   lastSeenAt: number;
+  classId?: number;
+  className?: string;
 };
 
 export type VisionTrack = {

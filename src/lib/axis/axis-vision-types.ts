@@ -6,6 +6,9 @@ export type AxisLiveDetection = {
   score: number;
   bbox: [number, number, number, number];
   kind: AxisDetectionKind;
+  classId?: number;
+  className?: string;
+  mappedType?: "player" | "ball";
 };
 
 export type AxisVisionTrack = {
@@ -19,6 +22,9 @@ export type AxisVisionTrack = {
   seenFrames: number;
   missedFrames: number;
   status: "active" | "lost";
+  classId?: number;
+  className?: string;
+  mappedType?: "player" | "ball";
 };
 
 export type AxisVisionFrame = {

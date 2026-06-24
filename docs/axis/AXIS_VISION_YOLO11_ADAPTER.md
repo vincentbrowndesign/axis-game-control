@@ -14,7 +14,21 @@ Find the ball.
 
 The adapter lets `/axis/vision` send camera frames to `/api/axis/vision/detect`.
 
-The API route saves a temporary image, runs `scripts/axis_vision_yolo11_detect.py`, parses JSON output, and returns normalized Axis detections that the existing Vision tracker can use.
+The Next.js API route calls the local Axis Vision detector service at:
+
+```text
+http://127.0.0.1:8011/detect
+```
+
+Set `AXIS_VISION_DETECTOR_URL` to use a different detector URL.
+
+The detector service lives at:
+
+```text
+services/axis-vision-detector/app.py
+```
+
+It loads YOLO11n, runs only COCO class `0` and class `32`, and returns normalized JSON detections that the existing Vision tracker can use.
 
 Product mode stays clean. Debug details stay behind the Debug toggle.
 
@@ -57,6 +71,36 @@ YOLO11 does not detect the rim yet. The user locks the rim in `/axis/vision`, an
 
 ```bash
 python -m pip install -U ultralytics
+```
+
+```bash
+python -m pip install fastapi uvicorn pillow
+```
+
+## Run Locally
+
+Terminal 1:
+
+```bash
+python -m uvicorn --app-dir services/axis-vision-detector app:app --host 127.0.0.1 --port 8011
+```
+
+Terminal 2:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000/axis/vision
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8011/health
 ```
 
 ## Test Commands

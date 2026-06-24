@@ -16,7 +16,7 @@ type ModelState = "idle" | "loading" | "ready" | "error";
 type OverlayMode = "product" | "debug";
 
 const maxPlayers = 3;
-const inferenceIntervalMs = 650;
+const inferenceIntervalMs = 700;
 
 export function AxisVisionObjectLock() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -42,6 +42,10 @@ export function AxisVisionObjectLock() {
   const [rimBox, setRimBox] = useState<VisionBox | null>(null);
   const [playerNames, setPlayerNames] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [detectorUrl, setDetectorUrl] = useState("http://127.0.0.1:8011");
+  const [detectorError, setDetectorError] = useState("");
+  const [lastInferenceMs, setLastInferenceMs] = useState(0);
+  const [lastCadenceMs, setLastCadenceMs] = useState(inferenceIntervalMs);
 
   const players = objects.filter((object) => object.type === "player");
   const rim = objects.find((object) => object.type === "rim");
@@ -113,14 +117,17 @@ export function AxisVisionObjectLock() {
       return;
     }
 
+    const cadenceMs = lastInferenceAtRef.current ? now - lastInferenceAtRef.current : inferenceIntervalMs;
     lastInferenceAtRef.current = now;
-    void runInference(video, now);
+    void runInference(video, now, cadenceMs);
   }
 
-  async function runInference(video: HTMLVideoElement, timestamp: number) {
+  async function runInference(video: HTMLVideoElement, timestamp: number, cadenceMs: number) {
     inferenceRunningRef.current = true;
+    const startedAt = performance.now();
     try {
-      const detections = await detectWithYolo(video, frameIdRef.current + 1, timestamp);
+      const result = await detectWithYolo(video, frameIdRef.current + 1, timestamp);
+      const detections = result.detections;
       const tracks = trackerRef.current.update(detections, timestamp);
       const nextObjects = buildObjectsFromTracks(tracks, timestamp);
       const relationships = calculateVisionRelationships(nextObjects, timestamp);
@@ -138,6 +145,10 @@ export function AxisVisionObjectLock() {
       setFrameState(nextFrame);
       setModelState("ready");
       setError("");
+      setDetectorError("");
+      setDetectorUrl(result.detectorUrl || "http://127.0.0.1:8011");
+      setLastCadenceMs(cadenceMs);
+      setLastInferenceMs(performance.now() - startedAt);
 
       nextObjects.forEach((object) => {
         if (object.state === "locked") {
@@ -153,24 +164,34 @@ export function AxisVisionObjectLock() {
         if (relationship.type === "drive_window") recordAxisVisionObjectEvent("drive_window_detected", relationship);
         if (relationship.type === "finish_window") recordAxisVisionObjectEvent("finish_window_detected", relationship);
       });
-    } catch {
+    } catch (caughtError) {
+      const reason = caughtError instanceof Error ? caughtError.message : "Detector service unavailable.";
       setModelState("error");
-      setError("Detector route unavailable. Camera stays usable.");
+      setDetectorError(reason);
+      setError("Detector service unavailable. Camera stays usable.");
+      setLastInferenceMs(performance.now() - startedAt);
     } finally {
       inferenceRunningRef.current = false;
     }
   }
 
-  async function detectWithYolo(video: HTMLVideoElement, frameId: number, timestamp: number): Promise<AxisLiveDetection[]> {
+  async function detectWithYolo(
+    video: HTMLVideoElement,
+    frameId: number,
+    timestamp: number,
+  ): Promise<{ detections: AxisLiveDetection[]; detectorUrl?: string }> {
     const imageDataUrl = captureVideoFrame(video);
     const response = await fetch("/api/axis/vision/detect", {
       body: JSON.stringify({ frameId, imageDataUrl, timestamp }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const result = (await response.json().catch(() => null)) as { detections?: AxisLiveDetection[]; error?: string; ok?: boolean } | null;
+    const result = (await response.json().catch(() => null)) as { detections?: AxisLiveDetection[]; detectorUrl?: string; error?: string; ok?: boolean } | null;
     if (!response.ok || !result?.ok) throw new Error(result?.error || "Detection failed.");
-    return Array.isArray(result.detections) ? result.detections : [];
+    return {
+      detections: Array.isArray(result.detections) ? result.detections : [],
+      detectorUrl: result.detectorUrl,
+    };
   }
 
   function captureVideoFrame(video: HTMLVideoElement) {
@@ -201,6 +222,8 @@ export function AxisVisionObjectLock() {
       const fallbackLabel = `P${index + 1}`;
       return {
         bbox: smoothBox(previousObject?.bbox, trackToBox(track), 0.34),
+        classId: track.classId,
+        className: track.className,
         confidence: track.score,
         id,
         label: playerNames[id] || fallbackLabel,
@@ -216,6 +239,8 @@ export function AxisVisionObjectLock() {
     const nextBall: VisionObject | null = ballTrack
       ? {
           bbox: smoothBox(previous.find((object) => object.type === "ball")?.bbox, trackToBox(ballTrack), 0.48),
+          classId: ballTrack.classId,
+          className: ballTrack.className,
           confidence: ballTrack.score,
           id: "ball-1",
           label: "Ball",
@@ -353,7 +378,8 @@ export function AxisVisionObjectLock() {
     const color = object.type === "player" ? "#f7f4eb" : object.type === "rim" ? "#d8ad52" : "#c8f1dd";
     const alpha = object.state === "lost" ? Math.max(0.18, object.confidence) : 0.94;
     const labelVisible = object.type !== "ball" || overlayMode === "debug";
-    const label = overlayMode === "debug" ? `${object.label} ${Math.round(object.confidence * 100)}% ${object.trackId}` : object.label;
+    const debugClass = object.classId !== undefined ? ` c${object.classId}` : "";
+    const label = overlayMode === "debug" ? `${object.label}${debugClass} ${Math.round(object.confidence * 100)}% ${object.trackId}` : object.label;
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -409,13 +435,16 @@ export function AxisVisionObjectLock() {
   function drawDebug(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
-    ctx.fillRect(16, 16, 260, 104);
+    ctx.fillRect(16, 16, 320, detectorError ? 166 : 146);
     ctx.fillStyle = "#ffffff";
     ctx.font = "600 13px system-ui";
     ctx.fillText(`DEBUG VIEW`, 28, 38);
     ctx.fillText(`Objects: ${objectsRef.current.length}`, 28, 60);
     ctx.fillText(`Frame: ${frameIdRef.current}`, 28, 82);
     ctx.fillText(`Model: ${modelState}`, 28, 104);
+    ctx.fillText(`Detector: ${detectorUrl.replace("http://", "")}`, 28, 126);
+    ctx.fillText(`Cadence: ${Math.round(lastCadenceMs)}ms  Latency: ${Math.round(lastInferenceMs)}ms`, 28, 148);
+    if (detectorError) ctx.fillText(`Error: ${detectorError.slice(0, 34)}`, 28, 170);
     ctx.restore();
   }
 

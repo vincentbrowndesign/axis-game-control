@@ -51,3 +51,5 @@ next-env.d.ts
 .trigger-dev.out.log
 .tmp-*
 axis-*.png
+*.pt
+Ultralytics/
