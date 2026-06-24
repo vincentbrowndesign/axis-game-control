@@ -12,6 +12,7 @@ const localEvents: NapoleonEvent[] = [];
 export async function recordNapoleonEvent(
   eventType: NapoleonEventType,
   payload: Record<string, unknown> = {},
+  options: { persist?: boolean } = {},
 ) {
   const event: NapoleonEvent = {
     id: createNapoleonId("event"),
@@ -21,6 +22,8 @@ export async function recordNapoleonEvent(
   };
 
   localEvents.push(event);
+
+  if (options.persist === false) return event;
 
   try {
     await fetch("/api/napoleon/events", {

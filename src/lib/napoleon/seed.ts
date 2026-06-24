@@ -69,6 +69,7 @@ export const napoleonGenesisNode: NapoleonNode = {
   subtitle: "Basketball reality became cash flow.",
   proof: "Trophy Champs -> private training -> Bridge validation at $1K/month",
   cta: "View Genesis",
+  visibility: "public",
 };
 
 export const napoleonSeedLoops: NapoleonCashLoop[] = [
@@ -89,6 +90,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Capture the next session as proof for the memory product",
     proofStatus: "Historical proof",
     createdAt: "2026-06-23T11:50:00.000Z",
+    visibility: "founder",
   }),
   createSeedLoop({
     id: "loop-bridge-validation",
@@ -107,6 +109,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Document what made the $1K/month validation work",
     proofStatus: "Historical proof at $1K/month",
     createdAt: "2026-06-23T11:55:00.000Z",
+    visibility: "founder",
   }),
   {
     id: "loop-player-memory-pass",
@@ -125,6 +128,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Build checkout path and first parent message",
     proofStatus: "Bridge validation supports the direction",
     createdAt: "2026-06-23T12:00:00.000Z",
+    visibility: "founder",
     offerBuilder: playerMemoryPassOffer,
     checkoutWire: playerMemoryPassCheckoutWire,
     fulfillmentWire: playerMemoryPassFulfillmentWire,
@@ -148,6 +152,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Package one report from a real practice",
     proofStatus: "Needs one paid test",
     createdAt: "2026-06-23T12:05:00.000Z",
+    visibility: "founder",
   },
   {
     id: "loop-game-report",
@@ -166,6 +171,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Use one finished game as the sample",
     proofStatus: "Awaiting cash wire",
     createdAt: "2026-06-23T12:10:00.000Z",
+    visibility: "founder",
   },
   {
     id: "loop-napoleon-install",
@@ -184,6 +190,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Create the first query-first walkthrough",
     proofStatus: "Historical proof only",
     createdAt: "2026-06-23T12:15:00.000Z",
+    visibility: "founder",
   },
   createSeedLoop({
     id: "loop-napoleon-operator-referral",
@@ -202,6 +209,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Define the first referral target and commission agreement",
     proofStatus: "Needs permissioned tracking",
     createdAt: "2026-06-23T12:18:00.000Z",
+    visibility: "founder",
   }),
   createSeedLoop({
     id: "loop-axis-napoleon-licensing",
@@ -220,6 +228,7 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Identify what part of the install is truly repeatable",
     proofStatus: "Future only",
     createdAt: "2026-06-23T12:19:00.000Z",
+    visibility: "founder",
   }),
 ];
 
@@ -262,6 +271,7 @@ export const napoleonSeedProof: NapoleonProof[] = [
     type: "Historical proof",
     text: "Bridge validation at $1K/month.",
     createdAt: "2026-06-23T12:20:00.000Z",
+    visibility: "public",
   },
 ];
 

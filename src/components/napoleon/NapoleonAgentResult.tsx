@@ -9,10 +9,11 @@ import {
 type Props = {
   busy: boolean;
   result: NapoleonAgentResultType | null;
+  ctaLabel?: string;
   onBuildLoop: () => void;
 };
 
-export function NapoleonAgentResult({ busy, onBuildLoop, result }: Props) {
+export function NapoleonAgentResult({ busy, ctaLabel = "Build This Loop", onBuildLoop, result }: Props) {
   if (busy) {
     return (
       <section className="napoleon-agent-result" aria-live="polite">
@@ -83,7 +84,7 @@ export function NapoleonAgentResult({ busy, onBuildLoop, result }: Props) {
       </article>
 
       <button className="napoleon-primary" type="button" onClick={onBuildLoop}>
-        Build This Loop
+        {ctaLabel}
       </button>
     </section>
   );

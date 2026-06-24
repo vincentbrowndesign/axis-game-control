@@ -1,5 +1,5 @@
 import { NapoleonShell } from "../components/napoleon/NapoleonShell";
 
 export default function Home() {
-  return <NapoleonShell />;
+  return <NapoleonShell mode="public" />;
 }

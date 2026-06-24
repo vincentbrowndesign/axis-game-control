@@ -19,6 +19,7 @@ import type {
   NapoleonCashLoop,
   NapoleonConnection,
   NapoleonLoopArtifact,
+  NapoleonMode,
   NapoleonProof,
 } from "../../lib/napoleon/types";
 import { NapoleonBottomNav, type NapoleonView } from "./NapoleonBottomNav";
@@ -28,9 +29,14 @@ import { NapoleonHome } from "./NapoleonHome";
 import { NapoleonLoopCard } from "./NapoleonLoopCard";
 import { NapoleonPlayerMemoryPassBuilder } from "./NapoleonPlayerMemoryPassBuilder";
 import { NapoleonProofFeed } from "./NapoleonProofFeed";
+import { NapoleonPublicEntry } from "./NapoleonPublicEntry";
 import { NapoleonQueryToolbar } from "./NapoleonQueryToolbar";
 
-export function NapoleonShell() {
+type Props = {
+  mode?: NapoleonMode;
+};
+
+export function NapoleonShell({ mode = "founder" }: Props) {
   const [activeView, setActiveView] = useState<NapoleonView>("home");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -43,8 +49,14 @@ export function NapoleonShell() {
   const selectedLoop = loops.find((loop) => loop.id === selectedLoopId) ?? null;
 
   useEffect(() => {
+    if (mode === "public") {
+      void recordNapoleonEvent("public_entry_viewed", { route: "/" }, { persist: false });
+      return;
+    }
+
+    void recordNapoleonEvent("founder_mode_opened", { route: "/axis/napoleon" });
     void recordNapoleonEvent("napoleon_opened", { route: "/axis/napoleon" });
-  }, []);
+  }, [mode]);
 
   async function runQuery(input: string) {
     const trimmed = input.trim();
@@ -190,20 +202,30 @@ export function NapoleonShell() {
   }
 
   return (
-    <main className="napoleon-shell">
+    <main className="napoleon-shell" data-mode={mode}>
       <header className="napoleon-header">
         <div>
           <strong>NAPOLEON</strong>
-          <span>Powered by Axis</span>
+          <span>{mode === "founder" ? "Founder Mode" : "Powered by Axis"}</span>
         </div>
         <div className="napoleon-header__icons" aria-label="Napoleon controls">
-          <button type="button" aria-label="Notifications">!</button>
-          <button type="button" aria-label="Settings">Settings</button>
+          {mode === "public" ? (
+            <button type="button" onClick={() => void recordNapoleonEvent("request_access_clicked", { label: "Header CTA" }, { persist: false })}>
+              Request Access
+            </button>
+          ) : (
+            <>
+              <button type="button" aria-label="Notifications">!</button>
+              <button type="button" aria-label="Settings">Settings</button>
+            </>
+          )}
         </div>
       </header>
 
       <section className="napoleon-body" aria-live="polite">
-        {selectedLoop?.id === "loop-player-memory-pass" && (
+        {mode === "public" && <NapoleonPublicEntry />}
+
+        {mode === "founder" && selectedLoop?.id === "loop-player-memory-pass" && (
           <>
             <NapoleonQueryToolbar
               busy={busy}
@@ -223,7 +245,7 @@ export function NapoleonShell() {
           </>
         )}
 
-        {!selectedLoop && activeView === "home" && (
+        {mode === "founder" && !selectedLoop && activeView === "home" && (
           <NapoleonHome
             busy={busy}
             genesisNode={napoleonGenesisNode}
@@ -242,7 +264,7 @@ export function NapoleonShell() {
           />
         )}
 
-        {!selectedLoop && activeView === "loops" && (
+        {mode === "founder" && !selectedLoop && activeView === "loops" && (
           <section className="napoleon-view">
             <div className="napoleon-section-heading">
               <span>Loops</span>
@@ -265,7 +287,7 @@ export function NapoleonShell() {
           </section>
         )}
 
-        {!selectedLoop && activeView === "proof" && (
+        {mode === "founder" && !selectedLoop && activeView === "proof" && (
           <section className="napoleon-view">
             <NapoleonQueryToolbar
               busy={busy}
@@ -279,7 +301,7 @@ export function NapoleonShell() {
           </section>
         )}
 
-        {!selectedLoop && activeView === "empire" && (
+        {mode === "founder" && !selectedLoop && activeView === "empire" && (
           <section className="napoleon-view">
             <NapoleonQueryToolbar
               busy={busy}
@@ -293,7 +315,7 @@ export function NapoleonShell() {
           </section>
         )}
 
-        {!selectedLoop && activeView === "profile" && (
+        {mode === "founder" && !selectedLoop && activeView === "profile" && (
           <section className="napoleon-view">
             <div className="napoleon-section-heading">
               <span>Profile</span>
@@ -308,7 +330,7 @@ export function NapoleonShell() {
         {error && <p className="napoleon-error">{error}</p>}
       </section>
 
-      <NapoleonBottomNav active={activeView} onChange={setActiveView} />
+      {mode === "founder" && <NapoleonBottomNav active={activeView} onChange={setActiveView} />}
 
       <style jsx global>{napoleonStyles}</style>
     </main>
@@ -329,6 +351,10 @@ const napoleonStyles = `
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     min-height: 100dvh;
     overflow-x: hidden;
+  }
+
+  .napoleon-shell[data-mode="public"] .napoleon-body {
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
   }
 
   .napoleon-header {
@@ -398,6 +424,34 @@ const napoleonStyles = `
     padding: 1.45rem 0 0.25rem;
   }
 
+  .napoleon-public-hero {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1.8rem 0 0.35rem;
+  }
+
+  .napoleon-public-hero p {
+    color: #8b7b62;
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.12em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+
+  .napoleon-public-hero h1 {
+    font-size: clamp(2.75rem, 14vw, 5.8rem);
+    letter-spacing: -0.08em;
+    line-height: 0.86;
+    margin: 0;
+  }
+
+  .napoleon-public-hero span {
+    color: #5f5a50;
+    font-size: 1.04rem;
+    line-height: 1.45;
+  }
+
   .napoleon-hero h1,
   .napoleon-section-heading h1,
   .napoleon-section-heading h2 {
@@ -427,6 +481,9 @@ const napoleonStyles = `
   .napoleon-cash-plan,
   .napoleon-cash-systems,
   .napoleon-cash-system-card,
+  .napoleon-public-ctas,
+  .napoleon-public-layers,
+  .napoleon-public-layer-grid article,
   .napoleon-connection-card,
   .napoleon-view {
     background: rgba(255, 255, 255, 0.82);
@@ -508,6 +565,7 @@ const napoleonStyles = `
   .napoleon-loop-list,
   .napoleon-proof-list,
   .napoleon-cash-system-list,
+  .napoleon-public-layer-grid,
   .napoleon-connection-list {
     display: grid;
     gap: 0.75rem;
@@ -525,6 +583,9 @@ const napoleonStyles = `
   .napoleon-cash-plan,
   .napoleon-cash-systems,
   .napoleon-cash-system-card,
+  .napoleon-public-ctas,
+  .napoleon-public-layers,
+  .napoleon-public-layer-grid article,
   .napoleon-view {
     display: grid;
     gap: 0.65rem;
@@ -558,6 +619,7 @@ const napoleonStyles = `
   .napoleon-loop-card strong,
   .napoleon-proof-item strong,
   .napoleon-cash-system-card strong,
+  .napoleon-public-layer-grid strong,
   .napoleon-next-move strong {
     font-size: 1.05rem;
     line-height: 1.18;
@@ -601,12 +663,38 @@ const napoleonStyles = `
   .napoleon-cash-plan dd,
   .napoleon-cash-system-card span,
   .napoleon-cash-system-card p,
+  .napoleon-public-layer-grid p,
   .napoleon-loop-card dd,
   .napoleon-connection-card p,
   .napoleon-connection-card dd {
     color: #534d42;
     line-height: 1.4;
     margin: 0;
+  }
+
+  .napoleon-public-ctas {
+    grid-template-columns: 1fr;
+  }
+
+  .napoleon-public-ctas button {
+    background: #111111;
+    border: 0;
+    border-radius: 999px;
+    color: #ffffff;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 950;
+    min-height: 3.1rem;
+    padding: 0 1rem;
+  }
+
+  .napoleon-public-message {
+    background: #f6f1e5;
+    border: 1px solid rgba(181, 132, 50, 0.2);
+    border-radius: 1rem;
+    color: #5f4c2c;
+    margin: 0;
+    padding: 0.8rem;
   }
 
   .napoleon-genesis__proof {

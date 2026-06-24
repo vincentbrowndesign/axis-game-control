@@ -6,6 +6,7 @@ type Props = {
   busy: boolean;
   query: string;
   resultReady: boolean;
+  placeholder?: string;
   onChange: (value: string) => void;
   onHelper: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -24,6 +25,7 @@ export function NapoleonQueryToolbar({
   onChange,
   onHelper,
   onSubmit,
+  placeholder = "Ask Napoleon anything...",
   query,
   resultReady,
 }: Props) {
@@ -34,7 +36,7 @@ export function NapoleonQueryToolbar({
         <textarea
           id="napoleon-query-input"
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Ask Napoleon anything..."
+          placeholder={placeholder}
           rows={4}
           value={query}
         />

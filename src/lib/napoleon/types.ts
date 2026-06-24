@@ -1,5 +1,10 @@
 export type NapoleonEventType =
   | "napoleon_opened"
+  | "public_entry_viewed"
+  | "request_access_clicked"
+  | "genesis_case_viewed"
+  | "founder_mode_opened"
+  | "public_query_preview_submitted"
   | "query_started"
   | "query_submitted"
   | "find_money_started"
@@ -28,6 +33,10 @@ export type NapoleonEvent = {
   createdAt: string;
   payload?: Record<string, unknown>;
 };
+
+export type NapoleonMode = "public" | "founder";
+
+export type NapoleonVisibility = "public" | "founder" | "private";
 
 export type NapoleonQuery = {
   id: string;
@@ -116,6 +125,7 @@ export type NapoleonCashLoop = {
   proofStatus: string;
   createdAt: string;
   sourceQueryId?: string;
+  visibility?: NapoleonVisibility;
   offerBuilder?: NapoleonOffer;
   checkoutWire?: NapoleonCheckoutWire;
   fulfillmentWire?: NapoleonFulfillmentWire;
@@ -185,6 +195,7 @@ export type NapoleonProof = {
   text: string;
   createdAt: string;
   loopId?: string;
+  visibility?: NapoleonVisibility;
 };
 
 export type NapoleonConnection = {
@@ -196,6 +207,7 @@ export type NapoleonConnection = {
   actions: string[];
   connectedCashLoop: string;
   lastSync: string;
+  visibility?: NapoleonVisibility;
 };
 
 export type NapoleonNode = {
@@ -204,6 +216,7 @@ export type NapoleonNode = {
   subtitle: string;
   proof: string;
   cta: string;
+  visibility?: NapoleonVisibility;
 };
 
 export type NapoleonNextMove = {
