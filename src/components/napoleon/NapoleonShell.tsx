@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { recordNapoleonEvent, submitNapoleonQuery } from "../../lib/napoleon/client";
 import type { NapoleonAgentResult, NapoleonMode } from "../../lib/napoleon/types";
 
@@ -32,8 +32,8 @@ export function NapoleonShell({ mode = "public" }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<NapoleonAgentResult | null>(null);
+  const [resultMode, setResultMode] = useState<MoneyMode>("find");
   const [lastAction, setLastAction] = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     void recordNapoleonEvent("napoleon_surface_opened", { mode }, { persist: mode === "public" ? false : undefined });
@@ -44,17 +44,17 @@ export function NapoleonShell({ mode = "public" }: Props) {
 
   const focusedResult = useMemo(() => {
     if (!result) return null;
-    return createFocusedResult(activeMode, result);
-  }, [activeMode, result]);
+    return createFocusedResult(resultMode, result);
+  }, [resultMode, result]);
 
   function selectMode(nextMode: MoneyMode) {
     setActiveMode(nextMode);
     setLastAction("");
     void recordNapoleonEvent("mode_selected", { mode: nextMode }, { persist: mode === "public" ? false : undefined });
+    void runSignal(nextMode);
   }
 
-  async function submitSignal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function runSignal(nextMode: MoneyMode) {
     const input = signal.trim();
     if (!input || busy) return;
 
@@ -63,20 +63,21 @@ export function NapoleonShell({ mode = "public" }: Props) {
     setLastAction("");
 
     const eventOptions = { persist: mode === "public" ? false : undefined };
-    await recordNapoleonEvent("signal_submitted", { mode: activeMode, input }, eventOptions);
+    await recordNapoleonEvent("signal_submitted", { mode: nextMode, input }, eventOptions);
 
     try {
-      const nextResult = await submitNapoleonQuery(createModePrompt(activeMode, input));
+      const nextResult = await submitNapoleonQuery(createModePrompt(nextMode, input));
       setResult(nextResult);
+      setResultMode(nextMode);
 
       const generatedEvent =
-        activeMode === "find"
+        nextMode === "find"
           ? "find_result_generated"
-          : activeMode === "build"
+          : nextMode === "build"
             ? "build_result_generated"
             : "fix_result_generated";
 
-      await recordNapoleonEvent(generatedEvent, { resultId: nextResult.id, mode: activeMode }, eventOptions);
+      await recordNapoleonEvent(generatedEvent, { resultId: nextResult.id, mode: nextMode }, eventOptions);
     } catch {
       setError("Napoleon could not read that signal yet. Bring in the rough version.");
     } finally {
@@ -99,51 +100,32 @@ export function NapoleonShell({ mode = "public" }: Props) {
         <header className="napoleon-minimal-header">
           <div>
             <strong>NAPOLEON</strong>
-            <span>{mode === "founder" ? "Founder Mode" : "Powered by Axis"}</span>
+            <span>Powered by Axis</span>
           </div>
-          <button
-            aria-expanded={menuOpen}
-            aria-label="Open Napoleon menu"
-            className="napoleon-menu-button"
-            type="button"
-            onClick={() => setMenuOpen((current) => !current)}
-          >
-            Menu
-          </button>
         </header>
 
-        {menuOpen && (
-          <nav className="napoleon-hidden-menu" aria-label="Hidden Napoleon surfaces">
-            <button type="button">Loops</button>
-            <button type="button">Proof</button>
-            <button type="button">Wires</button>
-            <button type="button">Genesis</button>
-          </nav>
-        )}
-
-        <form className="napoleon-signal-form" onSubmit={submitSignal}>
+        <section className="napoleon-signal-form">
           <label htmlFor="napoleon-signal">Signal</label>
           <textarea
             id="napoleon-signal"
             onChange={(event) => setSignal(event.target.value)}
-            placeholder="Bring in a signal..."
+            placeholder="Bring in a signal…"
             rows={3}
             value={signal}
           />
-          <button type="submit" disabled={busy || !signal.trim()}>
-            {busy ? "Reading..." : "Run"}
-          </button>
-        </form>
+        </section>
 
         <div className="napoleon-mode-strip" aria-label="Napoleon modes">
           {modes.map((item) => (
             <button
+              aria-label={`${item.label} this signal`}
+              disabled={busy}
               key={item.id}
               data-active={activeMode === item.id}
               type="button"
               onClick={() => selectMode(item.id)}
             >
-              {item.label}
+              {busy && activeMode === item.id ? "Reading" : item.label}
             </button>
           ))}
         </div>
@@ -248,17 +230,16 @@ const napoleonMinimalStyles = `
 
   .napoleon-minimal-surface {
     display: grid;
-    gap: 1rem;
+    gap: 0.8rem;
     margin: 0 auto;
-    max-width: 38rem;
+    max-width: 32rem;
     min-height: 100dvh;
-    padding: max(1rem, env(safe-area-inset-top)) 1rem calc(2rem + env(safe-area-inset-bottom));
+    padding: max(1.35rem, env(safe-area-inset-top)) 1rem calc(2rem + env(safe-area-inset-bottom));
   }
 
   .napoleon-minimal-header {
-    align-items: center;
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    justify-items: start;
   }
 
   .napoleon-minimal-header div {
@@ -283,10 +264,7 @@ const napoleonMinimalStyles = `
     text-transform: uppercase;
   }
 
-  .napoleon-menu-button,
-  .napoleon-hidden-menu button,
   .napoleon-mode-strip button,
-  .napoleon-signal-form button,
   .napoleon-focused-card button {
     border-radius: 999px;
     font: inherit;
@@ -295,38 +273,22 @@ const napoleonMinimalStyles = `
     min-height: 2.8rem;
   }
 
-  .napoleon-menu-button,
-  .napoleon-hidden-menu button {
-    background: rgba(255, 255, 255, 0.62);
-    border: 1px solid rgba(17, 17, 17, 0.08);
-    color: #28241d;
-    padding: 0 0.85rem;
-  }
-
-  .napoleon-hidden-menu {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    justify-content: flex-end;
-  }
-
   .napoleon-signal-form {
     align-self: center;
     display: grid;
     gap: 0.65rem;
-    margin-top: clamp(4rem, 14vh, 8rem);
+    margin-top: clamp(5rem, 17vh, 9rem);
   }
 
   .napoleon-signal-form textarea {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.72);
     border: 1px solid rgba(17, 17, 17, 0.1);
-    border-radius: 1.4rem;
-    box-shadow: 0 1.5rem 4rem rgba(36, 28, 14, 0.08);
+    border-radius: 1.25rem;
     color: #111111;
     font: inherit;
     font-size: clamp(1.2rem, 4vw, 1.65rem);
     line-height: 1.25;
-    min-height: 9rem;
+    min-height: 8.4rem;
     outline: 0;
     padding: 1.15rem;
     resize: vertical;
@@ -334,23 +296,16 @@ const napoleonMinimalStyles = `
   }
 
   .napoleon-signal-form textarea:focus {
-    border-color: rgba(181, 132, 50, 0.5);
-    box-shadow:
-      0 0 0 4px rgba(181, 132, 50, 0.1),
-      0 1.5rem 4rem rgba(36, 28, 14, 0.08);
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(181, 132, 50, 0.42);
+    box-shadow: 0 0 0 3px rgba(181, 132, 50, 0.08);
   }
 
-  .napoleon-signal-form button,
   .napoleon-focused-card button {
     background: #111111;
     border: 0;
     color: #ffffff;
     padding: 0 1.05rem;
-  }
-
-  .napoleon-signal-form button:disabled {
-    cursor: not-allowed;
-    opacity: 0.38;
   }
 
   .napoleon-mode-strip {
@@ -366,9 +321,14 @@ const napoleonMinimalStyles = `
   }
 
   .napoleon-mode-strip button[data-active="true"] {
-    background: #b58432;
-    border-color: #b58432;
-    color: #ffffff;
+    background: rgba(181, 132, 50, 0.1);
+    border-color: rgba(181, 132, 50, 0.42);
+    color: #5f4211;
+  }
+
+  .napoleon-mode-strip button:disabled {
+    cursor: wait;
+    opacity: 0.7;
   }
 
   .napoleon-focused-card,
@@ -376,8 +336,7 @@ const napoleonMinimalStyles = `
   .napoleon-error {
     background: rgba(255, 255, 255, 0.84);
     border: 1px solid rgba(17, 17, 17, 0.08);
-    border-radius: 1.45rem;
-    box-shadow: 0 1rem 2.8rem rgba(36, 28, 14, 0.07);
+    border-radius: 1.25rem;
   }
 
   .napoleon-focused-card {
