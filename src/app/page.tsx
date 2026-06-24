@@ -1,5 +1,5 @@
-import AxisPage from "./axis/page";
+import { NapoleonShell } from "../components/napoleon/NapoleonShell";
 
 export default function Home() {
-  return <AxisPage />;
+  return <NapoleonShell />;
 }
