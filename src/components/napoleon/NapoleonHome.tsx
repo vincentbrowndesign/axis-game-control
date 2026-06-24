@@ -10,6 +10,7 @@ import type {
 } from "../../lib/napoleon/types";
 import { NapoleonActionCards } from "./NapoleonActionCards";
 import { NapoleonAgentResult as NapoleonAgentResultView } from "./NapoleonAgentResult";
+import { NapoleonCashStreamSystems } from "./NapoleonCashStreamSystems";
 import { NapoleonGenesisNode } from "./NapoleonGenesisNode";
 import { NapoleonLoopCard } from "./NapoleonLoopCard";
 import { NapoleonProofFeed } from "./NapoleonProofFeed";
@@ -66,6 +67,8 @@ export function NapoleonHome({
       <NapoleonAgentResultView busy={busy} onBuildLoop={onBuildLoop} result={result} />
 
       <NapoleonActionCards onBuildLoop={onBuildLoop} onFindMoney={onFindMoney} />
+
+      <NapoleonCashStreamSystems />
 
       <NapoleonGenesisNode node={genesisNode} onView={onGenesisView} />
 

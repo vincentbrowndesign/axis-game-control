@@ -40,21 +40,70 @@ export type NapoleonAgentResult = {
   query: NapoleonQuery;
   createdAt: string;
   voices: NapoleonAgentVoice[];
+  cashStream: NapoleonCashStreamPlan;
   suggestedLoop: {
     title: string;
     targetCustomer: string;
     offer: string;
     nextAction: string;
     proofStatus: string;
+    incomeType: NapoleonIncomeType;
+    wealthLayer: NapoleonWealthLayer;
+    cashStreamSystem: NapoleonCashStreamSystem;
+    systemBlueprint: string;
+    fastestCashPath: string;
+    automationPath: string;
+    reinvestmentRule: string;
+    leakRule: string;
   };
+};
+
+export type NapoleonIncomeType =
+  | "earned_income"
+  | "profit_income"
+  | "interest_income"
+  | "dividend_income"
+  | "rental_income"
+  | "royalty_income"
+  | "capital_gains_commission";
+
+export type NapoleonWealthLayer =
+  | "active_core"
+  | "leveraged_accelerator"
+  | "passive_foundation";
+
+export type NapoleonCashStreamSystem =
+  | "service_to_product_loop"
+  | "digital_content_funnel"
+  | "automated_rental_engine"
+  | "retail_arbitrage_wheel"
+  | "automated_wealth_sweep";
+
+export type NapoleonCashStreamPlan = {
+  moneyType: NapoleonIncomeType;
+  wealthLayer: NapoleonWealthLayer;
+  systemBlueprint: string;
+  fastestCashPath: string;
+  automationPath: string;
+  reinvestmentValve: string;
+  leakRule: string;
+  nextAction: string;
 };
 
 export type NapoleonCashLoop = {
   id: string;
   title: string;
   status: "idea" | "building" | "live" | "proven" | "leaking";
+  incomeType: NapoleonIncomeType;
+  wealthLayer: NapoleonWealthLayer;
+  cashStreamSystem: NapoleonCashStreamSystem;
+  systemBlueprint: string;
   targetCustomer: string;
   offer: string;
+  fastestCashPath: string;
+  automationPath: string;
+  reinvestmentRule: string;
+  leakRule: string;
   nextAction: string;
   proofStatus: string;
   createdAt: string;

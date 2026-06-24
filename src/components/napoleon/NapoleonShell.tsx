@@ -20,6 +20,7 @@ import type {
   NapoleonProof,
 } from "../../lib/napoleon/types";
 import { NapoleonBottomNav, type NapoleonView } from "./NapoleonBottomNav";
+import { NapoleonCashStreamSystems } from "./NapoleonCashStreamSystems";
 import { NapoleonConnections } from "./NapoleonConnections";
 import { NapoleonHome } from "./NapoleonHome";
 import { NapoleonLoopCard } from "./NapoleonLoopCard";
@@ -158,6 +159,7 @@ export function NapoleonShell() {
               query={query}
               resultReady={Boolean(result)}
             />
+            <NapoleonCashStreamSystems />
             <div className="napoleon-loop-list">
               {loops.map((loop) => (
                 <NapoleonLoopCard key={loop.id} loop={loop} />
@@ -324,6 +326,9 @@ const napoleonStyles = `
   .napoleon-next-move,
   .napoleon-proof-feed,
   .napoleon-proof-item,
+  .napoleon-cash-plan,
+  .napoleon-cash-systems,
+  .napoleon-cash-system-card,
   .napoleon-connection-card,
   .napoleon-view {
     background: rgba(255, 255, 255, 0.82);
@@ -404,6 +409,7 @@ const napoleonStyles = `
   .napoleon-agent-grid,
   .napoleon-loop-list,
   .napoleon-proof-list,
+  .napoleon-cash-system-list,
   .napoleon-connection-list {
     display: grid;
     gap: 0.75rem;
@@ -416,6 +422,9 @@ const napoleonStyles = `
   .napoleon-next-move,
   .napoleon-proof-feed,
   .napoleon-proof-item,
+  .napoleon-cash-plan,
+  .napoleon-cash-systems,
+  .napoleon-cash-system-card,
   .napoleon-view {
     display: grid;
     gap: 0.65rem;
@@ -429,6 +438,8 @@ const napoleonStyles = `
   .napoleon-action-card span,
   .napoleon-agent-card small,
   .napoleon-proof-item small,
+  .napoleon-cash-plan small,
+  .napoleon-cash-plan dt,
   .napoleon-loop-card dt,
   .napoleon-connection-card dt,
   .napoleon-next-move span {
@@ -443,6 +454,7 @@ const napoleonStyles = `
   .napoleon-agent-card strong,
   .napoleon-loop-card strong,
   .napoleon-proof-item strong,
+  .napoleon-cash-system-card strong,
   .napoleon-next-move strong {
     font-size: 1.05rem;
     line-height: 1.18;
@@ -480,6 +492,9 @@ const napoleonStyles = `
 
   .napoleon-genesis p,
   .napoleon-proof-item strong,
+  .napoleon-cash-plan dd,
+  .napoleon-cash-system-card span,
+  .napoleon-cash-system-card p,
   .napoleon-loop-card dd,
   .napoleon-connection-card p,
   .napoleon-connection-card dd {
@@ -528,6 +543,7 @@ const napoleonStyles = `
   }
 
   .napoleon-loop-card dl,
+  .napoleon-cash-plan dl,
   .napoleon-connection-card dl {
     display: grid;
     gap: 0.5rem;
@@ -535,6 +551,7 @@ const napoleonStyles = `
   }
 
   .napoleon-loop-card div,
+  .napoleon-cash-plan div,
   .napoleon-connection-card dl div {
     display: grid;
     gap: 0.16rem;
@@ -542,6 +559,8 @@ const napoleonStyles = `
 
   .napoleon-loop-card dd,
   .napoleon-loop-card dt,
+  .napoleon-cash-plan dd,
+  .napoleon-cash-plan dt,
   .napoleon-connection-card dd,
   .napoleon-connection-card dt {
     margin: 0;
