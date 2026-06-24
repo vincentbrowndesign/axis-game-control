@@ -1,5 +1,5 @@
-import { NapoleonShell } from "../../../components/napoleon/NapoleonShell";
+import { redirect } from "next/navigation";
 
-export default function NapoleonPage() {
-  return <NapoleonShell mode="founder" />;
+export default function RedirectPage() {
+  redirect("/axis/midheaven");
 }

@@ -1,5 +1,5 @@
-import { NapoleonShell } from "../components/napoleon/NapoleonShell";
+import { MidheavenShell } from "../components/midheaven/MidheavenShell";
 
 export default function Home() {
-  return <NapoleonShell mode="public" />;
+  return <MidheavenShell mode="public" />;
 }
