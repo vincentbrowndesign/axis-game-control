@@ -1,0 +1,11 @@
+[project]
+name = "axis-vision-detector"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "pillow>=11,<12",
+  "pydantic>=2,<3",
+  "ultralytics>=8.3,<9",
+  "uvicorn[standard]>=0.35,<1",
+]

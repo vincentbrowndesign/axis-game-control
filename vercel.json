@@ -1,0 +1,14 @@
+{
+  "experimentalServices": {
+    "web": {
+      "entrypoint": ".",
+      "routePrefix": "/"
+    },
+    "detector": {
+      "entrypoint": "services/axis-vision-detector/app.py",
+      "routePrefix": "/detector",
+      "memory": 3008,
+      "maxDuration": 60
+    }
+  }
+}

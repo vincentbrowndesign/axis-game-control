@@ -5,8 +5,9 @@ import os
 from io import BytesIO
 from typing import Any
 
-os.environ.setdefault("YOLO_CONFIG_DIR", os.path.join(os.getcwd(), ".tmp-ultralytics"))
-os.environ.setdefault("MPLCONFIGDIR", os.path.join(os.getcwd(), ".tmp-matplotlib"))
+runtime_cache_dir = os.environ.get("AXIS_DETECTOR_CACHE_DIR", "/tmp")
+os.environ.setdefault("YOLO_CONFIG_DIR", os.path.join(runtime_cache_dir, ".tmp-ultralytics"))
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(runtime_cache_dir, ".tmp-matplotlib"))
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ AXIS_TYPE_BY_CLASS = {
     32: "ball",
 }
 
-MODEL_NAME = os.environ.get("AXIS_YOLO_MODEL", "yolo11n.pt")
+MODEL_NAME = os.environ.get("AXIS_YOLO_MODEL", os.path.join(runtime_cache_dir, "yolo11n.pt"))
 CONFIDENCE = float(os.environ.get("AXIS_YOLO_CONFIDENCE", "0.25"))
 
 app = FastAPI(title="Axis Vision Detector", version="0.1.0")
