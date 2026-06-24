@@ -1,5 +1,5 @@
-import { MidheavenShell } from "../components/midheaven/MidheavenShell";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <MidheavenShell mode="public" />;
+  redirect("/axis/vision");
 }
