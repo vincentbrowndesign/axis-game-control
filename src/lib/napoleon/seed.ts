@@ -11,6 +11,58 @@ import type {
   NapoleonWealthLayer,
 } from "./types";
 
+export const playerMemoryPassOffer = {
+  targetCustomer: "Parents of players",
+  coreProblem: "Training progress disappears without proof",
+  offer: "Monthly player memory, recap, clips, development notes, and next focus",
+  pricing: [
+    { label: "Starter" as const, price: "$25/month" },
+    { label: "Plus" as const, price: "$50/month" },
+    { label: "Pro" as const, price: "$75/month" },
+  ],
+  fastestCashPath: "Start with Stripe payment link",
+  scalableCashPath: "Shopify product + subscription + parent portal",
+};
+
+export const playerMemoryPassCheckoutWire = {
+  status: "not_wired" as const,
+  connections: [
+    {
+      name: "Stripe" as const,
+      status: "not connected / ready placeholder",
+      purpose: "Fastest payment link path",
+    },
+    {
+      name: "Shopify" as const,
+      status: "future product catalog",
+      purpose: "Scalable product and subscription path",
+    },
+    {
+      name: "Website" as const,
+      status: "landing page needed",
+      purpose: "Explain the pass and route parents to checkout",
+    },
+  ],
+};
+
+export const playerMemoryPassFulfillmentWire = {
+  status: "not_wired" as const,
+  buyerReceives: [
+    "Session recap",
+    "Player development note",
+    "1-3 clips or proof moments",
+    "Next focus",
+    "Monthly progress summary",
+  ],
+};
+
+export const playerMemoryPassLeakRule = {
+  id: "leak-player-memory-pass-recap",
+  rule: "If session_completed occurs and no recap_generated or payment_link_created occurs within 15 minutes, mark leak.",
+  estimatedLeak: "Selected price tier",
+  testStatus: "not_tested" as const,
+};
+
 export const napoleonGenesisNode: NapoleonNode = {
   id: "axis-genesis-node",
   title: "Axis Genesis Node",
@@ -73,6 +125,11 @@ export const napoleonSeedLoops: NapoleonCashLoop[] = [
     nextAction: "Build checkout path and first parent message",
     proofStatus: "Bridge validation supports the direction",
     createdAt: "2026-06-23T12:00:00.000Z",
+    offerBuilder: playerMemoryPassOffer,
+    checkoutWire: playerMemoryPassCheckoutWire,
+    fulfillmentWire: playerMemoryPassFulfillmentWire,
+    leakRuleConfig: playerMemoryPassLeakRule,
+    artifacts: [],
   },
   {
     id: "loop-practice-report",

@@ -9,6 +9,7 @@ import {
   napoleonSeedProof,
 } from "../../lib/napoleon/seed";
 import {
+  createNapoleonArtifactPlaceholder,
   createNapoleonLoopFromResult,
   recordNapoleonEvent,
   submitNapoleonQuery,
@@ -17,6 +18,7 @@ import type {
   NapoleonAgentResult,
   NapoleonCashLoop,
   NapoleonConnection,
+  NapoleonLoopArtifact,
   NapoleonProof,
 } from "../../lib/napoleon/types";
 import { NapoleonBottomNav, type NapoleonView } from "./NapoleonBottomNav";
@@ -24,6 +26,7 @@ import { NapoleonCashStreamSystems } from "./NapoleonCashStreamSystems";
 import { NapoleonConnections } from "./NapoleonConnections";
 import { NapoleonHome } from "./NapoleonHome";
 import { NapoleonLoopCard } from "./NapoleonLoopCard";
+import { NapoleonPlayerMemoryPassBuilder } from "./NapoleonPlayerMemoryPassBuilder";
 import { NapoleonProofFeed } from "./NapoleonProofFeed";
 import { NapoleonQueryToolbar } from "./NapoleonQueryToolbar";
 
@@ -35,6 +38,9 @@ export function NapoleonShell() {
   const [result, setResult] = useState<NapoleonAgentResult | null>(null);
   const [loops, setLoops] = useState<NapoleonCashLoop[]>(napoleonSeedLoops);
   const [proof, setProof] = useState<NapoleonProof[]>(napoleonSeedProof);
+  const [selectedLoopId, setSelectedLoopId] = useState<string | null>(null);
+
+  const selectedLoop = loops.find((loop) => loop.id === selectedLoopId) ?? null;
 
   useEffect(() => {
     void recordNapoleonEvent("napoleon_opened", { route: "/axis/napoleon" });
@@ -113,6 +119,76 @@ export function NapoleonShell() {
     await recordNapoleonEvent("connection_viewed", { connectionId: connection.id });
   }
 
+  async function openLoop(loop: NapoleonCashLoop) {
+    if (loop.id !== "loop-player-memory-pass") return;
+    setSelectedLoopId(loop.id);
+    await recordNapoleonEvent("build_loop_started", { loopId: loop.id, source: "loop_card" });
+  }
+
+  function updateSelectedLoop(updater: (loop: NapoleonCashLoop) => NapoleonCashLoop) {
+    if (!selectedLoopId) return;
+    setLoops((current) => current.map((loop) => (loop.id === selectedLoopId ? updater(loop) : loop)));
+  }
+
+  async function createLoopArtifact(artifact: NapoleonLoopArtifact, updates: Partial<NapoleonCashLoop> = {}) {
+    const storedArtifact = await createNapoleonArtifactPlaceholder(artifact);
+
+    updateSelectedLoop((loop) => ({
+      ...loop,
+      ...updates,
+      artifacts: [storedArtifact, ...(loop.artifacts ?? [])],
+    }));
+
+    const eventTypeByArtifact: Partial<Record<NapoleonLoopArtifact["type"], Parameters<typeof recordNapoleonEvent>[0]>> = {
+      landing_page_copy: "landing_page_draft_created",
+      parent_offer: "offer_created",
+      proof_template: "fulfillment_asset_drafted",
+      recap_template: "recap_template_created",
+      shopify_product_draft: "shopify_product_draft_created",
+      stripe_link_placeholder: "payment_link_placeholder_created",
+    };
+
+    if (artifact.type === "stripe_link_placeholder" || artifact.type === "shopify_product_draft" || artifact.type === "landing_page_copy") {
+      await recordNapoleonEvent("checkout_wire_started", { loopId: selectedLoopId });
+    }
+
+    if (artifact.type === "proof_template" || artifact.type === "recap_template") {
+      await recordNapoleonEvent("fulfillment_wire_started", { loopId: selectedLoopId });
+    }
+
+    const eventType = eventTypeByArtifact[artifact.type];
+    if (eventType) {
+      await recordNapoleonEvent(eventType, { artifactId: storedArtifact.id, loopId: selectedLoopId });
+    }
+  }
+
+  async function createLeakRule() {
+    updateSelectedLoop((loop) => ({
+      ...loop,
+      leakRuleConfig: loop.leakRuleConfig,
+    }));
+    await recordNapoleonEvent("leak_rule_created", { loopId: selectedLoopId });
+  }
+
+  async function testLeakRule() {
+    const artifact: NapoleonLoopArtifact = {
+      id: `leak-test-${Date.now().toString(36)}`,
+      type: "leak_test",
+      title: "Leak rule placeholder test",
+      body: "Placeholder only: session_completed had no recap_generated or payment_link_created inside the 15-minute window.",
+      createdAt: new Date().toISOString(),
+    };
+
+    updateSelectedLoop((loop) => ({
+      ...loop,
+      artifacts: [artifact, ...(loop.artifacts ?? [])],
+      leakRuleConfig: loop.leakRuleConfig
+        ? { ...loop.leakRuleConfig, testStatus: "placeholder_detected" }
+        : loop.leakRuleConfig,
+    }));
+    await recordNapoleonEvent("leak_detected", { loopId: selectedLoopId, placeholder: true });
+  }
+
   return (
     <main className="napoleon-shell">
       <header className="napoleon-header">
@@ -127,7 +203,27 @@ export function NapoleonShell() {
       </header>
 
       <section className="napoleon-body" aria-live="polite">
-        {activeView === "home" && (
+        {selectedLoop?.id === "loop-player-memory-pass" && (
+          <>
+            <NapoleonQueryToolbar
+              busy={busy}
+              onChange={setQuery}
+              onHelper={useHelper}
+              onSubmit={submitQuery}
+              query={query}
+              resultReady={Boolean(result)}
+            />
+            <NapoleonPlayerMemoryPassBuilder
+              loop={selectedLoop}
+              onAction={(artifact, updates) => void createLoopArtifact(artifact, updates)}
+              onBack={() => setSelectedLoopId(null)}
+              onCreateLeakRule={() => void createLeakRule()}
+              onTestLeakRule={() => void testLeakRule()}
+            />
+          </>
+        )}
+
+        {!selectedLoop && activeView === "home" && (
           <NapoleonHome
             busy={busy}
             genesisNode={napoleonGenesisNode}
@@ -136,6 +232,7 @@ export function NapoleonShell() {
             onBuildLoop={buildLoop}
             onFindMoney={findMoney}
             onGenesisView={viewGenesis}
+            onOpenLoop={openLoop}
             onQueryChange={setQuery}
             onQueryHelper={useHelper}
             onQuerySubmit={submitQuery}
@@ -145,7 +242,7 @@ export function NapoleonShell() {
           />
         )}
 
-        {activeView === "loops" && (
+        {!selectedLoop && activeView === "loops" && (
           <section className="napoleon-view">
             <div className="napoleon-section-heading">
               <span>Loops</span>
@@ -162,13 +259,13 @@ export function NapoleonShell() {
             <NapoleonCashStreamSystems />
             <div className="napoleon-loop-list">
               {loops.map((loop) => (
-                <NapoleonLoopCard key={loop.id} loop={loop} />
+                <NapoleonLoopCard key={loop.id} loop={loop} onOpen={openLoop} />
               ))}
             </div>
           </section>
         )}
 
-        {activeView === "proof" && (
+        {!selectedLoop && activeView === "proof" && (
           <section className="napoleon-view">
             <NapoleonQueryToolbar
               busy={busy}
@@ -182,7 +279,7 @@ export function NapoleonShell() {
           </section>
         )}
 
-        {activeView === "empire" && (
+        {!selectedLoop && activeView === "empire" && (
           <section className="napoleon-view">
             <NapoleonQueryToolbar
               busy={busy}
@@ -196,7 +293,7 @@ export function NapoleonShell() {
           </section>
         )}
 
-        {activeView === "profile" && (
+        {!selectedLoop && activeView === "profile" && (
           <section className="napoleon-view">
             <div className="napoleon-section-heading">
               <span>Profile</span>
@@ -321,6 +418,7 @@ const napoleonStyles = `
   .napoleon-query,
   .napoleon-agent-result,
   .napoleon-action-card,
+  .napoleon-builder-card,
   .napoleon-genesis,
   .napoleon-loop-card,
   .napoleon-next-move,
@@ -417,6 +515,8 @@ const napoleonStyles = `
 
   .napoleon-action-card,
   .napoleon-agent-card,
+  .napoleon-builder,
+  .napoleon-builder-card,
   .napoleon-genesis,
   .napoleon-loop-card,
   .napoleon-next-move,
@@ -437,6 +537,8 @@ const napoleonStyles = `
 
   .napoleon-action-card span,
   .napoleon-agent-card small,
+  .napoleon-builder-card dt,
+  .napoleon-builder-heading span,
   .napoleon-proof-item small,
   .napoleon-cash-plan small,
   .napoleon-cash-plan dt,
@@ -452,6 +554,7 @@ const napoleonStyles = `
 
   .napoleon-action-card strong,
   .napoleon-agent-card strong,
+  .napoleon-builder-card strong,
   .napoleon-loop-card strong,
   .napoleon-proof-item strong,
   .napoleon-cash-system-card strong,
@@ -491,6 +594,9 @@ const napoleonStyles = `
   }
 
   .napoleon-genesis p,
+  .napoleon-builder-card dd,
+  .napoleon-builder-card li,
+  .napoleon-builder-card p,
   .napoleon-proof-item strong,
   .napoleon-cash-plan dd,
   .napoleon-cash-system-card span,
@@ -544,6 +650,7 @@ const napoleonStyles = `
 
   .napoleon-loop-card dl,
   .napoleon-cash-plan dl,
+  .napoleon-builder-card dl,
   .napoleon-connection-card dl {
     display: grid;
     gap: 0.5rem;
@@ -552,6 +659,7 @@ const napoleonStyles = `
 
   .napoleon-loop-card div,
   .napoleon-cash-plan div,
+  .napoleon-builder-card dl div,
   .napoleon-connection-card dl div {
     display: grid;
     gap: 0.16rem;
@@ -561,9 +669,110 @@ const napoleonStyles = `
   .napoleon-loop-card dt,
   .napoleon-cash-plan dd,
   .napoleon-cash-plan dt,
+  .napoleon-builder-card dd,
+  .napoleon-builder-card dt,
   .napoleon-connection-card dd,
   .napoleon-connection-card dt {
     margin: 0;
+  }
+
+  .napoleon-builder {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .napoleon-builder__back {
+    background: transparent;
+    border: 1px solid rgba(17, 17, 17, 0.12);
+    border-radius: 999px;
+    color: #191919;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 900;
+    justify-self: start;
+    min-height: 2.7rem;
+    padding: 0 0.9rem;
+  }
+
+  .napoleon-builder-card {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.95rem;
+  }
+
+  .napoleon-builder-header h1 {
+    font-size: clamp(2rem, 10vw, 4rem);
+    letter-spacing: -0.07em;
+    line-height: 0.9;
+    margin: 0;
+  }
+
+  .napoleon-builder-heading {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .napoleon-builder-heading h2 {
+    font-size: clamp(1.35rem, 6vw, 2.2rem);
+    letter-spacing: -0.055em;
+    line-height: 0.98;
+    margin: 0;
+  }
+
+  .napoleon-price-pill {
+    background: #f4ead7;
+    border-radius: 999px;
+    color: #7f5b1b;
+    display: inline-flex;
+    font-size: 0.76rem;
+    font-weight: 900;
+    margin: 0.18rem 0.25rem 0.18rem 0;
+    padding: 0.38rem 0.55rem;
+  }
+
+  .napoleon-wire-grid,
+  .napoleon-copy-list,
+  .napoleon-builder-actions {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .napoleon-wire-card,
+  .napoleon-copy-list article {
+    background: #f6f3ec;
+    border: 1px solid rgba(17, 17, 17, 0.07);
+    border-radius: 1.05rem;
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.75rem;
+  }
+
+  .napoleon-wire-card span,
+  .napoleon-copy-list small {
+    color: #9a7a43;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .napoleon-builder-card ul {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+
+  .napoleon-builder-actions button {
+    background: #111111;
+    border: 0;
+    border-radius: 999px;
+    color: #ffffff;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 900;
+    min-height: 3rem;
+    padding: 0 0.9rem;
   }
 
   .napoleon-connections {

@@ -27,6 +27,7 @@ type Props = {
   onBuildLoop: () => void;
   onFindMoney: () => void;
   onGenesisView: () => void;
+  onOpenLoop: (loop: NapoleonCashLoop) => void;
   onQueryChange: (value: string) => void;
   onQueryHelper: (value: string) => void;
   onQuerySubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -40,6 +41,7 @@ export function NapoleonHome({
   onBuildLoop,
   onFindMoney,
   onGenesisView,
+  onOpenLoop,
   onQueryChange,
   onQueryHelper,
   onQuerySubmit,
@@ -79,7 +81,7 @@ export function NapoleonHome({
         </div>
         <div className="napoleon-loop-list">
           {loops.map((loop) => (
-            <NapoleonLoopCard key={loop.id} loop={loop} />
+            <NapoleonLoopCard key={loop.id} loop={loop} onOpen={onOpenLoop} />
           ))}
         </div>
       </section>

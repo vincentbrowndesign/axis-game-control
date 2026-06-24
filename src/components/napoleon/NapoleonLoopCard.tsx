@@ -7,11 +7,12 @@ import {
 
 type Props = {
   loop: NapoleonCashLoop;
+  onOpen?: (loop: NapoleonCashLoop) => void;
 };
 
-export function NapoleonLoopCard({ loop }: Props) {
-  return (
-    <article className="napoleon-loop-card">
+export function NapoleonLoopCard({ loop, onOpen }: Props) {
+  const content = (
+    <>
       <div className="napoleon-loop-card__top">
         <strong>{loop.title}</strong>
         <span data-status={loop.status}>{loop.status}</span>
@@ -58,6 +59,20 @@ export function NapoleonLoopCard({ loop }: Props) {
           <dd>{loop.nextAction}</dd>
         </div>
       </dl>
+    </>
+  );
+
+  if (onOpen) {
+    return (
+      <button className="napoleon-loop-card" type="button" onClick={() => onOpen(loop)}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <article className="napoleon-loop-card">
+      {content}
     </article>
   );
 }

@@ -4,6 +4,7 @@ import type {
   NapoleonCashLoop,
   NapoleonEvent,
   NapoleonEventType,
+  NapoleonLoopArtifact,
 } from "./types";
 
 const localEvents: NapoleonEvent[] = [];
@@ -79,4 +80,20 @@ export async function createNapoleonLoopFromResult(
 
 export function getLocalNapoleonEvents() {
   return [...localEvents];
+}
+
+export async function createNapoleonArtifactPlaceholder(artifact: NapoleonLoopArtifact) {
+  try {
+    const response = await fetch("/api/napoleon/artifacts", {
+      body: JSON.stringify(artifact),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    if (!response.ok) return artifact;
+    const data = (await response.json()) as { artifact?: NapoleonLoopArtifact };
+    return data.artifact ?? artifact;
+  } catch {
+    return artifact;
+  }
 }

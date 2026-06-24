@@ -11,6 +11,14 @@ export type NapoleonEventType =
   | "offer_created"
   | "proof_attached"
   | "leak_detected"
+  | "checkout_wire_started"
+  | "payment_link_placeholder_created"
+  | "shopify_product_draft_created"
+  | "landing_page_draft_created"
+  | "fulfillment_wire_started"
+  | "fulfillment_asset_drafted"
+  | "recap_template_created"
+  | "leak_rule_created"
   | "axis_genesis_viewed"
   | "connection_viewed";
 
@@ -108,6 +116,59 @@ export type NapoleonCashLoop = {
   proofStatus: string;
   createdAt: string;
   sourceQueryId?: string;
+  offerBuilder?: NapoleonOffer;
+  checkoutWire?: NapoleonCheckoutWire;
+  fulfillmentWire?: NapoleonFulfillmentWire;
+  leakRuleConfig?: NapoleonLeakRule;
+  artifacts?: NapoleonLoopArtifact[];
+};
+
+export type NapoleonOffer = {
+  targetCustomer: string;
+  coreProblem: string;
+  offer: string;
+  pricing: Array<{
+    label: "Starter" | "Plus" | "Pro";
+    price: string;
+  }>;
+  fastestCashPath: string;
+  scalableCashPath: string;
+};
+
+export type NapoleonCheckoutWire = {
+  status: "not_wired" | "draft" | "ready";
+  connections: Array<{
+    name: "Stripe" | "Shopify" | "Website";
+    status: string;
+    purpose: string;
+  }>;
+};
+
+export type NapoleonFulfillmentWire = {
+  status: "not_wired" | "draft" | "ready" | "delivered";
+  buyerReceives: string[];
+};
+
+export type NapoleonLeakRule = {
+  id: string;
+  rule: string;
+  estimatedLeak: string;
+  testStatus: "not_tested" | "placeholder_detected";
+};
+
+export type NapoleonLoopArtifact = {
+  id: string;
+  type:
+    | "stripe_link_placeholder"
+    | "shopify_product_draft"
+    | "landing_page_copy"
+    | "parent_offer"
+    | "proof_template"
+    | "recap_template"
+    | "leak_test";
+  title: string;
+  body: string;
+  createdAt: string;
 };
 
 export type NapoleonProofType =
