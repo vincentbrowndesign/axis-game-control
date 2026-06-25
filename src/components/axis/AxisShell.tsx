@@ -139,7 +139,7 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
       id: createLocalId(),
       title,
       playerName: playerName.trim() || undefined,
-      objective: objective.trim() || "Open run",
+      objective: objective.trim() || "Today's work",
       sessionType,
       startedAt: now,
       moments: [],

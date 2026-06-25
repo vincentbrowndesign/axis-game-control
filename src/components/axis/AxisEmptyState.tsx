@@ -43,7 +43,7 @@ export function AxisEmptyState({
     <section className="axis-card axis-empty-state">
       <div>
         <p className="axis-empty-state__eyebrow">Today&apos;s Work</p>
-        <h1>Log work.</h1>
+        <h1>Log Work</h1>
       </div>
 
       <p className="axis-empty-state__meta">
@@ -56,7 +56,7 @@ export function AxisEmptyState({
           <input
             value={sessionTitle}
             onChange={(event) => onSessionTitleChange(event.target.value)}
-            placeholder="Today's Work"
+            placeholder="Today's work"
           />
         </label>
 
@@ -65,7 +65,7 @@ export function AxisEmptyState({
           <input
             value={playerName}
             onChange={(event) => onPlayerNameChange(event.target.value)}
-            placeholder="Hailey, guards, varsity..."
+            placeholder="Player or group"
           />
         </label>
 
@@ -74,7 +74,7 @@ export function AxisEmptyState({
           <input
             value={objective}
             onChange={(event) => onObjectiveChange(event.target.value)}
-            placeholder="Pound stop pivot finish"
+            placeholder="What changed?"
           />
         </label>
 
@@ -93,7 +93,7 @@ export function AxisEmptyState({
         </label>
 
         <button className="axis-primary" type="submit">
-          Log Work
+          Save Memory
         </button>
       </form>
 

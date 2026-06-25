@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import {
   axisMeasureEvidenceStorageEvent,
   axisMeasureEvidenceQualityLabels,
@@ -14,6 +14,7 @@ import {
 
 export default function AxisMeasureReviewPage() {
   const frames = useSyncExternalStore(subscribeToEvidenceFrames, getAxisMeasureEvidenceFrameSnapshot, emptyEvidenceFrames);
+  const [exportStatus, setExportStatus] = useState("");
 
   const exportName = useMemo(() => `axis-measure-evidence-${new Date().toISOString().slice(0, 10)}.json`, []);
 
@@ -36,14 +37,43 @@ export default function AxisMeasureReviewPage() {
     deleteAxisMeasureEvidenceFrame(id);
   }
 
+  function getExportJson() {
+    return JSON.stringify(frames, null, 2);
+  }
+
   function exportJson() {
-    const blob = new Blob([JSON.stringify(frames, null, 2)], { type: "application/json" });
+    if (frames.length === 0) return;
+    setExportStatus("Export ready");
+    const blob = new Blob([getExportJson()], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = exportName;
+    link.style.display = "none";
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExportStatus("Download started");
+  }
+
+  async function copyJson() {
+    if (frames.length === 0) return;
+    const json = getExportJson();
+    try {
+      await navigator.clipboard.writeText(json);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = json;
+      textarea.style.left = "-9999px";
+      textarea.style.position = "fixed";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setExportStatus("Copied");
   }
 
   return (
@@ -53,9 +83,15 @@ export default function AxisMeasureReviewPage() {
           <p>Axis Measure</p>
           <h1>Evidence Review</h1>
         </div>
-        <button disabled={frames.length === 0} onClick={exportJson} type="button">
-          Export JSON
-        </button>
+        <div className="axis-measure-review__export">
+          <button disabled={frames.length === 0} onClick={exportJson} type="button">
+            Export JSON
+          </button>
+          <button disabled={frames.length === 0} onClick={() => void copyJson()} type="button">
+            Copy JSON
+          </button>
+          {exportStatus && <span>{exportStatus}</span>}
+        </div>
       </header>
 
       <section className="axis-measure-review__intro">
@@ -81,7 +117,7 @@ export default function AxisMeasureReviewPage() {
                 <div className="axis-measure-review__meta">
                   <strong>{formatDate(frame.createdAt)}</strong>
                   <span>{frame.objects.length} objects</span>
-                  <span>{frame.surface} · {frame.route}</span>
+                  <span>{frame.surface} - {frame.route}</span>
                   {typeof frame.detectorLatencyMs === "number" && <span>{frame.detectorLatencyMs}ms detector</span>}
                 </div>
 
@@ -173,6 +209,20 @@ const styles = `
     margin: 0 auto;
     max-width: 72rem;
     padding: 1rem 0;
+  }
+
+  .axis-measure-review__export {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: flex-end;
+  }
+
+  .axis-measure-review__export span {
+    color: rgba(247, 244, 235, 0.68);
+    font-size: 0.72rem;
+    font-weight: 800;
   }
 
   .axis-measure-review__header p {

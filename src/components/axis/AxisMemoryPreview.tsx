@@ -16,7 +16,8 @@ export function AxisMemoryPreview({ compact = false, sessions }: Props) {
 
       {visibleSessions.length === 0 ? (
         <div className="axis-memory-item">
-          <strong>No memory yet. Start a session and capture one moment.</strong>
+          <strong>No memory yet.</strong>
+          <span>Use Vision or Log to save the first one.</span>
         </div>
       ) : (
         <div className="axis-memory-list">
