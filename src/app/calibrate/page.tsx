@@ -14,6 +14,7 @@ export default async function CalibratePage() {
       initialRimSetup
       productName={productName}
       route="/calibrate"
+      surface={surface}
     />
   );
 }

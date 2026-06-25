@@ -8,6 +8,13 @@ import {
   smoothBox,
   trackToBox,
 } from "../../lib/axis/axis-object-lock";
+import {
+  axisMeasureEvidenceQualityLabels,
+  saveAxisMeasureEvidenceFrame,
+  updateAxisMeasureEvidenceFrame,
+  type AxisMeasureEvidenceQualityLabel,
+} from "../../lib/axis/measure/evidence-capture";
+import type { AxisSurface } from "../../lib/axis/surface";
 import type { AxisLiveDetection, AxisVisionTrack } from "../../lib/axis/axis-vision-types";
 import type { VisionBox, VisionFrameState, VisionObject } from "../../lib/axis/axis-object-lock-types";
 
@@ -30,6 +37,7 @@ type AxisVisionObjectLockProps = {
   initialRimSetup?: boolean;
   productName?: string;
   route?: string;
+  surface?: AxisSurface;
 };
 
 export function AxisVisionObjectLock({
@@ -37,6 +45,7 @@ export function AxisVisionObjectLock({
   initialRimSetup = false,
   productName = "Axis Vision",
   route = "/axis/vision",
+  surface = "axis",
 }: AxisVisionObjectLockProps = {}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -82,6 +91,9 @@ export function AxisVisionObjectLock({
   const [detectorError, setDetectorError] = useState("");
   const [lastInferenceMs, setLastInferenceMs] = useState(0);
   const [lastCadenceMs, setLastCadenceMs] = useState(inferenceIntervalMs);
+  const [savedFrameId, setSavedFrameId] = useState<string | null>(null);
+  const [savedFrameLabels, setSavedFrameLabels] = useState<AxisMeasureEvidenceQualityLabel[]>([]);
+  const [saveMessage, setSaveMessage] = useState("");
 
   const players = objects.filter((object) => object.type === "player");
   const rim = objects.find((object) => object.type === "rim");
@@ -248,6 +260,58 @@ export function AxisVisionObjectLock({
     if (!ctx) throw new Error("Frame capture is unavailable.");
     ctx.drawImage(video, 0, 0, width, height);
     return canvas.toDataURL("image/jpeg", 0.72);
+  }
+
+  function saveTestFrame() {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) {
+      setSaveMessage("Start camera before saving a frame.");
+      return;
+    }
+
+    const imageDataUrl = captureVideoFrame(video);
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    const timestamp = Date.now();
+    const evidenceFrame = saveAxisMeasureEvidenceFrame({
+      createdAt: new Date(timestamp).toISOString(),
+      detectorLatencyMs: Math.round(lastInferenceMs),
+      frameHeight: height,
+      frameWidth: width,
+      id: `axis-measure-frame-${timestamp.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      imageDataUrl,
+      notes: "",
+      objects: getEvidenceObjects(timestamp),
+      qualityLabels: [],
+      relationships: frameState?.relationships ?? [],
+      reviewStatus: "unreviewed",
+      route,
+      surface,
+      timestamp,
+    });
+
+    setSavedFrameId(evidenceFrame.id);
+    setSavedFrameLabels([]);
+    setSaveMessage("Test frame saved. Add quick labels.");
+  }
+
+  function toggleSavedFrameLabel(label: AxisMeasureEvidenceQualityLabel) {
+    if (!savedFrameId) return;
+    setSavedFrameLabels((current) => {
+      const next = current.includes(label) ? current.filter((item) => item !== label) : [...current, label];
+      updateAxisMeasureEvidenceFrame(savedFrameId, { qualityLabels: next });
+      return next;
+    });
+  }
+
+  function getEvidenceObjects(timestamp: number) {
+    return getDrawableObjects()
+      .filter((object) => object.type === "player" || object.type === "ball" || object.type === "rim")
+      .map((object) => ({
+        ...object,
+        lastSeenAt: object.type === "rim" ? timestamp : object.lastSeenAt,
+        selected: false,
+      }));
   }
 
   function buildObjectsFromTracks(tracks: AxisVisionTrack[], timestamp: number): VisionObject[] {
@@ -748,6 +812,23 @@ export function AxisVisionObjectLock({
               <input checked={multiPlayer} onChange={(event) => setMultiPlayer(event.target.checked)} type="checkbox" />
               Multi-player
             </label>
+            <button type="button" onClick={saveTestFrame}>Save Test Frame</button>
+            <a href="/measure/review">Review frames</a>
+            {saveMessage && <span>{saveMessage}</span>}
+            {savedFrameId && (
+              <div className="axis-object-lock__labels" aria-label="Frame quality labels">
+                {axisMeasureEvidenceQualityLabels.map((label) => (
+                  <button
+                    data-active={savedFrameLabels.includes(label)}
+                    key={label}
+                    onClick={() => toggleSavedFrameLabel(label)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -942,8 +1023,11 @@ const styles = `
   .axis-object-lock__debug-controls {
     bottom: 6rem;
     color: #f7f4eb;
+    display: grid;
+    gap: 0.5rem;
     font-size: 0.8rem;
     font-weight: 800;
+    max-width: min(22rem, calc(100vw - 1.5rem));
     padding: 0.55rem 0.7rem;
     right: 0.75rem;
   }
@@ -956,6 +1040,31 @@ const styles = `
 
   .axis-object-lock__debug-controls input {
     accent-color: #d8ad52;
+  }
+
+  .axis-object-lock__debug-controls a {
+    color: #f7f4eb;
+    text-decoration: underline;
+    text-underline-offset: 0.18rem;
+  }
+
+  .axis-object-lock__debug-controls span {
+    color: rgba(247, 244, 235, 0.68);
+    font-size: 0.72rem;
+  }
+
+  .axis-object-lock__labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .axis-object-lock__labels button {
+    background: rgba(247, 244, 235, 0.1);
+    color: #f7f4eb;
+    font-size: 0.68rem;
+    min-height: 2rem;
+    padding: 0 0.55rem;
   }
 
   .axis-object-lock__bottom {

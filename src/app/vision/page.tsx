@@ -13,6 +13,7 @@ export default async function VisionPage() {
       detectEndpoint="/api/vision/detect"
       productName={productName}
       route="/vision"
+      surface={surface}
     />
   );
 }
