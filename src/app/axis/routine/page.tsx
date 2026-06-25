@@ -122,7 +122,7 @@ export default function AxisRoutinePage() {
             ))}
           </section>
 
-          <button className="axis-routine__primary" type="button" onClick={() => setConfiguredRoutine(null)}>
+          <button className="axis-routine__secondary" type="button" onClick={() => setConfiguredRoutine(null)}>
             Edit Setup
           </button>
         </section>
@@ -225,7 +225,7 @@ export default function AxisRoutinePage() {
           </div>
           <span>{blocks.length} blocks for a {selectedRoutineMinutes} min routine</span>
           {hasMismatch && (
-            <em>
+            <em role="status">
               Plan is {totalBlockMinutes} minutes. Selected routine is {selectedRoutineMinutes} minutes.
             </em>
           )}
@@ -267,6 +267,11 @@ export default function AxisRoutinePage() {
         <button className="axis-routine__primary" disabled={!canBuildRoutine} onClick={buildRoutine} type="button">
           Build Routine
         </button>
+        {!canBuildRoutine && (
+          <p className="axis-routine__validation">
+            Add player/group, focus, scoring method, benchmark name, and at least one block.
+          </p>
+        )}
       </section>
 
       <style jsx>{styles}</style>
@@ -296,7 +301,13 @@ const styles = `
     background: #f7f4eb;
     color: #141610;
     min-height: 100dvh;
+    overflow-x: hidden;
     padding: 1rem;
+  }
+
+  .axis-routine,
+  .axis-routine * {
+    box-sizing: border-box;
   }
 
   .axis-routine__shell,
@@ -334,9 +345,13 @@ const styles = `
   }
 
   .axis-routine h1 {
-    font-size: clamp(2.4rem, 11vw, 5.4rem);
+    color: #141610;
+    font-size: clamp(2.05rem, 8.8vw, 5rem);
+    font-weight: 950;
     letter-spacing: 0;
     line-height: 0.95;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .axis-routine h2 {
@@ -346,7 +361,8 @@ const styles = `
 
   .axis-routine__header > span,
   .axis-routine__preview > span,
-  .axis-routine__empty {
+  .axis-routine__empty,
+  .axis-routine__validation {
     color: rgba(20, 22, 16, 0.68);
   }
 
@@ -372,6 +388,7 @@ const styles = `
     color: #141610;
     font: inherit;
     font-size: 1rem;
+    line-height: 1.2;
     min-height: 3.25rem;
     padding: 0 0.85rem;
     width: 100%;
@@ -388,7 +405,9 @@ const styles = `
     border-radius: 0.5rem;
     font: inherit;
     font-weight: 850;
+    line-height: 1.1;
     min-height: 3.25rem;
+    padding: 0 0.8rem;
   }
 
   .axis-routine__segments button {
@@ -411,16 +430,30 @@ const styles = `
   }
 
   .axis-routine__preview div,
-  .axis-routine__section-title,
   .axis-routine__ready-block {
     align-items: center;
     display: flex;
+    flex-wrap: wrap;
     gap: 0.75rem;
     justify-content: space-between;
   }
 
+  .axis-routine__section-title {
+    align-items: start;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .axis-routine__preview div {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
   .axis-routine__preview strong {
     font-size: 1.35rem;
+    overflow-wrap: anywhere;
   }
 
   .axis-routine__preview em {
@@ -438,8 +471,13 @@ const styles = `
     border-radius: 0.5rem;
     display: grid;
     gap: 0.65rem;
-    grid-template-columns: minmax(0, 1fr) 7.5rem;
+    grid-template-columns: 1fr;
     padding: 0.75rem;
+  }
+
+  .axis-routine__block label,
+  .axis-routine__block input {
+    min-width: 0;
   }
 
   .axis-routine__ready-summary {
@@ -466,17 +504,32 @@ const styles = `
     border-bottom: 0;
   }
 
-  .axis-routine__primary {
+  .axis-routine__primary,
+  .axis-routine__secondary {
     background: #141610;
     border: 1px solid #141610;
+    border-radius: 0.5rem;
     color: #f7f4eb;
+    font: inherit;
+    font-weight: 850;
+    min-height: 3.25rem;
     width: 100%;
+  }
+
+  .axis-routine__secondary {
+    background: transparent;
+    color: #141610;
   }
 
   .axis-routine__primary:disabled {
     background: rgba(20, 22, 16, 0.18);
     border-color: rgba(20, 22, 16, 0.08);
     color: rgba(20, 22, 16, 0.48);
+  }
+
+  .axis-routine__validation {
+    font-size: 0.88rem;
+    margin: -0.35rem 0 0;
   }
 
   @media (min-width: 720px) {
@@ -492,6 +545,17 @@ const styles = `
     .axis-routine__segments {
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
+
+    .axis-routine__block {
+      grid-template-columns: minmax(0, 1fr) 7.5rem;
+    }
+
+    .axis-routine__preview div,
+    .axis-routine__section-title {
+      align-items: center;
+      flex-direction: row;
+      gap: 0.75rem;
+    }
   }
 
   @media (max-width: 430px) {
@@ -499,16 +563,8 @@ const styles = `
       padding: 0.85rem;
     }
 
-    .axis-routine__block,
     .axis-routine__ready-summary {
       grid-template-columns: 1fr;
-    }
-
-    .axis-routine__preview div,
-    .axis-routine__section-title {
-      align-items: start;
-      flex-direction: column;
-      gap: 0.25rem;
     }
   }
 `;
