@@ -1,23 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-type CameraState = "idle" | "starting" | "live" | "error";
+type CameraStatus = "ready" | "live" | "stopped" | "error";
 
 export function AxisVisionCaptureLoop() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [cameraState, setCameraState] = useState<CameraState>("idle");
-  const [message, setMessage] = useState("Vision Capture Loop");
+  const [cameraStatus, setCameraStatus] = useState<CameraStatus>("ready");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isStarting, setIsStarting] = useState(false);
 
-  useEffect(() => () => stopCamera(), []);
+  const stopTracks = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
+
+  useEffect(() => () => stopTracks(), [stopTracks]);
 
   async function startCamera() {
-    if (cameraState === "starting" || cameraState === "live") return;
-    setCameraState("starting");
-    setMessage("Starting rear camera");
+    if (isStarting || cameraStatus === "live") return;
+    setIsStarting(true);
+    setErrorMessage("");
 
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera is not available in this browser.");
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -26,25 +37,27 @@ export function AxisVisionCaptureLoop() {
           width: { ideal: 1280 },
         },
       });
+
       streamRef.current = stream;
       const video = videoRef.current;
       if (!video) throw new Error("Camera view is unavailable.");
+
       video.srcObject = stream;
       await video.play();
-      setCameraState("live");
-      setMessage("Live video feed");
-    } catch {
-      setCameraState("error");
-      setMessage("Camera permission or device access failed.");
-      stopCamera();
+      setCameraStatus("live");
+    } catch (error) {
+      stopTracks();
+      setCameraStatus("error");
+      setErrorMessage(error instanceof Error ? error.message : "Camera permission or device access failed.");
+    } finally {
+      setIsStarting(false);
     }
   }
 
   function stopCamera() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setCameraState("idle");
+    stopTracks();
+    setCameraStatus("stopped");
+    setErrorMessage("");
   }
 
   return (
@@ -52,38 +65,28 @@ export function AxisVisionCaptureLoop() {
       <section className="axis-vision-capture__stage" aria-label="Axis Vision Capture Loop">
         <video ref={videoRef} autoPlay className="axis-vision-capture__video" muted playsInline />
 
-        {cameraState !== "live" && (
+        {cameraStatus !== "live" && (
           <div className="axis-vision-capture__empty">
-            <p>Axis Vision</p>
-            <h1>Vision Capture Loop</h1>
-            <span>Rear camera to live video feed. No detection loop is active here.</span>
+            <h1>Axis Vision</h1>
           </div>
         )}
 
         <header className="axis-vision-capture__top">
-          <div>
-            <strong>Axis Vision</strong>
-            <span>{message}</span>
-          </div>
+          <strong>Axis Vision</strong>
+          <a href="/axis/space">Axis Space</a>
         </header>
 
         <footer className="axis-vision-capture__bottom">
-          <div>
-            <span>Input</span>
-            <strong>rear camera</strong>
+          <div className="axis-vision-capture__status" aria-live="polite">
+            <span>CAMERA: {cameraStatus}</span>
+            {errorMessage && <p>{errorMessage}</p>}
           </div>
-          <div>
-            <span>Provider</span>
-            <strong>browser camera</strong>
-          </div>
-          <div>
-            <span>Dataset</span>
-            <strong>session draft</strong>
-          </div>
-          {cameraState === "live" ? (
-            <button type="button" onClick={stopCamera}>Stop</button>
+          {cameraStatus === "live" ? (
+            <button type="button" onClick={stopCamera}>Stop Camera</button>
           ) : (
-            <button type="button" onClick={() => void startCamera()}>Start</button>
+            <button type="button" disabled={isStarting} onClick={() => void startCamera()}>
+              {isStarting ? "Starting Camera" : "Start Camera"}
+            </button>
           )}
         </footer>
       </section>
@@ -120,34 +123,18 @@ const styles = `
     align-content: center;
     background: #050706;
     display: grid;
-    gap: 0.75rem;
     inset: 0;
-    justify-items: start;
+    justify-items: center;
     padding: 1.2rem;
     position: absolute;
     z-index: 2;
   }
 
-  .axis-vision-capture__empty p,
-  .axis-vision-capture__top span,
-  .axis-vision-capture__bottom span {
-    color: rgba(247, 244, 235, 0.62);
-    font-size: 0.68rem;
-    font-weight: 850;
-    letter-spacing: 0.1em;
-    margin: 0;
-    text-transform: uppercase;
-  }
-
   .axis-vision-capture__empty h1 {
-    font-size: clamp(2.4rem, 12vw, 5.5rem);
+    font-size: clamp(2.2rem, 10vw, 4.8rem);
     letter-spacing: 0;
-    line-height: 0.92;
+    line-height: 1;
     margin: 0;
-  }
-
-  .axis-vision-capture__empty span {
-    color: rgba(247, 244, 235, 0.72);
   }
 
   .axis-vision-capture__top,
@@ -161,39 +148,53 @@ const styles = `
   }
 
   .axis-vision-capture__top {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
     left: 0.75rem;
     padding: 0.65rem 0.75rem;
     right: 0.75rem;
     top: max(0.75rem, env(safe-area-inset-top));
   }
 
-  .axis-vision-capture__top div {
-    display: grid;
-    gap: 0.15rem;
+  .axis-vision-capture__top a {
+    color: rgba(247, 244, 235, 0.68);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-decoration: none;
   }
 
   .axis-vision-capture__bottom {
     align-items: center;
     bottom: max(0.75rem, env(safe-area-inset-bottom));
-    display: grid;
-    gap: 0.45rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
     left: 0.75rem;
-    padding: 0.55rem;
+    padding: 0.65rem;
     right: 0.75rem;
   }
 
-  .axis-vision-capture__bottom div {
+  .axis-vision-capture__status {
     display: grid;
-    gap: 0.08rem;
+    gap: 0.2rem;
     min-width: 0;
   }
 
-  .axis-vision-capture__bottom strong {
+  .axis-vision-capture__status span {
+    color: rgba(247, 244, 235, 0.82);
     font-size: 0.78rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-vision-capture__status p {
+    color: rgba(247, 244, 235, 0.74);
+    font-size: 0.82rem;
+    margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .axis-vision-capture button {
@@ -209,13 +210,17 @@ const styles = `
     padding: 0 0.95rem;
   }
 
+  .axis-vision-capture button:disabled {
+    opacity: 0.7;
+  }
+
   @media (max-width: 640px) {
     .axis-vision-capture__bottom {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: stretch;
+      flex-direction: column;
     }
 
     .axis-vision-capture__bottom button {
-      grid-column: 1 / -1;
       width: 100%;
     }
   }
