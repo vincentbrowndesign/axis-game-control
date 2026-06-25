@@ -35,7 +35,10 @@ type PlayerRejectionReason =
   | "not_persistent"
   | "class_not_mapped"
   | "coordinate_invalid"
-  | "no_person_detected";
+  | "no_person_detected"
+  | "none";
+
+type CameraFlipState = "back" | "front" | "switching" | "unavailable";
 
 type VisionDiagnostics = {
   cameraCount: number;
@@ -48,6 +51,9 @@ type VisionDiagnostics = {
   lastDetectorSummary: string;
   lastRejectedReason: PlayerRejectionReason;
   mappedPlayerCount: number;
+  primaryPlayerConfidence: number;
+  primaryPlayerId: string;
+  primaryPlayerState: VisionObject["state"] | "none";
   renderedHeight: number;
   renderedWidth: number;
   scaleX: number;
@@ -81,9 +87,9 @@ type PlayerTrackEvaluation = {
 const maxPlayers = 3;
 const inferenceIntervalMs = 700;
 const productPlayerMinConfidence = 0.38;
-const firstLockPlayerMinConfidence = 0.24;
+const firstLockPlayerMinConfidence = 0.08;
 const productPlayerMinAreaRatio = 0.035;
-const firstLockPlayerMinAreaRatio = 0.01;
+const firstLockPlayerMinAreaRatio = 0.002;
 const productPlayerEdgeMarginRatio = 0.04;
 const productPlayerAliveMs = 2100;
 const ballAliveMs = 1200;
@@ -137,6 +143,8 @@ export function AxisVisionObjectLock({
   const [cameraFacingMode, setCameraFacingMode] = useState<CameraFacingMode>("environment");
   const [modelState, setModelState] = useState<ModelState>("idle");
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("product");
+  const [debugExpanded, setDebugExpanded] = useState(false);
+  const [cameraFlipState, setCameraFlipState] = useState<CameraFlipState>("back");
   const [multiPlayer, setMultiPlayer] = useState(false);
   const [objects, setObjects] = useState<VisionObject[]>([]);
   const [frameState, setFrameState] = useState<VisionFrameState | null>(null);
@@ -166,6 +174,9 @@ export function AxisVisionObjectLock({
     lastDetectorSummary: "No detector response yet.",
     lastRejectedReason: "no_person_detected",
     mappedPlayerCount: 0,
+    primaryPlayerConfidence: 0,
+    primaryPlayerId: "none",
+    primaryPlayerState: "none",
     renderedHeight: 0,
     renderedWidth: 0,
     scaleX: 1,
@@ -202,6 +213,7 @@ export function AxisVisionObjectLock({
     try {
       await openCamera(cameraFacingMode);
       setCameraState("live");
+      setCameraFlipState(cameraFacingMode === "environment" ? "back" : "front");
       setCameraLiveSince(Date.now());
       setFieldTick(0);
       recordAxisVisionObjectEvent("camera_started");
@@ -239,6 +251,7 @@ export function AxisVisionObjectLock({
   async function flipCamera() {
     const cameras = await getVideoInputDevices();
     if (cameras.length <= 1) {
+      setCameraFlipState("unavailable");
       setVisionDiagnostics((current) => ({
         ...current,
         cameraCount: cameras.length,
@@ -252,13 +265,17 @@ export function AxisVisionObjectLock({
     if (cameraState !== "live") return;
 
     setCameraState("starting");
+    setCameraFlipState("switching");
     try {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       inferenceRunningRef.current = false;
       lastInferenceAtRef.current = 0;
       await openCamera(nextMode);
+      trackerRef.current = createAxisTracker({ ballIouThreshold: 0.12, maxMissedFrames: 3, personIouThreshold: 0.22 });
+      primaryPlayerTrackIdRef.current = null;
       setCameraState("live");
+      setCameraFlipState(nextMode === "environment" ? "back" : "front");
       setCameraLiveSince(Date.now());
       setFieldTick(0);
       setVisionDiagnostics((current) => ({
@@ -269,6 +286,12 @@ export function AxisVisionObjectLock({
       loop();
     } catch {
       setCameraState("error");
+      setCameraFlipState("unavailable");
+      setVisionDiagnostics((current) => ({
+        ...current,
+        cameraCount: cameras.length,
+        cameraMessage: `Camera switch failed: ${nextMode}`,
+      }));
       setError("Camera could not switch. Check permission and try again.");
     }
   }
@@ -323,7 +346,7 @@ export function AxisVisionObjectLock({
       modelClassesRef.current = summarizeDetectionClasses(detections);
       const tracks = trackerRef.current.update(detections, timestamp);
       const nextObjects = buildObjectsFromTracks(tracks, timestamp);
-      updateDetectorDiagnostics(result, nextObjects);
+      updateDetectorDiagnostics(result);
       const relationships = calculateVisionRelationships(nextObjects, timestamp);
       const nextFrame: VisionFrameState = {
         frameId: frameIdRef.current + 1,
@@ -451,7 +474,7 @@ export function AxisVisionObjectLock({
 
     setSavedFrameId(evidenceFrame.id);
     setSavedFrameLabels([]);
-    setSaveMessage("Test frame saved. Add quick labels.");
+    setSaveMessage("Saved 1 frame");
   }
 
   function toggleSavedFrameLabel(label: AxisMeasureEvidenceQualityLabel) {
@@ -483,6 +506,9 @@ export function AxisVisionObjectLock({
       candidatePlayerCount: playerSelection.candidatePlayerCount,
       lastRejectedReason: playerSelection.lastRejectedReason,
       mappedPlayerCount: playerSelection.mappedPlayerCount,
+      primaryPlayerConfidence: playerSelection.primaryPlayerConfidence,
+      primaryPlayerId: playerSelection.primaryPlayerId,
+      primaryPlayerState: nextPlayers[0]?.state ?? "none",
       stablePlayerCount: playerSelection.stablePlayerCount,
     }));
     const ballTrack = tracks.filter((track) => track.kind === "ball").sort((a, b) => b.score - a.score)[0];
@@ -585,13 +611,15 @@ export function AxisVisionObjectLock({
       .map((evaluation) => evaluation.track)
       .sort((a, b) => detectionPriority(b) - detectionPriority(a));
 
-    const fallbackReason = personTracks.length === 0
+    const fallbackReason: PlayerRejectionReason = personTracks.length === 0
       ? "no_person_detected"
-      : (evaluations.find((evaluation) => !evaluation.usable)?.reason ?? "not_persistent");
+      : (evaluations.find((evaluation) => !evaluation.usable)?.reason ?? "none");
     const diagnostics = {
       candidatePlayerCount: evaluations.filter((evaluation) => evaluation.reason !== "class_not_mapped" && evaluation.reason !== "coordinate_invalid").length,
       lastRejectedReason: fallbackReason,
       mappedPlayerCount: personTracks.filter((track) => track.mappedType === "player" || track.kind === "person").length,
+      primaryPlayerConfidence: 0,
+      primaryPlayerId: "none",
       stablePlayerCount: evaluations.filter((evaluation) => evaluation.usable && evaluation.stable).length,
     };
 
@@ -599,7 +627,9 @@ export function AxisVisionObjectLock({
       const visibleTracks = playerTracks.slice(0, maxPlayers);
       return {
         ...diagnostics,
-        stablePlayerCount: visibleTracks.filter((track) => track.seenFrames >= 2 || track.trackId === primaryPlayerTrackIdRef.current).length,
+        primaryPlayerConfidence: visibleTracks[0]?.score ?? 0,
+        primaryPlayerId: visibleTracks[0]?.trackId ?? "none",
+        stablePlayerCount: visibleTracks.filter((track) => evaluations.find((evaluation) => evaluation.track.trackId === track.trackId)?.stable).length,
         tracks: visibleTracks,
       };
     }
@@ -610,7 +640,9 @@ export function AxisVisionObjectLock({
 
     return {
       ...diagnostics,
-      stablePlayerCount: best ? 1 : 0,
+      primaryPlayerConfidence: best?.score ?? 0,
+      primaryPlayerId: best?.trackId ?? "none",
+      stablePlayerCount: best && evaluations.find((evaluation) => evaluation.track.trackId === best.trackId)?.stable ? 1 : 0,
       tracks: best ? [best] : [],
     };
   }
@@ -624,7 +656,8 @@ export function AxisVisionObjectLock({
     const selected = selectedId && objectsRef.current.find((object) => object.trackId === track.trackId && object.id === selectedId);
     const isPrimary = track.trackId === primaryPlayerTrackIdRef.current;
     const hasPrimary = Boolean(primaryPlayerTrackIdRef.current);
-    const firstLockCandidate = !hasPrimary && personTrackCount === 1;
+    const onlyMappedPlayer = personTrackCount === 1;
+    const firstLockCandidate = onlyMappedPlayer || !hasPrimary;
     const minConfidence = firstLockCandidate || isPrimary || selected ? firstLockPlayerMinConfidence : productPlayerMinConfidence;
     const minAreaRatio = firstLockCandidate || isPrimary || selected ? firstLockPlayerMinAreaRatio : productPlayerMinAreaRatio;
 
@@ -635,7 +668,7 @@ export function AxisVisionObjectLock({
     if (timestamp - track.lastSeenAt > productPlayerAliveMs) return { reason: "not_persistent", stable: false, track, usable: false };
     if (!isPrimary && !selected && track.score < minConfidence) return { reason: "low_confidence", stable: false, track, usable: false };
     if (!isPrimary && areaRatio < minAreaRatio) return { reason: "too_small", stable: false, track, usable: false };
-    if (!firstLockCandidate && !isPrimary && !selected && track.seenFrames < 2) {
+    if (!onlyMappedPlayer && !firstLockCandidate && !isPrimary && !selected && track.seenFrames < 2) {
       return { reason: "not_persistent", stable: false, track, usable: false };
     }
 
@@ -647,7 +680,7 @@ export function AxisVisionObjectLock({
       box.x + box.width >= width - edgeMarginX ||
       box.y + box.height >= height - edgeMarginY;
 
-    if (!firstLockCandidate && !isPrimary && !selected && nearEdge) {
+    if (!onlyMappedPlayer && hasPrimary && !isPrimary && !selected && nearEdge) {
       return { reason: "edge_rejected", stable: false, track, usable: false };
     }
 
@@ -672,7 +705,7 @@ export function AxisVisionObjectLock({
     return classes.length ? classes.join(", ") : "none";
   }
 
-  function updateDetectorDiagnostics(result: DetectorResult, nextObjects: VisionObject[]) {
+  function updateDetectorDiagnostics(result: DetectorResult) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const rect = video?.getBoundingClientRect();
@@ -694,7 +727,6 @@ export function AxisVisionObjectLock({
       renderedWidth,
       scaleX: renderedWidth / Math.max(1, canvas?.width || result.capture.width),
       scaleY: renderedHeight / Math.max(1, canvas?.height || result.capture.height),
-      stablePlayerCount: nextObjects.filter((object) => object.type === "player").length,
     }));
   }
 
@@ -713,12 +745,7 @@ export function AxisVisionObjectLock({
     const point = canvasPoint(event);
 
     if (rimSetup === "placing") {
-      const box = {
-        height: 54,
-        width: 86,
-        x: point.x - 43,
-        y: point.y - 27,
-      };
+      const box = createRimBoxAtPoint(point.x, point.y);
       rimDraftRef.current = box;
       setRimBox(box);
       setRimSetup("adjusting");
@@ -743,6 +770,12 @@ export function AxisVisionObjectLock({
         setSelectedId("rim-1");
         return;
       }
+
+      const movedBox = createRimBoxAtPoint(point.x, point.y, rimBox);
+      rimDraftRef.current = movedBox;
+      setRimBox(movedBox);
+      setSelectedId("rim-1");
+      return;
     }
 
     const object = hitTest(point.x, point.y);
@@ -777,8 +810,9 @@ export function AxisVisionObjectLock({
           width: Math.max(48, drag.startBox.width + (point.x - drag.startX)),
         };
 
-    rimDraftRef.current = nextBox;
-    setRimBox(nextBox);
+    const boundedBox = clampRimBox(nextBox);
+    rimDraftRef.current = boundedBox;
+    setRimBox(boundedBox);
   }
 
   function handleCanvasPointerUp() {
@@ -788,7 +822,10 @@ export function AxisVisionObjectLock({
   }
 
   function startRimSetup() {
-    setRimSetup(rimBox ? "adjusting" : "placing");
+    const nextBox = rimBox ?? createDefaultRimBox();
+    rimDraftRef.current = nextBox;
+    setRimBox(nextBox);
+    setRimSetup("adjusting");
     setRimLocked(false);
     setSelectedId("rim-1");
   }
@@ -812,6 +849,40 @@ export function AxisVisionObjectLock({
     setRimSetup("idle");
     setSelectedId(null);
     rimDragRef.current = null;
+  }
+
+  function createDefaultRimBox() {
+    const canvas = canvasRef.current;
+    const width = canvas?.width || videoRef.current?.videoWidth || 1280;
+    const height = canvas?.height || videoRef.current?.videoHeight || 720;
+    return clampRimBox({
+      height: Math.max(74, Math.min(104, height * 0.12)),
+      width: Math.max(118, Math.min(156, width * 0.14)),
+      x: width * 0.5 - Math.max(118, Math.min(156, width * 0.14)) / 2,
+      y: height * 0.23,
+    });
+  }
+
+  function createRimBoxAtPoint(x: number, y: number, existingBox?: VisionBox) {
+    const box = existingBox ?? createDefaultRimBox();
+    return clampRimBox({
+      ...box,
+      x: x - box.width / 2,
+      y: y - box.height / 2,
+    });
+  }
+
+  function clampRimBox(box: VisionBox) {
+    const canvas = canvasRef.current;
+    const width = canvas?.width || videoRef.current?.videoWidth || 1280;
+    const height = canvas?.height || videoRef.current?.videoHeight || 720;
+    return {
+      ...box,
+      height: Math.min(Math.max(box.height, 54), height),
+      width: Math.min(Math.max(box.width, 86), width),
+      x: Math.min(Math.max(0, box.x), Math.max(0, width - box.width)),
+      y: Math.min(Math.max(0, box.y), Math.max(0, height - box.height)),
+    };
   }
 
   function assignPlayerName(id: string, currentLabel: string) {
@@ -924,14 +995,16 @@ export function AxisVisionObjectLock({
     }
 
     if (object.type === "rim" && rimSetup === "adjusting") {
-      const handle = getRimResizeHandle(object.bbox);
+      const handles = getRimHandles(object.bbox);
       ctx.fillStyle = "#d8ad52";
-      ctx.beginPath();
-      ctx.arc(handle.x, handle.y, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(5, 7, 6, 0.82)";
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      handles.forEach((handle) => {
+        ctx.beginPath();
+        ctx.arc(handle.x, handle.y, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(5, 7, 6, 0.82)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      });
     }
     ctx.restore();
   }
@@ -991,27 +1064,37 @@ export function AxisVisionObjectLock({
     };
   }
 
+  function getRimHandles(box: VisionBox) {
+    return [
+      { x: box.x, y: box.y },
+      { x: box.x + box.width, y: box.y },
+      { x: box.x, y: box.y + box.height },
+      getRimResizeHandle(box),
+    ];
+  }
+
   function drawDebug(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
-    ctx.fillRect(16, 16, 430, detectorError ? 344 : 324);
+    ctx.fillRect(16, 16, 430, detectorError ? 372 : 350);
     ctx.fillStyle = "#ffffff";
     ctx.font = "600 13px system-ui";
     ctx.fillText(`DEBUG VIEW`, 28, 38);
     ctx.fillText(`Objects: ${getDrawableObjects().length}  Raw detections: ${rawDetectionCountRef.current}`, 28, 60);
     ctx.fillText(`Mapped: ${visionDiagnostics.mappedPlayerCount}  Candidate: ${visionDiagnostics.candidatePlayerCount}  Stable: ${visionDiagnostics.stablePlayerCount}`, 28, 82);
-    ctx.fillText(`Rejected: ${visionDiagnostics.lastRejectedReason}`, 28, 104);
-    ctx.fillText(`Summary: ${visionDiagnostics.lastDetectorSummary.slice(0, 48)}`, 28, 126);
-    ctx.fillText(`Frame: ${frameIdRef.current}  Model: ${modelState}`, 28, 148);
-    ctx.fillText(`Detector: ${detectorUrl.replace("http://", "")}`, 28, 170);
-    ctx.fillText(`Cadence: ${Math.round(lastCadenceMs)}ms  Latency: ${Math.round(lastInferenceMs)}ms`, 28, 192);
-    ctx.fillText(`Misses: ${detectorMissesRef.current}  Dropped: ${droppedFramesRef.current}`, 28, 214);
-    ctx.fillText(`Capture: ${visionDiagnostics.captureWidth}x${visionDiagnostics.captureHeight}  Detector: ${visionDiagnostics.detectorImageWidth}x${visionDiagnostics.detectorImageHeight}`, 28, 236);
-    ctx.fillText(`Rendered: ${visionDiagnostics.renderedWidth}x${visionDiagnostics.renderedHeight}  Scale: ${visionDiagnostics.scaleX.toFixed(2)} x ${visionDiagnostics.scaleY.toFixed(2)}`, 28, 258);
-    ctx.fillText(`Classes: ${modelClassesRef.current || "none"}`, 28, 280);
-    ctx.fillText(`Evidence: ${savedEvidenceCount}  Multi-player: ${multiPlayer ? "on" : "off"}`, 28, 302);
-    if (visionDiagnostics.cameraMessage) ctx.fillText(`Camera: ${visionDiagnostics.cameraMessage}`, 28, 324);
-    if (detectorError) ctx.fillText(`Error: ${detectorError.slice(0, 48)}`, 28, visionDiagnostics.cameraMessage ? 344 : 324);
+    ctx.fillText(`P1: ${visionDiagnostics.primaryPlayerId} ${Math.round(visionDiagnostics.primaryPlayerConfidence * 100)}% ${visionDiagnostics.primaryPlayerState}`, 28, 104);
+    ctx.fillText(`Rejected: ${visionDiagnostics.lastRejectedReason}`, 28, 126);
+    ctx.fillText(`Summary: ${visionDiagnostics.lastDetectorSummary.slice(0, 48)}`, 28, 148);
+    ctx.fillText(`Frame: ${frameIdRef.current}  Model: ${modelState}`, 28, 170);
+    ctx.fillText(`Detector: ${detectorUrl.replace("http://", "")}`, 28, 192);
+    ctx.fillText(`Cadence: ${Math.round(lastCadenceMs)}ms  Latency: ${Math.round(lastInferenceMs)}ms`, 28, 214);
+    ctx.fillText(`Misses: ${detectorMissesRef.current}  Dropped: ${droppedFramesRef.current}`, 28, 236);
+    ctx.fillText(`Capture: ${visionDiagnostics.captureWidth}x${visionDiagnostics.captureHeight}  Detector: ${visionDiagnostics.detectorImageWidth}x${visionDiagnostics.detectorImageHeight}`, 28, 258);
+    ctx.fillText(`Rendered: ${visionDiagnostics.renderedWidth}x${visionDiagnostics.renderedHeight}  Scale: ${visionDiagnostics.scaleX.toFixed(2)} x ${visionDiagnostics.scaleY.toFixed(2)}`, 28, 280);
+    ctx.fillText(`Classes: ${modelClassesRef.current || "none"}`, 28, 302);
+    ctx.fillText(`Evidence: ${savedEvidenceCount}  Multi-player: ${multiPlayer ? "on" : "off"}  Camera: ${cameraFlipState}`, 28, 324);
+    if (visionDiagnostics.cameraMessage) ctx.fillText(`Camera: ${visionDiagnostics.cameraMessage}`, 28, 346);
+    if (detectorError) ctx.fillText(`Error: ${detectorError.slice(0, 48)}`, 28, visionDiagnostics.cameraMessage ? 366 : 346);
     ctx.restore();
   }
 
@@ -1021,10 +1104,11 @@ export function AxisVisionObjectLock({
   }
 
   const status = useMemo(() => {
+    const primaryPlayer = players[0];
     const lockedPlayers = players.filter((object) => object.state === "locked" || object.state === "manual_override").length;
     return {
       ball: ball?.state === "lost" ? "searching" : ball ? "detected" : "searching",
-      players: lockedPlayers || players.length ? "locked" : "searching",
+      players: lockedPlayers ? "locked" : primaryPlayer ? "candidate" : "searching",
       rim: rimLocked && rimBox ? "locked" : rimBox ? "placed" : "manual",
     };
   }, [ball, players, rimBox, rimLocked]);
@@ -1082,10 +1166,12 @@ export function AxisVisionObjectLock({
           <button
             aria-label={cameraFacingMode === "environment" ? "Use front camera" : "Use back camera"}
             className="axis-object-lock__icon-button"
+            data-state={cameraFlipState}
             type="button"
             onClick={() => void flipCamera()}
           >
             <SwitchCamera aria-hidden size={18} strokeWidth={2.4} />
+            <span>{cameraFlipState}</span>
           </button>
           <button data-active={rimSetup !== "idle"} type="button" onClick={startRimSetup}>
             Set Rim
@@ -1111,40 +1197,56 @@ export function AxisVisionObjectLock({
         )}
 
         {overlayMode === "debug" && (
-          <div className="axis-object-lock__debug-controls">
-            <label>
-              <input checked={multiPlayer} onChange={(event) => setMultiPlayer(event.target.checked)} type="checkbox" />
-              Multi-player
-            </label>
+          <div className="axis-object-lock__debug-controls" data-expanded={debugExpanded}>
+            <div className="axis-object-lock__debug-head">
+              <strong>Debug</strong>
+              <button type="button" onClick={() => setDebugExpanded((current) => !current)}>
+                {debugExpanded ? "Collapse" : "Expand"}
+              </button>
+            </div>
             <div className="axis-object-lock__debug-stats">
               <span>Latency {Math.round(lastInferenceMs)}ms</span>
               <span>Raw {rawDetectionCountRef.current}</span>
               <span>Mapped {visionDiagnostics.mappedPlayerCount}</span>
               <span>Candidate {visionDiagnostics.candidatePlayerCount}</span>
               <span>Stable {visionDiagnostics.stablePlayerCount}</span>
-              <span>Rejected {visionDiagnostics.lastRejectedReason}</span>
-              <span>Capture {visionDiagnostics.captureWidth}x{visionDiagnostics.captureHeight}</span>
-              <span>Detector {visionDiagnostics.detectorImageWidth}x{visionDiagnostics.detectorImageHeight}</span>
-              <span>Rendered {visionDiagnostics.renderedWidth}x{visionDiagnostics.renderedHeight}</span>
-              <span>Saved {savedEvidenceCount}</span>
             </div>
-            <span>{visionDiagnostics.lastDetectorSummary}</span>
-            {visionDiagnostics.cameraMessage && <span>{visionDiagnostics.cameraMessage}</span>}
-            <button type="button" onClick={saveTestFrame}>Save Test Frame</button>
-            <a href="/measure/review">Review frames</a>
-            {saveMessage && <span>{saveMessage}</span>}
-            {savedFrameId && (
-              <div className="axis-object-lock__labels" aria-label="Frame quality labels">
-                {axisMeasureEvidenceQualityLabels.map((label) => (
-                  <button
-                    data-active={savedFrameLabels.includes(label)}
-                    key={label}
-                    onClick={() => toggleSavedFrameLabel(label)}
-                    type="button"
-                  >
-                    {label}
-                  </button>
-                ))}
+            {debugExpanded && (
+              <div className="axis-object-lock__debug-expanded">
+                <label>
+                  <input checked={multiPlayer} onChange={(event) => setMultiPlayer(event.target.checked)} type="checkbox" />
+                  Multi-player
+                </label>
+                <div className="axis-object-lock__debug-stats">
+                  <span>P1 {visionDiagnostics.primaryPlayerId}</span>
+                  <span>P1 {Math.round(visionDiagnostics.primaryPlayerConfidence * 100)}%</span>
+                  <span>P1 {visionDiagnostics.primaryPlayerState}</span>
+                  <span>Rejected {visionDiagnostics.lastRejectedReason}</span>
+                  <span>Camera {cameraFlipState}</span>
+                  <span>Capture {visionDiagnostics.captureWidth}x{visionDiagnostics.captureHeight}</span>
+                  <span>Detector {visionDiagnostics.detectorImageWidth}x{visionDiagnostics.detectorImageHeight}</span>
+                  <span>Rendered {visionDiagnostics.renderedWidth}x{visionDiagnostics.renderedHeight}</span>
+                  <span>Saved {savedEvidenceCount}</span>
+                </div>
+                <span>{visionDiagnostics.lastDetectorSummary}</span>
+                {visionDiagnostics.cameraMessage && <span>{visionDiagnostics.cameraMessage}</span>}
+                <button type="button" onClick={saveTestFrame}>Save Test Frame</button>
+                <a href="/measure/review">Review frames</a>
+                {saveMessage && <span>{saveMessage}</span>}
+                {savedFrameId && (
+                  <div className="axis-object-lock__labels" aria-label="Frame quality labels">
+                    {axisMeasureEvidenceQualityLabels.map((label) => (
+                      <button
+                        data-active={savedFrameLabels.includes(label)}
+                        key={label}
+                        onClick={() => toggleSavedFrameLabel(label)}
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1307,9 +1409,24 @@ const styles = `
   .axis-object-lock__icon-button {
     align-items: center;
     display: inline-flex;
+    gap: 0.3rem;
     justify-content: center;
-    min-width: 2.65rem;
-    padding: 0;
+    min-width: 4.8rem;
+    padding: 0 0.55rem;
+  }
+
+  .axis-object-lock__icon-button span {
+    font-size: 0.64rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  .axis-object-lock__icon-button[data-state="switching"] {
+    opacity: 0.72;
+  }
+
+  .axis-object-lock__icon-button[data-state="unavailable"] {
+    background: rgba(255, 215, 199, 0.9);
   }
 
   .axis-object-lock__hint {
@@ -1376,6 +1493,27 @@ const styles = `
     max-width: min(22rem, calc(100vw - 1.5rem));
     padding: 0.55rem 0.7rem;
     right: 0.75rem;
+  }
+
+  .axis-object-lock__debug-head,
+  .axis-object-lock__debug-expanded {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .axis-object-lock__debug-head {
+    align-items: center;
+    grid-template-columns: 1fr auto;
+  }
+
+  .axis-object-lock__debug-head strong {
+    font-size: 0.78rem;
+  }
+
+  .axis-object-lock__debug-head button {
+    background: rgba(247, 244, 235, 0.1);
+    color: #f7f4eb;
+    min-height: 2rem;
   }
 
   .axis-object-lock__debug-controls label {
@@ -1490,6 +1628,18 @@ const styles = `
 
     .axis-object-lock__toggle button {
       flex: 1 1 0;
+    }
+
+    .axis-object-lock__debug-controls {
+      bottom: 7.4rem;
+      left: 0.75rem;
+      max-height: 42dvh;
+      overflow: auto;
+      right: 0.75rem;
+    }
+
+    .axis-object-lock__debug-controls[data-expanded="false"] {
+      max-height: 9rem;
     }
 
     .axis-object-lock__bottom {

@@ -41,10 +41,14 @@ export default function AxisMeasureReviewPage() {
     return JSON.stringify(frames, null, 2);
   }
 
+  function createExportBlob() {
+    return new Blob([getExportJson()], { type: "application/json" });
+  }
+
   function exportJson() {
     if (frames.length === 0) return;
     setExportStatus("Export ready");
-    const blob = new Blob([getExportJson()], { type: "application/json" });
+    const blob = createExportBlob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -54,7 +58,7 @@ export default function AxisMeasureReviewPage() {
     link.click();
     document.body.removeChild(link);
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setExportStatus("Download started");
+    setExportStatus("Download started. If it did not download, use Copy JSON or Share JSON.");
   }
 
   async function copyJson() {
@@ -76,6 +80,40 @@ export default function AxisMeasureReviewPage() {
     setExportStatus("Copied");
   }
 
+  function openJson() {
+    if (frames.length === 0) return;
+    const url = URL.createObjectURL(createExportBlob());
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    setExportStatus(opened ? "Export ready" : "Download blocked. Use Copy JSON or Share JSON.");
+  }
+
+  async function shareJson() {
+    if (frames.length === 0) return;
+    const nav = navigator as Navigator & {
+      canShare?: (data: ShareData) => boolean;
+      share?: (data: ShareData) => Promise<void>;
+    };
+    if (!nav.share) {
+      setExportStatus("Download blocked. Use Copy JSON or Share JSON.");
+      return;
+    }
+
+    const json = getExportJson();
+    const file = new File([json], exportName, { type: "application/json" });
+    const fileShareData = { files: [file], title: "Axis Measure Evidence" } satisfies ShareData;
+    try {
+      if (!nav.canShare || nav.canShare(fileShareData)) {
+        await nav.share(fileShareData);
+      } else {
+        await nav.share({ text: json, title: "Axis Measure Evidence" });
+      }
+      setExportStatus("Export ready");
+    } catch {
+      setExportStatus("Download blocked. Use Copy JSON or Share JSON.");
+    }
+  }
+
   return (
     <main className="axis-measure-review">
       <header className="axis-measure-review__header">
@@ -90,12 +128,19 @@ export default function AxisMeasureReviewPage() {
           <button disabled={frames.length === 0} onClick={() => void copyJson()} type="button">
             Copy JSON
           </button>
+          <button disabled={frames.length === 0} onClick={openJson} type="button">
+            Open JSON
+          </button>
+          <button disabled={frames.length === 0} onClick={() => void shareJson()} type="button">
+            Share JSON
+          </button>
           {exportStatus && <span>{exportStatus}</span>}
         </div>
       </header>
 
       <section className="axis-measure-review__intro">
         <p>Saved test frames become Axis-owned evidence for improving player, ball, and rim lock.</p>
+        <strong>{frames.length} saved frame{frames.length === 1 ? "" : "s"}</strong>
       </section>
 
       {frames.length === 0 ? (
@@ -277,7 +322,16 @@ const styles = `
 
   .axis-measure-review__intro {
     color: rgba(247, 244, 235, 0.68);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    justify-content: space-between;
     padding-bottom: 1rem;
+  }
+
+  .axis-measure-review__intro strong {
+    color: #f7f4eb;
+    font-size: 0.84rem;
   }
 
   .axis-measure-review__empty {
