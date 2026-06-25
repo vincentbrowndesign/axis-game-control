@@ -6,7 +6,7 @@ export type RoutineCueRulesVersion = "axis-routine-cue-rules-v0";
 
 export type RoutinePromptVersion = "none" | "axis-routine-insight-v0";
 
-export type RoutineScoringMethod = "make_miss" | "success_fail" | "count_only";
+export type RoutineScoringMethod = "make_miss" | "success_fail" | "count_only" | "timed_count";
 
 export type RoutineRunStatus = "planned" | "running" | "completed" | "abandoned";
 
