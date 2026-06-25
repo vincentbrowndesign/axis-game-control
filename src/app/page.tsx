@@ -1,20 +1,10 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 
+import { AxisRoutineSetup } from "../components/axis/AxisRoutineSetup";
 import { getAxisSurface } from "../lib/axis/surface";
 
 const surfaceCopy = {
-  axis: {
-    actions: [
-      { href: "/vision", label: "Vision" },
-      { href: "/axis", label: "Log" },
-      { href: "/axis?view=review", label: "Review" },
-    ],
-    domain: "ontheaxis.com",
-    strip: ["See what happened.", "Save what matters.", "Build player memory."],
-    subtitle: "Memory and vision for training.",
-    title: "Axis",
-  },
   measure: {
     actions: [
       { href: "/vision", label: "Open Object Lock" },
@@ -30,6 +20,10 @@ const surfaceCopy = {
 export default async function Home() {
   const requestHeaders = await headers();
   const surface = getAxisSurface(requestHeaders.get("x-forwarded-host") || requestHeaders.get("host"));
+  if (surface === "axis") {
+    return <AxisRoutineSetup />;
+  }
+
   const copy = surfaceCopy[surface];
 
   return (
