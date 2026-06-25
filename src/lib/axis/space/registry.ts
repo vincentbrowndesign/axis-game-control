@@ -302,16 +302,17 @@ export const axisProviders: AxisProvider[] = [
 
 export const axisLoops: AxisLoop[] = [
   {
-    acceptance_test: "Opening /axis/vision only runs the Vision Capture Loop.",
-    capability: "camera capture",
-    dataset: "session draft",
+    acceptance_test: "/axis/space shows Vision Capture Loop with Deliverable: Session Clip. /axis/vision remains unchanged until recording is built.",
+    capability: "camera capture; session recording",
+    dataset: "hidden dataset: session draft; capture start time; capture end time; device/camera state; clip metadata only",
     id: "vision-capture-loop",
     input: "rear camera",
     name: "Vision Capture Loop",
-    output: "mobile camera page",
-    provider: "browser camera",
-    result: "live video feed",
-    review: "Start/Stop works on iPhone Safari",
-    status: "active",
+    output:
+      "Deliverable: Session Clip - A clean playable clip from the training/practice/game environment that a trainer, player, parent, or coach would want to keep, review, or share.",
+    provider: "browser camera; browser recording if supported",
+    result: "live camera feed; recorded session segment",
+    review: "User can open /axis/vision; start camera; record a short clip; stop recording; see a playable preview of the session clip",
+    status: "testing",
   },
 ];
