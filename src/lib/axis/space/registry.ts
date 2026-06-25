@@ -72,6 +72,19 @@ export const axisCapabilityCategories: AxisCapabilityCategory[] = [
 
 export const axisCapabilities: AxisCapability[] = [
   {
+    acceptance_test: "Axis Routine contracts define a repeatable benchmark, rep timeline, and Workout Report without adding more UI.",
+    category: "Data / Storage",
+    datasets_created: ["sessions", "routine_runs", "rep_events", "workout_reports"],
+    description: "Turn a training session into a repeatable benchmark, rep timeline, and workout report.",
+    first_page: "/axis/space",
+    id: "axis-routine-loop",
+    inputs: ["routine setup", "rep events"],
+    name: "Axis Routine Loop",
+    outputs: ["Workout Report"],
+    possible_providers: ["manual-entry", "local-calculations"],
+    status: "active",
+  },
+  {
     acceptance_test: "Opening /axis/vision starts and stops the rear camera on iPhone Safari.",
     category: "Vision",
     datasets_created: ["sessions"],
@@ -206,6 +219,10 @@ export const axisCapabilities: AxisCapability[] = [
 export const axisDatasets: AxisDataset[] = [
   { description: "People connected to saved Axis work.", id: "players", name: "Players", status: "seed" },
   { description: "Session drafts and saved session records.", id: "sessions", name: "Sessions", status: "active" },
+  { description: "Future routine definitions for repeatable training benchmarks.", id: "routine_templates", name: "Routine Templates", status: "seed" },
+  { description: "Future routine executions that create rep timelines.", id: "routine_runs", name: "Routine Runs", status: "seed" },
+  { description: "Future manual rep events for routine timelines.", id: "rep_events", name: "Rep Events", status: "seed" },
+  { description: "Future calculated market-facing routine reports.", id: "workout_reports", name: "Workout Reports", status: "seed" },
   { description: "Future reviewed camera events.", id: "vision_events", name: "Vision Events", status: "seed" },
   { description: "Future reviewed shot attempts.", id: "shot_attempts", name: "Shot Attempts", status: "seed" },
   { description: "Future reviewed drill outcomes.", id: "drill_results", name: "Drill Results", status: "seed" },
@@ -232,6 +249,24 @@ export const axisProviders: AxisProvider[] = [
     description: "Local browser storage for lightweight drafts.",
     id: "local-storage",
     name: "Local Storage",
+    status: "available",
+    type: "browser",
+  },
+  {
+    capabilities: ["Manual routine setup", "Rep controls"],
+    category: "Manual Input",
+    description: "User-entered routine and rep events. No detector or provider required.",
+    id: "manual-entry",
+    name: "Manual Entry",
+    status: "available",
+    type: "browser",
+  },
+  {
+    capabilities: ["Routine metrics", "Workout Report calculations", "Deterministic cues"],
+    category: "Local Calculation",
+    description: "Pure local calculations for routine metrics and cue rules.",
+    id: "local-calculations",
+    name: "Local Calculations",
     status: "available",
     type: "browser",
   },
@@ -301,6 +336,19 @@ export const axisProviders: AxisProvider[] = [
 ];
 
 export const axisLoops: AxisLoop[] = [
+  {
+    acceptance_test: "Contracts exist for setup, rep logging, calculated metrics, and a Workout Report without adding full routine UI.",
+    capability: "routine setup; rep timeline; deterministic calculations; cue rules",
+    dataset: "hidden dataset: routine template; routine run; routine blocks; rep events; metrics snapshot; workout report",
+    deliverable: "Deliverable: Workout Report - a repeatable benchmark summary a player, parent, coach, trainer, or program would want to keep, review, share, or act on.",
+    id: "axis-routine-loop",
+    input: "manual routine setup; manual rep events",
+    name: "Axis Routine Loop",
+    provider: "manual entry; local calculations",
+    result: "repeatable benchmark; rep timeline; calculated report metrics",
+    review: "Calculated Workout Report exists without video, camera, AI, provider calls, or Supabase writes.",
+    status: "active",
+  },
   {
     acceptance_test: "/axis/vision can start the camera, record a short clip, stop recording, and show a playable Session Clip preview.",
     capability: "camera capture; session recording",
