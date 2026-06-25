@@ -1,4 +1,5 @@
 import type { AxisSurface } from "../surface";
+import type { AxisLiveDetection } from "../axis-vision-types";
 import type { VisionObject, VisionRelationship } from "../axis-object-lock-types";
 
 export const axisMeasureEvidenceStorageKey = "axis.measure.evidence.frames.v0";
@@ -26,6 +27,7 @@ export type AxisMeasureEvidenceFrame = {
   frameWidth: number;
   frameHeight: number;
   objects: VisionObject[];
+  rawDetections?: AxisLiveDetection[];
   relationships: VisionRelationship[];
   qualityLabels: AxisMeasureEvidenceQualityLabel[];
   notes?: string;

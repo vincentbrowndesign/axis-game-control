@@ -57,6 +57,8 @@ export function AxisVisionObjectLock({
   const inferenceRunningRef = useRef(false);
   const objectsRef = useRef<VisionObject[]>([]);
   const rawObjectsRef = useRef<VisionObject[]>([]);
+  const rawDetectionsRef = useRef<AxisLiveDetection[]>([]);
+  const renderedObjectsRef = useRef<VisionObject[]>([]);
   const frameIdRef = useRef(0);
   const pressTimerRef = useRef<number | null>(null);
   const objectStateRef = useRef<Record<string, VisionObject["state"]>>({});
@@ -96,7 +98,6 @@ export function AxisVisionObjectLock({
   const [saveMessage, setSaveMessage] = useState("");
 
   const players = objects.filter((object) => object.type === "player");
-  const rim = objects.find((object) => object.type === "rim");
   const ball = objects.find((object) => object.type === "ball");
 
   useEffect(() => {
@@ -176,6 +177,7 @@ export function AxisVisionObjectLock({
     try {
       const result = await detectWithYolo(video, frameIdRef.current + 1, timestamp);
       const detections = result.detections;
+      rawDetectionsRef.current = detections;
       rawDetectionCountRef.current = detections.length;
       modelClassesRef.current = summarizeDetectionClasses(detections);
       const tracks = trackerRef.current.update(detections, timestamp);
@@ -283,6 +285,7 @@ export function AxisVisionObjectLock({
       notes: "",
       objects: getEvidenceObjects(timestamp),
       qualityLabels: [],
+      rawDetections: rawDetectionsRef.current,
       relationships: frameState?.relationships ?? [],
       reviewStatus: "unreviewed",
       route,
@@ -618,7 +621,7 @@ export function AxisVisionObjectLock({
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    getDrawableObjects().forEach((object) => drawObject(ctx, object));
+    getRenderedObjects().forEach((object) => drawObject(ctx, object));
 
     if (overlayMode === "debug") {
       drawDebug(ctx);
@@ -630,6 +633,23 @@ export function AxisVisionObjectLock({
       ? objectsRef.current
       : [...rawObjectsRef.current, ...objectsRef.current.filter((object) => object.type !== "player")]);
     return withImmediateRim;
+  }
+
+  function getRenderedObjects() {
+    const targetObjects = getDrawableObjects();
+    const previousObjects = renderedObjectsRef.current;
+    const renderedObjects = targetObjects.map((object) => {
+      const previous = previousObjects.find((item) => item.id === object.id);
+      if (!previous) return object;
+      return {
+        ...object,
+        bbox: smoothBox(previous.bbox, object.bbox, object.state === "lost" ? 0.18 : 0.36),
+        confidence: object.state === "lost" ? Math.max(0, previous.confidence * 0.9) : object.confidence,
+      };
+    });
+
+    renderedObjectsRef.current = renderedObjects;
+    return renderedObjects;
   }
 
   function appendImmediateRim(drawableObjects: VisionObject[]) {
@@ -762,7 +782,7 @@ export function AxisVisionObjectLock({
         {cameraState !== "live" && (
           <div className="axis-object-lock__empty">
             <strong>{productName}</strong>
-            <p>Find the player. Find the rim. Find the ball.</p>
+            <p>Axis sees the player. Set the rim. Bring in the ball.</p>
             <button type="button" onClick={() => void startVision()}>
               Start Vision
             </button>
@@ -788,10 +808,9 @@ export function AxisVisionObjectLock({
         </header>
 
         <div className="axis-object-lock__flow" aria-label="Axis Vision setup flow">
-          <span data-active={cameraState === "live"}>1 Start camera</span>
-          <span data-active={players.length > 0}>2 Lock player</span>
-          <span data-active={Boolean(rim)}>3 Set rim</span>
-          <span data-active={Boolean(ball)}>4 Ball</span>
+          <span data-active={players.length > 0}>Axis sees the player.</span>
+          <span data-active={Boolean(rimBox)}>Set the rim.</span>
+          <span data-active={Boolean(ball)}>Bring in the ball.</span>
         </div>
 
         {rimSetup !== "idle" && (
