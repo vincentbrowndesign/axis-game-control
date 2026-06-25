@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createAxisTracker } from "../../lib/axis/axis-simple-tracker";
 import {
   calculateVisionRelationships,
@@ -10,6 +10,8 @@ import {
 } from "../../lib/axis/axis-object-lock";
 import {
   axisMeasureEvidenceQualityLabels,
+  axisMeasureEvidenceStorageEvent,
+  getAxisMeasureEvidenceFrameSnapshot,
   saveAxisMeasureEvidenceFrame,
   updateAxisMeasureEvidenceFrame,
   type AxisMeasureEvidenceQualityLabel,
@@ -23,6 +25,7 @@ type ModelState = "idle" | "loading" | "ready" | "error";
 type OverlayMode = "product" | "debug";
 type RimEditMode = "idle" | "placing" | "adjusting";
 type RimDragMode = "move" | "resize";
+type DetectorReadiness = "Warming up" | "Ready" | "Slow" | "Offline";
 
 const maxPlayers = 3;
 const inferenceIntervalMs = 700;
@@ -96,9 +99,12 @@ export function AxisVisionObjectLock({
   const [savedFrameId, setSavedFrameId] = useState<string | null>(null);
   const [savedFrameLabels, setSavedFrameLabels] = useState<AxisMeasureEvidenceQualityLabel[]>([]);
   const [saveMessage, setSaveMessage] = useState("");
+  const [cameraLiveSince, setCameraLiveSince] = useState<number | null>(null);
+  const [fieldTick, setFieldTick] = useState(0);
 
   const players = objects.filter((object) => object.type === "player");
   const ball = objects.find((object) => object.type === "ball");
+  const savedEvidenceCount = useSyncExternalStore(subscribeToEvidenceFrames, getEvidenceCountSnapshot, getEmptyEvidenceCount);
 
   useEffect(() => {
     recordAxisVisionObjectEvent("vision_opened", { productName, route });
@@ -109,6 +115,12 @@ export function AxisVisionObjectLock({
     draw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [objects, overlayMode, frameState, selectedId, rimSetup, rimBox, rimLocked]);
+
+  useEffect(() => {
+    if (cameraState !== "live") return undefined;
+    const timer = window.setInterval(() => setFieldTick((current) => current + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [cameraState]);
 
   async function startVision() {
     if (cameraState === "starting" || cameraState === "live") return;
@@ -132,6 +144,8 @@ export function AxisVisionObjectLock({
       video.srcObject = stream;
       await video.play();
       setCameraState("live");
+      setCameraLiveSince(Date.now());
+      setFieldTick(0);
       recordAxisVisionObjectEvent("camera_started");
 
       setModelState("ready");
@@ -151,6 +165,8 @@ export function AxisVisionObjectLock({
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraState("idle");
+    setCameraLiveSince(null);
+    setFieldTick(0);
     setModelState("idle");
   }
 
@@ -498,7 +514,7 @@ export function AxisVisionObjectLock({
 
     if (rimSetup === "adjusting" && rimBox) {
       const handle = getRimResizeHandle(rimBox);
-      const nearHandle = Math.hypot(point.x - handle.x, point.y - handle.y) <= 28;
+      const nearHandle = Math.hypot(point.x - handle.x, point.y - handle.y) <= 44;
       const inBox = point.x >= rimBox.x && point.x <= rimBox.x + rimBox.width && point.y >= rimBox.y && point.y <= rimBox.y + rimBox.height;
       if (nearHandle || inBox) {
         rimDragRef.current = {
@@ -697,8 +713,11 @@ export function AxisVisionObjectLock({
       const handle = getRimResizeHandle(object.bbox);
       ctx.fillStyle = "#d8ad52";
       ctx.beginPath();
-      ctx.arc(handle.x, handle.y, 7, 0, Math.PI * 2);
+      ctx.arc(handle.x, handle.y, 14, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "rgba(5, 7, 6, 0.82)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -747,7 +766,7 @@ export function AxisVisionObjectLock({
     ctx.fillText(`Cadence: ${Math.round(lastCadenceMs)}ms  Latency: ${Math.round(lastInferenceMs)}ms`, 28, 148);
     ctx.fillText(`Misses: ${detectorMissesRef.current}  Dropped: ${droppedFramesRef.current}`, 28, 170);
     ctx.fillText(`Classes: ${modelClassesRef.current || "none"}`, 28, 192);
-    ctx.fillText(`Multi-player: ${multiPlayer ? "on" : "off"}`, 28, 214);
+    ctx.fillText(`Evidence: ${savedEvidenceCount}  Multi-player: ${multiPlayer ? "on" : "off"}`, 28, 214);
     if (detectorError) ctx.fillText(`Error: ${detectorError.slice(0, 38)}`, 28, 236);
     ctx.restore();
   }
@@ -765,6 +784,18 @@ export function AxisVisionObjectLock({
       rim: rimLocked && rimBox ? "locked" : rimBox ? "placed" : "manual",
     };
   }, [ball, players, rimBox, rimLocked]);
+
+  const detectorReadiness = useMemo<DetectorReadiness>(() => {
+    if (detectorMissesRef.current >= 3 || modelState === "error") return "Offline";
+    if (cameraState === "live" && frameIdRef.current === 0) return "Warming up";
+    if (lastInferenceMs > 1800 || lastCadenceMs > 1500) return "Slow";
+    if (modelState === "ready" && frameIdRef.current > 0) return "Ready";
+    return "Warming up";
+  }, [cameraState, lastCadenceMs, lastInferenceMs, modelState]);
+
+  const showStepIntoFrame = Boolean(cameraLiveSince && cameraState === "live" && players.length === 0 && fieldTick >= 5);
+  const playerFlowText = showStepIntoFrame ? "Step into frame." : players.length > 0 ? "Axis sees the player." : "Find the player.";
+  const ballFlowText = ball && ball.state !== "lost" ? "Ball detected." : "Ball searching.";
 
   return (
     <main className="axis-object-lock">
@@ -792,7 +823,9 @@ export function AxisVisionObjectLock({
         <header className="axis-object-lock__top">
           <div>
             <strong>{productName}</strong>
-            <span>{cameraState === "live" ? "Live" : cameraState}</span>
+            <span data-readiness={detectorReadiness.toLowerCase().replace(/\s+/g, "-")}>
+              {cameraState === "live" ? detectorReadiness : cameraState}
+            </span>
           </div>
           <div className="axis-object-lock__toggle" aria-label="Overlay mode">
             <button data-active={overlayMode === "product"} type="button" onClick={() => toggleMode("product")}>
@@ -808,9 +841,9 @@ export function AxisVisionObjectLock({
         </header>
 
         <div className="axis-object-lock__flow" aria-label="Axis Vision setup flow">
-          <span data-active={players.length > 0}>Axis sees the player.</span>
+          <span data-active={players.length > 0} data-warning={showStepIntoFrame ? "true" : undefined}>{playerFlowText}</span>
           <span data-active={Boolean(rimBox)}>Set the rim.</span>
-          <span data-active={Boolean(ball)}>Bring in the ball.</span>
+          <span data-active={Boolean(ball && ball.state !== "lost")}>{ballFlowText}</span>
         </div>
 
         {rimSetup !== "idle" && (
@@ -818,7 +851,7 @@ export function AxisVisionObjectLock({
             <span>{rimSetup === "placing" ? "Tap where the rim is." : "Drag or resize the rim box."}</span>
             {rimSetup === "adjusting" && (
               <div>
-                <button type="button" onClick={lockRim}>Lock Rim</button>
+                <button className="axis-object-lock__lock-rim" type="button" onClick={lockRim}>Lock Rim</button>
                 <button type="button" onClick={cancelRimSetup}>Cancel</button>
               </div>
             )}
@@ -831,6 +864,11 @@ export function AxisVisionObjectLock({
               <input checked={multiPlayer} onChange={(event) => setMultiPlayer(event.target.checked)} type="checkbox" />
               Multi-player
             </label>
+            <div className="axis-object-lock__debug-stats">
+              <span>Latency {Math.round(lastInferenceMs)}ms</span>
+              <span>Raw {rawDetectionCountRef.current}</span>
+              <span>Saved {savedEvidenceCount}</span>
+            </div>
             <button type="button" onClick={saveTestFrame}>Save Test Frame</button>
             <a href="/measure/review">Review frames</a>
             {saveMessage && <span>{saveMessage}</span>}
@@ -981,6 +1019,19 @@ const styles = `
     text-transform: uppercase;
   }
 
+  .axis-object-lock__top span[data-readiness="ready"] {
+    color: #c8f1dd;
+  }
+
+  .axis-object-lock__top span[data-readiness="slow"],
+  .axis-object-lock__flow span[data-warning="true"] {
+    color: #ffe0a6;
+  }
+
+  .axis-object-lock__top span[data-readiness="offline"] {
+    color: #ffd7c7;
+  }
+
   .axis-object-lock__toggle {
     display: flex;
     gap: 0.25rem;
@@ -994,10 +1045,10 @@ const styles = `
 
   .axis-object-lock__hint {
     display: grid;
-    gap: 0.55rem;
+    gap: 0.75rem;
     left: 50%;
     min-width: min(22rem, calc(100vw - 2rem));
-    padding: 0.7rem 0.9rem;
+    padding: 0.85rem 0.95rem;
     text-align: center;
     top: 8.9rem;
     transform: translateX(-50%);
@@ -1010,7 +1061,14 @@ const styles = `
   }
 
   .axis-object-lock__hint button {
-    min-height: 2.2rem;
+    font-size: 0.86rem;
+    min-height: 3rem;
+    min-width: 7.25rem;
+  }
+
+  .axis-object-lock__hint .axis-object-lock__lock-rim {
+    background: rgba(216, 173, 82, 0.96);
+    color: #151008;
   }
 
   .axis-object-lock__flow {
@@ -1061,6 +1119,21 @@ const styles = `
     accent-color: #d8ad52;
   }
 
+  .axis-object-lock__debug-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .axis-object-lock__debug-stats span {
+    background: rgba(247, 244, 235, 0.08);
+    border: 1px solid rgba(247, 244, 235, 0.1);
+    border-radius: 999px;
+    color: rgba(247, 244, 235, 0.76);
+    font-size: 0.68rem;
+    padding: 0.32rem 0.5rem;
+  }
+
   .axis-object-lock__debug-controls a {
     color: #f7f4eb;
     text-decoration: underline;
@@ -1097,6 +1170,11 @@ const styles = `
     padding: 0.55rem;
   }
 
+  .axis-object-lock__bottom button {
+    min-height: 3rem;
+    min-width: 4.6rem;
+  }
+
   .axis-object-lock__bottom div {
     display: grid;
     gap: 0.08rem;
@@ -1125,4 +1203,50 @@ const styles = `
       max-width: 76rem;
     }
   }
+
+  @media (max-width: 640px) {
+    .axis-object-lock__top {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
+
+    .axis-object-lock__top > div:first-child {
+      flex: 1 1 7rem;
+    }
+
+    .axis-object-lock__toggle {
+      order: 3;
+      width: 100%;
+    }
+
+    .axis-object-lock__toggle button {
+      flex: 1 1 0;
+    }
+
+    .axis-object-lock__bottom {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .axis-object-lock__bottom button {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
 `;
+
+function subscribeToEvidenceFrames(onStoreChange: () => void) {
+  window.addEventListener(axisMeasureEvidenceStorageEvent, onStoreChange);
+  window.addEventListener("storage", onStoreChange);
+  return () => {
+    window.removeEventListener(axisMeasureEvidenceStorageEvent, onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
+}
+
+function getEvidenceCountSnapshot() {
+  return getAxisMeasureEvidenceFrameSnapshot().length;
+}
+
+function getEmptyEvidenceCount() {
+  return 0;
+}
