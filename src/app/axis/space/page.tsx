@@ -94,9 +94,10 @@ export default function AxisSpacePage() {
         <div className="axis-space__grid">
           {axisProviders.map((provider) => (
             <article className="axis-space__item" key={provider.id}>
-              <small>{provider.type}</small>
+              <small>{provider.category} - {provider.type}</small>
               <strong>{provider.name}</strong>
               <span>{provider.description}</span>
+              <span>Capabilities: {formatList(provider.capabilities)}</span>
               <em data-status={provider.status}>{provider.status}</em>
             </article>
           ))}

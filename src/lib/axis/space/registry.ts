@@ -48,6 +48,8 @@ export type AxisLoop = {
 };
 
 export type AxisProvider = {
+  capabilities: string[];
+  category: string;
   description: string;
   id: string;
   name: string;
@@ -216,6 +218,8 @@ export const axisDatasets: AxisDataset[] = [
 
 export const axisProviders: AxisProvider[] = [
   {
+    capabilities: ["Camera capture"],
+    category: "Browser Device",
     description: "Native browser camera access. No external API key.",
     id: "browser-camera",
     name: "Browser Camera",
@@ -223,6 +227,8 @@ export const axisProviders: AxisProvider[] = [
     type: "browser",
   },
   {
+    capabilities: ["Session drafts", "Local fallback"],
+    category: "Browser Storage",
     description: "Local browser storage for lightweight drafts.",
     id: "local-storage",
     name: "Local Storage",
@@ -230,6 +236,8 @@ export const axisProviders: AxisProvider[] = [
     type: "browser",
   },
   {
+    capabilities: ["Future reasoning"],
+    category: "Reasoning",
     description: "Placeholder for future reasoning providers.",
     id: "llm-provider",
     name: "Reasoning Provider",
@@ -237,11 +245,58 @@ export const axisProviders: AxisProvider[] = [
     type: "external",
   },
   {
+    capabilities: ["Future exports"],
+    category: "Export",
     description: "Placeholder for future file/document output.",
     id: "browser-download",
     name: "Browser Download",
     status: "planned",
     type: "browser",
+  },
+  {
+    capabilities: ["Vision", "Audio / Voice", "LLM / Reasoning", "Embeddings", "Classification"],
+    category: "Model Hub",
+    description: "Future model discovery and evaluation registry. No Hugging Face Space or API connection exists yet.",
+    id: "hugging-face-models",
+    name: "Hugging Face Models",
+    status: "planned",
+    type: "external",
+  },
+  {
+    capabilities: ["LLM / Reasoning", "Text generation", "Image generation", "Embeddings", "Speech", "Classification"],
+    category: "Inference API",
+    description: "Future hosted inference option. No API calls or tokens are wired.",
+    id: "hugging-face-inference-providers",
+    name: "Hugging Face Inference Providers",
+    status: "planned",
+    type: "external",
+  },
+  {
+    capabilities: ["Dedicated model serving", "Production inference"],
+    category: "Production Model Hosting",
+    description: "Future dedicated inference hosting for production models.",
+    id: "hugging-face-inference-endpoints",
+    name: "Hugging Face Inference Endpoints",
+    status: "planned",
+    type: "external",
+  },
+  {
+    capabilities: ["sanitized training datasets", "model evaluation datasets", "dataset cards"],
+    category: "Dataset Registry",
+    description: "Future public or sanitized dataset registry. No real player footage is referenced or uploaded.",
+    id: "hugging-face-datasets",
+    name: "Hugging Face Datasets",
+    status: "planned",
+    type: "external",
+  },
+  {
+    capabilities: ["model artifacts", "checkpoints", "logs", "large training files"],
+    category: "Large File Storage",
+    description: "Future large-file storage option for model artifacts and training files.",
+    id: "hugging-face-storage-buckets",
+    name: "Hugging Face Storage Buckets",
+    status: "planned",
+    type: "external",
   },
 ];
 
