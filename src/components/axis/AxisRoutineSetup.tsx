@@ -10,6 +10,53 @@ type RoutinePageState = "builder" | "review" | "running" | "complete";
 
 type EditableBlock = RoutineBlockPlan & {
   id: string;
+  instruction?: string;
+  scoringIntent?: string;
+};
+
+type RepResult = "success" | "miss" | "fail" | "neutral" | "breakdown";
+
+type LocalRepEvent = {
+  blockId: string;
+  blockName: string;
+  repId: string;
+  repNumber: number;
+  result: RepResult;
+  secondsIntoBlock: number;
+  secondsIntoSession: number;
+  timestamp: string;
+};
+
+type MetricsSummary = {
+  bestStreak: number;
+  blockReps: number;
+  breakdownsOrFails: number;
+  currentBlockScore: number;
+  currentDrought: number;
+  currentStreak: number;
+  lastFivePattern: string;
+  longestDrought: number;
+  missesOrFails: number;
+  pacePerMinute: number;
+  successRate: number | null;
+  successes: number;
+  totalReps: number;
+};
+
+type SessionGuide = {
+  blockInstruction: string;
+  coachingCue: string;
+  nextAction: string;
+  warning?: string;
+};
+
+type ReportCopy = {
+  coachNote: string;
+  keyPattern: string;
+  nextSessionRecommendation: string;
+  playerMessage: string;
+  progressNote: string;
+  summary: string;
 };
 
 type RunningClock = {
@@ -24,7 +71,15 @@ type RunningClock = {
 
 type CompleteSummary = {
   completedBlocksCount: number;
+  finalBenchmarkResult: number;
+  metrics: MetricsSummary;
+  reportCopy: ReportCopy | null;
+  startingBenchmarkResult: number;
   totalElapsedSeconds: number;
+};
+
+type LocalRoutineTemplate = Omit<RoutineTemplate, "blockStructure"> & {
+  blockStructure: EditableBlock[];
 };
 
 const routineLengthOptions: Array<{ label: string; value: RoutineLengthOption }> = [
@@ -42,13 +97,13 @@ const scoringOptions: Array<{ label: string; value: RoutineScoringMethod }> = [
 ];
 
 const defaultBlocks: EditableBlock[] = [
-  { id: "warmup", name: "Warmup", order: 1, plannedDurationSeconds: 5 * 60, type: "recovery" },
-  { id: "starting-benchmark", name: "Starting Benchmark", order: 2, plannedDurationSeconds: 8 * 60, type: "benchmark" },
-  { id: "work-block-1", name: "Work Block 1", order: 3, plannedDurationSeconds: 12 * 60, type: "skill" },
-  { id: "work-block-2", name: "Work Block 2", order: 4, plannedDurationSeconds: 12 * 60, type: "skill" },
-  { id: "work-block-3", name: "Work Block 3", order: 5, plannedDurationSeconds: 12 * 60, type: "skill" },
-  { id: "final-benchmark", name: "Final Benchmark", order: 6, plannedDurationSeconds: 8 * 60, type: "benchmark" },
-  { id: "report", name: "Report", order: 7, plannedDurationSeconds: 3 * 60, type: "custom" },
+  { id: "warmup", instruction: "Get loose and prepare for the benchmark.", name: "Warmup", order: 1, plannedDurationSeconds: 5 * 60, scoringIntent: "Prepare clean movement.", type: "recovery" },
+  { id: "starting-benchmark", instruction: "Set the baseline. Do not chase perfection.", name: "Starting Benchmark", order: 2, plannedDurationSeconds: 8 * 60, scoringIntent: "Set the baseline.", type: "benchmark" },
+  { id: "work-block-1", instruction: "Train the focus. Keep the pace honest.", name: "Work Block 1", order: 3, plannedDurationSeconds: 12 * 60, scoringIntent: "Count clean work.", type: "skill" },
+  { id: "work-block-2", instruction: "Train the focus. Keep the pace honest.", name: "Work Block 2", order: 4, plannedDurationSeconds: 12 * 60, scoringIntent: "Count clean work.", type: "skill" },
+  { id: "work-block-3", instruction: "Train the focus. Keep the pace honest.", name: "Work Block 3", order: 5, plannedDurationSeconds: 12 * 60, scoringIntent: "Count clean work.", type: "skill" },
+  { id: "final-benchmark", instruction: "Retest the same skill and beat the baseline.", name: "Final Benchmark", order: 6, plannedDurationSeconds: 8 * 60, scoringIntent: "Beat the baseline.", type: "benchmark" },
+  { id: "report", instruction: "Wrap the session and prepare the report.", name: "Report", order: 7, plannedDurationSeconds: 3 * 60, scoringIntent: "Review the session.", type: "custom" },
 ];
 
 export function AxisRoutineSetup() {
@@ -64,9 +119,11 @@ export function AxisRoutineSetup() {
   const [benchmarkName, setBenchmarkName] = useState("Training Benchmark");
   const [blocks, setBlocks] = useState<EditableBlock[]>(defaultBlocks);
   const [editingBlockId, setEditingBlockId] = useState(defaultBlocks[0]?.id ?? "");
-  const [configuredRoutine, setConfiguredRoutine] = useState<RoutineTemplate | null>(null);
+  const [configuredRoutine, setConfiguredRoutine] = useState<LocalRoutineTemplate | null>(null);
   const [runningClock, setRunningClock] = useState<RunningClock | null>(null);
   const [completeSummary, setCompleteSummary] = useState<CompleteSummary | null>(null);
+  const [repEvents, setRepEvents] = useState<LocalRepEvent[]>([]);
+  const [sessionGuide, setSessionGuide] = useState<SessionGuide | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const selectedRoutineMinutes = routineLengthOption === "custom" ? customLengthMinutes : Number(routineLengthOption);
@@ -79,6 +136,17 @@ export function AxisRoutineSetup() {
   const hasMismatch = totalBlockSeconds !== selectedRoutineSeconds;
   const editingBlock = blocks.find((block) => block.id === editingBlockId) ?? blocks[0];
   const canStartRoutine = blocks.length > 0 && selectedRoutineSeconds > 0;
+  const activeBlockId =
+    configuredRoutine && runningClock
+      ? getBlockId(configuredRoutine.blockStructure[runningClock.currentBlockIndex])
+      : "";
+  const metrics = useMemo(() => calculateMetrics(repEvents, activeBlockId, runningClock?.runStartedAtMs, nowMs), [
+    activeBlockId,
+    nowMs,
+    repEvents,
+    runningClock?.runStartedAtMs,
+  ]);
+  const axisCue = getAxisCue(metrics, repEvents, activeBlockId);
 
   useEffect(() => {
     if (pageState !== "running" || runningClock?.isPaused) return;
@@ -133,9 +201,11 @@ export function AxisRoutineSetup() {
       nextLength === 30 || nextLength === 45 || nextLength === 60 ? (String(nextLength) as RoutineLengthOption) : "custom";
     const suggestedBlocks = suggestion.blocks.map((block, index) => ({
       id: block.id ?? createBlockId(block.name, index),
+      instruction: block.instruction,
       name: block.name,
       order: block.order,
       plannedDurationSeconds: block.plannedDurationSeconds,
+      scoringIntent: block.scoringIntent,
       type: block.type,
     }));
 
@@ -170,12 +240,7 @@ export function AxisRoutineSetup() {
     const now = new Date().toISOString();
     return {
       benchmarkName: benchmarkName.trim() || "Training Benchmark",
-      blockStructure: blocks.map((block) => ({
-        name: block.name,
-        order: block.order,
-        plannedDurationSeconds: block.plannedDurationSeconds,
-        type: block.type,
-      })),
+      blockStructure: blocks.map((block) => ({ ...block })),
       constraints: [],
       createdAt: now,
       focus: focus.trim() || "General skill work",
@@ -191,10 +256,11 @@ export function AxisRoutineSetup() {
   function startRoutine() {
     if (!canStartRoutine) return;
     const routine = createRoutineTemplate();
-    const startedAtMs = Date.now();
+    const startedAtMs = new Date().getTime();
     setConfiguredRoutine(routine);
+    setRepEvents([]);
     setNowMs(startedAtMs);
-    setRunningClock({
+    const nextClock = {
       blockPausedMs: 0,
       blockStartedAtMs: startedAtMs,
       currentBlockIndex: 0,
@@ -202,9 +268,11 @@ export function AxisRoutineSetup() {
       pausedAtMs: null,
       runStartedAtMs: startedAtMs,
       totalPausedMs: 0,
-    });
+    };
+    setRunningClock(nextClock);
     setCompleteSummary(null);
     setPageState("running");
+    void loadSessionGuide(routine, nextClock, emptyMetrics());
   }
 
   function pauseRoutine() {
@@ -235,7 +303,7 @@ export function AxisRoutineSetup() {
       if (nextIndex < 0 || nextIndex >= configuredRoutine.blockStructure.length) return clock;
       const startedAtMs = Date.now();
       setNowMs(startedAtMs);
-      return {
+      const nextClock = {
         ...clock,
         blockPausedMs: 0,
         blockStartedAtMs: startedAtMs,
@@ -243,18 +311,35 @@ export function AxisRoutineSetup() {
         isPaused: false,
         pausedAtMs: null,
       };
+      void loadSessionGuide(configuredRoutine, nextClock, metrics);
+      return nextClock;
     });
   }
 
-  function finishRoutine() {
+  async function finishRoutine() {
     if (!configuredRoutine || !runningClock) return;
-    const endedAtMs = runningClock.isPaused && runningClock.pausedAtMs !== null ? runningClock.pausedAtMs : Date.now();
+    const endedAtMs = runningClock.isPaused && runningClock.pausedAtMs !== null ? runningClock.pausedAtMs : new Date().getTime();
+    const finalMetrics = calculateMetrics(repEvents, activeBlockId, runningClock.runStartedAtMs, endedAtMs);
+    const startingBenchmarkResult = getBenchmarkResult(repEvents, configuredRoutine.blockStructure, "starting");
+    const finalBenchmarkResult = getBenchmarkResult(repEvents, configuredRoutine.blockStructure, "final");
     setCompleteSummary({
       completedBlocksCount: Math.min(runningClock.currentBlockIndex + 1, configuredRoutine.blockStructure.length),
+      finalBenchmarkResult,
+      metrics: finalMetrics,
+      reportCopy: null,
+      startingBenchmarkResult,
       totalElapsedSeconds: getElapsedSeconds(endedAtMs, runningClock.runStartedAtMs, runningClock.totalPausedMs),
     });
     setRunningClock(null);
     setPageState("complete");
+    const reportCopy = await loadReportPreview(
+      configuredRoutine,
+      finalMetrics,
+      startingBenchmarkResult,
+      finalBenchmarkResult,
+      getElapsedSeconds(endedAtMs, runningClock.runStartedAtMs, runningClock.totalPausedMs),
+    );
+    setCompleteSummary((currentSummary) => (currentSummary ? { ...currentSummary, reportCopy } : currentSummary));
   }
 
   function resetRoutine() {
@@ -272,6 +357,94 @@ export function AxisRoutineSetup() {
     setConfiguredRoutine(null);
     setRunningClock(null);
     setCompleteSummary(null);
+    setRepEvents([]);
+    setSessionGuide(null);
+  }
+
+  function logRep(result: RepResult) {
+    if (!configuredRoutine || !runningClock) return;
+    const eventNowMs = runningClock.isPaused && runningClock.pausedAtMs !== null ? runningClock.pausedAtMs : Date.now();
+    const currentBlock = configuredRoutine.blockStructure[runningClock.currentBlockIndex];
+    const blockId = getBlockId(currentBlock);
+    const blockEventCount = repEvents.filter((event) => event.blockId === blockId).length;
+    setRepEvents((events) => [
+      ...events,
+      {
+        blockId,
+        blockName: currentBlock.name,
+        repId: `rep-${eventNowMs}-${events.length + 1}`,
+        repNumber: blockEventCount + 1,
+        result,
+        secondsIntoBlock: getElapsedSeconds(eventNowMs, runningClock.blockStartedAtMs, runningClock.blockPausedMs),
+        secondsIntoSession: getElapsedSeconds(eventNowMs, runningClock.runStartedAtMs, runningClock.totalPausedMs),
+        timestamp: new Date(eventNowMs).toISOString(),
+      },
+    ]);
+    setNowMs(eventNowMs);
+  }
+
+  function undoRep() {
+    setRepEvents((events) => events.slice(0, -1));
+  }
+
+  async function loadSessionGuide(routine: LocalRoutineTemplate, clock: RunningClock, summary: MetricsSummary) {
+    const currentBlock = routine.blockStructure[clock.currentBlockIndex];
+    try {
+      const response = await fetch("/api/axis/session-guide", {
+        body: JSON.stringify({
+          currentBlock,
+          metricsSummary: summary,
+          plan: routine,
+          recentRepSummary: repEvents.slice(-5),
+          scoringMethod: routine.scoringMethod,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as SessionGuide;
+      if (response.ok) {
+        setSessionGuide(payload);
+        return;
+      }
+    } catch {
+      // Local fallback below keeps the workout moving.
+    }
+    setSessionGuide({
+      blockInstruction: currentBlock.instruction || getBlockInstruction(currentBlock),
+      coachingCue: "Keep building clean reps.",
+      nextAction: "Log the next rep.",
+    });
+  }
+
+  async function loadReportPreview(
+    routine: LocalRoutineTemplate,
+    summary: MetricsSummary,
+    startingBenchmarkResult: number,
+    finalBenchmarkResult: number,
+    elapsedSeconds: number,
+  ): Promise<ReportCopy> {
+    try {
+      const response = await fetch("/api/axis/report", {
+        body: JSON.stringify({
+          blockSummaries: summarizeBlocks(repEvents, routine.blockStructure),
+          elapsedSeconds,
+          finalBenchmarkResult,
+          focus: routine.focus,
+          metrics: summary,
+          plan: routine,
+          playerOrGroup: routine.playerOrGroup,
+          repTimelineSummary: repEvents.slice(-12),
+          startingBenchmarkResult,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as ReportCopy;
+      if (response.ok) return payload;
+    } catch {
+      // Deterministic fallback below.
+    }
+    return createLocalReportCopy(routine, summary, startingBenchmarkResult, finalBenchmarkResult);
   }
 
   if (pageState === "running" && configuredRoutine && runningClock) {
@@ -289,7 +462,7 @@ export function AxisRoutineSetup() {
           <section className="axis-routine__current" aria-label="Current routine block">
             <span>Block {runningClock.currentBlockIndex + 1} of {configuredRoutine.blockStructure.length}</span>
             <h2 id="axis-routine-running-title">{currentBlock.name}</h2>
-            <p>{getBlockInstruction(currentBlock)}</p>
+            <p>{sessionGuide?.blockInstruction || currentBlock.instruction || getBlockInstruction(currentBlock)}</p>
             <strong>Planned: {formatDuration(currentBlock.plannedDurationSeconds)}</strong>
             {isOverPlanned && <em role="status">Over planned time</em>}
           </section>
@@ -304,6 +477,9 @@ export function AxisRoutineSetup() {
               <strong>{formatDuration(blockElapsedSeconds)}</strong>
             </div>
           </section>
+
+          <ScoringControls scoringMethod={configuredRoutine.scoringMethod} onLog={logRep} onUndo={undoRep} />
+          <LiveProgressCard axisCue={sessionGuide?.coachingCue || axisCue} metrics={metrics} />
 
           <ProgressList blocks={configuredRoutine.blockStructure} currentBlockIndex={runningClock.currentBlockIndex} />
 
@@ -324,7 +500,7 @@ export function AxisRoutineSetup() {
             >
               Next Block
             </button>
-            <button className="axis-routine__finish" onClick={finishRoutine} type="button">Finish Routine</button>
+            <button className="axis-routine__finish" onClick={() => void finishRoutine()} type="button">Finish Routine</button>
           </div>
         </section>
         <style jsx>{styles}</style>
@@ -336,13 +512,32 @@ export function AxisRoutineSetup() {
     return (
       <main className="axis-routine">
         <section className="axis-routine__shell" aria-labelledby="axis-routine-complete-title">
-          <Header id="axis-routine-complete-title" title="Routine Complete" subtitle="Session is finished." />
+          <Header id="axis-routine-complete-title" title="Routine Complete" subtitle="Report Preview" />
 
           <section className="axis-routine__summary-card" aria-labelledby="axis-routine-complete-title">
             <SummaryItem label="Player / Group" value={configuredRoutine.playerOrGroup} />
             <SummaryItem label="Focus" value={configuredRoutine.focus} />
             <SummaryItem label="Total Elapsed Time" value={formatDuration(completeSummary.totalElapsedSeconds)} />
             <SummaryItem label="Completed Blocks" value={`${completeSummary.completedBlocksCount} of ${configuredRoutine.blockStructure.length}`} />
+            <SummaryItem label="Total Reps" value={`${completeSummary.metrics.totalReps}`} />
+            <SummaryItem label="Clean / Success" value={`${completeSummary.metrics.successes}`} />
+            <SummaryItem label="Miss / Breakdown" value={`${completeSummary.metrics.missesOrFails + completeSummary.metrics.breakdownsOrFails}`} />
+            <SummaryItem label="Rate / Pace" value={formatRatePace(completeSummary.metrics)} />
+            <SummaryItem label="Best Streak" value={`${completeSummary.metrics.bestStreak}`} />
+            <SummaryItem label="Longest Drought" value={`${completeSummary.metrics.longestDrought}`} />
+            <SummaryItem label="Starting Benchmark" value={`${completeSummary.startingBenchmarkResult}`} />
+            <SummaryItem label="Final Benchmark" value={`${completeSummary.finalBenchmarkResult}`} />
+            <SummaryItem
+              label="Change"
+              value={`${completeSummary.finalBenchmarkResult - completeSummary.startingBenchmarkResult >= 0 ? "+" : ""}${completeSummary.finalBenchmarkResult - completeSummary.startingBenchmarkResult}`}
+            />
+          </section>
+
+          <section className="axis-routine__report-preview" aria-label="Axis report preview">
+            <h2>Report Preview</h2>
+            <p>{completeSummary.reportCopy?.summary || "Calculating the session pattern."}</p>
+            <p>{completeSummary.reportCopy?.keyPattern || "Metrics stay based on your logged reps."}</p>
+            <strong>{completeSummary.reportCopy?.nextSessionRecommendation || "Next target will appear here."}</strong>
           </section>
 
           <div className="axis-routine__actions">
@@ -611,8 +806,203 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ScoringControls({
+  onLog,
+  onUndo,
+  scoringMethod,
+}: {
+  onLog: (result: RepResult) => void;
+  onUndo: () => void;
+  scoringMethod: RoutineScoringMethod;
+}) {
+  const controls =
+    scoringMethod === "success_fail"
+      ? [
+          { label: "Success", result: "success" as const },
+          { label: "Fail", result: "fail" as const },
+        ]
+      : scoringMethod === "count_only"
+        ? [{ label: "Add Rep", result: "neutral" as const }]
+        : scoringMethod === "timed_count"
+          ? [
+              { label: "Clean Rep", result: "success" as const },
+              { label: "Breakdown", result: "breakdown" as const },
+            ]
+          : [
+              { label: "Make", result: "success" as const },
+              { label: "Miss", result: "miss" as const },
+            ];
+
+  return (
+    <section className="axis-routine__scoring" aria-label="Scoring controls">
+      {controls.map((control) => (
+        <button className="axis-routine__primary" key={control.label} onClick={() => onLog(control.result)} type="button">
+          {control.label}
+        </button>
+      ))}
+      <button className="axis-routine__secondary" onClick={onUndo} type="button">Undo</button>
+    </section>
+  );
+}
+
+function LiveProgressCard({ axisCue, metrics }: { axisCue: string; metrics: MetricsSummary }) {
+  return (
+    <section className="axis-routine__progress-card" aria-label="Live progress">
+      <SummaryItem label="Total" value={`${metrics.totalReps} reps`} />
+      <SummaryItem label="Current Block" value={`${metrics.blockReps} reps`} />
+      <SummaryItem label="Rate / Pace" value={formatRatePace(metrics)} />
+      <SummaryItem label="Best Streak" value={`${metrics.bestStreak}`} />
+      <div className="axis-routine__cue">
+        <span>Axis Cue</span>
+        <strong>{axisCue}</strong>
+      </div>
+    </section>
+  );
+}
+
 function secondsToMinutes(seconds: number) {
   return Math.round(seconds / 60);
+}
+
+function emptyMetrics(): MetricsSummary {
+  return {
+    bestStreak: 0,
+    blockReps: 0,
+    breakdownsOrFails: 0,
+    currentBlockScore: 0,
+    currentDrought: 0,
+    currentStreak: 0,
+    lastFivePattern: "",
+    longestDrought: 0,
+    missesOrFails: 0,
+    pacePerMinute: 0,
+    successRate: null,
+    successes: 0,
+    totalReps: 0,
+  };
+}
+
+function calculateMetrics(
+  events: LocalRepEvent[],
+  activeBlockId: string,
+  runStartedAtMs: number | undefined,
+  nowMs: number,
+): MetricsSummary {
+  const totalReps = events.length;
+  const successes = events.filter((event) => event.result === "success").length;
+  const missesOrFails = events.filter((event) => event.result === "miss" || event.result === "fail").length;
+  const breakdownsOrFails = events.filter((event) => event.result === "breakdown" || event.result === "fail").length;
+  const scoredEvents = events.filter((event) => event.result !== "neutral");
+  const successRate = scoredEvents.length > 0 ? (successes / scoredEvents.length) * 100 : null;
+  const elapsedMinutes = runStartedAtMs ? Math.max((nowMs - runStartedAtMs) / 60000, 1 / 60) : 0;
+  const pacePerMinute = elapsedMinutes > 0 ? totalReps / elapsedMinutes : 0;
+  const blockEvents = events.filter((event) => event.blockId === activeBlockId);
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let currentDrought = 0;
+  let longestDrought = 0;
+  let streak = 0;
+  let drought = 0;
+
+  for (const event of events) {
+    if (event.result === "success" || event.result === "neutral") {
+      streak += 1;
+      drought = 0;
+    } else {
+      drought += 1;
+      streak = 0;
+    }
+    bestStreak = Math.max(bestStreak, streak);
+    longestDrought = Math.max(longestDrought, drought);
+    currentStreak = streak;
+    currentDrought = drought;
+  }
+
+  return {
+    bestStreak,
+    blockReps: blockEvents.length,
+    breakdownsOrFails,
+    currentBlockScore: blockEvents.filter((event) => event.result === "success" || event.result === "neutral").length,
+    currentDrought,
+    currentStreak,
+    lastFivePattern: events.slice(-5).map((event) => resultShortLabel(event.result)).join(" "),
+    longestDrought,
+    missesOrFails,
+    pacePerMinute,
+    successRate,
+    successes,
+    totalReps,
+  };
+}
+
+function getAxisCue(metrics: MetricsSummary, events: LocalRepEvent[], activeBlockId: string) {
+  if (metrics.currentDrought >= 2) return "Reset before the next rep.";
+  const previousEvents = events.slice(0, -1);
+  const previousBest = calculateMetrics(previousEvents, activeBlockId, undefined, Date.now()).bestStreak;
+  if (metrics.bestStreak > previousBest && metrics.bestStreak > 1) return "New best streak. Beat it.";
+  if (metrics.pacePerMinute > 8 && metrics.successRate !== null && metrics.successRate < 60) return "Pace is up. Clean it up.";
+  if (isCurrentBlockImproving(events, activeBlockId)) return "This block is improving.";
+  return "Keep building clean reps.";
+}
+
+function isCurrentBlockImproving(events: LocalRepEvent[], activeBlockId: string) {
+  const blockEvents = events.filter((event) => event.blockId === activeBlockId);
+  if (blockEvents.length < 4) return false;
+  const midpoint = Math.floor(blockEvents.length / 2);
+  const first = blockEvents.slice(0, midpoint).filter((event) => event.result === "success" || event.result === "neutral").length;
+  const second = blockEvents.slice(midpoint).filter((event) => event.result === "success" || event.result === "neutral").length;
+  return second > first;
+}
+
+function resultShortLabel(result: RepResult) {
+  if (result === "success") return "S";
+  if (result === "neutral") return "R";
+  if (result === "breakdown") return "B";
+  return "X";
+}
+
+function formatRatePace(metrics: MetricsSummary) {
+  const rate = metrics.successRate === null ? "n/a" : `${Math.round(metrics.successRate)}%`;
+  return `${rate} / ${metrics.pacePerMinute.toFixed(1)} rpm`;
+}
+
+function getBlockId(block: Pick<EditableBlock, "id" | "name" | "order">) {
+  return block.id || `${block.order}-${block.name}`;
+}
+
+function getBenchmarkResult(events: LocalRepEvent[], blocks: EditableBlock[], type: "starting" | "final") {
+  const target = blocks.find((block) => block.name.toLowerCase().includes(type === "starting" ? "starting benchmark" : "final benchmark"));
+  if (!target) return 0;
+  const blockId = getBlockId(target);
+  return events.filter((event) => event.blockId === blockId && (event.result === "success" || event.result === "neutral")).length;
+}
+
+function summarizeBlocks(events: LocalRepEvent[], blocks: EditableBlock[]) {
+  return blocks.map((block) => {
+    const blockEvents = events.filter((event) => event.blockId === getBlockId(block));
+    return {
+      name: block.name,
+      reps: blockEvents.length,
+      successes: blockEvents.filter((event) => event.result === "success" || event.result === "neutral").length,
+    };
+  });
+}
+
+function createLocalReportCopy(
+  routine: LocalRoutineTemplate,
+  metrics: MetricsSummary,
+  startingBenchmarkResult: number,
+  finalBenchmarkResult: number,
+): ReportCopy {
+  const change = finalBenchmarkResult - startingBenchmarkResult;
+  return {
+    coachNote: `${routine.playerOrGroup} logged ${metrics.totalReps} reps on ${routine.focus}.`,
+    keyPattern: metrics.successRate === null ? `Pace finished at ${metrics.pacePerMinute.toFixed(1)} reps per minute.` : `Success rate finished at ${Math.round(metrics.successRate)}%.`,
+    nextSessionRecommendation: change > 0 ? "Open with the final benchmark target next time." : "Repeat the baseline and clean up the first block.",
+    playerMessage: change > 0 ? "You beat the baseline. Bring that back next time." : "You built the baseline. Now clean it up.",
+    progressNote: `Benchmark change: ${change >= 0 ? "+" : ""}${change}.`,
+    summary: `${routine.playerOrGroup} completed ${routine.focus} with ${metrics.totalReps} logged reps.`,
+  };
 }
 
 function getElapsedSeconds(nowMs: number, startedAtMs: number, pausedMs: number) {
@@ -713,6 +1103,8 @@ const styles = `
   .axis-routine__blocks,
   .axis-routine__preview,
   .axis-routine__summary-card,
+  .axis-routine__progress-card,
+  .axis-routine__report-preview,
   .axis-routine__current,
   .axis-routine__timers > div {
     background: #fffdf7;
@@ -724,6 +1116,8 @@ const styles = `
   .axis-routine__review,
   .axis-routine__blocks,
   .axis-routine__summary-card,
+  .axis-routine__progress-card,
+  .axis-routine__report-preview,
   .axis-routine__current {
     display: grid;
     gap: 0.65rem;
@@ -731,6 +1125,7 @@ const styles = `
 
   .axis-routine__edit-grid,
   .axis-routine__timers,
+  .axis-routine__scoring,
   .axis-routine__actions {
     display: grid;
     gap: 0.65rem;
@@ -874,14 +1269,45 @@ const styles = `
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .axis-routine__summary-card div {
+  .axis-routine__summary-card div,
+  .axis-routine__progress-card div {
     display: grid;
     gap: 0.18rem;
     min-width: 0;
   }
 
-  .axis-routine__summary-card strong {
+  .axis-routine__summary-card strong,
+  .axis-routine__progress-card strong {
     overflow-wrap: anywhere;
+  }
+
+  .axis-routine__progress-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .axis-routine__cue {
+    grid-column: 1 / -1;
+  }
+
+  .axis-routine__cue span {
+    color: rgba(20, 22, 16, 0.58);
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-routine__scoring {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .axis-routine__scoring button:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .axis-routine__report-preview p,
+  .axis-routine__report-preview strong {
+    margin: 0;
   }
 
   .axis-routine__current strong {

@@ -50,11 +50,13 @@ function createFallbackSuggestion(
 
   return {
     benchmarkName,
-    blocks,
+    blocks: addBlockIntelligence(blocks, focus),
     explanation: "Axis built a setup suggestion from your instruction. Review it before applying.",
     focus,
     playerOrGroup,
+    reportGoals: createReportGoals(focus),
     routineLengthMinutes,
+    scoringControls: getScoringControls(scoringMethod),
     scoringMethod,
   };
 }
@@ -149,4 +151,57 @@ function createBlockPlan(
       name,
     };
   });
+}
+
+function addBlockIntelligence(blocks: AxisRoutineToolbarBlock[], focus: string) {
+  const isDelta = focus.toLowerCase().includes("delta");
+  return blocks.map((block) => {
+    const lowerName = block.name.toLowerCase();
+    let instruction = "Train the focus. Keep the pace honest.";
+    let scoringIntent = "Count clean work.";
+
+    if (lowerName.includes("warmup")) {
+      instruction = isDelta ? "Walk through the timing and spacing." : "Get loose and prepare for the benchmark.";
+      scoringIntent = "Prepare clean movement.";
+    } else if (lowerName.includes("starting benchmark")) {
+      instruction = isDelta
+        ? "Run the action at game pace. Count clean completions."
+        : "Set the baseline. Do not chase perfection.";
+      scoringIntent = "Set the baseline.";
+    } else if (lowerName.includes("final benchmark")) {
+      instruction = isDelta
+        ? "Retest the same action and beat the baseline."
+        : "Retest the same skill and beat the baseline.";
+      scoringIntent = "Beat the baseline.";
+    } else if (lowerName.includes("report")) {
+      instruction = isDelta ? "Review the pattern and next target." : "Wrap the session and prepare the report.";
+      scoringIntent = "Review the session.";
+    } else if (isDelta && lowerName.includes("block 1")) {
+      instruction = "Train the first option. Keep spacing clean.";
+      scoringIntent = "Count clean first-option reads.";
+    } else if (isDelta && lowerName.includes("block 2")) {
+      instruction = "Train the second option. Watch timing and advantage.";
+      scoringIntent = "Count clean second-option reads.";
+    } else if (isDelta && lowerName.includes("block 3")) {
+      instruction = "Mix the reads. Stay organized.";
+      scoringIntent = "Count organized reads.";
+    }
+
+    return { ...block, instruction, scoringIntent };
+  });
+}
+
+function getScoringControls(scoringMethod: AxisRoutineToolbarSuggestion["scoringMethod"]) {
+  if (scoringMethod === "success_fail") return ["Success", "Fail", "Undo"];
+  if (scoringMethod === "count_only") return ["Add Rep", "Undo"];
+  if (scoringMethod === "timed_count") return ["Clean Rep", "Breakdown", "Undo"];
+  return ["Make", "Miss", "Undo"];
+}
+
+function createReportGoals(focus: string) {
+  return [
+    `Show whether ${focus || "the focus"} improved from start to finish.`,
+    "Identify the cleanest stretch.",
+    "Name the next target.",
+  ];
 }

@@ -56,9 +56,11 @@ export type AxisReviewDecision = {
 
 export type AxisRoutineToolbarBlock = {
   id?: string;
+  instruction?: string;
   name: string;
   order: number;
   plannedDurationSeconds: number;
+  scoringIntent?: string;
   type: "benchmark" | "skill" | "conditioning" | "recovery" | "custom";
 };
 
@@ -77,6 +79,8 @@ export type AxisRoutineToolbarSuggestion = {
   explanation: string;
   focus: string;
   playerOrGroup: string;
+  reportGoals: string[];
   routineLengthMinutes: number;
+  scoringControls: string[];
   scoringMethod: "make_miss" | "success_fail" | "count_only" | "timed_count";
 };
