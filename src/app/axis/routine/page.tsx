@@ -1,12 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RoutineBlockPlan, RoutineScoringMethod, RoutineTemplate } from "../../../lib/axis/routine/types";
 
 type RoutineLengthOption = "30" | "45" | "60" | "custom";
+type RoutinePageState = "setup" | "ready" | "running" | "complete";
 
 type EditableBlock = RoutineBlockPlan & {
   id: string;
+};
+
+type RunningClock = {
+  blockPausedMs: number;
+  blockStartedAtMs: number;
+  currentBlockIndex: number;
+  isPaused: boolean;
+  pausedAtMs: number | null;
+  runStartedAtMs: number;
+  totalPausedMs: number;
+};
+
+type CompleteSummary = {
+  completedBlocksCount: number;
+  totalElapsedSeconds: number;
 };
 
 const routineLengthOptions: Array<{ label: string; value: RoutineLengthOption }> = [
@@ -34,6 +50,7 @@ const defaultBlocks: EditableBlock[] = [
 ];
 
 export default function AxisRoutinePage() {
+  const [pageState, setPageState] = useState<RoutinePageState>("setup");
   const [playerOrGroup, setPlayerOrGroup] = useState("");
   const [focus, setFocus] = useState("");
   const [routineLengthOption, setRoutineLengthOption] = useState<RoutineLengthOption>("60");
@@ -42,6 +59,9 @@ export default function AxisRoutinePage() {
   const [benchmarkName, setBenchmarkName] = useState("");
   const [blocks, setBlocks] = useState<EditableBlock[]>(defaultBlocks);
   const [configuredRoutine, setConfiguredRoutine] = useState<RoutineTemplate | null>(null);
+  const [runningClock, setRunningClock] = useState<RunningClock | null>(null);
+  const [completeSummary, setCompleteSummary] = useState<CompleteSummary | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const selectedRoutineMinutes = routineLengthOption === "custom" ? customLengthMinutes : Number(routineLengthOption);
   const selectedRoutineSeconds = Math.max(1, selectedRoutineMinutes) * 60;
@@ -57,6 +77,12 @@ export default function AxisRoutinePage() {
     scoringMethod !== "" &&
     benchmarkName.trim().length > 0 &&
     blocks.length > 0;
+
+  useEffect(() => {
+    if (pageState !== "running" || runningClock?.isPaused) return;
+    const interval = window.setInterval(() => setNowMs(Date.now()), 500);
+    return () => window.clearInterval(interval);
+  }, [pageState, runningClock?.isPaused]);
 
   function updateBlockName(blockId: string, name: string) {
     setBlocks((currentBlocks) => currentBlocks.map((block) => (block.id === blockId ? { ...block, name } : block)));
@@ -92,9 +118,100 @@ export default function AxisRoutinePage() {
       templateId: `routine-${Date.now()}`,
       updatedAt: now,
     });
+    setPageState("ready");
   }
 
-  if (configuredRoutine) {
+  function startRoutine() {
+    if (!configuredRoutine) return;
+    const startedAtMs = Date.now();
+    setNowMs(startedAtMs);
+    setRunningClock({
+      blockPausedMs: 0,
+      blockStartedAtMs: startedAtMs,
+      currentBlockIndex: 0,
+      isPaused: false,
+      pausedAtMs: null,
+      runStartedAtMs: startedAtMs,
+      totalPausedMs: 0,
+    });
+    setCompleteSummary(null);
+    setPageState("running");
+  }
+
+  function pauseRoutine() {
+    setRunningClock((currentClock) => {
+      if (!currentClock || currentClock.isPaused) return currentClock;
+      return { ...currentClock, isPaused: true, pausedAtMs: Date.now() };
+    });
+  }
+
+  function resumeRoutine() {
+    setRunningClock((currentClock) => {
+      if (!currentClock?.isPaused || currentClock.pausedAtMs === null) return currentClock;
+      const resumedAtMs = Date.now();
+      const pausedDurationMs = resumedAtMs - currentClock.pausedAtMs;
+      setNowMs(resumedAtMs);
+      return {
+        ...currentClock,
+        blockPausedMs: currentClock.blockPausedMs + pausedDurationMs,
+        isPaused: false,
+        pausedAtMs: null,
+        totalPausedMs: currentClock.totalPausedMs + pausedDurationMs,
+      };
+    });
+  }
+
+  function goToNextBlock() {
+    if (!configuredRoutine) return;
+    setRunningClock((currentClock) => {
+      if (!currentClock || currentClock.currentBlockIndex >= configuredRoutine.blockStructure.length - 1) return currentClock;
+      const nextStartedAtMs = Date.now();
+      setNowMs(nextStartedAtMs);
+      return {
+        ...currentClock,
+        blockPausedMs: 0,
+        blockStartedAtMs: nextStartedAtMs,
+        currentBlockIndex: currentClock.currentBlockIndex + 1,
+        isPaused: false,
+        pausedAtMs: null,
+      };
+    });
+  }
+
+  function finishRoutine() {
+    if (!configuredRoutine || !runningClock) return;
+    const endedAtMs = runningClock.isPaused && runningClock.pausedAtMs !== null ? runningClock.pausedAtMs : Date.now();
+    const totalElapsedSeconds = getElapsedSeconds(endedAtMs, runningClock.runStartedAtMs, runningClock.totalPausedMs);
+    setCompleteSummary({
+      completedBlocksCount: Math.min(runningClock.currentBlockIndex + 1, configuredRoutine.blockStructure.length),
+      totalElapsedSeconds,
+    });
+    setRunningClock(null);
+    setPageState("complete");
+  }
+
+  function resetRoutine() {
+    setPageState("setup");
+    setConfiguredRoutine(null);
+    setRunningClock(null);
+    setCompleteSummary(null);
+    setPlayerOrGroup("");
+    setFocus("");
+    setRoutineLengthOption("60");
+    setCustomLengthMinutes(60);
+    setScoringMethod("");
+    setBenchmarkName("");
+    setBlocks(defaultBlocks);
+  }
+
+  function backToSetup() {
+    setPageState("setup");
+    setConfiguredRoutine(null);
+    setRunningClock(null);
+    setCompleteSummary(null);
+  }
+
+  if (pageState === "ready" && configuredRoutine) {
     return (
       <main className="axis-routine">
         <section className="axis-routine__ready" aria-labelledby="axis-routine-ready-title">
@@ -122,9 +239,102 @@ export default function AxisRoutinePage() {
             ))}
           </section>
 
-          <button className="axis-routine__secondary" type="button" onClick={() => setConfiguredRoutine(null)}>
-            Edit Setup
-          </button>
+          <div className="axis-routine__action-stack">
+            <button className="axis-routine__primary" type="button" onClick={startRoutine}>
+              Start Routine
+            </button>
+            <button className="axis-routine__secondary" type="button" onClick={() => setPageState("setup")}>
+              Edit Setup
+            </button>
+          </div>
+        </section>
+        <style jsx>{styles}</style>
+      </main>
+    );
+  }
+
+  if (pageState === "running" && configuredRoutine && runningClock) {
+    const displayNowMs = runningClock.isPaused && runningClock.pausedAtMs !== null ? runningClock.pausedAtMs : nowMs;
+    const currentBlock = configuredRoutine.blockStructure[runningClock.currentBlockIndex];
+    const totalElapsedSeconds = getElapsedSeconds(displayNowMs, runningClock.runStartedAtMs, runningClock.totalPausedMs);
+    const blockElapsedSeconds = getElapsedSeconds(displayNowMs, runningClock.blockStartedAtMs, runningClock.blockPausedMs);
+    const isOverPlanned = blockElapsedSeconds > currentBlock.plannedDurationSeconds;
+    const hasNextBlock = runningClock.currentBlockIndex < configuredRoutine.blockStructure.length - 1;
+
+    return (
+      <main className="axis-routine">
+        <section className="axis-routine__running" aria-labelledby="axis-routine-running-title">
+          <header className="axis-routine__header">
+            <p>Axis Routine</p>
+            <h1 id="axis-routine-running-title">Running</h1>
+            <span>{configuredRoutine.playerOrGroup} / {configuredRoutine.focus}</span>
+          </header>
+
+          <section className="axis-routine__current-block" aria-label="Current block">
+            <span>Block {runningClock.currentBlockIndex + 1} of {configuredRoutine.blockStructure.length}</span>
+            <strong>{currentBlock.name}</strong>
+            <p>Planned: {formatDuration(currentBlock.plannedDurationSeconds)}</p>
+            {isOverPlanned && <em role="status">Over planned time</em>}
+          </section>
+
+          <section className="axis-routine__timers" aria-label="Routine timers">
+            <div>
+              <span>Total Time</span>
+              <strong>{formatDuration(totalElapsedSeconds)}</strong>
+            </div>
+            <div>
+              <span>Block Time</span>
+              <strong>{formatDuration(blockElapsedSeconds)}</strong>
+            </div>
+          </section>
+
+          <section className="axis-routine__progress" aria-label="Block progress">
+            {configuredRoutine.blockStructure.map((block, index) => (
+              <div data-active={index === runningClock.currentBlockIndex} data-complete={index < runningClock.currentBlockIndex} key={`${block.order}-${block.name}`}>
+                <span>{index + 1}</span>
+                <strong>{block.name}</strong>
+              </div>
+            ))}
+          </section>
+
+          <div className="axis-routine__action-stack">
+            {runningClock.isPaused ? (
+              <button className="axis-routine__primary" type="button" onClick={resumeRoutine}>Resume</button>
+            ) : (
+              <button className="axis-routine__secondary" type="button" onClick={pauseRoutine}>Pause</button>
+            )}
+            {hasNextBlock && (
+              <button className="axis-routine__primary" type="button" onClick={goToNextBlock}>Next Block</button>
+            )}
+            <button className="axis-routine__finish" type="button" onClick={finishRoutine}>Finish Routine</button>
+          </div>
+        </section>
+        <style jsx>{styles}</style>
+      </main>
+    );
+  }
+
+  if (pageState === "complete" && configuredRoutine && completeSummary) {
+    return (
+      <main className="axis-routine">
+        <section className="axis-routine__ready" aria-labelledby="axis-routine-complete-title">
+          <header className="axis-routine__header">
+            <p>Axis Routine</p>
+            <h1 id="axis-routine-complete-title">Routine Complete</h1>
+            <span>The run is finished. Report generation comes later.</span>
+          </header>
+
+          <div className="axis-routine__ready-summary">
+            <SummaryItem label="Player / Group" value={configuredRoutine.playerOrGroup} />
+            <SummaryItem label="Focus" value={configuredRoutine.focus} />
+            <SummaryItem label="Total Elapsed Time" value={formatDuration(completeSummary.totalElapsedSeconds)} />
+            <SummaryItem label="Completed Blocks" value={`${completeSummary.completedBlocksCount} of ${configuredRoutine.blockStructure.length}`} />
+          </div>
+
+          <div className="axis-routine__action-stack">
+            <button className="axis-routine__primary" type="button" onClick={resetRoutine}>New Routine</button>
+            <button className="axis-routine__secondary" type="button" onClick={backToSetup}>Back to Setup</button>
+          </div>
         </section>
         <style jsx>{styles}</style>
       </main>
@@ -296,6 +506,16 @@ function secondsToMinutes(seconds: number) {
   return Math.round(seconds / 60);
 }
 
+function getElapsedSeconds(nowMs: number, startedAtMs: number, pausedMs: number) {
+  return Math.max(0, Math.floor((nowMs - startedAtMs - pausedMs) / 1000));
+}
+
+function formatDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 const styles = `
   .axis-routine {
     background: #f7f4eb;
@@ -311,7 +531,8 @@ const styles = `
   }
 
   .axis-routine__shell,
-  .axis-routine__ready {
+  .axis-routine__ready,
+  .axis-routine__running {
     display: grid;
     gap: 1rem;
     margin: 0 auto;
@@ -369,7 +590,9 @@ const styles = `
   .axis-routine__form,
   .axis-routine__blocks,
   .axis-routine__preview,
-  .axis-routine__ready-summary {
+  .axis-routine__ready-summary,
+  .axis-routine__timers,
+  .axis-routine__progress {
     display: grid;
     gap: 0.75rem;
   }
@@ -422,11 +645,96 @@ const styles = `
   }
 
   .axis-routine__preview,
-  .axis-routine__ready-summary {
+  .axis-routine__ready-summary,
+  .axis-routine__current-block,
+  .axis-routine__timers > div {
     background: #fffdf7;
     border: 1px solid rgba(20, 22, 16, 0.12);
     border-radius: 0.5rem;
     padding: 0.85rem;
+  }
+
+  .axis-routine__current-block {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .axis-routine__current-block span,
+  .axis-routine__timers span,
+  .axis-routine__progress span {
+    color: rgba(20, 22, 16, 0.58);
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-routine__current-block strong {
+    font-size: clamp(1.75rem, 9vw, 3.4rem);
+    line-height: 0.98;
+    overflow-wrap: anywhere;
+  }
+
+  .axis-routine__current-block p {
+    color: rgba(20, 22, 16, 0.68);
+  }
+
+  .axis-routine__current-block em {
+    background: #fff0d9;
+    border: 1px solid #f1c078;
+    border-radius: 999px;
+    color: #5d3a00;
+    font-style: normal;
+    font-weight: 850;
+    justify-self: start;
+    padding: 0.35rem 0.6rem;
+  }
+
+  .axis-routine__timers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .axis-routine__timers > div {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .axis-routine__timers strong {
+    font-size: clamp(2rem, 12vw, 4rem);
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .axis-routine__progress {
+    gap: 0.5rem;
+  }
+
+  .axis-routine__progress div {
+    align-items: center;
+    background: rgba(255, 253, 247, 0.72);
+    border: 1px solid rgba(20, 22, 16, 0.1);
+    border-radius: 0.5rem;
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    padding: 0.65rem;
+  }
+
+  .axis-routine__progress div[data-active="true"] {
+    background: #141610;
+    color: #f7f4eb;
+  }
+
+  .axis-routine__progress div[data-active="true"] span {
+    color: rgba(247, 244, 235, 0.68);
+  }
+
+  .axis-routine__progress div[data-complete="true"] {
+    border-color: rgba(20, 22, 16, 0.22);
+  }
+
+  .axis-routine__progress strong {
+    overflow-wrap: anywhere;
   }
 
   .axis-routine__preview div,
@@ -505,7 +813,8 @@ const styles = `
   }
 
   .axis-routine__primary,
-  .axis-routine__secondary {
+  .axis-routine__secondary,
+  .axis-routine__finish {
     background: #141610;
     border: 1px solid #141610;
     border-radius: 0.5rem;
@@ -519,6 +828,17 @@ const styles = `
   .axis-routine__secondary {
     background: transparent;
     color: #141610;
+  }
+
+  .axis-routine__finish {
+    background: #fffdf7;
+    border-color: #8f2f24;
+    color: #8f2f24;
+  }
+
+  .axis-routine__action-stack {
+    display: grid;
+    gap: 0.65rem;
   }
 
   .axis-routine__primary:disabled {
@@ -544,6 +864,14 @@ const styles = `
 
     .axis-routine__segments {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .axis-routine__action-stack {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .axis-routine__action-stack .axis-routine__finish {
+      grid-column: 1 / -1;
     }
 
     .axis-routine__block {
