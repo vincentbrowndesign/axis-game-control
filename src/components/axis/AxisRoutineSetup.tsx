@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AxisToolbar } from "./AxisToolbar";
 import type { RoutineBlockPlan, RoutineScoringMethod, RoutineTemplate } from "../../lib/axis/routine/types";
+import type { AxisRoutineToolbarSuggestion } from "../../lib/axis/routine/toolbar-types";
 
 type RoutineLengthOption = "30" | "45" | "60" | "custom";
 type RoutinePageState = "setup" | "ready";
@@ -98,6 +100,27 @@ export function AxisRoutineSetup() {
     setPageState("ready");
   }
 
+  function applyToolbarSuggestion(suggestion: AxisRoutineToolbarSuggestion) {
+    const nextLength = suggestion.routineLengthMinutes;
+    const nextLengthOption: RoutineLengthOption =
+      nextLength === 30 || nextLength === 45 || nextLength === 60 ? String(nextLength) as RoutineLengthOption : "custom";
+    setPlayerOrGroup(suggestion.playerOrGroup);
+    setFocus(suggestion.focus);
+    setRoutineLengthOption(nextLengthOption);
+    setCustomLengthMinutes(nextLength);
+    setScoringMethod(suggestion.scoringMethod);
+    setBenchmarkName(suggestion.benchmarkName);
+    const suggestedBlocks = suggestion.blocks.map((block, index) => ({
+      id: block.id ?? createBlockId(block.name, index),
+      name: block.name,
+      order: block.order,
+      plannedDurationSeconds: block.plannedDurationSeconds,
+      type: block.type,
+    }));
+    setBlocks(suggestedBlocks);
+    setEditingBlockId(suggestedBlocks[0]?.id ?? "");
+  }
+
   if (pageState === "ready" && configuredRoutine) {
     return (
       <main className="axis-routine">
@@ -147,7 +170,37 @@ export function AxisRoutineSetup() {
           <span>Build the benchmark. Run the reps. Get the report.</span>
         </header>
 
-        <section className="axis-routine__form" aria-label="Routine setup">
+        <AxisToolbar
+          currentSetup={{
+            benchmarkName,
+            blocks,
+            focus,
+            playerOrGroup,
+            routineLengthMinutes: selectedRoutineMinutes,
+            scoringMethod,
+          }}
+          onApply={applyToolbarSuggestion}
+        />
+
+        <section className="axis-routine__preview" aria-labelledby="axis-routine-plan-preview">
+          <div>
+            <p id="axis-routine-plan-preview">Routine Plan</p>
+            <strong>{totalBlockMinutes} min planned</strong>
+          </div>
+          <span>{blocks.length} blocks for a {selectedRoutineMinutes} min routine</span>
+          {hasMismatch && (
+            <em role="status">
+              Plan is {totalBlockMinutes} minutes. Selected routine is {selectedRoutineMinutes} minutes.
+            </em>
+          )}
+        </section>
+
+        <section className="axis-routine__form" aria-label="Manual routine setup">
+          <div className="axis-routine__section-title axis-routine__section-title--full">
+            <h2>Manual Setup</h2>
+            <span>Manual setup is always available.</span>
+          </div>
+
           <label>
             <span>Player / Group</span>
             <input
@@ -223,19 +276,6 @@ export function AxisRoutineSetup() {
               value={benchmarkName}
             />
           </label>
-        </section>
-
-        <section className="axis-routine__preview" aria-labelledby="axis-routine-plan-preview">
-          <div>
-            <p id="axis-routine-plan-preview">Routine Plan</p>
-            <strong>{totalBlockMinutes} min planned</strong>
-          </div>
-          <span>{blocks.length} blocks for a {selectedRoutineMinutes} min routine</span>
-          {hasMismatch && (
-            <em role="status">
-              Plan is {totalBlockMinutes} minutes. Selected routine is {selectedRoutineMinutes} minutes.
-            </em>
-          )}
         </section>
 
         <section className="axis-routine__blocks" aria-labelledby="axis-routine-blocks-title">
@@ -315,6 +355,10 @@ function formatScoringMethod(scoringMethod: RoutineScoringMethod) {
 
 function secondsToMinutes(seconds: number) {
   return Math.round(seconds / 60);
+}
+
+function createBlockId(name: string, index: number) {
+  return `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "block"}-${index + 1}`;
 }
 
 const styles = `
@@ -460,6 +504,10 @@ const styles = `
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+  }
+
+  .axis-routine__section-title--full {
+    grid-column: 1 / -1;
   }
 
   .axis-routine__preview strong {

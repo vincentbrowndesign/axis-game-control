@@ -53,3 +53,30 @@ export type AxisReviewDecision = {
   reviewedAt: string;
   reviewerNote?: string;
 };
+
+export type AxisRoutineToolbarBlock = {
+  id?: string;
+  name: string;
+  order: number;
+  plannedDurationSeconds: number;
+  type: "benchmark" | "skill" | "conditioning" | "recovery" | "custom";
+};
+
+export type AxisRoutineToolbarSetup = {
+  benchmarkName: string;
+  blocks: AxisRoutineToolbarBlock[];
+  focus: string;
+  playerOrGroup: string;
+  routineLengthMinutes: number;
+  scoringMethod: "make_miss" | "success_fail" | "count_only" | "timed_count" | "";
+};
+
+export type AxisRoutineToolbarSuggestion = {
+  benchmarkName: string;
+  blocks: AxisRoutineToolbarBlock[];
+  explanation: string;
+  focus: string;
+  playerOrGroup: string;
+  routineLengthMinutes: number;
+  scoringMethod: "make_miss" | "success_fail" | "count_only" | "timed_count";
+};
