@@ -8,16 +8,22 @@ type ClipMetadata = {
   cameraStatus: CameraStatus;
   clipAvailable: boolean;
   durationSeconds: number;
-  endedAt: string;
-  startedAt: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  recordingEndedAt: string;
+  recordingStartedAt: string;
+  recordingStatus: "idle" | "recording" | "recorded" | "error";
 };
 
 const emptyClipMetadata: ClipMetadata = {
   cameraStatus: "ready",
   clipAvailable: false,
   durationSeconds: 0,
-  endedAt: "",
-  startedAt: "",
+  fileSizeBytes: 0,
+  mimeType: "",
+  recordingEndedAt: "",
+  recordingStartedAt: "",
+  recordingStatus: "idle",
 };
 
 export function AxisVisionCaptureLoop() {
@@ -128,8 +134,11 @@ export function AxisVisionCaptureLoop() {
       cameraStatus: "recording",
       clipAvailable: false,
       durationSeconds: 0,
-      endedAt: "",
-      startedAt: startedAt.toISOString(),
+      fileSizeBytes: 0,
+      mimeType: recorder.mimeType,
+      recordingEndedAt: "",
+      recordingStartedAt: startedAt.toISOString(),
+      recordingStatus: "recording",
     });
 
     recorder.ondataavailable = (event) => {
@@ -140,6 +149,11 @@ export function AxisVisionCaptureLoop() {
 
     recorder.onerror = () => {
       setCameraStatus("error");
+      setClipMetadata((currentMetadata) => ({
+        ...currentMetadata,
+        cameraStatus: "error",
+        recordingStatus: "error",
+      }));
       setErrorMessage("Clip recording failed.");
     };
 
@@ -158,8 +172,11 @@ export function AxisVisionCaptureLoop() {
           cameraStatus: "live",
           clipAvailable: true,
           durationSeconds,
-          endedAt: endedAt.toISOString(),
-          startedAt: startedAtForClip.toISOString(),
+          fileSizeBytes: clipBlob.size,
+          mimeType: clipBlob.type,
+          recordingEndedAt: endedAt.toISOString(),
+          recordingStartedAt: startedAtForClip.toISOString(),
+          recordingStatus: "recorded",
         });
       } else {
         setErrorMessage("No clip was created. Try recording again.");
@@ -193,7 +210,7 @@ export function AxisVisionCaptureLoop() {
       <section className="axis-vision-capture__stage" aria-label="Axis Vision Capture Loop">
         <video ref={videoRef} autoPlay className="axis-vision-capture__video" muted playsInline />
 
-        {cameraStatus !== "live" && (
+        {cameraStatus !== "live" && cameraStatus !== "recording" && (
           <div className="axis-vision-capture__empty">
             <h1>Axis Vision</h1>
           </div>
@@ -203,7 +220,10 @@ export function AxisVisionCaptureLoop() {
           <aside className="axis-vision-capture__clip" aria-label="Session Clip preview">
             <div>
               <strong>Session Clip</strong>
-              <button type="button" onClick={clearClip}>Clear Clip</button>
+              <div>
+                <a download={getClipFileName(clipMetadata.mimeType)} href={clipUrl}>Download Clip</a>
+                <button type="button" onClick={clearClip}>Clear Clip</button>
+              </div>
             </div>
             <video ref={previewRef} controls playsInline src={clipUrl} />
           </aside>
@@ -370,16 +390,34 @@ const styles = `
   }
 
   .axis-vision-capture button {
+    align-items: center;
     background: rgba(247, 244, 235, 0.92);
     border: 1px solid rgba(247, 244, 235, 0.18);
     border-radius: 999px;
     color: #050706;
+    display: inline-flex;
     font: inherit;
     font-size: 0.8rem;
     font-weight: 850;
+    justify-content: center;
     min-height: 3rem;
     min-width: 4.6rem;
     padding: 0 0.95rem;
+  }
+
+  .axis-vision-capture a[download] {
+    align-items: center;
+    background: rgba(247, 244, 235, 0.14);
+    border: 1px solid rgba(247, 244, 235, 0.18);
+    border-radius: 999px;
+    color: #f7f4eb;
+    display: inline-flex;
+    font-size: 0.8rem;
+    font-weight: 850;
+    justify-content: center;
+    min-height: 3rem;
+    padding: 0 0.95rem;
+    text-decoration: none;
   }
 
   .axis-vision-capture button:disabled {
@@ -388,6 +426,11 @@ const styles = `
 
   @media (max-width: 640px) {
     .axis-vision-capture__actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .axis-vision-capture__clip div {
       align-items: stretch;
       flex-direction: column;
     }
@@ -415,4 +458,9 @@ function getRecordingMimeType() {
   return ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find((mimeType) =>
     MediaRecorder.isTypeSupported(mimeType),
   ) ?? "";
+}
+
+function getClipFileName(mimeType: string) {
+  const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+  return `axis-session-clip.${extension}`;
 }
