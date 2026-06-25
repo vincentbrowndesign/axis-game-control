@@ -1,5 +1,5 @@
-import { AxisVisionObjectLock } from "../../../components/axis/AxisVisionObjectLock";
+import { AxisVisionCaptureLoop } from "../../../components/axis/AxisVisionCaptureLoop";
 
 export default function AxisVisionPage() {
-  return <AxisVisionObjectLock />;
+  return <AxisVisionCaptureLoop />;
 }
