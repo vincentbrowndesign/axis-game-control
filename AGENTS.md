@@ -36,7 +36,7 @@ Do not wire `/api/axis/run`, CV, video, replay, upload, evidence, mission, or da
 
 Do not show APIs, routers, provider names, model names, JSON, raw detections, FPS, frame counts, track IDs, rim setup, zones, calibration, or debug UI on the main `/axis` landing screen.
 
-Do not treat docs in `docs/archive/`, `docs/reference/`, or `docs/future/` as current build direction.
+Do not treat docs in `docs/reference/` or old markdown recovered from git history as current build direction.
 
 ---
 
@@ -50,7 +50,7 @@ Before coding Axis product work, read:
 
 Only build items marked Build Now or Refine Current in the active build map.
 
-Future, reference, archive, research, lab, or old capability docs may inform decisions, but they do not unlock implementation.
+Future, reference, research, lab, or old capability docs may inform decisions, but they do not unlock implementation.
 
 ---
 
@@ -136,9 +136,7 @@ Preserved infrastructure - do not remove without explicit direction:
 * CV/video/replay/upload/evidence routes
 * `src/lib/`
 * `supabase/migrations/`
-* `docs/archive/`
 * `docs/reference/`
-* `docs/future/`
 
 Do not wire preserved infrastructure back into `/axis` without a documented migration decision.
 

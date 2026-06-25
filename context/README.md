@@ -1,15 +1,16 @@
 # context/
 
-All context docs from this directory have been archived.
+Legacy context markdown has been removed from the working documentation set.
 
-They described prior Axis product directions (check-in loop, leaderboard, video overlay, reconstruction, Mission Control) and were moved to `archive/context/` as `.legacy.md` files during the Axis Conversation MVP cleanup pass (2026-06-17).
+## Current Source Of Truth
 
-## Current source of truth
+- `README.md`
+- `docs/AXIS_INDEX.md`
+- `docs/AXIS_PRODUCT_MAP.md`
+- `docs/AXIS_BUILD_MAP.md`
+- `docs/AXIS_CURATION_GATE.md`
+- `docs/AXIS_DELIVERABLE_STANDARD.md`
 
-- `docs/AXIS_CONVERSATION_MVP.md` — active MVP scope, product truth, acceptance tests
-- `docs/REPO_CLEANUP.md` — what changed, what was archived, what to not touch
-- `README.md` — how to run, where the active MVP lives
+## Recovery
 
-## Archived context (historical reference only)
-
-All prior context docs are in `archive/context/`. They are not current product direction.
+If old project context is needed, recover it from git history instead of treating archived markdown as active guidance.

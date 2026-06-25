@@ -40,6 +40,8 @@ Open phone
 | `docs/AXIS_BUILD_MAP.md` | ACTIVE | What may be built now and what is locked. |
 | `docs/AXIS_DESIGN_CONSTITUTION.md` | ACTIVE | User-facing design rules and visual language. |
 | `docs/AXIS_MOBILE_PRIORITY.md` | ACTIVE | Mobile-first gym-use rules. |
+| `docs/AXIS_CURATION_GATE.md` | ACTIVE | Gate for deciding what can appear in a loop or on a page. |
+| `docs/AXIS_DELIVERABLE_STANDARD.md` | ACTIVE | Standard for market-facing loop deliverables. |
 | `docs/capsules/AXIS_AUTH.md` | ACTIVE | Auth and owner-scoped session save boundaries. |
 | `docs/capsules/AXIS_SESSION_MEMORY.md` | ACTIVE | A1 session memory object, memory page, and build sequence. |
 | `docs/capsules/AXIS_DATA_ASSET_LAYER.md` | ACTIVE FOUNDATION | Data asset vocabulary and future boundary. No runtime data asset operations. |
@@ -64,40 +66,17 @@ Reference docs are useful background, but they are not current build direction.
 | `docs/reference/codebase-research.md` | Historical codebase research. |
 | `docs/reference/repo-evaluation.md` | Historical repo evaluation. |
 
-## Future Docs
+## Removed Legacy Docs
 
-Future docs may contain good ideas. They are not unlocked for current implementation.
+Old project markdown from prior directions has been removed from the working documentation set.
 
-| Doc | Boundary |
-|---|---|
-| `docs/future/AXIS_ASSET_FLYWHEEL.md` | Strategy only. No monetization or data asset runtime. |
-| `docs/future/AXIS_BOARD_OBJECT_LAYER.md` | Future board object layer. Not current `/axis`. |
-| `docs/future/AXIS_CV_FOUNDATION.md` | CV foundation reference. Not current main product direction. |
-| `docs/future/AXIS_UI_LAB.md` | Lab exploration. Not active product truth. |
-| `docs/future/CARTRIDGE_TEMPLATE.md` | Future extension pattern. |
-
-## Archive Docs
-
-Archive docs are old directions, duplicates, drift, or superseded truth.
-
-| Doc | Why Not Current |
-|---|---|
-| `docs/archive/AXIS_CONVERSATION_MVP.md` | Superseded by session-memory direction. |
-| `docs/archive/AXIS_THREAD_PERSISTENCE.md` | Prior thread-centered persistence direction. |
-| `docs/archive/REPO_CLEANUP.md` | Historical cleanup record. |
-| `docs/archive/axis-core.md` | Superseded mission/objective framing. |
-| `docs/archive/01-axis-understanding.md` | Older understanding-layer note. |
-| `docs/archive/AXIS_CONSTITUTION.md` | Older broad product constitution. |
-| `docs/archive/AXIS_ENGINEERING_CONSTITUTION.md` | Older video/replay/CV engineering framing. |
-| `docs/archive/CLAUDE.md` | Older Claude instructions. |
-| `docs/archive/CODEX.md` | Older Codex instructions. |
-| `docs/archive/CONTRIBUTING.md` | Older contributing guide. |
+If a future build needs old context, recover it from git history instead of reintroducing archived docs as active guidance.
 
 ## What Not To Use As Current Build Direction
 
 Do not use these as active build truth:
 
-- archived conversation MVP docs
+- removed legacy/archive docs
 - thread-board/whiteboard-first docs
 - capability indexes without checking the active build map
 - lab mock docs
