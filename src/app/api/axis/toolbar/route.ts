@@ -68,6 +68,7 @@ function inferRoutineLength(normalized: string, currentLength?: number) {
 
 function inferScoringMethod(normalized: string, currentMethod?: AxisRoutineToolbarSetup["scoringMethod"]) {
   if (normalized.includes("timed")) return "timed_count";
+  if (normalized.includes("delta") || normalized.includes("offense")) return "timed_count";
   if (normalized.includes("make miss") || normalized.includes("make/miss") || normalized.includes("shoot")) return "make_miss";
   if (normalized.includes("success") || normalized.includes("fail")) return "success_fail";
   if (normalized.includes("rep count") || normalized.includes("reps")) return "count_only";
@@ -75,18 +76,21 @@ function inferScoringMethod(normalized: string, currentMethod?: AxisRoutineToolb
 }
 
 function inferFocus(normalized: string, currentFocus?: string) {
+  if (normalized.includes("delta") || normalized.includes("offense")) return "Delta Offense";
   if (normalized.includes("speed stop")) return "Speed stop";
   if (normalized.includes("shoot")) return "Shooting";
   if (normalized.includes("skill")) return "Skill work";
   if (normalized.includes("finish")) return "Finishing";
   if (normalized.includes("handle") || normalized.includes("dribble")) return "Ball handling";
-  return currentFocus?.trim() || "Skill work";
+  return currentFocus?.trim() || "General skill work";
 }
 
 function inferBenchmarkName(normalized: string, currentBenchmarkName: string | undefined, focus: string) {
+  if (normalized.includes("delta") || normalized.includes("offense")) return "Delta Timing";
   if (normalized.includes("speed stop")) return "Speed Stop";
   if (normalized.includes("shoot")) return "Shooting Benchmark";
-  return currentBenchmarkName?.trim() || `${focus} Benchmark`;
+  if (currentBenchmarkName?.trim()) return currentBenchmarkName.trim();
+  return focus ? `${focus} Benchmark` : "Training Benchmark";
 }
 
 function inferPlayerOrGroup(instruction: string, currentPlayerOrGroup?: string) {
@@ -134,7 +138,7 @@ function createBlockPlan(
   };
 
   const selectedLength = routineLengthMinutes === 30 || routineLengthMinutes === 45 ? routineLengthMinutes : 60;
-  const focusName = focus === "Skill work" ? "Skill" : focus;
+  const focusName = focus === "General skill work" || focus === "Skill work" ? "Skill" : focus;
 
   return templates[selectedLength].map((block) => {
     const currentMatch = currentBlockPlan.find((currentBlock) => currentBlock.order === block.order);
