@@ -37,10 +37,10 @@ export type AxisLoop = {
   acceptance_test: string;
   capability: string;
   dataset: string;
+  deliverable: string;
   id: string;
   input: string;
   name: string;
-  output: string;
   provider: string;
   result: string;
   review: string;
@@ -304,25 +304,25 @@ export const axisLoops: AxisLoop[] = [
   {
     acceptance_test: "/axis/vision can start the camera, record a short clip, stop recording, and show a playable Session Clip preview.",
     capability: "camera capture; session recording",
-    dataset: "hidden dataset: session draft; capture start time; capture end time; device/camera state; clip metadata only",
+    dataset: "hidden dataset: session draft; capture start time; capture end time; duration; camera status; clip availability",
+    deliverable:
+      "Deliverable: Session Clip - A clean playable clip from a training, practice, or game environment that a trainer, player, parent, or coach would actually want to watch, keep, save, or share.",
     id: "vision-capture-loop",
     input: "rear camera",
     name: "Vision Capture Loop",
-    output:
-      "Deliverable: Session Clip - A clean playable clip from the training/practice/game environment that a trainer, player, parent, or coach would want to keep, review, or share.",
-    provider: "browser camera; browser recording if supported",
+    provider: "browser camera; browser MediaRecorder when supported",
     result: "live camera feed; recorded session segment",
-    review: "User can open /axis/vision; start camera; record a short clip; stop recording; see a playable preview of the session clip",
+    review: "Start camera; record a short clip; stop recording; see a playable Session Clip preview",
     status: "active",
   },
   {
     acceptance_test: "Not active until a user-facing player lock loop can be tested without exposing detector output.",
     capability: "player lock",
     dataset: "future vision_events only; detector output stays hidden from the Vision Capture Loop",
+    deliverable: "planned; no user-facing deliverable yet",
     id: "player-lock-loop",
     input: "future live camera feed or Session Clip",
     name: "Player Lock Loop",
-    output: "planned; no user-facing deliverable yet",
     provider: "future detector or measurement capability",
     result: "future player lock evidence",
     review: "Planned loop. Must stay off /axis/vision until it has a tested market-facing deliverable.",
@@ -332,10 +332,10 @@ export const axisLoops: AxisLoop[] = [
     acceptance_test: "Not active until manual rim placement has a tested user-facing loop.",
     capability: "manual rim set",
     dataset: "future vision_events only; rim coordinates stay hidden from the Vision Capture Loop",
+    deliverable: "planned; no user-facing deliverable yet",
     id: "manual-rim-set-loop",
     input: "future user tap or drag on camera view",
     name: "Manual Rim Set Loop",
-    output: "planned; no user-facing deliverable yet",
     provider: "future manual calibration control",
     result: "future rim anchor evidence",
     review: "Planned loop. Must stay off /axis/vision until it helps a complete deliverable.",
@@ -345,10 +345,10 @@ export const axisLoops: AxisLoop[] = [
     acceptance_test: "Not active until ball lock can be tested without adding detector UI to Loop 1.",
     capability: "ball lock",
     dataset: "future vision_events only; ball detections stay hidden from the Vision Capture Loop",
+    deliverable: "planned; no user-facing deliverable yet",
     id: "ball-lock-loop",
     input: "future live camera feed or Session Clip",
     name: "Ball Lock Loop",
-    output: "planned; no user-facing deliverable yet",
     provider: "future detector or measurement capability",
     result: "future ball lock evidence",
     review: "Planned loop. Must stay off /axis/vision until it has a tested market-facing deliverable.",
@@ -358,10 +358,10 @@ export const axisLoops: AxisLoop[] = [
     acceptance_test: "Not active until shot attempts can be reviewed without fake stats or detector panels.",
     capability: "shot attempt review",
     dataset: "future shot_attempts only; measurement data stays hidden from the Vision Capture Loop",
+    deliverable: "planned; no user-facing deliverable yet",
     id: "shot-attempt-loop",
     input: "future reviewed clip evidence",
     name: "Shot Attempt Loop",
-    output: "planned; no user-facing deliverable yet",
     provider: "future reviewed vision capability",
     result: "future shot attempt evidence",
     review: "Planned loop. Must stay off /axis/vision until it creates a tested user-facing result.",

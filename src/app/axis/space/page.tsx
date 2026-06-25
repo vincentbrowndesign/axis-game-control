@@ -78,7 +78,7 @@ export default function AxisSpacePage() {
                 <li><span>Provider</span>{loop.provider}</li>
                 <li><span>Result</span>{loop.result}</li>
                 <li><span>Dataset</span>{loop.dataset}</li>
-                <li><span>Output</span>{loop.output}</li>
+                <li><span>Deliverable</span>{loop.deliverable}</li>
                 <li><span>Review</span>{loop.review}</li>
               </ol>
             </article>
