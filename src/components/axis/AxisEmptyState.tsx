@@ -42,21 +42,21 @@ export function AxisEmptyState({
   return (
     <section className="axis-card axis-empty-state">
       <div>
-        <p className="axis-empty-state__eyebrow">Today</p>
-        <h1>Start the session.</h1>
+        <p className="axis-empty-state__eyebrow">Today&apos;s Work</p>
+        <h1>Log work.</h1>
       </div>
 
       <p className="axis-empty-state__meta">
-        Capture what happens, correct it while it is fresh, and leave with memory for the next run.
+        Save what matters without needing the camera.
       </p>
 
       <form onSubmit={onStartSession}>
         <label>
-          Session
+          Record
           <input
             value={sessionTitle}
             onChange={(event) => onSessionTitleChange(event.target.value)}
-            placeholder="Today's Session"
+            placeholder="Today's Work"
           />
         </label>
 
@@ -79,7 +79,7 @@ export function AxisEmptyState({
         </label>
 
         <label>
-          Session Type
+          Work Type
           <select
             value={sessionType}
             onChange={(event) => onSessionTypeChange(event.target.value as AxisSession["sessionType"])}
@@ -93,11 +93,11 @@ export function AxisEmptyState({
         </label>
 
         <button className="axis-primary" type="submit">
-          Start Session
+          Log Work
         </button>
       </form>
 
-      <div className="axis-empty-state__links" aria-label="Session state">
+      <div className="axis-empty-state__links" aria-label="Memory state">
         <span className="axis-secondary">{signedIn ? "Signed in" : "Local use"}</span>
         <span className="axis-secondary">{saveLabel}</span>
         <span className="axis-secondary">Memory ready</span>

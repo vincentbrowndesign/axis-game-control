@@ -56,6 +56,9 @@ export type AxisMemorySession = {
 
 type AxisSessionType = AxisSession["sessionType"];
 type AxisShellStatus = "idle" | "starting" | "running" | "saved";
+type AxisShellProps = {
+  initialNav?: AxisNavKey;
+};
 
 const localMemoryKey = "axis-a1-mobile-memory";
 
@@ -78,33 +81,21 @@ const quickMarks = [
   { label: "Great Rep", content: "The current focus worked on this rep" },
 ];
 
-export function AxisShell() {
+export function AxisShell({ initialNav = "session" }: AxisShellProps) {
   const auth = useAxisAuth();
-  const [activeNav, setActiveNav] = useState<AxisNavKey>("session");
+  const [activeNav, setActiveNav] = useState<AxisNavKey>(initialNav);
   const [shellStatus, setShellStatus] = useState<AxisShellStatus>("idle");
-  const [sessionTitle, setSessionTitle] = useState("Today's Session");
+  const [sessionTitle, setSessionTitle] = useState("Today's Work");
   const [playerName, setPlayerName] = useState("");
   const [objective, setObjective] = useState("");
   const [sessionType, setSessionType] = useState<AxisSessionType>("practice");
   const [activeSession, setActiveSession] = useState<AxisMemorySession | null>(null);
-  const [recentSessions, setRecentSessions] = useState<AxisMemorySession[]>([]);
+  const [initialLocalMemory] = useState(loadLocalMemory);
+  const [recentSessions, setRecentSessions] = useState<AxisMemorySession[]>(initialLocalMemory.sessions);
   const [backendDrafts, setBackendDrafts] = useState<AxisSession[]>([]);
   const [momentDraft, setMomentDraft] = useState("");
   const [saveLabel, setSaveLabel] = useState("Local");
-  const [errorMessage, setErrorMessage] = useState("");
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(localMemoryKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { recentSessions?: AxisMemorySession[] };
-      if (Array.isArray(parsed.recentSessions)) {
-        setRecentSessions(parsed.recentSessions.map(normalizeAxisMemorySession).filter(isPresent).slice(0, 8));
-      }
-    } catch {
-      setErrorMessage("Local memory could not be restored.");
-    }
-  }, []);
+  const [errorMessage] = useState(initialLocalMemory.errorMessage);
 
   useEffect(() => {
     try {
@@ -143,7 +134,7 @@ export function AxisShell() {
   async function startSession(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     const now = new Date().toISOString();
-    const title = sessionTitle.trim() || "Today's Session";
+    const title = sessionTitle.trim() || "Today's Work";
     const nextSession: AxisMemorySession = {
       id: createLocalId(),
       title,
@@ -152,14 +143,13 @@ export function AxisShell() {
       sessionType,
       startedAt: now,
       moments: [],
-      nextFocus: "Capture one real moment, then name the correction before the session ends.",
+      nextFocus: "Capture one real moment, then name the correction before saving memory.",
       savedState: "local",
     };
 
     setActiveSession(nextSession);
     setShellStatus("starting");
-    setSaveLabel(auth.status === "signed_in" ? "Memory will save when the session ends" : "Sign in to save memory");
-    setErrorMessage("");
+    setSaveLabel(auth.status === "signed_in" ? "Memory will save when you finish" : "Sign in to save memory");
     setShellStatus("running");
   }
 
@@ -176,7 +166,7 @@ export function AxisShell() {
       interpretedTitle: interpretMoment(trimmed),
       needsReview: true,
       reviewState: "needs_review",
-      structure: structureMoment(trimmed, activeSession, type),
+      structure: structureMoment(trimmed, activeSession),
       type,
     };
 
@@ -349,7 +339,20 @@ export function AxisShell() {
         )}
 
         {activeNav === "memory" && (
-          <AxisMemorySurface sessions={recentMemory} />
+          auth.status === "signed_in" ? (
+            <AxisMemorySurface sessions={recentMemory} />
+          ) : (
+            <section className="axis-panel">
+              <div className="axis-surface-header">
+                <p>Review</p>
+                <h2>Sign in to review memory.</h2>
+                <span>Vision can preview. Log works locally. Review and saved memory need an account.</span>
+              </div>
+              <button className="axis-primary" type="button" onClick={() => void auth.signInWithGoogle()}>
+                Sign in
+              </button>
+            </section>
+          )
         )}
 
         {activeNav === "players" && (
@@ -537,7 +540,7 @@ function getNextFocus(input: string) {
   return "Add one cause or correction before ending the session.";
 }
 
-function structureMoment(input: string, session: AxisMemorySession, type: AxisMomentType): AxisMomentStructure {
+function structureMoment(input: string, session: AxisMemorySession): AxisMomentStructure {
   const normalized = input.toLowerCase();
   const actor = session.playerName || "Current player";
   const evidence = "Manual note";
@@ -719,6 +722,23 @@ function createLocalId() {
   return `axis-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function loadLocalMemory() {
+  if (typeof window === "undefined") return { errorMessage: "", sessions: [] as AxisMemorySession[] };
+
+  try {
+    const raw = window.localStorage.getItem(localMemoryKey);
+    if (!raw) return { errorMessage: "", sessions: [] as AxisMemorySession[] };
+    const parsed = JSON.parse(raw) as { recentSessions?: AxisMemorySession[] };
+    if (!Array.isArray(parsed.recentSessions)) return { errorMessage: "", sessions: [] as AxisMemorySession[] };
+    return {
+      errorMessage: "",
+      sessions: parsed.recentSessions.map(normalizeAxisMemorySession).filter(isPresent).slice(0, 8),
+    };
+  } catch {
+    return { errorMessage: "Local memory could not be restored.", sessions: [] as AxisMemorySession[] };
+  }
+}
+
 function isAxisMemorySession(value: unknown): value is AxisMemorySession {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Partial<AxisMemorySession>;
@@ -757,7 +777,7 @@ function normalizeAxisMoment(value: unknown, session: AxisMemorySession): AxisMo
     interpretedTitle: typeof record.interpretedTitle === "string" ? record.interpretedTitle : interpretMoment(record.content),
     needsReview: typeof record.needsReview === "boolean" ? record.needsReview : true,
     reviewState: isAxisMomentReviewState(record.reviewState) ? record.reviewState : "needs_review",
-    structure: isAxisMomentStructure(record.structure) ? record.structure : structureMoment(record.content, session, record.type ?? "typed"),
+    structure: isAxisMomentStructure(record.structure) ? record.structure : structureMoment(record.content, session),
     type: record.type === "tap" ? "tap" : "typed",
   };
 }
@@ -1234,7 +1254,7 @@ const axisShellStyles = `
     bottom: 0;
     display: grid;
     gap: 0.2rem;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     left: 50%;
     max-width: 31rem;
     padding: 0.45rem 0.45rem max(0.55rem, env(safe-area-inset-bottom));
@@ -1244,15 +1264,20 @@ const axisShellStyles = `
     z-index: 19;
   }
 
-  .axis-bottom-nav button {
+  .axis-bottom-nav button,
+  .axis-bottom-nav a {
+    align-items: center;
     background: transparent;
     border: 0;
     border-radius: 0.9rem;
     color: rgba(248, 245, 238, 0.54);
+    display: inline-flex;
+    justify-content: center;
     font: inherit;
     font-size: 0.68rem;
     font-weight: 900;
     min-height: 3.05rem;
+    text-decoration: none;
   }
 
   .axis-bottom-nav button[data-active="true"] {

@@ -32,7 +32,7 @@ export function AxisSessionCard({
     <section className="axis-card axis-session-card">
       <div className="axis-session-card__header">
         <div>
-          <p className="axis-session-card__eyebrow">{saved ? "Saved to Memory" : "Active Session"}</p>
+          <p className="axis-session-card__eyebrow">{saved ? "Saved Memory" : "Today&apos;s Work"}</p>
           <h1>{session.title}</h1>
         </div>
         <span className="axis-session-card__timer">{timer}</span>
@@ -108,7 +108,7 @@ export function AxisSessionCard({
         {saved ? (
           <>
             <button className="axis-primary" type="button" onClick={onStartAnother}>
-              Start Another
+              New Record
             </button>
             <span className="axis-secondary">{saveLabel}</span>
           </>
@@ -116,16 +116,16 @@ export function AxisSessionCard({
           <>
             <span className="axis-secondary">{saveLabel}</span>
             <button className="axis-session-card__end" type="button" onClick={onEndSession}>
-              End Session
+              Save Memory
             </button>
-            <span className="axis-session-card__save-help">Memory saves when the session ends.</span>
+            <span className="axis-session-card__save-help">Memory saves when you finish.</span>
           </>
         )}
       </div>
 
       {saved && (
         <section className="axis-next-session-card" aria-label="Next Session Card">
-          <small>Next Session Card</small>
+          <small>Next Work Card</small>
           <strong>{session.nextFocus}</strong>
           <span>
             Start with {session.playerName || "the group"} and check whether this carryover still shows up.

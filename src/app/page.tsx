@@ -6,12 +6,13 @@ import { getAxisSurface } from "../lib/axis/surface";
 const surfaceCopy = {
   axis: {
     actions: [
-      { href: "/axis", label: "Start Session" },
-      { href: "/vision", label: "Start Vision" },
+      { href: "/vision", label: "Vision" },
+      { href: "/axis", label: "Log" },
+      { href: "/axis?view=review", label: "Review" },
     ],
     domain: "ontheaxis.com",
-    strip: ["Start Session", "Capture", "Saved Memory"],
-    subtitle: "Start sessions, capture moments, and keep basketball memory ready for the next run.",
+    strip: ["See what happened.", "Save what matters.", "Build player memory."],
+    subtitle: "Memory and vision for training.",
     title: "Axis",
   },
   measure: {
@@ -120,7 +121,7 @@ export default async function Home() {
           text-decoration: none;
         }
 
-        .axis-surface-home__actions a:last-child {
+        .axis-surface-home__actions a:not(:first-child) {
           background: rgba(247, 244, 235, 0.08);
           color: #f7f4eb;
         }

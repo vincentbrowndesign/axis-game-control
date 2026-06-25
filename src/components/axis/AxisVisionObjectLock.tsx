@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { SwitchCamera } from "lucide-react";
 import { createAxisTracker } from "../../lib/axis/axis-simple-tracker";
 import {
   calculateVisionRelationships,
@@ -26,6 +27,7 @@ type OverlayMode = "product" | "debug";
 type RimEditMode = "idle" | "placing" | "adjusting";
 type RimDragMode = "move" | "resize";
 type DetectorReadiness = "Warming up" | "Ready" | "Slow" | "Offline";
+type CameraFacingMode = "environment" | "user";
 
 const maxPlayers = 3;
 const inferenceIntervalMs = 700;
@@ -81,6 +83,7 @@ export function AxisVisionObjectLock({
   } | null>(null);
 
   const [cameraState, setCameraState] = useState<CameraState>("idle");
+  const [cameraFacingMode, setCameraFacingMode] = useState<CameraFacingMode>("environment");
   const [modelState, setModelState] = useState<ModelState>("idle");
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("product");
   const [multiPlayer, setMultiPlayer] = useState(false);
@@ -129,20 +132,7 @@ export function AxisVisionObjectLock({
     setCameraState("starting");
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: "environment" },
-          height: { ideal: 720 },
-          width: { ideal: 1280 },
-        },
-      });
-
-      streamRef.current = stream;
-      const video = videoRef.current;
-      if (!video) throw new Error("Video surface is unavailable.");
-      video.srcObject = stream;
-      await video.play();
+      await openCamera(cameraFacingMode);
       setCameraState("live");
       setCameraLiveSince(Date.now());
       setFieldTick(0);
@@ -155,6 +145,41 @@ export function AxisVisionObjectLock({
       setCameraState("error");
       setModelState((current) => (current === "loading" ? "error" : current));
       setError("Camera or model could not start. Check permission and try again.");
+    }
+  }
+
+  async function openCamera(facingMode: CameraFacingMode) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: facingMode },
+        height: { ideal: 720 },
+        width: { ideal: 1280 },
+      },
+    });
+
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = stream;
+    const video = videoRef.current;
+    if (!video) throw new Error("Video surface is unavailable.");
+    video.srcObject = stream;
+    await video.play();
+  }
+
+  async function flipCamera() {
+    const nextMode: CameraFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+    setCameraFacingMode(nextMode);
+    if (cameraState !== "live") return;
+
+    setCameraState("starting");
+    try {
+      await openCamera(nextMode);
+      setCameraState("live");
+      setCameraLiveSince(Date.now());
+      setFieldTick(0);
+    } catch {
+      setCameraState("error");
+      setError("Camera could not switch. Check permission and try again.");
     }
   }
 
@@ -835,6 +860,14 @@ export function AxisVisionObjectLock({
               Debug
             </button>
           </div>
+          <button
+            aria-label={cameraFacingMode === "environment" ? "Use front camera" : "Use back camera"}
+            className="axis-object-lock__icon-button"
+            type="button"
+            onClick={() => void flipCamera()}
+          >
+            <SwitchCamera aria-hidden size={18} strokeWidth={2.4} />
+          </button>
           <button data-active={rimSetup !== "idle"} type="button" onClick={startRimSetup}>
             Set Rim
           </button>
@@ -1043,6 +1076,14 @@ const styles = `
     min-height: 2.25rem;
   }
 
+  .axis-object-lock__icon-button {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    min-width: 2.65rem;
+    padding: 0;
+  }
+
   .axis-object-lock__hint {
     display: grid;
     gap: 0.75rem;
@@ -1216,7 +1257,7 @@ const styles = `
 
     .axis-object-lock__toggle {
       order: 3;
-      width: 100%;
+      width: calc(100% - 5.3rem);
     }
 
     .axis-object-lock__toggle button {

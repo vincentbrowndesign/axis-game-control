@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export type AxisNavKey = "session" | "ask" | "memory" | "players" | "tools";
 
 type Props = {
@@ -8,16 +10,14 @@ type Props = {
 };
 
 const navItems: Array<{ key: AxisNavKey; label: string }> = [
-  { key: "session", label: "Session" },
-  { key: "ask", label: "Ask" },
-  { key: "memory", label: "Memory" },
-  { key: "players", label: "Players" },
-  { key: "tools", label: "Tools" },
+  { key: "session", label: "Log" },
+  { key: "memory", label: "Review" },
 ];
 
 export function AxisBottomNav({ active, onChange }: Props) {
   return (
     <nav className="axis-bottom-nav" aria-label="Axis sections">
+      <Link href="/vision">Vision</Link>
       {navItems.map((item) => (
         <button
           key={item.key}
