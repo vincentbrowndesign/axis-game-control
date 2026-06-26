@@ -170,11 +170,15 @@ export function AxisWatchRoot() {
           <span>Ask, attach, run, review, continue.</span>
         </header>
 
-        <section className="axis-watch__composer" aria-label="Axis execution composer">
-          <div className="axis-watch__signal-label" aria-hidden="true">EXECUTION COMPOSER</div>
+        <section className="axis-watch__composer" aria-label="Axis clip composer">
           <label className="axis-watch__query-field">
-            <span>Axis Query Bar</span>
-            <textarea onChange={(event) => setQuery(event.target.value)} rows={4} value={query} />
+            <textarea
+              aria-label="Ask Axis what to watch for"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Ask about this clip…"
+              rows={4}
+              value={query}
+            />
           </label>
           <input
             accept="video/*"
@@ -184,13 +188,13 @@ export function AxisWatchRoot() {
             type="file"
           />
           <div className="axis-watch__tool-menu" aria-label="Axis tools">
-            <button onClick={() => fileInputRef.current?.click()} type="button">+ Upload Clip</button>
-            {recordingState === "idle" && <button onClick={() => void startRecordingPreview()} type="button">+ Record Clip</button>}
+            <button onClick={() => fileInputRef.current?.click()} type="button">Attach Clip</button>
+            {recordingState === "idle" && <button onClick={() => void startRecordingPreview()} type="button">Record Clip</button>}
             {recordingState === "preview" && <button onClick={startRecording} type="button">Start Recording</button>}
             {recordingState === "recording" && <button onClick={stopRecording} type="button">Stop Recording</button>}
             {recordingState !== "idle" && <button onClick={stopRecordingPreview} type="button">Cancel</button>}
-            <a href="/axis/routine">Build Routine Context</a>
-            <a href="#watch-queue">Watch Queue</a>
+            <a href="/axis/routine">Routine Context</a>
+            <a href="#watch-queue">Clips</a>
             <a href="#report-preview">Reports</a>
           </div>
           <div className="axis-watch__chips" aria-label="Quick watch queries">
@@ -222,33 +226,33 @@ export function AxisWatchRoot() {
           <section className="axis-watch__card axis-watch__completion" aria-labelledby="axis-completion-title">
             <div className="axis-watch__section-title">
               <h2 id="axis-completion-title">Ready for review</h2>
-              <span>{latestReadyJob.candidates.length} candidate{latestReadyJob.candidates.length === 1 ? "" : "s"}</span>
+              <span>{latestReadyJob.candidates.length} moment{latestReadyJob.candidates.length === 1 ? "" : "s"} to review</span>
             </div>
             <dl className="axis-watch__result-grid">
               <div>
-                <dt>Query used</dt>
+                <dt>Question</dt>
                 <dd>{latestReadyJob.query}</dd>
               </div>
               <div>
-                <dt>Clip name</dt>
+                <dt>Clip</dt>
                 <dd>{latestReadyJob.clipName}</dd>
               </div>
               <div>
-                <dt>Frames sampled</dt>
+                <dt>Frames checked</dt>
                 <dd>{latestReadyJob.sampledFrameCount}</dd>
               </div>
               <div>
-                <dt>Candidates found</dt>
+                <dt>Moments to review</dt>
                 <dd>{latestReadyJob.candidates.length}</dd>
               </div>
             </dl>
             <div className="axis-watch__limitations">
               <span>Limitations</span>
-              <p>Axis is creating review candidates from the clip and your query. It is not claiming identity, stats, shots, rim, or ball truth.</p>
+              <p>Axis is finding moments from the clip and your question. It is not claiming identity, stats, shots, rim, or ball truth.</p>
             </div>
             <div className="axis-watch__next-actions" aria-label="Next actions">
               <a href="#candidate-review">Review</a>
-              <a href="#clip-question">Ask about this clip...</a>
+              <a href="#clip-question">Ask about this clip…</a>
               <a href="#report-preview">Make report</a>
             </div>
           </section>
@@ -256,24 +260,23 @@ export function AxisWatchRoot() {
 
         <section className="axis-watch__card" aria-labelledby="axis-watch-queue-title" id="watch-queue">
           <div className="axis-watch__section-title">
-            <h2 id="axis-watch-queue-title">Watch Queue</h2>
-            <span>{jobs.length === 0 ? "No clips queued yet." : `${jobs.length} local job${jobs.length === 1 ? "" : "s"}`}</span>
+            <h2 id="axis-watch-queue-title">Clips</h2>
+            <span>{jobs.length === 0 ? "No clips yet." : `${jobs.length} clip${jobs.length === 1 ? "" : "s"}`}</span>
           </div>
           <div className="axis-watch__queue">
             {jobs.length === 0 && (
               <div className="axis-watch__empty">
-                <span>NO SIGNAL PLACED</span>
-                <strong>Queue a clip to create candidate moments.</strong>
+                <strong>Add a clip to start.</strong>
               </div>
             )}
             {jobs.map((job) => (
               <article className="axis-watch__job" data-status={job.status} key={job.id}>
                 <div>
                   <strong>{job.clipName}</strong>
-                  <span className="axis-watch__status-badge" data-status={job.status}>{job.status}</span>
+                  <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status)}</span>
                 </div>
                 <p>{job.query}</p>
-                <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} sampled frames` : "Waiting for frames"}</small>
+                <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Preparing clip"}</small>
                 {job.error && <em>{job.error}</em>}
                 {job.status === "ready" && (
                   <CandidateReview candidates={job.candidates} jobId={job.id} onUpdateCandidate={updateCandidate} sectionId={job.id === latestReadyJob?.id ? "candidate-review" : undefined} />
@@ -286,16 +289,16 @@ export function AxisWatchRoot() {
         {latestReadyJob && (
           <section className="axis-watch__card" aria-label="Clip follow up" id="clip-question">
             <label>
-              <span>Ask about this clip...</span>
-              <input placeholder="Ask about this clip..." type="text" />
+              <span>Ask about this clip…</span>
+              <input placeholder="Ask about this clip…" type="text" />
             </label>
           </section>
         )}
 
         <section className="axis-watch__card" aria-labelledby="axis-report-preview-title" id="report-preview">
           <div className="axis-watch__section-title axis-watch__report-cover">
-            <h2 id="axis-report-preview-title">Report Preview</h2>
-            <span>Accepted candidates only.</span>
+            <h2 id="axis-report-preview-title">Report</h2>
+            <span>Accepted moments only.</span>
           </div>
           {acceptedCandidates.length === 0 ? (
             <p>No accepted moments yet.</p>
@@ -337,12 +340,12 @@ function CandidateReview({
             <span>{formatTimestamp(candidate.timestampSeconds)}</span>
           </div>
           <input
-            aria-label="Candidate title"
+            aria-label="Moment title"
             onChange={(event) => onUpdateCandidate(jobId, candidate.id, { title: event.target.value })}
             value={candidate.title}
           />
           <textarea
-            aria-label="Candidate note"
+            aria-label="Moment note"
             onChange={(event) => onUpdateCandidate(jobId, candidate.id, { note: event.target.value })}
             rows={2}
             value={candidate.note}
@@ -365,7 +368,7 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
   return (
     <section className="axis-watch__card axis-watch__execution" aria-labelledby="axis-execution-title" data-status={job.status}>
       <div className="axis-watch__section-title">
-        <h2 id="axis-execution-title">Running job</h2>
+        <h2 id="axis-execution-title">Analyzing clip</h2>
         <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status)}</span>
       </div>
       <div className="axis-watch__execution-main">
@@ -385,8 +388,8 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
         )}
       </ol>
       <div className="axis-watch__execution-meta">
-        <span>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames sampled` : "Preparing clip frames"}</span>
-        {job.status === "ready" && <span>{job.candidates.length} candidates ready</span>}
+        <span>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Preparing clip"}</span>
+        {job.status === "ready" && <span>{job.candidates.length} moments to review</span>}
         {job.status === "failed" && <button onClick={onRetry} type="button">Retry</button>}
       </div>
       {job.error && <em>{job.error}</em>}
@@ -396,11 +399,11 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
 
 function getStatusLabel(status: WatchStatus) {
   const labels: Record<WatchStatus, string> = {
-    failed: "failed / retry",
-    queued: "queued",
-    ready: "ready for review",
-    sampling: "sampling frames",
-    watching: "watching",
+    failed: "Failed",
+    queued: "Waiting",
+    ready: "Needs review",
+    sampling: "Analyzing",
+    watching: "Analyzing",
   };
 
   return labels[status];
