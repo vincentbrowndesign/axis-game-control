@@ -38,6 +38,7 @@ export function AxisWatchRoot() {
   const [query, setQuery] = useState("Watch for spacing breakdowns in Delta offense.");
   const [jobs, setJobs] = useState<WatchJob[]>([]);
   const [recordingState, setRecordingState] = useState<"idle" | "preview" | "recording">("idle");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -149,6 +150,7 @@ export function AxisWatchRoot() {
   }
 
   const latestReadyJob = jobs.find((job) => job.status === "ready");
+  const activeJob = jobs[0];
   const acceptedCandidates = latestReadyJob?.candidates.filter((candidate) => candidate.status === "accepted") ?? [];
 
   return (
@@ -159,51 +161,94 @@ export function AxisWatchRoot() {
         <header className="axis-watch__header">
           <p>AXIS</p>
           <h1 id="axis-watch-title">AXIS</h1>
-          <span>Upload a clip. Tell Axis what to watch. Review the moments.</span>
+          <span>Ask, attach, run, review, continue.</span>
         </header>
 
-        <section className="axis-watch__card" aria-label="Clip input">
-          <div className="axis-watch__section-title">
-            <h2>Clip</h2>
-            <span>Upload or record locally.</span>
-          </div>
-          <label className="axis-watch__file">
-            <span>Upload clip</span>
-            <input accept="video/*" onChange={(event) => setUploadedClip(event.target.files?.[0] ?? null)} type="file" />
+        <section className="axis-watch__composer" aria-label="Axis execution composer">
+          <div className="axis-watch__signal-label" aria-hidden="true">EXECUTION COMPOSER</div>
+          <label className="axis-watch__query-field">
+            <span>Axis Query Bar</span>
+            <textarea onChange={(event) => setQuery(event.target.value)} rows={4} value={query} />
           </label>
-          <div className="axis-watch__record">
-            {recordingState === "idle" && <button onClick={() => void startRecordingPreview()} type="button">Record Clip</button>}
+          <input
+            accept="video/*"
+            className="axis-watch__hidden-file"
+            onChange={(event) => setUploadedClip(event.target.files?.[0] ?? null)}
+            ref={fileInputRef}
+            type="file"
+          />
+          <div className="axis-watch__tool-menu" aria-label="Axis tools">
+            <button onClick={() => fileInputRef.current?.click()} type="button">+ Upload Clip</button>
+            {recordingState === "idle" && <button onClick={() => void startRecordingPreview()} type="button">+ Record Clip</button>}
             {recordingState === "preview" && <button onClick={startRecording} type="button">Start Recording</button>}
             {recordingState === "recording" && <button onClick={stopRecording} type="button">Stop Recording</button>}
             {recordingState !== "idle" && <button onClick={stopRecordingPreview} type="button">Cancel</button>}
+            <a href="/axis/routine">Build Routine Context</a>
+            <a href="#watch-queue">Watch Queue</a>
+            <a href="#report-preview">Reports</a>
           </div>
-          <div className="axis-watch__video-shell">
-            <video className="axis-watch__video" controls muted playsInline ref={videoPreviewRef} src={clipUrl || undefined} />
-            <div className="axis-watch__video-overlay" aria-hidden="true">
-              <span>00:00:00</span>
-              <i />
-              <span>SIGNAL READY</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="axis-watch__card axis-watch__query" aria-label="Axis Query Bar">
-          <div className="axis-watch__signal-label" aria-hidden="true">QUERY / REVIEW PATH</div>
-          <label>
-            <span>Axis Query Bar</span>
-            <textarea onChange={(event) => setQuery(event.target.value)} rows={3} value={query} />
-          </label>
           <div className="axis-watch__chips" aria-label="Quick watch queries">
             {quickQueries.map((chip) => (
               <button key={chip} onClick={() => setQuery(chip)} type="button">{chip}</button>
             ))}
           </div>
-          <button className="axis-watch__primary" disabled={!clipUrl || !query.trim()} onClick={() => void watchWithAxis()} type="button">
-            Watch with Axis
-          </button>
+          <div className="axis-watch__attach-row">
+            <span>{clipFile ? `Clip attached: ${clipFile.name}` : "Attach or record a clip to run Axis."}</span>
+            <button className="axis-watch__primary" disabled={!clipUrl || !query.trim()} onClick={() => void watchWithAxis()} type="button">
+              Watch with Axis
+            </button>
+          </div>
+          {(clipUrl || recordingState !== "idle") && (
+            <div className="axis-watch__video-shell">
+              <video className="axis-watch__video" controls muted playsInline ref={videoPreviewRef} src={clipUrl || undefined} />
+              <div className="axis-watch__video-overlay" aria-hidden="true">
+                <span>00:00:00</span>
+                <i />
+                <span>{recordingState === "recording" ? "RECORDING" : "SIGNAL READY"}</span>
+              </div>
+            </div>
+          )}
         </section>
 
-        <section className="axis-watch__card" aria-labelledby="axis-watch-queue-title">
+        {activeJob && <ExecutionCard job={activeJob} onRetry={() => void watchWithAxis()} />}
+
+        {latestReadyJob && (
+          <section className="axis-watch__card axis-watch__completion" aria-labelledby="axis-completion-title">
+            <div className="axis-watch__section-title">
+              <h2 id="axis-completion-title">Ready for review</h2>
+              <span>{latestReadyJob.candidates.length} candidate{latestReadyJob.candidates.length === 1 ? "" : "s"}</span>
+            </div>
+            <dl className="axis-watch__result-grid">
+              <div>
+                <dt>Query used</dt>
+                <dd>{latestReadyJob.query}</dd>
+              </div>
+              <div>
+                <dt>Clip name</dt>
+                <dd>{latestReadyJob.clipName}</dd>
+              </div>
+              <div>
+                <dt>Frames sampled</dt>
+                <dd>{latestReadyJob.sampledFrameCount}</dd>
+              </div>
+              <div>
+                <dt>Candidates found</dt>
+                <dd>{latestReadyJob.candidates.length}</dd>
+              </div>
+            </dl>
+            <div className="axis-watch__limitations">
+              <span>Limitations</span>
+              <p>Axis is creating review candidates from the clip and your query. It is not claiming identity, stats, shots, rim, or ball truth.</p>
+            </div>
+            <div className="axis-watch__next-actions" aria-label="Next actions">
+              <a href="#candidate-review">Review</a>
+              <a href="#clip-question">Ask about this clip...</a>
+              <a href="#report-preview">Make report</a>
+            </div>
+          </section>
+        )}
+
+        <section className="axis-watch__card" aria-labelledby="axis-watch-queue-title" id="watch-queue">
           <div className="axis-watch__section-title">
             <h2 id="axis-watch-queue-title">Watch Queue</h2>
             <span>{jobs.length === 0 ? "No clips queued yet." : `${jobs.length} local job${jobs.length === 1 ? "" : "s"}`}</span>
@@ -225,7 +270,7 @@ export function AxisWatchRoot() {
                 <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} sampled frames` : "Waiting for frames"}</small>
                 {job.error && <em>{job.error}</em>}
                 {job.status === "ready" && (
-                  <CandidateReview candidates={job.candidates} jobId={job.id} onUpdateCandidate={updateCandidate} />
+                  <CandidateReview candidates={job.candidates} jobId={job.id} onUpdateCandidate={updateCandidate} sectionId={job.id === latestReadyJob?.id ? "candidate-review" : undefined} />
                 )}
               </article>
             ))}
@@ -233,7 +278,7 @@ export function AxisWatchRoot() {
         </section>
 
         {latestReadyJob && (
-          <section className="axis-watch__card" aria-label="Clip follow up">
+          <section className="axis-watch__card" aria-label="Clip follow up" id="clip-question">
             <label>
               <span>Ask about this clip...</span>
               <input placeholder="Ask about this clip..." type="text" />
@@ -241,7 +286,7 @@ export function AxisWatchRoot() {
           </section>
         )}
 
-        <section className="axis-watch__card" aria-labelledby="axis-report-preview-title">
+        <section className="axis-watch__card" aria-labelledby="axis-report-preview-title" id="report-preview">
           <div className="axis-watch__section-title axis-watch__report-cover">
             <h2 id="axis-report-preview-title">Report Preview</h2>
             <span>Accepted candidates only.</span>
@@ -270,13 +315,15 @@ function CandidateReview({
   candidates,
   jobId,
   onUpdateCandidate,
+  sectionId,
 }: {
   candidates: WatchCandidate[];
   jobId: string;
   onUpdateCandidate: (jobId: string, candidateId: string, patch: Partial<WatchCandidate>) => void;
+  sectionId?: string;
 }) {
   return (
-    <div className="axis-watch__candidates">
+    <div className="axis-watch__candidates" id={sectionId}>
       {candidates.map((candidate) => (
         <article data-review-status={candidate.status} key={candidate.id}>
           <div className="axis-watch__candidate-time">
@@ -303,6 +350,54 @@ function CandidateReview({
       ))}
     </div>
   );
+}
+
+function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void }) {
+  const steps: WatchStatus[] = ["queued", "sampling", "watching", "ready"];
+  const statusIndex = job.status === "failed" ? -1 : steps.indexOf(job.status);
+
+  return (
+    <section className="axis-watch__card axis-watch__execution" aria-labelledby="axis-execution-title" data-status={job.status}>
+      <div className="axis-watch__section-title">
+        <h2 id="axis-execution-title">Running job</h2>
+        <span>{getStatusLabel(job.status)}</span>
+      </div>
+      <div className="axis-watch__execution-main">
+        <strong>{job.clipName}</strong>
+        <p>{job.query}</p>
+      </div>
+      <ol className="axis-watch__steps" aria-label="Execution progress">
+        {steps.map((step, index) => (
+          <li data-active={index <= statusIndex} data-current={step === job.status} key={step}>
+            <span>{getStatusLabel(step)}</span>
+          </li>
+        ))}
+        {job.status === "failed" && (
+          <li data-active="true" data-current="true">
+            <span>Failed / retry</span>
+          </li>
+        )}
+      </ol>
+      <div className="axis-watch__execution-meta">
+        <span>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames sampled` : "Preparing clip frames"}</span>
+        {job.status === "ready" && <span>{job.candidates.length} candidates ready</span>}
+        {job.status === "failed" && <button onClick={onRetry} type="button">Retry</button>}
+      </div>
+      {job.error && <em>{job.error}</em>}
+    </section>
+  );
+}
+
+function getStatusLabel(status: WatchStatus) {
+  const labels: Record<WatchStatus, string> = {
+    failed: "failed / retry",
+    queued: "queued",
+    ready: "ready for review",
+    sampling: "sampling frames",
+    watching: "watching",
+  };
+
+  return labels[status];
 }
 
 async function sampleVideoFrames(videoUrl: string, maxFrames: number) {
@@ -400,9 +495,9 @@ const styles = `
 
   .axis-watch__shell {
     display: grid;
-    gap: 0.85rem;
+    gap: 0.9rem;
     margin: 0 auto;
-    max-width: 48rem;
+    max-width: 52rem;
     position: relative;
     z-index: 1;
   }
@@ -417,7 +512,7 @@ const styles = `
 
   .axis-watch__header::after {
     color: rgba(20, 22, 16, 0.18);
-    content: "AXIS::SIGNAL 0101 / CLIP->QUERY->QUEUE->REVIEW";
+    content: "AXIS::EXECUTION 0101 / ASK->ATTACH->RUN->REVIEW";
     font-size: 0.64rem;
     font-weight: 900;
     letter-spacing: 0.14em;
@@ -469,6 +564,7 @@ const styles = `
   }
 
   .axis-watch__card,
+  .axis-watch__composer,
   .axis-watch__job,
   .axis-watch__candidates article {
     background: #fffdf7;
@@ -483,6 +579,7 @@ const styles = `
   }
 
   .axis-watch__card::before,
+  .axis-watch__composer::before,
   .axis-watch__job::before,
   .axis-watch__candidates article::before {
     background: linear-gradient(90deg, #141610, #b7ff5c 40%, transparent 72%);
@@ -494,22 +591,33 @@ const styles = `
   }
 
   .axis-watch__card > *,
+  .axis-watch__composer > *,
   .axis-watch__job > *,
   .axis-watch__candidates article > * {
     position: relative;
     z-index: 1;
   }
 
-  .axis-watch__query {
+  .axis-watch__composer {
     background:
       linear-gradient(135deg, rgba(20, 22, 16, 0.94), rgba(34, 38, 27, 0.92)),
       repeating-linear-gradient(90deg, rgba(183, 255, 92, 0.18) 0 1px, transparent 1px 8px);
     border-color: rgba(183, 255, 92, 0.38);
     color: #fffdf7;
+    gap: 0.8rem;
+    padding: 0.95rem;
   }
 
-  .axis-watch__query label span {
+  .axis-watch__composer label span {
     color: rgba(255, 253, 247, 0.7);
+  }
+
+  .axis-watch__query-field textarea {
+    border-color: rgba(183, 255, 92, 0.28);
+    box-shadow: inset 0 0 0 1px rgba(183, 255, 92, 0.05);
+    font-size: 1rem;
+    line-height: 1.45;
+    resize: vertical;
   }
 
   .axis-watch__signal-label {
@@ -547,6 +655,14 @@ const styles = `
 
   .axis-watch__file input {
     background: #f7f4eb;
+  }
+
+  .axis-watch__hidden-file {
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    width: 1px;
   }
 
   .axis-watch__video-shell {
@@ -623,6 +739,11 @@ const styles = `
     padding: 0 0.8rem;
   }
 
+  .axis-watch a {
+    color: inherit;
+    text-decoration: none;
+  }
+
   .axis-watch__primary {
     background: #b7ff5c;
     border: 1px solid #b7ff5c;
@@ -635,19 +756,57 @@ const styles = `
   }
 
   .axis-watch__record,
+  .axis-watch__tool-menu,
   .axis-watch__chips,
-  .axis-watch__candidate-actions {
+  .axis-watch__candidate-actions,
+  .axis-watch__next-actions,
+  .axis-watch__execution-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 0.45rem;
   }
 
   .axis-watch__record button,
+  .axis-watch__tool-menu button,
+  .axis-watch__tool-menu a,
   .axis-watch__chips button,
-  .axis-watch__candidates button {
+  .axis-watch__candidates button,
+  .axis-watch__next-actions a,
+  .axis-watch__execution-meta button {
     background: rgba(20, 22, 16, 0.06);
     border: 1px solid rgba(20, 22, 16, 0.14);
+    border-radius: 0.5rem;
     color: #141610;
+    font: inherit;
+    font-weight: 850;
+    min-height: 2.85rem;
+    padding: 0 0.8rem;
+  }
+
+  .axis-watch__tool-menu button,
+  .axis-watch__tool-menu a,
+  .axis-watch__chips button {
+    align-items: center;
+    background: rgba(255, 253, 247, 0.08);
+    border-color: rgba(255, 253, 247, 0.18);
+    color: #fffdf7;
+    display: inline-flex;
+  }
+
+  .axis-watch__tool-menu a {
+    min-height: 2.85rem;
+  }
+
+  .axis-watch__attach-row {
+    align-items: center;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .axis-watch__attach-row > span {
+    color: rgba(255, 253, 247, 0.72);
+    font-size: 0.92rem;
+    font-weight: 750;
   }
 
   .axis-watch__queue,
@@ -703,6 +862,75 @@ const styles = `
     border-color: rgba(72, 150, 48, 0.34);
   }
 
+  .axis-watch__execution[data-status="sampling"],
+  .axis-watch__execution[data-status="watching"],
+  .axis-watch__execution[data-status="queued"] {
+    border-color: rgba(183, 255, 92, 0.38);
+  }
+
+  .axis-watch__execution-main {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .axis-watch__execution-main strong {
+    font-size: 1.05rem;
+  }
+
+  .axis-watch__steps {
+    display: grid;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .axis-watch__steps li {
+    align-items: center;
+    color: rgba(20, 22, 16, 0.52);
+    display: flex;
+    font-size: 0.78rem;
+    font-weight: 900;
+    gap: 0.5rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .axis-watch__steps li::before {
+    background: rgba(20, 22, 16, 0.12);
+    border-radius: 999px;
+    content: "";
+    height: 0.62rem;
+    width: 0.62rem;
+  }
+
+  .axis-watch__steps li[data-active="true"] {
+    color: #141610;
+  }
+
+  .axis-watch__steps li[data-active="true"]::before {
+    background: #b7ff5c;
+    box-shadow: 0 0 0 3px rgba(183, 255, 92, 0.22);
+  }
+
+  .axis-watch__steps li[data-current="true"] {
+    color: #141610;
+  }
+
+  .axis-watch__execution-meta {
+    align-items: center;
+  }
+
+  .axis-watch__execution-meta span {
+    background: rgba(20, 22, 16, 0.06);
+    border: 1px solid rgba(20, 22, 16, 0.1);
+    border-radius: 999px;
+    color: rgba(20, 22, 16, 0.66);
+    font-size: 0.78rem;
+    font-weight: 850;
+    padding: 0.45rem 0.65rem;
+  }
+
   .axis-watch__job em {
     background: #fff0d9;
     border: 1px solid #f1c078;
@@ -716,6 +944,47 @@ const styles = `
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+
+  .axis-watch__completion {
+    border-color: rgba(72, 150, 48, 0.34);
+  }
+
+  .axis-watch__result-grid {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0;
+  }
+
+  .axis-watch__result-grid div,
+  .axis-watch__limitations {
+    background: rgba(20, 22, 16, 0.045);
+    border: 1px solid rgba(20, 22, 16, 0.08);
+    border-radius: 0.5rem;
+    display: grid;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 0.65rem;
+  }
+
+  .axis-watch__result-grid dt,
+  .axis-watch__limitations span {
+    color: rgba(20, 22, 16, 0.54);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+
+  .axis-watch__result-grid dd,
+  .axis-watch__limitations p {
+    margin: 0;
+  }
+
+  .axis-watch__next-actions a {
+    align-items: center;
+    display: inline-flex;
   }
 
   .axis-watch__candidates {
@@ -784,8 +1053,16 @@ const styles = `
       padding: 1.5rem;
     }
 
-    .axis-watch__query {
-      grid-template-columns: minmax(0, 1fr);
+    .axis-watch__attach-row {
+      grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+    }
+
+    .axis-watch__steps {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .axis-watch__result-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
