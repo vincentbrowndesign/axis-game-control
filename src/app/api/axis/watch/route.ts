@@ -84,16 +84,17 @@ async function handleFastWatch(request: Request) {
   const clipName = getClipName(body);
   const plan = compileWatchPlan(query, { name: clipName }, undefined, body.cvContext, normalizeKnownPlayerLabels(body.knownPlayerLabels));
   const fallback = createFallbackWatchResponse(query, frames, clipName, "fallback");
+  const watchGroups = plan.expectedOutputGroups.map((label) => ({ candidateIds: [], label, watch: label }));
 
   if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json(fallback);
+    return NextResponse.json({ ...fallback, compiledIntent: plan.compiledIntent, watchGroups });
   }
 
   try {
     const providerResponse = await watchFramesWithOpenAI(plan.prompt, frames, clipName);
-    return NextResponse.json({ ...providerResponse, compiledIntent: plan.compiledIntent, watchGroups: plan.expectedOutputGroups.map((label) => ({ candidateIds: [], label, watch: label })) });
+    return NextResponse.json({ ...providerResponse, compiledIntent: plan.compiledIntent, watchGroups });
   } catch {
-    return NextResponse.json(fallback);
+    return NextResponse.json({ ...fallback, compiledIntent: plan.compiledIntent, watchGroups });
   }
 }
 
