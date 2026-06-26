@@ -12,6 +12,8 @@ type WatchCandidate = {
   status: "pending" | "accepted" | "rejected";
 };
 
+type WatchMode = "fast_watch" | "deep_watch";
+
 type WatchJob = {
   acceptedCount: number;
   candidates: WatchCandidate[];
@@ -19,6 +21,7 @@ type WatchJob = {
   createdAt: string;
   error?: string;
   id: string;
+  mode: WatchMode;
   query: string;
   sampledFrameCount: number;
   status: WatchStatus;
@@ -31,6 +34,7 @@ export function AxisWatchRoot() {
   const [jobs, setJobs] = useState<WatchJob[]>([]);
   const [recordingState, setRecordingState] = useState<"idle" | "preview" | "recording">("idle");
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [watchMode, setWatchMode] = useState<WatchMode>("fast_watch");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -86,7 +90,7 @@ export function AxisWatchRoot() {
     setRecordingState("idle");
   }
 
-  async function watchWithAxis() {
+  function watchWithAxis() {
     if (!clipUrl || !query.trim()) return;
     const jobId = `watch-${Date.now()}`;
     const baseJob: WatchJob = {
@@ -95,21 +99,28 @@ export function AxisWatchRoot() {
       clipName: clipFile?.name || "Recorded clip",
       createdAt: new Date().toISOString(),
       id: jobId,
+      mode: watchMode,
       query: query.trim(),
       sampledFrameCount: 0,
       status: "queued",
     };
     setJobs((currentJobs) => [baseJob, ...currentJobs]);
 
+    if (watchMode === "deep_watch") {
+      void runDeepWatch(jobId);
+    } else {
+      void runFastWatch(jobId);
+    }
+  }
+
+  async function runFastWatch(jobId: string) {
     try {
       updateJob(jobId, { status: "sampling" });
       const frames = await sampleVideoFrames(clipUrl, 60);
       updateJob(jobId, { sampledFrameCount: frames.length, status: "watching" });
       const response = await fetch("/api/axis/watch", {
         body: JSON.stringify({
-          clipMetadata: {
-            name: clipFile?.name || "Recorded clip",
-          },
+          clipMetadata: { name: clipFile?.name || "Recorded clip" },
           frames,
           query: query.trim(),
         }),
@@ -127,6 +138,36 @@ export function AxisWatchRoot() {
       });
     } catch {
       updateJob(jobId, { error: "Axis could not sample or watch this clip.", status: "failed" });
+    }
+  }
+
+  async function runDeepWatch(jobId: string) {
+    if (!clipFile) {
+      updateJob(jobId, { error: "Attach a clip file to use Deep Watch.", status: "failed" });
+      return;
+    }
+    try {
+      updateJob(jobId, { status: "watching" });
+      const form = new FormData();
+      form.append("video", clipFile);
+      form.append("query", query.trim());
+      form.append("clipName", clipFile.name);
+      form.append("mode", "deep_watch");
+      const response = await fetch("/api/axis/watch", {
+        body: form,
+        method: "POST",
+      });
+      const payload = (await response.json()) as { candidates?: Array<Omit<WatchCandidate, "status">>; error?: string };
+      if (!response.ok || !payload.candidates) {
+        updateJob(jobId, { error: payload.error || "Deep Watch could not process this clip.", status: "failed" });
+        return;
+      }
+      updateJob(jobId, {
+        candidates: payload.candidates.map((candidate) => ({ ...candidate, status: "pending" })),
+        status: "ready",
+      });
+    } catch {
+      updateJob(jobId, { error: "Deep Watch could not reach the server.", status: "failed" });
     }
   }
 
@@ -175,6 +216,7 @@ export function AxisWatchRoot() {
           </label>
           <input
             accept="video/*"
+            aria-label="Attach video clip"
             className="axis-watch__hidden-file"
             onChange={(event) => {
               setUploadedClip(event.target.files?.[0] ?? null);
@@ -183,11 +225,31 @@ export function AxisWatchRoot() {
             ref={fileInputRef}
             type="file"
           />
+          <div className="axis-watch__mode-toggle" role="group" aria-label="Watch mode">
+            <button
+              aria-pressed={watchMode === "fast_watch" ? "true" : "false"}
+              className="axis-watch__mode-btn"
+              data-active={watchMode === "fast_watch"}
+              onClick={() => setWatchMode("fast_watch")}
+              type="button"
+            >
+              Fast Watch
+            </button>
+            <button
+              aria-pressed={watchMode === "deep_watch" ? "true" : "false"}
+              className="axis-watch__mode-btn"
+              data-active={watchMode === "deep_watch"}
+              onClick={() => setWatchMode("deep_watch")}
+              type="button"
+            >
+              Deep Watch
+            </button>
+          </div>
           <div className="axis-watch__attach-row">
             <div className="axis-watch__plus-wrap">
               <button
                 aria-controls="axis-watch-tool-menu"
-                aria-expanded={toolMenuOpen}
+                aria-expanded={toolMenuOpen ? "true" : "false"}
                 aria-label="Open clip tools"
                 className="axis-watch__plus"
                 onClick={() => setToolMenuOpen((isOpen) => !isOpen)}
@@ -263,8 +325,8 @@ export function AxisWatchRoot() {
                 <dd>{latestReadyJob.clipName}</dd>
               </div>
               <div>
-                <dt>Frames checked</dt>
-                <dd>{latestReadyJob.sampledFrameCount}</dd>
+                <dt>{latestReadyJob.mode === "deep_watch" ? "Provider" : "Frames checked"}</dt>
+                <dd>{latestReadyJob.mode === "deep_watch" ? "TwelveLabs (full clip)" : latestReadyJob.sampledFrameCount}</dd>
               </div>
               <div>
                 <dt>Moments to review</dt>
@@ -298,10 +360,10 @@ export function AxisWatchRoot() {
               <article className="axis-watch__job" data-status={job.status} key={job.id}>
                 <div>
                   <strong>{job.clipName}</strong>
-                  <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status)}</span>
+                  <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status, job.mode)}</span>
                 </div>
                 <p>{job.query}</p>
-                <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Preparing clip"}</small>
+                <small>{job.mode === "deep_watch" ? "Full clip" : job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Preparing clip"}</small>
                 {job.error && <em>{job.error}</em>}
                 {job.status === "ready" && (
                   <CandidateReview candidates={job.candidates} jobId={job.id} onUpdateCandidate={updateCandidate} sectionId={job.id === latestReadyJob?.id ? "candidate-review" : undefined} />
@@ -387,14 +449,23 @@ function CandidateReview({
 }
 
 function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void }) {
-  const steps: WatchStatus[] = ["queued", "sampling", "watching", "ready"];
+  const isDeep = job.mode === "deep_watch";
+  const steps: WatchStatus[] = isDeep
+    ? ["queued", "watching", "ready"]
+    : ["queued", "sampling", "watching", "ready"];
   const statusIndex = job.status === "failed" ? -1 : steps.indexOf(job.status);
+
+  const metaLabel = isDeep
+    ? "Full clip — TwelveLabs"
+    : job.sampledFrameCount > 0
+      ? `${job.sampledFrameCount} frames checked`
+      : "Preparing clip";
 
   return (
     <section className="axis-watch__card axis-watch__execution" aria-labelledby="axis-execution-title" data-status={job.status}>
       <div className="axis-watch__section-title">
-        <h2 id="axis-execution-title">Analyzing clip</h2>
-        <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status)}</span>
+        <h2 id="axis-execution-title">{isDeep ? "Processing clip" : "Analyzing clip"}</h2>
+        <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status, job.mode)}</span>
       </div>
       <div className="axis-watch__execution-main">
         <strong>{job.clipName}</strong>
@@ -403,7 +474,7 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
       <ol className="axis-watch__steps" aria-label="Execution progress">
         {steps.map((step, index) => (
           <li data-active={index <= statusIndex} data-current={step === job.status} key={step}>
-            <span>{getStatusLabel(step)}</span>
+            <span>{getStatusLabel(step, job.mode)}</span>
           </li>
         ))}
         {job.status === "failed" && (
@@ -413,7 +484,7 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
         )}
       </ol>
       <div className="axis-watch__execution-meta">
-        <span>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Preparing clip"}</span>
+        <span>{metaLabel}</span>
         {job.status === "ready" && <span>{job.candidates.length} moments to review</span>}
         {job.status === "failed" && <button onClick={onRetry} type="button">Retry</button>}
       </div>
@@ -422,7 +493,18 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
   );
 }
 
-function getStatusLabel(status: WatchStatus) {
+function getStatusLabel(status: WatchStatus, mode: WatchMode = "fast_watch") {
+  if (mode === "deep_watch") {
+    const deepLabels: Record<WatchStatus, string> = {
+      failed: "Failed",
+      queued: "Waiting",
+      ready: "Needs review",
+      sampling: "Uploading",
+      watching: "Processing",
+    };
+    return deepLabels[status];
+  }
+
   const labels: Record<WatchStatus, string> = {
     failed: "Failed",
     queued: "Waiting",
@@ -635,6 +717,35 @@ const styles = `
     color: rgba(255, 253, 247, 0.68);
   }
 
+  .axis-watch__mode-toggle {
+    background: rgba(255, 253, 247, 0.06);
+    border: 1px solid rgba(255, 253, 247, 0.1);
+    border-radius: 0.55rem;
+    display: grid;
+    gap: 0.18rem;
+    grid-template-columns: 1fr 1fr;
+    padding: 0.2rem;
+  }
+
+  .axis-watch__mode-btn {
+    background: transparent;
+    border: 0;
+    border-radius: 0.38rem;
+    color: rgba(255, 253, 247, 0.46);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    min-height: 2rem;
+    padding: 0 0.6rem;
+    text-transform: uppercase;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .axis-watch__mode-btn[data-active="true"] {
+    background: rgba(255, 253, 247, 0.11);
+    color: #fffdf7;
+  }
+
   .axis-watch__query-field textarea {
     background: #fffdf8;
     border-color: rgba(255, 253, 247, 0.36);
@@ -769,11 +880,35 @@ const styles = `
     background: #b7ff5c;
     border: 1px solid #b7ff5c;
     color: #141610;
+    overflow: hidden;
+    position: relative;
+    transition: box-shadow 0.18s ease, opacity 0.18s ease, transform 0.12s ease;
     width: 100%;
   }
 
+  .axis-watch__primary::before {
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+    content: "";
+    height: 100%;
+    left: -100%;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    width: 60%;
+  }
+
+  .axis-watch__primary:not(:disabled):hover {
+    box-shadow: 0 4px 18px rgba(183, 255, 92, 0.38);
+    transform: translateY(-1px);
+  }
+
+  .axis-watch__primary:not(:disabled):active {
+    box-shadow: none;
+    transform: translateY(0);
+  }
+
   .axis-watch__primary:disabled {
-    opacity: 0.45;
+    opacity: 0.42;
   }
 
   .axis-watch__record-controls,
@@ -806,14 +941,23 @@ const styles = `
   .axis-watch__plus {
     align-items: center;
     background: rgba(255, 253, 247, 0.09);
-    border: 1px solid rgba(255, 253, 247, 0.16);
-    border-color: rgba(255, 253, 247, 0.16);
+    border: 1px solid rgba(255, 253, 247, 0.18);
     color: #fffdf7;
     display: inline-flex;
     font-size: 1.35rem;
     justify-content: center;
     padding: 0;
+    transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
     width: 2.85rem;
+  }
+
+  .axis-watch__plus:hover {
+    background: rgba(255, 253, 247, 0.16);
+    box-shadow: 0 0 0 3px rgba(255, 253, 247, 0.07), 0 4px 14px rgba(0, 0, 0, 0.22);
+  }
+
+  .axis-watch__plus:active {
+    transform: scale(0.94);
   }
 
   .axis-watch__tool-menu {
@@ -845,6 +989,7 @@ const styles = `
     min-height: 2.6rem;
     padding: 0 0.75rem;
     text-align: left;
+    transition: background 0.14s ease;
     width: 100%;
   }
 
@@ -880,28 +1025,34 @@ const styles = `
   }
 
   .axis-watch__empty {
-    background:
-      linear-gradient(135deg, rgba(20, 22, 16, 0.035), transparent 48%),
-      #fffdf8;
-    border: 1px dashed rgba(20, 22, 16, 0.22);
-    border-radius: 0.7rem;
+    background: #fffdf8;
+    border: 1.5px dashed rgba(20, 22, 16, 0.18);
+    border-radius: 0.85rem;
     display: grid;
-    gap: 0.25rem;
-    min-height: 7.5rem;
-    padding: 1rem;
+    gap: 0.4rem;
+    min-height: 9rem;
+    padding: 1.5rem 1rem;
     place-content: center;
     text-align: center;
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+
+  .axis-watch__empty:hover {
+    background: rgba(183, 255, 92, 0.04);
+    border-color: rgba(20, 22, 16, 0.3);
   }
 
   .axis-watch__empty span {
-    color: rgba(20, 22, 16, 0.52);
-    font-size: 0.68rem;
+    color: rgba(20, 22, 16, 0.48);
+    font-size: 0.65rem;
     font-weight: 950;
     letter-spacing: 0.16em;
   }
 
   .axis-watch__empty strong {
-    font-size: 1rem;
+    color: rgba(20, 22, 16, 0.72);
+    font-size: 0.95rem;
+    font-weight: 850;
   }
 
   .axis-watch__job::after {
@@ -980,6 +1131,11 @@ const styles = `
     color: #141610;
   }
 
+  .axis-watch__steps li[data-current="true"]::before {
+    background: #141610;
+    box-shadow: 0 0 0 4px rgba(20, 22, 16, 0.1);
+  }
+
   .axis-watch__execution-meta {
     align-items: center;
     color: rgba(20, 22, 16, 0.58);
@@ -1038,7 +1194,15 @@ const styles = `
   }
 
   .axis-watch__completion {
-    border-color: rgba(20, 22, 16, 0.1);
+    border-color: rgba(72, 150, 48, 0.18);
+  }
+
+  .axis-watch__completion::before {
+    background: linear-gradient(90deg, rgba(72, 150, 48, 0.52), transparent 65%);
+    content: "";
+    height: 2px;
+    inset: 0 0 auto;
+    position: absolute;
   }
 
   .axis-watch__result-grid {
@@ -1132,16 +1296,27 @@ const styles = `
   }
 
   .axis-watch__report-list li {
-    border-left: 2px solid rgba(20, 22, 16, 0.16);
+    border-left: 2.5px solid rgba(72, 150, 48, 0.38);
     display: grid;
-    gap: 0.15rem;
-    padding-left: 0.65rem;
+    gap: 0.2rem;
+    padding: 0.22rem 0 0.22rem 0.75rem;
   }
 
   @keyframes axis-sweep {
     to {
       transform: translateX(100%);
     }
+  }
+
+  @keyframes axis-shine {
+    to {
+      left: 100%;
+    }
+  }
+
+  @keyframes axis-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(20, 22, 16, 0.08); }
+    50% { box-shadow: 0 0 0 5px rgba(20, 22, 16, 0.15); }
   }
 
   @media (min-width: 760px) {
@@ -1170,6 +1345,14 @@ const styles = `
     .axis-signal--scan {
       animation: axis-scan 12s linear infinite;
     }
+
+    .axis-watch__primary:not(:disabled):hover::before {
+      animation: axis-shine 0.5s ease forwards;
+    }
+
+    .axis-watch__steps li[data-current="true"]::before {
+      animation: axis-pulse 1.4s ease-in-out infinite;
+    }
   }
 
   @keyframes axis-scan {
@@ -1180,7 +1363,9 @@ const styles = `
 
   @media (prefers-reduced-motion: reduce) {
     .axis-signal--scan,
-    .axis-watch__job::after {
+    .axis-watch__job::after,
+    .axis-watch__primary::before,
+    .axis-watch__steps li[data-current="true"]::before {
       animation: none !important;
     }
   }
