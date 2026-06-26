@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type WatchStatus = "queued" | "sampling" | "watching" | "ready" | "failed";
 
@@ -25,6 +25,7 @@ type WatchJob = {
   query: string;
   sampledFrameCount: number;
   status: WatchStatus;
+  triggerRunId?: string;
 };
 
 export function AxisWatchRoot() {
@@ -40,6 +41,15 @@ export function AxisWatchRoot() {
   const recordingChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const pollIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+
+  useEffect(() => {
+    const intervals = pollIntervalsRef.current;
+    return () => {
+      intervals.forEach(clearInterval);
+      intervals.clear();
+    };
+  }, []);
 
   function setUploadedClip(file: File | null) {
     if (!file) return;
@@ -146,28 +156,99 @@ export function AxisWatchRoot() {
       updateJob(jobId, { error: "Attach a clip file to use Deep Watch.", status: "failed" });
       return;
     }
+
     try {
-      updateJob(jobId, { status: "watching" });
+      // "Uploading" — shows while the route sends the clip to TwelveLabs.
+      updateJob(jobId, { status: "sampling" });
+
       const form = new FormData();
       form.append("video", clipFile);
       form.append("query", query.trim());
       form.append("clipName", clipFile.name);
       form.append("mode", "deep_watch");
-      const response = await fetch("/api/axis/watch", {
-        body: form,
-        method: "POST",
-      });
-      const payload = (await response.json()) as { candidates?: Array<Omit<WatchCandidate, "status">>; error?: string };
-      if (!response.ok || !payload.candidates) {
-        updateJob(jobId, { error: payload.error || "Deep Watch could not process this clip.", status: "failed" });
+
+      const response = await fetch("/api/axis/watch", { body: form, method: "POST" });
+      const payload = (await response.json()) as {
+        candidates?: Array<Omit<WatchCandidate, "status">>;
+        error?: string;
+        jobId?: string;
+        status?: string;
+      };
+
+      if (!response.ok) {
+        updateJob(jobId, { error: payload.error || "Deep Watch could not start.", status: "failed" });
         return;
       }
-      updateJob(jobId, {
-        candidates: payload.candidates.map((candidate) => ({ ...candidate, status: "pending" })),
-        status: "ready",
-      });
+
+      // Synchronous fallback (no API key) — route returns candidates directly.
+      if (payload.candidates) {
+        updateJob(jobId, {
+          candidates: payload.candidates.map((c) => ({ ...c, status: "pending" as const })),
+          status: "ready",
+        });
+        return;
+      }
+
+      // Async path — route returned a Trigger.dev run ID; start polling.
+      const triggerRunId = payload.jobId;
+      if (!triggerRunId) {
+        updateJob(jobId, { error: "Deep Watch could not start.", status: "failed" });
+        return;
+      }
+
+      updateJob(jobId, { status: "watching", triggerRunId });
+      startPolling(jobId, triggerRunId);
     } catch {
       updateJob(jobId, { error: "Deep Watch could not reach the server.", status: "failed" });
+    }
+  }
+
+  function startPolling(jobId: string, triggerRunId: string) {
+    const intervalId = setInterval(() => {
+      void pollJobStatus(jobId, triggerRunId, intervalId);
+    }, 5_000);
+    pollIntervalsRef.current.set(jobId, intervalId);
+  }
+
+  async function pollJobStatus(
+    jobId: string,
+    triggerRunId: string,
+    intervalId: ReturnType<typeof setInterval>,
+  ) {
+    try {
+      const response = await fetch(`/api/axis/watch/status/${triggerRunId}`);
+      const poll = (await response.json()) as {
+        error?: string;
+        result?: { candidates?: Array<Omit<WatchCandidate, "status">> };
+        status: WatchStatus;
+      };
+
+      if (poll.status === "ready" && poll.result?.candidates) {
+        clearInterval(intervalId);
+        pollIntervalsRef.current.delete(jobId);
+        updateJob(jobId, {
+          candidates: poll.result.candidates.map((c) => ({ ...c, status: "pending" as const })),
+          status: "ready",
+        });
+        return;
+      }
+
+      if (poll.status === "failed") {
+        clearInterval(intervalId);
+        pollIntervalsRef.current.delete(jobId);
+        updateJob(jobId, {
+          error: poll.error || "Deep Watch could not process this clip.",
+          status: "failed",
+        });
+        return;
+      }
+
+      // Intermediate state — keep the job in "watching" regardless of
+      // whether Trigger reports QUEUED or EXECUTING so the badge never
+      // regresses from "Processing" back to "Waiting".
+      updateJob(jobId, { status: "watching" });
+    } catch {
+      // Transient network error — keep polling.
     }
   }
 
