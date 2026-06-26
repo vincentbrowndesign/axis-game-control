@@ -33,6 +33,7 @@ type WatchRequest = {
   frames?: WatchFrame[];
   knownPlayerLabels?: unknown;
   query?: string;
+  routineContext?: unknown;
 };
 
 type ProviderPayload = {
@@ -82,7 +83,10 @@ async function handleFastWatch(request: Request) {
   }
 
   const clipName = getClipName(body);
-  const plan = compileWatchPlan(query, { name: clipName }, undefined, body.cvContext, normalizeKnownPlayerLabels(body.knownPlayerLabels));
+  const routineContext = typeof body.routineContext === "string" && body.routineContext.trim()
+    ? body.routineContext.trim()
+    : undefined;
+  const plan = compileWatchPlan(query, { name: clipName }, routineContext, body.cvContext, normalizeKnownPlayerLabels(body.knownPlayerLabels));
   const fallback = createFallbackWatchResponse(query, frames, clipName, "fallback");
   const watchGroups = plan.expectedOutputGroups.map((label) => ({ candidateIds: [], label, watch: label }));
 

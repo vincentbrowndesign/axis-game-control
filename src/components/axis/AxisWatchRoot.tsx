@@ -167,6 +167,7 @@ export function AxisWatchRoot() {
   function watchWithAxis() {
     if (!clipUrl || !query.trim()) return;
     const jobId = `watch-${Date.now()}`;
+    const reportContextJob = latestReadyJob;
     const baseJob: WatchJob = {
       acceptedCount: 0,
       candidates: [],
@@ -184,14 +185,14 @@ export function AxisWatchRoot() {
     // Deep watch: sequential (CV summary injected into the prompt).
     // Fast watch: parallel (CV runs alongside, no injection needed).
     if (clipFile) {
-      void runCvThenDeepWatch(jobId, clipUrl);
+      void runCvThenDeepWatch(jobId, clipUrl, reportContextJob);
     } else {
       void runCvContext(jobId, clipUrl);
-      void runFastWatch(jobId);
+      void runFastWatch(jobId, reportContextJob);
     }
   }
 
-  async function runFastWatch(jobId: string) {
+  async function runFastWatch(jobId: string, reportContextJob?: WatchJob) {
     try {
       updateJob(jobId, { status: "sampling" });
       const frames = await sampleVideoFrames(clipUrl, 60);
@@ -199,8 +200,10 @@ export function AxisWatchRoot() {
       const response = await fetch("/api/axis/watch", {
         body: JSON.stringify({
           clipMetadata: { name: clipFile?.name || "Recorded clip" },
+          cvContext: reportContextJob?.cvContext?.summary,
           frames,
           query: query.trim(),
+          routineContext: buildFollowUpContext(reportContextJob),
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -230,9 +233,9 @@ export function AxisWatchRoot() {
     }
   }
 
-  async function runCvThenDeepWatch(jobId: string, videoUrl: string) {
+  async function runCvThenDeepWatch(jobId: string, videoUrl: string, reportContextJob?: WatchJob) {
     const cvSummary = await runCvContext(jobId, videoUrl);
-    await runDeepWatch(jobId, cvSummary ?? undefined);
+    await runDeepWatch(jobId, cvSummary ?? reportContextJob?.cvContext?.summary, reportContextJob);
   }
 
   async function runCvContext(jobId: string, videoUrl: string): Promise<CvContext["summary"] | null> {
@@ -366,7 +369,7 @@ export function AxisWatchRoot() {
     }
   }
 
-  async function runDeepWatch(jobId: string, cvSummary?: CvContext["summary"]) {
+  async function runDeepWatch(jobId: string, cvSummary?: CvContext["summary"], reportContextJob?: WatchJob) {
     if (!clipFile) {
       updateJob(jobId, { error: "Attach a clip file to use Deep Watch.", status: "failed" });
       return;
@@ -381,6 +384,10 @@ export function AxisWatchRoot() {
       form.append("query", query.trim());
       form.append("clipName", clipFile.name);
       form.append("mode", "deep_watch");
+      const followUpContext = buildFollowUpContext(reportContextJob);
+      if (followUpContext) {
+        form.append("routineContext", followUpContext);
+      }
       if (cvSummary) {
         form.append("cvSummary", JSON.stringify(cvSummary));
       }
@@ -567,6 +574,7 @@ export function AxisWatchRoot() {
   const latestReadyJob = jobs.find((job) => job.status === "ready");
   const activeJob = jobs[0];
   const workbenchJob = workbenchJobId ? jobs.find((j) => j.id === workbenchJobId) : null;
+  const hasReport = Boolean(latestReadyJob);
 
   return (
     <main className="axis-watch" aria-labelledby="axis-watch-title">
@@ -580,15 +588,6 @@ export function AxisWatchRoot() {
         </header>
 
         <section className="axis-watch__composer" aria-label="Axis clip composer">
-          <label className="axis-watch__query-field">
-            <textarea
-              aria-label="Ask Axis what to watch for"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ask Axis what to watch for…"
-              rows={4}
-              value={query}
-            />
-          </label>
           <input
             accept="video/*"
             aria-label="Attach video clip"
@@ -639,9 +638,6 @@ export function AxisWatchRoot() {
               )}
             </div>
             <span>{clipFile ? `Clip attached: ${clipFile.name}` : "Attach or record a clip to run Axis."}</span>
-            <button className="axis-watch__primary" disabled={!clipUrl || !query.trim()} onClick={() => void watchWithAxis()} type="button">
-              Watch with Axis
-            </button>
           </div>
           {recordingState !== "idle" && (
             <div className="axis-watch__record-controls" aria-label="Recording controls">
@@ -660,6 +656,14 @@ export function AxisWatchRoot() {
               </div>
             </div>
           )}
+          <AxisQueryBox
+            buttonLabel={hasReport ? "Ask Axis" : "Watch with Axis"}
+            disabled={!clipUrl || !query.trim()}
+            onChange={setQuery}
+            onSubmit={() => void watchWithAxis()}
+            placeholder={hasReport ? "Ask about this clip…" : "Ask Axis what to watch for…"}
+            value={query}
+          />
         </section>
 
         {activeJob && <ExecutionCard job={activeJob} onRetry={() => void watchWithAxis()} />}
@@ -729,15 +733,6 @@ export function AxisWatchRoot() {
           </div>
         </section>
 
-        {latestReadyJob && (
-          <section className="axis-watch__card" aria-label="Clip follow up" id="clip-question">
-            <label>
-              <span>Ask about this clip…</span>
-              <input placeholder="Ask about this clip…" type="text" />
-            </label>
-          </section>
-        )}
-
         {latestReadyJob && <ClipData job={latestReadyJob} />}
       </section>
 
@@ -759,6 +754,53 @@ export function AxisWatchRoot() {
       <style jsx>{styles}</style>
     </main>
   );
+}
+
+function AxisQueryBox({
+  buttonLabel,
+  disabled,
+  onChange,
+  onSubmit,
+  placeholder,
+  value,
+}: {
+  buttonLabel: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  placeholder: string;
+  value: string;
+}) {
+  return (
+    <div className="axis-watch__query-box">
+      <label className="axis-watch__query-field">
+        <textarea
+          aria-label={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          rows={4}
+          value={value}
+        />
+      </label>
+      <button className="axis-watch__primary" disabled={disabled} onClick={onSubmit} type="button">
+        {buttonLabel}
+      </button>
+    </div>
+  );
+}
+
+function buildFollowUpContext(job?: WatchJob): string | undefined {
+  if (!job) return undefined;
+
+  const lines = [
+    `Previous Axis report for this selected clip: ${job.clipSummary ?? job.compiledIntent ?? job.query}`,
+    ...job.candidates
+      .filter((candidate) => candidate.status !== "rejected")
+      .slice(0, 4)
+      .map((candidate) => `${formatTimestamp(candidate.timestampSeconds)} ${candidate.title}: ${candidate.note}`),
+  ];
+
+  return lines.join("\n").slice(0, 1800);
 }
 
 function toPlaybackJob(job: WatchJob): PlaybackJob {
@@ -1721,6 +1763,11 @@ const styles = `
     resize: vertical;
   }
 
+  .axis-watch__query-box {
+    display: grid;
+    gap: 0.65rem;
+  }
+
   .axis-watch__signal-label {
     color: rgba(183, 255, 92, 0.86);
     font-size: 0.65rem;
@@ -1976,10 +2023,6 @@ const styles = `
     font-weight: 750;
     min-width: 0;
     overflow-wrap: anywhere;
-  }
-
-  .axis-watch__attach-row .axis-watch__primary {
-    grid-column: 1 / -1;
   }
 
   .axis-watch__queue,
@@ -2770,11 +2813,12 @@ const styles = `
     }
 
     .axis-watch__attach-row {
-      grid-template-columns: auto minmax(0, 1fr) minmax(14rem, 18rem);
+      grid-template-columns: auto minmax(0, 1fr);
     }
 
-    .axis-watch__attach-row .axis-watch__primary {
-      grid-column: auto;
+    .axis-watch__query-box {
+      align-items: end;
+      grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
     }
 
     .axis-watch__steps {
