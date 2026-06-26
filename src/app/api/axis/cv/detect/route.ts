@@ -161,42 +161,27 @@ async function tryYolo(
 }
 
 async function callYoloFrame(frame: FrameInput): Promise<CvDetectFrameResult> {
-  // Try full data URL first; some servers accept this format.
-  // Strip the prefix and retry if we get a 400 (bad request).
-  const bodyVariants = [
-    { base64: frame.imageDataUrl },          // full data:image/jpeg;base64,... string
-    { base64: frame.imageDataUrl.replace(/^data:[^;]+;base64,/, "") }, // raw base64
-  ];
-
-  let lastError: Error | null = null;
-  for (const bodyObj of bodyVariants) {
-    let response: Response;
-    try {
-      response = await fetch(`${DETECTOR_URL}/detect`, {
-        body: JSON.stringify(bodyObj),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      break; // Network error — don't retry other body variants
-    }
-
-    if (response.status === 400) {
-      lastError = new Error(`YOLO HTTP 400`);
-      continue; // Try next body variant
-    }
-
-    if (!response.ok) {
-      throw new Error(`YOLO HTTP ${response.status}`);
-    }
-
-    const raw = (await response.json()) as unknown;
-    return { ...parseYoloResponse(raw, frame.timestampSeconds), timestampSeconds: frame.timestampSeconds };
+  // axismeasure.com/detector expects { imageDataUrl: "data:image/jpeg;base64,..." }
+  // Verified from /health response schema — "imageDataUrl" is the required field name.
+  if (typeof frame.imageDataUrl !== "string" || !frame.imageDataUrl) {
+    throw new Error(`frame.imageDataUrl is ${typeof frame.imageDataUrl} — expected string`);
   }
 
-  throw lastError ?? new Error("YOLO: all body variants exhausted");
+  const response = await fetch(`${DETECTOR_URL}/detect`, {
+    body: JSON.stringify({ imageDataUrl: frame.imageDataUrl }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    // Capture response body for diagnostics (422 from schema mismatch, etc.)
+    const errText = await response.text().catch(() => "");
+    throw new Error(`YOLO HTTP ${response.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const raw = (await response.json()) as unknown;
+  return { ...parseYoloResponse(raw, frame.timestampSeconds), timestampSeconds: frame.timestampSeconds };
 }
 
 // Parse multiple YOLO/detector response shapes
