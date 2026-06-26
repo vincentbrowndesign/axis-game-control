@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { PlaybackWorkbench, type PlaybackJob } from "./PlaybackWorkbench";
 
 type WatchStatus = "queued" | "sampling" | "watching" | "ready" | "failed";
 
@@ -50,12 +51,14 @@ type WatchJob = {
   candidates: WatchCandidate[];
   clipName: string;
   clipSummary?: string;
+  clipUrl?: string;
   compiledIntent?: string;
   createdAt: string;
   cvContext?: CvContext;
   cvStatus?: "failed" | "idle" | "ready" | "sampling";
   error?: string;
   id: string;
+  lastViewedTimestamp?: number;
   limitations?: string[];
   query: string;
   sampledFrameCount: number;
@@ -72,6 +75,7 @@ export function AxisWatchRoot() {
   const [jobs, setJobs] = useState<WatchJob[]>([]);
   const [recordingState, setRecordingState] = useState<"idle" | "preview" | "recording">("idle");
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [workbenchJobId, setWorkbenchJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -89,7 +93,8 @@ export function AxisWatchRoot() {
 
   function setUploadedClip(file: File | null) {
     if (!file) return;
-    if (clipUrl) URL.revokeObjectURL(clipUrl);
+    // Don't revoke the old URL if a job's workbench still references it.
+    // Object URLs are cheap and sessions are short — let the browser clean up.
     const nextUrl = URL.createObjectURL(file);
     setClipFile(file);
     setClipUrl(nextUrl);
@@ -143,6 +148,7 @@ export function AxisWatchRoot() {
       acceptedCount: 0,
       candidates: [],
       clipName: clipFile?.name || "Recorded clip",
+      clipUrl: clipUrl || undefined,
       createdAt: new Date().toISOString(),
       id: jobId,
       query: query.trim(),
@@ -471,6 +477,7 @@ export function AxisWatchRoot() {
 
   const latestReadyJob = jobs.find((job) => job.status === "ready");
   const activeJob = jobs[0];
+  const workbenchJob = workbenchJobId ? jobs.find((j) => j.id === workbenchJobId) : null;
 
   return (
     <main className="axis-watch" aria-labelledby="axis-watch-title">
@@ -608,6 +615,15 @@ export function AxisWatchRoot() {
                 <p>{job.compiledIntent ?? job.query}</p>
                 <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Full clip"}</small>
                 {job.error && <em>{job.error}</em>}
+                {job.status === "ready" && (
+                  <button
+                    className="axis-watch__open-wb"
+                    onClick={() => setWorkbenchJobId(job.id)}
+                    type="button"
+                  >
+                    Open in Workbench
+                  </button>
+                )}
               </article>
             ))}
           </div>
@@ -625,9 +641,36 @@ export function AxisWatchRoot() {
         {latestReadyJob && <ClipData job={latestReadyJob} />}
       </section>
 
+      {workbenchJob && (
+        <PlaybackWorkbench
+          job={toPlaybackJob(workbenchJob)}
+          onClose={(lastTimestamp) => {
+            if (lastTimestamp !== undefined) {
+              updateJob(workbenchJob.id, { lastViewedTimestamp: lastTimestamp });
+            }
+            setWorkbenchJobId(null);
+          }}
+          onUpdateCandidate={(candidateId, patch) =>
+            updateCandidate(workbenchJob.id, candidateId, patch)
+          }
+        />
+      )}
+
       <style jsx>{styles}</style>
     </main>
   );
+}
+
+function toPlaybackJob(job: WatchJob): PlaybackJob {
+  return {
+    candidates: job.candidates,
+    clipName: job.clipName,
+    clipUrl: job.clipUrl,
+    compiledIntent: job.compiledIntent,
+    id: job.id,
+    lastViewedTimestamp: job.lastViewedTimestamp,
+    query: job.query,
+  };
 }
 
 function CvPreview({ cvContext }: { cvContext: CvContext | undefined }) {
@@ -1490,6 +1533,25 @@ const styles = `
 
   .axis-watch__job[data-status="ready"] {
     border-color: rgba(20, 22, 16, 0.1);
+  }
+
+  .axis-watch__open-wb {
+    background: rgba(20, 22, 16, 0.06);
+    border: 1px solid rgba(20, 22, 16, 0.14);
+    border-radius: 0.65rem;
+    color: #141610;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 850;
+    min-height: 2.4rem;
+    padding: 0 0.8rem;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .axis-watch__open-wb:hover {
+    background: rgba(20, 22, 16, 0.1);
+    border-color: rgba(20, 22, 16, 0.22);
   }
 
   .axis-watch__execution[data-status="sampling"],
