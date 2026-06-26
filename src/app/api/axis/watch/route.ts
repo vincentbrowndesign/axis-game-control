@@ -13,7 +13,7 @@ import {
   type CandidateMoment,
   type WatchResponse,
 } from "../../../../lib/axis/deep-watch-provider";
-import { compileWatchPlan } from "../../../../lib/axis/watch-compiler";
+import { compileWatchPlan, type AxisWatchCompilerCvContext } from "../../../../lib/axis/watch-compiler";
 import type { DeepWatchPayload } from "../../../../../trigger/deep-watch";
 
 export const runtime = "nodejs";
@@ -29,7 +29,9 @@ type WatchFrame = {
 type WatchRequest = {
   clipMetadata?: { durationSeconds?: unknown; name?: unknown };
   clipName?: unknown;
+  cvContext?: AxisWatchCompilerCvContext;
   frames?: WatchFrame[];
+  knownPlayerLabels?: unknown;
   query?: string;
 };
 
@@ -80,6 +82,7 @@ async function handleFastWatch(request: Request) {
   }
 
   const clipName = getClipName(body);
+  const plan = compileWatchPlan(query, { name: clipName }, undefined, body.cvContext, normalizeKnownPlayerLabels(body.knownPlayerLabels));
   const fallback = createFallbackWatchResponse(query, frames, clipName, "fallback");
 
   if (!process.env.OPENAI_API_KEY) {
@@ -87,14 +90,14 @@ async function handleFastWatch(request: Request) {
   }
 
   try {
-    const providerResponse = await watchFramesWithOpenAI(query, frames, clipName);
-    return NextResponse.json(providerResponse);
+    const providerResponse = await watchFramesWithOpenAI(plan.prompt, frames, clipName);
+    return NextResponse.json({ ...providerResponse, compiledIntent: plan.compiledIntent, watchGroups: plan.expectedOutputGroups.map((label) => ({ candidateIds: [], label, watch: label })) });
   } catch {
     return NextResponse.json(fallback);
   }
 }
 
-async function watchFramesWithOpenAI(query: string, frames: WatchFrame[], clipName: string): Promise<WatchResponse> {
+async function watchFramesWithOpenAI(compiledPrompt: string, frames: WatchFrame[], clipName: string): Promise<WatchResponse> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const selectedFrames = selectProviderFrames(frames, MAX_PROVIDER_FRAMES);
   const batches = chunk(selectedFrames, PROVIDER_BATCH_SIZE);
@@ -111,7 +114,7 @@ async function watchFramesWithOpenAI(query: string, frames: WatchFrame[], clipNa
         },
         {
           content: [
-            { text: buildVisionPrompt(query, clipName, frames.length, batch), type: "text" },
+            { text: buildVisionPrompt(compiledPrompt, clipName, frames.length, batch), type: "text" },
             ...batch.map((frame) => ({
               image_url: { detail: "low" as const, url: frame.imageDataUrl || "" },
               type: "image_url" as const,
@@ -127,17 +130,19 @@ async function watchFramesWithOpenAI(query: string, frames: WatchFrame[], clipNa
     batchResults.push(parseProviderPayload(completion.choices[0]?.message?.content ?? "{}"));
   }
 
-  return normalizeOpenAIWatchResponse(query, frames, clipName, batchResults);
+  return normalizeOpenAIWatchResponse(compiledPrompt, frames, clipName, batchResults);
 }
 
-function buildVisionPrompt(query: string, clipName: string, totalFrameCount: number, batch: WatchFrame[]) {
+function buildVisionPrompt(compiledPrompt: string, clipName: string, totalFrameCount: number, batch: WatchFrame[]) {
   const timestamps = batch.map((frame, index) => `${index + 1}: ${frame.timestampSeconds.toFixed(2)}s`).join("\n");
 
   return `Clip: ${clipName}
-Coach query: ${query}
 Total sampled frames available: ${totalFrameCount}
 This batch timestamps:
 ${timestamps}
+
+Compiled watch plan:
+${compiledPrompt}
 
 Return valid JSON only:
 {
@@ -230,38 +235,22 @@ async function handleDeepWatch(request: Request) {
 
   const apiKey = process.env.TWELVELABS_API_KEY;
 
-  // Compile the watch plan from the open query regardless of provider availability.
-  const clipMetadata = { name: clipName };
   const rawRoutineContext = formData.get("routineContext");
   const routineContext = typeof rawRoutineContext === "string" && rawRoutineContext.trim()
     ? rawRoutineContext.trim()
     : undefined;
-  const plan = compileWatchPlan(query, clipMetadata, routineContext);
-
-  // If CV pre-scan ran client-side, inject its summary into the compiled prompt.
   const rawCvSummary = formData.get("cvSummary");
-  if (typeof rawCvSummary === "string" && rawCvSummary) {
-    try {
-      const cv = JSON.parse(rawCvSummary) as {
-        avgPeopleCount?: number;
-        framesWithPeople?: number;
-        maxPeopleCount?: number;
-        provider?: string;
-        totalFrames?: number;
-      };
-      if (typeof cv.maxPeopleCount === "number") {
-        plan.prompt +=
-          `\n\nCV Pre-scan Evidence:\n- People visible: max ${cv.maxPeopleCount} (avg ${cv.avgPeopleCount ?? 0})\n- Frames with people: ${cv.framesWithPeople ?? 0}/${cv.totalFrames ?? 0}\n- CV source: ${cv.provider ?? "unknown"}`;
-      }
-    } catch {
-      // ignore malformed cv summary
-    }
-  }
+  const cvContext = parseCvContext(rawCvSummary);
+  const knownPlayerLabels = normalizeKnownPlayerLabels(formData.get("knownPlayerLabels"));
+
+  // Compile the watch plan from the open query regardless of provider availability.
+  const plan = compileWatchPlan(query, { name: clipName }, routineContext, cvContext, knownPlayerLabels);
 
   console.log("[deep-watch] compiled", {
     clipName,
-    cvSummary: rawCvSummary ? "injected" : "none",
-    watches: plan.watches,
+    cvSummary: cvContext ? "injected" : "none",
+    evidenceGoals: plan.evidenceGoals.map((goal) => goal.watch),
+    watches: plan.selectedWatches,
     providerRoute: plan.providerRoute,
   });
 
@@ -285,9 +274,13 @@ async function handleDeepWatch(request: Request) {
       "deep-watch-clip",
       {
         clipName,
+        cvContext,
+        evidenceGoals: plan.evidenceGoals,
         compiledIntent: plan.compiledIntent,
         compiledPrompt: plan.prompt,
         compiledWatches: plan.expectedOutputGroups,
+        providerRoute: plan.providerRoute,
+        repairPlan: plan.repairPlan,
         indexId,
         query,
         tlTaskId,
@@ -319,6 +312,28 @@ function parseProviderPayload(raw: string): ProviderPayload {
   } catch {
     return {};
   }
+}
+
+function parseCvContext(value: FormDataEntryValue | null): AxisWatchCompilerCvContext | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(value) as AxisWatchCompilerCvContext;
+    return parsed && typeof parsed === "object" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeKnownPlayerLabels(value: unknown): string[] {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) return normalizeStringArray(parsed).slice(0, 8);
+    } catch {
+      return value.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 8);
+    }
+  }
+  return Array.isArray(value) ? normalizeStringArray(value).slice(0, 8) : [];
 }
 
 function normalizeCandidateMoments(candidateMoments: unknown, duration: number): CandidateMoment[] {

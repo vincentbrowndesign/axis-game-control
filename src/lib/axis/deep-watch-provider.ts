@@ -32,8 +32,8 @@ export type CandidateMoment = {
 export type WatchFailureReason = "analyze_failed" | "parse_failed" | "task_failed" | "task_timeout";
 
 export const WATCH_FAILURE_MESSAGES: Record<WatchFailureReason, string> = {
-  analyze_failed: "The analysis could not complete. Try a more specific query.",
-  parse_failed: "No moments were found. Try a more specific query.",
+  analyze_failed: "Axis could not complete the provider pass and will use available visual evidence.",
+  parse_failed: "Axis did not receive structured moments and will widen the watch automatically.",
   task_failed: "The clip could not be processed. Try a different format.",
   task_timeout: "Deep Watch is taking longer than expected. Try again with a shorter clip.",
 };
@@ -54,9 +54,24 @@ export type WatchResponse = {
   limitations: string[];
   needsReviewCount: number;
   peopleSummary: string;
-  provider?: "deep_watch" | "deep_watch:twelvelabs" | "failed" | "fallback" | "fast_watch";
+  provider?: "cv_summary" | "deep_watch" | "deep_watch:repaired" | "deep_watch:twelvelabs" | "failed" | "fallback" | "fast_watch";
   suggestedNextQueries: string[];
   watchGroups?: WatchGroup[];
+};
+
+export type CvEvidenceSummary = {
+  avgPeopleCount?: number;
+  ballDetected?: boolean;
+  failReason?: string;
+  framesWithDetections?: number;
+  framesWithPeople?: number;
+  maxPeopleCount?: number;
+  provider?: string;
+  reason?: string;
+  status?: string;
+  totalDetections?: number;
+  totalFrames?: number;
+  usableFrameCount?: number;
 };
 
 type TwelveLabsTaskStatus = "pending" | "indexing" | "ready" | "failed" | "error";
@@ -274,7 +289,7 @@ export function buildTwelveLabsWatchResponse(
       clipSummary: `TwelveLabs reviewed ${clipName} but no moments were identified.`,
       compiledIntent,
       frameCount: 0,
-      limitations: ["The analysis did not produce structured moments. Try a more specific query."],
+      limitations: ["The analysis did not produce structured moments, so Axis will widen the watch automatically."],
       needsReviewCount: 0,
       peopleSummary: "Could not assess visible people or spacing.",
       provider: "fallback",
@@ -316,11 +331,11 @@ export function buildTwelveLabsWatchResponse(
 const LABEL_TO_GROUP: Record<string, string> = {
   breakdown: "Teaching moments",
   clean_sequence: "Teaching moments",
-  group_action: "Full review",
-  person_visible: "Individual",
+  group_action: "Report",
+  person_visible: "People",
   player_action: "Individual",
   spacing_issue: "Spacing",
-  speed_change: "Transition",
+  speed_change: "Movement",
   teaching_moment: "Teaching moments",
   unclear: "Needs review",
 };
@@ -348,6 +363,72 @@ function buildWatchGroups(moments: CandidateMoment[], expectedGroups: string[]):
   }
 
   return ordered;
+}
+
+export function buildCvEvidenceWatchResponse({
+  clipName,
+  compiledIntent,
+  cvContext,
+  expectedOutputGroups,
+  query,
+}: {
+  clipName: string;
+  compiledIntent?: string;
+  cvContext?: CvEvidenceSummary;
+  expectedOutputGroups?: string[];
+  query: string;
+}): WatchResponse {
+  const usableFrames = cvContext?.usableFrameCount ?? cvContext?.totalFrames ?? 0;
+  const framesWithPeople = cvContext?.framesWithPeople ?? 0;
+  const maxPeopleCount = cvContext?.maxPeopleCount ?? 0;
+  const ballDetected = Boolean(cvContext?.ballDetected);
+  const baseConfidence = usableFrames >= 12 ? 0.58 : 0.42;
+  const visiblePeopleLabels: CandidateLabel[] = ["person_visible", "group_action"];
+  const limitedEvidenceLabels: CandidateLabel[] = ["unclear"];
+  const moments: CandidateMoment[] = [
+    {
+      confidence: baseConfidence,
+      id: "candidate-1",
+      labels: maxPeopleCount > 0 ? visiblePeopleLabels : limitedEvidenceLabels,
+      needsReview: true,
+      note:
+        maxPeopleCount > 0
+          ? `CV saw visible people in ${framesWithPeople}/${cvContext?.totalFrames ?? usableFrames} frames. Use this as a cautious starting point for reviewing group shape and action.`
+          : "CV did not find enough visible people to support a specific basketball claim. Review the clip quality and broad play context.",
+      timestampSeconds: 0,
+      title: maxPeopleCount > 0 ? "Visible play context" : "Limited visual evidence",
+    },
+  ].map((moment) => {
+    const { bucket, evidenceScore } = scoreEvidence(moment.labels, moment.confidence);
+    return { ...moment, evidenceBucket: bucket, evidenceScore };
+  });
+
+  const clipSummary =
+    maxPeopleCount > 0
+      ? `Axis found visible basketball context in ${clipName}, with up to ${maxPeopleCount} visible people.`
+      : `Axis reviewed ${clipName}, but the available visual evidence was limited.`;
+
+  const limitations = [
+    "This is a CV-only evidence summary because the provider did not return useful structured moments.",
+    ballDetected ? "A ball-like object was detected, but Axis does not infer shot result or possession." : "Ball visibility was not reliable enough for ball-specific claims.",
+  ];
+
+  return {
+    candidates: moments.map(({ id, note, timestampSeconds, title }) => ({ id, note, timestampSeconds, title })),
+    candidateMoments: moments,
+    clipSummary,
+    compiledIntent,
+    frameCount: usableFrames,
+    limitations,
+    needsReviewCount: moments.length,
+    peopleSummary:
+      maxPeopleCount > 0
+        ? `People were visible in ${framesWithPeople}/${cvContext?.totalFrames ?? usableFrames} analyzed frames.`
+        : "People visibility was too limited for a specific finding.",
+    provider: "cv_summary",
+    suggestedNextQueries: createSuggestedNextQueries(query),
+    watchGroups: buildWatchGroups(moments, expectedOutputGroups ?? []),
+  };
 }
 
 function normalizeTwelveLabsChapter(chapter: TwelveLabsChapter, index: number, query: string): CandidateMoment {

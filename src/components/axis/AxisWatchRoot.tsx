@@ -1343,10 +1343,10 @@ function actionKindLabel(kind: NextActionKind): string {
 function getStatusLabel(status: WatchStatus) {
   const labels: Record<WatchStatus, string> = {
     failed: "Failed",
-    queued: "Waiting",
+    queued: "Analyzing clip",
     ready: "Ready",
-    sampling: "Uploading",
-    watching: "Processing",
+    sampling: "Finding the play",
+    watching: "Building report",
   };
   return labels[status];
 }
