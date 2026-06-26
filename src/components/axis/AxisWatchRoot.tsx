@@ -25,6 +25,7 @@ type CvContext = {
   summary: {
     avgPeopleCount: number;
     ballDetected?: boolean;
+    failReason?: string;
     framesWithDetections?: number;
     framesWithPeople: number;
     maxPeopleCount: number;
@@ -164,11 +165,13 @@ export function AxisWatchRoot() {
     };
     setJobs((currentJobs) => [baseJob, ...currentJobs]);
 
-    // CV pre-scan runs before Deep Watch so its summary can be injected into the prompt.
-    // Fast watch (frame sampling) skips CV and runs OpenAI directly.
+    // CV always fires on Watch with Axis, regardless of path.
+    // Deep watch: sequential (CV summary injected into the prompt).
+    // Fast watch: parallel (CV runs alongside, no injection needed).
     if (clipFile) {
-      void runCvThenDeepWatch(jobId);
+      void runCvThenDeepWatch(jobId, clipUrl);
     } else {
+      void runCvContext(jobId, clipUrl);
       void runFastWatch(jobId);
     }
   }
@@ -212,18 +215,38 @@ export function AxisWatchRoot() {
     }
   }
 
-  async function runCvThenDeepWatch(jobId: string) {
-    const cvSummary = await runCvContext(jobId);
+  async function runCvThenDeepWatch(jobId: string, videoUrl: string) {
+    const cvSummary = await runCvContext(jobId, videoUrl);
     await runDeepWatch(jobId, cvSummary ?? undefined);
   }
 
-  async function runCvContext(jobId: string): Promise<CvContext["summary"] | null> {
-    if (!clipUrl) return null;
+  async function runCvContext(jobId: string, videoUrl: string): Promise<CvContext["summary"] | null> {
+    if (!videoUrl) {
+      console.log("[CV_CLIENT] no videoUrl — CV skipped");
+      return null;
+    }
     updateJob(jobId, { cvStatus: "sampling" });
 
     try {
-      // 1 frame/sec, cap at 25 — enough for CV pre-scan without dominating upload time
-      const frames = await sampleVideoFrames(clipUrl, 25);
+      // 1 frame/sec, cap at 25 — enough for a CV pre-scan before deep watch
+      const frames = await sampleVideoFrames(videoUrl, 25);
+
+      console.log(`[CV_CLIENT_CALL_START] jobId=${jobId} frames=${frames.length}`);
+
+      if (frames.length === 0) {
+        // Video loaded but yielded no sampleable frames — surface clearly
+        const summary: CvContext["summary"] = {
+          avgPeopleCount: 0,
+          failReason: "no_frames_sampled",
+          framesWithPeople: 0,
+          maxPeopleCount: 0,
+          provider: "none",
+          status: "failed",
+          totalFrames: 0,
+        };
+        updateJob(jobId, { cvContext: { summary }, cvStatus: "ready" });
+        return summary;
+      }
 
       const response = await fetch("/api/axis/cv/detect", {
         body: JSON.stringify({ frames }),
@@ -232,11 +255,13 @@ export function AxisWatchRoot() {
       });
 
       if (!response.ok) {
+        console.log(`[CV_CLIENT] route error: HTTP ${response.status}`);
         updateJob(jobId, { cvStatus: "failed" });
         return null;
       }
 
       const data = (await response.json()) as {
+        failReason?: string;
         frameResults?: Array<{
           detections: CvDetection[];
           error?: string;
@@ -251,8 +276,11 @@ export function AxisWatchRoot() {
       const frameResults = data.frameResults ?? [];
       const status = data.status ?? "failed";
       const provider = data.provider ?? "unknown";
+      const failReason = data.failReason ?? data.summary?.failReason;
 
-      // Build summary from raw frame results so we're not relying on server-computed shape
+      console.log(`[CV_CLIENT] route returned status=${status} provider=${provider} frames=${frameResults.length} failReason=${failReason ?? "none"}`);
+
+      // Build summary from frame results — don't trust server shape alone
       const peopleCounts = frameResults.map((f) => f.peopleCount);
       const maxPeopleCount = peopleCounts.length > 0 ? Math.max(...peopleCounts) : 0;
       const framesWithPeople = peopleCounts.filter((n) => n > 0).length;
@@ -265,9 +293,10 @@ export function AxisWatchRoot() {
       const allDetections = frameResults.flatMap((f) => f.detections);
       const ballDetected = allDetections.some((d) => d.kind === "ball");
 
-      const summary: CvContext["summary"] = data.summary ?? {
+      const summary: CvContext["summary"] = {
         avgPeopleCount,
         ballDetected,
+        failReason,
         framesWithDetections: frameResults.filter((f) => f.detections.length > 0).length,
         framesWithPeople,
         maxPeopleCount,
@@ -277,11 +306,7 @@ export function AxisWatchRoot() {
         totalFrames: frameResults.length,
       };
 
-      // Ensure summary has the status/provider from the route response
-      summary.status = status;
-      summary.provider = provider;
-
-      // Peak frame: most people — used for overlay canvas
+      // Peak frame — used for overlay canvas preview
       const peakResult = frameResults.reduce<(typeof frameResults)[0] | null>(
         (best, curr) => (curr.peopleCount > (best?.peopleCount ?? 0) ? curr : best),
         null,
@@ -302,11 +327,12 @@ export function AxisWatchRoot() {
         }
       }
 
-      // status === "not_configured" or "failed" still reaches "ready" so the UI
-      // can show an honest message rather than silently disappearing.
+      // Always reach "ready" so UI can show a specific reason instead of silently vanishing
       updateJob(jobId, { cvContext: { peakFrame, summary }, cvStatus: "ready" });
       return summary;
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[CV_CLIENT] exception: ${msg}`);
       updateJob(jobId, { cvStatus: "failed" });
       return null;
     }
@@ -790,11 +816,17 @@ function CvPreview({ cvContext }: { cvContext: CvContext | undefined }) {
         </div>
       )}
 
-      {summary.status === "failed" && (
-        <p className="axis-cv__fallback">CV provider did not respond. People counts are unavailable for this clip.</p>
-      )}
-      {summary.status === "not_configured" && (
-        <p className="axis-cv__fallback">No CV provider configured. Set AXIS_VISION_DETECTOR_URL or ROBOFLOW_API_KEY to enable detection.</p>
+      {(summary.status === "failed" || summary.status === "not_configured") && (
+        <p className="axis-cv__fallback">
+          {summary.failReason === "no_frames_sampled"
+            ? "Could not read frames from this clip. Check the video format."
+            : summary.failReason
+              ? summary.failReason
+              : summary.status === "not_configured"
+                ? "No CV provider configured. Set AXIS_VISION_DETECTOR_URL or ROBOFLOW_API_KEY."
+                : "CV provider did not respond."
+          }
+        </p>
       )}
     </section>
   );
@@ -1037,7 +1069,15 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
       </ol>
       <div className="axis-watch__execution-meta">
         <span>{metaLabel}</span>
-        {cvLabel && <span className="axis-watch__cv-badge" data-cv-status={job.cvStatus}>CV · {cvLabel}</span>}
+        {cvLabel && (
+          <span
+            className="axis-watch__cv-badge"
+            data-cv-status={job.cvStatus}
+            title={job.cvContext?.summary.failReason ?? job.cvContext?.summary.provider}
+          >
+            CV · {cvLabel}
+          </span>
+        )}
         {job.status === "ready" && <span>{job.candidates.length} findings</span>}
         {job.status === "failed" && <button onClick={onRetry} type="button">Retry</button>}
       </div>
@@ -1280,8 +1320,15 @@ async function sampleVideoFrames(videoUrl: string, maxFrames: number) {
   video.src = videoUrl;
   video.muted = true;
   video.playsInline = true;
-  video.crossOrigin = "anonymous";
-  await waitForVideoMetadata(video);
+  // Do NOT set crossOrigin on blob: URLs — causes CORS rejection on some browsers
+  // and blob URLs don't need it.
+
+  try {
+    await waitForVideoMetadata(video);
+  } catch (err) {
+    console.log(`[CV_CLIENT] sampleVideoFrames: metadata failed — ${err instanceof Error ? err.message : String(err)}`);
+    return [];
+  }
 
   const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
   const sampleCount = Math.min(maxFrames, Math.max(1, Math.ceil(duration)));
@@ -1306,8 +1353,16 @@ async function sampleVideoFrames(videoUrl: string, maxFrames: number) {
 
 function waitForVideoMetadata(video: HTMLVideoElement) {
   return new Promise<void>((resolve, reject) => {
-    video.onloadedmetadata = () => resolve();
-    video.onerror = () => reject(new Error("Clip could not load."));
+    // 12s timeout — handles slow blob loading and prevents silent hangs
+    const timer = setTimeout(
+      () => reject(new Error("Video metadata load timed out (12s)")),
+      12_000,
+    );
+    const done = (err?: Error) => { clearTimeout(timer); if (err) reject(err); else resolve(); };
+    video.onloadedmetadata = () => done();
+    video.onerror = () => done(new Error("Clip could not load — check video format."));
+    // Explicit load() call so the browser starts fetching even without autoplay
+    video.load();
   });
 }
 

@@ -46,12 +46,14 @@ export type CvDetectFrameResult = {
 };
 
 export type CvDetectResponse = {
+  failReason?: string;
   frameResults: CvDetectFrameResult[];
   provider: string;
   status: CvDetectStatus;
   summary: {
     avgPeopleCount: number;
     ballDetected: boolean;
+    failReason?: string;
     framesWithDetections: number;
     framesWithPeople: number;
     maxPeopleCount: number;
@@ -95,21 +97,24 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json(buildResponse(rfResult.frameResults, "roboflow", "connected"));
   }
 
-  // Both failed or not configured — return whichever had a real failure
+  // Both failed or not configured — surface the most actionable reason
   if (yoloResult.status === "failed" || rfResult.status === "failed") {
     const failedProvider = yoloResult.status === "failed" ? "yolo" : "roboflow";
-    return NextResponse.json(buildResponse([], failedProvider, "failed"));
+    const failReason = yoloResult.failReason ?? rfResult.failReason;
+    return NextResponse.json(buildResponse([], failedProvider, "failed", failReason));
   }
 
-  // Neither is configured
-  return NextResponse.json(buildResponse([], "none", "not_configured"));
+  // Both not_configured (or one not_configured + one not reachable before the failed check above)
+  const failReason = yoloResult.failReason ?? rfResult.failReason
+    ?? "No provider configured — set AXIS_VISION_DETECTOR_URL or ROBOFLOW_API_KEY";
+  return NextResponse.json(buildResponse([], "none", "not_configured", failReason));
 }
 
 // ─── Provider: YOLO ──────────────────────────────────────────────────────────
 
 async function tryYolo(
   frames: FrameInput[],
-): Promise<{ frameResults: CvDetectFrameResult[]; status: CvDetectStatus }> {
+): Promise<{ failReason?: string; frameResults: CvDetectFrameResult[]; status: CvDetectStatus }> {
   if (!DETECTOR_URL) {
     console.log("[CV] yolo: not_configured — AXIS_VISION_DETECTOR_URL not set");
     return { frameResults: [], status: "not_configured" };
@@ -119,6 +124,7 @@ async function tryYolo(
 
   let successCount = 0;
   let errorCount = 0;
+  let lastError = "";
   const frameResults: CvDetectFrameResult[] = [];
 
   for (let i = 0; i < frames.length; i += BATCH_SIZE) {
@@ -132,6 +138,7 @@ async function tryYolo(
         } catch (err) {
           errorCount++;
           const msg = err instanceof Error ? err.message : String(err);
+          lastError = msg;
           return emptyFrame(frame.timestampSeconds, msg);
         }
       }),
@@ -148,10 +155,9 @@ async function tryYolo(
     return { frameResults, status: "connected" };
   }
 
-  console.log(
-    `[CV_CALL_FAILED] provider=yolo frames=${frames.length} errors=${errorCount}`,
-  );
-  return { frameResults: [], status: "failed" };
+  const failReason = `yolo: ${lastError || "no frames succeeded"} (${DETECTOR_URL}/detect)`;
+  console.log(`[CV_CALL_FAILED] provider=yolo frames=${frames.length} errors=${errorCount} reason=${failReason}`);
+  return { failReason, frameResults: [], status: "failed" };
 }
 
 async function callYoloFrame(frame: FrameInput): Promise<CvDetectFrameResult> {
@@ -273,7 +279,7 @@ function parseYoloResponse(raw: unknown, timestampSeconds: number): Omit<CvDetec
 
 async function tryRoboflow(
   frames: FrameInput[],
-): Promise<{ frameResults: CvDetectFrameResult[]; status: CvDetectStatus }> {
+): Promise<{ failReason?: string; frameResults: CvDetectFrameResult[]; status: CvDetectStatus }> {
   if (!ROBOFLOW_API_KEY) {
     console.log("[CV] roboflow: not_configured — ROBOFLOW_API_KEY not set");
     return { frameResults: [], status: "not_configured" };
@@ -285,6 +291,8 @@ async function tryRoboflow(
 
   let successCount = 0;
   let errorCount = 0;
+  let lastError = "";
+  let projectNotFound = false;
   const frameResults: CvDetectFrameResult[] = [];
 
   for (let i = 0; i < frames.length; i += BATCH_SIZE) {
@@ -298,11 +306,15 @@ async function tryRoboflow(
         } catch (err) {
           errorCount++;
           const msg = err instanceof Error ? err.message : String(err);
+          lastError = msg;
+          if (msg.includes("HTTP 404")) projectNotFound = true;
           return emptyFrame(frame.timestampSeconds, msg);
         }
       }),
     );
     frameResults.push(...batchResults);
+    // If all frames in the first batch hit 404, the project doesn't exist — stop trying
+    if (projectNotFound && i === 0 && successCount === 0) break;
   }
 
   const totalDetections = frameResults.reduce((s, f) => s + f.detections.length, 0);
@@ -314,10 +326,13 @@ async function tryRoboflow(
     return { frameResults, status: "connected" };
   }
 
-  console.log(
-    `[CV_CALL_FAILED] provider=roboflow frames=${frames.length} errors=${errorCount}`,
-  );
-  return { frameResults: [], status: "failed" };
+  const failReason = projectNotFound
+    ? `roboflow: project "${ROBOFLOW_PROJECT}/${ROBOFLOW_VERSION}" not found — model not deployed`
+    : `roboflow: ${lastError || "no frames succeeded"}`;
+  const status: CvDetectStatus = projectNotFound ? "not_configured" : "failed";
+
+  console.log(`[CV_CALL_FAILED] provider=roboflow frames=${frames.length} errors=${errorCount} reason=${failReason}`);
+  return { failReason, frameResults: [], status };
 }
 
 async function callRoboflowFrame(frame: FrameInput): Promise<CvDetectFrameResult> {
@@ -346,6 +361,7 @@ function buildResponse(
   frameResults: CvDetectFrameResult[],
   provider: string,
   status: CvDetectStatus,
+  failReason?: string,
 ): CvDetectResponse {
   const peopleCounts = frameResults.map((f) => f.peopleCount);
   const maxPeopleCount = peopleCounts.length > 0 ? Math.max(...peopleCounts) : 0;
@@ -362,12 +378,14 @@ function buildResponse(
   const ballDetected = allDetections.some((d) => d.kind === "ball");
 
   return {
+    failReason,
     frameResults,
     provider,
     status,
     summary: {
       avgPeopleCount,
       ballDetected,
+      failReason,
       framesWithDetections,
       framesWithPeople,
       maxPeopleCount,
