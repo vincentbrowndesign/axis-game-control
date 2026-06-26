@@ -13,6 +13,7 @@ import {
   type CandidateMoment,
   type WatchResponse,
 } from "../../../../lib/axis/deep-watch-provider";
+import { compileWatchPlan } from "../../../../lib/axis/watch-compiler";
 import type { DeepWatchPayload } from "../../../../../trigger/deep-watch";
 
 export const runtime = "nodejs";
@@ -229,33 +230,60 @@ async function handleDeepWatch(request: Request) {
 
   const apiKey = process.env.TWELVELABS_API_KEY;
 
+  // Compile the watch plan from the open query regardless of provider availability.
+  const clipMetadata = { name: clipName };
+  const rawRoutineContext = formData.get("routineContext");
+  const routineContext = typeof rawRoutineContext === "string" && rawRoutineContext.trim()
+    ? rawRoutineContext.trim()
+    : undefined;
+  const plan = compileWatchPlan(query, clipMetadata, routineContext);
+
+  console.log("[deep-watch] compiled", {
+    clipName,
+    watches: plan.watches,
+    providerRoute: plan.providerRoute,
+  });
+
   if (!apiKey) {
     // Return a synchronous fallback so the UI can show something immediately.
     const fallback = createFallbackWatchResponse(query, [], clipName, "fallback");
     return NextResponse.json({
       ...fallback,
+      compiledIntent: plan.compiledIntent,
       limitations: ["TwelveLabs key is not configured. Results are placeholder candidates."],
     });
   }
 
   try {
     // Upload happens in the route so we can pass a JSON-serializable task ID.
-    // Polling and analysis run async in the Trigger.dev task.
+    // Polling, analysis, and grouping run async in the Trigger.dev task.
     const indexId = await createTwelveLabsIndex(apiKey, `axis-${Date.now()}`);
     const tlTaskId = await uploadVideoToIndex(apiKey, indexId, videoEntry, clipName);
 
     const handle = await tasks.trigger<typeof import("../../../../../trigger/deep-watch").deepWatchClip>(
       "deep-watch-clip",
-      { clipName, indexId, query, tlTaskId } satisfies DeepWatchPayload,
+      {
+        clipName,
+        compiledIntent: plan.compiledIntent,
+        compiledPrompt: plan.prompt,
+        compiledWatches: plan.expectedOutputGroups,
+        indexId,
+        query,
+        tlTaskId,
+      } satisfies DeepWatchPayload,
     );
 
     console.log("[deep-watch] triggered", { clipName, jobId: handle.id, tlTaskId });
 
-    return NextResponse.json({ jobId: handle.id, status: "watching" });
+    return NextResponse.json({
+      compiledIntent: plan.compiledIntent,
+      jobId: handle.id,
+      status: "watching",
+    });
   } catch (err) {
     console.error("[deep-watch] failed to start", err instanceof Error ? err.message : String(err));
     const fallback = createFallbackWatchResponse(query, [], clipName, "fallback");
-    return NextResponse.json(fallback);
+    return NextResponse.json({ ...fallback, compiledIntent: plan.compiledIntent });
   }
 }
 

@@ -12,6 +12,9 @@ import {
 
 export type DeepWatchPayload = {
   clipName: string;
+  compiledIntent?: string;
+  compiledPrompt?: string;
+  compiledWatches?: string[];
   indexId: string;
   query: string;
   tlTaskId: string;
@@ -24,7 +27,7 @@ export const deepWatchClip = task({
     const apiKey = process.env.TWELVELABS_API_KEY;
     if (!apiKey) throw new Error("TWELVELABS_API_KEY not configured");
 
-    const { clipName, indexId, query, tlTaskId } = payload;
+    const { clipName, compiledIntent, compiledPrompt, compiledWatches, indexId, query, tlTaskId } = payload;
 
     try {
       // Phase 1: poll until TwelveLabs finishes indexing the video
@@ -36,45 +39,47 @@ export const deepWatchClip = task({
         const reason: WatchFailureReason =
           err instanceof Error && err.message.includes("timed out") ? "task_timeout" : "task_failed";
         logger.warn("deep-watch: polling failed", { reason });
-        return buildFailedWatchResponse(reason);
+        return buildFailedWatchResponse(reason, compiledIntent);
       }
 
-      // Phase 2: analyze with TwelveLabs Pegasus
-      logger.info("deep-watch: analyzing", { videoId });
+      // Phase 2: analyze with compiled prompt if available, fallback to generic
+      logger.info("deep-watch: analyzing", { videoId, watches: compiledWatches });
       let analysis;
       try {
-        analysis = await analyzeWithTwelveLabs(apiKey, videoId, query, clipName);
+        analysis = await analyzeWithTwelveLabs(apiKey, videoId, query, clipName, compiledPrompt);
       } catch {
         logger.warn("deep-watch: analyze failed");
-        return buildFailedWatchResponse("analyze_failed");
+        return buildFailedWatchResponse("analyze_failed", compiledIntent);
       }
 
-      // Phase 3: normalize to WatchResponse
-      const result = buildTwelveLabsWatchResponse(query, clipName, analysis);
+      // Phase 3: normalize — pass compiled context for intent + grouping
+      const result = buildTwelveLabsWatchResponse(query, clipName, analysis, compiledIntent, compiledWatches);
       if (result.provider === "fallback") {
         logger.warn("deep-watch: parse produced no moments");
-        return buildFailedWatchResponse("parse_failed");
+        return buildFailedWatchResponse("parse_failed", compiledIntent);
       }
 
       logger.info("deep-watch: complete", {
         candidateCount: result.candidateMoments.length,
+        groupCount: result.watchGroups?.length ?? 0,
         provider: result.provider,
+        watches: compiledWatches,
       });
 
       return result;
     } finally {
-      // Best-effort cleanup — always runs whether phase succeeded or failed
       await deleteTwelveLabsIndex(apiKey, indexId);
       logger.info("deep-watch: index cleaned up", { indexId });
     }
   },
 });
 
-function buildFailedWatchResponse(reason: WatchFailureReason): WatchResponse {
+function buildFailedWatchResponse(reason: WatchFailureReason, compiledIntent?: string): WatchResponse {
   return {
     candidates: [],
     candidateMoments: [],
     clipSummary: WATCH_FAILURE_MESSAGES[reason],
+    compiledIntent,
     failureReason: reason,
     frameCount: 0,
     limitations: [],

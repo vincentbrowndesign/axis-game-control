@@ -32,10 +32,17 @@ export const WATCH_FAILURE_MESSAGES: Record<WatchFailureReason, string> = {
   task_timeout: "Deep Watch is taking longer than expected. Try again with a shorter clip.",
 };
 
+export type WatchGroup = {
+  candidateIds: string[];
+  label: string;
+  watch: string;
+};
+
 export type WatchResponse = {
   candidates: Array<{ id: string; note: string; timestampSeconds: number; title: string }>;
   candidateMoments: CandidateMoment[];
   clipSummary: string;
+  compiledIntent?: string;
   failureReason?: WatchFailureReason;
   frameCount: number;
   limitations: string[];
@@ -43,6 +50,7 @@ export type WatchResponse = {
   peopleSummary: string;
   provider?: "deep_watch" | "deep_watch:twelvelabs" | "failed" | "fallback" | "fast_watch";
   suggestedNextQueries: string[];
+  watchGroups?: WatchGroup[];
 };
 
 type TwelveLabsTaskStatus = "pending" | "indexing" | "ready" | "failed" | "error";
@@ -176,8 +184,9 @@ export async function analyzeWithTwelveLabs(
   videoId: string,
   query: string,
   clipName: string,
+  compiledPrompt?: string,
 ): Promise<TwelveLabsAnalyzeResponse> {
-  const prompt = `You are reviewing basketball footage for a coach. Clip: ${clipName}. Coach query: ${query}.
+  const prompt = compiledPrompt ?? `You are reviewing basketball footage for a coach. Clip: ${clipName}. Coach query: ${query}.
 
 Return ONLY valid JSON — no markdown fences, no prose before or after:
 {
@@ -242,6 +251,8 @@ export function buildTwelveLabsWatchResponse(
   query: string,
   clipName: string,
   analysis: TwelveLabsAnalyzeResponse,
+  compiledIntent?: string,
+  expectedOutputGroups?: string[],
 ): WatchResponse {
   const rawChapters = Array.isArray(analysis.chapters) ? analysis.chapters : [];
   const moments = rawChapters
@@ -255,6 +266,7 @@ export function buildTwelveLabsWatchResponse(
       candidates: [],
       candidateMoments: [],
       clipSummary: `TwelveLabs reviewed ${clipName} but no moments were identified.`,
+      compiledIntent,
       frameCount: 0,
       limitations: ["The analysis did not produce structured moments. Try a more specific query."],
       needsReviewCount: 0,
@@ -290,7 +302,46 @@ export function buildTwelveLabsWatchResponse(
     peopleSummary,
     provider: "deep_watch:twelvelabs",
     suggestedNextQueries: suggestedNextQueries.length > 0 ? suggestedNextQueries : createSuggestedNextQueries(query),
+    compiledIntent,
+    watchGroups: buildWatchGroups(moments, expectedOutputGroups ?? []),
   };
+}
+
+const LABEL_TO_GROUP: Record<string, string> = {
+  breakdown: "Teaching moments",
+  clean_sequence: "Teaching moments",
+  group_action: "Full review",
+  person_visible: "Individual",
+  player_action: "Individual",
+  spacing_issue: "Spacing",
+  speed_change: "Transition",
+  teaching_moment: "Teaching moments",
+  unclear: "Needs review",
+};
+
+function buildWatchGroups(moments: CandidateMoment[], expectedGroups: string[]): WatchGroup[] {
+  const groupMap = new Map<string, string[]>();
+
+  for (const moment of moments) {
+    const dominantLabel = moment.labels[0] ?? "unclear";
+    const groupLabel = LABEL_TO_GROUP[dominantLabel] ?? "Needs review";
+    if (!groupMap.has(groupLabel)) groupMap.set(groupLabel, []);
+    groupMap.get(groupLabel)!.push(moment.id);
+  }
+
+  // Order by expectedGroups first, then any remainder
+  const ordered: WatchGroup[] = [];
+  const used = new Set<string>();
+
+  for (const label of expectedGroups) {
+    const ids = groupMap.get(label);
+    if (ids) { ordered.push({ candidateIds: ids, label, watch: label }); used.add(label); }
+  }
+  for (const [label, ids] of groupMap.entries()) {
+    if (!used.has(label)) ordered.push({ candidateIds: ids, label, watch: label });
+  }
+
+  return ordered;
 }
 
 function normalizeTwelveLabsChapter(chapter: TwelveLabsChapter, index: number, query: string): CandidateMoment {

@@ -12,20 +12,24 @@ type WatchCandidate = {
   status: "pending" | "accepted" | "rejected";
 };
 
-type WatchMode = "fast_watch" | "deep_watch";
+type WatchGroup = {
+  candidateIds: string[];
+  label: string;
+};
 
 type WatchJob = {
   acceptedCount: number;
   candidates: WatchCandidate[];
   clipName: string;
+  compiledIntent?: string;
   createdAt: string;
   error?: string;
   id: string;
-  mode: WatchMode;
   query: string;
   sampledFrameCount: number;
   status: WatchStatus;
   triggerRunId?: string;
+  watchGroups?: WatchGroup[];
 };
 
 export function AxisWatchRoot() {
@@ -35,7 +39,6 @@ export function AxisWatchRoot() {
   const [jobs, setJobs] = useState<WatchJob[]>([]);
   const [recordingState, setRecordingState] = useState<"idle" | "preview" | "recording">("idle");
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
-  const [watchMode, setWatchMode] = useState<WatchMode>("fast_watch");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -109,14 +112,15 @@ export function AxisWatchRoot() {
       clipName: clipFile?.name || "Recorded clip",
       createdAt: new Date().toISOString(),
       id: jobId,
-      mode: watchMode,
       query: query.trim(),
       sampledFrameCount: 0,
       status: "queued",
     };
     setJobs((currentJobs) => [baseJob, ...currentJobs]);
 
-    if (watchMode === "deep_watch") {
+    // Compiler decides routing — deep watch (TwelveLabs) when a file is attached.
+    // Fast watch (frame sampling) runs when TwelveLabs is unavailable as a fallback.
+    if (clipFile) {
       void runDeepWatch(jobId);
     } else {
       void runFastWatch(jobId);
@@ -170,9 +174,11 @@ export function AxisWatchRoot() {
       const response = await fetch("/api/axis/watch", { body: form, method: "POST" });
       const payload = (await response.json()) as {
         candidates?: Array<Omit<WatchCandidate, "status">>;
+        compiledIntent?: string;
         error?: string;
         jobId?: string;
         status?: string;
+        watchGroups?: WatchGroup[];
       };
 
       if (!response.ok) {
@@ -184,7 +190,9 @@ export function AxisWatchRoot() {
       if (payload.candidates) {
         updateJob(jobId, {
           candidates: payload.candidates.map((c) => ({ ...c, status: "pending" as const })),
+          compiledIntent: payload.compiledIntent,
           status: "ready",
+          watchGroups: payload.watchGroups,
         });
         return;
       }
@@ -196,7 +204,8 @@ export function AxisWatchRoot() {
         return;
       }
 
-      updateJob(jobId, { status: "watching", triggerRunId });
+      // Store compiledIntent immediately so it shows during the watch
+      updateJob(jobId, { compiledIntent: payload.compiledIntent, status: "watching", triggerRunId });
       startPolling(jobId, triggerRunId);
     } catch {
       updateJob(jobId, { error: "Deep Watch could not reach the server.", status: "failed" });
@@ -219,7 +228,11 @@ export function AxisWatchRoot() {
       const response = await fetch(`/api/axis/watch/status/${triggerRunId}`);
       const poll = (await response.json()) as {
         error?: string;
-        result?: { candidates?: Array<Omit<WatchCandidate, "status">> };
+        result?: {
+          candidates?: Array<Omit<WatchCandidate, "status">>;
+          compiledIntent?: string;
+          watchGroups?: WatchGroup[];
+        };
         status: WatchStatus;
       };
 
@@ -228,7 +241,9 @@ export function AxisWatchRoot() {
         pollIntervalsRef.current.delete(jobId);
         updateJob(jobId, {
           candidates: poll.result.candidates.map((c) => ({ ...c, status: "pending" as const })),
+          compiledIntent: poll.result.compiledIntent,
           status: "ready",
+          watchGroups: poll.result.watchGroups,
         });
         return;
       }
@@ -306,26 +321,6 @@ export function AxisWatchRoot() {
             ref={fileInputRef}
             type="file"
           />
-          <div className="axis-watch__mode-toggle" role="group" aria-label="Watch mode">
-            <button
-              aria-pressed={watchMode === "fast_watch" ? "true" : "false"}
-              className="axis-watch__mode-btn"
-              data-active={watchMode === "fast_watch"}
-              onClick={() => setWatchMode("fast_watch")}
-              type="button"
-            >
-              Fast Watch
-            </button>
-            <button
-              aria-pressed={watchMode === "deep_watch" ? "true" : "false"}
-              className="axis-watch__mode-btn"
-              data-active={watchMode === "deep_watch"}
-              onClick={() => setWatchMode("deep_watch")}
-              type="button"
-            >
-              Deep Watch
-            </button>
-          </div>
           <div className="axis-watch__attach-row">
             <div className="axis-watch__plus-wrap">
               <button
@@ -398,16 +393,12 @@ export function AxisWatchRoot() {
             </div>
             <dl className="axis-watch__result-grid">
               <div>
-                <dt>Question</dt>
-                <dd>{latestReadyJob.query}</dd>
+                <dt>Axis watched for</dt>
+                <dd>{latestReadyJob.compiledIntent ?? latestReadyJob.query}</dd>
               </div>
               <div>
                 <dt>Clip</dt>
                 <dd>{latestReadyJob.clipName}</dd>
-              </div>
-              <div>
-                <dt>{latestReadyJob.mode === "deep_watch" ? "Provider" : "Frames checked"}</dt>
-                <dd>{latestReadyJob.mode === "deep_watch" ? "TwelveLabs (full clip)" : latestReadyJob.sampledFrameCount}</dd>
               </div>
               <div>
                 <dt>Moments to review</dt>
@@ -441,13 +432,13 @@ export function AxisWatchRoot() {
               <article className="axis-watch__job" data-status={job.status} key={job.id}>
                 <div>
                   <strong>{job.clipName}</strong>
-                  <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status, job.mode)}</span>
+                  <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status)}</span>
                 </div>
-                <p>{job.query}</p>
-                <small>{job.mode === "deep_watch" ? "Full clip" : job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Preparing clip"}</small>
+                <p>{job.compiledIntent ?? job.query}</p>
+                <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Full clip"}</small>
                 {job.error && <em>{job.error}</em>}
                 {job.status === "ready" && (
-                  <CandidateReview candidates={job.candidates} jobId={job.id} onUpdateCandidate={updateCandidate} sectionId={job.id === latestReadyJob?.id ? "candidate-review" : undefined} />
+                  <CandidateReview candidates={job.candidates} jobId={job.id} onUpdateCandidate={updateCandidate} sectionId={job.id === latestReadyJob?.id ? "candidate-review" : undefined} watchGroups={job.watchGroups} />
                 )}
               </article>
             ))}
@@ -493,69 +484,107 @@ function CandidateReview({
   jobId,
   onUpdateCandidate,
   sectionId,
+  watchGroups,
 }: {
   candidates: WatchCandidate[];
   jobId: string;
   onUpdateCandidate: (jobId: string, candidateId: string, patch: Partial<WatchCandidate>) => void;
   sectionId?: string;
+  watchGroups?: WatchGroup[];
 }) {
+  const candidateById = new Map(candidates.map((c) => [c.id, c]));
+
+  // Render grouped when groups are available, flat otherwise
+  if (watchGroups && watchGroups.length > 0) {
+    const groupedIds = new Set(watchGroups.flatMap((g) => g.candidateIds));
+    const ungrouped = candidates.filter((c) => !groupedIds.has(c.id));
+
+    return (
+      <div className="axis-watch__candidates" id={sectionId}>
+        {watchGroups.map((group) => {
+          const groupCandidates = group.candidateIds.map((id) => candidateById.get(id)).filter(Boolean) as WatchCandidate[];
+          if (groupCandidates.length === 0) return null;
+          return (
+            <div key={group.label}>
+              <p className="axis-watch__group-label">{group.label} <span>({groupCandidates.length})</span></p>
+              {groupCandidates.map((candidate) => (
+                <CandidateCard candidate={candidate} jobId={jobId} key={candidate.id} onUpdateCandidate={onUpdateCandidate} />
+              ))}
+            </div>
+          );
+        })}
+        {ungrouped.map((candidate) => (
+          <CandidateCard candidate={candidate} jobId={jobId} key={candidate.id} onUpdateCandidate={onUpdateCandidate} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="axis-watch__candidates" id={sectionId}>
       {candidates.map((candidate) => (
-        <article data-review-status={candidate.status} key={candidate.id}>
-          <div className="axis-watch__candidate-time">
-            <i aria-hidden="true" />
-            <span>{formatTimestamp(candidate.timestampSeconds)}</span>
-          </div>
-          <input
-            aria-label="Moment title"
-            onChange={(event) => onUpdateCandidate(jobId, candidate.id, { title: event.target.value })}
-            value={candidate.title}
-          />
-          <textarea
-            aria-label="Moment note"
-            onChange={(event) => onUpdateCandidate(jobId, candidate.id, { note: event.target.value })}
-            rows={2}
-            value={candidate.note}
-          />
-          <div className="axis-watch__candidate-actions">
-            <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "accepted" })} type="button">Accept</button>
-            <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "rejected" })} type="button">Reject</button>
-            <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "pending" })} type="button">Edit</button>
-          </div>
-        </article>
+        <CandidateCard candidate={candidate} jobId={jobId} key={candidate.id} onUpdateCandidate={onUpdateCandidate} />
       ))}
     </div>
   );
 }
 
-function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void }) {
-  const isDeep = job.mode === "deep_watch";
-  const steps: WatchStatus[] = isDeep
-    ? ["queued", "watching", "ready"]
-    : ["queued", "sampling", "watching", "ready"];
-  const statusIndex = job.status === "failed" ? -1 : steps.indexOf(job.status);
+function CandidateCard({
+  candidate,
+  jobId,
+  onUpdateCandidate,
+}: {
+  candidate: WatchCandidate;
+  jobId: string;
+  onUpdateCandidate: (jobId: string, candidateId: string, patch: Partial<WatchCandidate>) => void;
+}) {
+  return (
+    <article data-review-status={candidate.status} key={candidate.id}>
+      <div className="axis-watch__candidate-time">
+        <i aria-hidden="true" />
+        <span>{formatTimestamp(candidate.timestampSeconds)}</span>
+      </div>
+      <input
+        aria-label="Moment title"
+        onChange={(event) => onUpdateCandidate(jobId, candidate.id, { title: event.target.value })}
+        value={candidate.title}
+      />
+      <textarea
+        aria-label="Moment note"
+        onChange={(event) => onUpdateCandidate(jobId, candidate.id, { note: event.target.value })}
+        rows={2}
+        value={candidate.note}
+      />
+      <div className="axis-watch__candidate-actions">
+        <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "accepted" })} type="button">Accept</button>
+        <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "rejected" })} type="button">Reject</button>
+        <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "pending" })} type="button">Edit</button>
+      </div>
+    </article>
+  );
+}
 
-  const metaLabel = isDeep
-    ? "Full clip — TwelveLabs"
-    : job.sampledFrameCount > 0
-      ? `${job.sampledFrameCount} frames checked`
-      : "Preparing clip";
+function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void }) {
+  const steps: WatchStatus[] = ["queued", "watching", "ready"];
+  const statusIndex = job.status === "failed" ? -1 : steps.indexOf(job.status);
+  const metaLabel = job.sampledFrameCount > 0
+    ? `${job.sampledFrameCount} frames checked`
+    : "Full clip";
 
   return (
     <section className="axis-watch__card axis-watch__execution" aria-labelledby="axis-execution-title" data-status={job.status}>
       <div className="axis-watch__section-title">
-        <h2 id="axis-execution-title">{isDeep ? "Processing clip" : "Analyzing clip"}</h2>
-        <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status, job.mode)}</span>
+        <h2 id="axis-execution-title">Watching clip</h2>
+        <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status)}</span>
       </div>
       <div className="axis-watch__execution-main">
         <strong>{job.clipName}</strong>
-        <p>{job.query}</p>
+        <p>{job.compiledIntent ?? job.query}</p>
       </div>
       <ol className="axis-watch__steps" aria-label="Execution progress">
         {steps.map((step, index) => (
           <li data-active={index <= statusIndex} data-current={step === job.status} key={step}>
-            <span>{getStatusLabel(step, job.mode)}</span>
+            <span>{getStatusLabel(step)}</span>
           </li>
         ))}
         {job.status === "failed" && (
@@ -574,26 +603,14 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
   );
 }
 
-function getStatusLabel(status: WatchStatus, mode: WatchMode = "fast_watch") {
-  if (mode === "deep_watch") {
-    const deepLabels: Record<WatchStatus, string> = {
-      failed: "Failed",
-      queued: "Waiting",
-      ready: "Needs review",
-      sampling: "Uploading",
-      watching: "Processing",
-    };
-    return deepLabels[status];
-  }
-
+function getStatusLabel(status: WatchStatus) {
   const labels: Record<WatchStatus, string> = {
     failed: "Failed",
     queued: "Waiting",
     ready: "Needs review",
-    sampling: "Analyzing",
-    watching: "Analyzing",
+    sampling: "Uploading",
+    watching: "Processing",
   };
-
   return labels[status];
 }
 
@@ -798,34 +815,6 @@ const styles = `
     color: rgba(255, 253, 247, 0.68);
   }
 
-  .axis-watch__mode-toggle {
-    background: rgba(255, 253, 247, 0.06);
-    border: 1px solid rgba(255, 253, 247, 0.1);
-    border-radius: 0.55rem;
-    display: grid;
-    gap: 0.18rem;
-    grid-template-columns: 1fr 1fr;
-    padding: 0.2rem;
-  }
-
-  .axis-watch__mode-btn {
-    background: transparent;
-    border: 0;
-    border-radius: 0.38rem;
-    color: rgba(255, 253, 247, 0.46);
-    font-size: 0.68rem;
-    font-weight: 950;
-    letter-spacing: 0.06em;
-    min-height: 2rem;
-    padding: 0 0.6rem;
-    text-transform: uppercase;
-    transition: background 0.15s ease, color 0.15s ease;
-  }
-
-  .axis-watch__mode-btn[data-active="true"] {
-    background: rgba(255, 253, 247, 0.11);
-    color: #fffdf7;
-  }
 
   .axis-watch__query-field textarea {
     background: #fffdf8;
@@ -1334,6 +1323,23 @@ const styles = `
     border-left: 1px solid rgba(20, 22, 16, 0.12);
     margin-left: 0.2rem;
     padding-left: 0.65rem;
+  }
+
+  .axis-watch__group-label {
+    color: rgba(20, 22, 16, 0.56);
+    font-size: 0.7rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    margin: 0.6rem 0 0.3rem;
+    text-transform: uppercase;
+  }
+
+  .axis-watch__group-label span {
+    color: rgba(20, 22, 16, 0.38);
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
   }
 
   .axis-watch__candidates article {
