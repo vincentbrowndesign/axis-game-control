@@ -270,7 +270,7 @@ export function AxisWatchRoot() {
               <article className="axis-watch__job" data-status={job.status} key={job.id}>
                 <div>
                   <strong>{job.clipName}</strong>
-                  <span>{job.status}</span>
+                  <span className="axis-watch__status-badge" data-status={job.status}>{job.status}</span>
                 </div>
                 <p>{job.query}</p>
                 <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} sampled frames` : "Waiting for frames"}</small>
@@ -366,7 +366,7 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
     <section className="axis-watch__card axis-watch__execution" aria-labelledby="axis-execution-title" data-status={job.status}>
       <div className="axis-watch__section-title">
         <h2 id="axis-execution-title">Running job</h2>
-        <span>{getStatusLabel(job.status)}</span>
+        <span className="axis-watch__status-badge" data-status={job.status}>{getStatusLabel(job.status)}</span>
       </div>
       <div className="axis-watch__execution-main">
         <strong>{job.clipName}</strong>
@@ -456,15 +456,12 @@ function formatTimestamp(seconds: number) {
 
 const styles = `
   .axis-watch {
-    background:
-      radial-gradient(circle at 18% 8%, rgba(183, 255, 92, 0.24), transparent 22rem),
-      radial-gradient(circle at 84% 0%, rgba(28, 92, 255, 0.14), transparent 24rem),
-      linear-gradient(180deg, #fbf8ef 0%, #efeadc 100%);
+    background: #f7f3ea;
     color: #141610;
     isolation: isolate;
     min-height: 100dvh;
     overflow-x: hidden;
-    padding: max(0.9rem, env(safe-area-inset-top)) 0.9rem max(5rem, env(safe-area-inset-bottom));
+    padding: max(1rem, env(safe-area-inset-top)) 0.9rem max(4rem, env(safe-area-inset-bottom));
     position: relative;
   }
 
@@ -482,58 +479,48 @@ const styles = `
 
   .axis-signal--grid {
     background-image:
-      linear-gradient(rgba(20, 22, 16, 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(20, 22, 16, 0.04) 1px, transparent 1px),
-      radial-gradient(circle, rgba(20, 22, 16, 0.14) 1px, transparent 1.5px);
+      linear-gradient(rgba(20, 22, 16, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20, 22, 16, 0.025) 1px, transparent 1px);
     background-position: 0 0, 0 0, 0 0;
-    background-size: 36px 36px, 36px 36px, 12px 12px;
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 78%);
-    opacity: 0.72;
+    background-size: 44px 44px, 44px 44px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 72%);
+    opacity: 0.36;
   }
 
   .axis-signal--scan {
     background:
-      repeating-linear-gradient(180deg, rgba(20, 22, 16, 0.055) 0 1px, transparent 1px 6px),
-      linear-gradient(90deg, transparent, rgba(183, 255, 92, 0.16), transparent);
+      linear-gradient(90deg, transparent, rgba(20, 22, 16, 0.035), transparent);
     mix-blend-mode: multiply;
-    opacity: 0.42;
+    opacity: 0.24;
   }
 
   .axis-watch__shell {
     display: grid;
-    gap: 0.9rem;
+    gap: 0.85rem;
     margin: 0 auto;
-    max-width: 52rem;
+    max-width: 46rem;
     position: relative;
     z-index: 1;
   }
 
   .axis-watch__header {
+    align-items: center;
     display: grid;
-    gap: 0.3rem;
-    overflow: hidden;
-    padding: 0.15rem 0 0.35rem;
+    gap: 0.25rem;
+    justify-items: center;
+    padding: 0.15rem 0 0.55rem;
     position: relative;
+    text-align: center;
   }
 
   .axis-watch__header::after {
-    color: rgba(20, 22, 16, 0.18);
-    content: "AXIS::EXECUTION 0101 / ASK->ATTACH->RUN->REVIEW";
-    font-size: 0.64rem;
-    font-weight: 900;
-    letter-spacing: 0.14em;
-    line-height: 1;
-    position: absolute;
-    right: 0;
-    top: 0.25rem;
-    transform: translateY(-0.12rem);
-    white-space: nowrap;
+    content: none;
   }
 
   .axis-watch__header p,
   .axis-watch label span,
   .axis-watch__section-title span,
-  .axis-watch__job span,
+  .axis-watch__status-badge,
   .axis-watch__candidates span {
     color: rgba(20, 22, 16, 0.58);
     font-size: 0.72rem;
@@ -550,15 +537,14 @@ const styles = `
   }
 
   .axis-watch h1 {
-    font-size: clamp(3.4rem, 18vw, 7rem);
+    font-size: clamp(2.75rem, 14vw, 5.4rem);
     font-weight: 950;
     letter-spacing: 0;
-    line-height: 0.85;
-    text-shadow: 0.04em 0 rgba(183, 255, 92, 0.26), -0.03em 0 rgba(20, 22, 16, 0.12);
+    line-height: 0.9;
   }
 
   .axis-watch h2 {
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     letter-spacing: 0;
   }
 
@@ -566,33 +552,36 @@ const styles = `
   .axis-watch__job p,
   .axis-watch__job small,
   .axis-watch__card > p {
-    color: rgba(20, 22, 16, 0.68);
+    color: rgba(20, 22, 16, 0.66);
   }
 
   .axis-watch__card,
   .axis-watch__composer,
   .axis-watch__job,
   .axis-watch__candidates article {
-    background: #fffdf7;
-    border: 1px solid rgba(20, 22, 16, 0.12);
-    border-radius: 0.55rem;
-    box-shadow: 0 1.1rem 3rem rgba(20, 22, 16, 0.08);
+    background: #fffdf8;
+    border: 1px solid rgba(20, 22, 16, 0.1);
+    border-radius: 0.7rem;
+    box-shadow: 0 1rem 2.4rem rgba(20, 22, 16, 0.055);
     display: grid;
-    gap: 0.7rem;
+    gap: 0.75rem;
     overflow: hidden;
-    padding: 0.85rem;
+    padding: 0.95rem;
     position: relative;
   }
 
   .axis-watch__card::before,
-  .axis-watch__composer::before,
   .axis-watch__job::before,
   .axis-watch__candidates article::before {
-    background: linear-gradient(90deg, #141610, #b7ff5c 40%, transparent 72%);
+    content: none;
+  }
+
+  .axis-watch__composer::before {
+    background: linear-gradient(90deg, rgba(183, 255, 92, 0.68), transparent 55%);
     content: "";
-    height: 3px;
+    height: 2px;
     inset: 0 0 auto;
-    opacity: 0.86;
+    opacity: 0.72;
     position: absolute;
   }
 
@@ -605,32 +594,33 @@ const styles = `
   }
 
   .axis-watch__composer {
-    background:
-      linear-gradient(135deg, rgba(20, 22, 16, 0.94), rgba(34, 38, 27, 0.92)),
-      repeating-linear-gradient(90deg, rgba(183, 255, 92, 0.18) 0 1px, transparent 1px 8px);
-    border-color: rgba(183, 255, 92, 0.38);
+    background: #141610;
+    border-color: rgba(20, 22, 16, 0.88);
+    box-shadow: 0 1.4rem 3.4rem rgba(20, 22, 16, 0.18);
     color: #fffdf7;
-    gap: 0.8rem;
-    padding: 0.95rem;
+    gap: 0.75rem;
+    padding: 1rem;
   }
 
   .axis-watch__composer label span {
-    color: rgba(255, 253, 247, 0.7);
+    color: rgba(255, 253, 247, 0.68);
   }
 
   .axis-watch__query-field textarea {
-    border-color: rgba(183, 255, 92, 0.28);
-    box-shadow: inset 0 0 0 1px rgba(183, 255, 92, 0.05);
-    font-size: 1rem;
+    background: #fffdf8;
+    border-color: rgba(255, 253, 247, 0.36);
+    box-shadow: none;
+    font-size: 1.02rem;
     line-height: 1.45;
+    min-height: 7rem;
     resize: vertical;
   }
 
   .axis-watch__signal-label {
-    color: #b7ff5c;
+    color: rgba(183, 255, 92, 0.86);
     font-size: 0.65rem;
     font-weight: 950;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
   }
 
@@ -649,18 +639,14 @@ const styles = `
 
   .axis-watch input,
   .axis-watch textarea {
-    background: #fffdf7;
+    background: #fffdf8;
     border: 1px solid rgba(20, 22, 16, 0.16);
-    border-radius: 0.5rem;
+    border-radius: 0.65rem;
     color: #141610;
     font: inherit;
     min-height: 3rem;
     padding: 0.75rem;
     width: 100%;
-  }
-
-  .axis-watch__file input {
-    background: #f7f4eb;
   }
 
   .axis-watch__hidden-file {
@@ -673,8 +659,8 @@ const styles = `
 
   .axis-watch__video-shell {
     background: #141610;
-    border: 1px solid rgba(20, 22, 16, 0.16);
-    border-radius: 0.55rem;
+    border: 1px solid rgba(255, 253, 247, 0.14);
+    border-radius: 0.65rem;
     overflow: hidden;
     position: relative;
   }
@@ -688,7 +674,7 @@ const styles = `
 
   .axis-watch__video-overlay {
     align-items: flex-start;
-    color: rgba(183, 255, 92, 0.86);
+    color: rgba(255, 253, 247, 0.72);
     display: flex;
     font-size: 0.58rem;
     font-weight: 950;
@@ -704,12 +690,12 @@ const styles = `
 
   .axis-watch__video-overlay::before,
   .axis-watch__video-overlay::after {
-    border-color: rgba(183, 255, 92, 0.72);
+    border-color: rgba(255, 253, 247, 0.42);
     border-style: solid;
     content: "";
-    height: 1.8rem;
+    height: 1.35rem;
     position: absolute;
-    width: 1.8rem;
+    width: 1.35rem;
   }
 
   .axis-watch__video-overlay::before {
@@ -726,8 +712,8 @@ const styles = `
 
   .axis-watch__video-overlay i {
     background:
-      linear-gradient(rgba(183, 255, 92, 0.55), rgba(183, 255, 92, 0.55)) center / 1px 100% no-repeat,
-      linear-gradient(90deg, rgba(183, 255, 92, 0.55), rgba(183, 255, 92, 0.55)) center / 100% 1px no-repeat;
+      linear-gradient(rgba(255, 253, 247, 0.34), rgba(255, 253, 247, 0.34)) center / 1px 100% no-repeat,
+      linear-gradient(90deg, rgba(255, 253, 247, 0.34), rgba(255, 253, 247, 0.34)) center / 100% 1px no-repeat;
     height: 2rem;
     left: 50%;
     opacity: 0.6;
@@ -738,7 +724,7 @@ const styles = `
   }
 
   .axis-watch button {
-    border-radius: 0.5rem;
+    border-radius: 0.65rem;
     font: inherit;
     font-weight: 850;
     min-height: 2.85rem;
@@ -769,7 +755,7 @@ const styles = `
   .axis-watch__execution-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
+    gap: 0.5rem;
   }
 
   .axis-watch__record button,
@@ -781,7 +767,7 @@ const styles = `
   .axis-watch__execution-meta button {
     background: rgba(20, 22, 16, 0.06);
     border: 1px solid rgba(20, 22, 16, 0.14);
-    border-radius: 0.5rem;
+    border-radius: 0.65rem;
     color: #141610;
     font: inherit;
     font-weight: 850;
@@ -793,8 +779,8 @@ const styles = `
   .axis-watch__tool-menu a,
   .axis-watch__chips button {
     align-items: center;
-    background: rgba(255, 253, 247, 0.08);
-    border-color: rgba(255, 253, 247, 0.18);
+    background: rgba(255, 253, 247, 0.09);
+    border-color: rgba(255, 253, 247, 0.16);
     color: #fffdf7;
     display: inline-flex;
   }
@@ -824,13 +810,13 @@ const styles = `
 
   .axis-watch__empty {
     background:
-      radial-gradient(circle at 18% 50%, rgba(183, 255, 92, 0.22), transparent 12rem),
-      repeating-linear-gradient(90deg, rgba(20, 22, 16, 0.08) 0 1px, transparent 1px 10px);
+      linear-gradient(135deg, rgba(20, 22, 16, 0.035), transparent 48%),
+      #fffdf8;
     border: 1px dashed rgba(20, 22, 16, 0.22);
-    border-radius: 0.55rem;
+    border-radius: 0.7rem;
     display: grid;
     gap: 0.25rem;
-    min-height: 8rem;
+    min-height: 7.5rem;
     padding: 1rem;
     place-content: center;
     text-align: center;
@@ -865,13 +851,13 @@ const styles = `
   }
 
   .axis-watch__job[data-status="ready"] {
-    border-color: rgba(72, 150, 48, 0.34);
+    border-color: rgba(20, 22, 16, 0.1);
   }
 
   .axis-watch__execution[data-status="sampling"],
   .axis-watch__execution[data-status="watching"],
   .axis-watch__execution[data-status="queued"] {
-    border-color: rgba(183, 255, 92, 0.38);
+    border-color: rgba(20, 22, 16, 0.1);
   }
 
   .axis-watch__execution-main {
@@ -885,7 +871,7 @@ const styles = `
 
   .axis-watch__steps {
     display: grid;
-    gap: 0.45rem;
+    gap: 0.5rem;
     list-style: none;
     margin: 0;
     padding: 0;
@@ -895,7 +881,7 @@ const styles = `
     align-items: center;
     color: rgba(20, 22, 16, 0.52);
     display: flex;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 900;
     gap: 0.5rem;
     letter-spacing: 0.06em;
@@ -915,8 +901,8 @@ const styles = `
   }
 
   .axis-watch__steps li[data-active="true"]::before {
-    background: #b7ff5c;
-    box-shadow: 0 0 0 3px rgba(183, 255, 92, 0.22);
+    background: #141610;
+    box-shadow: 0 0 0 3px rgba(20, 22, 16, 0.08);
   }
 
   .axis-watch__steps li[data-current="true"] {
@@ -925,16 +911,44 @@ const styles = `
 
   .axis-watch__execution-meta {
     align-items: center;
+    color: rgba(20, 22, 16, 0.58);
+    font-size: 0.82rem;
   }
 
   .axis-watch__execution-meta span {
+    color: inherit;
+    font-size: inherit;
+    font-weight: 750;
+    padding: 0;
+  }
+
+  .axis-watch__status-badge {
     background: rgba(20, 22, 16, 0.06);
     border: 1px solid rgba(20, 22, 16, 0.1);
     border-radius: 999px;
-    color: rgba(20, 22, 16, 0.66);
-    font-size: 0.78rem;
-    font-weight: 850;
-    padding: 0.45rem 0.65rem;
+    color: rgba(20, 22, 16, 0.68);
+    display: inline-flex;
+    line-height: 1;
+    padding: 0.42rem 0.58rem;
+    white-space: nowrap;
+  }
+
+  .axis-watch__status-badge[data-status="watching"],
+  .axis-watch__status-badge[data-status="sampling"],
+  .axis-watch__status-badge[data-status="queued"] {
+    background: rgba(183, 255, 92, 0.16);
+    border-color: rgba(20, 22, 16, 0.12);
+    color: #141610;
+  }
+
+  .axis-watch__status-badge[data-status="ready"] {
+    background: rgba(72, 150, 48, 0.12);
+    color: #214a1a;
+  }
+
+  .axis-watch__status-badge[data-status="failed"] {
+    background: #fff0d9;
+    color: #5d3a00;
   }
 
   .axis-watch__job em {
@@ -953,24 +967,28 @@ const styles = `
   }
 
   .axis-watch__completion {
-    border-color: rgba(72, 150, 48, 0.34);
+    border-color: rgba(20, 22, 16, 0.1);
   }
 
   .axis-watch__result-grid {
     display: grid;
-    gap: 0.55rem;
+    gap: 0;
     margin: 0;
   }
 
-  .axis-watch__result-grid div,
-  .axis-watch__limitations {
-    background: rgba(20, 22, 16, 0.045);
-    border: 1px solid rgba(20, 22, 16, 0.08);
-    border-radius: 0.5rem;
+  .axis-watch__result-grid div {
+    border-top: 1px solid rgba(20, 22, 16, 0.08);
     display: grid;
     gap: 0.2rem;
     margin: 0;
-    padding: 0.65rem;
+    padding: 0.7rem 0;
+  }
+
+  .axis-watch__limitations {
+    border-top: 1px solid rgba(20, 22, 16, 0.08);
+    display: grid;
+    gap: 0.25rem;
+    padding-top: 0.75rem;
   }
 
   .axis-watch__result-grid dt,
@@ -990,13 +1008,16 @@ const styles = `
 
   .axis-watch__next-actions a {
     align-items: center;
+    background: #141610;
+    border-color: #141610;
+    color: #fffdf8;
     display: inline-flex;
   }
 
   .axis-watch__candidates {
-    border-left: 2px solid rgba(20, 22, 16, 0.14);
-    margin-left: 0.38rem;
-    padding-left: 0.75rem;
+    border-left: 1px solid rgba(20, 22, 16, 0.12);
+    margin-left: 0.2rem;
+    padding-left: 0.65rem;
   }
 
   .axis-watch__candidates article {
@@ -1004,7 +1025,7 @@ const styles = `
   }
 
   .axis-watch__candidates article[data-review-status="accepted"] {
-    border-color: rgba(72, 150, 48, 0.38);
+    border-color: rgba(72, 150, 48, 0.22);
   }
 
   .axis-watch__candidates article[data-review-status="rejected"] {
@@ -1019,8 +1040,8 @@ const styles = `
   }
 
   .axis-watch__candidate-time i {
-    background: #b7ff5c;
-    border: 2px solid #141610;
+    background: #141610;
+    border: 2px solid #fffdf8;
     border-radius: 999px;
     display: inline-block;
     height: 0.68rem;
@@ -1028,21 +1049,19 @@ const styles = `
   }
 
   .axis-watch__report-cover {
-    background:
-      linear-gradient(135deg, rgba(20, 22, 16, 0.96), rgba(20, 22, 16, 0.84)),
-      repeating-linear-gradient(90deg, rgba(183, 255, 92, 0.18) 0 1px, transparent 1px 9px);
-    border-radius: 0.5rem;
-    color: #fffdf7;
-    margin: -0.2rem -0.2rem 0;
-    padding: 0.8rem;
+    background: transparent;
+    border-radius: 0;
+    color: #141610;
+    margin: 0;
+    padding: 0;
   }
 
   .axis-watch__report-cover span {
-    color: rgba(255, 253, 247, 0.66);
+    color: rgba(20, 22, 16, 0.58);
   }
 
   .axis-watch__report-list li {
-    border-left: 3px solid #b7ff5c;
+    border-left: 2px solid rgba(20, 22, 16, 0.16);
     display: grid;
     gap: 0.15rem;
     padding-left: 0.65rem;
@@ -1056,7 +1075,7 @@ const styles = `
 
   @media (min-width: 760px) {
     .axis-watch {
-      padding: 1.5rem;
+      padding: 1.6rem;
     }
 
     .axis-watch__attach-row {
@@ -1074,7 +1093,7 @@ const styles = `
 
   @media (prefers-reduced-motion: no-preference) {
     .axis-signal--scan {
-      animation: axis-scan 7s linear infinite;
+      animation: axis-scan 12s linear infinite;
     }
   }
 
