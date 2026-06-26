@@ -22,8 +22,11 @@ const ROBOFLOW_API_KEY = process.env.ROBOFLOW_API_KEY ?? "";
 const ROBOFLOW_PROJECT = process.env.ROBOFLOW_PROJECT ?? "axis-kinetic-observer";
 const ROBOFLOW_VERSION = process.env.ROBOFLOW_VERSION ?? "1";
 const BATCH_SIZE = 4;
-const MAX_FRAMES = 30;
+const MAX_FRAMES = 60;
+const MIN_USABLE_FRAMES_FOR_ZERO_PEOPLE = 12;
 const TIMEOUT_MS = 8000;
+const YOLO_DEFAULT_CONFIDENCE = 0.25;
+const YOLO_RETRY_CONFIDENCE = 0.12;
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -42,6 +45,7 @@ export type CvDetectFrameResult = {
   detections: CvDetectDetection[];
   error?: string;
   peopleCount: number;
+  retryUsed?: boolean;
   timestampSeconds: number;
 };
 
@@ -53,14 +57,17 @@ export type CvDetectResponse = {
   summary: {
     avgPeopleCount: number;
     ballDetected: boolean;
+    classCounts: Record<string, number>;
     failReason?: string;
     framesWithDetections: number;
     framesWithPeople: number;
     maxPeopleCount: number;
+    reason?: string;
     provider: string;
     status: CvDetectStatus;
     totalDetections: number;
     totalFrames: number;
+    usableFrameCount: number;
   };
 };
 
@@ -71,10 +78,16 @@ type FrameInput = {
   timestampSeconds: number;
 };
 
+type SamplingStats = {
+  frameCount?: number;
+  skippedFrameCount?: number;
+  usableFrameCount?: number;
+};
+
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<Response> {
-  let body: { frames?: FrameInput[] };
+  let body: { frames?: FrameInput[]; sampling?: SamplingStats };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -82,32 +95,38 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const frames = (body.frames ?? []).slice(0, MAX_FRAMES);
+  const sampling = normalizeSamplingStats(body.sampling, frames.length);
   if (frames.length === 0) {
     return NextResponse.json({ error: "No frames provided." }, { status: 400 });
   }
 
+  console.log(
+    `[CV_SAMPLING] frameCount=${sampling.frameCount} usableFrameCount=${sampling.usableFrameCount} skippedFrameCount=${sampling.skippedFrameCount}`,
+  );
+  console.log("[CV_CLASS_MAP] person/player=0 sports_ball=32");
+
   // Try providers in priority order — return on first connected result
   const yoloResult = await tryYolo(frames);
   if (yoloResult.status === "connected") {
-    return NextResponse.json(buildResponse(yoloResult.frameResults, "yolo", "connected"));
+    return NextResponse.json(buildResponse(yoloResult.frameResults, "yolo", "connected", undefined, sampling));
   }
 
   const rfResult = await tryRoboflow(frames);
   if (rfResult.status === "connected") {
-    return NextResponse.json(buildResponse(rfResult.frameResults, "roboflow", "connected"));
+    return NextResponse.json(buildResponse(rfResult.frameResults, "roboflow", "connected", undefined, sampling));
   }
 
   // Both failed or not configured — surface the most actionable reason
   if (yoloResult.status === "failed" || rfResult.status === "failed") {
     const failedProvider = yoloResult.status === "failed" ? "yolo" : "roboflow";
     const failReason = yoloResult.failReason ?? rfResult.failReason;
-    return NextResponse.json(buildResponse([], failedProvider, "failed", failReason));
+    return NextResponse.json(buildResponse([], failedProvider, "failed", failReason, sampling));
   }
 
   // Both not_configured (or one not_configured + one not reachable before the failed check above)
   const failReason = yoloResult.failReason ?? rfResult.failReason
     ?? "No provider configured — set AXIS_VISION_DETECTOR_URL or ROBOFLOW_API_KEY";
-  return NextResponse.json(buildResponse([], "none", "not_configured", failReason));
+  return NextResponse.json(buildResponse([], "none", "not_configured", failReason, sampling));
 }
 
 // ─── Provider: YOLO ──────────────────────────────────────────────────────────
@@ -132,7 +151,7 @@ async function tryYolo(
     const batchResults = await Promise.all(
       batch.map(async (frame) => {
         try {
-          const result = await callYoloFrame(frame);
+          const result = await callYoloFrameWithRetry(frame);
           successCount++;
           return result;
         } catch (err) {
@@ -147,10 +166,11 @@ async function tryYolo(
   }
 
   const totalDetections = frameResults.reduce((s, f) => s + f.detections.length, 0);
+  const classCounts = countDetectionsByClass(frameResults);
 
   if (successCount > 0) {
     console.log(
-      `[CV_CALL_SUCCESS] provider=yolo frames=${frames.length} success=${successCount} detections=${totalDetections}`,
+      `[CV_CALL_SUCCESS] provider=yolo frames=${frames.length} success=${successCount} detections=${totalDetections} classCounts=${JSON.stringify(classCounts)}`,
     );
     return { frameResults, status: "connected" };
   }
@@ -160,7 +180,18 @@ async function tryYolo(
   return { failReason, frameResults: [], status: "failed" };
 }
 
-async function callYoloFrame(frame: FrameInput): Promise<CvDetectFrameResult> {
+async function callYoloFrameWithRetry(frame: FrameInput): Promise<CvDetectFrameResult> {
+  const first = await callYoloFrame(frame, YOLO_DEFAULT_CONFIDENCE);
+  if (first.detections.length > 0) return first;
+
+  console.log(
+    `[CV_YOLO_RETRY] timestamp=${frame.timestampSeconds.toFixed(2)} reason=zero_detections confidence=${YOLO_RETRY_CONFIDENCE} crop=none frame=full`,
+  );
+  const retry = await callYoloFrame(frame, YOLO_RETRY_CONFIDENCE);
+  return { ...retry, retryUsed: true };
+}
+
+async function callYoloFrame(frame: FrameInput, confidenceThreshold: number): Promise<CvDetectFrameResult> {
   // axismeasure.com/detector expects { imageDataUrl: "data:image/jpeg;base64,..." }
   // Verified from /health response schema — "imageDataUrl" is the required field name.
   if (typeof frame.imageDataUrl !== "string" || !frame.imageDataUrl) {
@@ -168,7 +199,11 @@ async function callYoloFrame(frame: FrameInput): Promise<CvDetectFrameResult> {
   }
 
   const response = await fetch(`${DETECTOR_URL}/detect`, {
-    body: JSON.stringify({ imageDataUrl: frame.imageDataUrl }),
+    body: JSON.stringify({
+      confidenceThreshold,
+      imageDataUrl: frame.imageDataUrl,
+      resizeMode: "full_frame",
+    }),
     headers: { "Content-Type": "application/json" },
     method: "POST",
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -195,14 +230,15 @@ function parseYoloResponse(raw: unknown, timestampSeconds: number): Omit<CvDetec
     const imgW = (obj["image"] as Record<string, number> | undefined)?.["width"] ?? 480;
     const imgH = (obj["image"] as Record<string, number> | undefined)?.["height"] ?? 270;
     const detections = (obj["detections"] as Array<Record<string, unknown>>).flatMap((d) => {
-      const bbox = d["bbox"] as [number, number, number, number] | undefined;
+      const bbox = normalizeDetectorBbox(d["bbox"], imgW, imgH);
       if (!bbox) return [];
-      const [x, y, bw, bh] = bbox;
-      const kind = classToKind(String(d["kind"] ?? d["label"] ?? "object"));
+      const classId = getNumber(d["classId"]);
+      const cls = String(d["className"] ?? d["label"] ?? d["kind"] ?? d["mappedType"] ?? "object");
+      const kind = classToKind(cls, classId);
       return [{
-        bbox: [x / imgW, y / imgH, (x + bw) / imgW, (y + bh) / imgH] as [number, number, number, number],
-        class: String(d["label"] ?? d["kind"] ?? "object"),
-        confidence: Number(d["score"] ?? 0),
+        bbox,
+        class: cls,
+        confidence: Number(d["confidence"] ?? d["score"] ?? 0),
         kind,
       }] satisfies CvDetectDetection[];
     });
@@ -219,8 +255,9 @@ function parseYoloResponse(raw: unknown, timestampSeconds: number): Omit<CvDetec
       const cy = Number(p["y"] ?? 0);
       const pw = Number(p["width"] ?? 0);
       const ph = Number(p["height"] ?? 0);
-      const cls = String(p["class"] ?? "object");
-      const kind = classToKind(cls);
+      const classId = getNumber(p["classId"] ?? p["class_id"]);
+      const cls = String(p["class"] ?? p["className"] ?? p["class_name"] ?? "object");
+      const kind = classToKind(cls, classId);
       return [{
         bbox: [
           (cx - pw / 2) / imgW,
@@ -244,8 +281,9 @@ function parseYoloResponse(raw: unknown, timestampSeconds: number): Omit<CvDetec
       const y1 = Number(item["y1"] ?? 0);
       const x2 = Number(item["x2"] ?? 0);
       const y2 = Number(item["y2"] ?? 0);
-      const cls = String(item["class"] ?? item["label"] ?? "object");
-      const kind = classToKind(cls);
+      const classId = getNumber(item["classId"] ?? item["class_id"]);
+      const cls = String(item["class"] ?? item["className"] ?? item["label"] ?? "object");
+      const kind = classToKind(cls, classId);
       return [{
         bbox: [x1, y1, x2, y2] as [number, number, number, number],
         class: cls,
@@ -303,10 +341,11 @@ async function tryRoboflow(
   }
 
   const totalDetections = frameResults.reduce((s, f) => s + f.detections.length, 0);
+  const classCounts = countDetectionsByClass(frameResults);
 
   if (successCount > 0) {
     console.log(
-      `[CV_CALL_SUCCESS] provider=roboflow frames=${frames.length} success=${successCount} detections=${totalDetections}`,
+      `[CV_CALL_SUCCESS] provider=roboflow frames=${frames.length} success=${successCount} detections=${totalDetections} classCounts=${JSON.stringify(classCounts)}`,
     );
     return { frameResults, status: "connected" };
   }
@@ -347,6 +386,7 @@ function buildResponse(
   provider: string,
   status: CvDetectStatus,
   failReason?: string,
+  sampling?: SamplingStats,
 ): CvDetectResponse {
   const peopleCounts = frameResults.map((f) => f.peopleCount);
   const maxPeopleCount = peopleCounts.length > 0 ? Math.max(...peopleCounts) : 0;
@@ -361,30 +401,44 @@ function buildResponse(
   const totalDetections = allDetections.length;
   const framesWithDetections = frameResults.filter((f) => f.detections.length > 0).length;
   const ballDetected = allDetections.some((d) => d.kind === "ball");
+  const classCounts = countDetectionsByClass(frameResults);
+  const usableFrameCount = sampling?.usableFrameCount ?? frameResults.length;
+  const reason = maxPeopleCount === 0 && usableFrameCount < MIN_USABLE_FRAMES_FOR_ZERO_PEOPLE
+    ? "CV needs better frames"
+    : failReason;
+
+  console.log(
+    `[CV_DETECTION_SUMMARY] provider=${provider} status=${status} totalFrames=${frameResults.length} usableFrameCount=${usableFrameCount} totalDetections=${totalDetections} framesWithPeople=${framesWithPeople} ballDetected=${ballDetected} classCounts=${JSON.stringify(classCounts)} reason=${reason ?? "none"}`,
+  );
 
   return {
-    failReason,
+    failReason: reason ?? failReason,
     frameResults,
     provider,
     status,
     summary: {
       avgPeopleCount,
       ballDetected,
-      failReason,
+      classCounts,
+      failReason: reason ?? failReason,
       framesWithDetections,
       framesWithPeople,
       maxPeopleCount,
+      reason,
       provider,
       status,
       totalDetections,
       totalFrames: frameResults.length,
+      usableFrameCount,
     },
   };
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function classToKind(cls: string): CvDetectKind {
+function classToKind(cls: string, classId?: number): CvDetectKind {
+  if (classId === 0) return "person";
+  if (classId === 32) return "ball";
   const lower = cls.toLowerCase();
   if (lower === "person" || lower === "player" || lower === "human") return "person";
   if (lower === "ball" || lower === "basketball" || lower === "sports ball") return "ball";
@@ -394,4 +448,59 @@ function classToKind(cls: string): CvDetectKind {
 
 function emptyFrame(timestampSeconds: number, error?: string): CvDetectFrameResult {
   return { detections: [], error, peopleCount: 0, timestampSeconds };
+}
+
+function countDetectionsByClass(frameResults: CvDetectFrameResult[]) {
+  const counts: Record<string, number> = {};
+  for (const detection of frameResults.flatMap((frame) => frame.detections)) {
+    counts[detection.class] = (counts[detection.class] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function getNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function normalizeDetectorBbox(value: unknown, imgW: number, imgH: number): [number, number, number, number] | null {
+  if (Array.isArray(value) && value.length >= 4) {
+    const [rawX, rawY, rawW, rawH] = value.map(Number);
+    if (![rawX, rawY, rawW, rawH].every(Number.isFinite)) return null;
+    return normalizeXywh(rawX, rawY, rawW, rawH, imgW, imgH);
+  }
+
+  if (value && typeof value === "object") {
+    const box = value as Record<string, unknown>;
+    const x = Number(box["x"] ?? box["left"] ?? box["x1"]);
+    const y = Number(box["y"] ?? box["top"] ?? box["y1"]);
+    const width = Number(box["width"] ?? box["w"]);
+    const height = Number(box["height"] ?? box["h"]);
+    if ([x, y, width, height].every(Number.isFinite)) {
+      return normalizeXywh(x, y, width, height, imgW, imgH);
+    }
+
+    const x2 = Number(box["x2"]);
+    const y2 = Number(box["y2"]);
+    if ([x, y, x2, y2].every(Number.isFinite)) {
+      return clampBbox([x / imgW, y / imgH, x2 / imgW, y2 / imgH]);
+    }
+  }
+
+  return null;
+}
+
+function normalizeXywh(x: number, y: number, width: number, height: number, imgW: number, imgH: number) {
+  return clampBbox([x / imgW, y / imgH, (x + width) / imgW, (y + height) / imgH]);
+}
+
+function clampBbox(bbox: [number, number, number, number]): [number, number, number, number] {
+  return bbox.map((value) => Math.max(0, Math.min(1, value))) as [number, number, number, number];
+}
+
+function normalizeSamplingStats(sampling: SamplingStats | undefined, fallbackUsableFrameCount: number): Required<SamplingStats> {
+  const usableFrameCount = Math.max(0, Math.round(sampling?.usableFrameCount ?? fallbackUsableFrameCount));
+  const frameCount = Math.max(usableFrameCount, Math.round(sampling?.frameCount ?? usableFrameCount));
+  const skippedFrameCount = Math.max(0, Math.round(sampling?.skippedFrameCount ?? frameCount - usableFrameCount));
+  return { frameCount, skippedFrameCount, usableFrameCount };
 }

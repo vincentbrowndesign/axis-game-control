@@ -25,15 +25,30 @@ type CvContext = {
   summary: {
     avgPeopleCount: number;
     ballDetected?: boolean;
+    classCounts?: Record<string, number>;
     failReason?: string;
     framesWithDetections?: number;
     framesWithPeople: number;
     maxPeopleCount: number;
+    reason?: string;
     provider: string;
     status: CvContextStatus;
     totalDetections?: number;
     totalFrames: number;
+    usableFrameCount?: number;
   };
+};
+
+type CvFrameInput = {
+  imageDataUrl: string;
+  timestampSeconds: number;
+};
+
+type CvSampleResult = {
+  frameCount: number;
+  frames: CvFrameInput[];
+  skippedFrameCount: number;
+  usableFrameCount: number;
 };
 
 type WatchCandidate = {
@@ -228,10 +243,12 @@ export function AxisWatchRoot() {
     updateJob(jobId, { cvStatus: "sampling" });
 
     try {
-      // 1 frame/sec, cap at 25 — enough for a CV pre-scan before deep watch
-      const frames = await sampleVideoFrames(videoUrl, 25);
+      const sample = await sampleUsableCvFrames(videoUrl);
+      const frames = sample.frames;
 
-      console.log(`[CV_CLIENT_CALL_START] jobId=${jobId} frames=${frames.length}`);
+      console.log(
+        `[CV_CLIENT_CALL_START] jobId=${jobId} frameCount=${sample.frameCount} usableFrameCount=${sample.usableFrameCount} skippedFrameCount=${sample.skippedFrameCount}`,
+      );
 
       if (frames.length === 0) {
         // Video loaded but yielded no sampleable frames — surface clearly
@@ -243,13 +260,21 @@ export function AxisWatchRoot() {
           provider: "none",
           status: "failed",
           totalFrames: 0,
+          usableFrameCount: 0,
         };
         updateJob(jobId, { cvContext: { summary }, cvStatus: "ready" });
         return summary;
       }
 
       const response = await fetch("/api/axis/cv/detect", {
-        body: JSON.stringify({ frames }),
+        body: JSON.stringify({
+          frames,
+          sampling: {
+            frameCount: sample.frameCount,
+            skippedFrameCount: sample.skippedFrameCount,
+            usableFrameCount: sample.usableFrameCount,
+          },
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -278,7 +303,7 @@ export function AxisWatchRoot() {
       const provider = data.provider ?? "unknown";
       const failReason = data.failReason ?? data.summary?.failReason;
 
-      console.log(`[CV_CLIENT] route returned status=${status} provider=${provider} frames=${frameResults.length} failReason=${failReason ?? "none"}`);
+      console.log(`[CV_CLIENT] route returned status=${status} provider=${provider} frames=${frameResults.length} usableFrameCount=${sample.usableFrameCount} failReason=${failReason ?? "none"}`);
 
       // Build summary from frame results — don't trust server shape alone
       const peopleCounts = frameResults.map((f) => f.peopleCount);
@@ -296,14 +321,17 @@ export function AxisWatchRoot() {
       const summary: CvContext["summary"] = {
         avgPeopleCount,
         ballDetected,
+        classCounts: data.summary?.classCounts,
         failReason,
         framesWithDetections: frameResults.filter((f) => f.detections.length > 0).length,
         framesWithPeople,
         maxPeopleCount,
+        reason: data.summary?.reason,
         provider,
         status,
         totalDetections: allDetections.length,
         totalFrames: frameResults.length,
+        usableFrameCount: sample.usableFrameCount,
       };
 
       // Peak frame — used for overlay canvas preview
@@ -788,6 +816,10 @@ function CvPreview({ cvContext }: { cvContext: CvContext | undefined }) {
   if (!cvContext) return null;
 
   const { summary, peakFrame } = cvContext;
+  const needsBetterFrames = summary.maxPeopleCount === 0 && (summary.usableFrameCount ?? summary.totalFrames) < 12;
+  const peopleVisibleLabel = needsBetterFrames
+    ? "CV needs better frames"
+    : `${summary.maxPeopleCount} max · ${summary.avgPeopleCount} avg`;
 
   return (
     <section className="axis-watch__card axis-cv" aria-labelledby="axis-cv-title">
@@ -799,7 +831,7 @@ function CvPreview({ cvContext }: { cvContext: CvContext | undefined }) {
       <dl className="axis-cv__summary">
         <div>
           <dt>People visible</dt>
-          <dd>{summary.maxPeopleCount} max · {summary.avgPeopleCount} avg</dd>
+          <dd>{peopleVisibleLabel}</dd>
         </div>
         <div>
           <dt>Frames with people</dt>
@@ -870,7 +902,11 @@ function AxisReport({
       {cv && (
         <div className="axis-report__cv-row">
           <span className="axis-report__label">What Axis saw</span>
-          <span className="axis-report__cv-stat">{cv.maxPeopleCount} people visible · {cv.framesWithPeople}/{cv.totalFrames} frames · {cv.provider}</span>
+          <span className="axis-report__cv-stat">
+            {cv.maxPeopleCount === 0 && (cv.usableFrameCount ?? cv.totalFrames) < 12
+              ? "CV needs better frames"
+              : `${cv.maxPeopleCount} people visible · ${cv.framesWithPeople}/${cv.totalFrames} frames · ${cv.provider}`}
+          </span>
         </div>
       )}
 
@@ -1349,6 +1385,107 @@ async function sampleVideoFrames(videoUrl: string, maxFrames: number) {
     frames.push({ imageDataUrl: canvas.toDataURL("image/jpeg", 0.62), timestampSeconds });
   }
   return frames;
+}
+
+async function sampleUsableCvFrames(videoUrl: string): Promise<CvSampleResult> {
+  const video = document.createElement("video");
+  video.src = videoUrl;
+  video.muted = true;
+  video.playsInline = true;
+
+  try {
+    await waitForVideoMetadata(video);
+  } catch (err) {
+    console.log(`[CV_CLIENT] sampleUsableCvFrames: metadata failed - ${err instanceof Error ? err.message : String(err)}`);
+    return { frameCount: 0, frames: [], skippedFrameCount: 0, usableFrameCount: 0 };
+  }
+
+  const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+  const targetInterval = duration >= 60 ? 1 : 0.5;
+  const frameCount = Math.min(60, Math.max(24, Math.floor(duration / targetInterval) + 1));
+  const canvas = document.createElement("canvas");
+  const width = Math.min(640, video.videoWidth || 640);
+  const height = Math.max(1, Math.round(width / ((video.videoWidth || 16) / (video.videoHeight || 9))));
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return { frameCount, frames: [], skippedFrameCount: frameCount, usableFrameCount: 0 };
+
+  const frames: CvFrameInput[] = [];
+  let skippedFrameCount = 0;
+
+  for (let index = 0; index < frameCount; index += 1) {
+    const denominator = Math.max(1, frameCount - 1);
+    const timestampSeconds = Math.min(duration, (duration * index) / denominator);
+    video.currentTime = timestampSeconds;
+    await waitForSeek(video);
+    context.drawImage(video, 0, 0, width, height);
+
+    const quality = inspectFrameQuality(context, width, height);
+    if (!quality.usable) {
+      skippedFrameCount += 1;
+      continue;
+    }
+
+    frames.push({ imageDataUrl: canvas.toDataURL("image/jpeg", 0.72), timestampSeconds });
+  }
+
+  console.log(
+    `[CV_CLIENT_SAMPLING] frameCount=${frameCount} usableFrameCount=${frames.length} skippedFrameCount=${skippedFrameCount}`,
+  );
+
+  return {
+    frameCount,
+    frames,
+    skippedFrameCount,
+    usableFrameCount: frames.length,
+  };
+}
+
+function inspectFrameQuality(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): { reason?: string; usable: boolean } {
+  const image = context.getImageData(0, 0, width, height).data;
+
+  let brightnessSum = 0;
+  let brightnessSquaredSum = 0;
+  let darkPixelCount = 0;
+  let edgeSum = 0;
+  let greenDominantCount = 0;
+  const pixelCount = width * height;
+
+  for (let index = 0; index < image.length; index += 4) {
+    const r = image[index] ?? 0;
+    const g = image[index + 1] ?? 0;
+    const b = image[index + 2] ?? 0;
+    const brightness = (r + g + b) / 3;
+    brightnessSum += brightness;
+    brightnessSquaredSum += brightness * brightness;
+    if (brightness < 18) darkPixelCount += 1;
+    if (g > r * 1.08 && g > b * 1.08 && brightness > 45) greenDominantCount += 1;
+
+    if (index >= 4) {
+      const prev = (image[index - 4] + image[index - 3] + image[index - 2]) / 3;
+      edgeSum += Math.abs(brightness - prev);
+    }
+  }
+
+  const mean = brightnessSum / pixelCount;
+  const variance = brightnessSquaredSum / pixelCount - mean * mean;
+  const contrast = Math.sqrt(Math.max(0, variance));
+  const darkRatio = darkPixelCount / pixelCount;
+  const edgeMean = edgeSum / Math.max(1, pixelCount - 1);
+  const greenDominantRatio = greenDominantCount / pixelCount;
+
+  if (mean < 24 || darkRatio > 0.9) return { reason: "too_dark", usable: false };
+  if (contrast < 5) return { reason: "blank", usable: false };
+  if (edgeMean < 1.1) return { reason: "too_blurry", usable: false };
+  if (greenDominantRatio > 0.82 && contrast < 18) return { reason: "floor_only", usable: false };
+
+  return { usable: true };
 }
 
 function waitForVideoMetadata(video: HTMLVideoElement) {

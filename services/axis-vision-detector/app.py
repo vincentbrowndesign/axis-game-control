@@ -37,6 +37,7 @@ session: ort.InferenceSession | None = None
 
 class DetectRequest(BaseModel):
     imageDataUrl: str
+    confidenceThreshold: float | None = None
     frameId: str | int | None = None
     timestamp: float | int | None = None
 
@@ -69,7 +70,7 @@ def detect(payload: DetectRequest) -> dict[str, Any]:
     detector = get_session()
     input_name = detector.get_inputs()[0].name
     output = detector.run(None, {input_name: prepare_image(image)})[0]
-    detections = decode_yolo_output(output, width, height)
+    detections = decode_yolo_output(output, width, height, payload.confidenceThreshold)
 
     return {
         "ok": True,
@@ -108,7 +109,12 @@ def prepare_image(image: Image.Image) -> np.ndarray:
     return np.transpose(array, (2, 0, 1))[None, :, :, :]
 
 
-def decode_yolo_output(output: np.ndarray, image_width: int, image_height: int) -> list[dict[str, Any]]:
+def decode_yolo_output(
+    output: np.ndarray,
+    image_width: int,
+    image_height: int,
+    confidence_threshold: float | None = None,
+) -> list[dict[str, Any]]:
     predictions = np.squeeze(output)
     if predictions.ndim != 2:
         return []
@@ -120,11 +126,13 @@ def decode_yolo_output(output: np.ndarray, image_width: int, image_height: int) 
     x_scale = image_width / IMAGE_SIZE
     y_scale = image_height / IMAGE_SIZE
 
+    threshold = CONFIDENCE if confidence_threshold is None else max(0.01, min(float(confidence_threshold), 0.99))
+
     for prediction in predictions:
         class_scores = prediction[4:]
         class_id = max(AXIS_TYPE_BY_CLASS, key=lambda key: float(class_scores[key]))
         confidence = float(class_scores[class_id])
-        if confidence < CONFIDENCE:
+        if confidence < threshold:
             continue
 
         center_x, center_y, width, height = [float(value) for value in prediction[:4]]
