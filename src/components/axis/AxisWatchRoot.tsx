@@ -24,20 +24,13 @@ type WatchJob = {
   status: WatchStatus;
 };
 
-const quickQueries = [
-  "Watch for spacing breakdowns in Delta offense.",
-  "Find rushed decisions.",
-  "Find poor transition spacing.",
-  "Watch weak-side movement.",
-  "Find coachable moments.",
-];
-
 export function AxisWatchRoot() {
   const [clipFile, setClipFile] = useState<File | null>(null);
   const [clipUrl, setClipUrl] = useState("");
-  const [query, setQuery] = useState("Watch for spacing breakdowns in Delta offense.");
+  const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<WatchJob[]>([]);
   const [recordingState, setRecordingState] = useState<"idle" | "preview" | "recording">("idle");
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -167,7 +160,7 @@ export function AxisWatchRoot() {
         <header className="axis-watch__header">
           <p>AXIS</p>
           <h1 id="axis-watch-title">AXIS</h1>
-          <span>Ask, attach, run, review, continue.</span>
+          <span>Attach a clip. Ask Axis what to watch for.</span>
         </header>
 
         <section className="axis-watch__composer" aria-label="Axis clip composer">
@@ -175,7 +168,7 @@ export function AxisWatchRoot() {
             <textarea
               aria-label="Ask Axis what to watch for"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ask about this clip…"
+              placeholder="Ask Axis what to watch for…"
               rows={4}
               value={query}
             />
@@ -183,31 +176,63 @@ export function AxisWatchRoot() {
           <input
             accept="video/*"
             className="axis-watch__hidden-file"
-            onChange={(event) => setUploadedClip(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              setUploadedClip(event.target.files?.[0] ?? null);
+              setToolMenuOpen(false);
+            }}
             ref={fileInputRef}
             type="file"
           />
-          <div className="axis-watch__tool-menu" aria-label="Axis tools">
-            <button onClick={() => fileInputRef.current?.click()} type="button">Attach Clip</button>
-            {recordingState === "idle" && <button onClick={() => void startRecordingPreview()} type="button">Record Clip</button>}
-            {recordingState === "preview" && <button onClick={startRecording} type="button">Start Recording</button>}
-            {recordingState === "recording" && <button onClick={stopRecording} type="button">Stop Recording</button>}
-            {recordingState !== "idle" && <button onClick={stopRecordingPreview} type="button">Cancel</button>}
-            <a href="/axis/routine">Routine Context</a>
-            <a href="#watch-queue">Clips</a>
-            <a href="#report-preview">Reports</a>
-          </div>
-          <div className="axis-watch__chips" aria-label="Quick watch queries">
-            {quickQueries.map((chip) => (
-              <button key={chip} onClick={() => setQuery(chip)} type="button">{chip}</button>
-            ))}
-          </div>
           <div className="axis-watch__attach-row">
+            <div className="axis-watch__plus-wrap">
+              <button
+                aria-controls="axis-watch-tool-menu"
+                aria-expanded={toolMenuOpen}
+                aria-label="Open clip tools"
+                className="axis-watch__plus"
+                onClick={() => setToolMenuOpen((isOpen) => !isOpen)}
+                type="button"
+              >
+                +
+              </button>
+              {toolMenuOpen && (
+                <div className="axis-watch__tool-menu" id="axis-watch-tool-menu" aria-label="Clip tools">
+                  <button
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setToolMenuOpen(false);
+                    }}
+                    type="button"
+                  >
+                    Attach Clip
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (recordingState === "idle") void startRecordingPreview();
+                      setToolMenuOpen(false);
+                    }}
+                    type="button"
+                  >
+                    Record Clip
+                  </button>
+                  <a href="/axis/routine" onClick={() => setToolMenuOpen(false)}>Routine Context</a>
+                  <a href="#watch-queue" onClick={() => setToolMenuOpen(false)}>Clips</a>
+                  <a href="#report-preview" onClick={() => setToolMenuOpen(false)}>Reports</a>
+                </div>
+              )}
+            </div>
             <span>{clipFile ? `Clip attached: ${clipFile.name}` : "Attach or record a clip to run Axis."}</span>
             <button className="axis-watch__primary" disabled={!clipUrl || !query.trim()} onClick={() => void watchWithAxis()} type="button">
               Watch with Axis
             </button>
           </div>
+          {recordingState !== "idle" && (
+            <div className="axis-watch__record-controls" aria-label="Recording controls">
+              {recordingState === "preview" && <button onClick={startRecording} type="button">Start Recording</button>}
+              {recordingState === "recording" && <button onClick={stopRecording} type="button">Stop Recording</button>}
+              <button onClick={stopRecordingPreview} type="button">Cancel</button>
+            </div>
+          )}
           {(clipUrl || recordingState !== "idle") && (
             <div className="axis-watch__video-shell">
               <video className="axis-watch__video" controls muted playsInline ref={videoPreviewRef} src={clipUrl || undefined} />
@@ -602,6 +627,7 @@ const styles = `
     box-shadow: 0 1.4rem 3.4rem rgba(20, 22, 16, 0.18);
     color: #fffdf7;
     gap: 0.75rem;
+    overflow: visible;
     padding: 1rem;
   }
 
@@ -750,9 +776,7 @@ const styles = `
     opacity: 0.45;
   }
 
-  .axis-watch__record,
-  .axis-watch__tool-menu,
-  .axis-watch__chips,
+  .axis-watch__record-controls,
   .axis-watch__candidate-actions,
   .axis-watch__next-actions,
   .axis-watch__execution-meta {
@@ -761,10 +785,7 @@ const styles = `
     gap: 0.5rem;
   }
 
-  .axis-watch__record button,
-  .axis-watch__tool-menu button,
-  .axis-watch__tool-menu a,
-  .axis-watch__chips button,
+  .axis-watch__record-controls button,
   .axis-watch__candidates button,
   .axis-watch__next-actions a,
   .axis-watch__execution-meta button {
@@ -778,30 +799,77 @@ const styles = `
     padding: 0 0.8rem;
   }
 
-  .axis-watch__tool-menu button,
-  .axis-watch__tool-menu a,
-  .axis-watch__chips button {
+  .axis-watch__plus-wrap {
+    position: relative;
+  }
+
+  .axis-watch__plus {
     align-items: center;
     background: rgba(255, 253, 247, 0.09);
+    border: 1px solid rgba(255, 253, 247, 0.16);
     border-color: rgba(255, 253, 247, 0.16);
     color: #fffdf7;
     display: inline-flex;
+    font-size: 1.35rem;
+    justify-content: center;
+    padding: 0;
+    width: 2.85rem;
   }
 
+  .axis-watch__tool-menu {
+    background: #fffdf8;
+    border: 1px solid rgba(20, 22, 16, 0.12);
+    border-radius: 0.7rem;
+    box-shadow: 0 1rem 2rem rgba(20, 22, 16, 0.18);
+    display: grid;
+    gap: 0.2rem;
+    left: 0;
+    min-width: min(13rem, calc(100vw - 2.8rem));
+    padding: 0.45rem;
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    z-index: 20;
+  }
+
+  .axis-watch__tool-menu button,
   .axis-watch__tool-menu a {
-    min-height: 2.85rem;
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 0.55rem;
+    color: #141610;
+    display: flex;
+    font: inherit;
+    font-weight: 850;
+    justify-content: flex-start;
+    min-height: 2.6rem;
+    padding: 0 0.75rem;
+    text-align: left;
+    width: 100%;
+  }
+
+  .axis-watch__tool-menu button:hover,
+  .axis-watch__tool-menu a:hover {
+    background: rgba(20, 22, 16, 0.06);
   }
 
   .axis-watch__attach-row {
     align-items: center;
     display: grid;
     gap: 0.6rem;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .axis-watch__attach-row > span {
     color: rgba(255, 253, 247, 0.72);
     font-size: 0.92rem;
     font-weight: 750;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .axis-watch__attach-row .axis-watch__primary {
+    grid-column: 1 / -1;
   }
 
   .axis-watch__queue,
@@ -1082,7 +1150,11 @@ const styles = `
     }
 
     .axis-watch__attach-row {
-      grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+      grid-template-columns: auto minmax(0, 1fr) minmax(14rem, 18rem);
+    }
+
+    .axis-watch__attach-row .axis-watch__primary {
+      grid-column: auto;
     }
 
     .axis-watch__steps {
