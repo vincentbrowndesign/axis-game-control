@@ -96,13 +96,9 @@ export function AxisWatchRoot() {
   const [clipUrl, setClipUrl] = useState("");
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<WatchJob[]>([]);
-  const [recordingState, setRecordingState] = useState<"idle" | "preview" | "recording">("idle");
-  const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [workbenchJobId, setWorkbenchJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const queryInputRef = useRef<HTMLTextAreaElement | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
   const pollIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
@@ -121,47 +117,6 @@ export function AxisWatchRoot() {
     const nextUrl = URL.createObjectURL(file);
     setClipFile(file);
     setClipUrl(nextUrl);
-  }
-
-  async function startRecordingPreview() {
-    if (!navigator.mediaDevices?.getUserMedia) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: "environment" } });
-    streamRef.current = stream;
-    setRecordingState("preview");
-    if (videoPreviewRef.current) {
-      videoPreviewRef.current.srcObject = stream;
-      await videoPreviewRef.current.play();
-    }
-  }
-
-  function startRecording() {
-    const stream = streamRef.current;
-    if (!stream || typeof MediaRecorder === "undefined") return;
-    recordingChunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
-    mediaRecorderRef.current = recorder;
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) recordingChunksRef.current.push(event.data);
-    };
-    recorder.onstop = () => {
-      const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "video/webm" });
-      const file = new File([blob], `axis-recorded-clip-${Date.now()}.webm`, { type: blob.type });
-      setUploadedClip(file);
-      stopRecordingPreview();
-    };
-    recorder.start();
-    setRecordingState("recording");
-  }
-
-  function stopRecording() {
-    mediaRecorderRef.current?.stop();
-  }
-
-  function stopRecordingPreview() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
-    setRecordingState("idle");
   }
 
   function watchWithAxis() {
@@ -593,8 +548,11 @@ export function AxisWatchRoot() {
             aria-label="Attach video clip"
             className="axis-watch__hidden-file"
             onChange={(event) => {
-              setUploadedClip(event.target.files?.[0] ?? null);
-              setToolMenuOpen(false);
+              const file = event.target.files?.[0] ?? null;
+              setUploadedClip(file);
+              if (file) {
+                requestAnimationFrame(() => queryInputRef.current?.focus());
+              }
             }}
             ref={fileInputRef}
             type="file"
@@ -602,63 +560,30 @@ export function AxisWatchRoot() {
           <div className="axis-watch__attach-row">
             <div className="axis-watch__plus-wrap">
               <button
-                aria-controls="axis-watch-tool-menu"
-                aria-expanded={toolMenuOpen}
-                aria-label="Open clip tools"
+                aria-label="Attach clip"
                 className="axis-watch__plus"
-                onClick={() => setToolMenuOpen((isOpen) => !isOpen)}
+                onClick={() => fileInputRef.current?.click()}
                 type="button"
               >
                 +
               </button>
-              {toolMenuOpen && (
-                <div className="axis-watch__tool-menu" id="axis-watch-tool-menu" aria-label="Clip tools">
-                  <button
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                      setToolMenuOpen(false);
-                    }}
-                    type="button"
-                  >
-                    Attach Clip
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (recordingState === "idle") void startRecordingPreview();
-                      setToolMenuOpen(false);
-                    }}
-                    type="button"
-                  >
-                    Record Clip
-                  </button>
-                  <a href="/axis/routine" onClick={() => setToolMenuOpen(false)}>Routine Context</a>
-                  <a href="#watch-queue" onClick={() => setToolMenuOpen(false)}>Clips</a>
-                  <a href="#axis-report" onClick={() => setToolMenuOpen(false)}>Report</a>
-                </div>
-              )}
             </div>
-            <span>{clipFile ? `Clip attached: ${clipFile.name}` : "Attach or record a clip to run Axis."}</span>
+            <span>{clipFile ? `Clip attached: ${clipFile.name}` : "Attach a clip to run Axis."}</span>
           </div>
-          {recordingState !== "idle" && (
-            <div className="axis-watch__record-controls" aria-label="Recording controls">
-              {recordingState === "preview" && <button onClick={startRecording} type="button">Start Recording</button>}
-              {recordingState === "recording" && <button onClick={stopRecording} type="button">Stop Recording</button>}
-              <button onClick={stopRecordingPreview} type="button">Cancel</button>
-            </div>
-          )}
-          {(clipUrl || recordingState !== "idle") && (
+          {clipUrl && (
             <div className="axis-watch__video-shell">
               <video className="axis-watch__video" controls muted playsInline ref={videoPreviewRef} src={clipUrl || undefined} />
               <div className="axis-watch__video-overlay" aria-hidden="true">
                 <span>00:00:00</span>
                 <i />
-                <span>{recordingState === "recording" ? "RECORDING" : "SIGNAL READY"}</span>
+                <span>SIGNAL READY</span>
               </div>
             </div>
           )}
           <AxisQueryBox
             buttonLabel={hasReport ? "Ask Axis" : "Watch with Axis"}
             disabled={!clipUrl || !query.trim()}
+            inputRef={queryInputRef}
             onChange={setQuery}
             onSubmit={() => void watchWithAxis()}
             placeholder={hasReport ? "Ask about this clip…" : "Ask Axis what to watch for…"}
@@ -759,6 +684,7 @@ export function AxisWatchRoot() {
 function AxisQueryBox({
   buttonLabel,
   disabled,
+  inputRef,
   onChange,
   onSubmit,
   placeholder,
@@ -766,6 +692,7 @@ function AxisQueryBox({
 }: {
   buttonLabel: string;
   disabled: boolean;
+  inputRef: { current: HTMLTextAreaElement | null };
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder: string;
@@ -776,6 +703,7 @@ function AxisQueryBox({
       <label className="axis-watch__query-field">
         <textarea
           aria-label={placeholder}
+          ref={inputRef}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           rows={4}
@@ -1970,44 +1898,6 @@ const styles = `
 
   .axis-watch__plus:active {
     transform: scale(0.94);
-  }
-
-  .axis-watch__tool-menu {
-    background: #fffdf8;
-    border: 1px solid rgba(20, 22, 16, 0.12);
-    border-radius: 0.7rem;
-    box-shadow: 0 1rem 2rem rgba(20, 22, 16, 0.18);
-    display: grid;
-    gap: 0.2rem;
-    left: 0;
-    min-width: min(13rem, calc(100vw - 2.8rem));
-    padding: 0.45rem;
-    position: absolute;
-    top: calc(100% + 0.45rem);
-    z-index: 20;
-  }
-
-  .axis-watch__tool-menu button,
-  .axis-watch__tool-menu a {
-    align-items: center;
-    background: transparent;
-    border: 0;
-    border-radius: 0.55rem;
-    color: #141610;
-    display: flex;
-    font: inherit;
-    font-weight: 850;
-    justify-content: flex-start;
-    min-height: 2.6rem;
-    padding: 0 0.75rem;
-    text-align: left;
-    transition: background 0.14s ease;
-    width: 100%;
-  }
-
-  .axis-watch__tool-menu button:hover,
-  .axis-watch__tool-menu a:hover {
-    background: rgba(20, 22, 16, 0.06);
   }
 
   .axis-watch__attach-row {
