@@ -587,6 +587,17 @@ export function AxisWatchRoot() {
         )}
 
         {latestReadyJob && (
+          <NextActionCard
+            job={latestReadyJob}
+            onCopyReport={() =>
+              void navigator.clipboard.writeText(buildReportLines(latestReadyJob).join("\n"))
+            }
+            onOpenWorkbench={() => setWorkbenchJobId(latestReadyJob.id)}
+            onSetQuery={setQuery}
+          />
+        )}
+
+        {latestReadyJob && (
           <CheckThese
             candidates={latestReadyJob.candidates}
             jobId={latestReadyJob.id}
@@ -758,7 +769,7 @@ function AxisReport({
   onIncludeInReport: (id: string) => void;
 }) {
   void onIncludeInReport;
-  const reportFindings = job.candidates.filter((c) => c.status === "accepted");
+  const reportFindings = dedupeById(job.candidates).filter((c) => c.status === "accepted");
   const sorted = [...reportFindings].sort((a, b) => (b.evidenceScore ?? 0) - (a.evidenceScore ?? 0));
   const bestMoment = sorted[0];
   const biggestIssue = reportFindings.find(
@@ -767,46 +778,19 @@ function AxisReport({
   const nextAction = job.suggestedNextQueries?.[0];
   const cv = job.cvContext?.summary;
 
-  function copyReport() {
-    const lines: string[] = [
-      `AXIS REPORT — ${job.clipName}`,
-      new Date().toLocaleDateString(),
-      "",
-      `Axis watched for: ${job.compiledIntent ?? job.query}`,
-    ];
-
-    if (cv) {
-      lines.push("", "CV EVIDENCE");
-      lines.push(`Provider: ${cv.provider}`);
-      lines.push(`People visible: ${cv.maxPeopleCount} max (avg ${cv.avgPeopleCount})`);
-      lines.push(`Frames with people: ${cv.framesWithPeople}/${cv.totalFrames}`);
-    }
-
-    if (reportFindings.length > 0) {
-      lines.push("", "KEY FINDINGS");
-      for (const f of reportFindings) {
-        lines.push(`[${formatTimestamp(f.timestampSeconds)}] ${f.title} — ${f.note}`);
-      }
-    }
-
-    const checkItems = job.candidates.filter((c) => c.evidenceBucket === "check_this" && c.status === "pending");
-    if (checkItems.length > 0) {
-      lines.push("", "CHECK THESE");
-      for (const c of checkItems) {
-        lines.push(`[${formatTimestamp(c.timestampSeconds)}] ${c.title}`);
-      }
-    }
-
-    void navigator.clipboard.writeText(lines.join("\n"));
-  }
-
   return (
     <section className="axis-watch__card axis-report" aria-labelledby="axis-report-title" id="axis-report">
       <div className="axis-watch__section-title">
         <h2 id="axis-report-title">Axis Report</h2>
         <div className="axis-report__title-actions">
           <span>{reportFindings.length} finding{reportFindings.length === 1 ? "" : "s"}</span>
-          <button className="axis-report__export" onClick={copyReport} type="button">Copy</button>
+          <button
+            className="axis-report__export"
+            onClick={() => void navigator.clipboard.writeText(buildReportLines(job).join("\n"))}
+            type="button"
+          >
+            Copy
+          </button>
         </div>
       </div>
 
@@ -879,7 +863,9 @@ function CheckThese({
   onInclude: (id: string) => void;
   onSkip: (id: string) => void;
 }) {
-  const checkItems = candidates.filter((c) => c.evidenceBucket === "check_this" && c.status === "pending");
+  const checkItems = dedupeById(candidates).filter(
+    (c) => c.evidenceBucket === "check_this" && c.status === "pending",
+  );
   if (checkItems.length === 0) return null;
 
   return (
@@ -910,14 +896,35 @@ function CheckThese({
 
 function ClipData({ job }: { job: WatchJob }) {
   const notEnoughEvidence = job.limitations ?? [];
-  const allFindings = job.candidates;
+  // Deduplicate by id, then exclude findings already surfaced in AxisReport (accepted)
+  // and CheckThese (check_this + pending) — those sections own those findings.
+  const allUnique = dedupeById(job.candidates);
+  const reportedCount = allUnique.filter((c) => c.status === "accepted").length;
+  const pendingCount = allUnique.filter(
+    (c) => c.evidenceBucket === "check_this" && c.status === "pending",
+  ).length;
+  const dataFindings = allUnique.filter(
+    (c) =>
+      c.status !== "accepted" &&
+      !(c.evidenceBucket === "check_this" && c.status === "pending"),
+  );
 
   return (
     <details className="axis-watch__card axis-clip-data">
       <summary>
         <span>Clip Data</span>
-        <span className="axis-clip-data__meta">{allFindings.length} finding{allFindings.length === 1 ? "" : "s"} · {job.clipName}</span>
+        <span className="axis-clip-data__meta">{allUnique.length} total · {job.clipName}</span>
       </summary>
+      {(reportedCount > 0 || pendingCount > 0) && (
+        <p className="axis-clip-data__surfaced">
+          {[
+            reportedCount > 0 && `${reportedCount} in report`,
+            pendingCount > 0 && `${pendingCount} under review`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
       {notEnoughEvidence.length > 0 && (
         <div className="axis-clip-data__section">
           <span className="axis-report__label">Not enough evidence</span>
@@ -927,8 +934,10 @@ function ClipData({ job }: { job: WatchJob }) {
         </div>
       )}
       <div className="axis-watch__candidates">
-        {allFindings.length === 0 && <p>No clip data available.</p>}
-        {allFindings.map((f) => (
+        {dataFindings.length === 0 && (
+          <p className="axis-clip-data__empty">All findings are in the report or under review.</p>
+        )}
+        {dataFindings.map((f) => (
           <article data-bucket={f.evidenceBucket} data-review-status={f.status} key={f.id}>
             <div className="axis-watch__candidate-time">
               <i aria-hidden="true" />
@@ -953,9 +962,12 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
     ? `${job.sampledFrameCount} frames checked`
     : "Full clip";
 
+  const cvReady = job.cvStatus === "ready";
+  const cvOffline = cvReady && job.cvContext?.summary.provider === "fallback";
   const cvLabel =
     job.cvStatus === "sampling" ? "Scanning…"
-    : job.cvStatus === "ready" ? `${job.cvContext?.summary.maxPeopleCount ?? 0} people`
+    : cvOffline ? "CV offline"
+    : cvReady ? `${job.cvContext?.summary.maxPeopleCount ?? 0} people`
     : job.cvStatus === "failed" ? "CV unavailable"
     : null;
 
@@ -990,6 +1002,221 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
       {job.error && <em>{job.error}</em>}
     </section>
   );
+}
+
+// ─── Next Action ──────────────────────────────────────────────────────────────
+
+type NextActionKind =
+  | "connect_cv"
+  | "export_clip"
+  | "recheck_segment"
+  | "review_uncertain"
+  | "run_ball_watch";
+
+type NextAction = {
+  candidateId?: string;
+  cta: string;
+  description: string;
+  kind: NextActionKind;
+  timestamp?: number;
+};
+
+type HealthResult = {
+  overall: "degraded" | "offline" | "ready";
+  roboflow: { configured: boolean; error?: string; latencyMs?: number; reachable: boolean; validKey?: boolean };
+  yolo: { configured: boolean; error?: string; latencyMs?: number; reachable: boolean; url: string };
+};
+
+function computeNextAction(job: WatchJob): NextAction | null {
+  const unique = dedupeById(job.candidates);
+  const accepted = unique.filter((c) => c.status === "accepted");
+  const checkItems = unique.filter(
+    (c) => c.evidenceBucket === "check_this" && c.status === "pending",
+  );
+  const recheckable = unique.filter(
+    (c) => c.evidenceBucket === "not_enough_evidence" && c.status !== "rejected",
+  );
+
+  // 1. CV offline → connect
+  if (
+    (job.cvStatus === "failed" || job.cvContext?.summary.provider === "fallback") &&
+    job.cvStatus !== "sampling"
+  ) {
+    return {
+      cta: "Check CV Status",
+      description:
+        "CV detection returned no evidence. Verify the detector and Roboflow project are reachable.",
+      kind: "connect_cv",
+    };
+  }
+
+  // 2. Uncertain findings waiting for review
+  if (checkItems.length > 0) {
+    return {
+      cta: "Review Now",
+      description: `${checkItems.length} finding${checkItems.length === 1 ? "" : "s"} ${checkItems.length === 1 ? "needs" : "need"} coach sign-off before the report is final.`,
+      kind: "review_uncertain",
+    };
+  }
+
+  // 3. Report ready — export
+  if (accepted.length > 0) {
+    const best = [...accepted].sort((a, b) => (b.evidenceScore ?? 0) - (a.evidenceScore ?? 0))[0];
+    return {
+      candidateId: best.id,
+      cta: "Copy Report",
+      description: `Report has ${accepted.length} confirmed finding${accepted.length === 1 ? "" : "s"}. Export or share.`,
+      kind: "export_clip",
+    };
+  }
+
+  // 4. Segments with insufficient evidence — recheck
+  if (recheckable.length > 0) {
+    const first = recheckable[0];
+    return {
+      candidateId: first.id,
+      cta: "Open Workbench",
+      description: `${recheckable.length} segment${recheckable.length === 1 ? "" : "s"} lacked enough evidence. Recheck in the workbench.`,
+      kind: "recheck_segment",
+      timestamp: first.timestampSeconds,
+    };
+  }
+
+  // 5. Shot/ball query with no findings → run a focused ball watch
+  if (/shot|make|miss|basket|score|ball/i.test(job.query)) {
+    return {
+      cta: "Watch for Shots",
+      description: "No shot evidence found. Run a focused ball watch with a tighter query.",
+      kind: "run_ball_watch",
+    };
+  }
+
+  return null;
+}
+
+function NextActionCard({
+  job,
+  onCopyReport,
+  onOpenWorkbench,
+  onSetQuery,
+}: {
+  job: WatchJob;
+  onCopyReport: () => void;
+  onOpenWorkbench: () => void;
+  onSetQuery: (q: string) => void;
+}) {
+  const action = computeNextAction(job);
+  const [healthResult, setHealthResult] = useState<HealthResult | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  async function runHealthCheck() {
+    setHealthLoading(true);
+    try {
+      const response = await fetch("/api/axis/cv/health");
+      const data = (await response.json()) as HealthResult;
+      setHealthResult(data);
+    } catch {
+      setHealthResult(null);
+    } finally {
+      setHealthLoading(false);
+    }
+  }
+
+  if (!action) return null;
+
+  function handleCta() {
+    if (!action) return;
+    if (action.kind === "connect_cv") {
+      void runHealthCheck();
+      return;
+    }
+    if (action.kind === "review_uncertain") {
+      document.getElementById("check-these")?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    if (action.kind === "export_clip") {
+      onCopyReport();
+      return;
+    }
+    if (action.kind === "recheck_segment") {
+      onOpenWorkbench();
+      return;
+    }
+    if (action.kind === "run_ball_watch") {
+      onSetQuery("Watch for shot attempts and ball movement.");
+      document.querySelector<HTMLTextAreaElement>(".axis-watch__query-field textarea")?.focus();
+      return;
+    }
+  }
+
+  return (
+    <section
+      className="axis-watch__card axis-next-action"
+      aria-label="Next action"
+      data-kind={action.kind}
+    >
+      <div className="axis-next-action__body">
+        <div className="axis-next-action__text">
+          <span className="axis-next-action__kind">{actionKindLabel(action.kind)}</span>
+          <p className="axis-next-action__desc">{action.description}</p>
+        </div>
+        <button
+          className="axis-next-action__cta"
+          disabled={healthLoading}
+          onClick={handleCta}
+          type="button"
+        >
+          {healthLoading ? "Checking…" : action.cta}
+        </button>
+      </div>
+
+      {healthResult && (
+        <div className="axis-health__result" aria-live="polite">
+          <HealthStatusRow label="Roboflow" entry={healthResult.roboflow} />
+          <HealthStatusRow label="Detector" entry={healthResult.yolo} />
+          {healthResult.roboflow.error && (
+            <p className="axis-health__hint">{healthResult.roboflow.error}</p>
+          )}
+          {healthResult.yolo.error && (
+            <p className="axis-health__hint">{healthResult.yolo.error}</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HealthStatusRow({
+  entry,
+  label,
+}: {
+  entry: { configured: boolean; latencyMs?: number; reachable: boolean };
+  label: string;
+}) {
+  const status = !entry.configured
+    ? "not configured"
+    : entry.reachable
+      ? `online · ${entry.latencyMs ?? "–"}ms`
+      : "offline";
+
+  return (
+    <div className="axis-health__row" data-reachable={entry.reachable && entry.configured}>
+      <span className="axis-health__dot" aria-hidden="true" />
+      <span className="axis-health__label">{label}</span>
+      <span className="axis-health__status">{status}</span>
+    </div>
+  );
+}
+
+function actionKindLabel(kind: NextActionKind): string {
+  const labels: Record<NextActionKind, string> = {
+    connect_cv: "Connect CV",
+    export_clip: "Export Ready",
+    recheck_segment: "Recheck",
+    review_uncertain: "Review Needed",
+    run_ball_watch: "Suggested",
+  };
+  return labels[kind];
 }
 
 function getStatusLabel(status: WatchStatus) {
@@ -1049,6 +1276,48 @@ function formatTimestamp(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+function dedupeById<T extends { id: string }>(arr: T[]): T[] {
+  return Array.from(new Map(arr.map((item) => [item.id, item])).values());
+}
+
+function buildReportLines(job: WatchJob): string[] {
+  const reportFindings = dedupeById(job.candidates).filter((c) => c.status === "accepted");
+  const checkItems = dedupeById(job.candidates).filter(
+    (c) => c.evidenceBucket === "check_this" && c.status === "pending",
+  );
+  const cv = job.cvContext?.summary;
+
+  const lines: string[] = [
+    `AXIS REPORT — ${job.clipName}`,
+    new Date().toLocaleDateString(),
+    "",
+    `Axis watched for: ${job.compiledIntent ?? job.query}`,
+  ];
+
+  if (cv && cv.provider !== "fallback") {
+    lines.push("", "CV EVIDENCE");
+    lines.push(`Provider: ${cv.provider}`);
+    lines.push(`People visible: ${cv.maxPeopleCount} max (avg ${cv.avgPeopleCount})`);
+    lines.push(`Frames with people: ${cv.framesWithPeople}/${cv.totalFrames}`);
+  }
+
+  if (reportFindings.length > 0) {
+    lines.push("", "KEY FINDINGS");
+    for (const f of reportFindings) {
+      lines.push(`[${formatTimestamp(f.timestampSeconds)}] ${f.title} — ${f.note}`);
+    }
+  }
+
+  if (checkItems.length > 0) {
+    lines.push("", "CHECK THESE");
+    for (const c of checkItems) {
+      lines.push(`[${formatTimestamp(c.timestampSeconds)}] ${c.title}`);
+    }
+  }
+
+  return lines;
 }
 
 const styles = `
@@ -1552,6 +1821,142 @@ const styles = `
   .axis-watch__open-wb:hover {
     background: rgba(20, 22, 16, 0.1);
     border-color: rgba(20, 22, 16, 0.22);
+  }
+
+  /* ── Next Action card ──────────────────────────────────────── */
+  .axis-next-action {
+    border-left: 3px solid rgba(183, 255, 92, 0.52);
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .axis-next-action__body {
+    align-items: center;
+    display: flex;
+    gap: 0.9rem;
+    justify-content: space-between;
+  }
+
+  .axis-next-action__text {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+
+  .axis-next-action__kind {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .axis-next-action[data-kind="connect_cv"] .axis-next-action__kind {
+    color: rgba(180, 80, 40, 0.88);
+  }
+
+  .axis-next-action[data-kind="review_uncertain"] .axis-next-action__kind {
+    color: rgba(20, 22, 16, 0.68);
+  }
+
+  .axis-next-action[data-kind="export_clip"] .axis-next-action__kind {
+    color: rgba(40, 120, 40, 0.88);
+  }
+
+  .axis-next-action__desc {
+    color: rgba(20, 22, 16, 0.74);
+    font-size: 0.86rem;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .axis-next-action__cta {
+    background: #141610;
+    border: 1px solid #141610;
+    border-radius: 0.65rem;
+    color: #b7ff5c;
+    cursor: pointer;
+    flex-shrink: 0;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 900;
+    min-height: 2.5rem;
+    padding: 0 0.85rem;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .axis-next-action__cta:hover:not(:disabled) {
+    background: #1e2016;
+    box-shadow: 0 3px 12px rgba(20, 22, 16, 0.18);
+  }
+
+  .axis-next-action__cta:disabled {
+    opacity: 0.48;
+  }
+
+  /* ── CV Health status ──────────────────────────────────────── */
+  .axis-health__result {
+    border-top: 1px solid rgba(20, 22, 16, 0.1);
+    display: grid;
+    gap: 0.38rem;
+    padding-top: 0.6rem;
+  }
+
+  .axis-health__row {
+    align-items: center;
+    display: flex;
+    gap: 0.55rem;
+  }
+
+  .axis-health__dot {
+    background: rgba(20, 22, 16, 0.24);
+    border-radius: 50%;
+    flex-shrink: 0;
+    height: 0.52rem;
+    width: 0.52rem;
+  }
+
+  .axis-health__row[data-reachable="true"] .axis-health__dot {
+    background: #48a83a;
+  }
+
+  .axis-health__label {
+    color: #141610;
+    font-size: 0.76rem;
+    font-weight: 800;
+    min-width: 6ch;
+  }
+
+  .axis-health__status {
+    color: rgba(20, 22, 16, 0.58);
+    font-size: 0.76rem;
+    font-family: monospace;
+  }
+
+  .axis-health__row[data-reachable="true"] .axis-health__status {
+    color: rgba(40, 100, 30, 0.88);
+  }
+
+  .axis-health__hint {
+    color: rgba(20, 22, 16, 0.58);
+    font-size: 0.74rem;
+    font-style: italic;
+    line-height: 1.4;
+    margin: 0.15rem 0 0;
+  }
+
+  .axis-clip-data__surfaced {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.76rem;
+    margin: 0;
+  }
+
+  .axis-clip-data__empty {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.82rem;
+    font-style: italic;
+    margin: 0;
   }
 
   .axis-watch__execution[data-status="sampling"],
